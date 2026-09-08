@@ -8,6 +8,7 @@ export type AchievementId =
   | 'stable-core'
   | 'adaptation'
   | 'deep-dive'
+  | 'epidemic'
   | 'cleanup-500'
   | 'restart-3'
   | 'full-protocol';
@@ -19,14 +20,15 @@ export interface AchievementDef {
 }
 
 export const ACHIEVEMENTS: AchievementDef[] = [
-  { id: 'first-contact', name: 'ПЕРВЫЙ КОНТАКТ', desc: 'Очистить 50 угроз за один сеанс' },
-  { id: 'continuous-flow', name: 'НЕПРЕРЫВНЫЙ ПОТОК', desc: 'Достичь комбо ×20' },
-  { id: 'stable-core', name: 'СТАБИЛЬНОЕ ЯДРО', desc: '60 секунд подряд без урона' },
-  { id: 'adaptation', name: 'АДАПТАЦИЯ', desc: 'Получить первую эволюцию' },
-  { id: 'deep-dive', name: 'ГЛУБОКОЕ ПОГРУЖЕНИЕ', desc: 'Дожить до 03:00' },
-  { id: 'cleanup-500', name: 'ОЧИСТКА', desc: 'Очистить 500 угроз суммарно' },
-  { id: 'restart-3', name: 'ПОВТОРНЫЙ ЗАПУСК', desc: 'Завершить 3 сеанса' },
-  { id: 'full-protocol', name: 'ПОЛНЫЙ ПРОТОКОЛ', desc: 'Открыть все три эволюции' },
+  { id: 'first-contact', name: 'ПЕРВЫЙ КОНТАКТ', desc: 'Уничтожить 50 иммунных клеток за цикл' },
+  { id: 'continuous-flow', name: 'ЦЕПНАЯ РЕАКЦИЯ', desc: 'Достичь комбо ×20' },
+  { id: 'stable-core', name: 'УСТОЙЧИВЫЙ ШТАММ', desc: '60 секунд подряд без повреждения капсида' },
+  { id: 'adaptation', name: 'КРИТИЧЕСКАЯ МУТАЦИЯ', desc: 'Получить первую критическую мутацию' },
+  { id: 'deep-dive', name: 'СИСТЕМНАЯ ИНФЕКЦИЯ', desc: 'Продержаться до 03:00' },
+  { id: 'epidemic', name: 'ЭПИДЕМИЯ', desc: 'Заразить 10 клеток хозяина за один цикл' },
+  { id: 'cleanup-500', name: 'ИММУННЫЙ ПРОРЫВ', desc: 'Уничтожить 500 иммунных клеток суммарно' },
+  { id: 'restart-3', name: 'НОВЫЙ ЦИКЛ', desc: 'Завершить 3 цикла заражения' },
+  { id: 'full-protocol', name: 'ИДЕАЛЬНЫЙ ШТАММ', desc: 'Открыть все три критические мутации' },
 ];
 
 const BY_ID = new Map<AchievementId, AchievementDef>(ACHIEVEMENTS.map((a) => [a.id, a]));
@@ -38,8 +40,7 @@ export function getAchievementDef(id: AchievementId): AchievementDef {
 }
 
 /**
- * Проверка лёгкая и side-effect-free до момента реального unlock.
- * `runRecorded=true` означает, что current kills/evolutions уже перенесены в SaveSystem.
+ * Lightweight evaluation. `runRecorded=true` means current kills/evolutions are already stored.
  */
 export function evaluateAchievements(st: RunState, runRecorded = false): AchievementId[] {
   const save = SaveSystem.get();
@@ -50,6 +51,7 @@ export function evaluateAchievements(st: RunState, runRecorded = false): Achieve
   if (st.maxNoDamageMs >= 60_000) candidate.push('stable-core');
   if (st.evolutions.size > 0) candidate.push('adaptation');
   if (st.timeMs >= 180_000) candidate.push('deep-dive');
+  if (st.hostCellsInfected >= 10) candidate.push('epidemic');
 
   const lifetimeKills = save.totalKills + (runRecorded ? 0 : st.kills);
   if (lifetimeKills >= 500) candidate.push('cleanup-500');
