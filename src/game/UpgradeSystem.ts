@@ -3,6 +3,7 @@ import type { RunState } from './RunState';
 export type UpgradeFamily = 'weapon' | 'core' | 'defense' | 'utility';
 export type UpgradeRarity = 'common' | 'rare';
 export type EvolutionId = 'prism' | 'halo' | 'singularity';
+export type ChoiceKind = 'upgrade' | 'evolution';
 
 export const UPGRADE_FAMILY_LABELS: Record<UpgradeFamily, string> = {
   weapon: 'АТАКА',
@@ -27,7 +28,9 @@ export interface UpgradeDef {
   max: number;
   family: UpgradeFamily;
   rarity: UpgradeRarity;
+  kind?: ChoiceKind;
   evolutionHint?: EvolutionId;
+  evolutionId?: EvolutionId;
   showProgress?: boolean;
   apply: (s: RunState) => void;
 }
