@@ -1,6 +1,7 @@
-// Звук: процедурный WebAudio-синтез (фолбэк) + готовые SFX/музыка из Kenney CC0.
-// Ассеты (public/audio/*.ogg) грузятся по сети и декодируются лениво, НЕ входят в JS-бандл.
-// Лицензия Kenney: CC0 1.0 (https://kenney.nl) — атрибуция не требуется.
+// Звук: процедурный WebAudio-синтез (фолбэк) + готовые SFX и музыка (CC0).
+// SFX — Kenney CC0 (https://kenney.nl). Музыка — коллекция CC0 Music на OpenGameArt
+// (https://opengameart.org/content/cc0-music-0). Ассеты (public/audio/*) грузятся по сети и
+// декодируются лениво, НЕ входят в JS-бандл. Лицензия CC0 1.0 — атрибуция не требуется.
 
 import { SaveSystem } from './SaveSystem';
 
@@ -40,11 +41,16 @@ const MANIFEST: Record<SfxName, { file: string; vol: number }> = {
   victory: { file: 'audio/sfx/victory.ogg', vol: 0.8 },
 };
 
-// Фоновая музыка: 8-Bit jingles (Kenney, CC0). Случайный трек на каждый забег.
+// Фоновая музыка: треки из CC0-коллекции OpenGameArt (электроника/эмбиент/эпик).
+// Случайный трек на каждый забег; кандидаты для прослушивания, потом сократим до 2–3 лучших.
 const MUSIC_TRACKS: string[] = [
-  'audio/music/nes_2.ogg',
-  'audio/music/nes_3.ogg',
-  'audio/music/nes_8.ogg',
+  'audio/music/loop0.ogg',
+  'audio/music/loop1.ogg',
+  'audio/music/loop2.ogg',
+  'audio/music/loop3.mp3',
+  'audio/music/loop4.mp3',
+  'audio/music/loop5.mp3',
+  'audio/music/loop6.mp3',
 ];
 
 class SfxImpl {
