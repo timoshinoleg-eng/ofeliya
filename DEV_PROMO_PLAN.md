@@ -144,7 +144,7 @@
 | 1 | ✅ | `03213ec` | босс выведен из `difficulty()` (`BOSS_SCALE`), спавн в бою ×0.35, онбординг первого забега |
 | 2 | ✅ | `7dcd9a4` | hit-stop (`JUICE`), пул цифр урона со склейкой, фанфары левелапа, рамка low-HP, тряска на уроне и смерти элиты |
 | 3 | ✅ (кроме шрифта) | `c66620c` | 11 иконок `up-<id>` кодом в `BootScene`, комбо-счётчик (`COMBO`), трейл игрока (пул × 8) |
-| Аудио | ✅ | — | SFX — Kenney CC0 (11 файлов, `public/audio/sfx`); фоновая музыка — коллекция CC0 Music на OpenGameArt (7 кандидатов-лупов `public/audio/music`, потом сузим до 2–3). Ленивая загрузка в `Sfx.ts`, процедурный WebAudio-фолбэк, `startMusic`/`stopMusic` |
+| Аудио | ✅ | — | SFX — Kenney CC0 (11 файлов, `public/audio/sfx`); фоновая музыка — коллекция CC0 Music на OpenGameArt (7 лупов `public/audio/music`, финальный выбор). Ленивая загрузка в `Sfx.ts`, процедурный WebAudio-фолбэк, `startMusic`/`stopMusic` |
 | 4 | ⏳ нужен девайс | — | профилировка Android; как страховка — авто-деградация (снять bloom, урезать кап врагов) при FPS < 45 |
 
 **Сделано:** п. 9 — display-шрифт **Chakra Petch** (OFL, self-hosted WOFF2 latin 400/700 в `public/fonts/`,
