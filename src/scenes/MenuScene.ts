@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { COLORS, FONT, fmtTime } from '../game/config';
+import { IDENTITY } from '../game/identity';
 import { MaxBridge } from '../systems/MaxBridge';
 import { SaveSystem } from '../systems/SaveSystem';
 import { Sfx } from '../systems/Sfx';
@@ -14,6 +15,7 @@ export class MenuScene extends Phaser.Scene {
     const H = this.scale.height;
     this.cameras.main.setBackgroundColor(COLORS.bg);
     Sfx.stopMusic();
+    MaxBridge.setBackHandler(null);
 
     const grid = this.add
       .tileSprite(0, 0, W, H, 'grid')
@@ -23,7 +25,6 @@ export class MenuScene extends Phaser.Scene {
     grid.tilePositionY = 90;
     this.add.image(W / 2, H / 2, 'vignette').setDisplaySize(W * 1.25, H * 1.25).setDepth(-9);
 
-    // декоративные враги, лениво плавающие по меню
     const decor = [
       { tex: 'enemy-swarm', x: 0.16, y: 0.3 },
       { tex: 'enemy-runner', x: 0.86, y: 0.24 },
@@ -58,7 +59,7 @@ export class MenuScene extends Phaser.Scene {
     title.setShadow(0, 0, 'rgba(53,224,255,0.85)', 22, true, true);
 
     this.add
-      .text(W / 2, H * 0.24 + 46, 'рогалик-выживание · продержись 5 минут', {
+      .text(W / 2, H * 0.24 + 46, IDENTITY.copy.menuTagline, {
         fontFamily: FONT,
         fontSize: '14px',
         color: '#aab4d4',
@@ -66,10 +67,10 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setResolution(2);
 
-    const user = MaxBridge.getUser();
-    if (MaxBridge.available && user?.name) {
+    const displayName = MaxBridge.getDisplayName();
+    if (MaxBridge.available && displayName) {
       this.add
-        .text(W / 2, H * 0.24 + 70, `Привет, ${user.name}!`, {
+        .text(W / 2, H * 0.24 + 70, `Привет, ${displayName}!`, {
           fontFamily: FONT,
           fontSize: '13px',
           color: '#7dff6e',
@@ -79,28 +80,31 @@ export class MenuScene extends Phaser.Scene {
     }
 
     const save = SaveSystem.get();
+    const survival = save.bestSurvivalMs > 0 ? fmtTime(save.bestSurvivalMs) : '—';
+    const victory = save.bestWinTimeMs > 0 ? fmtTime(save.bestWinTimeMs) : '—';
     const records =
       save.runs > 0
-        ? `Рекорд: ${fmtTime(save.bestTimeMs)}   ·   убийств: ${save.bestKills}   ·   уровень: ${save.bestLevel}`
-        : 'Твой первый забег — удачи!';
+        ? `Выживание ${survival}   ·   Победа ${victory}\nОчищено ${save.bestKills}   ·   Ядро ${save.bestLevel}`
+        : IDENTITY.copy.firstRun;
     this.add
-      .text(W / 2, H * 0.46, records, {
+      .text(W / 2, H * 0.45, records, {
         fontFamily: FONT,
         fontSize: '14px',
         color: '#e8f4ff',
+        align: 'center',
+        lineSpacing: 5,
       })
       .setOrigin(0.5)
       .setResolution(2);
 
-    // кнопка «Играть»
     const btnY = H * 0.64;
     const btnBg = this.add
       .rectangle(W / 2, btnY, 250, 64, COLORS.cyan, 0.16)
       .setStrokeStyle(2, COLORS.cyan, 1);
-    const btnText = this.add
-      .text(W / 2, btnY, 'ИГРАТЬ', {
+    this.add
+      .text(W / 2, btnY, 'ЗАПУСТИТЬ ЯДРО', {
         fontFamily: FONT,
-        fontSize: '24px',
+        fontSize: '21px',
         fontStyle: 'bold',
         color: '#35e0ff',
       })
@@ -129,7 +133,7 @@ export class MenuScene extends Phaser.Scene {
       });
 
     this.add
-      .text(W / 2, H - 52, 'Автоогонь по ближайшему врагу. Двигайся, собирай кристаллы\nопыта и выбирай улучшения на новых уровнях.', {
+      .text(W / 2, H - 52, IDENTITY.copy.howToPlay, {
         fontFamily: FONT,
         fontSize: '12px',
         color: '#8a94b0',
@@ -148,7 +152,13 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5, 1)
       .setResolution(2);
 
-    // меню не имеет состояния — при изменении размера просто перезапускаемся
-    this.scale.on('resize', () => this.scene.restart(), this);
+    this.scale.on('resize', this.onResize, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.scale.off('resize', this.onResize, this);
+    });
+  }
+
+  private onResize(): void {
+    this.scene.restart();
   }
 }

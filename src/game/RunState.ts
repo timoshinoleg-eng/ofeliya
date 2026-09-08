@@ -1,4 +1,5 @@
 import { GEM, NOVA, ORBIT, PLAYER, WEAPON } from './config';
+import type { EvolutionId } from './UpgradeSystem';
 
 export function xpForLevel(level: number): number {
   return Math.floor(6 + level * 4 + level * level * 0.35);
@@ -17,6 +18,10 @@ export class RunState {
   comboTimer = 0;
   comboBest = 0;
 
+  /** Текущая и лучшая серия без получения урона. */
+  noDamageMs = 0;
+  maxNoDamageMs = 0;
+
   hp = PLAYER.hp;
   maxHp = PLAYER.hp;
 
@@ -31,9 +36,14 @@ export class RunState {
   regen = 0;
 
   stacks: Record<string, number> = {};
+  evolutions = new Set<EvolutionId>();
 
   get bulletDamage(): number {
     return WEAPON.damage * this.damageMul;
+  }
+
+  get bulletPierce(): number {
+    return this.pierce + (this.hasEvolution('prism') ? 1 : 0);
   }
 
   get fireInterval(): number {
@@ -60,7 +70,6 @@ export class RunState {
     return NOVA.intervalMs * Math.max(0.55, 1 - 0.1 * (this.novaLevel - 1));
   }
 
-  /** Возвращает количество полученных уровней. */
   addXp(v: number): number {
     this.xp += v;
     let levels = 0;
@@ -73,11 +82,30 @@ export class RunState {
     return levels;
   }
 
+  tickNoDamage(delta: number): void {
+    this.noDamageMs += delta;
+    if (this.noDamageMs > this.maxNoDamageMs) this.maxNoDamageMs = this.noDamageMs;
+  }
+
+  resetNoDamage(): void {
+    this.noDamageMs = 0;
+  }
+
   stackOf(id: string): number {
     return this.stacks[id] ?? 0;
   }
 
   bump(id: string): void {
     this.stacks[id] = (this.stacks[id] ?? 0) + 1;
+  }
+
+  hasEvolution(id: EvolutionId): boolean {
+    return this.evolutions.has(id);
+  }
+
+  addEvolution(id: EvolutionId): boolean {
+    if (this.evolutions.has(id)) return false;
+    this.evolutions.add(id);
+    return true;
   }
 }

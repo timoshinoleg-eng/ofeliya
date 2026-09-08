@@ -26,7 +26,6 @@ const THROTTLE_MS: Partial<Record<SfxName, number>> = {
 
 const BASE: string = import.meta.env.BASE_URL || './';
 
-// Маппинг событий на файлы Kenney (vol — относительная громкость проигрывания).
 const MANIFEST: Record<SfxName, { file: string; vol: number }> = {
   shoot: { file: 'audio/sfx/shoot.ogg', vol: 0.5 },
   hit: { file: 'audio/sfx/hit.ogg', vol: 0.45 },
@@ -41,8 +40,6 @@ const MANIFEST: Record<SfxName, { file: string; vol: number }> = {
   victory: { file: 'audio/sfx/victory.ogg', vol: 0.8 },
 };
 
-// Фоновая музыка: треки из CC0-коллекции OpenGameArt (электроника/эмбиент/эпик).
-// Случайный трек на каждый забег. Финальный выбор (решение пользователя 08.09.2026).
 const MUSIC_TRACKS: string[] = [
   'audio/music/loop0.ogg',
   'audio/music/loop1.ogg',
@@ -63,12 +60,19 @@ class SfxImpl {
   private loading: Partial<Record<SfxName, Promise<AudioBuffer | null>>> = {};
   private musicSrc: AudioBufferSourceNode | null = null;
   private musicBuf: AudioBuffer | null = null;
+  private musicAbort: AbortController | null = null;
+  private musicRequestId = 0;
+  private musicWanted = false;
   muted = SaveSystem.get().muted;
 
   setMuted(m: boolean): void {
     this.muted = m;
     SaveSystem.update({ muted: m });
     this.applyGain();
+
+    // Do not spend network/decode work on a track that cannot currently be heard.
+    if (m && !this.musicSrc) this.cancelMusicLoad();
+    if (!m && this.musicWanted && !this.musicSrc) this.startMusic();
   }
 
   toggle(): boolean {
@@ -120,6 +124,10 @@ class SfxImpl {
       })
       .catch(() => null);
     this.loading[name] = p;
+    // A transient network/decode failure must be retryable on a later sound event.
+    void p.then(() => {
+      if (this.loading[name] === p) delete this.loading[name];
+    });
     return p;
   }
 
@@ -135,7 +143,6 @@ class SfxImpl {
     src.start();
   }
 
-  // Процедурный фолбэк — тот же синтез, что был раньше, на случай недоступности ассета.
   private fallback(name: SfxName): void {
     const ctx = this.ensure();
     if (!ctx || !this.sfxGain) return;
@@ -195,7 +202,6 @@ class SfxImpl {
       this.playBuf(buf, this.sfxGain, MANIFEST[name].vol);
       return;
     }
-    // Ассет ещё не готов — грузим в фоне, а сейчас даём процедурный звук для отклика.
     if (!this.loading[name]) void this.load(name);
     this.fallback(name);
   }
@@ -227,24 +233,54 @@ class SfxImpl {
   // --- музыка ---
 
   startMusic(): void {
+    this.musicWanted = true;
+    // Muted runs should not fetch/decode music at all. Unmute resumes this request path.
+    if (this.muted) return;
+    if (this.musicSrc) return;
+    if (this.musicBuf) {
+      this.spawnMusic();
+      return;
+    }
+    if (this.musicAbort) return;
+
     const ctx = this.ensure();
     if (!ctx || !this.musicGain) return;
-    if (this.musicSrc) return;
+
+    const requestId = ++this.musicRequestId;
+    const controller = new AbortController();
+    this.musicAbort = controller;
     const track = MUSIC_TRACKS[Math.floor(Math.random() * MUSIC_TRACKS.length)];
-    fetch(BASE + track)
+
+    void fetch(BASE + track, { signal: controller.signal })
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('HTTP ' + r.status))))
       .then((ab) => ctx.decodeAudioData(ab))
       .then((buf) => {
+        // stopMusic()/mute may have invalidated this async request while fetch/decode was pending.
+        if (requestId !== this.musicRequestId || !this.musicWanted || this.muted) return;
         this.musicBuf = buf;
         this.spawnMusic();
       })
       .catch(() => {
-        /* музыка опциональна — тихий отказ */
+        /* музыка опциональна — abort/network/decode failures are silent */
+      })
+      .finally(() => {
+        if (requestId === this.musicRequestId && this.musicAbort === controller) {
+          this.musicAbort = null;
+        }
       });
   }
 
   private spawnMusic(): void {
-    if (!this.ctx || !this.musicBuf || !this.musicGain || this.musicSrc) return;
+    if (
+      !this.musicWanted ||
+      this.muted ||
+      !this.ctx ||
+      !this.musicBuf ||
+      !this.musicGain ||
+      this.musicSrc
+    ) {
+      return;
+    }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
     const src = this.ctx.createBufferSource();
     src.buffer = this.musicBuf;
@@ -255,6 +291,9 @@ class SfxImpl {
   }
 
   stopMusic(): void {
+    this.musicWanted = false;
+    this.cancelMusicLoad();
+    this.musicBuf = null;
     if (this.musicSrc) {
       try {
         this.musicSrc.stop();
@@ -263,6 +302,18 @@ class SfxImpl {
       }
       this.musicSrc.disconnect();
       this.musicSrc = null;
+    }
+  }
+
+  private cancelMusicLoad(): void {
+    this.musicRequestId += 1;
+    if (this.musicAbort) {
+      try {
+        this.musicAbort.abort();
+      } catch {
+        /* no-op */
+      }
+      this.musicAbort = null;
     }
   }
 }

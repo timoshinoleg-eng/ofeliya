@@ -16,13 +16,25 @@ export class BootScene extends Phaser.Scene {
   private makeTextures(): void {
     const g = this.add.graphics();
 
-    // игрок — тёмный круг с неоновой обводкой и белым ядром
-    g.fillStyle(0x0d1b2a, 1);
+    // ЯДРО OFELIYA: круглая friendly-форма, сегментированное внешнее кольцо и белое ядро.
+    g.fillStyle(0x071321, 1);
     g.fillCircle(14, 14, 13);
     g.lineStyle(2.5, COLORS.cyan, 1);
-    g.strokeCircle(14, 14, 12);
+    for (let i = 0; i < 4; i++) {
+      const a = i * (Math.PI / 2) + 0.12;
+      g.beginPath();
+      g.arc(14, 14, 12, a, a + 1.05);
+      g.strokePath();
+    }
+    g.lineStyle(1.5, COLORS.cyan, 0.45);
+    g.strokeCircle(14, 14, 8);
     g.fillStyle(COLORS.white, 1);
-    g.fillCircle(14, 14, 5);
+    g.fillCircle(14, 14, 4.5);
+    g.fillStyle(COLORS.cyan, 0.95);
+    g.fillCircle(14, 3, 1.5);
+    g.fillCircle(25, 14, 1.5);
+    g.fillCircle(14, 25, 1.5);
+    g.fillCircle(3, 14, 1.5);
     g.generateTexture('player', 28, 28);
     g.clear();
 
@@ -40,32 +52,116 @@ export class BootScene extends Phaser.Scene {
     g.generateTexture('bullet', 14, 6);
     g.clear();
 
-    // роевик — круг
-    g.fillStyle(0x3a1030, 1);
-    g.fillCircle(12, 12, 11);
+    // ШУМ: почти круг, но с рваным/асимметричным контуром и сломанным ядром.
+    g.fillStyle(0x351027, 1);
+    g.fillPoints(
+      [
+        { x: 12, y: 1 },
+        { x: 20, y: 4 },
+        { x: 23, y: 11 },
+        { x: 20, y: 20 },
+        { x: 13, y: 23 },
+        { x: 5, y: 20 },
+        { x: 1, y: 13 },
+        { x: 4, y: 5 },
+      ],
+      true
+    );
     g.lineStyle(2, COLORS.magenta, 1);
-    g.strokeCircle(12, 12, 10);
+    g.strokePoints(
+      [
+        { x: 12, y: 1 },
+        { x: 20, y: 4 },
+        { x: 23, y: 11 },
+        { x: 20, y: 20 },
+        { x: 13, y: 23 },
+        { x: 5, y: 20 },
+        { x: 1, y: 13 },
+        { x: 4, y: 5 },
+      ],
+      true
+    );
+    g.lineStyle(1.5, COLORS.magenta, 0.6);
+    g.beginPath();
+    g.arc(12, 12, 6, -0.25, 1.7);
+    g.strokePath();
+    g.beginPath();
+    g.arc(12, 12, 6, 2.15, 4.35);
+    g.strokePath();
     g.fillStyle(COLORS.magenta, 1);
-    g.fillCircle(12, 12, 4);
+    g.fillCircle(10, 12, 2.5);
+    g.fillRect(13, 9, 3, 6);
     g.generateTexture('enemy-swarm', 24, 24);
     g.clear();
 
-    // бегун — треугольник вправо
+    // ИМПУЛЬС: вытянутый острый клин с разорванным хвостом — читается как скорость.
+    const runnerPts = [
+      { x: 23, y: 12 },
+      { x: 5, y: 2 },
+      { x: 8, y: 9 },
+      { x: 1, y: 12 },
+      { x: 8, y: 15 },
+      { x: 5, y: 22 },
+    ];
     g.fillStyle(0x3a2410, 1);
-    g.fillTriangle(24, 12, 2, 2, 2, 22);
+    g.fillPoints(runnerPts, true);
     g.lineStyle(2, COLORS.orange, 1);
-    g.strokeTriangle(24, 12, 2, 2, 2, 22);
+    g.strokePoints(runnerPts, true);
+    g.fillStyle(COLORS.orange, 0.95);
+    g.fillTriangle(20, 12, 11, 8.5, 11, 15.5);
+    g.lineStyle(1.5, COLORS.orange, 0.55);
+    g.beginPath();
+    g.moveTo(2, 6);
+    g.lineTo(7, 9);
+    g.moveTo(2, 18);
+    g.lineTo(7, 15);
+    g.strokePath();
     g.generateTexture('enemy-runner', 24, 24);
     g.clear();
 
-    // громила — квадрат
-    g.fillStyle(0x2a1245, 1);
-    g.fillRoundedRect(1, 1, 28, 28, 6);
-    g.lineStyle(2, COLORS.purple, 1);
-    g.strokeRoundedRect(2, 2, 26, 26, 6);
-    g.fillStyle(COLORS.purple, 0.9);
-    g.fillRect(10, 10, 10, 10);
+    // РАЗРЫВ: тяжёлая угловатая форма с вырезанным центром и усиленными углами.
+    const brutePts = [
+      { x: 6, y: 1 },
+      { x: 24, y: 1 },
+      { x: 29, y: 6 },
+      { x: 29, y: 24 },
+      { x: 24, y: 29 },
+      { x: 6, y: 29 },
+      { x: 1, y: 24 },
+      { x: 1, y: 6 },
+    ];
+    g.fillStyle(0x28113f, 1);
+    g.fillPoints(brutePts, true);
+    g.lineStyle(2.5, COLORS.purple, 1);
+    g.strokePoints(brutePts, true);
+    g.fillStyle(0x0b0e1a, 1);
+    g.fillRect(9, 9, 12, 12);
+    g.lineStyle(2, COLORS.purple, 0.8);
+    g.strokeRect(10, 10, 10, 10);
+    g.fillStyle(COLORS.purple, 1);
+    g.fillRect(3, 3, 6, 3);
+    g.fillRect(21, 3, 6, 3);
+    g.fillRect(3, 24, 6, 3);
+    g.fillRect(21, 24, 6, 3);
     g.generateTexture('enemy-brute', 30, 30);
+    g.clear();
+
+    // АНОМАЛИЯ: отдельный декоративный overlay для элит, не новый enemy family.
+    g.lineStyle(2, COLORS.gold, 0.95);
+    for (let i = 0; i < 4; i++) {
+      const a = i * (Math.PI / 2) + 0.1;
+      g.beginPath();
+      g.arc(21, 21, 18, a, a + 0.92);
+      g.strokePath();
+    }
+    g.lineStyle(1, COLORS.white, 0.55);
+    g.strokeCircle(21, 21, 14);
+    g.fillStyle(COLORS.gold, 1);
+    g.fillTriangle(21, 0, 18, 5, 24, 5);
+    g.fillTriangle(42, 21, 37, 18, 37, 24);
+    g.fillTriangle(21, 42, 18, 37, 24, 37);
+    g.fillTriangle(0, 21, 5, 18, 5, 24);
+    g.generateTexture('elite-ring', 42, 42);
     g.clear();
 
     // босс
@@ -74,13 +170,20 @@ export class BootScene extends Phaser.Scene {
     g.lineStyle(3, COLORS.red, 1);
     g.strokeCircle(28, 28, 25);
     g.lineStyle(2, COLORS.red, 0.6);
-    g.strokeCircle(28, 28, 18);
+    for (let i = 0; i < 6; i++) {
+      const a = i * (Math.PI / 3) + 0.1;
+      g.beginPath();
+      g.arc(28, 28, 18, a, a + 0.72);
+      g.strokePath();
+    }
     g.fillStyle(COLORS.red, 1);
     g.fillCircle(28, 28, 8);
+    g.fillStyle(COLORS.white, 0.85);
+    g.fillCircle(28, 28, 3);
     g.generateTexture('boss', 56, 56);
     g.clear();
 
-    // кристалл опыта — ромб
+    // фрагмент данных — ромб
     g.fillStyle(COLORS.green, 1);
     g.fillTriangle(6, 0, 0, 8, 12, 8);
     g.fillTriangle(0, 8, 12, 8, 6, 16);
@@ -101,6 +204,49 @@ export class BootScene extends Phaser.Scene {
     g.fillStyle(COLORS.white, 1);
     g.fillCircle(4, 4, 3);
     g.generateTexture('spark', 8, 8);
+    g.clear();
+
+    // Фоновые системные глифы: намеренно тонкие — AtmosphereSystem держит их почти прозрачными.
+    g.lineStyle(2, COLORS.cyan, 1);
+    for (let i = 0; i < 6; i++) {
+      const a = i * (Math.PI / 3) + 0.08;
+      g.beginPath();
+      g.arc(48, 48, 38, a, a + 0.68);
+      g.strokePath();
+    }
+    g.lineStyle(1, COLORS.white, 0.7);
+    g.strokeCircle(48, 48, 26);
+    g.fillStyle(COLORS.cyan, 1);
+    g.fillCircle(48, 10, 2);
+    g.fillCircle(86, 48, 2);
+    g.fillCircle(48, 86, 2);
+    g.fillCircle(10, 48, 2);
+    g.generateTexture('atmo-ring', 96, 96);
+    g.clear();
+
+    g.lineStyle(2, COLORS.purple, 1);
+    g.beginPath();
+    g.moveTo(8, 18);
+    g.lineTo(30, 18);
+    g.lineTo(30, 38);
+    g.lineTo(52, 38);
+    g.lineTo(52, 16);
+    g.lineTo(82, 16);
+    g.moveTo(16, 76);
+    g.lineTo(38, 76);
+    g.lineTo(38, 56);
+    g.lineTo(68, 56);
+    g.lineTo(68, 78);
+    g.lineTo(88, 78);
+    g.strokePath();
+    g.fillStyle(COLORS.purple, 1);
+    g.fillCircle(8, 18, 3);
+    g.fillCircle(52, 38, 3);
+    g.fillCircle(82, 16, 3);
+    g.fillCircle(16, 76, 3);
+    g.fillCircle(68, 56, 3);
+    g.fillCircle(88, 78, 3);
+    g.generateTexture('atmo-circuit', 96, 96);
     g.clear();
 
     this.makeIcons(g);

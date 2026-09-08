@@ -1,10 +1,20 @@
 import Phaser from 'phaser';
+import { getAchievementDef, type AchievementId } from '../game/AchievementSystem';
 import { COLORS, COMBO, FONT, JUICE, fmtTime } from '../game/config';
+import { getEvolutionDef } from '../game/EvolutionSystem';
+import { IDENTITY } from '../game/identity';
 import { Joystick } from '../game/Joystick';
+import {
+  EVOLUTION_NAMES,
+  UPGRADE_FAMILY_LABELS,
+  UPGRADES,
+  getUpgradeProgress,
+  type EvolutionId,
+  type UpgradeDef,
+} from '../game/UpgradeSystem';
 import { MaxBridge } from '../systems/MaxBridge';
 import { Sfx } from '../systems/Sfx';
 import type { GameScene } from './GameScene';
-import type { UpgradeDef } from '../game/UpgradeSystem';
 
 interface RunSnapshot {
   hp: number;
@@ -24,10 +34,18 @@ interface RunResult {
   timeMs: number;
   kills: number;
   level: number;
+  comboBest: number;
+  stacks: Record<string, number>;
+  evolutions: EvolutionId[];
+  newAchievements: AchievementId[];
   records: { timeRecord: boolean; killsRecord: boolean; levelRecord: boolean };
 }
 
 const DEPTH = 50;
+
+type TintableEmitter = Phaser.GameObjects.Particles.ParticleEmitter & {
+  setParticleTint?: (color: number) => void;
+};
 
 export class UIScene extends Phaser.Scene {
   private gs: GameScene | null = null;
@@ -90,10 +108,10 @@ export class UIScene extends Phaser.Scene {
         .setDepth(DEPTH + 1);
 
     this.timerText = text(W / 2, 28, '00:00', 24, '#e8f4ff');
-    this.levelText = text(16, 30, 'УР 1', 15, '#35e0ff', 0);
-    this.killsText = text(W - 16, 30, 'уб. 0', 15, '#aab4d4', 1);
+    this.levelText = text(16, 30, 'ЯДРО 1', 14, '#35e0ff', 0);
+    this.killsText = text(W - 16, 30, 'ОЧИЩ. 0', 14, '#aab4d4', 1);
     this.hpText = text(W / 2, 58, '', 10, '#e8f4ff');
-    this.bossLabel = text(W / 2, 72, 'БОСС', 11, '#ff3860');
+    this.bossLabel = text(W / 2, 72, IDENTITY.boss, 11, '#ff3860');
     this.muteText = this.add
       .text(W - 16, 54, '♪', { fontFamily: FONT, fontSize: '16px', color: Sfx.muted ? '#5a6480' : '#35e0ff' })
       .setOrigin(1, 0)
@@ -102,12 +120,9 @@ export class UIScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerup', () => {
         const muted = Sfx.toggle();
-        this.muteText
-          .setText('♪')
-          .setColor(muted ? '#5a6480' : '#35e0ff');
+        this.muteText.setText('♪').setColor(muted ? '#5a6480' : '#35e0ff');
       });
 
-    // рамка «мало HP» — под HUD, но над игрой (модалки поверх, на глубине 100+)
     this.hpWarn = this.add.graphics().setDepth(DEPTH - 1);
     this.fanfare = this.add
       .particles(0, 0, 'spark', {
@@ -120,7 +135,6 @@ export class UIScene extends Phaser.Scene {
       })
       .setDepth(101);
 
-    // комбо — под уровнем, слева: не мешает таймеру и полосам
     this.lastCombo = 0;
     this.comboText = this.add
       .text(16, 54, '', {
@@ -147,7 +161,6 @@ export class UIScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
     if (run) {
-      // XP-бар
       this.xpBack.clear();
       this.xpBack.fillStyle(0x1a2136, 0.9);
       this.xpBack.fillRoundedRect(12, 12, W - 24, 10, 5);
@@ -159,10 +172,9 @@ export class UIScene extends Phaser.Scene {
       }
 
       this.timerText.setText(fmtTime(run.timeMs));
-      this.levelText.setText(`УР ${run.level}`);
-      this.killsText.setText(`уб. ${run.kills}`);
+      this.levelText.setText(`ЯДРО ${run.level}`);
+      this.killsText.setText(`ОЧИЩ. ${run.kills}`);
 
-      // комбо: пульс на каждом приросте серии
       const showCombo = run.combo >= COMBO.showFrom;
       this.comboText.setVisible(showCombo);
       if (showCombo && run.combo !== this.lastCombo) {
@@ -170,17 +182,11 @@ export class UIScene extends Phaser.Scene {
         this.comboText.setText(`×${run.combo}`);
         this.tweens.killTweensOf(this.comboText);
         this.comboText.setScale(1.4);
-        this.tweens.add({
-          targets: this.comboText,
-          scale: 1,
-          duration: 200,
-          ease: 'Quad.Out',
-        });
+        this.tweens.add({ targets: this.comboText, scale: 1, duration: 200, ease: 'Quad.Out' });
       } else if (!showCombo) {
         this.lastCombo = 0;
       }
 
-      // HP-бар
       const bw = 200;
       const bx = W / 2 - bw / 2;
       this.hpBack.clear();
@@ -194,7 +200,6 @@ export class UIScene extends Phaser.Scene {
       }
       this.hpText.setText(`${Math.ceil(Math.max(0, run.hp))} / ${run.maxHp}`);
 
-      // предупреждение на низком HP: пульсирующая красная рамка по краю экрана
       this.hpWarn.clear();
       if (run.hp > 0 && hf <= JUICE.lowHpFraction) {
         const a = 0.22 + 0.22 * Math.sin(this.time.now / 120);
@@ -202,7 +207,6 @@ export class UIScene extends Phaser.Scene {
         this.hpWarn.strokeRect(8, 8, W - 16, H - 16);
       }
 
-      // полоска босса
       const boss = run.bossMax > 0;
       this.bossBack.setVisible(boss);
       this.bossFill.setVisible(boss);
@@ -223,12 +227,10 @@ export class UIScene extends Phaser.Scene {
       }
     }
 
-    // левелап
     if (this.gs && this.gs.awaitingChoice && !this.modalOpen && !this.overShown) {
       this.showLevelUp();
     }
 
-    // итог забега
     const res = this.registry.get('runResult') as RunResult | undefined | null;
     if (res && !this.overShown) {
       this.overShown = true;
@@ -247,14 +249,11 @@ export class UIScene extends Phaser.Scene {
     this.muteText.setX(W - 16);
   }
 
-  // --- модалка левелапа ---
-
   private showLevelUp(): void {
     const gs = this.gs;
     if (!gs) return;
     this.modalOpen = true;
     this.uiBlocked = true;
-    // пауза боя на время выбора улучшения
     this.scene.pause('Game');
     Sfx.play('levelup');
     MaxBridge.notify('success');
@@ -262,14 +261,13 @@ export class UIScene extends Phaser.Scene {
 
     const W = this.scale.width;
     const H = this.scale.height;
+    const compact = H < 620;
     const c = this.add.container(0, 0).setDepth(100);
     this.modal = c;
 
-    const dim = this.add.rectangle(W / 2, H / 2, W, H, 0x05070f, 0.72).setInteractive();
+    const dim = this.add.rectangle(W / 2, H / 2, W, H, 0x05070f, 0.76).setInteractive();
     c.add(dim);
 
-    // фанфары: кольцо + искры в центре (камера следует за игроком, он ~в центре).
-    // Живут в UI-сцене — она не ставится на паузу, эффект доигрывает до конца.
     const ring = this.add
       .circle(W / 2, H / 2, 20)
       .setStrokeStyle(3, COLORS.cyan, 0.9)
@@ -284,12 +282,14 @@ export class UIScene extends Phaser.Scene {
     });
     this.fanfare.emitParticleAt(W / 2, H / 2, 22);
 
+    const titleY = compact ? H * 0.1 : H * 0.13;
     const titleT = this.add
-      .text(W / 2, H * 0.14, `УРОВЕНЬ ${gs.runState.level}`, {
+      .text(W / 2, titleY, IDENTITY.levelUp, {
         fontFamily: FONT,
-        fontSize: '30px',
+        fontSize: compact ? '23px' : '27px',
         fontStyle: 'bold',
         color: '#35e0ff',
+        align: 'center',
       })
       .setOrigin(0.5)
       .setResolution(2)
@@ -299,9 +299,9 @@ export class UIScene extends Phaser.Scene {
     this.tweens.add({ targets: titleT, scale: 1, duration: 260, ease: 'Back.Out' });
     c.add(
       this.add
-        .text(W / 2, H * 0.14 + 40, 'выбери улучшение', {
+        .text(W / 2, titleY + (compact ? 31 : 38), `ядро ${gs.runState.level} · выбери протокол`, {
           fontFamily: FONT,
-          fontSize: '14px',
+          fontSize: compact ? '12px' : '14px',
           color: '#aab4d4',
         })
         .setOrigin(0.5)
@@ -309,74 +309,287 @@ export class UIScene extends Phaser.Scene {
     );
 
     const cards = gs.pendingChoices;
-    const cw = Math.min(W - 40, 340);
-    const ch = 88;
-    const gap = 14;
+    const cw = Math.min(W - 28, 360);
+    const ch = compact ? 94 : 106;
+    const gap = compact ? 8 : 10;
     const totalH = cards.length * ch + (cards.length - 1) * gap;
-    let y = H / 2 - totalH / 2 + ch / 2;
+    const blockCenter = compact ? H * 0.56 : H * 0.55;
+    let y = blockCenter - totalH / 2 + ch / 2;
 
-    cards.forEach((def: UpgradeDef) => {
+    cards.forEach((def: UpgradeDef, cardIndex: number) => {
       const card = this.add.container(W / 2, y);
+      const evolution = def.kind === 'evolution';
+      const accent = evolution ? COLORS.gold : def.rarity === 'rare' ? COLORS.purple : COLORS.cyan;
+      const progress = getUpgradeProgress(gs.runState, def);
       const bg = this.add
-        .rectangle(0, 0, cw, ch, COLORS.panel, 0.98)
-        .setStrokeStyle(2, COLORS.cyan, 0.85);
-      // иконка рисуется кодом в BootScene (ключ up-<id>); если текстуры нет —
-      // просто едем без неё, карточка остаётся текстовой
+        .rectangle(0, 0, cw, ch, COLORS.panel, 0.985)
+        .setStrokeStyle(evolution ? 3 : def.rarity === 'rare' ? 2.5 : 2, accent, evolution ? 1 : 0.85);
       card.add(bg);
-      const iconKey = `up-${def.id}`;
-      const hasIcon = this.textures.exists(iconKey);
-      if (hasIcon) card.add(this.add.image(-cw / 2 + 38, 0, iconKey));
-      const tx = -cw / 2 + (hasIcon ? 68 : 16);
-      const nameT = this.add
-        .text(tx, -ch / 2 + 12, def.name, {
-          fontFamily: FONT,
-          fontSize: '17px',
-          fontStyle: 'bold',
-          color: '#e8f4ff',
-        })
-        .setResolution(2);
-      const descT = this.add
-        .text(tx, -ch / 2 + 38, def.desc, {
-          fontFamily: FONT,
-          fontSize: '12px',
-          color: '#aab4d4',
-          wordWrap: { width: cw - 16 - (tx + cw / 2) },
-        })
-        .setResolution(2);
-      card.add([nameT, descT]);
-      const stacks = gs.runState.stackOf(def.id);
-      if (stacks > 0) {
+
+      if (evolution) {
         card.add(
           this.add
-            .text(cw / 2 - 12, -ch / 2 + 10, `×${stacks}`, {
+            .rectangle(0, 0, cw - 6, ch - 6, COLORS.gold, 0.035)
+            .setStrokeStyle(1, COLORS.gold, 0.28)
+        );
+      }
+
+      const iconKey = evolution && def.evolutionId ? `up-${this.evolutionIcon(def.evolutionId)}` : `up-${def.id}`;
+      const hasIcon = this.textures.exists(iconKey);
+      if (hasIcon) {
+        card.add(
+          this.add
+            .image(-cw / 2 + 38, -2, iconKey)
+            .setScale(compact ? 0.82 : 0.9)
+            .setTint(evolution ? COLORS.gold : def.rarity === 'rare' ? 0xe9dcff : 0xffffff)
+        );
+      }
+
+      const tx = -cw / 2 + (hasIcon ? 68 : 16);
+      const right = cw / 2 - 12;
+      const family = evolution
+        ? 'ЭВОЛЮЦИЯ ГОТОВА'
+        : `${UPGRADE_FAMILY_LABELS[def.family]} · ${def.rarity === 'rare' ? 'РЕДКИЙ' : 'СТАНДАРТ'}`;
+      card.add(
+        this.add
+          .text(tx, -ch / 2 + 8, family, {
+            fontFamily: FONT,
+            fontSize: compact ? '9px' : '10px',
+            fontStyle: 'bold',
+            color: evolution ? '#ffe066' : def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
+          })
+          .setResolution(2)
+      );
+
+      card.add(
+        this.add
+          .text(tx, -ch / 2 + (compact ? 22 : 24), def.shortName, {
+            fontFamily: FONT,
+            fontSize: evolution ? (compact ? '16px' : '18px') : compact ? '14px' : '15px',
+            fontStyle: 'bold',
+            color: evolution ? '#ffe066' : '#e8f4ff',
+          })
+          .setResolution(2)
+      );
+
+      card.add(
+        this.add
+          .text(tx, -ch / 2 + (compact ? 43 : 47), def.name, {
+            fontFamily: FONT,
+            fontSize: compact ? '10px' : '11px',
+            fontStyle: 'bold',
+            color: evolution ? '#fff1ac' : def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
+            wordWrap: { width: Math.max(100, right - tx) },
+          })
+          .setResolution(2)
+      );
+
+      if (!compact && !evolution) {
+        card.add(
+          this.add
+            .text(tx, -ch / 2 + 64, def.desc, {
               fontFamily: FONT,
-              fontSize: '12px',
-              color: '#5a6480',
+              fontSize: '10px',
+              color: '#8f9ab7',
+              wordWrap: { width: Math.max(100, right - tx - 4) },
+            })
+            .setResolution(2)
+        );
+      }
+
+      if (!evolution && def.evolutionHint) {
+        card.add(
+          this.add
+            .text(right, -ch / 2 + 9, `→ ${EVOLUTION_NAMES[def.evolutionHint]}`, {
+              fontFamily: FONT,
+              fontSize: compact ? '9px' : '10px',
+              fontStyle: 'bold',
+              color: '#ffe066',
             })
             .setOrigin(1, 0)
             .setResolution(2)
         );
       }
+
+      if (def.showProgress !== false && def.max <= 8) {
+        const pg = this.add.graphics();
+        const barX = tx;
+        const barY = ch / 2 - 13;
+        const available = Math.min(118, Math.max(72, right - tx - 64));
+        const segGap = 3;
+        const segW = (available - segGap * (def.max - 1)) / def.max;
+        for (let i = 0; i < def.max; i++) {
+          const x = barX + i * (segW + segGap);
+          const completed = i < progress.current;
+          const next = i === progress.current;
+          pg.fillStyle(accent, completed ? 0.95 : next ? 0.42 : 0.1);
+          pg.fillRoundedRect(x, barY, segW, 5, 2);
+        }
+        card.add(pg);
+        card.add(
+          this.add
+            .text(right, barY - 5, `${progress.current} → ${progress.next} / ${progress.max}`, {
+              fontFamily: FONT,
+              fontSize: '9px',
+              color: '#7f8aa7',
+            })
+            .setOrigin(1, 0)
+            .setResolution(2)
+        );
+      } else {
+        card.add(
+          this.add
+            .text(right, ch / 2 - 19, evolution ? 'ПЕРЕПИСАТЬ ПРОТОКОЛ' : 'РАЗОВЫЙ ПРОТОКОЛ', {
+              fontFamily: FONT,
+              fontSize: '9px',
+              fontStyle: evolution ? 'bold' : 'normal',
+              color: evolution ? '#ffe066' : '#7dff6e',
+            })
+            .setOrigin(1, 0)
+            .setResolution(2)
+        );
+      }
+
       bg.setInteractive({ useHandCursor: true }).on('pointerup', () => {
         Sfx.play('click');
         const more = gs.chooseUpgrade(def.id);
-        if (more) {
+        const evolutionId = gs.consumeEvolutionCeremony();
+        if (evolutionId) {
           c.destroy();
+          if (this.modal === c) this.modal = null;
+          this.showEvolutionCeremony(evolutionId, more);
+        } else if (more) {
+          c.destroy();
+          if (this.modal === c) this.modal = null;
+          this.modalOpen = false;
           this.showLevelUp();
         } else {
           this.hideModal();
           this.scene.resume('Game');
         }
       });
-      bg.on('pointerover', () => bg.setFillStyle(COLORS.panelHover, 0.98));
-      bg.on('pointerout', () => bg.setFillStyle(COLORS.panel, 0.98));
+      bg.on('pointerover', () => bg.setFillStyle(evolution ? 0x332d18 : COLORS.panelHover, 1));
+      bg.on('pointerout', () => bg.setFillStyle(COLORS.panel, 0.985));
 
       c.add(card);
-      card.setScale(0.92).setAlpha(0);
-      this.tweens.add({ targets: card, scale: 1, alpha: 1, duration: 150, ease: 'Back.Out' });
+      card.setScale(0.94).setAlpha(0);
+      this.tweens.add({
+        targets: card,
+        scale: 1,
+        alpha: 1,
+        duration: 170,
+        delay: cardIndex * 35,
+        ease: 'Back.Out',
+      });
 
       y += ch + gap;
     });
+  }
+
+  private showEvolutionCeremony(id: EvolutionId, moreChoices: boolean): void {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const def = getEvolutionDef(id);
+    this.modalOpen = true;
+    this.uiBlocked = true;
+
+    const c = this.add.container(0, 0).setDepth(106);
+    this.modal = c;
+    c.add(this.add.rectangle(W / 2, H / 2, W, H, 0x03040a, 0.9).setInteractive());
+
+    const outer = this.add
+      .circle(W / 2, H * 0.43, 58)
+      .setStrokeStyle(3, COLORS.gold, 0.9)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    const inner = this.add
+      .circle(W / 2, H * 0.43, 30)
+      .setStrokeStyle(2, COLORS.white, 0.7)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    c.add([outer, inner]);
+    this.tweens.add({ targets: outer, scale: 1.75, alpha: 0.08, duration: 760, ease: 'Quad.Out' });
+    this.tweens.add({ targets: inner, scale: 0.55, alpha: 1, duration: 300, yoyo: true, ease: 'Sine.InOut' });
+
+    (this.fanfare as TintableEmitter).setParticleTint?.(COLORS.gold);
+    this.fanfare.emitParticleAt(W / 2, H * 0.43, 38);
+
+    c.add(
+      this.add
+        .text(W / 2, H * 0.21, 'ЭВОЛЮЦИЯ ЯДРА', {
+          fontFamily: FONT,
+          fontSize: '18px',
+          fontStyle: 'bold',
+          color: '#fff1ac',
+          letterSpacing: 2,
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+
+    const name = this.add
+      .text(W / 2, H * 0.31, def.name, {
+        fontFamily: FONT,
+        fontSize: H < 620 ? '30px' : '38px',
+        fontStyle: 'bold',
+        color: '#ffe066',
+        align: 'center',
+      })
+      .setOrigin(0.5)
+      .setResolution(2)
+      .setShadow(0, 0, 'rgba(255,224,102,0.85)', 20, true, true);
+    c.add(name);
+    name.setScale(0.6);
+    this.tweens.add({ targets: name, scale: 1, duration: 380, ease: 'Back.Out' });
+
+    c.add(
+      this.add
+        .text(W / 2, H * 0.61, def.effect, {
+          fontFamily: FONT,
+          fontSize: '13px',
+          color: '#e8f4ff',
+          align: 'center',
+          wordWrap: { width: Math.min(W - 48, 360) },
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+    c.add(
+      this.add
+        .text(W / 2, H * 0.69, 'ПРОТОКОЛ ПЕРЕПИСАН', {
+          fontFamily: FONT,
+          fontSize: '12px',
+          fontStyle: 'bold',
+          color: '#ffe066',
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+
+    Sfx.play('levelup');
+    this.time.delayedCall(130, () => Sfx.play(id === 'singularity' ? 'nova' : 'elite'));
+    MaxBridge.haptic('heavy');
+
+    this.time.delayedCall(1050, () => {
+      this.tweens.add({
+        targets: c,
+        alpha: 0,
+        duration: 240,
+        onComplete: () => {
+          c.destroy();
+          if (this.modal === c) this.modal = null;
+          this.modalOpen = false;
+          this.uiBlocked = false;
+          (this.fanfare as TintableEmitter).setParticleTint?.(COLORS.cyan);
+          if (moreChoices) this.showLevelUp();
+          else this.scene.resume('Game');
+        },
+      });
+    });
+  }
+
+  private evolutionIcon(id: EvolutionId): string {
+    if (id === 'prism') return 'pierce';
+    if (id === 'halo') return 'orbit';
+    return 'nova';
   }
 
   private hideModal(): void {
@@ -386,23 +599,24 @@ export class UIScene extends Phaser.Scene {
     this.uiBlocked = false;
   }
 
-  // --- итог забега ---
-
   private showGameOver(res: RunResult): void {
     this.uiBlocked = true;
     const W = this.scale.width;
     const H = this.scale.height;
+    const compact = H < 650;
     const c = this.add.container(0, 0).setDepth(110);
 
-    c.add(this.add.rectangle(W / 2, H / 2, W, H, 0x05070f, 0.8).setInteractive());
+    c.add(this.add.rectangle(W / 2, H / 2, W, H, 0x05070f, 0.84).setInteractive());
 
+    const titleY = compact ? H * 0.1 : H * 0.13;
     c.add(
       this.add
-        .text(W / 2, H * 0.2, res.win ? 'ПОБЕДА!' : 'ИГРА ОКОНЧЕНА', {
+        .text(W / 2, titleY, res.win ? 'ЯДРО СТАБИЛИЗИРОВАНО' : 'ЯДРО ПОТЕРЯНО', {
           fontFamily: FONT,
-          fontSize: '34px',
+          fontSize: res.win ? (compact ? '22px' : '27px') : compact ? '27px' : '32px',
           fontStyle: 'bold',
           color: res.win ? '#ffe066' : '#ff3860',
+          align: 'center',
         })
         .setOrigin(0.5)
         .setResolution(2)
@@ -411,9 +625,9 @@ export class UIScene extends Phaser.Scene {
 
     c.add(
       this.add
-        .text(W / 2, H * 0.2 + 58, fmtTime(res.timeMs), {
+        .text(W / 2, titleY + (compact ? 42 : 54), fmtTime(res.timeMs), {
           fontFamily: FONT,
-          fontSize: '46px',
+          fontSize: compact ? '38px' : '46px',
           fontStyle: 'bold',
           color: '#e8f4ff',
         })
@@ -421,29 +635,88 @@ export class UIScene extends Phaser.Scene {
         .setResolution(2)
     );
 
+    const statY = titleY + (compact ? 79 : 100);
     c.add(
       this.add
-        .text(W / 2, H * 0.2 + 104, `Убийств: ${res.kills}   ·   Уровень: ${res.level}`, {
+        .text(
+          W / 2,
+          statY,
+          `${IDENTITY.kills}: ${res.kills}   ·   Ядро: ${res.level}   ·   Комбо: ×${res.comboBest}`,
+          {
+            fontFamily: FONT,
+            fontSize: compact ? '11px' : '13px',
+            color: '#aab4d4',
+          }
+        )
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+
+    let detailY = statY + 27;
+    const evoText = res.evolutions.length > 0
+      ? res.evolutions.map((id) => EVOLUTION_NAMES[id]).join(' · ')
+      : 'нет';
+    c.add(
+      this.add
+        .text(W / 2, detailY, `ЭВОЛЮЦИИ: ${evoText}`, {
           fontFamily: FONT,
-          fontSize: '14px',
-          color: '#aab4d4',
+          fontSize: compact ? '10px' : '11px',
+          fontStyle: 'bold',
+          color: res.evolutions.length > 0 ? '#ffe066' : '#5a6480',
+          align: 'center',
+          wordWrap: { width: W - 42 },
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+
+    detailY += compact ? 25 : 29;
+    const build = this.buildSummary(res.stacks);
+    c.add(
+      this.add
+        .text(W / 2, detailY, `СБОРКА: ${build || 'базовое ядро'}`, {
+          fontFamily: FONT,
+          fontSize: compact ? '9px' : '10px',
+          color: '#8f9ab7',
+          align: 'center',
+          wordWrap: { width: W - 42 },
         })
         .setOrigin(0.5)
         .setResolution(2)
     );
 
     const rec: string[] = [];
-    if (res.records.timeRecord && res.timeMs > 0) rec.push('время');
-    if (res.records.killsRecord) rec.push('убийства');
-    if (res.records.levelRecord) rec.push('уровень');
+    if (res.records.timeRecord && res.timeMs > 0) rec.push(res.win ? 'победа' : 'выживание');
+    if (res.records.killsRecord) rec.push('очищено');
+    if (res.records.levelRecord) rec.push('ядро');
     if (rec.length > 0) {
+      detailY += compact ? 24 : 28;
       c.add(
         this.add
-          .text(W / 2, H * 0.2 + 130, `НОВЫЕ РЕКОРДЫ: ${rec.join(' · ')}`, {
+          .text(W / 2, detailY, `НОВЫЕ ЗАПИСИ: ${rec.join(' · ')}`, {
             fontFamily: FONT,
-            fontSize: '13px',
+            fontSize: compact ? '10px' : '11px',
+            fontStyle: 'bold',
+            color: '#73eaff',
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+      );
+    }
+
+    if (res.newAchievements.length > 0) {
+      detailY += compact ? 24 : 29;
+      const labels = res.newAchievements.slice(0, 2).map((id) => getAchievementDef(id).name);
+      const extra = res.newAchievements.length > 2 ? ` +${res.newAchievements.length - 2}` : '';
+      c.add(
+        this.add
+          .text(W / 2, detailY, `НОВОЕ ДОСТИЖЕНИЕ: ${labels.join(' · ')}${extra}`, {
+            fontFamily: FONT,
+            fontSize: compact ? '9px' : '10px',
             fontStyle: 'bold',
             color: '#ffe066',
+            align: 'center',
+            wordWrap: { width: W - 42 },
           })
           .setOrigin(0.5)
           .setResolution(2)
@@ -451,7 +724,8 @@ export class UIScene extends Phaser.Scene {
     }
 
     const gs = this.gs;
-    let y = H * 0.6;
+    let y = Math.max(H * (compact ? 0.66 : 0.68), detailY + (compact ? 54 : 62));
+    const gap = compact ? 50 : 56;
     this.button(c, 'ЕЩЁ РАЗ', W / 2, y, true, () => {
       this.scene.stop();
       if (gs) {
@@ -459,17 +733,18 @@ export class UIScene extends Phaser.Scene {
         gs.scene.restart();
       }
     });
-    y += 58;
+    y += gap;
     this.button(c, 'ПОДЕЛИТЬСЯ', W / 2, y, false, () => {
       const mins = fmtTime(res.timeMs);
+      const evoShare = res.evolutions.length > 0 ? ` Эволюции: ${res.evolutions.map((id) => EVOLUTION_NAMES[id]).join(', ')}.` : '';
       const shareText = res.win
-        ? `Я убил босса в OFELIYA за ${mins}! Убийств: ${res.kills}. Сможешь быстрее?`
-        : `Я продержался ${mins} в OFELIYA и набил ${res.kills} убийств. Сможешь больше?`;
+        ? `Я стабилизировал ядро OFELIYA за ${mins}! Очищено угроз: ${res.kills}.${evoShare} Сможешь быстрее?`
+        : `Моё ядро OFELIYA продержалось ${mins}. Очищено угроз: ${res.kills}.${evoShare} Сможешь больше?`;
       void MaxBridge.shareResult(shareText).then((ok) => {
         if (!ok) this.toast(c, 'Поделиться можно внутри MAX');
       });
     });
-    y += 58;
+    y += gap;
     this.button(c, 'В МЕНЮ', W / 2, y, false, () => {
       this.scene.stop();
       if (gs) {
@@ -477,6 +752,27 @@ export class UIScene extends Phaser.Scene {
         gs.scene.start('Menu');
       }
     });
+  }
+
+  private buildSummary(stacks: Record<string, number>): string {
+    const labels: Record<string, string> = {
+      dmg: 'ИМПУЛЬС',
+      rate: 'РАЗГОН',
+      multi: 'ЗАЛП',
+      pierce: 'СКВОЗНОЙ',
+      speed: 'СКОРОСТЬ',
+      hp: 'БРОНЯ',
+      magnet: 'ПОЛЕ',
+      orbit: 'КОЛЬЦО',
+      nova: 'ВОЛНА',
+      regen: 'РЕМОНТ',
+    };
+    return Object.entries(stacks)
+      .filter(([id, n]) => n > 0 && UPGRADES.some((u) => u.id === id))
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([id, n]) => `${labels[id] ?? id.toUpperCase()} ${n}`)
+      .join(' · ');
   }
 
   private button(
