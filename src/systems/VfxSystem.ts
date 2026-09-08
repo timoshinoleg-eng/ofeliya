@@ -64,7 +64,6 @@ export class VfxSystem {
   }
 
   hit(x: number, y: number, color = COLORS.white): void {
-    // Не рисуем burst на каждом projectile hit при плотной толпе.
     const now = this.scene.time.now;
     if (now - this.lastHitAt < 45) return;
     this.lastHitAt = now;
@@ -78,7 +77,13 @@ export class VfxSystem {
     this.killEmitter.emitParticleAt(x, y, count);
 
     if (importance !== 'normal') {
-      this.ring(x, y, importance === 'boss' ? COLORS.red : COLORS.gold, importance === 'boss' ? 84 : 48, 360);
+      this.ring(
+        x,
+        y,
+        importance === 'boss' ? COLORS.red : COLORS.gold,
+        importance === 'boss' ? 84 : 48,
+        360
+      );
     }
   }
 
@@ -91,6 +96,41 @@ export class VfxSystem {
     this.tint(this.rewardEmitter, COLORS.cyan);
     this.rewardEmitter.emitParticleAt(x, y, 10);
     this.ring(x, y, COLORS.cyan, radius, 360, 0.3);
+  }
+
+  singularity(x: number, y: number, radius: number): void {
+    this.tint(this.rewardEmitter, COLORS.purple);
+    this.rewardEmitter.emitParticleAt(x, y, 18);
+
+    // Отдельная фаза схлопывания перед привычной ударной волной.
+    const collapse = this.scene.add
+      .circle(x, y, radius * 0.62)
+      .setStrokeStyle(3, COLORS.purple, 0.9)
+      .setDepth(19)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    this.scene.tweens.add({
+      targets: collapse,
+      scale: 0.12,
+      alpha: 0.1,
+      duration: 170,
+      ease: 'Quad.In',
+      onComplete: () => collapse.destroy(),
+    });
+
+    const core = this.scene.add
+      .circle(x, y, 7, COLORS.white, 0.8)
+      .setDepth(20)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    this.scene.tweens.add({
+      targets: core,
+      scale: 2.2,
+      alpha: 0,
+      duration: 320,
+      ease: 'Quad.Out',
+      onComplete: () => core.destroy(),
+    });
+
+    this.ring(x, y, COLORS.purple, radius, 430, 0.36, 135);
   }
 
   levelUp(x: number, y: number): void {
@@ -124,7 +164,8 @@ export class VfxSystem {
     color: number,
     radius: number,
     duration: number,
-    alpha = 0.22
+    alpha = 0.22,
+    delay = 0
   ): void {
     const startRadius = 12;
     const ring = this.scene.add
@@ -132,12 +173,15 @@ export class VfxSystem {
       .setStrokeStyle(2, color, Math.min(1, alpha * 2.6))
       .setDepth(19)
       .setBlendMode(Phaser.BlendModes.ADD);
+    if (delay > 0) ring.setAlpha(0);
     this.scene.tweens.add({
       targets: ring,
       scale: radius / startRadius,
-      alpha: 0,
+      alpha: { from: alpha, to: 0 },
       duration,
+      delay,
       ease: 'Quad.Out',
+      onStart: () => ring.setAlpha(alpha),
       onComplete: () => ring.destroy(),
     });
   }
