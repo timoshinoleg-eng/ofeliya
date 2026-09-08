@@ -11,45 +11,52 @@ export interface RunMilestoneDef {
 
 export const RUN_MILESTONES: RunMilestoneDef[] = [
   {
-    id: 'runner-signal',
+    id: 'rna-detected',
+    atMs: 15_000,
+    title: 'ЧУЖЕРОДНАЯ РНК ОБНАРУЖЕНА',
+    subtitle: 'ИММУНИТЕТ НАЧИНАЕТ ПОИСК',
+    color: COLORS.cyan,
+  },
+  {
+    id: 'immune-response',
     atMs: 45_000,
-    title: 'НОВЫЙ СИГНАЛ',
-    subtitle: 'ИМПУЛЬС ОБНАРУЖЕН',
+    title: 'ИММУННЫЙ ОТВЕТ АКТИВИРОВАН',
+    subtitle: 'АНТИТЕЛА МОБИЛИЗОВАНЫ',
     color: COLORS.orange,
   },
   {
-    id: 'brute-signal',
+    id: 't-cell-response',
     atMs: 90_000,
-    title: 'СТРУКТУРА ПОВРЕЖДЕНА',
-    subtitle: 'РАЗРЫВ ОБНАРУЖЕН',
+    title: 'T-КЛЕТКИ ПОДКЛЮЧЕНЫ',
+    subtitle: 'ОХОТА НА ШТАММ УСКОРЯЕТСЯ',
     color: COLORS.purple,
   },
   {
-    id: 'first-anomaly',
+    id: 'adaptive-immunity',
     atMs: 120_000,
-    title: 'АНОМАЛИЯ',
-    subtitle: 'СТАБИЛЬНОСТЬ СНИЖЕНА',
+    title: 'АДАПТИВНЫЙ ИММУНИТЕТ',
+    subtitle: 'NK-КЛЕТКИ В ПОИСКЕ',
     color: COLORS.gold,
   },
   {
-    id: 'overload',
+    id: 'systemic-response',
     atMs: 180_000,
-    title: 'СИСТЕМА ПЕРЕГРУЖЕНА',
-    subtitle: 'ПЛОТНОСТЬ УГРОЗ РАСТЁТ',
+    title: 'СИСТЕМНЫЙ ОТВЕТ',
+    subtitle: 'КРОВОТОК НЕСТАБИЛЕН',
     color: COLORS.magenta,
   },
   {
-    id: 'critical',
+    id: 'critical-immune-response',
     atMs: 240_000,
-    title: 'КРИТИЧЕСКИЙ УРОВЕНЬ',
-    subtitle: 'ДО СТАБИЛИЗАЦИИ ЯДРА — 01:00',
+    title: 'КРИТИЧЕСКАЯ ИММУННАЯ РЕАКЦИЯ',
+    subtitle: 'ДО IMMUNE PRIME — 01:00',
     color: COLORS.red,
   },
 ];
 
 /**
- * Только presentation: читает время забега и создаёт одноразовые сообщения.
- * Не пишет в WaveDirector/config и не влияет на сложность или управление.
+ * Presentation-only immune escalation: reads run time and creates one-shot messages.
+ * Enemy composition and boss timing stay owned by WaveDirector/config.
  */
 export class RunMilestones {
   private readonly scene: Phaser.Scene;
@@ -97,7 +104,7 @@ export class RunMilestones {
     const title = this.scene.add
       .text(0, -17, def.title, {
         fontFamily: FONT,
-        fontSize: H < 620 ? '15px' : '17px',
+        fontSize: H < 620 ? '13px' : '15px',
         fontStyle: 'bold',
         color: '#e8f4ff',
         align: 'center',
@@ -107,7 +114,7 @@ export class RunMilestones {
     const subtitle = this.scene.add
       .text(0, 10, def.subtitle, {
         fontFamily: FONT,
-        fontSize: H < 620 ? '10px' : '11px',
+        fontSize: H < 620 ? '9px' : '10px',
         fontStyle: 'bold',
         color: `#${def.color.toString(16).padStart(6, '0')}`,
         align: 'center',
