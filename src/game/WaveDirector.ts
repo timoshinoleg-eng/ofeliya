@@ -20,8 +20,9 @@ export class WaveDirector {
     this.enemies = enemies;
     this.milestones = new RunMilestones(scene);
 
-    // First-session hook: three antibodies begin inside auto-fire range so the player sees
-    // shooting immediately, while their spacing leaves a clear escape lane for a new player.
+    // First-session hook: three antibodies begin inside auto-fire range. The nearest one is
+    // intentionally close enough for its RNA drop to enter the default magnet radius after the
+    // opening two-shot kill, while the offset pair leaves a readable escape lane.
     this.spawnOpeningAntibodies();
   }
 
@@ -86,9 +87,9 @@ export class WaveDirector {
   private spawnOpeningAntibodies(): void {
     const p = this.scene.player;
     const layout = [
-      { angle: -0.3, radius: 205 },
-      { angle: 2.05, radius: 235 },
-      { angle: 3.85, radius: 255 },
+      { angle: -0.28, radius: 150 },
+      { angle: 2.1, radius: 205 },
+      { angle: 3.9, radius: 235 },
     ];
     for (const spot of layout) {
       this.scene.spawnEnemy(
