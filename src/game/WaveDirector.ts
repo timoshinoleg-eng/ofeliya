@@ -43,7 +43,9 @@ export class WaveDirector {
     }
 
     const progress = Phaser.Math.Clamp(t / RUN.bossTimeMs, 0, 1);
-    const interval = Phaser.Math.Linear(1150, 330, progress);
+    let interval = Phaser.Math.Linear(1150, 330, progress);
+    // бой с боссом — дуэль: обычный спавн реже, иначе босс теряется в толпе
+    if (this.bossSpawned) interval /= RUN.bossPhaseSpawnMul;
     this.spawnAcc += delta;
     while (this.spawnAcc >= interval) {
       this.spawnAcc -= interval;

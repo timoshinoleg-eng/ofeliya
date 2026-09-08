@@ -1,5 +1,14 @@
 import Phaser from 'phaser';
-import { COLORS, ORBIT, PLAYER, POSTFX, WEAPON, difficulty, type EnemyKind } from '../game/config';
+import {
+  BOSS_SCALE,
+  COLORS,
+  ORBIT,
+  PLAYER,
+  POSTFX,
+  WEAPON,
+  difficulty,
+  type EnemyKind,
+} from '../game/config';
 import { Player } from '../game/Player';
 import { Enemy } from '../game/Enemy';
 import { Bullet } from '../game/Bullet';
@@ -225,8 +234,14 @@ export class GameScene extends Phaser.Scene {
   spawnEnemy(kind: EnemyKind, x: number, y: number, elite: boolean): Enemy | null {
     const e = this.enemies.get(x, y) as Enemy | null;
     if (!e) return null;
+    // босс — фиксированный климакс: кривая сложности к нему не применяется
+    const isBoss = kind === 'boss';
     const { hpScale, dmgScale } = difficulty(this.runState.timeMs);
-    e.activate(this, kind, x, y, { elite, hpScale, dmgScale });
+    e.activate(this, kind, x, y, {
+      elite,
+      hpScale: isBoss ? BOSS_SCALE.hp : hpScale,
+      dmgScale: isBoss ? BOSS_SCALE.dmg : dmgScale,
+    });
     if (kind === 'boss') {
       Sfx.play('boss');
       this.cameras.main.shake(320, 0.008);

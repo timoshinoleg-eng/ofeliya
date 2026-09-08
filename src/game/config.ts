@@ -64,6 +64,11 @@ export const GEM = {
 /** Момент появления босса — победа, если убить его. */
 export const RUN = {
   bossTimeMs: 5 * 60 * 1000,
+  /**
+   * Во сколько раз реже спавнятся обычные враги после появления босса.
+   * 0.35 → интервал ×2.9: босс читается как дуэль, а не теряется в толпе.
+   */
+  bossPhaseSpawnMul: 0.35,
 };
 
 export type EnemyKind = 'swarm' | 'runner' | 'brute' | 'boss';
@@ -86,6 +91,14 @@ export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
 };
 
 export const ELITE = { hpMul: 6, dmgMul: 1.7, xpMul: 8, scale: 1.45 };
+
+/**
+ * Босс — фиксированный климакс забега, НЕ масштабируется кривой сложности.
+ * difficulty() даёт на 5:00 ×3.1 HP: 2600 → 8060 HP. При ~100–150 DPS игрока
+ * это минута боя и нулевой винрейт у недамажных сборок (победа = шеринг).
+ * 2600 HP — расчётный бой ~20 с. Менять здесь, а не в ENEMY_DEFS.boss.
+ */
+export const BOSS_SCALE = { hp: 1, dmg: 1 };
 
 /** Множители сложности, растущие со временем забега. */
 export function difficulty(timeMs: number): { hpScale: number; dmgScale: number } {
