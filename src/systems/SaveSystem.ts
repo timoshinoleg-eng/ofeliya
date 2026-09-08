@@ -1,7 +1,11 @@
 import type { EvolutionId } from '../game/UpgradeSystem';
 
 export interface SaveData {
+  /** Legacy compatibility alias. New code should use bestSurvivalMs. */
   bestTimeMs: number;
+  bestSurvivalMs: number;
+  /** Fastest successful boss clear; 0 means no victory yet. */
+  bestWinTimeMs: number;
   bestKills: number;
   bestLevel: number;
   runs: number;
@@ -15,6 +19,8 @@ const KEY = 'ofeliya_save_v1';
 
 const DEFAULTS: SaveData = {
   bestTimeMs: 0,
+  bestSurvivalMs: 0,
+  bestWinTimeMs: 0,
   bestKills: 0,
   bestLevel: 0,
   runs: 0,
@@ -35,8 +41,12 @@ class SaveImpl {
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<SaveData> | null;
         if (parsed && typeof parsed === 'object') {
+          const legacyTime = this.num(parsed.bestTimeMs);
+          const survival = this.num(parsed.bestSurvivalMs) || legacyTime;
           this.data = {
-            bestTimeMs: this.num(parsed.bestTimeMs),
+            bestTimeMs: survival,
+            bestSurvivalMs: survival,
+            bestWinTimeMs: this.num(parsed.bestWinTimeMs),
             bestKills: this.num(parsed.bestKills),
             bestLevel: this.num(parsed.bestLevel),
             runs: this.num(parsed.runs),
@@ -69,6 +79,8 @@ class SaveImpl {
       achievements: patch.achievements ? [...patch.achievements] : this.data.achievements,
       evolutionsSeen: patch.evolutionsSeen ? [...patch.evolutionsSeen] : this.data.evolutionsSeen,
     };
+    // Keep the old field coherent for existing clients/saves while new UI uses explicit semantics.
+    this.data.bestTimeMs = this.data.bestSurvivalMs;
     try {
       localStorage.setItem(KEY, JSON.stringify(this.data));
     } catch {
@@ -76,16 +88,26 @@ class SaveImpl {
     }
   }
 
-  recordRun(timeMs: number, kills: number, level: number, evolutions: EvolutionId[] = []) {
+  recordRun(
+    win: boolean,
+    timeMs: number,
+    kills: number,
+    level: number,
+    evolutions: EvolutionId[] = []
+  ) {
+    const survivalRecord = !win && timeMs > this.data.bestSurvivalMs;
+    const victoryRecord =
+      win && timeMs > 0 && (this.data.bestWinTimeMs === 0 || timeMs < this.data.bestWinTimeMs);
     const res = {
-      timeRecord: timeMs > this.data.bestTimeMs,
+      timeRecord: survivalRecord || victoryRecord,
       killsRecord: kills > this.data.bestKills,
       levelRecord: level > this.data.bestLevel,
     };
     const seen = new Set<EvolutionId>(this.data.evolutionsSeen);
     for (const id of evolutions) seen.add(id);
     this.update({
-      bestTimeMs: Math.max(this.data.bestTimeMs, timeMs),
+      bestSurvivalMs: survivalRecord ? timeMs : this.data.bestSurvivalMs,
+      bestWinTimeMs: victoryRecord ? timeMs : this.data.bestWinTimeMs,
       bestKills: Math.max(this.data.bestKills, kills),
       bestLevel: Math.max(this.data.bestLevel, level),
       runs: this.data.runs + 1,
