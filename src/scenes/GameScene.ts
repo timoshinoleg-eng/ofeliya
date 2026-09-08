@@ -12,6 +12,11 @@ import {
   difficulty,
   type EnemyKind,
 } from '../game/config';
+import {
+  evaluateAchievements,
+  getAchievementDef,
+  type AchievementId,
+} from '../game/AchievementSystem';
 import { rollRunChoices } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
 import { Player } from '../game/Player';
@@ -62,6 +67,8 @@ export class GameScene extends Phaser.Scene {
   awaitingChoice = false;
   pendingChoices: UpgradeDef[] = [];
   private pendingEvolutionCeremony: EvolutionId | null = null;
+  private newAchievements: AchievementId[] = [];
+  private achievementCheckAcc = 0;
   private finished = false;
   private hitStopUntil = 0;
   private hitStopped = false;
@@ -85,6 +92,8 @@ export class GameScene extends Phaser.Scene {
     this.awaitingChoice = false;
     this.pendingChoices = [];
     this.pendingEvolutionCeremony = null;
+    this.newAchievements = [];
+    this.achievementCheckAcc = 0;
     this.finished = false;
     this.nextFireAt = 0;
     this.novaAcc = 0;
@@ -200,6 +209,12 @@ export class GameScene extends Phaser.Scene {
     }
     const st = this.runState;
     st.timeMs += delta;
+    st.tickNoDamage(delta);
+    this.achievementCheckAcc += delta;
+    if (this.achievementCheckAcc >= 500) {
+      this.achievementCheckAcc = 0;
+      this.captureAchievements(false, true);
+    }
 
     let vx = 0;
     let vy = 0;
@@ -311,6 +326,7 @@ export class GameScene extends Phaser.Scene {
     st.combo += 1;
     st.comboTimer = COMBO.windowMs;
     if (st.combo > st.comboBest) st.comboBest = st.combo;
+    this.captureAchievements(false, true);
     this.vfx.kill(e.x, e.y, e.color, e.isBoss ? 'boss' : e.isElite ? 'elite' : 'normal');
     if (e.isElite || e.isBoss) {
       this.hitStop(e.isBoss ? JUICE.hitStopBossMs : JUICE.hitStopMs);
@@ -409,7 +425,6 @@ export class GameScene extends Phaser.Scene {
     this.queuedLevels += this.runState.addXp(value);
   }
 
-  /** Выбор улучшения из UI-сцены. true — есть ещё ожидающие уровни. */
   chooseUpgrade(id: string): boolean {
     const def = this.pendingChoices.find((c) => c.id === id);
     if (def) {
@@ -420,6 +435,7 @@ export class GameScene extends Phaser.Scene {
       } else {
         this.runState.bump(id);
       }
+      this.captureAchievements(false, false);
       Sfx.play('click');
       MaxBridge.notify('success');
     }
@@ -443,13 +459,19 @@ export class GameScene extends Phaser.Scene {
     if (this.finished) return;
     this.finished = true;
     const st = this.runState;
-    const records = SaveSystem.recordRun(st.timeMs, st.kills, st.level);
+    const evolutions = [...st.evolutions];
+    const records = SaveSystem.recordRun(st.timeMs, st.kills, st.level, evolutions);
+    this.captureAchievements(true, false);
     this.registry.set('run', this.snapshot());
     this.registry.set('runResult', {
       win,
       timeMs: st.timeMs,
       kills: st.kills,
       level: st.level,
+      comboBest: st.comboBest,
+      stacks: { ...st.stacks },
+      evolutions,
+      newAchievements: [...this.newAchievements],
       records,
     });
     Sfx.play(win ? 'victory' : 'gameover');
@@ -608,6 +630,7 @@ export class GameScene extends Phaser.Scene {
     const now = this.time.now;
     if (now < this.player.hurtUntil) return;
     this.runState.hp -= e.dmg;
+    this.runState.resetNoDamage();
     this.player.markHurt(now);
     Sfx.play('hurt');
     MaxBridge.haptic('medium');
@@ -634,6 +657,54 @@ export class GameScene extends Phaser.Scene {
     }
     const first = this.gems.getFirstAlive() as Gem | null;
     if (first) first.value += value;
+  }
+
+  private captureAchievements(runRecorded: boolean, showToast: boolean): void {
+    const unlocked = evaluateAchievements(this.runState, runRecorded);
+    for (const id of unlocked) {
+      if (!this.newAchievements.includes(id)) this.newAchievements.push(id);
+      if (showToast) this.showAchievementToast(id);
+    }
+  }
+
+  private showAchievementToast(id: AchievementId): void {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const def = getAchievementDef(id);
+    const y = Math.max(155, H * 0.25) + ((this.newAchievements.length - 1) % 2) * 62;
+    const c = this.add.container(W / 2, y).setScrollFactor(0).setDepth(44).setAlpha(0);
+    const panelW = Math.min(W - 36, 340);
+    const panel = this.add
+      .rectangle(0, 0, panelW, 52, 0x101522, 0.94)
+      .setStrokeStyle(1.5, COLORS.gold, 0.82);
+    const title = this.add
+      .text(-panelW / 2 + 14, -16, 'ДОСТИЖЕНИЕ', {
+        fontFamily: FONT,
+        fontSize: '9px',
+        fontStyle: 'bold',
+        color: '#ffe066',
+      })
+      .setResolution(2);
+    const name = this.add
+      .text(-panelW / 2 + 14, 0, def.name, {
+        fontFamily: FONT,
+        fontSize: '13px',
+        fontStyle: 'bold',
+        color: '#e8f4ff',
+      })
+      .setResolution(2);
+    c.add([panel, title, name]);
+    Sfx.play('levelup');
+    MaxBridge.haptic('light');
+    this.tweens.add({
+      targets: c,
+      alpha: 1,
+      y: y + 6,
+      duration: 160,
+      yoyo: true,
+      hold: 900,
+      onComplete: () => c.destroy(),
+    });
   }
 
   private showIntroHint(): void {
