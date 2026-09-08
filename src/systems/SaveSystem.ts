@@ -95,10 +95,10 @@ class SaveImpl {
     return res;
   }
 
-  unlockAchievements(ids: string[]): string[] {
+  unlockAchievements<T extends string>(ids: T[]): T[] {
     if (ids.length === 0) return [];
     const known = new Set(this.data.achievements);
-    const unlocked: string[] = [];
+    const unlocked: T[] = [];
     for (const id of ids) {
       if (known.has(id)) continue;
       known.add(id);
