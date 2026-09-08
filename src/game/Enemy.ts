@@ -21,6 +21,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private target: Player | null = null;
   private knockX = 0;
   private knockY = 0;
+  private eliteRing: Phaser.GameObjects.Image | null = null;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'enemy-swarm');
@@ -73,11 +74,31 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setCircle(def.radius, this.width / 2 - def.radius, this.height / 2 - def.radius);
+
+    if (opts.elite) {
+      if (!this.eliteRing) {
+        this.eliteRing = this.scene.add
+          .image(x, y, 'elite-ring')
+          .setDepth(9)
+          .setBlendMode(Phaser.BlendModes.ADD);
+      }
+      this.eliteRing
+        .setVisible(true)
+        .setAlpha(0.82)
+        .setPosition(x, y)
+        .setScale(def.scale)
+        .setRotation(0);
+    } else {
+      this.eliteRing?.setVisible(false);
+    }
   }
 
   preUpdate(time: number, delta: number): void {
     super.preUpdate(time, delta);
-    if (!this.active || !this.target) return;
+    if (!this.active || !this.target) {
+      this.eliteRing?.setVisible(false);
+      return;
+    }
 
     if (time < this.flashUntil) this.setTintFill(0xffffff);
     else if (this.tintFill) this.clearTint();
@@ -94,6 +115,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.knockY *= 0.82;
 
     if (this.kind === 'runner') this.setRotation(Math.atan2(dy, dx));
+
+    if (this.isElite && this.eliteRing) {
+      this.eliteRing
+        .setVisible(true)
+        .setPosition(this.x, this.y)
+        .setRotation(-time * 0.00115)
+        .setAlpha(0.72 + Math.sin(time / 180) * 0.16);
+    }
   }
 
   takeDamage(amount: number, kx = 0, ky = 0): void {
@@ -103,6 +132,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.knockX += kx;
     this.knockY += ky;
     if (this.hp <= 0) {
+      this.eliteRing?.setVisible(false);
       this.disableBody(true, true);
       this.gs?.onEnemyDied(this);
     }
