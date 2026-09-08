@@ -460,7 +460,7 @@ export class GameScene extends Phaser.Scene {
     this.finished = true;
     const st = this.runState;
     const evolutions = [...st.evolutions];
-    const records = SaveSystem.recordRun(st.timeMs, st.kills, st.level, evolutions);
+    const records = SaveSystem.recordRun(win, st.timeMs, st.kills, st.level, evolutions);
     this.captureAchievements(true, false);
     this.registry.set('run', this.snapshot());
     this.registry.set('runResult', {
