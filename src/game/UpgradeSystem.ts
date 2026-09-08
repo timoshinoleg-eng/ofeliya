@@ -6,16 +6,16 @@ export type EvolutionId = 'prism' | 'halo' | 'singularity';
 export type ChoiceKind = 'upgrade' | 'evolution';
 
 export const UPGRADE_FAMILY_LABELS: Record<UpgradeFamily, string> = {
-  weapon: 'АТАКА',
-  core: 'ЯДРО',
+  weapon: 'АГРЕССИЯ',
+  core: 'РАСПРОСТРАНЕНИЕ',
   defense: 'ЗАЩИТА',
-  utility: 'СИСТЕМА',
+  utility: 'АДАПТАЦИЯ',
 };
 
 export const EVOLUTION_NAMES: Record<EvolutionId, string> = {
-  prism: 'ПРИЗМА',
-  halo: 'ОРЕОЛ',
-  singularity: 'СИНГУЛЯРНОСТЬ',
+  prism: 'ГИПЕРШИП',
+  halo: 'СВЕРХКАПСИД',
+  singularity: 'ЛИЗИС',
 };
 
 export interface UpgradeDef {
@@ -56,9 +56,9 @@ export function getUpgradeProgress(s: RunState, def: UpgradeDef): UpgradeProgres
 export const UPGRADES: UpgradeDef[] = [
   {
     id: 'dmg',
-    shortName: 'УСИЛЕНИЕ ИМПУЛЬСА',
+    shortName: 'БЕЛКОВЫЕ ШИПЫ',
     name: 'Урон +25%',
-    desc: 'Пули и клинки бьют больнее',
+    desc: 'Шиповые белки сильнее разрушают иммунные клетки',
     max: 6,
     family: 'weapon',
     rarity: 'common',
@@ -69,9 +69,9 @@ export const UPGRADES: UpgradeDef[] = [
   },
   {
     id: 'rate',
-    shortName: 'РАЗГОН ПРОТОКОЛА',
+    shortName: 'УСКОРЕННАЯ РЕПЛИКАЦИЯ',
     name: 'Скорострельность +15%',
-    desc: 'Протокол атаки срабатывает чаще',
+    desc: 'Штамм выпускает вирусные частицы чаще',
     max: 6,
     family: 'weapon',
     rarity: 'common',
@@ -82,9 +82,9 @@ export const UPGRADES: UpgradeDef[] = [
   },
   {
     id: 'multi',
-    shortName: 'ПАРАЛЛЕЛЬНЫЙ ЗАЛП',
+    shortName: 'МНОЖЕСТВЕННАЯ РЕПЛИКАЦИЯ',
     name: '+1 снаряд',
-    desc: 'Дополнительный импульс в каждом залпе',
+    desc: 'Дополнительная вирусная частица в каждом выбросе',
     max: 3,
     family: 'weapon',
     rarity: 'rare',
@@ -94,9 +94,9 @@ export const UPGRADES: UpgradeDef[] = [
   },
   {
     id: 'pierce',
-    shortName: 'СКВОЗНОЙ СИГНАЛ',
+    shortName: 'ПРОНИКНОВЕНИЕ',
     name: 'Пробивание +1',
-    desc: 'Импульс проходит ещё через одну угрозу',
+    desc: 'Вирусная частица проходит ещё через одну иммунную клетку',
     max: 3,
     family: 'weapon',
     rarity: 'rare',
@@ -107,9 +107,9 @@ export const UPGRADES: UpgradeDef[] = [
   },
   {
     id: 'speed',
-    shortName: 'УСКОРЕНИЕ ЯДРА',
+    shortName: 'ПОДВИЖНЫЙ ШТАММ',
     name: 'Скорость +8%',
-    desc: 'Ядро перемещается быстрее',
+    desc: 'OFELIYA быстрее перемещается в кровотоке',
     max: 5,
     family: 'core',
     rarity: 'common',
@@ -120,9 +120,9 @@ export const UPGRADES: UpgradeDef[] = [
   },
   {
     id: 'hp',
-    shortName: 'БРОНЯ ЯДРА',
+    shortName: 'УТОЛЩЁННЫЙ КАПСИД',
     name: 'Прочность +25',
-    desc: 'Максимум HP выше и сразу +25 HP',
+    desc: 'Оболочка крепче, максимум HP выше и сразу +25 HP',
     max: 5,
     family: 'defense',
     rarity: 'common',
@@ -133,9 +133,9 @@ export const UPGRADES: UpgradeDef[] = [
   },
   {
     id: 'magnet',
-    shortName: 'ПОЛЕ СБОРА',
+    shortName: 'РНК-АФФИНИТЕТ',
     name: 'Магнит +35%',
-    desc: 'Фрагменты данных притягиваются издалека',
+    desc: 'Фрагменты РНК притягиваются к штамму издалека',
     max: 4,
     family: 'utility',
     rarity: 'common',
@@ -146,9 +146,9 @@ export const UPGRADES: UpgradeDef[] = [
   },
   {
     id: 'orbit',
-    shortName: 'КОЛЬЦО ЗАЩИТЫ',
-    name: '+1 орбитальный клинок',
-    desc: 'Клинок вращается вокруг ядра и режет угрозы',
+    shortName: 'КАПСИДНЫЕ СПУТНИКИ',
+    name: '+1 орбитальная частица',
+    desc: 'Белковые фрагменты вращаются вокруг штамма и режут иммунные клетки',
     max: 4,
     family: 'weapon',
     rarity: 'rare',
@@ -159,9 +159,9 @@ export const UPGRADES: UpgradeDef[] = [
   },
   {
     id: 'nova',
-    shortName: 'ВОЛНА ЯДРА',
-    name: 'Нова +1',
-    desc: 'Периодический импульс вокруг ядра сильнее и чаще',
+    shortName: 'ЛИЗИС-ПУЛЬС',
+    name: 'Импульс +1',
+    desc: 'Периодический мембранный выброс вокруг штамма сильнее и чаще',
     max: 4,
     family: 'weapon',
     rarity: 'rare',
@@ -172,9 +172,9 @@ export const UPGRADES: UpgradeDef[] = [
   },
   {
     id: 'regen',
-    shortName: 'САМОРЕМОНТ',
+    shortName: 'РЕКОМБИНАЦИЯ',
     name: 'Регенерация +0.6/с',
-    desc: 'Ядро постепенно восстанавливает прочность',
+    desc: 'Капсид постепенно восстанавливает целостность',
     max: 3,
     family: 'defense',
     rarity: 'common',
@@ -186,9 +186,9 @@ export const UPGRADES: UpgradeDef[] = [
 
 const HEAL: UpgradeDef = {
   id: 'heal',
-  shortName: 'АВАРИЙНЫЙ РЕМОНТ',
+  shortName: 'АВАРИЙНАЯ РЕКОМБИНАЦИЯ',
   name: 'Восстановить +40 HP',
-  desc: 'Мгновенное восстановление без постоянного усиления',
+  desc: 'Мгновенно восстанавливает оболочку без постоянного усиления',
   max: 99,
   family: 'defense',
   rarity: 'common',
