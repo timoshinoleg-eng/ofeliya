@@ -12,6 +12,21 @@
          В обычном браузере скрипт просто не определяет WebApp — игра работает и без него. -->
     <script src="https://st.max.ru/js/max-web-app.js" defer></script>
     <style>
+      /* Chakra Petch (OFL, self-hosted) — современный дисплейный шрифт вместо Arial. */
+      @font-face {
+        font-family: 'Chakra Petch';
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url('fonts/chakra-petch-1.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Chakra Petch';
+        font-style: normal;
+        font-weight: 700;
+        font-display: swap;
+        src: url('fonts/chakra-petch-2.woff2') format('woff2');
+      }
       html,
       body {
         margin: 0;
@@ -35,7 +50,7 @@
         align-items: center;
         justify-content: center;
         color: #35e0ff;
-        font-family: Arial, sans-serif;
+        font-family: 'Chakra Petch', Arial, sans-serif;
         font-size: 18px;
         letter-spacing: 3px;
       }

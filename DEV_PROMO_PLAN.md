@@ -147,9 +147,8 @@
 | Аудио | ✅ | — | SFX — Kenney CC0 (11 файлов, `public/audio/sfx`); фоновая музыка — коллекция CC0 Music на OpenGameArt (7 кандидатов-лупов `public/audio/music`, потом сузим до 2–3). Ленивая загрузка в `Sfx.ts`, процедурный WebAudio-фолбэк, `startMusic`/`stopMusic` |
 | 4 | ⏳ нужен девайс | — | профилировка Android; как страховка — авто-деградация (снять bloom, урезать кап врагов) при FPS < 45 |
 
-**Отложено:** п. 9 — display-шрифт вместо Arial. Нужен файл (WOFF2-подмножество,
-лицензия OFL/Apache-2.0) и решение по весу; править в одну строку `config.FONT`,
-когда файл выбран.
+**Сделано:** п. 9 — display-шрифт **Chakra Petch** (OFL, self-hosted WOFF2 latin 400/700 в `public/fonts/`,
+подгрузка до старта Phaser в `main.ts`). `config.FONT` = `'Chakra Petch', Arial, sans-serif`; фолбэк на Arial.
 
 **Проверено сборкой:** `npm run build` (tsc + vite) — чисто, **354.71 КБ gzip** (аудио — отдельные ассеты, в бандл не входят)
 (было 352.07; +2 КБ за иконки, комбо и трейл).

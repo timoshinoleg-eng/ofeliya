@@ -15,7 +15,7 @@ export const COLORS = {
   stroke: 0x2a3452,
 };
 
-export const FONT = 'Arial, sans-serif';
+export const FONT = "'Chakra Petch', Arial, sans-serif";
 
 /**
  * Встроенные постэффекты Phaser 3.60+ (только WebGL).
