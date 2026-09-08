@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Продукт для MAX: хаб мини-игр из open-source | сентябрь 2026</title>
+<style>
+:root{
+  --bg:#f7f8fa; --card:#fff; --ink:#12161c; --ink2:#3d4653; --mut:#6b7684;
+  --line:#e3e7ec; --line2:#d3d9e0; --acc:#1a56db; --acc-bg:#eef3ff;
+  --ok:#0f7b3f; --ok-bg:#e8f6ed; --warn:#9a5b00; --warn-bg:#fff4e0; --bad:#b3261e; --bad-bg:#fdeceb;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.wrap{max-width:1120px;margin:0 auto;padding:32px 24px 96px}
+header{border-bottom:2px solid var(--ink);padding-bottom:18px;margin-bottom:26px}
+h1{font-size:25px;line-height:1.25;margin:0 0 8px;letter-spacing:-.3px}
+.sub{color:var(--mut);font-size:13px}
+h2{font-size:20px;margin:42px 0 6px;padding-top:14px;border-top:1px solid var(--line2);letter-spacing:-.2px}
+h2 .n{color:var(--acc);margin-right:8px;font-variant-numeric:tabular-nums}
+h3{font-size:16.5px;margin:26px 0 8px}
+h4{font-size:13.5px;margin:18px 0 6px;color:var(--ink2);text-transform:uppercase;letter-spacing:.5px}
+p{margin:8px 0}
+table{width:100%;border-collapse:collapse;margin:12px 0 18px;background:var(--card);
+  border:1px solid var(--line);font-size:13px}
+th{background:#eef1f5;text-align:left;padding:8px 10px;font-weight:600;border-bottom:1px solid var(--line2);
+  font-size:12px;color:var(--ink2);vertical-align:bottom}
+td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:none}
+tbody tr:nth-child(even){background:#fbfcfd}
+.ok{color:var(--ok);font-weight:600}.warn{color:var(--warn);font-weight:600}.bad{color:var(--bad);font-weight:600}
+.tag{display:inline-block;padding:1px 7px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
+.t-ok{background:var(--ok-bg);color:var(--ok)}.t-warn{background:var(--warn-bg);color:var(--warn)}
+.t-bad{background:var(--bad-bg);color:var(--bad)}.t-neu{background:#eef1f5;color:var(--ink2)}
+.box{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--acc);
+  padding:14px 16px;margin:16px 0;border-radius:4px}
+.box.red{border-left-color:var(--bad);background:var(--bad-bg)}
+.box.amber{border-left-color:var(--warn);background:var(--warn-bg)}
+.box.green{border-left-color:var(--ok);background:var(--ok-bg)}
+.box h4{margin-top:0}
+ul,ol{margin:8px 0 12px 22px;padding:0}li{margin:5px 0}
+code{background:#eef1f5;padding:1px 5px;border-radius:3px;font-size:12.5px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+pre{background:#1e2430;color:#e6ebf2;padding:14px 16px;border-radius:6px;overflow-x:auto;
+  font-size:12.5px;line-height:1.55;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+pre code{background:none;padding:0;color:inherit}
+.mut{color:var(--mut);font-size:12.5px}
+.kv{display:grid;grid-template-columns:160px 1fr;gap:4px 14px;font-size:13.5px;margin:10px 0}
+.kv dt{color:var(--mut)}.kv dd{margin:0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+@media(max-width:860px){.grid2,.grid3{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:14px 16px}
+.card h4{margin-top:0}
+.card.win{border:2px solid var(--ok)}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:860px){.split{grid-template-columns:1fr}}
+svg{max-width:100%;height:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Какой продукт выпустить в MAX быстро: хаб мини-игр из готового open-source</h1>
+  <div class="sub">Предложение от 7 сентября 2026 · Москва · аудитория 12–18+ · сборка из проверенных компонентов, а не разработка с нуля</div>
+</header>
+
+<div class="box green">
+<h4>Короткий ответ</h4>
+<p>Не одна игра, а <b>«Игротека» — бот в MAX + хаб из 3–5 мини-игр с единым социальным слоем</b>. Все игровые механики берутся из MIT-репозиториев целиком. С нуля пишется только то, чего нет ни в одном open-source проекте и что нельзя купить: <b>лидерборды, асинхронные дуэли и шаринг-карточки</b>. Это примерно 20% кода, но 100% ценности продукта.</p>
+<p><b>v0.1 через 3–4 недели</b> силами 2–3 человек. Дальше — добавление игр без новых затрат на дистрибуцию.</p>
+</div>
+
+<h2><span class="n">1</span>Почему именно хаб, а не одна игра</h2>
+<table>
+<thead><tr><th style="width:26%">Аргумент</th><th>Обоснование</th><th class="num">Метка</th></tr></thead>
+<tbody>
+<tr><td>В MAX нет каталога</td><td>Проверено по <code>dev.max.ru/help/miniapps</code>: приложение привязано к боту, кнопка «Играть». Органической витрины нет. Значит каждая новая игра стоит столько же, сколько первая, — если они не связаны</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>Хаб = собственный каталог</td><td>Вы сами становитесь витриной. Перекрёстный промо между играми внутри хаба — единственный бесплатный источник трафика, который принадлежит вам</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+<tr><td>Это проверено на Telegram</td><td>Catizen превратился из тапалки в <b>хаб из 30+ мини-игр</b> и держит ~13 млн MAU, тогда как одиночные tap-to-earn приложения потеряли 90%+ аудитории. Hamster Kombat: 300 млн → 13 млн MAU</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>Быстрый старт не противоречит хабу</td><td>v0.1 = оболочка + 3 игры. Оболочка пишется один раз, игры добавляются по одной</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+<tr><td>Диверсификация</td><td>Если одна механика не заходит, хаб не умирает — перераспределяете трафик</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+</tbody>
+</table>
+
+<h2><span class="n">2</span>Три варианта продукта и выбор</h2>
+<div class="grid3">
+<div class="card">
+<h4>Вариант A — одна игра-локомотив</h4>
+<p class="mut">Мердж-физика (Suika-тип) с дуэлями</p>
+<ul>
+<li><b>Плюс:</b> максимальная виральность, фокус</li>
+<li><b>Минус:</b> весь риск на одной механике; нет перекрёстного промо</li>
+<li class="mut">До v0.1: 2,5–3,5 нед.</li>
+<li class="mut">Скор: 84/100</li>
+</ul>
+</div>
+<div class="card win">
+<h4>Вариант B — хаб мини-игр ⭐</h4>
+<p class="mut">Оболочка + 3 игры + соц-слой</p>
+<ul>
+<li><b>Плюс:</b> собственная витрина, перекрёстный промо, масштабируемость</li>
+<li><b>Минус:</b> на 1 неделю дольше до первой игры</li>
+<li class="mut">До v0.1: 3–4 нед.</li>
+<li class="mut"><b>Скор: 88/100 — рекомендую</b></li>
+</ul>
+</div>
+<div class="card">
+<h4>Вариант C — ежедневная загадка</h4>
+<p class="mut">Один пазл в день для всех</p>
+<ul>
+<li><b>Плюс:</b> дешевле всех, идеальная привычка</li>
+<li><b>Минус:</b> одна сессия в день = мало рекламного инвентаря; узкая ниша</li>
+<li class="mut">До v0.1: 1,5–2 нед.</li>
+<li class="mut">Скор: 81/100</li>
+</ul>
+</div>
+</div>
+<p><b>Рекомендация — вариант B, но с вариантом C внутри.</b> Ежедневная загадка — лучший инструмент удержания из всех трёх, и она идеально ложится в хаб как один из режимов. Берём C как «якорную» игру хаба (гарантирует ежедневный возврат), добавляем 2048-дуэль и мердж-физику как «тяжёлые» развлекательные.</p>
+
+<h2><span class="n">3</span>Из чего собираем: спецификация компонентов</h2>
+<p class="mut">Все звёзды, лицензии SPDX и даты коммитов получены через GitHub API 6–7 сентября 2026. Помеченное <span class="tag t-warn">⚠️</span> в столбце «проверка» — данные по репозиторию подтверждены, но содержимое проверялось выборочно.</p>
+
+<h4>Игровые механики (берём целиком)</h4>
+<table>
+<thead><tr><th style="width:24%">Компонент</th><th>Репозиторий</th><th class="num">★</th><th>Лицензия</th><th>Коммит</th><th class="num">Готово</th><th class="num">Проверка</th></tr></thead>
+<tbody>
+<tr><td><b>2048</b> — якорная игра</td><td><code>gabrielecirulli/2048</code></td><td class="num">13 372</td><td class="ok">MIT</td><td>24.10.2024</td><td class="num">95%</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td><b>Ежедневный пазл</b> — удержание</td><td><code>gereleth/hexapipes</code></td><td class="num">218</td><td class="ok">MIT</td><td class="ok">06.09.2026</td><td class="num">85%</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td><b>Пак из 50 мини-игр</b> — наполнение хаба</td><td><code>he-is-talha/html-css-javascript-games</code></td><td class="num">274</td><td class="ok">MIT</td><td class="ok">04.09.2026</td><td class="num">80%</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+<tr><td colspan="7" style="padding:6px 10px;background:var(--bad-bg)"><b class="bad">Исправлено 07.09.2026: MIT на код не означает, что можно брать все 50 игр.</b> Получен реальный состав каталога: <b>минимум 12 позиций — клоны чужого IP</b> (02-Pac-Man, 09-Flappy-Bird, 32-Fruit-Slicer = Fruit Ninja, 42-Space-Invaders, 43-Asteroids, 46-Frogger, 01-Candy-Crush, 04-Doodle-Jump, 07-Crossy-Road, 20-Tetris, 11-Wordle, 13-Tower-Blocks = Stack), <b>ещё 3 — азартные механики, это стоп-критерий</b> (39-Blackjack, 47-Poker, 28-Dice-Roll-Simulator). Безопасно брать ~20 позиций с незащищёнными механиками: 24-Snake, 22-Memory-Card, 15-Tic-Tac-Toe, 35-Whack-A-Mole, 29-Shape-Clicker, 37-Sliding-Puzzle, 26-Insect-Catch, 34-Emoji-Catcher, 21-Tilting-Maze, 33-Quiz. Полный разбор — в плане валидации <code>MAX_fast_validation_plan_2026-09-07.html</code>.</td></tr>
+<tr><td><b>Физика мердж-игры</b> (фаза 2)</td><td><code>piqnt/planck.js</code></td><td class="num">5 277</td><td class="ok">MIT</td><td class="ok">07.04.2026</td><td class="num">—</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>Резерв физики</td><td><code>liabru/matter-js</code></td><td class="num">18 395</td><td class="ok">MIT</td><td class="bad">17.08.2024</td><td class="num">—</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+</tbody>
+</table>
+
+<h4>Инфраструктура (берём целиком)</h4>
+<table>
+<thead><tr><th style="width:24%">Компонент</th><th>Репозиторий</th><th class="num">★</th><th>Лицензия</th><th>Коммит</th><th>Зачем</th></tr></thead>
+<tbody>
+<tr><td>Бэкенд API</td><td><code>fastify/fastify</code></td><td class="num">37 103</td><td class="ok">MIT</td><td class="ok">06.09.2026</td><td>Лидерборды, профили, события — в MAX их нет</td></tr>
+<tr><td>Realtime / дуэли</td><td><code>socketio/socket.io</code></td><td class="num">63 211</td><td class="ok">MIT</td><td class="ok">07.09.2026</td><td>Живые дуэли и мгновенные результаты</td></tr>
+<tr><td>Локализация</td><td><code>i18next/i18next</code></td><td class="num">8 627</td><td class="ok">MIT</td><td class="ok">03.09.2026</td><td>Вынос хардкода, переключение RU/EN</td></tr>
+<tr><td>Звук без файлов</td><td><code>KilledByAPixel/LittleJS</code> (ZzFX)</td><td class="num">4 175</td><td class="ok">MIT</td><td class="ok">05.09.2026</td><td>Синтез звука в коде — ноль аудио-ассетов, ноль лицензионных рисков</td></tr>
+<tr><td>Ассеты</td><td>Kenney (kenney.nl)</td><td class="num">—</td><td class="ok">CC0</td><td class="ok">актуально</td><td>Спрайты, UI, звуки. Атрибуция не требуется</td></tr>
+<tr><td>Интеграция с MAX</td><td>MAX Bridge (<code>st.max.ru/js/max-web-app.js</code>)</td><td class="num">—</td><td class="mut">платформа</td><td class="ok">доки 2026</td><td>Авторизация, шаринг, BackButton, хаптик</td></tr>
+</tbody>
+</table>
+
+<h4>Пишем сами (~20% кода — и это единственная ценность)</h4>
+<table>
+<thead><tr><th style="width:26%">Модуль</th><th>Объём</th><th>Почему нельзя взять готовое</th></tr></thead>
+<tbody>
+<tr><td><b>Адаптер MAX Bridge</b></td><td>~200 строк</td><td>Платформенный API уникален; изоляция в одном файле даёт переносимость на VK Mini Apps и веб за 1–2 дня</td></tr>
+<tr><td><b>Асинхронные дуэли</b></td><td>~250 строк + 3 таблицы БД</td><td>Готовых реализаций нет ни на GitHub, ни на Gitee. Именно этот слой дал рост ×12 в кейсе 《狙击外星人》</td></tr>
+<tr><td><b>Еженедельные лиги (50 игроков, дивизионы)</b></td><td>~300 строк</td><td>То же: социального графа в OSS нет</td></tr>
+<tr><td><b>Шаринг-карточка с кнопкой «Ответить»</b></td><td>~150 строк</td><td>MAX умеет только <code>shareMaxContent</code>; генерация картинки результата — своя</td></tr>
+<tr><td><b>Оболочка хаба</b></td><td>~400 строк</td><td>Роутер, общее меню, единый профиль, кросс-промо</td></tr>
+<tr><td><b>Минимальная аналитика</b></td><td>~150 строк</td><td>Готовые решения часто AGPL/GPL (Umami, Plausible CE, Matomo) — по стоп-критериям не подходят. Свой сборщик событий дешевле юридической экспертизы</td></tr>
+</tbody>
+</table>
+
+<h2><span class="n">4</span>Архитектура</h2>
+<svg viewBox="0 0 900 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Архитектура продукта">
+  <style>
+    .bx{fill:#fff;stroke:#c9d2dc;stroke-width:1.5;rx:6}
+    .hb{fill:#e8f6ed;stroke:#0f7b3f;stroke-width:2}
+    .ac{fill:#eef3ff;stroke:#1a56db;stroke-width:2}
+    .gy{fill:#f4f6f9;stroke:#c9d2dc;stroke-width:1.5}
+    .t1{font:600 13px -apple-system,Segoe UI,Roboto,sans-serif;fill:#12161c}
+    .t2{font:400 11px -apple-system,Segoe UI,Roboto,sans-serif;fill:#5a6572}
+    .ln{stroke:#8b97a6;stroke-width:1.5;fill:none}
+  </style>
+
+  <rect class="bx ac" x="20" y="18" width="200" height="56" rx="6"/>
+  <text class="t1" x="120" y="40" text-anchor="middle">MAX (мессенджер)</text>
+  <text class="t2" x="120" y="58" text-anchor="middle">бот + кнопка «Играть»</text>
+
+  <rect class="bx gy" x="20" y="96" width="200" height="56" rx="6"/>
+  <text class="t1" x="120" y="118" text-anchor="middle">MAX Bridge adapter</text>
+  <text class="t2" x="120" y="136" text-anchor="middle">~200 строк · своё</text>
+
+  <rect class="bx ac" x="20" y="174" width="200" height="70" rx="6"/>
+  <text class="t1" x="120" y="197" text-anchor="middle">Оболочка хаба</text>
+  <text class="t2" x="120" y="215" text-anchor="middle">меню, профиль, кросс-промо</text>
+  <text class="t2" x="120" y="231" text-anchor="middle">~400 строк · своё</text>
+
+  <rect class="bx hb" x="270" y="174" width="270" height="70" rx="6"/>
+  <text class="t1" x="405" y="197" text-anchor="middle">Игры (100% open-source)</text>
+  <text class="t2" x="405" y="215" text-anchor="middle">2048 · ежедневный пазл · 50-пак мини-игр</text>
+  <text class="t2" x="405" y="231" text-anchor="middle">мердж-физика на planck.js + Kenney CC0</text>
+
+  <rect class="bx ac" x="590" y="174" width="270" height="70" rx="6"/>
+  <text class="t1" x="725" y="197" text-anchor="middle">Социальный слой</text>
+  <text class="t2" x="725" y="215" text-anchor="middle">дуэли · лиги · шаринг-карточки</text>
+  <text class="t2" x="725" y="231" text-anchor="middle">~700 строк · своё · 100% ценности</text>
+
+  <rect class="bx gy" x="270" y="290" width="590" height="60" rx="6"/>
+  <text class="t1" x="565" y="312" text-anchor="middle">Бэкенд: Fastify + Postgres + Socket.IO (всё MIT)</text>
+  <text class="t2" x="565" y="331" text-anchor="middle">лидерборды, результаты, сессии дуэлей, события аналитики</text>
+
+  <rect class="bx gy" x="270" y="360" width="590" height="50" rx="6"/>
+  <text class="t1" x="565" y="381" text-anchor="middle">Звук: ZzFX (синтез в коде) · Локализация: i18next · Ассеты: Kenney CC0</text>
+  <text class="t2" x="565" y="398" text-anchor="middle">всё MIT / CC0 — лицензионных рисков нет</text>
+
+  <path class="ln" d="M120 74 L120 96"/>
+  <path class="ln" d="M120 152 L120 174"/>
+  <path class="ln" d="M220 209 L270 209"/>
+  <path class="ln" d="M540 209 L590 209"/>
+  <path class="ln" d="M405 244 L405 290"/>
+  <path class="ln" d="M725 244 L725 290"/>
+  <path class="ln" d="M120 244 L120 320 L270 320"/>
+</svg>
+<p class="mut">Зелёное — берём целиком из open-source. Синее — пишем сами. Серое — инфраструктура из open-source.</p>
+
+<h2><span class="n">5</span>План выпуска</h2>
+<table>
+<thead><tr><th style="width:11%">Неделя</th><th>Задачи</th><th style="width:22%">Результат</th></tr></thead>
+<tbody>
+<tr><td><b>Нед. 1</b><br><span class="mut">Аудит и юрконтур</span></td><td>
+<b>Юридическое:</b> юрлицо/ИП РФ, договор с ООО «МАХ» через business.max.ru, публичная политика ПДн, возрастная маркировка (0+/6+/12+).<br>
+<b>Аудит:</b> LICENSE-файл у каждого компонента; происхождение каждого файла в <code>assets/</code>; <code>npm audit</code>; замер gzip-бандла.<br>
+<b>Согласование с MAX:</b> письменно уточнить допустимость внешней рекламной сети и внешних платежей <span class="tag t-bad">❓</span>.<br>
+<b>Регистрация бота</b> и получение тестового стенда.</td>
+<td>Юридически готовы публиковать. Реестр компонентов с лицензиями. Ответ MAX по монетизации</td></tr>
+
+<tr><td><b>Нед. 2</b><br><span class="mut">Каркас + первая игра</span></td><td>
+Форк 2048. Оболочка хаба: роутер, меню, шапка с профилем. Адаптер MAX Bridge: авторизация через <code>initData</code>, BackButton, <code>shareMaxContent</code>, хаптик. Бэкенд на Fastify: пользователи, результаты, <b>лидерборд</b>. i18next: вынос строк, RU-перевод, шрифт Press Start 2P (кириллица подтверждена) или Rubik.</td>
+<td>Работающий хаб с одной игрой, лидербордом и шарингом. Залит на https-хостинг, открывается из бота</td></tr>
+
+<tr><td><b>Нед. 3</b><br><span class="mut">Социальный слой</span></td><td>
+<b>Асинхронные дуэли:</b> «я набрал X — попробуй побить», вызов уходит в чат, ответ открывает ту же игру с тем же сидом. <b>Шаринг-карточка:</b> генерация PNG результата + кнопка «Ответить». <b>Ежедневный пазл</b> из hexapipes: генерация на GitHub Actions, рассылка от бота в 09:00, таблица результатов дня.</td>
+<td>Дуэли и ежедневный пазл работают. k-фактор измерим</td></tr>
+
+<tr><td><b>Нед. 4</b><br><span class="mut">Наполнение и софт-лонч</span></td><td>
+3–4 игры из пакета 50 мини-игр (змейка, Memory, «успей нажать», пазл) с единым лидербордом и общей валютой. Еженедельные лиги по 50 игроков с дивизионами. Минимальная аналитика: D1/D7, время сессии, доля шаринга. <b>Софт-лонч на 2 000 установок.</b></td>
+<td><b>v0.1 в продакшене.</b> Замерены CAC, D1, D7, k-фактор, стоимость привлечения</td></tr>
+
+<tr><td><b>Мес. 2–3</b><br><span class="mut">Монетизация и рост</span></td><td>
+По результатам софт-лонча — решение go/no-go. Мердж-физика на planck.js + Kenney CC0 как вторая «тяжёлая» игра. Подключение reward-video строго вне core loop. Косметика и подписка «без рекламы» без pay-to-win. Переговоры о трафике с крупными каналами MAX и <code>@vk_games_bot</code>.</td>
+<td>5–7 игр в хабе. Первая выручка. Подтверждённая юнит-экономика</td></tr>
+</tbody>
+</table>
+
+<h2><span class="n">6</span>Монетизация: три фазы</h2>
+<div class="grid3">
+<div class="card">
+<h4>Фаза 0 · недели 1–4</h4>
+<p><b>Без monetization вообще.</b> Только метрики.</p>
+<p class="mut">Зачем: подключение рекламы до понимания D1/D7 уничтожит ретеншн, а вы не узнаете, что именно сломалось. Цель фазы — стоимость установки и удержание.</p>
+</div>
+<div class="card">
+<h4>Фаза 1 · месяц 2</h4>
+<p><b>Reward-video вне core loop.</b> Воскрешение, +1 ход, x2 к очкам. Максимум 3 показа в день на игрока.</p>
+<p class="mut">Риск: платформенной рекламной сети в MAX нет <span class="tag t-ok">✅</span>, внешняя сеть требует согласования <span class="tag t-bad">❓</span>.</p>
+</div>
+<div class="card">
+<h4>Фаза 2 · месяц 3+</h4>
+<p><b>Косметика + подписка без рекламы.</b> Без pay-to-win — скины, темы, аватарки.</p>
+<p class="mut">Риск: платежного API в MAX Bridge нет <span class="tag t-ok">✅</span> — внешний провайдер, требует согласования <span class="tag t-bad">❓</span>.</p>
+</div>
+</div>
+
+<div class="box amber">
+<h4>Фаза 3 · месяц 4–6 — то, где реальные деньги</h4>
+<p><b>Брендированные мини-игры (advergaming).</b> MAX — 130 млн пользователей с обязательной предустановкой, а игрового инвентаря там практически нет. Для брендов это единственный способ получить игровой контакт с этой аудиторией.</p>
+<p>Модель: вы делаете кастомную тему/скин существующей механики под бренд заказчика (2–3 недели работы поверх готовой базы) и получаете фиксированный бюджет. Это обходит обе проблемы одновременно: не нужен ни платёжный API, ни рекламная сеть MAX.</p>
+<p class="mut">Оценка ⚠️: это гипотеза, а не подтверждённый факт. Проверяется одним звонком в рекламное агентство с игровой практикой до начала разработки.</p>
+</div>
+
+<h2><span class="n">7</span>Экономика v0.1</h2>
+<table>
+<thead><tr><th style="width:34%">Статья</th><th class="num">Сумма</th><th>Комментарий</th></tr></thead>
+<tbody>
+<tr><td>Команда 2–3 чел. × 4 недели</td><td class="num">~900 000 ₽</td><td>Основная статья. Сборка из готового даёт 4 недели вместо 4–5 месяцев разработки с нуля</td></tr>
+<tr><td>Юрлицо, договор, политика ПДн</td><td class="num">~50 000 ₽</td><td>Обязательно для публикации в MAX</td></tr>
+<tr><td>Хостинг + БД + CDN (мес.)</td><td class="num">~10 000 ₽</td><td>Fastify + Postgres, нагрузка первые месяцы минимальна</td></tr>
+<tr><td><b>Итого вложения в v0.1</b></td><td class="num"><b>~950 000 ₽</b></td><td>Вместо ~4–5 млн ₽ при разработке с нуля</td></tr>
+<tr><td>Расходы с месяца 2 (мес.)</td><td class="num">~175 000 ₽</td><td>Сервер, поддержка, контент, маркетинг</td></tr>
+</tbody>
+</table>
+<p class="mut">Сценарии выручки и окупаемость — в разделе 9 основного отчёта (<code>MAX_open_source_games_2026-09.html</code>). Кратко: в базовом сценарии (15 000 DAU, ARPDAU 0,8 ₽) выручка 360 тыс. ₽/мес, прибыль 185 тыс. ₽/мес, окупаемость ~5 месяцев. В пессимистичном (3 000 DAU) одиночная игра не окупается — именно поэтому нужен хаб, а не одна игра.</p>
+
+<h2><span class="n">8</span>Что категорически не брать</h2>
+<table>
+<thead><tr><th style="width:28%">Кандидат</th><th>Причина</th></tr></thead>
+<tbody>
+<tr><td><code>channingbreeze/games</code><br><span class="mut">2 335★, MIT, 30 игр на Phaser</span></td><td class="bad">Лицензия чистая, но состав — клоны чужого IP: 切水果 (Fruit Ninja), Flappybird, FC坦克大战 (Battle City). Плюс весь интерфейс на китайском и коммит 18.02.2024. <b>Брать только как донор алгоритмов, с полной заменой арта</b></td></tr>
+<tr><td><code>arcxingye/EatKano</code><br><span class="mut">1 905★, MIT</span></td><td class="bad">Требует PHP 5+ и MySQL для лидерборда. Для мини-игры в мессенджере — лишний стек. Плюс CJK-интерфейс. <b>Полезно только как пример структуры i18n</b> (<code>static/i18n/*.json</code>)</td></tr>
+<tr><td><code>Kooshaba/mini-survivor</code></td><td class="bad">0★, коммит 26.05.2024 — мёртв 2,3 года</td></tr>
+<tr><td>Umami / Plausible CE / Matomo</td><td class="bad">AGPL-3.0 / GPL — по стоп-критериям брифа не подходят. Свой сборщик событий на 150 строк дешевле</td></tr>
+<tr><td>Любой репозиторий без LICENSE</td><td class="bad">Жёсткий стоп. Кейс: <code>chvin/react-tetris</code> — 8 731★ и при этом <code>license: null</code></td></tr>
+</tbody>
+</table>
+
+<h2><span class="n">9</span>Первый шаг: что сделать сегодня</h2>
+<pre><code># 1. Клонировать компоненты и проверить, что они собираются
+git clone https://github.com/gabrielecirulli/2048.git
+git clone https://github.com/gereleth/hexapipes.git
+git clone https://github.com/he-is-talha/html-css-javascript-games.git
+
+# 2. Проверить лицензии (наличие файла — обязательно)
+ls 2048/LICENSE.txt hexapipes/LICENSE
+
+# 3. Проверить зависимости на заброшенность
+cd hexapipes && npm install && npm audit
+
+# 4. Замерять размер бандла — лимит MAX не опубликован
+npm run build && du -sh build/
+
+# 5. Открыть документацию MAX и зарегистрировать бота
+#    https://dev.max.ru/docs/webapps/introduction
+#    https://business.max.ru/self</code></pre>
+
+<div class="box">
+<h4>Чек-лист перед первой строкой кода</h4>
+<div class="split">
+<div>
+<ul>
+<li>Договор с ООО «МАХ»; статус резидента РФ <span class="tag t-bad">❓</span></li>
+<li>Возрастная маркировка определена и отображается</li>
+<li>Публичная политика ПДн опубликована</li>
+<li>LICENSE-файл у каждого компонента</li>
+<li>Происхождение каждого файла в <code>assets/</code></li>
+<li>Название проверено по базе Роспатента <span class="tag t-bad">❓</span></li>
+</ul>
+</div>
+<div>
+<ul>
+<li><code>npm audit</code> пройден, <code>package-lock.json</code> зафиксирован</li>
+<li>Кириллица в выбранном шрифте (Silkscreen и VT323 — нет)</li>
+<li>gzip-бандл измерен (цель &lt;2 МБ; лимит MAX неизвестен <span class="tag t-bad">❓</span>)</li>
+<li>Каждая игра реально открывается и проходится локально</li>
+<li>Бэкенд лидербордов развёрнут — в MAX их нет</li>
+<li>Ответ MAX по внешней рекламе и платежам получен <span class="tag t-bad">❓</span></li>
+</ul>
+</div>
+</div>
+</div>
+
+<div class="box red">
+<h4>Главный риск продукта</h4>
+<p><b>Не механика и не лицензии — а отсутствие каталога в MAX.</b> Можно собрать идеальный хаб за 4 недели и получить ноль установок, потому что пользователь не узнает о его существовании. Поэтому <b>неделя 4 — это софт-лонч на 2 000 установок с замером CAC, а не полноценный запуск</b>. Если стоимость установки не укладывается в модель — дешевле узнать это на четвёртой недели, чем на шестом месяце.</p>
+<p>Аналогично: до получения письменного ответа MAX о допустимости внешней рекламы и платежей <b>не проектируйте экономику на их основе</b>. Резервный путь — брендированные проекты (фаза 3), он не зависит от платформенной монетизации.</p>
+</div>
+
+<p class="mut" style="margin-top:36px;border-top:1px solid var(--line);padding-top:14px">
+Предложение подготовлено 7 сентября 2026 на основе исследования от 6 сентября (отчёт <code>MAX_open_source_games_2026-09.html</code>). Все компоненты проверены через GitHub API: звёзды, SPDX-лицензия, дата последнего коммита. Факты о платформе MAX — из официальной документации dev.max.ru. Оценки трудозатрат, ARPDAU и DAU — экспертные, помечены <span class="tag t-warn">⚠️</span>.
+</p>
+
+</div>
+</body>
+</html>

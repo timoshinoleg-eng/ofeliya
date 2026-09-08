@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Быстрая проверка спроса в MAX: план на 2 недели | сентябрь 2026</title>
+<style>
+:root{
+  --bg:#f7f8fa; --card:#fff; --ink:#12161c; --ink2:#3d4657; --mut:#6b7684;
+  --line:#e3e7ec; --line2:#d3d9e0; --acc:#1a56db; --acc-bg:#eef3ff;
+  --ok:#0f7b3f; --ok-bg:#e8f6ed; --warn:#9a5b00; --warn-bg:#fff4e0; --bad:#b3261e; --bad-bg:#fdeceb;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:32px 24px 96px}
+header{border-bottom:2px solid var(--ink);padding-bottom:18px;margin-bottom:26px}
+h1{font-size:25px;line-height:1.25;margin:0 0 8px;letter-spacing:-.3px}
+.sub{color:var(--mut);font-size:13px}
+h2{font-size:20px;margin:42px 0 6px;padding-top:14px;border-top:1px solid var(--line2);letter-spacing:-.2px}
+h2 .n{color:var(--acc);margin-right:8px;font-variant-numeric:tabular-nums}
+h3{font-size:16.5px;margin:26px 0 8px}
+h4{font-size:13.5px;margin:18px 0 6px;color:var(--ink2);text-transform:uppercase;letter-spacing:.5px}
+p{margin:8px 0}
+table{width:100%;border-collapse:collapse;margin:12px 0 18px;background:var(--card);
+  border:1px solid var(--line);font-size:13px}
+th{background:#eef1f5;text-align:left;padding:8px 10px;font-weight:600;border-bottom:1px solid var(--line2);
+  font-size:12px;color:var(--ink2);vertical-align:bottom}
+td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:none}
+tbody tr:nth-child(even){background:#fbfcfd}
+.ok{color:var(--ok);font-weight:600}.warn{color:var(--warn);font-weight:600}.bad{color:var(--bad);font-weight:600}
+.tag{display:inline-block;padding:1px 7px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
+.t-ok{background:var(--ok-bg);color:var(--ok)}.t-warn{background:var(--warn-bg);color:var(--warn)}
+.t-bad{background:var(--bad-bg);color:var(--bad)}
+.box{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--acc);
+  padding:14px 16px;margin:16px 0;border-radius:4px}
+.box.red{border-left-color:var(--bad);background:var(--bad-bg)}
+.box.amber{border-left-color:var(--warn);background:var(--warn-bg)}
+.box.green{border-left-color:var(--ok);background:var(--ok-bg)}
+.box h4{margin-top:0}
+ul,ol{margin:8px 0 12px 22px;padding:0}li{margin:5px 0}
+code{background:#eef1f5;padding:1px 5px;border-radius:3px;font-size:12.5px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+pre{background:#1e2430;color:#e6ebf2;padding:14px 16px;border-radius:6px;overflow-x:auto;
+  font-size:12.5px;line-height:1.55;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.mut{color:var(--mut);font-size:12.5px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:860px){.grid2{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:14px 16px}
+.card h4{margin-top:0}
+.step{display:grid;grid-template-columns:34px 1fr;gap:12px;margin:14px 0}
+.step .num{width:34px;height:34px;border-radius:50%;background:var(--acc);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px}
+.step .num.g{background:var(--ok)}.step .num.a{background:var(--warn)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Как прощупать интерес минимально: план на 2 недели</h1>
+  <div class="sub">7 сентября 2026 · проверка спроса до того, как вложены 4 недели и ~950 тыс. ₽</div>
+</header>
+
+<div class="box green">
+<h4>Короткий ответ на вопрос про демо-версии</h4>
+<p><b>Да, это сэкономит время — но демо решает только одну задачу: выбор механики.</b> Оно валидирует «в какую игру люди хотят играть», но <b>не</b> валидирует удержание, монетизацию и вообще жизнеспособность продукта.</p>
+<p>Главная ловушка: <b>если вы померите D7 на демо-версии, получите ложный минус.</b> Игрок проходит 2 уровня за 3 минуты, видит тупик и не возвращается — не потому что механика плохая, а потому что игра кончилась. Вы reject'нете рабочую механику на основании артефакта теста.</p>
+<p>Поэтому правило: <b>демо-хаб — это инструмент выбора, а не продукт. Оценивать его как продукт нельзя.</b></p>
+</div>
+
+<h2><span class="n">1</span>Что демо проверяет, а что нет</h2>
+<table>
+<thead><tr><th style="width:32%">Гипотеза</th><th>Можно проверить демо?</th><th>Чем проверять</th></tr></thead>
+<tbody>
+<tr><td><b>Люди вообще кликают в игры из бота</b></td><td class="ok">Да</td><td>CTR: доля открывших игру из числа открывших бота</td></tr>
+<tr><td><b>Какая механика привлекательнее</b></td><td class="ok">Да — главная задача демо</td><td>Распределение голосов + доля доигравших до конца демо</td></tr>
+<tr><td><b>Сколько стоит установка (CAC)</b></td><td class="ok">Да</td><td>Расход на привлечение ÷ число уникальных игроков</td></tr>
+<tr><td><b>Поделятся ли результатом (k-фактор)</b></td><td class="ok">Да</td><td>Доля нажавших «поделиться» и число переходов по карточкам</td></tr>
+<tr><td><b>Реальный интерес: вернутся ли</b></td><td class="bad">Нет — ложный минус</td><td>Кнопка «уведомить о запуске» (намерение, а не поведение)</td></tr>
+<tr><td><b>D1 / D7 / D30</b></td><td class="bad">Нет — нельзя измерять</td><td>Только на полной версии</td></tr>
+<tr><td><b>Готовы ли платить / смотреть рекламу</b></td><td class="bad">Нет</td><td>Только на полной версии с реальной аудиторией</td></tr>
+</tbody>
+</table>
+
+<h2><span class="n">2</span>Три ступени проверки</h2>
+
+<div class="step"><div class="num">0</div><div>
+<h4 style="margin-top:0">Фейк-дор · 1 день · 0 строк кода</h4>
+<p>Пост с опросом «Игры в MAX: во что будете играть?» в тематических каналах MAX и в своём канале бота. Пять вариантов механик. Плюс кнопка «уведомить о запуске».</p>
+<p class="mut">Слабый сигнал (люди декларируют, а не делают), но стоит один день и может сразу отсечь заведомо провальный вариант. Делается параллельно со ступенью 1, не вместо.</p>
+</div></div>
+
+<div class="step"><div class="num">1</div><div>
+<h4 style="margin-top:0">«Игротека-превью» · 5–6 дней · 1–2 человека</h4>
+<p>Бот + одна статическая страница-меню + <b>5 демо по 60–90 секунд</b>. В конце каждого демо — карточка результата, голос «понравилось / не зашло» и кнопка «уведомить о запуске».</p>
+<p class="mut"><b>Это и есть ответ на ваш вопрос.</b> Время на старте экономится радикально, потому что вы не строите оболочку хаба, лидерборды, лиги и дуэли — только меню, счётчик голосов и шаринг.</p>
+</div></div>
+
+<div class="step"><div class="num">2</div><div>
+<h4 style="margin-top:0">Одна полная игра · 3 недели · по результатам голосования</h4>
+<p>Победившая механика доводится до полноценной игры с прокачкой, лигами и дуэлями. Здесь впервые можно измерять D1/D7 и подключать монетизацию.</p>
+</div></div>
+
+<p><b>Итог по времени:</b> до обоснованного решения «что делать» — <b>~1,5–2 недели</b> вместо 4 недель на полноценный хаб. Экономия ~2,5 недели и примерно 400–500 тыс. ₽ на этапе, где вероятность ошибки максимальна <a href="#money" style="font-weight:400">(разбор цифры — в разделе 9)</a>.</p>
+
+<h2><span class="n">3</span>Какие демо брать: разбор пака 50 игр</h2>
+<div class="box red">
+<h4>Стоп: MIT на код не делает игру легальной</h4>
+<p>Получен реальный состав каталога <code>he-is-talha/html-css-javascript-games</code> (MIT, 274★). Минимум <b>12 позиций — клоны чужого IP</b>, ещё <b>3 — азартные механики</b> (это стоп-критерий вашего же брифа).</p>
+</div>
+<table>
+<thead><tr><th style="width:16%">Категория</th><th>Позиции</th><th>Вердикт</th></tr></thead>
+<tbody>
+<tr><td class="bad">Чужой IP</td><td>02-Pac-Man · 09-Flappy-Bird · 32-Fruit-Slicer (Fruit Ninja) · 42-Space-Invaders · 43-Asteroids · 46-Frogger · 01-Candy-Crush · 04-Doodle-Jump · 07-Crossy-Road · 20-Tetris · 11-Wordle · 13-Tower-Blocks (Stack)</td><td class="bad">Не брать. Механику можно, название и арт — нет</td></tr>
+<tr><td class="bad">Азартные</td><td>39-Blackjack · 47-Poker · 28-Dice-Roll-Simulator</td><td class="bad">Стоп-критерий. Исключить полностью</td></tr>
+<tr><td class="warn">Товарный знак, но механика свободна</td><td>38-Mastermind · 50-Lights-Out · 36-Simon-Says · 16-Minesweeper</td><td class="warn">Брать механику, менять название</td></tr>
+<tr><td class="ok">Безопасно</td><td>24-Snake · 22-Memory-Card · 15-Tic-Tac-Toe · 35-Whack-A-Mole · 29-Shape-Clicker · 37-Sliding-Puzzle · 26-Insect-Catch · 34-Emoji-Catcher · 21-Tilting-Maze · 23/31-Number-Guessing · 17/27/30-Typing · 33-Quiz · 06-Sudoku · 03-Chess · 41-Checkers · 44-Reversi · 25-Connect-Four · 48-Battleship · 05-Solitaire · 45-Mahjong-Solitaire</td><td class="ok">Можно брать. Проверить происхождение спрайтов</td></tr>
+</tbody>
+</table>
+
+<h4>Рекомендуемая пятёрка демо</h4>
+<table>
+<thead><tr><th style="width:20%">Демо</th><th>Источник</th><th>Почему именно оно</th><th class="num">Правка</th></tr></thead>
+<tbody>
+<tr><td><b>Мердж-числа</b> (2048, 1 минута)</td><td><code>gabrielecirulli/2048</code> — MIT, 13 372★</td><td>Единственная игра в списке с доказанной массовой тягой. Проверенная база, уже адаптивна</td><td class="num">30 мин</td></tr>
+<tr><td><b>Реакция</b> (Whack-A-Mole, 60 сек)</td><td>35-Whack-A-Mole-Game</td><td>Идеальный формат дуэли: счёт за 60 секунд сравнивать проще всего</td><td class="num">2–3 ч</td></tr>
+<tr><td><b>Память</b> (Memory, 1 минута)</td><td>22-Memory-Card-Game</td><td>Проверяет взрослую часть аудитории MAX; очень дешёвая адаптация</td><td class="num">2–3 ч</td></tr>
+<tr><td><b>Викторина</b> (Quiz, 5 вопросов)</td><td>33-Quiz-Game</td><td>Контентная механика: вопросы пишете сами, поэтому её легко обновлять и делать ежедневной. Сильнейший кандидат на удержание</td><td class="num">3–4 ч</td></tr>
+<tr><td><b>Змейка-дуэль</b> (Snake, 60 сек)</td><td>24-Snake-Game</td><td>Ностальгия + понятный счёт для сравнения в чате</td><td class="num">2–3 ч</td></tr>
+</tbody>
+</table>
+<p class="mut">Правка = вынос текста в RU, обрезка до одной минуты, подключение шаринг-карточки и кнопки голоса. Итого ~12–15 часов на все пять демо, потому что игры уже играбельны из коробки.</p>
+
+<h2><span class="n">4</span>Что НЕ строить на этапе теста</h2>
+<div class="grid2">
+<div class="card">
+<h4 class="bad">Не строить (экономия ~2,5 недель)</h4>
+<ul>
+<li><b>Оболочка хаба</b> (400 строк) — заменяется статическим меню на 100 строк</li>
+<li><b>Лидерборды и БД</b> — только счётчик голосов в одной таблице</li>
+<li><b>Асинхронные дуэли</b> (250 строк) — до валидации не нужны</li>
+<li><b>Еженедельные лиги</b> (300 строк)</li>
+<li><b>Профили, аватары, валюта</b></li>
+<li><b>Аналитический дашборд</b> — хватит выгрузки событий в CSV</li>
+<li><b>Монетизация</b> вообще</li>
+</ul>
+</div>
+<div class="card">
+<h4 class="ok">Обязательно построить</h4>
+<ul>
+<li>Статическая страница-меню с 5 карточками</li>
+<li>Адаптер MAX Bridge (~120 строк: <code>initData</code>, BackButton, <code>shareMaxContent</code>)</li>
+<li>Шаринг-карточка результата (PNG через canvas)</li>
+<li>Две кнопки после демо: «понравилось» и «уведомить о запуске»</li>
+<li>Счётчик событий в Postgres (5 полей: user_id, game, action, value, ts)</li>
+<li>Бот с рассылкой «уведомить о запуске»</li>
+</ul>
+</div>
+</div>
+
+<h2><span class="n">5</span>План по дням</h2>
+<table>
+<thead><tr><th style="width:12%">День</th><th>Задачи</th><th style="width:24%">Результат</th></tr></thead>
+<tbody>
+<tr><td><b>День 1</b></td><td>Юрлицо/ИП уже должно быть запущено (это длинный шаг — начните до кода). Регистрация бота в business.max.ru. Получение тестового стенда. Публикация поста-опроса в каналах (ступень 0)</td><td>Бот существует. Первые голоса по опросу</td></tr>
+<tr><td><b>Дни 2–3</b></td><td>Форк 4 игр из пака + 2048. Вынос строк в RU. Обрезка до 60–90 секунд. Подключение ZzFX (звук без файлов). Шрифт Press Start 2P или Rubik — кириллица подтверждена</td><td>5 играбельных демо на RU, работающих из статики</td></tr>
+<tr><td><b>День 4</b></td><td>Адаптер MAX Bridge. Страница-меню. Шаринг-карточка: canvas → PNG → <code>shareMaxContent</code>. Кнопки «понравилось» и «уведомить»</td><td>Превью открывается из бота, результат шарится в чат</td></tr>
+<tr><td><b>День 5</b></td><td>Счётчик событий на Fastify + Postgres (5 полей). Бот-рассылка для подписавшихся. Деплой на https-хостинг. Прогон по 10 устройствам</td><td>События пишутся. Всё работает на продакшене</td></tr>
+<tr><td><b>Дни 6–10</b></td><td><b>Сбор данных.</b> Небольшой закуп трафика (5–10 тыс. ₽) + посты в каналах. Никаких доработок во время сбора — иначе данные несравнимы</td><td>300–1 000 уникальных игроков. Таблица метрик</td></tr>
+<tr><td><b>День 11</b></td><td><b>Решение.</b> Сравнение с порогами (раздел 6). Выбор механики. Go / no-go / сменить подбор</td><td>Обоснованное решение за 1,5 недели</td></tr>
+</tbody>
+</table>
+
+<h2><span class="n">6</span>Метрики и пороги решения</h2>
+<table>
+<thead><tr><th style="width:30%">Метрика</th><th class="num">Провал</th><th class="num">Норма</th><th class="num">Отлично</th><th>Что делать при провале</th></tr></thead>
+<tbody>
+<tr><td>CTR: открыли игру / открыли бота</td><td class="num bad">&lt;25%</td><td class="num">40%</td><td class="num">60%</td><td>Проблема в подаче, не в игре. Менять название, иконку, текст кнопки</td></tr>
+<tr><td>Доля доигравших демо до конца</td><td class="num bad">&lt;45%</td><td class="num">65%</td><td class="num">85%</td><td>Демо слишком длинное или непонятное. Резать до 45 сек</td></tr>
+<tr><td>Доля нажавших «поделиться»</td><td class="num bad">&lt;8%</td><td class="num">15%</td><td class="num">30%</td><td>Слабый результат для шаринга. Менять форму карточки</td></tr>
+<tr><td><b>Доля «уведомить о запуске»</b> <span class="mut">← главный сигнал</span></td><td class="num bad">&lt;10%</td><td class="num">25%</td><td class="num">45%</td><td class="bad"><b>Интерес не подтверждён.</b> Не строить полную версию этой механики</td></tr>
+<tr><td>CAC (стоимость уникального игрока)</td><td class="num bad">&gt;40 ₽</td><td class="num">15 ₽</td><td class="num">5 ₽</td><td>Экономика не сходится ни при какой механике. Менять канал привлечения</td></tr>
+<tr><td>Разрыв между лидером и аутсайдером голосования</td><td class="num bad">&lt;1,3×</td><td class="num">2×</td><td class="num">3×</td><td>Нет явного фаворита — брать ту, что дешевле довести (2048 или викторина)</td></tr>
+</tbody>
+</table>
+
+<div class="box amber">
+<h4>Правило интерпретации</h4>
+<p><b>Одна метрика решает — «уведомить о запуске».</b> Она бесплатна для пользователя в деньгах, но стоит ему внимания и будущих уведомлений, поэтому это самый честный из доступных сигналов реального интереса. Голосование «понравилось» можно нажать от скуки; подписку на уведомление — нет.</p>
+<p><b>Не измеряйте на демо D1 и D7.</b> Если очень хочется — единственный корректный вариант: на 3-й день разослать подписавшимся новое демо (другую игру) и померить долю открывших. Это честный замер «вернутся ли», не искажённый обрывом контента.</p>
+</div>
+
+<h2><span class="n">7</span>Как демо-превью превращается в продукт</h2>
+<div class="step"><div class="num g">1</div><div><b>Меню остаётся.</b> Статическая страница-меню, сделанная за 100 строк, становится оболочкой хаба — она уже проверена на живых пользователях.</div></div>
+<div class="step"><div class="num g">2</div><div><b>Победившее демо расширяется.</b> У него уже есть RU-текст, звук, шаринг-карточка и аудитория, которая ждёт запуска.</div></div>
+<div class="step"><div class="num g">3</div><div><b>Подписавшиеся — это готовая аудитория софт-лонча.</b> 300–1 000 человек, уже давших согласие на уведомление. Это решает главную проблему MAX: отсутствие каталога.</div></div>
+<div class="step"><div class="num a">4</div><div><b>Остальные демо — это контент-план на месяцы.</b> Они уже лежат готовые и ждут очереди на доводку. Хаб наполняется без новых затрат на привлечение.</div></div>
+
+<h2><span class="n">8</span>Сравнение: сразу полный хаб vs через превью</h2>
+<table>
+<thead><tr><th style="width:26%">Параметр</th><th>Сразу полный хаб (4 нед.)</th><th>Через превью (1,5 нед. → 3 нед.)</th></tr></thead>
+<tbody>
+<tr><td>Время до первого решения</td><td>4 недели</td><td class="ok">1,5 недели</td></tr>
+<tr><td>Затраты до валидации</td><td>~950 000 ₽</td><td class="ok">~250 000 ₽</td></tr>
+<tr><td>Риск выбрать не ту механику</td><td class="bad">Высокий — решение принято до данных</td><td class="ok">Низкий — решение по голосам</td></tr>
+<tr><td>Аудитория к моменту запуска</td><td class="bad">0</td><td class="ok">300–1 000 подписавшихся</td></tr>
+<tr><td>Время до полного продукта</td><td class="ok">4 недели</td><td>4–5 недель</td></tr>
+<tr><td>Риск ложного минуса по механике</td><td class="ok">Нет</td><td class="warn">Есть — если мерить D7 на демо</td></tr>
+</tbody>
+</table>
+<p><b>Вывод:</b> через превью вы проигрываете 0,5–1 неделю до полного продукта, но получаете решение на данных, готовую аудиторию и в 4 раза меньший риск на этапе, где ошибка стоит всего дороже.</p>
+
+<h2 id="money"><span class="n">9</span>Из чего складываются 400–500 тыс. ₽</h2>
+
+<p><b>База расчёта <span class="tag t-warn">⚠️</span>:</b> команда 2–3 человека = <b>225 000 ₽ за неделю</b> (из оценки 900 000 ₽ за 4 недели в предложении продукта). Ставки — собственный расчёт, не внешний источник. Всё ниже — арифметика от этой базы.</p>
+
+<h4>Сценарий А — «сразу полный хаб»</h4>
+<table>
+<thead><tr><th style="width:34%">Статья</th><th class="num">Срок</th><th class="num">Стоимость</th><th>Что получено</th></tr></thead>
+<tbody>
+<tr><td>Юрлицо + политика ПДн</td><td class="num">параллельно</td><td class="num">50 000 ₽</td><td>Обязательно в обоих сценариях</td></tr>
+<tr><td>Нед. 1 — аудит, юрконтур, каркас</td><td class="num">1 нед.</td><td class="num">225 000 ₽</td><td>Каркас, ещё ни одной игры</td></tr>
+<tr><td>Нед. 2 — оболочка + 2048 полная</td><td class="num">1 нед.</td><td class="num">225 000 ₽</td><td>Игра №1</td></tr>
+<tr><td>Нед. 3 — дуэли + ежедневный пазл</td><td class="num">1 нед.</td><td class="num">225 000 ₽</td><td>Игры №2–3</td></tr>
+<tr><td>Нед. 4 — ещё 2–3 игры + софт-лонч</td><td class="num">1 нед.</td><td class="num">225 000 ₽</td><td>Игры №4–5 + первые метрики</td></tr>
+<tr><td><b>Итого</b></td><td class="num"><b>4 нед.</b></td><td class="num"><b>950 000 ₽</b></td><td><b>4–5 полных игр, решение на 4-й неделе</b></td></tr>
+</tbody>
+</table>
+
+<h4>Сценарий Б — «через превью»</h4>
+<table>
+<thead><tr><th style="width:34%">Статья</th><th class="num">Срок</th><th class="num">Стоимость</th><th>Что получено</th></tr></thead>
+<tbody>
+<tr><td>Юрлицо + политика ПДн</td><td class="num">—</td><td class="num">50 000 ₽</td><td>То же самое</td></tr>
+<tr><td>Ступень 0 — фейк-дор</td><td class="num">1 день × 1 чел.</td><td class="num">~18 000 ₽</td><td>Первичный сигнал, 0 кода</td></tr>
+<tr><td>Ступень 1 — превью из 5 демо</td><td class="num">1,2 нед. × 1,5 чел.</td><td class="num">~180 000 ₽</td><td>5 демо + меню + бот + аналитика</td></tr>
+<tr><td>Закуп трафика на 300–1 000 игроков</td><td class="num">—</td><td class="num">5 000–10 000 ₽</td><td>Данные для решения</td></tr>
+<tr style="background:var(--ok-bg)"><td><b>Итого до решения (день 11)</b></td><td class="num"><b>1,5 нед.</b></td><td class="num"><b>~255 000 ₽</b></td><td><b>Обоснованное решение + 300–1 000 подписчиков</b></td></tr>
+<tr><td>Ступень 2 — одна полная игра</td><td class="num">3 нед.</td><td class="num">675 000 ₽</td><td>v0.1 в продакшене</td></tr>
+<tr><td><b>Итого до v0.1</b></td><td class="num"><b>4,5–5 нед.</b></td><td class="num"><b>~930 000 ₽</b></td><td><b>1–2 полные игры вместо 4–5</b></td></tr>
+</tbody>
+</table>
+
+<h4>Три разные цифры — и какая из них «400–500 тыс. ₽»</h4>
+<div class="grid2">
+<div class="card">
+<h4 class="ok">400–500 тыс. ₽ — безусловная экономия</h4>
+<p><b>Это 2–3 полные игры, которые вы не собираете никогда.</b> В сценарии А вы делаете 4–5 игр вслепую; превью показывает, что в топе лишь 1–2, остальные вы выбрасываете.</p>
+<p>Расчёт: 675 000 ₽ (нед. 2–4) ÷ 4 игры ≈ <b>170 000 ₽ за полную игру</b>. Отсеяно 2–3 штуки → <b>340 000 – 510 000 ₽</b>.</p>
+<p class="mut">Вот откуда цифра. Она не про «потратим меньше» — она про «не сделаем лишнего».</p>
+</div>
+<div class="card">
+<h4 class="warn">675 тыс. ₽ — снятые с риска, а не сэкономленные</h4>
+<p>Ступень 2 вы не оплачиваете до дня 11. Если решение «вперёд» — платите. Если «стоп» — это и есть чистая экономия.</p>
+<p><b>Вероятность стопа <span class="tag t-warn">⚠️</span>: 30–50%</b> — экспертная оценка по доле Telegram mini-app, не набирающих аудиторию.</p>
+<p class="mut">Математическое ожидание экономии: 0,4 × 675 000 ≈ <b>270 000 ₽</b> в довесок к безусловным 400–500 тыс.</p>
+</div>
+</div>
+
+<div class="box">
+<h4>Честный вывод, который важно не потерять</h4>
+<p><b>Суммарные вложения до v0.1 почти не меняются: 950 000 ₽ против ~930 000 ₽.</b> Превью экономит не деньги — оно меняет <b>момент и обоснованность</b> траты.</p>
+<p>Настоящая ценность не в 400–500 тыс., а в асимметрии потерь: при решении «стоп» на 11-й день вы теряете <b>255 000 ₽ и 1,5 недели</b>, а не <b>950 000 ₽ и 4 недели</b>. Это разница между «перепробовали пять механик за полмесяца» и «полгода жизни и миллион рублей в никуда».</p>
+<p class="mut">Что <b>не</b> входит в 400–500 тыс.: 50 000 ₽ на юрлицо (платятся в обоих сценариях) и 675 000 ₽ ступени 2 (это не экономия, а отложенный платёж).</p>
+</div>
+
+<div class="box">
+<h4>Что сделать сегодня</h4>
+<pre><code># 1. Запустить юридический контур — самый долгий шаг, он не должен блокировать код
+#    business.max.ru → договор с ООО «МАХ»
+
+# 2. Склонировать и проверить, что всё запускается
+git clone https://github.com/he-is-talha/html-css-javascript-games.git
+git clone https://github.com/gabrielecirulli/2048.git
+
+# 3. Проверить лицензию — файл должен быть
+ls html-css-javascript-games/LICENSE 2048/LICENSE.txt
+
+# 4. Открыть две игры локально и пройти их — 15 минут
+#    35-Whack-A-Mole-Game/index.html
+#    22-Memory-Card-Game/index.html
+
+# 5. Написать пост-опрос в каналы (ступень 0) — 30 минут, 0 кода</code></pre>
+</div>
+
+<p class="mut" style="margin-top:36px;border-top:1px solid var(--line);padding-top:14px">
+План подготовлен 7 сентября 2026. Состав каталога 50 игр получен через GitHub Contents API 07.09.2026. Пороги метрик и оценки времени — экспертные <span class="tag t-warn">⚠️</span>, основаны на данных исследования от 6 сентября (файл <code>MAX_open_source_games_2026-09.html</code>). Факты о MAX — из официальной документации dev.max.ru.
+</p>
+
+</div>
+</body>
+</html>

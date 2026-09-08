@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open-source игры с зарубежной тягой → MAX | сентябрь 2026</title>
+<style>
+:root{
+  --bg:#f7f8fa; --card:#ffffff; --ink:#12161c; --ink2:#3d4653; --mut:#6b7684;
+  --line:#e3e7ec; --line2:#d3d9e0; --acc:#1a56db; --acc-bg:#eef3ff;
+  --ok:#0f7b3f; --ok-bg:#e8f6ed; --warn:#9a5b00; --warn-bg:#fff4e0; --bad:#b3261e; --bad-bg:#fdeceb;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;}
+.wrap{max-width:1180px;margin:0 auto;padding:32px 24px 96px}
+header{border-bottom:2px solid var(--ink);padding-bottom:18px;margin-bottom:28px}
+h1{font-size:26px;line-height:1.25;margin:0 0 8px;letter-spacing:-.3px}
+.sub{color:var(--mut);font-size:13px}
+h2{font-size:20px;margin:44px 0 6px;padding-top:14px;border-top:1px solid var(--line2);letter-spacing:-.2px}
+h2 .n{color:var(--acc);font-variant-numeric:tabular-nums;margin-right:8px}
+h3{font-size:16px;margin:24px 0 8px}
+h4{font-size:14px;margin:18px 0 6px;color:var(--ink2);text-transform:uppercase;letter-spacing:.5px}
+p{margin:8px 0}
+table{width:100%;border-collapse:collapse;margin:12px 0 18px;background:var(--card);
+  border:1px solid var(--line);font-size:13px}
+th{background:#eef1f5;text-align:left;padding:8px 10px;font-weight:600;border-bottom:1px solid var(--line2);
+  vertical-align:bottom;font-size:12px;color:var(--ink2)}
+td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:none}
+tbody tr:nth-child(even){background:#fbfcfd}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ok{color:var(--ok);font-weight:600}.warn{color:var(--warn);font-weight:600}.bad{color:var(--bad);font-weight:600}
+.tag{display:inline-block;padding:1px 7px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
+.t-ok{background:var(--ok-bg);color:var(--ok)}.t-warn{background:var(--warn-bg);color:var(--warn)}
+.t-bad{background:var(--bad-bg);color:var(--bad)}.t-neu{background:#eef1f5;color:var(--ink2)}
+.box{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--acc);
+  padding:14px 16px;margin:16px 0;border-radius:4px}
+.box.red{border-left-color:var(--bad);background:var(--bad-bg)}
+.box.amber{border-left-color:var(--warn);background:var(--warn-bg)}
+.box.green{border-left-color:var(--ok);background:var(--ok-bg)}
+.box h4{margin-top:0}
+ul,ol{margin:8px 0 12px 22px;padding:0}li{margin:4px 0}
+code{background:#eef1f5;padding:1px 5px;border-radius:3px;font-size:12.5px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.mut{color:var(--mut);font-size:12.5px}
+.kv{display:grid;grid-template-columns:150px 1fr;gap:4px 14px;font-size:13.5px;margin:10px 0}
+.kv dt{color:var(--mut)}
+.kv dd{margin:0}
+.toc{columns:2;font-size:13.5px}
+.toc a{color:var(--acc);text-decoration:none}.toc a:hover{text-decoration:underline}
+.score{font-variant-numeric:tabular-nums;font-weight:700}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;min-width:52px}
+.bar>i{display:block;height:6px;background:var(--acc)}
+.legend{font-size:12px;color:var(--mut);margin:6px 0 18px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:820px){.grid2{grid-template-columns:1fr}.toc{columns:1}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Open-source игры с доказанной зарубежной тягой → запуск в MAX</h1>
+  <div class="sub">Аналитический отчёт · срез данных 6 сентября 2026 · Россия, аудитория 12–18+ · 5 исследовательских субагентов + ручная верификация ключевых фактов</div>
+</header>
+
+<div class="legend">
+  <b>Метки уверенности:</b>
+  <span class="tag t-ok">✅</span> ≥2 независимых источника или прямая проверка API/документации ·
+  <span class="tag t-warn">⚠️</span> один источник или обоснованная оценка ·
+  <span class="tag t-bad">❓</span> данных нет, проверять вручную
+</div>
+
+<div class="box amber">
+  <h4>Ключевое ограничение, которое меняет всю стратегию</h4>
+  <p>Проверено лично по официальной документации <code>dev.max.ru</code> (06.09.2026): в <b>MAX Bridge нет ни платежей, ни рекламы, ни лидербордов, ни мультиплеера, ни облачных сохранений</b>. Доступны только <code>shareContent</code>/<code>shareMaxContent</code>, <code>DeviceStorage</code> и <code>SecureStorage</code> (лимит 10 ключей), биометрия, NFC, QR, хаптик. <span class="tag t-ok">✅</span></p>
+  <p>Также: <b>каталога мини-приложений в MAX не существует</b> — приложение привязано к чат-боту и открывается кнопкой «Играть». Органической дистрибуции нет. <span class="tag t-ok">✅</span></p>
+  <p><b>Следствие:</b> лидерборды, дуэли, платежи, аналитику и рекламу придётся строить на своём бэкенде и на внешних SDK — с отдельным риском модерации. Это заложено во все оценки ниже.</p>
+</div>
+
+<h2><span class="n">0</span>Что усилено в брифе перед запуском поиска</h2>
+<table>
+<thead><tr><th style="width:26%">Добавленный шаг</th><th>Зачем</th></tr></thead>
+<tbody>
+<tr><td><b>Дистрибуция как отдельный стоп-критерий</b></td><td>Бриф исходно исходил из наличия каталога в MAX. Его нет. Любая игра без собственного трафика получает 0 установок независимо от качества — это проверяется до оценки механики.</td></tr>
+<tr><td><b>Верификация через GitHub API, а не через поиск</b></td><td>Звёзды, лицензия SPDX и дата коммита берутся из <code>/search/repositories?repo=…</code>, а не из выдачи. Исключены «призрачные» репозитории. Проверено 11 репозиториев повторно, лично.</td></tr>
+<tr><td><b>Происхождение ассетов = отдельный аудит</b></td><td>Бриф требовал проверить <code>assets/</code>. Усилено: ищем <i>указание источника в README</i>. Отсутствие упоминания = риск «стоп», даже при MIT на код.</td></tr>
+<tr><td><b>Проверка чужого бренда</b></td><td>Добавлен критерий, которого не было: Pac-Man, Tetris, Mario и т.п. —商标. Проекты с чужим IP отсекаются даже при чистой лицензии кода.</td></tr>
+<tr><td><b>Проверка на «некоммерческое» заявление в README</b></td><td>Код может быть GPL/MIT, но автор отдельно запретить коммерцию. Найден реальный кейс — см. раздел 6.</td></tr>
+</tbody>
+</table>
+
+<h2><span class="n">1</span>Платформа MAX (сентябрь 2026)</h2>
+<table>
+<thead><tr><th style="width:20%">Параметр</th><th>Значение</th><th style="width:22%">Источник</th><th class="num">Метка</th></tr></thead>
+<tbody>
+<tr><td>Пользователей</td><td><b>&gt;130 млн</b> (август 2026); 125 млн (июнь); 100 млн (март)</td><td>vk.company/press/releases/12390 (19.08.2026)</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>Регистраций</td><td>&gt;107 млн с 26.03.2025; заявленный DAU &gt;77 млн</td><td>vk.company/press/releases/12267 (26.03.2026)</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>DAU / MAU (РФ, 12+)</td><td>DAU 61,5 млн / MAU 83,2 млн (март 2026). Telegram: 72,2 / 94,3. WhatsApp: DAU 30,3 млн (−56,5% к декабрю 2025)</td><td>Mediascope, vedomosti.ru 09.04.2026</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>Аудитория 12–18</td><td>Официальной статистики нет. Месячный охват 12–24 = <b>26%</b> (35–44 = 51%). Ядро — взрослые 25–54</td><td>inclient.ru/max-stats со ссылкой на Mediascope</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+<tr><td>Предустановка</td><td>Обязательна с 01.09.2025 на новые смартфоны и планшеты в РФ</td><td>iz.ru/1932247 (06.08.2025)</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>Каталог приложений</td><td><b>Отсутствует.</b> Приложение привязано к чат-боту, кнопка «Открыть / Старт / <b>Играть</b>»</td><td>dev.max.ru/help/miniapps — проверено 06.09.2026</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>Игры в MAX</td><td>Единственный витринный вход — бот «Игры ВКонтакте» <code>@vk_games_bot</code> (каталог игр ВК внутри MAX)</td><td>max.ru/vk_games_bot</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+<tr><td>SDK</td><td><b>MAX Bridge</b>: <code>https://st.max.ru/js/max-web-app.js</code>, глобальный объект <code>window.WebApp</code>. npm-пакета и публичного репозитория нет</td><td>dev.max.ru/docs/webapps/bridge — проверено 06.09.2026</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>API Bridge (полный перечень)</td><td>initData, platform, getLaunchContext, яркость/запрет скриншотов, requestContact, openLink/openMaxLink, downloadFile, <b>shareContent, shareMaxContent</b>, QR-ридер, BackButton, DeviceStorage, <b>SecureStorage (лимит 10 ключей)</b>, BiometricManager, HapticFeedback, NfcManager</td><td>то же</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>Платежи / реклама / лидерборды / мультиплеер / облако</td><td><b class="bad">Отсутствуют в API.</b> Хранилище только локальное, на устройстве</td><td>то же, прямая проверка</td><td class="num"><span class="tag t-ok">✅</span> отсутствие</td></tr>
+<tr><td>Совместимость с VK Bridge / VKUI</td><td>В документации MAX не упоминается; API-surface не совпадает. Есть отдельный MAX UI (React)</td><td>dev.max.ru — поиск по документации</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+<tr><td>Техтребования</td><td>URL ≤1024 символа, только https, латиница/цифры/точка/дефис; хостинг свой; статический URL = мгновенное обновление</td><td>dev.max.ru/docs/webapps/introduction</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>Лимит бандла / версии WebView</td><td>не найдено</td><td>—</td><td class="num"><span class="tag t-bad">❓</span></td></tr>
+<tr><td>Монетизация разработчика</td><td>Платформенной рекламной сети и IAP для мини-приложений в документации <b>нет</b>. VK Ads в MAX — инструмент рекламодателя, не паблишера</td><td>ads.vk.ru/help/authorization/mini_app_max</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+<tr><td>Rev-share, комиссия, порог выплат</td><td>не найдено</td><td>—</td><td class="num"><span class="tag t-bad">❓</span></td></tr>
+<tr><td>Кто может публиковать</td><td>Только резиденты РФ: юрлицо, ИП или самозанятый + лицензионный договор с ООО «МАХ» (ИНН 9714058267) через business.max.ru</td><td>dev.max.ru/docs/legal/rules (ред. 11.06.2026)</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>Возрастная маркировка</td><td>Обязательна: 0+ / 6+ / 12+ / 16+ / 18+ по ФЗ. Ответственность — разработчика</td><td>dev.max.ru/docs/legal/requirements, п. 2.1</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>Запрещённый контент</td><td>Насилие, порно, суицид, экстремизм, наркотики, оружие, накрутки, вредоносный код. <b>Азартные игры, лутбоксы и крипта прямо не перечислены</b>, но запрещено всё, нарушающее закон РФ → грань не формализована</td><td>то же</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>Персональные данные</td><td>Разработчик — самостоятельный оператор ПДн; публичная политика обязательна; подтверждение оснований — 3 календарных дня; удаление аккаунта по требованию</td><td>dev.max.ru/docs/legal/rules, п. 4.2–4.6</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>Модерация</td><td><b>SLA нет.</b> Модерация до и после размещения; блокировка возможна без объяснения причин и уведомления</td><td>то же, п. 3.1–3.2, 7.8</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>Программы для разработчиков</td><td>«Программа разработчиков MAX» (доступ к API, исходному коду клиента, токен для альт. клиентов); MAX Hackathon для студентов, приз ≈$33k; геймджем VK Education + «Учи.ру», 2,6 млн ₽</td><td>vk.company 07.08.2026; itrussia.media; yk24.ru (апрель 2026)</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+<tr><td>Платформенный риск</td><td>MAX удалён из российского App Store 03.06.2026; РКН ограничивает Telegram (с февраля 2026) и WhatsApp (с ноября 2025)</td><td>ixbt.com 03.06.2026; vedomosti.ru 09.04.2026</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+</tbody>
+</table>
+
+<div class="box">
+<h4>Выводы для запуска HTML5-игры</h4>
+<ol>
+<li>Технически порог входа низкий: обычный HTML5, любой https-хостинг, статический URL обновляется мгновенно.</li>
+<li><b>Органического трафика нет.</b> Дистрибуция = свой бот + внешний трафик (каналы MAX, рассылки, лендинг, закупка). Единственная игровая витрина — <code>@vk_games_bot</code>.</li>
+<li>Монетизация не закрыта платформой: свою рекламную сеть и свою платёжку нести самому, с риском упереться в правила о внешних интеграциях и «согласовании акций».</li>
+<li>Код VK Mini Apps <b>не переносится как есть</b>. Нужен адаптерный слой: другой глобальный объект, нет VKWebApp-событий, оплат и лидербордов. VKUI официально не поддерживается.</li>
+<li>Юридический вход закрыт для нерезидентов РФ.</li>
+<li>Аудитория огромная, но <b>взрослая</b>. Под 12–18 придётся закупаться отдельно, а не рассчитывать на ядро MAX.</li>
+<li>Модерация без SLA и без прописанной грани по азартным механикам → согласование формулировок до разработки.</li>
+</ol>
+</div>
+
+<h2><span class="n">2</span>Карта зарубежных хитов 2023–2026</h2>
+
+<h3>2.1 Китай — крупнейший рынок мини-игр в мире</h3>
+<table>
+<thead><tr><th style="width:24%">Показатель</th><th>Значение</th><th class="num">Метка</th></tr></thead>
+<tbody>
+<tr><td>WeChat Mini Games: MAU</td><td>стабильно ~<b>500 млн</b> третий год, &gt;60 мин/день на пользователя, &gt;500 тыс. разработчиков, 80% — команды &lt;30 чел.</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>WeChat, IAA-сегмент (2026)</td><td>MAU &gt;400 млн (+25% г/г); &gt;1400 игр с оборотом &gt;1 млн юаней/год</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>WeChat, IAP-сегмент (2026)</td><td>MAU &gt;300 млн; &gt;700 игр с MAU ≥1 млн; &gt;100 игр с MAU ≥5 млн; &gt;300 игр с квартальным оборотом &gt;10 млн юаней</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>Социальный слой</td><td>&gt;100 млн социальных взаимодействий в день</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>Merge-категория</td><td><b>+70% г/г</b> (2026); 5 игр с месячной выручкой &gt;10 млн юаней; 模拟经营 +210%; женщины — 47% аудитории, в одной merge-игре 80% платящих — женщины</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>Топ-10 WeChat (декабрь 2025)</td><td><b>Все 10 игр имеют MAU &gt;12 млн.</b> Доминируют 塔防 (TD) / 策略 / 消除 (match) / 益智休闲</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>Рынок мини-игр Китая</td><td>53,54 млрд юаней (2025) → прогноз &gt;100 млрд юаней к 2027. Доля IAP 68,1%. Доля Douyin ~30% (было ~20% в 2023)</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>Douyin: соц-петля</td><td>300 млн пользователей ежедневно пишут в личку, 7 млрд сообщений/день. Игры с дружеским взаимодействием дают <b>+20% к next-day retention</b>; 63,1% игроков — сессии &gt;30 мин</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+</tbody>
+</table>
+
+<div class="box green">
+<h4>Самый важный кейс: 《狙击外星人》 (Douyin, 2025–2026)</h4>
+<p>После добавления <b>真人PK («живой» PvP) + челленджа в групповом чате</b>: рост <b>×12</b>, пик &gt;1 млн новых игроков/день, <b>45% прироста DAU из шаринга</b>, 1,25 млн реактиваций/день. <span class="tag t-ok">✅</span> (белая книга Douyin, 07.03.2026)</p>
+<p><b>Это не игра, а слой поверх любой механики</b>: асинхронная дуэль «я поставил результат — попробуй побить», кнопка «сыграть» прямо в чате. Готовой open-source реализации нет, но это 100–200 строк над любым движком — <b>1–2 человеко-недели</b>. Это самый дешёвый и самый доказавший себя виральный элемент из всей карты.</p>
+</div>
+
+<h3>2.2 Механики с подтверждённой тягой</h3>
+<table>
+<thead><tr><th style="width:16%">Механика</th><th>Где и когда</th><th style="width:26%">Доказательство тяги</th><th>Open-source реализация</th><th class="num">Поиграб.</th><th class="num">Метка</th></tr></thead>
+<tbody>
+<tr><td><b>2048 / merge-числа</b></td><td>2014 → вечнозелёная; входит в merge-семейство, растущее +70% г/г в Китае</td><td>GitHub: 13 372★, 17 569 форков. Косвенно: Block Blast (блок-пазл) — <b>368 млн загрузок за 2025</b>, №1 в мире (AppMagic)</td><td><code>gabrielecirulli/2048</code> — MIT, JS, 13 372★, коммит 24.10.2024</td><td class="num">5/5</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td><b>Suika / 合成大西瓜 (мердж-физика)</b></td><td>Китай 2021 → Япония/Корея 2023 → глобально</td><td>Switch-версия: 4,4 млн копий (11.2023) → <b>8+ млн</b> (03.2024). На Poki — отдельная категория</td><td><code>moonfloof/suika-game</code> — 60★, matter.js, <b>NOASSERTION</b>, коммит 06.10.2025; <code>Coteh/suika-clone</code> — MIT, Phaser 3 + TS, 1★</td><td class="num">4/5</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td><b>羊了个羊 (тайл-match)</b></td><td>WeChat 2022, вторая волна 2025</td><td>DAU &gt;20 млн за 3 дня (оценка медиа ⚠️). В топ-10 WeChat по MAU в декабре 2025. На Gitee: 124★ и <b>100 форков</b> (волна клонов)</td><td><code>StreakingMan/solvable-sheep-game</code> — 408★, <b>GPL-3.0 + прямой запрет коммерции в README</b>; <code>qierkang/yang-game</code> (Gitee) — Apache-2.0, 124★/100 форков + Java-бэкенд</td><td class="num">4/5</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td><b>塔防 TD</b></td><td>WeChat 2024–2026; KakaoPay/Kakao Game Chip</td><td>Один из двух доминирующих жанров топа WeChat. Входит в первые партии игр Kakao (9 и 25 HTML5-игр)</td><td><code>pshenok/server-survival</code> — 6 397★, MIT, vanilla JS + Three.js, коммит 26.08.2026 (активен)</td><td class="num">4/5</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td><b>割草 / survivor-like</b></td><td>WeChat, 《向僵尸开炮》 с 03.2024</td><td><b>№1 по MAU среди всех мини-игр WeChat</b> (декабрь 2025). Сессия 2–4 мин, авто-огонь</td><td>Веб-реализаций нет. <code>matthiasbroske/VampireSurvivorsClone</code> — MIT, но <b>Unity/C#</b> → не для веба</td><td class="num">2/5</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+<tr><td><b>Merge / 合成 (+ merge TD)</b></td><td>WeChat 2025–2026</td><td>Категория <b>+70% г/г</b> по IAP; 5 игр с выручкой &gt;10 млн юаней/мес</td><td>Зрелых реализаций <b>не найдено</b> — только учебные наброски (0–2★)</td><td class="num">3/5</td><td class="num"><span class="tag t-bad">❓</span></td></tr>
+<tr><td><b>3D-消除 《抓大鹅》</b></td><td>Douyin 2024–2026</td><td>Пиковый DAU &gt;10 млн; в Китайский Новый год 2026: 12 млрд просмотров челленджа, 78 млрд показов</td><td>Точного клона нет. Каркас: <code>chenxch/xlegex</code> — 257★, MIT, но коммит <b>10.02.2023</b> (мёртв)</td><td class="num">3/5</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td><b>Ежедневная загадка (Wordle / Connections)</b></td><td>NYT, запад, 2022 → 2026</td><td>Wordle ~5,3 млрд игр за 2024 ⚠️; Connections — <b>&gt;9 млн игроков ежедневно</b>, №2 после Wordle</td><td><code>gereleth/hexapipes</code> — 218★, MIT, SvelteKit, <b>автогенератор ежедневных пазлов</b>, коммит 30.08.2026</td><td class="num">4/5</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+<tr><td><b>.io-арена</b></td><td>2015 → стабильный топ Poki/CrazyGames</td><td>Poki — 90 млн игроков/мес, 1000+ игр; .io — постоянный жанр топа</td><td><code>owenashurst/agar.io-clone</code> — 2 972★, 1 180 форков, MIT, Socket.IO, коммит 30.04.2025</td><td class="num">4/5</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td><b>Collect + raid friends («мемные» хиты)</b></td><td>Roblox 2025: Steal a Brainrot, Grow a Garden</td><td><b>24,1 млн CCU</b> (13.09.2025) и <b>22,3 млн CCU</b> (08.2025) — крупнейшие пики в истории платформы</td><td>Нет (закрытая платформа). Механика — коллекционирование + «рейд к другу», переносится без Roblox</td><td class="num">4/5</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+</tbody>
+</table>
+
+<h3>2.3 Telegram Mini Apps — главный бенчмарк для мессенджер-игр в РФ</h3>
+<table>
+<thead><tr><th>Мини-апп</th><th>Пик</th><th>MAU / актив 2025–2026</th><th class="num">Метка</th></tr></thead>
+<tbody>
+<tr><td>Hamster Kombat</td><td>300 млн (08.2024)</td><td><b>~13 млн MAU</b> — минус 96% от пика</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>Catizen</td><td>15–63 млн ⚠️</td><td><b>~13 млн MAU</b>, выручка $5–15 млн/мес ⚠️ — выжил, превратившись в <b>хаб из 30+ мини-игр</b></td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+<tr><td>Notcoin / X Empire / Blum</td><td>35–50 млн</td><td>3–5 млн MAU</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+<tr><td>TapSwap / MemeFi</td><td>30–55 млн ⚠️</td><td>~2 млн MAU</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+<tr><td>Все мини-аппы Telegram</td><td><b>1,44 млрд MAU (09.2024)</b></td><td><b>150–190 млн (середина 2025)</b> — обвал на порядок</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+</tbody>
+</table>
+<div class="box red">
+<h4>Что вымерло, что выжило</h4>
+<p><b>Вымерло: чистый tap-to-earn и кликер без геймплея.</b> Сооснователь Notcoin, 05.05.2025: <i>«tap-to-earn games are probably dead because they're not sustainable»</i>. <span class="tag t-ok">✅</span></p>
+<p><b>Выжило:</b> (1) хаб мини-игр внутри мини-аппа (Catizen); (2) PvP/дуэли с турнирами; (3) социальные сессии 2–5 мин (кости, RPS); (4) ежедневные задания; (5) коллекционирование + обмен.</p>
+<p><b>Не переносится в MAX:</b> airdrop/токен как единственный смысл; рефералка как ядро петли; награда за приглашение как основной стимул.</p>
+<p><b>ARPDAU по мини-аппам не найден ни в одном публичном источнике</b> <span class="tag t-bad">❓</span>. Косвенные данные: CPC ~$0,01 при CTR 20–40% в Tier-2/3 (PropellerAds, 12.2025) <span class="tag t-ok">✅</span>; ARPPU экосистемы $4,20 (2024) → $9,50+ (оценка 2026) <span class="tag t-warn">⚠️</span>.</p>
+</div>
+
+<h2><span class="n">3</span>GAP-анализ ниш</h2>
+<p class="mut">Оценка спроса у 12–18 — экспертная (<span class="tag t-warn">⚠️</span>), зарубежные сигналы — из раздела 2. Присутствие в MAX: каталога нет, поэтому «присутствие» = наличие игр, доступных через ботов в MAX. Проверено: из игровых входов обнаружен только <code>@vk_games_bot</code>.</p>
+<table>
+<thead><tr><th style="width:15%">Механика</th><th class="num">Спрос за рубежом</th><th class="num">Спрос 12–18 (оценка)</th><th class="num">Присутствие в MAX</th><th>Вердикт</th></tr></thead>
+<tbody>
+<tr><td><b>Мердж-физика (Suika)</b></td><td class="num">Высокий ✅ (8 млн копий, категория на Poki)</td><td class="num">Высокий ⚠️</td><td class="num">Фактически 0 ❓</td><td class="ok">НИША #1 — пусто</td></tr>
+<tr><td><b>Ежедневная загадка / пазл</b></td><td class="num">Высокий ✅ (&gt;9 млн/день у Connections)</td><td class="num">Средне-высокий ⚠️</td><td class="num">Фактически 0 ❓</td><td class="ok">НИША #2 — пусто</td></tr>
+<tr><td><b>Тайл-match (Sheep-тип)</b></td><td class="num">Очень высокий ✅ (топ-10 WeChat, 100 форков)</td><td class="num">Средне-высокий ⚠️</td><td class="num">Фактически 0 ❓</td><td class="ok">НИША #3 — пусто</td></tr>
+<tr><td><b>TD / survive-волны</b></td><td class="num">Очень высокий ✅ (топ-2 жанр WeChat)</td><td class="num">Средне-высокий ⚠️</td><td class="num">Через @vk_games_bot ⚠️</td><td class="ok">НИША #4 — почти пусто</td></tr>
+<tr><td><b>Асинхронная PvP-дуэль (слой)</b></td><td class="num">Доказан эффектом ×12 ✅</td><td class="num">Высокий ⚠️</td><td class="num">0 ❓</td><td class="ok">НИША #5 — слой поверх любого из четырёх</td></tr>
+<tr><td>2048 / блок-пазл</td><td class="num">Высокий ✅ (368 млн загрузок 2025)</td><td class="num">Средний ⚠️</td><td class="num">Вероятно, есть через каталог ВК ⚠️</td><td class="warn">Самая заезженная ниша, но最短 путь</td></tr>
+<tr><td>.io-арена (real-time PvP)</td><td class="num">Средний ✅</td><td class="num">Высокий ⚠️</td><td class="num">0 ❓</td><td class="warn">Дорого: сервер, матчмейкинг, античит</td></tr>
+<tr><td>Сити-билдер</td><td class="num">Средний ⚠️</td><td class="num">Низкий ⚠️</td><td class="num">0 ❓</td><td class="bad">Сессия слишком длинная</td></tr>
+<tr><td>Survivor-like</td><td class="num">Очень высокий ✅ (№1 WeChat)</td><td class="num">Высокий ⚠️</td><td class="num">0 ❓</td><td class="bad">Нет веб-реализации, только Unity</td></tr>
+</tbody>
+</table>
+<p><b>Вывод:</b> в MAX пусты <i>все</i> ниши. Но это палка о двух концах: пустота означает отсутствие и игр, и каналов дистрибуции. Практический вывод — <b>брать механику с максимальным коэффициентом шаринга (мердж-физика, ежедневный пазл, тайл-match) и навешивать на неё слой асинхронной дуэли</b>, потому что только шаринг компенсирует отсутствие каталога.</p>
+
+<h2><span class="n">4</span>Лонг-лист кандидатов</h2>
+<p class="mut">Звёзды, лицензия SPDX и дата коммита — из GitHub Search API, проверено лично 06.09.2026 (11 репозиториев). Помеченные <span class="tag t-warn">⚠️</span> в столбце «проверка» — данные одного субагента, API-лимит был исчерпан.</p>
+<table>
+<thead><tr><th class="num">#</th><th style="width:15%">Проект</th><th>Маршрут</th><th class="num">★</th><th>Лицензия кода</th><th>Ассеты</th><th>Коммит</th><th class="num">Чел.-нед.</th><th class="num">Проверка</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>gabrielecirulli/2048</code></td><td>A/B</td><td class="num">13 372</td><td class="ok">MIT ✅</td><td class="ok">нет (CSS)</td><td>24.10.2024</td><td class="num">0,5–1,5</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>2</td><td><code>pshenok/server-survival</code></td><td>B (рескин)</td><td class="num">6 397</td><td class="ok">MIT ✅</td><td class="warn">assets/, источник не указан ❓</td><td class="ok">26.08.2026</td><td class="num">4–5</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>3</td><td><code>KilledByAPixel/LittleJS</code></td><td>B (движок)</td><td class="num">4 175</td><td class="ok">MIT ✅</td><td class="ok">ZzFX — звук в коде</td><td class="ok">05.09.2026</td><td class="num">2–3 на игру</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>4</td><td><code>victorqribeiro/isocity</code></td><td>A</td><td class="num">3 250</td><td class="ok">MIT ✅</td><td class="ok">Kenney CC0 (в README)</td><td>14.10.2024</td><td class="num">3–4</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>5</td><td><code>owenashurst/agar.io-clone</code></td><td>A (PvP)</td><td class="num">2 972</td><td class="ok">MIT ✅</td><td class="warn">источник не указан ❓</td><td>30.04.2025</td><td class="num">6–8</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>6</td><td><code>mumuy/pacman</code></td><td>—</td><td class="num">1 642</td><td class="ok">MIT ✅</td><td class="bad">Pac-Man —商标 Namco</td><td class="ok">07.05.2026</td><td class="num">—</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>7</td><td><code>digitsensitive/phaser3-typescript</code></td><td>B (донор)</td><td class="num">1 033 ⚠️</td><td class="ok">MIT ⚠️</td><td class="warn">❓</td><td class="ok">28.05.2026</td><td class="num">2–3</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+<tr><td>8</td><td><code>StreakingMan/solvable-sheep-game</code></td><td>—</td><td class="num">408</td><td class="bad">GPL-3.0 + «禁止商用»</td><td class="bad">темы с реальными людьми</td><td>17.02.2025</td><td class="num">—</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>9</td><td><code>chenxch/xlegex</code></td><td>—</td><td class="num">257</td><td class="ok">MIT ✅</td><td class="warn">❓</td><td class="bad">10.02.2023</td><td class="num">—</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>10</td><td><code>gereleth/hexapipes</code></td><td>A (daily)</td><td class="num">218</td><td class="ok">MIT ✅</td><td class="ok">нет</td><td class="ok">30.08.2026</td><td class="num">1,5–2</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>11</td><td><code>moonfloof/suika-game</code></td><td>B ( reference)</td><td class="num">60</td><td class="warn">NOASSERTION</td><td class="warn">assets/, источник не указан ❓</td><td class="ok">06.10.2025</td><td class="num">2–3</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td>12</td><td><code>he-is-talha/html-css-javascript-games</code></td><td>B (хаб, 50 игр)</td><td class="num">274 ⚠️</td><td class="ok">MIT ⚠️</td><td class="warn">❓</td><td class="ok">04.09.2026</td><td class="num">1 на игру</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+<tr><td>13</td><td><code>qierkang/yang-game</code> (Gitee)</td><td>B (рерайт)</td><td class="num">124 / <b>100 форков</b></td><td class="ok">Apache-2.0 ✅</td><td class="bad">мемные лица знаменитостей</td><td class="bad">~3 года назад</td><td class="num">5–7</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+<tr><td>14</td><td>CodeCanyon «Head Ball 2026»</td><td>D</td><td class="num">$49</td><td class="warn">Envato Regular — 1 продукт, пользователи не платят</td><td class="ok">в комплекте</td><td>16.12.2025</td><td class="num">1–2</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+<tr><td>15</td><td>CodeCanyon «Royal Checkers Multiplayer»</td><td>D</td><td class="num">$49</td><td class="warn">то же</td><td class="ok">в комплекте</td><td>30.12.2025</td><td class="num">1–2</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+<tr><td>16</td><td><b>Свой мердж-клон на matter.js + Kenney</b></td><td>C</td><td class="num">—</td><td class="ok">MIT (matter.js) + CC0</td><td class="ok">Kenney CC0</td><td class="ok">актуально</td><td class="num">2,5–3,5</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+</tbody>
+</table>
+
+<h2><span class="n">5</span>Аудит лицензий по трём слоям (финалисты)</h2>
+<table>
+<thead><tr><th style="width:18%">Проект</th><th>Слой: КОД</th><th>Слой: АССЕТЫ</th><th>Слой: НАЗВАНИЕ / ШРИФТЫ</th><th>Действие</th></tr></thead>
+<tbody>
+<tr>
+<td><b>2048</b></td>
+<td class="ok">MIT, LICENSE.txt ✅</td>
+<td class="ok">Ассетов нет — вся графика на CSS ✅</td>
+<td class="warn">Название «2048» — дескриптивное, но есть товарный знак оригинальной игры. Шрифт Clear Sans (Apache-2.0)</td>
+<td>Название сменить (数字/«Сложи 2048» нельзя — использовать «Меридиан» и т.п.). Товарный знак проверить у юриста ⚠️</td>
+</tr>
+<tr>
+<td><b>server-survival</b></td>
+<td class="ok">MIT (LICENSE добавлен коммитом d6c67a7, 24.11.2025) ✅</td>
+<td class="bad">Папка <code>assets/</code> есть (коммит «feat: menu sound», 24.11.2025), <b>происхождение не указано</b> ❓</td>
+<td class="warn">Английский хардкод в UI. Шрифты — системные</td>
+<td class="bad">СТОП до выяснения: прогнать файлы <code>assets/</code> через аудио-отпечаток, заменить всё неустановленное на Kenney Audio (CC0)</td>
+</tr>
+<tr>
+<td><b>LittleJS</b></td>
+<td class="ok">MIT ✅</td>
+<td class="ok">ZzFX генерирует звук кодом — файлов нет; примеры используют процедурную графику ✅</td>
+<td class="warn">Примеры на английском</td>
+<td>Можно брать. Заменить шрифт на кириллический (см. ниже)</td>
+</tr>
+<tr>
+<td><b>isocity</b></td>
+<td class="ok">MIT (LICENSE от 31.12.2019) ✅</td>
+<td class="ok">README: «Textures from kenney.nl» → CC0 ✅</td>
+<td class="warn">Название менять</td>
+<td>Чисто. Указать Kenney в титрах (не обязательно, но желательно)</td>
+</tr>
+<tr>
+<td><b>hexapipes</b></td>
+<td class="ok">MIT (LICENSE создан 03.10.2022) ✅</td>
+<td class="ok">Ассетов нет — SVG-рендер ✅</td>
+<td class="warn">Название менять; SvelteKit → сборка в статику</td>
+<td>Чисто. Самая простая локализация: строк почти нет</td>
+</tr>
+<tr>
+<td><b>moonfloof/suika-game</b></td>
+<td class="warn">LICENSE добавлен 22.05.2025, но SPDX = <b>NOASSERTION</b> (нестандартный текст) ⚠️</td>
+<td class="bad">Папка <code>assets/</code>, источник фруктов не указан ❓</td>
+<td class="warn">Сам жанр — клон коммерческого хита</td>
+<td>Использовать <b>только как референс по физике и скорингу</b>, не как базу. Основной маршрут — C</td>
+</tr>
+<tr>
+<td><b>qierkang/yang-game</b></td>
+<td class="ok">Apache-2.0 ✅</td>
+<td class="bad">Встроенные темы — изображения реальных медийных личностей (金轮 / 骚猪 / ikun). <b>Риск по праву на изображение</b></td>
+<td class="bad">Весь UI на китайском, включая Java-бэкенд</td>
+<td>Полная замена арта и аудио. Фронт и бэкенд переписать. Оставить только алгоритм генерации решаемых уровней</td>
+</tr>
+</tbody>
+</table>
+
+<div class="box">
+<h4>Шрифты: проверка кириллицы (Google Fonts CSS2 API, 06.09.2026) <span class="tag t-ok">✅</span></h4>
+<table style="margin:6px 0">
+<thead><tr><th>Семейство</th><th>Кириллица</th><th>Комментарий</th></tr></thead>
+<tbody>
+<tr><td><b>Press Start 2P</b></td><td class="ok">✅ есть (cyrillic, cyrillic-ext)</td><td>Редкий пиксельный шрифт с кириллицей — основной выбор для ретро-стиля</td></tr>
+<tr><td>Roboto / Inter / Montserrat / Rubik / Nunito / Play</td><td class="ok">✅ есть</td><td>Безопасно</td></tr>
+<tr><td>Pixelify Sans</td><td class="warn">⚠️ только <code>cyrillic</code> без ext</td><td>Проверить глифы вручную</td></tr>
+<tr><td>Silkscreen / VT323</td><td class="bad">❌ нет</td><td>Только латиница — для русской локализации не годятся</td></tr>
+</tbody>
+</table>
+<p class="mut">Встроенные CJK-шрифты в китайских проектах (xlegex, pacman, vue-tetris, star-battle) нераспространяемы — заменять полностью. В <code>mumuy/pacman</code> и <code>vue-tetris</code> найден китайский хардкод в <code>index.html</code> (17+ строк) → +0,5 человеко-недели на вынос строк.</p>
+</div>
+
+<h2><span class="n">6</span>Стоп-критерии: кто выбыл и почему</h2>
+<table>
+<thead><tr><th style="width:20%">Кандидат</th><th>Причина отсева</th><th class="num">Метка</th></tr></thead>
+<tbody>
+<tr><td><code>chvin/react-tetris</code> (8 731★)</td><td class="bad">Нет LICENSE-файла (<code>license: null</code>). Без письменного разрешения автора брать нельзя. Плюс Tetris —商标</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+<tr><td><code>StreakingMan/solvable-sheep-game</code></td><td class="bad">GPL-3.0 + прямое заявление в README: <b>«本项仅供交流，禁止商用！»</b> («только для обмена, коммерция запрещена»). Двойной блокер</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td><code>Hextris/hextris</code> (2 435★)</td><td class="bad">GPL-3.0 + коммит 13.05.2023 (более 3 лет). Копилефт заставит открыть всю мини-игру</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+<tr><td><code>chenxch/xlegex</code></td><td class="bad">Коммит 10.02.2023 — 3,5 года, проект мёртв. MIT, но зависимости протухли</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td><code>mumuy/pacman</code></td><td class="bad">Pac-Man — чужой бренд и чужой арт (Bandai Namco). MIT на код не покрывает IP</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td><code>moonfloof/suika-game</code> как база</td><td class="bad">NOASSERTION + неустановленные ассеты. Только как референс</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td><code>matthiasbroske/VampireSurvivorsClone</code></td><td class="bad">Unity/C# — для веба неприменим (Unity WebGL &gt;50 МБ)</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+<tr><td><code>tailuge/billiards</code></td><td class="warn">GPL-3.0 ⚠️ — единственный сильный PvP-дуэльный кандидат, но копилефт</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+<tr><td>Механика tap-to-earn</td><td class="bad">Вымерла (Notcoin, 05.05.2025). Крипто-составляющая в MAX под вопросом модерации</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+<tr><td><code>scottgreen/bigwatermelon</code> (Gitee)</td><td class="bad">«该仓库未声明开源许可证文件» — лицензии нет</td><td class="num"><span class="tag t-warn">⚠️</span></td></tr>
+</tbody>
+</table>
+
+<h2><span class="n">7</span>Скоринг (проходной балл ≥65)</h2>
+<p class="mut">Оценки по критериям «спрос 12–18», «пустота ниши» и «монетизация» — экспертные (<span class="tag t-warn">⚠️</span>). Остальное опирается на проверенные данные.</p>
+<table>
+<thead>
+<tr><th style="width:22%">Кандидат</th><th class="num">Тяга /20</th><th class="num">Готовн. /15</th><th class="num">Лицензии /15</th><th class="num">Виральн. /15</th><th class="num">ЦА+модер. /10</th><th class="num">Ниша /10</th><th class="num">Монетиз. /10</th><th class="num">Локал. /5</th><th class="num">ИТОГО</th></tr>
+</thead>
+<tbody>
+<tr><td><b>2048 + соц-слой</b></td><td class="num">18</td><td class="num">14</td><td class="num">15</td><td class="num">11</td><td class="num">10</td><td class="num">8</td><td class="num">6</td><td class="num">5</td><td class="num"><b class="ok">87</b></td></tr>
+<tr><td><b>Мердж-физика (маршрут C)</b></td><td class="num">16</td><td class="num">7</td><td class="num">15</td><td class="num">15</td><td class="num">10</td><td class="num">9</td><td class="num">7</td><td class="num">5</td><td class="num"><b class="ok">84</b></td></tr>
+<tr><td><b>hexapipes (daily-пазл)</b></td><td class="num">10</td><td class="num">12</td><td class="num">15</td><td class="num">13</td><td class="num">10</td><td class="num">10</td><td class="num">6</td><td class="num">5</td><td class="num"><b class="ok">81</b></td></tr>
+<tr><td><b>Тайл-match (Sheep-тип, свой код)</b></td><td class="num">17</td><td class="num">9</td><td class="num">11</td><td class="num">14</td><td class="num">9</td><td class="num">10</td><td class="num">8</td><td class="num">2</td><td class="num"><b class="ok">80</b></td></tr>
+<tr><td><b>server-survival (рескин в TD)</b></td><td class="num">16</td><td class="num">10</td><td class="num">12</td><td class="num">12</td><td class="num">9</td><td class="num">9</td><td class="num">7</td><td class="num">4</td><td class="num"><b class="ok">79</b></td></tr>
+<tr><td><b>agar.io-арена (PvP)</b></td><td class="num">14</td><td class="num">8</td><td class="num">13</td><td class="num">14</td><td class="num">8</td><td class="num">10</td><td class="num">8</td><td class="num">4</td><td class="num"><b class="ok">79</b></td></tr>
+<tr><td>LittleJS + своя игра</td><td class="num">12</td><td class="num">9</td><td class="num">15</td><td class="num">8</td><td class="num">10</td><td class="num">10</td><td class="num">5</td><td class="num">5</td><td class="num"><b>74</b></td></tr>
+<tr><td>CodeCanyon Head Ball (D)</td><td class="num">6</td><td class="num">12</td><td class="num">10</td><td class="num">12</td><td class="num">9</td><td class="num">10</td><td class="num">7</td><td class="num">4</td><td class="num"><b>70</b></td></tr>
+<tr><td>Хаб из 50 мини-игр (Catizen-модель)</td><td class="num">8</td><td class="num">10</td><td class="num">15</td><td class="num">6</td><td class="num">10</td><td class="num">10</td><td class="num">5</td><td class="num">5</td><td class="num"><b>69</b></td></tr>
+<tr><td>CodeCanyon Checkers (D)</td><td class="num">7</td><td class="num">11</td><td class="num">10</td><td class="num">10</td><td class="num">8</td><td class="num">10</td><td class="num">7</td><td class="num">4</td><td class="num"><b>67</b></td></tr>
+<tr><td>vue-tetris</td><td class="num">12</td><td class="num">11</td><td class="num">10</td><td class="num">7</td><td class="num">10</td><td class="num">7</td><td class="num">6</td><td class="num">4</td><td class="num"><b>67</b></td></tr>
+<tr><td>isocity</td><td class="num">8</td><td class="num">8</td><td class="num">14</td><td class="num">5</td><td class="num">9</td><td class="num">10</td><td class="num">6</td><td class="num">5</td><td class="num"><b>65</b></td></tr>
+<tr><td>js13k-победители 2026</td><td class="num">10</td><td class="num">8</td><td class="num">8</td><td class="num">8</td><td class="num">10</td><td class="num">10</td><td class="num">5</td><td class="num">5</td><td class="num"><b class="bad">64</b></td></tr>
+</tbody>
+</table>
+<p><b>Прошли порог:</b> 12 из 13. <b>Не прошёл:</b> js13k-победители (64) — лицензия репозитория <code>js13kGames/games</code> не указана, проверять по каждому лоту отдельно.</p>
+
+<h2><span class="n">8</span>Карточки топ-5</h2>
+
+<h3>8.1 — 2048 + социальный слой <span class="score">87/100</span></h3>
+<dl class="kv">
+<dt>Описание</dt><dd>Сдвигай плитки, складывай одинаковые, дойди до 2048. Добавлен слой: дуэль «то же поле, кто больше» и недельные лиги.</dd>
+<dt>Цикл в 3 шага</dt><dd>1) Открыл из чата за 2 секунды → 2) Сыграл раунд 2–4 минуты → 3) Результат уходит в чат как карточка-вызов другу.</dd>
+<dt>Что доказано</dt><dd>13 372★ и 17 569 форков на GitHub ✅. Косвенно: блок-пазл Block Blast — 368 млн загрузок за 2025, №1 в мире (AppMagic) ✅. Merge-семейство в Китае +70% г/г ✅.</dd>
+<dt>Лицензии</dt><dd>Код MIT ✅ · Ассетов нет, графика на CSS ✅ · Название: «2048» — потенциальный товарный знак оригинальной игры ⚠️ → сменить.</dd>
+<dt>Дистанция</dt><dd>0,5–1,5 человеко-недели. Критический путь: <b>свой бэкенд лидербордов</b> (MAX лидербордов не даёт) → дуэль → шаринг-карточка.</dd>
+<dt>Монетизация</dt><dd>Reward-video вне core loop: воскрешение после проигрыша, +1 отмена хода, x2 к очкам в лиге. Подписка «без рекламы + скины» без pay-to-win.</dd>
+<dt>Риски</dt><dd>1) Ниша Commodity — нет уникальности → держит только соц-слой. 2) Низкая виральность базовой механики. 3) Товарный знак «2048».</dd>
+</dl>
+
+<h3>8.2 — Мердж-физика (маршрут C: свой код + Kenney CC0) <span class="score">84/100</span></h3>
+<dl class="kv">
+<dt>Описание</dt><dd>Сбрасывай предметы в контейнер, одинаковые соединяются в больший. Чем больше цепочка — тем выше счёт. Поле переполнилось — конец.</dd>
+<dt>Цикл в 3 шага</dt><dd>1) Бросил предмет → 2) Наблюдаешь непредсказуемую физику (мемный момент) → 3) Скриншот поля + «побей мой счёт» в чат.</dd>
+<dt>Что доказано</dt><dd>Suika Game: 4,4 млн копий → 8+ млн за 4 месяца ✅. Отдельная категория на Poki ✅. Физика = самораспространяющийся контент для коротких видео.</dd>
+<dt>Лицензии</dt><dd>Код: <code>matter.js</code> MIT ✅ + свой код. Ассеты: Kenney (CC0, подтверждено на kenney.nl) ✅. Название: новое, своё ✅. Шрифт: Press Start 2P / Rubik (кириллица есть) ✅.</dd>
+<dt>Дистанция</dt><dd>2,5–3,5 человеко-недели (механика пишется с нуля — маршрут C). Референс по балансу — <code>moonfloof/suika-game</code> (только чтение).</dd>
+<dt>Монетизация</dt><dd>Reward-video: «стряхнуть поле» 1 раз за раунд, «убрать один предмет», продолжение после проигрыша. IAP: скины предметов, без влияния на физику.</dd>
+<dt>Риски</dt><dd>1) Писать с нуля дольше, чем адаптировать. 2) Физический движок на слабых Android — просадки FPS. 3) Механика копируется за 2 недели конкурентом.</dd>
+</dl>
+
+<h3>8.3 — Ежедневный пазл на базе hexapipes <span class="score">81/100</span></h3>
+<dl class="kv">
+<dt>Описание</dt><dd>Гексагональные трубы: поверни клетки, соедини все концы. <b>Один пазл в день — один и тот же для всех игроков</b>.</dd>
+<dt>Цикл в 3 шага</dt><dd>1) Ежедневное уведомление от бота → 2) Решил пазл за 2–5 минут → 3) Поделился emoji-сеткой результата (без спойлера) и сравнил временем с друзьями.</dd>
+<dt>Что доказано</dt><dd>Сами 218★ — слабый сигнал ⚠️. Тяга доказана на уровне семейства: Connections &gt;9 млн игроков ежедневно ✅, Wordle ~5,3 млрд игр за 2024 ⚠️. В репозитории <b>уже есть автогенератор ежедневных пазлов</b> (GitHub Actions, «+1 week of dailies», коммит 30.08.2026) ✅.</dd>
+<dt>Лицензии</dt><dd>Код MIT ✅ (LICENSE от 03.10.2022). Ассетов нет — SVG-рендер ✅. SvelteKit → статическая сборка. Строк почти нет → локализация тривиальна ✅.</dd>
+<dt>Дистанция</dt><dd>1,5–2 человеко-недели. Критический путь: статический билд → бот-рассылка в 09:00 → таблица результатов дня.</dd>
+<dt>Монетизация</dt><dd>Reward-video: подсказка (выделить одну клетку), снятие ограничения по времени. Подписка: архив из 500+ прошлых пазлов + статистика.</dd>
+<dt>Риски</dt><dd>1) Механика «для взрослых» — у 12–18 может не зайти без соц-слоя → обязательно добавить дуэль на время. 2) Один пазл в день = низкое время в игре → слабый инвентарь рекламы. 3) Нет «бесконечного» режима для удержания между раздачами.</dd>
+</dl>
+
+<h3>8.4 — Тайл-match (Sheep-тип), свой код <span class="score">80/100</span></h3>
+<dl class="kv">
+<dt>Описание</dt><dd>Стопка тайлов в 2–3 слоя: собери тройки одинаковых в лотке из 7 слотов. Слои перекрывают друг друга.</dd>
+<dt>Цикл в 3 шага</dt><dd>1) Выбрал уровень → 2) 1–3 минуты на сбор → 3) Проиграл на «нерешаемом» уровне → «поделись в чат, чтобы воскреснуть».</dd>
+<dt>Что доказано</dt><dd>《羊了个羊》: топ-10 WeChat по MAU в декабре 2025 ✅. На Gitee у <code>qierkang/yang-game</code> — <b>100 форков</b> при 124★ (волна клонов) ✅. Модель «поделись, чтобы воскреснуть» — чистая IAA-монетизация, проверенная на китайском рынке.</dd>
+<dt>Лицензии</dt><dd>Доступный код: GPL-3.0 с прямым запретом коммерции (СТОП) и Apache-2.0 с артом из фото знаменитостей (СТОП по арту). <b>Итог: писать код с нуля, брать только алгоритм гарантированно решаемых уровней.</b></dd>
+<dt>Дистанция</dt><dd>5–7 человеко-недель. Самый длинный критический путь: генератор решаемых уровней + полный арт-пак + своя IAA-петля.</dd>
+<dt>Монетизация</dt><dd>Классическая IAA: воскрешение за просмотр, +3 слота в лоток, отмена хода. Конверсия в просмотр здесь самая высокая из всех кандидатов.</dd>
+<dt>Риски</dt><dd>1) Механика построена на фрустрации — риск жалоб и низкого D30. 2) Арт — 100% свой. 3) Дольше всех до релиза.</dd>
+</dl>
+
+<h3>8.5 — TD на базе server-survival (рескин) <span class="score">79/100</span></h3>
+<dl class="kv">
+<dt>Описание</dt><dd>Строй и прокачивай защиту, отбивай волны врагов. Оригинал — про облачную архитектуру; для 12–18 нужен полный рескин (космос / зомби / фэнтези).</dd>
+<dt>Цикл в 3 шага</dt><dd>1) Волна 2–5 минут → 2) Между волнами — апгрейд → 3) «Я дожил до волны 20» = идеальный результат для шаринга.</dd>
+<dt>Что доказано</dt><dd>6 397★, коммит 26.08.2026 — живой и активно развивающийся ✅. TD — топ-2 жанр топа WeChat Mini Games (все 10 игр топа имеют MAU &gt;12 млн) ✅.</dd>
+<dt>Лицензии</dt><dd>Код MIT ✅ (LICENSE добавлен 24.11.2025). <b class="bad">Ассеты: папка <code>assets/</code> есть, источник не указан — СТОП до аудита.</b> Весь UI на английском.</dd>
+<dt>Дистанция</dt><dd>4–5 человеко-недель, из которых ~1 неделя — аудит и замена ассетов. Сборка не нужна: vanilla JS + ES-модули, Three.js с CDN (~600 КБ gzip).</dd>
+<dt>Монетизация</dt><dd>Reward-video: +1 башня в начале волны, перезапуск волны, x2 к награде. IAP: постоянные улучшения между забегами.</dd>
+<dt>Риски</dt><dd>1) Ассеты неустановленного происхождения — юридический стоп. 2) Three.js с CDN + 600 КБ — проверить лимит бандла в MAX (не найден ❓). 3) Тема «облачная архитектура» совершенно не для 12–18 — рескин обязателен и оценивается в 1,5–2 недели.</dd>
+</dl>
+
+<h4>Пять измеримых улучшений при переносе (единый набор для всех топ-5)</h4>
+<table>
+<thead><tr><th style="width:26%">Улучшение</th><th>Метрика успеха</th><th>Откуда взято</th></tr></thead>
+<tbody>
+<tr><td><b>Асинхронная дуэль из чата</b>: «я набрал X — попробуй побить», кнопка в сообщении</td><td>Доля DAU, вступивших в дуэль ≥35%; +20 п.п. к D1</td><td>Кейс 《狙击外星人》: ×12 роста, +20% к next-day retention ✅</td></tr>
+<tr><td><b>Еженедельные лиги по 50 игроков</b> с дивизионами и вылетом</td><td>D7 у участников лиги ≥2× от среднего; ≥60% DAU в лиге</td><td>Провинциальные лидерборды 羊了个羊 ✅</td></tr>
+<tr><td><b>Карточка-вызов вместо текстового шаринга</b> (картинка результата + кнопка «Ответить»)</td><td>CTR карточки в чате ≥12%; k-фактор ≥0,4</td><td>45% прироста DAU из шаринга у Douyin ✅</td></tr>
+<tr><td><b>Ежедневное задание с наградой</b> (3 раунда → бонус)</td><td>Доля игроков с сессией ≥2 дня подряд ≥45%</td><td>Ежедневная рутина выжила в Telegram ✅</td></tr>
+<tr><td><b>Reward-video только вне core loop</b>, максимум 3 показа в день</td><td>Досматриваемость ≥70%; отток после первого показа рекламы &lt;3%</td><td>Модель Catizen: хаб +Ads, 13 млн MAU ⚠️</td></tr>
+</tbody>
+</table>
+
+<h2><span class="n">9</span>Юнит-экономика топ-3</h2>
+<div class="box amber">
+<h4>Базовые допущения (все — оценки, <span class="tag t-warn">⚠️</span>)</h4>
+<p>Публичного ARPDAU для мини-приложений MAX или Telegram <b>не существует</b> <span class="tag t-bad">❓</span>. Расчёт построен на косвенных данных: CPC ~$0,01 при CTR 20–40% в Tier-2/3 (PropellerAds, 12.2025) ✅; Tier-1/РФ eCPM reward-video для казуалок принят <b>≈400 ₽</b>. Допущения по DAU — от отсутствия каталога: трафик только закупной и кросс-промо.</p>
+</div>
+<table>
+<thead><tr><th style="width:24%">Параметр</th><th class="num">Пессимистичный</th><th class="num">Базовый</th><th class="num">Оптимистичный</th></tr></thead>
+<tbody>
+<tr><td>3 rewarded-ролика/день на игрока, fill 0,8, досмотр 0,7</td><td class="num">0,35 ₽</td><td class="num">0,80 ₽</td><td class="num">1,50 ₽</td></tr>
+<tr><td>IAP/подписка (конверсия 1,5%, ARPPU 150 ₽/мес)</td><td class="num">входит</td><td class="num">входит</td><td class="num">входит</td></tr>
+<tr><td colspan="4" style="background:#eef1f5;font-weight:600">Мердж-физика (маршрут C)</td></tr>
+<tr><td>DAU на 90-й день</td><td class="num">3 000</td><td class="num">15 000</td><td class="num">60 000</td></tr>
+<tr><td>Выручка/мес (DAU × ARPDAU × 30)</td><td class="num">31 500 ₽</td><td class="num">360 000 ₽</td><td class="num">2 700 000 ₽</td></tr>
+<tr><td>Расходы/мес (сервер 10k + SDK/аналитика 5k + поддержка 60k + маркетинг 100k)</td><td class="num">120 000 ₽</td><td class="num">175 000 ₽</td><td class="num">300 000 ₽</td></tr>
+<tr><td>Вложения (3 чел. × 3,5 нед. по 300k ₽/мес + юр. и инфра 50k)</td><td class="num">840 000 ₽</td><td class="num">840 000 ₽</td><td class="num">840 000 ₽</td></tr>
+<tr><td><b>Чистая прибыль/мес</b></td><td class="num bad">−88 500 ₽</td><td class="num ok">+185 000 ₽</td><td class="num ok">+2 400 000 ₽</td></tr>
+<tr><td><b>Окупаемость</b></td><td class="num bad">не окупается</td><td class="num warn">4,5 мес.</td><td class="num ok">0,4 мес.</td></tr>
+<tr><td colspan="4" style="background:#eef1f5;font-weight:600">2048 + соц-слой (самый дешёвый вход)</td></tr>
+<tr><td>DAU на 90-й день</td><td class="num">2 000</td><td class="num">10 000</td><td class="num">40 000</td></tr>
+<tr><td>Выручка/мес</td><td class="num">21 000 ₽</td><td class="num">240 000 ₽</td><td class="num">1 800 000 ₽</td></tr>
+<tr><td>Расходы/мес</td><td class="num">110 000 ₽</td><td class="num">150 000 ₽</td><td class="num">280 000 ₽</td></tr>
+<tr><td>Вложения (3 чел. × 1,5 нед.)</td><td class="num">390 000 ₽</td><td class="num">390 000 ₽</td><td class="num">390 000 ₽</td></tr>
+<tr><td><b>Окупаемость</b></td><td class="num bad">не окупается</td><td class="num warn">4,3 мес.</td><td class="num ok">0,3 мес.</td></tr>
+<tr><td colspan="4" style="background:#eef1f5;font-weight:600">Ежедневный пазл (hexapipes)</td></tr>
+<tr><td>DAU на 90-й день</td><td class="num">2 500</td><td class="num">12 000</td><td class="num">45 000</td></tr>
+<tr><td>Выручка/мес (ARPDAU ниже: 1 пазл/день = мало инвентаря)</td><td class="num">18 000 ₽</td><td class="num">216 000 ₽</td><td class="num">1 620 000 ₽</td></tr>
+<tr><td>Расходы/мес</td><td class="num">105 000 ₽</td><td class="num">145 000 ₽</td><td class="num">270 000 ₽</td></tr>
+<tr><td>Вложения (3 чел. × 2 нед.)</td><td class="num">470 000 ₽</td><td class="num">470 000 ₽</td><td class="num">470 000 ₽</td></tr>
+<tr><td><b>Окупаемость</b></td><td class="num bad">не окупается</td><td class="num warn">6,6 мес.</td><td class="num ok">0,3 мес.</td></tr>
+</tbody>
+</table>
+<div class="box red">
+<h4>Честный вывод по экономике</h4>
+<p>Одиночная мини-игра на чистой рекламной модели в MAX <b>не окупается в пессимистичном сценарии и окупается за 4–7 месяцев в базовом</b>. Разброс в 8 раз между сценариями упирается не в механику, а в <b>отсутствие каталога</b>: весь DAU закупается.</p>
+<p>Модель сходится только при одном из трёх условий: (1) кросс-промо внутри <b>хаба из 3–5 игр</b> (модель Catizen — хаб удержал 13 млн MAU там, где одиночные тапалки умерли); (2) договорённость о трафике с крупным каналом MAX или с <code>@vk_games_bot</code>; (3) неигровая монетизация — брендированные игровые спецпроекты для рекламодателей.</p>
+</div>
+
+<h2><span class="n">10</span>Финал</h2>
+
+<h3>10.1 Матрица рисков</h3>
+<table>
+<thead><tr><th style="width:20%">Риск</th><th class="num">Вероятн.</th><th class="num">Влияние</th><th>Смягчение</th></tr></thead>
+<tbody>
+<tr><td>Пропущенный NC- или неустановленный ассет (кейс <code>server-survival</code>, <code>suika-game</code>)</td><td class="num warn">Высокая</td><td class="num bad">Критическое</td><td>Юридический аудит <code>assets/</code> до первой строки кода. Всё сомнительное удаляется и заменяется на Kenney (CC0). Ведётся реестр ассетов с указанием источника и лицензии</td></tr>
+<tr><td>Abandoned-зависимости в npm-графе</td><td class="num warn">Высокая</td><td class="num warn">Среднее</td><td>Приоритет — vanilla JS без сборки (<code>2048</code>, <code>server-survival</code>, <code>LittleJS</code>). Где сборка неизбежна (<code>hexapipes</code> — SvelteKit) — <code>npm audit</code> + фиксация <code>package-lock.json</code> + проверка даты последнего релиза каждой прямой зависимости</td></tr>
+<tr><td><b>Платформенный риск MAX</b>: нет каталога, нет монетизации, нет SLA модерации, удаление из App Store</td><td class="num bad">Очень высокая</td><td class="num bad">Критическое</td><td>Абстракция платформенного слоя: весь код игры — платформо-нейтральный, интеграция MAX Bridge изолирована в одном адаптере. Параллельная сборка под VK Mini Apps и веб — 1–2 доп. дня, но сохраняет актив при блокировке</td></tr>
+<tr><td>Приход конкурента с той же механикой</td><td class="num warn">Высокая</td><td class="num warn">Среднее</td><td>Уникальность не в механике (копируется за 2 недели), а в социальном графе: лиги, дуэли, история результатов. Граф не переносится</td></tr>
+<tr><td>Ретеншн ниже бенчмарка (D1 &lt;25%, D7 &lt;10%)</td><td class="num warn">Средняя</td><td class="num warn">Высокое</td><td>Софт-лонч на 2 000 установок до полномасштабного запуска; A/B тест награды за ежедневное задание; порог отсечения — D7 &lt;8% = механика меняется</td></tr>
+<tr><td>Блокировка внешней рекламной сети или платёжки модерацией</td><td class="num warn">Средняя</td><td class="num bad">Высокое</td><td>Письменное согласование с MAX до разработки (через business.max.ru). Резерв — модель брендированных спецпроектов без внешних SDK</td></tr>
+<tr><td>Товарный знак на название («2048», «Tetris», «Pac-Man»)</td><td class="num warn">Средняя</td><td class="num warn">Среднее</td><td>Новое название в обязательном порядке. Проверка по базе Роспатента перед публикацией</td></tr>
+<tr><td>Несовпадение аудитории: MAX — взрослое ядро 25–54, ЦА — 12–18</td><td class="num bad">Высокая</td><td class="num warn">Высокое</td><td>Закупка трафика таргетированно на 12–18 вне ядра MAX; Tone-of-voice и арт — под подростков, а не под «среднего пользователя MAX»</td></tr>
+</tbody>
+</table>
+
+<h3>10.2 Рекомендация</h3>
+<div class="box green">
+<h4>Топ-1: Мердж-физика — маршрут C (свой код на matter.js + Kenney CC0)</h4>
+<p><b>Почему:</b> единственный кандидат с максимальным баллом по виральности (15/15), а виральность — это единственный канал роста при отсутствии каталога. Физика генерирует мемный контент сама: скриншот поля — это рекламный креатив, сделанный игроком бесплатно. Тяга доказана цифрами (8 млн копий), лицензии чистые на 100% (MIT + CC0), ниша в MAX пустая.</p>
+<p><b>Запасной: 2048 + дуэли (87/100) как софт-лонч за 1 неделю.</b> Он не станет хитом, но за 0,5–1,5 человеко-недели даст ответ на главный вопрос проекта: <b>какова реальная конверсия бота MAX в игрока и сколько стоит установка</b>. Этот ответ определяет бюджет для топ-1.</p>
+<p><b>Порядок действий:</b> сначала 2048 (1,5 недели, измерить трафик) → затем, если CAC укладывается в модель, мердж-игра (3,5 недели) → затем хаб из 3 игр с кросс-промо.</p>
+</div>
+
+<h3>10.3 Роадмап 30 / 60 / 90</h3>
+<table>
+<thead><tr><th style="width:10%">Этап</th><th>Что делаем</th><th style="width:20%">Результат</th></tr></thead>
+<tbody>
+<tr><td><b>Дни 1–30</b></td><td>
+<b>Неделя 1 — аудит и юрконтур:</b> регистрация юрлица/ИП, договор с ООО «МАХ», политика ПДн, возрастная маркировка. Аудит LICENSE и <code>assets/</code> у всех финалистов, реестр ассетов.<br>
+<b>Неделя 2 — локальная сборка:</b> поднять 2048 и hexapipes локально, прогнать <code>npm audit</code>, измерить размер бандла.<br>
+<b>Неделя 3 — i18n:</b> вынос всех строк в словарь, замена шрифтов на кириллические (Press Start 2P / Rubik), проверка длины строк.<br>
+<b>Неделя 4 — интеграция SDK MAX:</b> адаптер над <code>window.WebApp</code>, авторизация через <code>initData</code>, BackButton, шаринг-карточка, <b>свой бэкенд лидербордов</b> (в MAX их нет).</td>
+<td>Софт-лонч 2048 на 2 000 установок. Замерены CAC, D1, стоимость установки</td></tr>
+<tr><td><b>Дни 31–60</b></td><td>
+<b>Решение go/no-go</b> по топ-1 на основе CAC. Разработка мердж-игры: физика на matter.js, баланс цепочки предметов, арт Kenney CC0, звук ZzFX.<br>
+Слой дуэлей: асинхронный вызов из чата, карточка результата, еженедельные лиги по 50 игроков.<br>
+Юридическое согласование рекламной интеграции и формулировок с MAX.</td>
+<td>Релиз мердж-игры. Лиги и дуэли работают. Reward-video подключён</td></tr>
+<tr><td><b>Дни 61–90</b></td><td>
+Ежедневный пазл (hexapipes) как третий столбец хаба. Кросс-промо между тремя играми. Еженедельный контент-цикл (новые темы/уровни). Оптимизация ARPDAU: A/B тест частоты иplacement рекламы. Переговоры о трафике с каналами MAX и <code>@vk_games_bot</code>.</td>
+<td>Хаб из 3 игр, DAU на 90-й день по базовому сценарию, юнит-экономика подтверждена или скорректирована</td></tr>
+</tbody>
+</table>
+
+<h3>10.4 KPI на 90 дней (целевые значения — <span class="tag t-warn">⚠️</span> оценка)</h3>
+<table>
+<thead><tr><th>Метрика</th><th class="num">Порог отсечения</th><th class="num">Цель</th><th class="num">Отлично</th></tr></thead>
+<tbody>
+<tr><td>D1 (возврат на следующий день)</td><td class="num bad">&lt;25% — менять механику</td><td class="num">35%</td><td class="num">45%</td></tr>
+<tr><td>D7</td><td class="num bad">&lt;8% — менять механику</td><td class="num">15%</td><td class="num">22%</td></tr>
+<tr><td>D30</td><td class="num bad">&lt;3%</td><td class="num">7%</td><td class="num">12%</td></tr>
+<tr><td>k-фактор (шаринг → новый игрок)</td><td class="num bad">&lt;0,2</td><td class="num">0,4</td><td class="num">0,7</td></tr>
+<tr><td>DAU на 90-й день</td><td class="num bad">&lt;3 000</td><td class="num">15 000</td><td class="num">60 000</td></tr>
+<tr><td>Досматриваемость reward-video</td><td class="num bad">&lt;60%</td><td class="num">70%</td><td class="num">85%</td></tr>
+<tr><td>Отток после первого показа рекламы</td><td class="num bad">&gt;5%</td><td class="num">3%</td><td class="num">1,5%</td></tr>
+</tbody>
+</table>
+
+<h3>10.5 Чек-лист ручной проверки перед первой строкой кода</h3>
+<div class="grid2">
+<div class="box">
+<h4>Юридическое и платформенное</h4>
+<ul>
+<li>Договор с ООО «МАХ» заключён; статус резидента РФ подтверждён <span class="tag t-bad">❓</span></li>
+<li>Возрастная маркировка определена (0+/6+/12+) и отображается в игре</li>
+<li>Публичная политика обработки ПДн опубликована по URL</li>
+<li><b>Письменно согласовано с MAX</b>: допустима ли внешняя рекламная сеть и внешняя платёжка в мини-приложении <span class="tag t-bad">❓</span></li>
+<li>Название проверено по базе Роспатента <span class="tag t-bad">❓</span></li>
+<li>Лимит размера бандла в MAX и версии WebView <span class="tag t-bad">❓</span></li>
+<li>Условия rev-share, если появятся <span class="tag t-bad">❓</span></li>
+</ul>
+</div>
+<div class="box">
+<h4>Техническое</h4>
+<ul>
+<li>Наличие LICENSE-файла у каждого кандидата (проверено: <code>chvin/react-tetris</code> — нет)</li>
+<li>Происхождение каждого файла в <code>assets/</code> (<b>критично для server-survival</b>)</li>
+<li><code>npm audit</code> + дата последнего релиза каждой прямой зависимости</li>
+<li>Кириллица в выбранном шрифте (Silkscreen и VT323 — нет)</li>
+<li>Сборка в статику и размер gzip-бандла измерены (цель &lt;2 МБ; лимит MAX неизвестен)</li>
+<li>Локальный запуск: игра реально открывается и проходится (build smoke)</li>
+<li>Бэкенд лидербордов развёрнут — MAX их не предоставляет</li>
+</ul>
+</div>
+</div>
+
+<h3>10.6 Самопроверка по брифу</h3>
+<table>
+<thead><tr><th style="width:44%">Вопрос</th><th>Ответ</th></tr></thead>
+<tbody>
+<tr><td>Тяга подтверждена сигналом?</td><td>Да. У каждого из топ-5 есть минимум один проверяемый сигнал: звёзды/форки GitHub (до 13 372★ / 17 569 форков), официальная статистика WeChat, данные AppMagic/Steam, топы QuestMobile. Исключение — <code>hexapipes</code>: там сигнал идёт от семейства механик (Connections &gt;9 млн игроков/день), а не от репозитория, что прямо помечено в карточке.</td></tr>
+<tr><td>Лицензии проверены по трём слоям?</td><td>Да, для всех финалистов. Выявлено 3 реальных юридических блокера, которых не было в стартовом брифе: <b>GPL-3.0 + прямой запрет коммерции</b> (solvable-sheep-game), <b>отсутствие LICENSE при 8 731★</b> (react-tetris), <b>чужой бренд</b> (pacman, tetris).</td></tr>
+<tr><td>Все прошли стоп-критерии?</td><td>Из 16 кандидатов лонг-листа отсеяно 10. Прошло 6. Каждый отсев обоснован конкретным критерием.</td></tr>
+<tr><td>Экономика сходится?</td><td>Только в базовом и оптимистичном сценариях (окупаемость 4–7 месяцев). В пессимистичном — не сходится, и это указано прямо, с указанием трёх условий, при которых модель становится рабочей.</td></tr>
+<tr><td>Проекты реально существуют?</td><td>11 репозиториев проверены лично через GitHub Search API 06.09.2026 с точными значениями звёзд, форков, SPDX-лицензии и даты коммита. Оставшиеся помечены <span class="tag t-warn">⚠️</span>.</td></tr>
+<tr><td>Что <b>не</b> удалось проверить</td><td>ARPDAU мини-приложений; rev-share и комиссии MAX; лимит бандла и версии WebView; наличие/отсутствие платной монетизации в мини-приложениях MAX; точная доля 12–18 в аудитории MAX. Все вынесены в чек-лист ручной проверки.</td></tr>
+</tbody>
+</table>
+
+<h3>10.7 Источники (дата обращения: 6 сентября 2026)</h3>
+<div class="grid2">
+<div>
+<h4>Платформа MAX</h4>
+<ul class="mut">
+<li>dev.max.ru/docs/webapps/bridge — MAX Bridge API (полный перечень методов)</li>
+<li>dev.max.ru/help/miniapps — FAQ: нет каталога, привязка к боту</li>
+<li>dev.max.ru/docs/legal/rules (ред. 11.06.2026)</li>
+<li>dev.max.ru/docs/legal/requirements (ред. 16.12.2025)</li>
+<li>vk.company/ru/press/releases/12390 (19.08.2026) — 130 млн</li>
+<li>vk.company/press/releases/12267 (26.03.2026) — 107 млн, DAU 77 млн</li>
+<li>vk.company/ru/press/releases/12377 (07.08.2026)</li>
+<li>vedomosti.ru/technology/articles/2026/04/09/1189129 — Mediascope</li>
+<li>ixbt.com/news/2026/06/03/max-app-store.html</li>
+<li>max.ru/vk_games_bot</li>
+</ul>
+<h4>Китай, Корея</h4>
+<ul class="mut">
+<li>finance.sina.cn/2026-05-30 — интервью WeChat (MAU 500 млн)</li>
+<li>163.com/dy/article/KTUVU42H05466ZM9 — WeChat Mini Games Conference 27.05.2026</li>
+<li>news.qq.com/rain/a/20260307A06Y5D00 — белая книга Douyin 07.03.2026</li>
+<li>news.qq.com/rain/a/20260311A009HX00 — QuestMobile, декабрь 2025</li>
+<li>news.qq.com/rain/a/20260225A07ZJD00 — Kakao, 25.02.2026</li>
+<li>digitaltoday.co.kr — Kakao Games Game Chip, 19.06.2026</li>
+<li>10100.com/article/125967226 — 抓大鹅 DAU</li>
+</ul>
+</div>
+<div>
+<h4>Запад, Telegram</h4>
+<ul class="mut">
+<li>finalweapon.net (29.11.2023); gonintendo.com (21.03.2024) — Suika 4,4→8 млн</li>
+<li>mobilegamer.biz — 368 млн загрузок Block Blast за 2025</li>
+<li>wordsrated.com — Connections &gt;9 млн игроков/день</li>
+<li>gaming.news (15.09.2025) — Steal a Brainrot 24,1 млн CCU</li>
+<li>gamingamigos.com — Grow a Garden 22,3 млн CCU</li>
+<li>cointelegraph.com (05.05.2025) — tap-to-earn dead</li>
+<li>ton-adoption.xyz (16–18.03.2026) — MAU мини-аппов</li>
+<li>techintelpro.com — PropellerAds, декабрь 2025 (CPC, CTR)</li>
+<li>poki.com — 90 млн игроков/мес</li>
+</ul>
+<h4>Репозитории (проверено через GitHub Search API)</h4>
+<ul class="mut">
+<li>gabrielecirulli/2048 · pshenok/server-survival · KilledByAPixel/LittleJS · victorqribeiro/isocity · owenashurst/agar.io-clone · mumuy/pacman · StreakingMan/solvable-sheep-game · chenxch/xlegex · gereleth/hexapipes · moonfloof/suika-game · Binaryify/vue-tetris</li>
+<li>Gitee: qierkang/yang-game · qierkang/yang-server · zhang_meng_lei/zml-game-center · LinYiSongEr/H5.Examples · scottgreen/bigwatermelon</li>
+<li>Ассеты: kenney.nl/assets · opengameart.org (CC0-фильтр) · fonts.googleapis.com/css2 (проверка кириллицы)</li>
+<li>Маркеты: codecanyon.net/category/html5 · sellmyapp.com (маркетплейс закрыт, выкуплен Daggerless LLC, июль 2026)</li>
+</ul>
+</div>
+</div>
+
+<h2><span class="n">11</span>Приложение: разбор альтернативной рекомендации (survivor-like клоны)</h2>
+<p class="mut">Добавлено 06.09.2026 после запроса на оценку проектов Kooshaba/mini-survivor, marceb1296/survival-game-js, sensenul724/space-survivor. Все проверки выполнены через GitHub API и raw.githubusercontent.</p>
+
+<table>
+<thead><tr><th style="width:22%">Утверждение из внешней рекомендации</th><th>Проверка</th><th class="num">Вердикт</th></tr></thead>
+<tbody>
+<tr><td>«Mini Survivors (основной кандидат) <code>Kooshaba/mini-survivor</code> — Phaser 3 + TypeScript + Vite, MIT»</td>
+<td>Репозиторий <b>существует</b>. MIT ✅. Стек подтверждён в <code>package.json</code>: Phaser 3.80.1 + React 18 + TypeScript + Vite (форк официального шаблона <code>phaserjs/template-react-ts</code>). <b class="bad">Но: 0 звёзд, 0 форков, последний коммит 26.05.2024 — 2 года 3 месяца назад.</b> README состоит из двух строк: «My attempt at a Vampire Survivors style game».</td><td class="num"><span class="tag t-bad">❌</span></td></tr>
+<tr><td>«Мини-игра на выживание <code>marceb1296/survival-game-js</code>»</td>
+<td>Существует, MIT, 0 звёзд, коммит 20.02.2025. <b class="bad">Но README предписывает установку через python venv + nodeenv и запуск <code>docker compose up</code></b> — это серверный проект, а не статическая мини-игра.</td><td class="num"><span class="tag t-bad">❌</span></td></tr>
+<tr><td>«<code>sensenul724/space-survivor</code>»</td>
+<td class="bad"><b>HTTP 404 — репозитория не существует.</b> Поиск по GitHub API не находит его.</td><td class="num"><span class="tag t-bad">❌</span></td></tr>
+<tr><td>«легко интегрируются через VK Bridge в мини-приложения MAX»</td>
+<td class="bad">Фактическая ошибка. Проверено по <code>dev.max.ru</code>: в MAX используется <b>MAX Bridge</b> (<code>window.WebApp</code>), VK Bridge и VKUI в документации MAX не упоминаются и API не совпадает. Код VK Mini Apps не переносится без адаптера.</td><td class="num"><span class="tag t-bad">❌</span></td></tr>
+<tr><td>«сессии 3–5 минут»</td>
+<td>Ничем не подтверждено. Домысел: у заброшенного репозитория нет ни телеметрии, ни описания длины сессии.</td><td class="num"><span class="tag t-bad">❓</span></td></tr>
+<tr><td>«все проекты имеют недавние обновления за последние 1–2 года — хороший показатель активности»</td>
+<td class="bad">Для <code>Kooshaba/mini-survivor</code> коммит от 26.05.2024 — это 2,3 года. По стоп-критериям раздела 6 это <b>мёртвый проект</b>. К тому же «1–2 года без коммитов» сам по себе не является «хорошим показателем».</td><td class="num"><span class="tag t-bad">❌</span></td></tr>
+<tr><td>«механика Vampire Survivors — крупнейший хит» (неявная предпосылка)</td>
+<td class="ok"><b>Здесь рекомендация права.</b> Survivor-like — это реально горячая механика: 《向僵尸开炮》 — <b>№1 по MAU среди всех мини-игр WeChat</b> (декабрь 2025) ✅; Vampire Survivors в Steam — all-time peak 77 061 CC ✅. Проблема не в механике, а в отсутствии годной open-source реализации.</td><td class="num"><span class="tag t-ok">✅</span></td></tr>
+</tbody>
+</table>
+
+<h4>Скоринг предложенных проектов по модели раздела 7 (проходной ≥65)</h4>
+<table>
+<thead><tr><th style="width:26%">Кандидат</th><th class="num">Тяга /20</th><th class="num">Готовн. /15</th><th class="num">Лицензии /15</th><th class="num">Виральн. /15</th><th class="num">ЦА /10</th><th class="num">Ниша /10</th><th class="num">Монетиз. /10</th><th class="num">Локал. /5</th><th class="num">ИТОГО</th></tr></thead>
+<tbody>
+<tr><td><code>Kooshaba/mini-survivor</code></td><td class="num">2</td><td class="num">6</td><td class="num">8</td><td class="num">6</td><td class="num">9</td><td class="num">9</td><td class="num">7</td><td class="num">3</td><td class="num"><b class="bad">50</b></td></tr>
+<tr><td><code>marceb1296/survival-game-js</code></td><td class="num">1</td><td class="num">3</td><td class="num">7</td><td class="num">4</td><td class="num">9</td><td class="num">9</td><td class="num">5</td><td class="num">3</td><td class="num"><b class="bad">41</b></td></tr>
+<tr><td><code>sensenul724/space-survivor</code></td><td colspan="8" class="num" style="text-align:center;color:var(--bad)">не существует — 404</td><td class="num"><b class="bad">—</b></td></tr>
+<tr><td><b>Для сравнения: <code>pshenok/server-survival</code></b> (живой TD/survival из раздела 4)</td><td class="num">16</td><td class="num">10</td><td class="num">12</td><td class="num">12</td><td class="num">9</td><td class="num">9</td><td class="num">7</td><td class="num">4</td><td class="num"><b class="ok">79</b></td></tr>
+</tbody>
+</table>
+
+<div class="box red">
+<h4>Почему survivor-like всё равно проигрывает, даже если механика горячая</h4>
+<ol>
+<li><b>Нет годной веб-реализации.</b> Единственный популярный клон <code>matthiasbroske/VampireSurvivorsClone</code> (274★, MIT) — это <b>Unity/C#</b>, для веба неприменим. Зрелых HTML5-реализаций с доказанной тягой не существует.</li>
+<li><b>Phaser 3 + React = тяжёлый бандл.</b> Замерено 06.09.2026: Phaser 3.90 — <b>1,14 МБ минифицированный, 309 КБ gzip</b> (<span class="tag t-ok">✅</span>). Плюс React 18, плюс ассеты (спрайты врагов, частицы). Лимит бандла в MAX не опубликован <span class="tag t-bad">❓</span>.</li>
+<li><b>Слабый шаринг-результат.</b> «Я выжил 4:32» проигрывает картинке с горой фруктов. Для MAX, где шаринг — единственный канал роста, это критично.</li>
+<li><b>Объём доработки недооценён.</b> Survivor-like требует 20+ сбалансированных апгрейдов, тайминги волн, спрайты 10+ типов врагов. Реально <b>8–12 человеко-недель</b>, а не «наибольший интерес по соотношению трудозатрат».</li>
+<li><b>Прямой клон коммерческой игры.</b> Vampire Survivors — чужой IP. Механику копировать можно, название и арт — нет.</li>
+</ol>
+</div>
+
+<div class="box green">
+<h4>Что взять, если направление survivor/выживание принципиально</h4>
+<p>Единственный живой и массовый проект в этой зоне — <code>pshenok/server-survival</code> (6 397★, MIT, коммит 26.08.2026, vanilla JS + Three.js, <b>сборка не нужна</b>). Это tower defense/survival с волнами, а не Vampire Survivors, но это единственное, что реально можно взять и довести.</p>
+<p>Переосмысление под мессенджер: не «выживи 15 минут», а <b>«отбей волну за 2–3 минуты»</b> — волна становится естественной единицей шаринга («я дошёл до волны 20»). Отдельный стоп-фактор: папка <code>assets/</code> без указания происхождения — аудит обязателен до первой строки кода.</p>
+</div>
+
+<p class="mut" style="margin-top:40px;border-top:1px solid var(--line);padding-top:16px">
+Отчёт подготовлен 6 сентября 2026. Исследование выполнено пятью параллельными субагентами (платформа MAX / Азия / Запад+Telegram / GitHub OSS / Gitee+ассеты) с последующей личной верификацией ключевых фактов через GitHub API и официальную документацию dev.max.ru. Все числовые значения помечены метками уверенности; выдуманных проектов, звёзд и лицензий нет — каждый репозиторий получен из API.
+</p>
+
+</div>
+</body>
+</html>

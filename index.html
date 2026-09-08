@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0b0e1a" />
+    <title>Ofeliya</title>
+    <!-- MAX Bridge: глобальный объект window.WebApp (см. dev.max.ru/docs/webapps/bridge).
+         В обычном браузере скрипт просто не определяет WebApp — игра работает и без него. -->
+    <script src="https://st.max.ru/js/max-web-app.js" defer></script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: #0b0e1a;
+        height: 100%;
+        overflow: hidden;
+        overscroll-behavior: none;
+      }
+      #game {
+        width: 100%;
+        height: 100%;
+      }
+      #game canvas {
+        touch-action: none;
+      }
+      #splash {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #35e0ff;
+        font-family: Arial, sans-serif;
+        font-size: 18px;
+        letter-spacing: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game"></div>
+    <div id="splash">OFELIYA</div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

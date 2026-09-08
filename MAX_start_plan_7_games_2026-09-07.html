@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Старт: 7 игр для MAX. План на 3 недели без монетизации | сентябрь 2026</title>
+<style>
+:root{
+  --bg:#f7f8fa; --card:#fff; --ink:#12161c; --ink2:#3d4657; --mut:#6b7684;
+  --line:#e3e7ec; --line2:#d3d9e0; --acc:#1a56db; --acc-bg:#eef3ff;
+  --ok:#0f7b3f; --ok-bg:#e8f6ed; --warn:#9a5b00; --warn-bg:#fff4e0; --bad:#b3261e; --bad-bg:#fdeceb;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:32px 24px 96px}
+header{border-bottom:2px solid var(--ink);padding-bottom:18px;margin-bottom:26px}
+h1{font-size:25px;line-height:1.25;margin:0 0 8px;letter-spacing:-.3px}
+.sub{color:var(--mut);font-size:13px}
+h2{font-size:20px;margin:42px 0 6px;padding-top:14px;border-top:1px solid var(--line2);letter-spacing:-.2px}
+h2 .n{color:var(--acc);margin-right:8px;font-variant-numeric:tabular-nums}
+h3{font-size:16.5px;margin:26px 0 8px}
+h4{font-size:13.5px;margin:18px 0 6px;color:var(--ink2);text-transform:uppercase;letter-spacing:.5px}
+p{margin:8px 0}
+table{width:100%;border-collapse:collapse;margin:12px 0 18px;background:var(--card);
+  border:1px solid var(--line);font-size:13px}
+th{background:#eef1f5;text-align:left;padding:8px 10px;font-weight:600;border-bottom:1px solid var(--line2);
+  font-size:12px;color:var(--ink2);vertical-align:bottom}
+td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:none}
+tbody tr:nth-child(even){background:#fbfcfd}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ok{color:var(--ok);font-weight:600}.warn{color:var(--warn);font-weight:600}.bad{color:var(--bad);font-weight:600}
+.tag{display:inline-block;padding:1px 7px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
+.t-ok{background:var(--ok-bg);color:var(--ok)}.t-warn{background:var(--warn-bg);color:var(--warn)}
+.t-bad{background:var(--bad-bg);color:var(--bad)}
+.box{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--acc);
+  padding:14px 16px;margin:16px 0;border-radius:4px}
+.box.red{border-left-color:var(--bad);background:var(--bad-bg)}
+.box.amber{border-left-color:var(--warn);background:var(--warn-bg)}
+.box.green{border-left-color:var(--ok);background:var(--ok-bg)}
+.box h4{margin-top:0}
+ul,ol{margin:8px 0 12px 22px;padding:0}li{margin:5px 0}
+code{background:#eef1f5;padding:1px 5px;border-radius:3px;font-size:12.5px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+pre{background:#1e2430;color:#e6ebf2;padding:14px 16px;border-radius:6px;overflow-x:auto;
+  font-size:12.5px;line-height:1.55;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.mut{color:var(--mut);font-size:12.5px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:860px){.grid2{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:14px 16px}
+.card h4{margin-top:0}
+.step{display:grid;grid-template-columns:34px 1fr;gap:12px;margin:14px 0}
+.step .num{width:34px;height:34px;border-radius:50%;background:var(--acc);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px}
+.step .num.g{background:var(--ok)}.step .num.a{background:var(--warn)}
+.gcard{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:14px 16px;margin:12px 0}
+.gcard .hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px}
+.gcard .hd b{font-size:16px}
+.gcard .hd .pill{font-size:11px;padding:2px 8px;border-radius:20px;background:var(--acc-bg);color:var(--acc);font-weight:700}
+.gcard .hd .pill.r{background:var(--warn-bg);color:var(--warn)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Старт: 7 игр в MAX. План на 3 недели без монетизации</h1>
+  <div class="sub">7 сентября 2026 · выбор игр по фактическим размерам исходников (GitHub Trees API) и подтверждённым требованиям платформы (dev.max.ru)</div>
+</header>
+
+<div class="box green">
+<h4>Что решено</h4>
+<p><b>Семь игр, а не одна и не двадцать.</b> Семь — это минимальное число, при котором хаб выглядит как «игротека», а не как одна игра с меню. При этом все семь — короткосессионные аркадно-логические, их не нужно «глубить» уровнями: полная версия каждой и есть то, что лежит в паке.</p>
+<p><b>Монетизации нет вообще.</b> Ни рекламы, ни валюты, ни подписки. Фаза 0: только метрики. Причина: в MAX Bridge нет ни платежей, ни рекламной сети, а подключение внешней рекламы до понимания D1/D7 уничтожит ретеншн и вы не узнаете, что именно сломалось.</p>
+</div>
+
+<h2><span class="n">1</span>Что проверено про MAX и что это меняет</h2>
+
+<table>
+<thead><tr><th style="width:26%">Факт</th><th style="width:20%">Источник</th><th>Следствие для плана</th></tr></thead>
+<tbody>
+<tr><td><b>Бота нельзя создать как физлицо.</b> Только юрлицо, ИП или самозанятый — резидент РФ</td><td>dev.max.ru/docs/chatbots/bots-create/create <span class="tag t-ok">✅</span></td><td class="bad">Блокер дня 1. Без юрлица код некуда деплоить. Модерация бота — до 48 рабочих часов</td></tr>
+<tr><td><b>Ник бота генерируется автоматически:</b> <code>idИНН_bot</code> или <code>se(orgid)_bot</code>. Изменить нельзя</td><td>dev.max.ru <span class="tag t-ok">✅</span></td><td>Запомнить ссылку невозможно. <b>Весь рост — только через шаринг и deep link</b>, не через бренд</td></tr>
+<tr><td><b>Мини-приложение существует только внутри бота</b>, автономно — нет</td><td>dev.max.ru/docs/webapps <span class="tag t-ok">✅</span></td><td>Хаб = бот + одно мини-приложение с меню. Не 7 приложений</td></tr>
+<tr><td><b>Кнопка запуска выбирается:</b> «Открыть» / «Старт» / <b>«Играть»</b> / без названия</td><td>dev.max.ru/docs/webapps <span class="tag t-ok">✅</span></td><td>Ставим «Играть» — единственный игровой сигнал в интерфейсе</td></tr>
+<tr><td><b>Мини-приложение подключается вручную:</b> Чат-боты → Расширенные настройки → Настроить → URL → Сохранить. Кнопка появляется сразу</td><td>dev.max.ru/docs/webapps <span class="tag t-ok">✅</span></td><td class="ok">Ключевая удача: <b>итерируем без повторной модерации.</b> Можно выкатывать по игре в день. Модерации подлежит бот, а не апп</td></tr>
+<tr><td><b>Хостинг — свой, только HTTPS.</b> URL ≤1024 символа, только латиница, цифры, точка и дефис</td><td>dev.max.ru/docs/webapps <span class="tag t-ok">✅</span></td><td>Домен — латиницей. Подойдёт VK Cloud / Yandex Cloud / GitHub Pages</td></tr>
+<tr><td><b>Deep link:</b> <code>https://max.ru/&lt;bot&gt;?startapp=&lt;payload&gt;</code>, payload ≤512 символов, только <code>A-Z a-z 0-9 _ -</code></td><td>dev.max.ru/docs/webapps <span class="tag t-ok">✅</span></td><td>В шаринг-карточку вкладываем <code>startapp=g1_s1234</code> — откуда пришли и чей счёт побили</td></tr>
+<tr><td>Модерация мини-приложения в документации не описана</td><td>— <span class="tag t-warn">❓</span></td><td>Проверить перед первым деплоем: задать вопрос в поддержку партнёрской платформы</td></tr>
+</tbody>
+</table>
+
+<h2><span class="n">2</span>Семь игр: таблица выбора</h2>
+
+<p>Размеры — фактические, получены через GitHub Trees API 07.09.2026 по репо <code>he-is-talha/html-css-javascript-games</code> (MIT, 274★). Оценки интереса — по данным исследования от 6 сентября.</p>
+
+<table>
+<thead><tr>
+<th style="width:15%">Игра</th><th style="width:11%">Папка в паке</th>
+<th class="num">JS&nbsp;KB</th><th class="num">Всего&nbsp;KB</th>
+<th class="num">Интерес<br>/10</th><th class="num">Порт<br>/10</th><th class="num">Шаринг<br>/10</th><th class="num">Повтор<br>/10</th><th class="num">Итого</th>
+</tr></thead>
+<tbody>
+<tr><td><b>Мердж</b></td><td><code>10-2048-Game</code></td><td class="num">7.6</td><td class="num">10.8</td><td class="num">10 <span class="tag t-ok">✅</span></td><td class="num">8</td><td class="num">9</td><td class="num">10</td><td class="num"><b>37</b></td></tr>
+<tr><td><b>Реакция</b></td><td><code>35-Whack-A-Mole</code></td><td class="num">1.2</td><td class="num">5.6</td><td class="num">8 <span class="tag t-ok">✅</span></td><td class="num">10</td><td class="num">10</td><td class="num">9</td><td class="num"><b>37</b></td></tr>
+<tr><td><b>Змейка</b></td><td><code>24-Snake-Game</code></td><td class="num">3.4</td><td class="num">7.4</td><td class="num">8 <span class="tag t-ok">✅</span></td><td class="num">9</td><td class="num">9</td><td class="num">9</td><td class="num"><b>35</b></td></tr>
+<tr><td><b>Сапёр</b></td><td><code>16-Minesweeper</code></td><td class="num">4.0</td><td class="num">6.8</td><td class="num">8 <span class="tag t-ok">✅</span></td><td class="num">9</td><td class="num">8</td><td class="num">10</td><td class="num"><b>35</b></td></tr>
+<tr><td><b>Викторина</b></td><td><code>33-Quiz-Game</code></td><td class="num">6.7</td><td class="num">9.9</td><td class="num">9 <span class="tag t-warn">⚠️</span></td><td class="num">7</td><td class="num">8</td><td class="num">10</td><td class="num"><b>34</b></td></tr>
+<tr><td><b>Эхо</b></td><td><code>36-Simon-Says</code></td><td class="num">5.8</td><td class="num">10.2</td><td class="num">7 <span class="tag t-warn">⚠️</span></td><td class="num">8</td><td class="num">9</td><td class="num">9</td><td class="num"><b>33</b></td></tr>
+<tr><td><b>Память</b></td><td><code>22-Memory-Card</code></td><td class="num">1.8</td><td class="num">141.4</td><td class="num">7 <span class="tag t-warn">⚠️</span></td><td class="num">7</td><td class="num">7</td><td class="num">7</td><td class="num"><b>28</b></td></tr>
+<tr style="background:var(--acc-bg)"><td colspan="2"><b>Итого исходников</b></td><td class="num"><b>30.5</b></td><td class="num"><b>~192</b></td><td colspan="4" class="mut">после замены 8 PNG на эмодзи — <b>~60 КБ</b></td><td class="num">—</td></tr>
+</tbody>
+</table>
+
+<p class="mut"><b>Интерес</b> — обоснование в карточках ниже. <b>Порт</b> — обратная величина объёма JS + наличие ассетов. <b>Шаринг</b> — даёт ли игра число, которое можно сравнить в чате. <b>Повтор</b> — ежедневный или бесконечный режим без доработок.</p>
+
+<h2><span class="n">3</span>Карточки семи игр</h2>
+
+<div class="gcard">
+<div class="hd"><b>1 · Мердж</b><span class="pill">10-2048-Game · 7.6 КБ JS</span><span class="pill r">⚠️ переименовать</span></div>
+<p><b>Почему в топе:</b> единственная механика в списке с доказанной массовой тягой — 13 372★ у оригинального репо, категория merge на WeChat выросла на 70% год к году (данные конференции 2026). Бесконечная, без сессий, идеальна для «ещё одну партию».</p>
+<p><b>Работа:</b> 3–4 часа. Свайпы уже есть. Текста почти нет (числа и две строки UI). Добавить BackButton, шаринг максимальной плитки.</p>
+<p class="mut"><b>Риск:</b> название «2048» — чужое. Выпускаем как <b>«Мердж»</b> или <b>«Плитки»</b>. Числа и механика сдвига — общие идеи, защитить их нельзя.</p>
+</div>
+
+<div class="gcard">
+<div class="hd"><b>2 · Реакция</b><span class="pill">35-Whack-A-Mole · 1.2 КБ JS</span><span class="pill">✅ чисто</span></div>
+<p><b>Почему в топе:</b> самый быстрый порт во всём паке — 1,2 КБ JS. Формат «счёт за 60 секунд» — идеальная база для дуэли: сравнивать одно число проще всего. Именно добавление живого PvP дало кейсу Douyin рост ×12.</p>
+<p><b>Работа:</b> 2–3 часа. Таймер 60 сек, тач-обработка, звук через ZzFX (без аудиофайлов — ноль лицензионного риска).</p>
+<p class="mut">Это первая игра, на которой стоит тестировать дуэльный шаринг: «Я набрал 47. Попробуй больше».</p>
+</div>
+
+<div class="gcard">
+<div class="hd"><b>3 · Змейка</b><span class="pill">24-Snake-Game · 3.4 КБ JS</span><span class="pill">✅ чисто</span></div>
+<p><b>Почему в топе:</b> ностальгия, нулевое обучение, сопоставимый счёт. Механика общественное достояние, рисков нет. Аудитория 12–18 поймёт её без единого слова текста.</p>
+<p><b>Работа:</b> 2–3 часа. Клавиатура уже есть — добавить свайпы и виброотклик через <code>HapticFeedback</code>. Шаринг счёта.</p>
+</div>
+
+<div class="gcard">
+<div class="hd"><b>4 · Сапёр</b><span class="pill">16-Minesweeper-Game · 4.0 КБ JS</span><span class="pill">✅ чисто</span></div>
+<p><b>Почему в топе:</b> самый маленький объём при высокой узнаваемости — 4,0 КБ JS, ни одного ассета. Ключевое свойство: <b>ежедневная доска, одинаковая для всех</b> — готовый ритуал возвращения без единой строки бэкенд-логики (детерминированный сид от даты). Это единственная игра в семёрке, которая даёт повод вернуться завтра «просто потому что новая доска».</p>
+<p><b>Работа:</b> 3–4 часа. Тап — открыть, долгое нажатие — флаг. Генерация по сиду даты.</p>
+</div>
+
+<div class="gcard">
+<div class="hd"><b>5 · Викторина</b><span class="pill">33-Quiz-Game · 6.7 КБ JS</span><span class="pill r">⚠️ контент — свой</span></div>
+<p><b>Почему в топе:</b> единственная контентная механика в семёрке. Всё остальное — код, который конечен; викторина — это вопросы, которые вы пишете сами и обновляете бесплатно. Сильнейший кандидат на удержание: ежедневный пакет из 5 вопросов.</p>
+<p><b>Работа:</b> 4–5 часов, из которых <b>3–4 часа — написание 50–100 вопросов</b> на RU. Кода почти нет. Вопросы — ваш собственный контент, то есть и ваша собственная интеллектуальная собственность.</p>
+<p class="mut"><b>Оценка «интерес 9» — экспертная ⚠️</b>, а не измеренная: это экстраполяция паттерна «ежедневная игра», а не прямой факт по викторинам в мессенджерах.</p>
+</div>
+
+<div class="gcard">
+<div class="hd"><b>6 · Эхо</b><span class="pill">36-Simon-Says-Game · 5.8 КБ JS</span><span class="pill r">⚠️ переименовать</span></div>
+<p><b>Почему в топе:</b> последовательная память — механика, которой больше нет в семёрке (не перекрывается ни с «Памятью», ни с «Мерджем»). Рост сложности до бесконечности → число-уровень для шаринга. Отлично работает на телефоне: большие кнопки, никакой точности.</p>
+<p><b>Работа:</b> 3–4 часа. Звук через WebAudio-осциллятор вместо файлов.</p>
+<p class="mut"><b>Риск:</b> «Simon» — товарный знак электронной игрушки. Механика общая, но называем <b>«Эхо»</b> или <b>«Повтори»</b>.</p>
+</div>
+
+<div class="gcard">
+<div class="hd"><b>7 · Память</b><span class="pill">22-Memory-Card-Game · 1.8 КБ JS</span><span class="pill r">⚠️ заменить 8 PNG</span></div>
+<p><b>Почему в топе:</b> всего 1,8 КБ JS и простейшая логика. Зато у неё <b>141 КБ веса — это восемь фотографий карточек</b>. Их происхождение неизвестно, MIT на код их не покрывает.</p>
+<p><b>Работа:</b> 2–3 часа, и почти всё время — <b>заменить 8 PNG на эмодзи</b> (🍎🍇🍓🍒🍑🥝🍍🍌). Это убирает лицензионный риск полностью и заодно сжимает игру со 141 КБ до ~8 КБ.</p>
+<p class="mut">Слабейшая в семёрке по сумме баллов. Если сроки горят — первая кандидатка на вылет. Оставлена потому, что закрывает взрослый сегмент и стоит почти ничего.</p>
+</div>
+
+<h2><span class="n">4</span>Что не берём и почему</h2>
+
+<table>
+<thead><tr><th style="width:30%">Причина отсева</th><th>Игры</th><th>Комментарий</th></tr></thead>
+<tbody>
+<tr><td class="bad">Чужой IP или товарный знак</td><td><code>01-Candy-Crush</code>, <code>02-Pac-Man</code>, <code>04-Doodle-Jump</code>, <code>07-Crossy-Road</code>, <code>09-Flappy-Bird</code>, <code>11-Wordle</code>, <code>13-Tower-Blocks</code>, <code>20-Tetris</code>, <code>32-Fruit-Slicer</code>, <code>42-Space-Invaders</code>, <code>43-Asteroids</code>, <code>46-Frogger</code></td><td>12 позиций. Код MIT, но названия и образы — чужие. Стоп-критерий брифа</td></tr>
+<tr><td class="bad">Азартные механики</td><td><code>28-Dice-Roll</code>, <code>39-Blackjack</code>, <code>47-Poker</code></td><td>Стоп-критерий брифа, без обсуждений</td></tr>
+<tr><td class="warn">Неизвестные ассеты</td><td><code>08-Rock-Paper</code> (3 JPG), <code>15-Tic-Tac-Toe</code> (2 PNG), <code>22-Memory</code> (8 PNG), <code>25-Connect-Four</code> (icons8 PNG)</td><td>Фото и иконки стороннего происхождения MIT не покрыты. «Память» берём с заменой, остальные — нет</td></tr>
+<tr><td class="warn">Нужен соперник или ИИ</td><td><code>03-Chess</code>, <code>19-Ping-Pong</code>, <code>25-Connect-Four</code>, <code>41-Checkers</code>, <code>44-Reversi</code>, <code>48-Battleship</code></td><td>В MAX Bridge нет ни мультиплеера, ни лидербордов. Игра без напарника мертва, а писать ИИ — это недели</td></tr>
+<tr><td>Долгая сессия (&gt;10 мин)</td><td><code>05-Solitaire</code>, <code>06-Sudoku</code>, <code>45-Mahjong</code>, <code>49-Nonogram</code>, <code>37-Sliding</code></td><td>Не формат мессенджера. Судоку — первый кандидат на 8-ю игру, если аудитория окажется старше 25</td></tr>
+<tr><td>Технический риск на мобильных</td><td><code>21-Tilting-Maze</code> (акселерометр), <code>31-Speak-Number</code> (Web Speech, RU может не работать), <code>17/27/30-Typing</code> (RU-раскладка и автозамена)</td><td>Каждая — отдельный источник багов. Не стоят места в первой семёрке</td></tr>
+<tr><td>Дублирует уже взятое</td><td><code>26-Insect-Catch</code>, <code>29-Shape-Clicker</code>, <code>34-Emoji-Catcher</code> — дубли «Реакции»; <code>50-Lights-Out</code>, <code>40-Bubble-Shooter</code>, <code>18-Breakout</code></td><td>Хабу нужны разные механики, не разные оболочки одной</td></tr>
+</tbody>
+</table>
+
+<div class="box amber">
+<h4>Резерв на 8–10-ю игру</h4>
+<p><b>Судоку</b> (<code>06</code>, 12,6 КБ JS) — если метрики покажут аудиторию 25+. <b>Нонограмма</b> (<code>49</code>, 16,9 КБ) — та же логика, но дороже портировать. <b>Bubble Shooter</b> (<code>40</code>, 11 КБ) — если нужен бесконечный аркадный счёт. Все три отложены не из-за рисков, а из-за стоимости порта.</p>
+</div>
+
+<h2><span class="n">5</span>Что пишем сами: семь чужих скриптов ≠ хаб</h2>
+
+<p>Главная ошибка на этом этапе — просто залить семь папок на хостинг. Получится семь игр и ноль продукта. Хаб делает <b>единый контракт игры</b>: каждая игра обязана реализовать три функции, и тогда всё остальное — оболочка, шаринг, аналитика — пишется один раз на все семь.</p>
+
+<pre><code>// Единый контракт. Каждая игра — модуль с тремя функциями.
+export default {
+  id:      'merge',                    // для аналитики и deep link
+  title:   'Мердж',
+  mount(el, { onFinish, haptic }),     // встроить игру в контейнер
+  getShareData(result) {               // что летит в карточку и в URL
+    return { score: result.maxTile, text: 'Моя плитка: ' + result.maxTile };
+  }
+}</code></pre>
+
+<table>
+<thead><tr><th style="width:32%">Свой модуль</th><th class="num">Строк</th><th class="num">Часов</th><th>Зачем</th></tr></thead>
+<tbody>
+<tr><td><b>Адаптер MAX Bridge</b></td><td class="num">~120</td><td class="num">4</td><td>Один раз: <code>initData</code>, BackButton, <code>shareMaxContent</code>, <code>HapticFeedback</code>, <code>DeviceStorage</code></td></tr>
+<tr><td><b>Меню-оболочка</b></td><td class="num">~250</td><td class="num">5</td><td>7 карточек, счётчик «сыграно сегодня», возврат в меню без перезагрузки</td></tr>
+<tr><td><b>Шина игр</b> (контракт выше)</td><td class="num">~120</td><td class="num">4</td><td>То, что превращает семь чужих скриптов в один продукт</td></tr>
+<tr><td><b>Шаринг-карточка</b></td><td class="num">~180</td><td class="num">6</td><td>Canvas → PNG → <code>shareMaxContent</code>. Содержит deep link <code>?startapp=g3_s120</code></td></tr>
+<tr><td><b>Сборщик событий</b> (Fastify + Postgres)</td><td class="num">~200</td><td class="num">8</td><td>5 полей: <code>user_id, game, action, value, ts</code>. Готовые Umami/Matomo — AGPL/GPL, не годятся</td></tr>
+<tr><td><b>Бот</b></td><td class="num">~150</td><td class="num">6</td><td>Команды, рассылка «уведомить о запуске», приглашение в дуэль</td></tr>
+<tr><td colspan="2"><b>Итого своего</b></td><td class="num"><b>~1 020</b></td><td class="num"><b>~33 ч</b></td></tr>
+</tbody>
+</table>
+
+<p class="mut">Плюс ~20–26 часов на порт семи игр. <b>Итого ~55–60 часов работы</b> — это одна неделя вдвоём или полторы одному. Всё остальное в календарном плане — юридический контур и сбор данных, которые идут параллельно.</p>
+
+<h2><span class="n">6</span>План по неделям</h2>
+
+<div class="step"><div class="num a">0</div><div>
+<h4 style="margin-top:0">Юридический контур · дни 1–3 · параллельно с кодом</h4>
+<p>Самый долгий внешний шаг — и единственный, который нельзя ускорить. Начинается в первый час, потому что без него деплоить некуда.</p>
+<ol>
+<li>Юрлицо, ИП или самозанятость (если ещё нет). <b>Физлицо не подойдёт</b> — это подтверждённое требование</li>
+<li><code>business.max.ru/self</code> → профиль → верификация</li>
+<li>Чат-боты → Создать. Логотип 500×500, название ≤59 символов, описание ≤200 символов</li>
+<li><b>Модерация до 48 рабочих часов.</b> В это время пишется весь код — блокировки нет</li>
+</ol>
+<p class="mut">Ник получится вида <code>idИНН_bot</code>. Смиритесь: бренд будет жить в названии и в шаринг-карточке, а не в ссылке.</p>
+</div></div>
+
+<div class="step"><div class="num">1</div><div>
+<h4 style="margin-top:0">Каркас и первые три игры · дни 1–5 · софт-лонч</h4>
+<p><b>День 1.</b> Репо, Vite, HTTPS-хостинг, деплой заглушки. Адаптер MAX Bridge.</p>
+<p><b>День 2.</b> Меню-оболочка + шина игр. <b>Мердж</b> (3–4 ч).</p>
+<p><b>День 3.</b> <b>Реакция</b> (2–3 ч) + <b>Змейка</b> (2–3 ч).</p>
+<p><b>День 4.</b> Шаринг-карточка + подключение мини-приложения к боту (Расширенные настройки → URL → кнопка «Играть»).</p>
+<p><b>День 5.</b> <b>Софт-лонч на 100–300 человек.</b> Три игры, метрики, никаких доработок во время сбора.</p>
+</div></div>
+
+<div class="step"><div class="num">2</div><div>
+<h4 style="margin-top:0">Остальные четыре игры · дни 6–10</h4>
+<p><b>Дни 6–7.</b> <b>Викторина</b> (4–5 ч, из них 3–4 — написание вопросов) + <b>Сапёр</b> (3–4 ч).</p>
+<p><b>День 8.</b> <b>Эхо</b> (3–4 ч).</p>
+<p><b>День 9.</b> <b>Память</b> (2–3 ч, замена 8 PNG на эмодзи).</p>
+<p><b>День 10.</b> Сборщик событий, бот, кнопка «уведомить о запуске». <b>Хаб из семи игр готов.</b></p>
+<p class="mut">Игры выкатываются по одной — мини-приложение не требует повторной модерации, настройки кнопки при обновлении URL не сбрасываются.</p>
+</div></div>
+
+<div class="step"><div class="num g">3</div><div>
+<h4 style="margin-top:0">Данные и решение · дни 11–15</h4>
+<p>Пять дней сбора без доработок. Закуп трафика 5–10 тыс. ₽ + посты в каналах → 300–1 000 уникальных игроков. Сравнение с порогами из раздела 8. Выбор 1–2 игр на углубление.</p>
+<p>Параллельно пишется <b>вторая волна</b>: ежедневный режим для Сапёра и Викторины, дуэльный шаринг для Реакции и Змейки.</p>
+</div></div>
+
+<h2><span class="n">7</span>Что НЕ делаем: монетизация и всё, что к ней ведёт</h2>
+
+<div class="grid2">
+<div class="card">
+<h4 class="bad">Не делаем вообще</h4>
+<ul>
+<li><b>Реклама</b> — ни баннеры, ни reward-video. До понимания D1/D7 она убивает ретеншн, а вы не узнаете, что именно сломалось</li>
+<li><b>Внутренняя валюта и покупки</b> — в MAX Bridge нет платежей, а own-биллинг — это юрлицо, чеки и 54-ФЗ</li>
+<li><b>Подписка</b> — нечего продавать на седьмой день</li>
+<li><b>Профили, аватары, уровни аккаунта</b> — ноль влияния на ответ «пойдёт ли механика»</li>
+<li><b>Админка и дашборд</b> — хватит выгрузки событий в CSV</li>
+</ul>
+</div>
+<div class="card">
+<h4 class="ok">Делаем вместо этого</h4>
+<ul>
+<li>Счётчик событий: <code>user_id, game, action, value, ts</code></li>
+<li>Кнопку «уведомить о запуске» — самый честный сигнал интереса</li>
+<li>Шаринг-карточку с deep link <code>?startapp=</code></li>
+<li>Ежедневный режим там, где он бесплатный (Сапёр по сиду даты, Викторина по пакету вопросов)</li>
+<li><b>Никаких изменений в играх во время сбора данных</b> — иначе данные несравнимы</li>
+</ul>
+</div>
+</div>
+
+<h2><span class="n">8</span>Метрики и пороги решения</h2>
+
+<table>
+<thead><tr><th style="width:30%">Метрика</th><th class="num">Провал</th><th class="num">Норма</th><th class="num">Отлично</th><th>Что делать при провале</th></tr></thead>
+<tbody>
+<tr><td><b>CTR: открыли игру / открыли бота</b></td><td class="num">&lt;25%</td><td class="num">40%</td><td class="num">60%</td><td>Проблема в боте, не в играх. Менять описание и кнопку</td></tr>
+<tr><td><b>Доигрываемость до конца сессии</b></td><td class="num">&lt;45%</td><td class="num">65%</td><td class="num">85%</td><td>Игра непонятна или скучна. Убирать из хаба</td></tr>
+<tr><td><b>Доля шаринга результата</b></td><td class="num">&lt;8%</td><td class="num">15%</td><td class="num">30%</td><td class="bad">Критично: в MAX нет каталога, шаринг — единственный канал роста</td></tr>
+<tr><td><b>«Уведомить о запуске»</b></td><td class="num">&lt;10%</td><td class="num">25%</td><td class="num">45%</td><td class="bad">Решающая метрика. Стоит внимания, а не случайного клика</td></tr>
+<tr><td><b>CAC уникального игрока</b></td><td class="num">&gt;40 ₽</td><td class="num">15 ₽</td><td class="num">5 ₽</td><td>Экономика не сходится ни при какой механике. Менять канал</td></tr>
+<tr><td><b>Отрыв лидера в распределении игр</b></td><td class="num">&lt;1,3×</td><td class="num">2×</td><td class="num">3×</td><td>Нет явного фаворита → углублять две, а не одну</td></tr>
+</tbody>
+</table>
+
+<p><b>Не измеряем D1 и D7 на этом этапе.</b> Семь коротких игр дадут красивую цифру возврата, которая не значит ничего: пользователь возвращается в хаб, а не в игру. Настоящий D7 меряется на углублённой версии одной игры в неделю 4.</p>
+
+<h2><span class="n">9</span>Чек-лист: первые четыре часа</h2>
+
+<pre><code># 1. Юридический контур — самый долгий шаг, он не должен блокировать код
+#    business.max.ru/self → профиль организации, ИП или самозанятого
+#    Чат-боты → Создать → логотип 500x500 → модерация до 48 рабочих часов
+
+# 2. Склонировать пак и вынуть только семь нужных папок
+git clone --depth 1 https://github.com/he-is-talha/html-css-javascript-games.git games-src
+cd games-src && mkdir -p ../vendor && for d in 10-2048-Game 35-Whack-A-Mole-Game \
+  24-Snake-Game 16-Minesweeper-Game 33-Quiz-Game 36-Simon-Says-Game 22-Memory-Card-Game; \
+  do cp -r "$d" ../vendor/; done && cd ..
+
+# 3. Проверить, что LICENSE на месте (код — MIT)
+ls games-src/LICENSE
+
+# 4. Проверить шрифты: если игры тянут Google Fonts — убедиться, что есть кириллица.
+#    Press Start 2P — есть. Silkscreen и VT323 — нет.
+grep -rl "fonts.googleapis" vendor/ || echo "внешних шрифтов нет"
+
+# 5. УДАЛИТЬ чужие ассеты до первого коммита
+rm -f vendor/22-Memory-Card-Game/images/*.png
+#    и заменить на эмодзи в script.js
+
+# 6. Открыть каждую игру локально и пройти — 30 минут на все семь</code></pre>
+
+<div class="box red">
+<h4>Три вещи, которые убьют проект, если их пропустить</h4>
+<ol>
+<li><b>Деплой без юрлица.</b> Бота физически не создадите. Это не формальность, а подтверждённое требование платформы.</li>
+<li><b>Чужие PNG в коммите.</b> Восемь фотографий в «Памяти» и три JPG в «Камень-ножницы» — MIT на код их не покрывает. Удалить до первого коммита, а не перед релизом.</li>
+<li><b>Название «2048» в интерфейсе.</b> Переименовать в «Мердж» сразу, пока не привыкли.</li>
+</ol>
+</div>
+
+<p class="mut" style="margin-top:36px;border-top:1px solid var(--line);padding-top:14px">
+План подготовлен 7 сентября 2026. Размеры исходников — фактические, через GitHub Trees API по репо <code>he-is-talha/html-css-javascript-games</code> (MIT, 274★, коммит 04.09.2026). Требования MAX — из официальной документации dev.max.ru (проверено 07.09.2026). Оценки интереса, времени порта и пороги метрик — экспертные <span class="tag t-warn">⚠️</span>, основаны на исследовании от 6 сентября (<code>MAX_open_source_games_2026-09.html</code>). Модерация мини-приложения в документации не описана <span class="tag t-warn">❓</span> — уточнить в поддержке партнёрской платформы до первого деплоя.
+</p>
+
+</div>
+</body>
+</html>

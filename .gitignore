@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.local
+.DS_Store
+
+# клон пакета игр (временный)
+.tmp-pack/
+
+# служебные данные инструментов
+.workbuddy-ai/
+.mimosa/
+
+# отдельный продукт со своим репозиторием: github.com/timoshinoleg-eng/hub
+hub/
