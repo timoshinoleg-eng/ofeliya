@@ -19,6 +19,11 @@ export class WaveDirector {
     this.scene = scene;
     this.enemies = enemies;
     this.milestones = new RunMilestones(scene);
+
+    // Strain Zero opening: the player should see the immune system almost immediately rather
+    // than spending the first second in an empty arena. Normal cadence continues unchanged.
+    this.spawn('swarm', false);
+    this.spawn('swarm', false);
   }
 
   update(delta: number): void {
