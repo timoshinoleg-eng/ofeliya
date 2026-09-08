@@ -11,7 +11,7 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
   prism = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
-    super(scene, x, y, 'bullet');
+    super(scene, x, y, 'viral-particle');
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setDepth(14);
@@ -27,9 +27,9 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     this.lastHitAt = 0;
     this.setRotation(angle);
     if (prism) {
-      this.setTint(COLORS.gold).setBlendMode(Phaser.BlendModes.ADD).setAlpha(1);
+      this.setTint(COLORS.gold).setBlendMode(Phaser.BlendModes.ADD).setAlpha(1).setScale(1.22);
     } else {
-      this.clearTint().setBlendMode(Phaser.BlendModes.NORMAL).setAlpha(1);
+      this.clearTint().setBlendMode(Phaser.BlendModes.ADD).setAlpha(1).setScale(1);
     }
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setVelocity(Math.cos(angle) * WEAPON.bulletSpeed, Math.sin(angle) * WEAPON.bulletSpeed);
@@ -38,7 +38,7 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
   preUpdate(time: number, delta: number): void {
     super.preUpdate(time, delta);
     if (!this.active) return;
-    // ПРИЗМА мерцает без дополнительных объектов/emitters — дешёвая визуальная сигнатура.
+    // ГИПЕРШИП мерцает без дополнительных объектов/emitters — дешёвая визуальная сигнатура.
     if (this.prism) this.setAlpha(0.82 + Math.sin(time / 55) * 0.18);
     if (time > this.dieAt) this.disableBody(true, true);
   }
