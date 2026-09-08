@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import {
   BOSS_SCALE,
   COLORS,
+  FONT,
   ORBIT,
   PLAYER,
   POSTFX,
@@ -144,6 +145,9 @@ export class GameScene extends Phaser.Scene {
     this.registry.set('joy', { x: 0, y: 0 });
     this.registry.set('runResult', null);
     this.registry.set('run', this.snapshot());
+
+    // подсказка только в самый первый забег (runs инкрементится в finish())
+    if (SaveSystem.get().runs === 0) this.showIntroHint();
 
     this.scale.on('resize', this.onResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -477,6 +481,42 @@ export class GameScene extends Phaser.Scene {
     }
     const first = this.gems.getFirstAlive() as Gem | null;
     if (first) first.value += value;
+  }
+
+  // --- онбординг первого забега ---
+
+  /** Короткая подсказка в первом забеге: управление + авто-огонь. */
+  private showIntroHint(): void {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const c = this.add.container(0, 0).setDepth(60);
+
+    const title = this.add
+      .text(W / 2, H * 0.3, 'Двигай — джойстик или WASD', {
+        fontFamily: FONT,
+        fontSize: '18px',
+        fontStyle: 'bold',
+        color: '#35e0ff',
+      })
+      .setOrigin(0.5)
+      .setResolution(2);
+    const sub = this.add
+      .text(W / 2, H * 0.3 + 30, 'оружие стреляет само · собирай опыт', {
+        fontFamily: FONT,
+        fontSize: '13px',
+        color: '#aab4d4',
+        align: 'center',
+      })
+      .setOrigin(0.5)
+      .setResolution(2);
+    c.add([title, sub]);
+
+    c.setAlpha(0);
+    this.tweens.add({ targets: c, alpha: 1, duration: 250 });
+    // самоубирается через 5 с, даже если игрок так и не пошёл
+    this.time.delayedCall(5000, () => {
+      this.tweens.add({ targets: c, alpha: 0, duration: 300, onComplete: () => c.destroy() });
+    });
   }
 
   private snapshot(): RunSnapshot {
