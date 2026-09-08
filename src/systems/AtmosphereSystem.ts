@@ -1,17 +1,20 @@
 import Phaser from 'phaser';
 import { COLORS, RUN } from '../game/config';
+import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
 
-interface GlyphLayer {
+interface AmbientCell {
   image: Phaser.GameObjects.Image;
-  baseX: number;
-  baseY: number;
-  parallax: number;
-  drift: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
   phase: number;
+  rotationSpeed: number;
   alpha: number;
+  parallax: number;
 }
 
-interface DustParticle {
+interface PlasmaParticle {
   image: Phaser.GameObjects.Image;
   x: number;
   y: number;
@@ -22,14 +25,15 @@ interface DustParticle {
 }
 
 /**
- * Лёгкий атмосферный слой арены: сетка, крупные системные глифы и фиксированный
- * пул digital dust. Никаких бесконечно создаваемых emitter-ов или тяжёлых shader-ов.
+ * Bounded microscopic bloodstream layer. All ambient objects are allocated once per scene:
+ * no per-frame creation, no per-cell postFX and no unbounded particle emitters.
  */
 export class AtmosphereSystem {
   private readonly scene: Phaser.Scene;
-  private readonly grid: Phaser.GameObjects.TileSprite;
-  private readonly glyphs: GlyphLayer[] = [];
-  private readonly dust: DustParticle[] = [];
+  private readonly plasma: Phaser.GameObjects.TileSprite;
+  private readonly erythrocytes: AmbientCell[] = [];
+  private readonly hostCells: AmbientCell[] = [];
+  private readonly particles: PlasmaParticle[] = [];
 
   private width: number;
   private height: number;
@@ -39,63 +43,87 @@ export class AtmosphereSystem {
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
+    ensureStrainZeroTextures(scene);
     this.width = scene.scale.width;
     this.height = scene.scale.height;
 
-    this.grid = scene.add
-      .tileSprite(0, 0, this.width, this.height, 'grid')
+    this.plasma = scene.add
+      .tileSprite(0, 0, this.width, this.height, 'blood-plasma')
       .setOrigin(0)
       .setScrollFactor(0)
-      .setDepth(-30)
-      .setAlpha(0.86);
+      .setDepth(-32)
+      .setAlpha(1);
 
-    const glyphDefs = [
-      { x: 0.12, y: 0.18, p: 0.035, drift: 0.7, scale: 1.7, tex: 'atmo-ring', alpha: 0.055 },
-      { x: 0.82, y: 0.28, p: 0.055, drift: -0.5, scale: 2.2, tex: 'atmo-circuit', alpha: 0.045 },
-      { x: 0.28, y: 0.72, p: 0.045, drift: -0.65, scale: 2.5, tex: 'atmo-circuit', alpha: 0.04 },
-      { x: 0.76, y: 0.82, p: 0.03, drift: 0.45, scale: 1.9, tex: 'atmo-ring', alpha: 0.05 },
-      { x: 0.5, y: 0.5, p: 0.018, drift: 0.32, scale: 3.2, tex: 'atmo-ring', alpha: 0.028 },
-    ] as const;
-
-    glyphDefs.forEach((def, i) => {
+    // Mid/deep erythrocytes: enough to sell a bloodstream while remaining cheap on mobile.
+    for (let i = 0; i < 14; i++) {
+      const x = Phaser.Math.FloatBetween(-40, this.width + 40);
+      const y = Phaser.Math.FloatBetween(-40, this.height + 40);
+      const alpha = Phaser.Math.FloatBetween(0.16, 0.42);
+      const scale = Phaser.Math.FloatBetween(0.58, 1.38);
       const image = scene.add
-        .image(this.width * def.x, this.height * def.y, def.tex)
+        .image(x, y, 'erythrocyte')
         .setScrollFactor(0)
-        .setDepth(-22)
-        .setScale(def.scale)
-        .setAlpha(def.alpha)
-        .setBlendMode(Phaser.BlendModes.ADD)
-        .setTint(i % 2 === 0 ? COLORS.cyan : COLORS.purple);
-      this.glyphs.push({
+        .setDepth(i % 4 === 0 ? -12 : -24)
+        .setScale(scale)
+        .setAlpha(alpha)
+        .setRotation(Phaser.Math.FloatBetween(-Math.PI, Math.PI));
+      this.erythrocytes.push({
         image,
-        baseX: def.x,
-        baseY: def.y,
-        parallax: def.p,
-        drift: def.drift,
-        phase: i * 1.31,
-        alpha: def.alpha,
+        x,
+        y,
+        vx: Phaser.Math.FloatBetween(10, 24),
+        vy: Phaser.Math.FloatBetween(-3, 5),
+        phase: Phaser.Math.FloatBetween(0, Math.PI * 2),
+        rotationSpeed: Phaser.Math.FloatBetween(-0.08, 0.08),
+        alpha,
+        parallax: Phaser.Math.FloatBetween(0.02, 0.065),
       });
-    });
+    }
 
-    // Фиксированный пул: количество объектов никогда не растёт во время забега.
-    for (let i = 0; i < 28; i++) {
+    // Large soft host cells create depth now; later the interactive infection cells use a
+    // separate gameplay pool and remain visually distinct from these background silhouettes.
+    for (let i = 0; i < 4; i++) {
+      const x = Phaser.Math.FloatBetween(-80, this.width + 80);
+      const y = Phaser.Math.FloatBetween(-80, this.height + 80);
+      const alpha = Phaser.Math.FloatBetween(0.07, 0.15);
+      const image = scene.add
+        .image(x, y, 'host-cell-shadow')
+        .setScrollFactor(0)
+        .setDepth(-27)
+        .setScale(Phaser.Math.FloatBetween(1.2, 2.15))
+        .setAlpha(alpha)
+        .setRotation(Phaser.Math.FloatBetween(-Math.PI, Math.PI));
+      this.hostCells.push({
+        image,
+        x,
+        y,
+        vx: Phaser.Math.FloatBetween(3, 8),
+        vy: Phaser.Math.FloatBetween(-2, 3),
+        phase: i * 1.7,
+        rotationSpeed: Phaser.Math.FloatBetween(-0.025, 0.025),
+        alpha,
+        parallax: Phaser.Math.FloatBetween(0.012, 0.03),
+      });
+    }
+
+    // Fixed micro-particle pool. These are plasma proteins/debris, not digital dust.
+    for (let i = 0; i < 24; i++) {
       const x = Phaser.Math.FloatBetween(0, this.width);
       const y = Phaser.Math.FloatBetween(0, this.height);
-      const alpha = Phaser.Math.FloatBetween(0.07, 0.2);
+      const alpha = Phaser.Math.FloatBetween(0.035, 0.12);
       const image = scene.add
         .image(x, y, 'spark')
         .setScrollFactor(0)
         .setDepth(-18)
-        .setBlendMode(Phaser.BlendModes.ADD)
-        .setTint(i % 5 === 0 ? COLORS.magenta : COLORS.cyan)
-        .setScale(Phaser.Math.FloatBetween(0.18, 0.48))
+        .setTint(i % 6 === 0 ? COLORS.green : 0xffa2b6)
+        .setScale(Phaser.Math.FloatBetween(0.12, 0.34))
         .setAlpha(alpha);
-      this.dust.push({
+      this.particles.push({
         image,
         x,
         y,
-        vx: Phaser.Math.FloatBetween(-4, 7),
-        vy: Phaser.Math.FloatBetween(-8, -2),
+        vx: Phaser.Math.FloatBetween(6, 18),
+        vy: Phaser.Math.FloatBetween(-4, 4),
         phase: Phaser.Math.FloatBetween(0, Math.PI * 2),
         alpha,
       });
@@ -114,51 +142,55 @@ export class AtmosphereSystem {
     this.lastCamY = cam.scrollY;
 
     const progress = Phaser.Math.Clamp(runTimeMs / RUN.bossTimeMs, 0, 1);
-    const intensity = Phaser.Math.Clamp(0.76 + progress * 0.24 + this.phaseBoost, 0.7, 1.25);
-
-    // Сетка двигается медленнее мира: простая, дешёвая иллюзия глубины.
-    this.grid.tilePositionX = cam.scrollX * 0.82 + time * 0.004;
-    this.grid.tilePositionY = cam.scrollY * 0.82 - time * 0.002;
-    this.grid.setAlpha(0.8 + progress * 0.1);
-    this.grid.setTint(progress > 0.72 ? 0xe9dcff : 0xffffff);
-
-    for (const g of this.glyphs) {
-      const x = this.wrap(
-        this.width * g.baseX - cam.scrollX * g.parallax + Math.sin(time * 0.00018 + g.phase) * 16,
-        -140,
-        this.width + 140
-      );
-      const y = this.wrap(
-        this.height * g.baseY - cam.scrollY * g.parallax + Math.cos(time * 0.00015 + g.phase) * 12,
-        -140,
-        this.height + 140
-      );
-      g.image
-        .setPosition(x, y)
-        .setRotation(time * 0.000035 * g.drift + g.phase)
-        .setAlpha(g.alpha * intensity);
-    }
-
     const dt = Math.min(delta, 50) / 1000;
-    for (const d of this.dust) {
-      d.x += d.vx * dt - camDx * 0.055;
-      d.y += d.vy * dt - camDy * 0.055;
-      d.x = this.wrap(d.x, -12, this.width + 12);
-      d.y = this.wrap(d.y, -12, this.height + 12);
-      d.image
-        .setPosition(d.x, d.y)
-        .setAlpha(d.alpha * intensity * (0.82 + Math.sin(time * 0.0012 + d.phase) * 0.18));
+    const response = Phaser.Math.Clamp(progress + this.phaseBoost, 0, 1.3);
+
+    // The bloodstream subtly accelerates as immune response rises.
+    const flow = 1 + progress * 0.65;
+    this.plasma.tilePositionX = cam.scrollX * 0.7 - time * 0.007 * flow;
+    this.plasma.tilePositionY = cam.scrollY * 0.7 + Math.sin(time * 0.00018) * 8;
+    this.plasma.setTint(progress > 0.72 ? 0xffd6df : 0xffffff);
+
+    for (const cell of this.erythrocytes) {
+      cell.x += cell.vx * flow * dt - camDx * cell.parallax;
+      cell.y += (cell.vy + Math.sin(time * 0.00065 + cell.phase) * 2.4) * dt - camDy * cell.parallax;
+      cell.x = this.wrap(cell.x, -90, this.width + 90);
+      cell.y = this.wrap(cell.y, -70, this.height + 70);
+      cell.image
+        .setPosition(cell.x, cell.y)
+        .setRotation(cell.image.rotation + cell.rotationSpeed * dt)
+        .setAlpha(cell.alpha * (0.93 + response * 0.12));
     }
 
-    // Плавно возвращаемся к базовой интенсивности после milestone pulse.
+    for (const cell of this.hostCells) {
+      cell.x += cell.vx * flow * dt - camDx * cell.parallax;
+      cell.y += (cell.vy + Math.cos(time * 0.0004 + cell.phase) * 1.4) * dt - camDy * cell.parallax;
+      cell.x = this.wrap(cell.x, -170, this.width + 170);
+      cell.y = this.wrap(cell.y, -150, this.height + 150);
+      cell.image
+        .setPosition(cell.x, cell.y)
+        .setRotation(cell.image.rotation + cell.rotationSpeed * dt)
+        .setAlpha(cell.alpha * (0.9 + response * 0.18));
+    }
+
+    for (const p of this.particles) {
+      p.x += p.vx * flow * dt - camDx * 0.045;
+      p.y += (p.vy + Math.sin(time * 0.001 + p.phase) * 1.8) * dt - camDy * 0.045;
+      p.x = this.wrap(p.x, -10, this.width + 10);
+      p.y = this.wrap(p.y, -10, this.height + 10);
+      p.image
+        .setPosition(p.x, p.y)
+        .setAlpha(p.alpha * (0.82 + Math.sin(time * 0.0013 + p.phase) * 0.18 + response * 0.18));
+    }
+
     this.phaseBoost *= Math.pow(0.2, dt);
   }
 
-  /** Короткий атмосферный импульс; используется будущими milestone-событиями. */
-  pulse(color = COLORS.cyan, strength = 0.22): void {
+  /** Short systemic/immune response pulse. */
+  pulse(color = COLORS.immune, strength = 0.22): void {
     this.phaseBoost = Math.max(this.phaseBoost, strength);
     const flash = this.scene.add
-      .rectangle(0, 0, this.width, this.height, color, 0.08 + strength * 0.12)
+      .rectangle(0, 0, this.width, this.height, color, 0.06 + strength * 0.1)
       .setOrigin(0)
       .setScrollFactor(0)
       .setDepth(-6)
@@ -175,15 +207,17 @@ export class AtmosphereSystem {
   resize(): void {
     this.width = this.scene.scale.width;
     this.height = this.scene.scale.height;
-    this.grid.setSize(this.width, this.height);
+    this.plasma.setSize(this.width, this.height);
   }
 
   destroy(): void {
-    this.grid.destroy();
-    for (const g of this.glyphs) g.image.destroy();
-    for (const d of this.dust) d.image.destroy();
-    this.glyphs.length = 0;
-    this.dust.length = 0;
+    this.plasma.destroy();
+    for (const c of this.erythrocytes) c.image.destroy();
+    for (const c of this.hostCells) c.image.destroy();
+    for (const p of this.particles) p.image.destroy();
+    this.erythrocytes.length = 0;
+    this.hostCells.length = 0;
+    this.particles.length = 0;
   }
 
   private wrap(value: number, min: number, max: number): number {
