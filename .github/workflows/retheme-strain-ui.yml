@@ -1,0 +1,79 @@
+name: Retheme Strain UI
+
+on:
+  push:
+    branches:
+      - feat/strain-zero-redesign
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ contains(github.event.head_commit.message, '[retheme-ui]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/strain-zero-redesign
+      - name: Apply Strain Zero UI language and result wiring
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def patch(path, replacements):
+              p = Path(path)
+              s = p.read_text()
+              for old, new in replacements:
+                  if old not in s:
+                      raise SystemExit(f'anchor not found in {path}: {old[:90]}')
+                  s = s.replace(old, new, 1)
+              p.write_text(s)
+
+          patch('src/scenes/GameScene.ts', [
+              (".image(0, 0, 'player')", ".image(0, 0, 'virus-player')"),
+              ("      kills: st.kills,\n      level: st.level,", "      kills: st.kills,\n      hostCellsInfected: st.hostCellsInfected,\n      level: st.level,"),
+          ])
+
+          patch('src/scenes/UIScene.ts', [
+              ("  kills: number;\n  level: number;", "  kills: number;\n  hostCellsInfected: number;\n  level: number;"),
+              ("this.levelText = text(16, 30, 'ЯДРО 1', 14, '#35e0ff', 0);", "this.levelText = text(16, 30, 'МУТАЦИЯ 1', 13, '#ff78c8', 0);"),
+              ("this.killsText = text(W - 16, 30, 'ОЧИЩ. 0', 14, '#aab4d4', 1);", "this.killsText = text(W - 16, 30, 'ИММУН. 0', 13, '#dff8ff', 1);"),
+              ("this.xpFill.fillStyle(COLORS.cyan, 1);", "this.xpFill.fillStyle(COLORS.magenta, 1);"),
+              ("this.levelText.setText(`ЯДРО ${run.level}`);", "this.levelText.setText(`МУТАЦИЯ ${run.level}`);"),
+              ("this.killsText.setText(`ОЧИЩ. ${run.kills}`);", "this.killsText.setText(`ИММУН. ${run.kills}`);"),
+              ("`ядро ${gs.runState.level} · выбери протокол`", "`стадия ${gs.runState.level} · выбери мутацию`"),
+              ("'ЭВОЛЮЦИЯ ГОТОВА'", "'КРИТИЧЕСКАЯ МУТАЦИЯ'"),
+              ("evolution ? 'ПЕРЕПИСАТЬ ПРОТОКОЛ' : 'РАЗОВЫЙ ПРОТОКОЛ'", "evolution ? 'ЗАКРЕПИТЬ МУТАЦИЮ' : 'РАЗОВАЯ АДАПТАЦИЯ'"),
+              ("'ЭВОЛЮЦИЯ ЯДРА'", "'КРИТИЧЕСКАЯ МУТАЦИЯ'"),
+              ("'ПРОТОКОЛ ПЕРЕПИСАН'", "'ШТАММ ИЗМЕНИЛСЯ'"),
+              ("res.win ? 'ЯДРО СТАБИЛИЗИРОВАНО' : 'ЯДРО ПОТЕРЯНО'", "res.win ? 'ИММУНИТЕТ ПОДАВЛЕН' : 'ШТАММ УНИЧТОЖЕН'"),
+              ("`${IDENTITY.kills}: ${res.kills}   ·   Ядро: ${res.level}   ·   Комбо: ×${res.comboBest}`", "`${IDENTITY.kills}: ${res.kills}   ·   Клеток: ${res.hostCellsInfected}   ·   Мутация: ${res.level}   ·   ×${res.comboBest}`"),
+              ("`ЭВОЛЮЦИИ: ${evoText}`", "`КРИТ. МУТАЦИИ: ${evoText}`"),
+              ("`СБОРКА: ${build || 'базовое ядро'}`", "`ШТАММ: ${build || 'базовый штамм'}`"),
+              ("if (res.records.killsRecord) rec.push('очищено');", "if (res.records.killsRecord) rec.push('иммунитет');"),
+              ("if (res.records.levelRecord) rec.push('ядро');", "if (res.records.levelRecord) rec.push('мутация');"),
+              ("this.button(c, 'ЕЩЁ РАЗ', W / 2, y, true, () => {", "this.button(c, 'ЕЩЁ ОДИН ЦИКЛ', W / 2, y, true, () => {"),
+              ("? `Я стабилизировал ядро OFELIYA за ${mins}! Очищено угроз: ${res.kills}.${evoShare} Сможешь быстрее?`\n        : `Моё ядро OFELIYA продержалось ${mins}. Очищено угроз: ${res.kills}.${evoShare} Сможешь больше?`;", "? `OFELIYA / STRAIN-0 подавила иммунитет за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${evoShare} Сможешь быстрее?`\n        : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${evoShare} Сможешь дольше?`;"),
+              ("if (!ok) this.toast(c, 'Поделиться можно внутри MAX');", "if (!ok) this.toast(c, 'Нативный шаринг недоступен в этом клиенте');"),
+              ("dmg: 'ИМПУЛЬС',", "dmg: 'ШИПЫ',"),
+              ("rate: 'РАЗГОН',", "rate: 'РЕПЛИКАЦИЯ',"),
+              ("multi: 'ЗАЛП',", "multi: 'КОПИИ',"),
+              ("pierce: 'СКВОЗНОЙ',", "pierce: 'ПРОНИКН.',"),
+              ("speed: 'СКОРОСТЬ',", "speed: 'ПОДВИЖН.',"),
+              ("hp: 'БРОНЯ',", "hp: 'КАПСИД',"),
+              ("magnet: 'ПОЛЕ',", "magnet: 'АФФИНИТЕТ',"),
+              ("orbit: 'КОЛЬЦО',", "orbit: 'СПУТНИКИ',"),
+              ("nova: 'ВОЛНА',", "nova: 'ЛИЗИС',"),
+              ("regen: 'РЕМОНТ',", "regen: 'РЕКОМБ.',"),
+              ("primary ? COLORS.cyan : COLORS.panel", "primary ? COLORS.magenta : COLORS.panel"),
+              ("primary ? COLORS.cyan : COLORS.stroke", "primary ? COLORS.magenta : COLORS.stroke"),
+              ("color: primary ? '#35e0ff' : '#e8f4ff'", "color: primary ? '#ff78c8' : '#fff4ec'"),
+              ("primary ? COLORS.cyan : COLORS.panel, primary ? 0.18 : 0.95", "primary ? COLORS.magenta : COLORS.panel, primary ? 0.18 : 0.95"),
+          ])
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/scenes/GameScene.ts src/scenes/UIScene.ts
+          git commit -m 'feat: retheme HUD results and mutation ceremony for Strain Zero'
+          git push origin HEAD:feat/strain-zero-redesign
