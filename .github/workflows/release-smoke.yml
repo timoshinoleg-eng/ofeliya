@@ -164,7 +164,6 @@ jobs:
             const listenersAfter = await listenerCount(page);
             assert(listenersAfter === listenersBefore, `resize listeners leaked: ${listenersBefore} -> ${listenersAfter}`);
 
-            // Open a real level-up modal and make sure its aggregate bounds stay inside the phone viewport.
             await page.evaluate(() => {
               const gs = window.__game.scene.getScene('Game');
               gs.onGemCollected(gs.runState.xpNext + 1);
@@ -187,7 +186,6 @@ jobs:
               ui.scene.resume('Game');
             });
 
-            // Force a legitimate PRISM recipe, verify it becomes a special choice and render the ceremony.
             await page.evaluate(() => {
               const gs = window.__game.scene.getScene('Game');
               gs.runState.stacks.dmg = 3;
@@ -217,7 +215,6 @@ jobs:
             });
             await page.waitForTimeout(1450);
 
-            // Dense late-run scenario. Inflate HP only in QA runtime so the stress scene is observable.
             const density = await page.evaluate(() => {
               const gs = window.__game.scene.getScene('Game');
               gs.runState.maxHp = 1e9;
@@ -240,7 +237,6 @@ jobs:
             });
             assert(boss && boss.maxHp > 0, `Boss did not spawn at 5:00: ${JSON.stringify(boss)}`);
 
-            // Force a loss and click the actual primary restart button on the Phaser canvas.
             await page.evaluate(() => window.__game.scene.getScene('Game').finish(false));
             await page.waitForFunction(() => window.__game.scene.getScene('UI').overShown === true);
             const retry = await page.evaluate(() => {
@@ -278,7 +274,7 @@ jobs:
             process.exit(1);
           });
           NODE
-          node /tmp/release-smoke.cjs
+          NODE_PATH="$GITHUB_WORKSPACE/node_modules" node /tmp/release-smoke.cjs
 
       - name: Dump Vite log on failure
         if: failure()
