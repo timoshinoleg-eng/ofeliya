@@ -8,7 +8,7 @@ export class Gem extends Phaser.Physics.Arcade.Sprite {
   private gs: GameScene | null = null;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
-    super(scene, x, y, 'gem');
+    super(scene, x, y, 'rna-fragment');
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setDepth(5);
@@ -26,6 +26,7 @@ export class Gem extends Phaser.Physics.Arcade.Sprite {
   preUpdate(time: number, delta: number): void {
     super.preUpdate(time, delta);
     if (!this.active || !this.gs) return;
+    this.setRotation(Math.sin(time * 0.003 + this.x * 0.01) * 0.18);
     const p = this.gs.player;
     const dx = p.x - this.x;
     const dy = p.y - this.y;
