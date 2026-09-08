@@ -1,0 +1,106 @@
+name: Strain Zero smoke
+
+on:
+  push:
+    branches: [feat/strain-zero-redesign]
+
+jobs:
+  smoke:
+    if: ${{ contains(github.event.head_commit.message, '[strain-smoke]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm install --no-save --package-lock=false playwright-core@1.55.0
+      - name: Start dev server
+        run: |
+          npm run dev -- --host 127.0.0.1 > /tmp/vite.log 2>&1 &
+          for i in $(seq 1 40); do curl -fsS http://127.0.0.1:5173/ >/dev/null && exit 0; sleep .5; done
+          cat /tmp/vite.log; exit 1
+      - name: Validate first-session loop
+        run: |
+          cat > /tmp/strain-smoke.cjs <<'NODE'
+          const fs = require('fs');
+          const { chromium } = require('playwright-core');
+          const chrome = ['/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/usr/bin/chromium'].find(fs.existsSync);
+          if (!chrome) throw new Error('Chrome not found');
+          const assert = (v,m) => { if (!v) throw new Error(m); };
+
+          async function run(browser, viewport) {
+            const ctx = await browser.newContext({ viewport });
+            const page = await ctx.newPage();
+            const errors=[]; page.on('pageerror', e => errors.push(String(e)));
+            await page.addInitScript(() => localStorage.setItem('ofeliya_save_v1', JSON.stringify({ muted:true, runs:0 })));
+            await page.goto('http://127.0.0.1:5173/', { waitUntil:'domcontentloaded' });
+            await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
+            const hook = await page.evaluate(() => window.__game.scene.getScene('Menu').children.list.some(o => o?.text?.includes('ОРГАНИЗМ ЕЩЁ НЕ ЗНАЕТ')));
+            assert(hook, 'Strain Zero menu hook missing');
+
+            const t0 = Date.now();
+            await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
+            await page.waitForFunction(() => window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI'));
+            const initial = await page.evaluate(() => window.__game.scene.getScene('Game').enemies.countActive(true));
+            assert(initial >= 3, `opening threats missing: ${initial}`);
+
+            await page.waitForFunction(() => window.__game.scene.getScene('Game').runState.kills >= 1, null, { timeout:4000 });
+            const killMs = Date.now()-t0;
+            await page.waitForFunction(() => window.__game.scene.getScene('Game').runState.level >= 2, null, { timeout:3000 });
+            const levelMs = Date.now()-t0;
+            await page.waitForFunction(() => window.__game.scene.getScene('UI').modalOpen === true, null, { timeout:3000 });
+            const mutationMs = Date.now()-t0;
+            assert(killMs <= 4000, `first kill ${killMs}ms`);
+            assert(levelMs <= 7000, `first RNA/level ${levelMs}ms`);
+            assert(mutationMs <= 12000, `mutation modal ${mutationMs}ms`);
+
+            await page.evaluate(() => {
+              const g=window.__game, gs=g.scene.getScene('Game'), ui=g.scene.getScene('UI');
+              const first=gs.pendingChoices[0];
+              if (first) gs.chooseUpgrade(first.id);
+              ui.hideModal(); gs.awaitingChoice=false; gs.pendingChoices=[]; ui.scene.resume('Game');
+            });
+
+            await page.waitForFunction(() => window.__game.scene.getScene('Game').hostCells.cells.some(c => c.active), null, { timeout:9000 });
+            await page.evaluate(() => {
+              const gs=window.__game.scene.getScene('Game');
+              const cell=gs.hostCells.cells.find(c=>c.active);
+              gs.player.setPosition(cell.image.x, cell.image.y);
+            });
+            await page.waitForFunction(() => window.__game.scene.getScene('Game').runState.hostCellsInfected >= 1, null, { timeout:3000 });
+
+            await page.evaluate(() => { const gs=window.__game.scene.getScene('Game'); gs.runState.timeMs=15010; });
+            await page.waitForTimeout(150);
+            const milestone = await page.evaluate(() => {
+              const scene=window.__game.scene.getScene('Game');
+              const scan=o => !!o && (o.text?.includes('ЧУЖЕРОДНАЯ РНК') || (Array.isArray(o.list) && o.list.some(scan)));
+              return scene.children.list.some(scan);
+            });
+            assert(milestone, '15s immune milestone missing');
+
+            // Floating joystick must accept a lower-screen drag and remain entirely on-screen.
+            await page.mouse.move(viewport.width*0.2, viewport.height*0.78);
+            await page.mouse.down();
+            await page.mouse.move(viewport.width*0.32, viewport.height*0.72, {steps:3});
+            await page.waitForTimeout(80);
+            const joy = await page.evaluate(() => window.__game.registry.get('joy'));
+            assert(Math.hypot(joy.x, joy.y) > 0.1, `joystick vector missing ${JSON.stringify(joy)}`);
+            await page.mouse.up();
+            const finalJoy = await page.evaluate(() => window.__game.registry.get('joy'));
+            assert(finalJoy.x===0 && finalJoy.y===0, 'joystick did not release');
+            assert(errors.length===0, errors.join('\n'));
+            console.log(JSON.stringify({viewport, killMs, levelMs, mutationMs, initial, status:'ok'}));
+            await ctx.close();
+          }
+
+          (async()=>{
+            const browser=await chromium.launch({executablePath:chrome,headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+            try { await run(browser,{width:390,height:844}); await run(browser,{width:430,height:932}); }
+            finally { await browser.close(); }
+          })().catch(e=>{ console.error(e.stack||e); process.exit(1); });
+          NODE
+          NODE_PATH="$GITHUB_WORKSPACE/node_modules" node /tmp/strain-smoke.cjs
