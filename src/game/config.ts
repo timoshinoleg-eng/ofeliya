@@ -54,6 +54,21 @@ export const JUICE = {
   lowHpFraction: 0.3,
   shakeHurt: { duration: 190, intensity: 0.009 },
   shakeEliteKill: { duration: 150, intensity: 0.006 },
+  /** Трейл игрока: след каждые N мс, живёт trailFadeMs. */
+  trailEveryMs: 55,
+  trailFadeMs: 260,
+  trailPool: 8,
+};
+
+/**
+ * Комбо-счётчик: серия убийств без пауз. Чисто визуальная мотивация «ещё разок»,
+ * на баланс не влияет (в дуэлях пригодится как метрика мастерства).
+ */
+export const COMBO = {
+  /** Сколько держится серия после последнего убийства. */
+  windowMs: 2500,
+  /** Ниже этого значения счётчик не показываем — не засорять экран. */
+  showFrom: 3,
 };
 
 export const PLAYER = {

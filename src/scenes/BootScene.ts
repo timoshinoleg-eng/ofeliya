@@ -103,6 +103,8 @@ export class BootScene extends Phaser.Scene {
     g.generateTexture('spark', 8, 8);
     g.clear();
 
+    this.makeIcons(g);
+
     g.destroy();
 
     // сетка фона
@@ -147,5 +149,142 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(0, 0, 512, 512);
       vg.refresh();
     }
+  }
+
+  /**
+   * Иконки улучшений: ключ текстуры `up-<id>` (id из UpgradeSystem).
+   * Рисуются кодом, 40×40 — те же правила, что и для остальных спрайтов:
+   * никаких внешних ассетов и лицензионных вопросов.
+   * UI проверяет существование текстуры, так что забытая иконка не ломает бой.
+   */
+  private makeIcons(g: Phaser.GameObjects.Graphics): void {
+    const put = (id: string, draw: () => void): void => {
+      g.clear();
+      draw();
+      g.generateTexture(`up-${id}`, 40, 40);
+      g.clear();
+    };
+    const solid = (c: number): void => {
+      g.fillStyle(c, 1);
+    };
+    const line = (c: number, w: number, a = 1): void => {
+      g.lineStyle(w, c, a);
+    };
+    const bolt = (pts: number[]): void => {
+      const p: Phaser.Types.Math.Vector2Like[] = [];
+      for (let i = 0; i < pts.length; i += 2) p.push({ x: pts[i], y: pts[i + 1] });
+      g.fillPoints(p, true);
+    };
+
+    // урон — стрелка вверх
+    put('dmg', () => {
+      solid(COLORS.orange);
+      g.fillTriangle(20, 4, 33, 19, 7, 19);
+      g.fillRect(15, 17, 10, 19);
+    });
+
+    // скорострельность — молния
+    put('rate', () => {
+      solid(COLORS.cyan);
+      bolt([25, 3, 10, 21, 19, 21, 15, 37, 30, 17, 21, 17]);
+    });
+
+    // +1 снаряд — залп из трёх
+    put('multi', () => {
+      solid(COLORS.cyan);
+      g.fillRoundedRect(6, 8, 26, 6, 3);
+      g.fillRoundedRect(6, 17, 30, 6, 3);
+      g.fillRoundedRect(6, 26, 20, 6, 3);
+    });
+
+    // пробивание — стрела сквозь препятствие
+    put('pierce', () => {
+      line(COLORS.cyan, 3);
+      g.beginPath();
+      g.moveTo(4, 20);
+      g.lineTo(33, 20);
+      g.strokePath();
+      solid(COLORS.cyan);
+      g.fillTriangle(37, 20, 26, 13, 26, 27);
+      g.fillStyle(0x0b0e1a, 1);
+      g.fillRect(15, 11, 5, 18);
+    });
+
+    // скорость — линии и стрелка
+    put('speed', () => {
+      solid(COLORS.green);
+      g.fillRoundedRect(5, 8, 22, 5, 2.5);
+      g.fillRoundedRect(5, 17, 17, 5, 2.5);
+      g.fillRoundedRect(5, 26, 12, 5, 2.5);
+      g.fillTriangle(36, 20, 27, 14, 27, 26);
+    });
+
+    // прочность — сердце
+    put('hp', () => {
+      solid(COLORS.red);
+      g.fillCircle(14, 15, 9);
+      g.fillCircle(26, 15, 9);
+      g.fillTriangle(5.5, 17, 34.5, 17, 20, 35);
+    });
+
+    // магнит — подкова
+    put('magnet', () => {
+      line(COLORS.purple, 6);
+      g.beginPath();
+      g.arc(20, 22, 13, Math.PI, Math.PI * 2);
+      g.strokePath();
+      solid(COLORS.purple);
+      g.fillRect(7, 22, 6, 11);
+      g.fillRect(27, 22, 6, 11);
+    });
+
+    // орбитальный клинок — орбита с лезвием
+    put('orbit', () => {
+      line(COLORS.cyan, 2.5, 0.85);
+      g.strokeCircle(20, 20, 13);
+      solid(COLORS.cyan);
+      g.fillCircle(20, 6, 5);
+      g.fillCircle(20, 20, 3.5);
+    });
+
+    // нова — вспышка
+    put('nova', () => {
+      line(COLORS.orange, 4);
+      for (let i = 0; i < 8; i++) {
+        const a = (i * Math.PI * 2) / 8;
+        g.beginPath();
+        g.moveTo(20 + Math.cos(a) * 6, 20 + Math.sin(a) * 6);
+        g.lineTo(20 + Math.cos(a) * 17, 20 + Math.sin(a) * 17);
+        g.strokePath();
+      }
+      solid(COLORS.orange);
+      g.fillCircle(20, 20, 4);
+    });
+
+    // регенерация — шевроны в круге
+    put('regen', () => {
+      line(COLORS.green, 2.5, 0.85);
+      g.strokeCircle(20, 20, 14);
+      line(COLORS.green, 3.5);
+      g.beginPath();
+      g.moveTo(11, 21);
+      g.lineTo(20, 13);
+      g.lineTo(29, 21);
+      g.strokePath();
+      g.beginPath();
+      g.moveTo(11, 28);
+      g.lineTo(20, 20);
+      g.lineTo(29, 28);
+      g.strokePath();
+    });
+
+    // ремонт — крест в круге
+    put('heal', () => {
+      line(COLORS.green, 3);
+      g.strokeCircle(20, 20, 14);
+      solid(COLORS.green);
+      g.fillRect(17, 9, 6, 22);
+      g.fillRect(9, 17, 22, 6);
+    });
   }
 }

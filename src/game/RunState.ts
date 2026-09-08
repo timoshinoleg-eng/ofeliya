@@ -12,6 +12,11 @@ export class RunState {
   kills = 0;
   timeMs = 0;
 
+  /** Текущая серия убийств и сколько ей осталось (мс) — см. COMBO в config. */
+  combo = 0;
+  comboTimer = 0;
+  comboBest = 0;
+
   hp = PLAYER.hp;
   maxHp = PLAYER.hp;
 

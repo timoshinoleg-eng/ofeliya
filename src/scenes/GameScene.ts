@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import {
   BOSS_SCALE,
   COLORS,
+  COMBO,
   FONT,
   JUICE,
   ORBIT,
@@ -30,6 +31,7 @@ interface RunSnapshot {
   xpNext: number;
   timeMs: number;
   kills: number;
+  combo: number;
   bossHp: number;
   bossMax: number;
 }
@@ -63,6 +65,9 @@ export class GameScene extends Phaser.Scene {
   private dmgCursor = 0;
   private lastDmgAt = 0;
   private lastDmg: { obj: Phaser.GameObjects.Text; value: number; at: number } | null = null;
+  private trail: Phaser.GameObjects.Image[] = [];
+  private trailCursor = 0;
+  private trailAcc = 0;
   private keys: Record<string, Phaser.Input.Keyboard.Key> = {};
 
   constructor() {
@@ -160,6 +165,20 @@ export class GameScene extends Phaser.Scene {
       );
     }
 
+    // трейл игрока: пул спрайтов, гасим твином. Глубина 14 — под игроком (15)
+    this.trail = [];
+    for (let i = 0; i < JUICE.trailPool; i++) {
+      this.trail.push(
+        this.add
+          .image(0, 0, 'player')
+          .setDepth(14)
+          .setBlendMode(Phaser.BlendModes.ADD)
+          .setVisible(false)
+      );
+    }
+    this.trailCursor = 0;
+    this.trailAcc = 0;
+
     this.physics.add.overlap(this.bullets, this.enemies, this.onBulletHit, undefined, this);
     this.physics.add.overlap(this.player, this.enemies, this.onPlayerHit, undefined, this);
     this.physics.add.overlap(this.player, this.gems, this.onGemTouch, undefined, this);
@@ -226,6 +245,27 @@ export class GameScene extends Phaser.Scene {
     }
     const speed = PLAYER.speed * st.speedMul;
     (this.player.body as Phaser.Physics.Arcade.Body).setVelocity(vx * speed, vy * speed);
+
+    // трейл — только на реальном движении; на стоянке аккумулятор держим
+    // заряженным, чтобы первый же шаг сразу дал след
+    if (len > 0.1) {
+      this.trailAcc += delta;
+      if (this.trailAcc >= JUICE.trailEveryMs) {
+        this.trailAcc = 0;
+        this.spawnTrail();
+      }
+    } else {
+      this.trailAcc = JUICE.trailEveryMs;
+    }
+
+    // комбо: серия убийств, сбрасывается паузой дольше COMBO.windowMs
+    if (st.combo > 0) {
+      st.comboTimer -= delta;
+      if (st.comboTimer <= 0) {
+        st.combo = 0;
+        st.comboTimer = 0;
+      }
+    }
 
     // мигание в кадрах неуязвимости
     if (time < this.player.hurtUntil) {
@@ -302,6 +342,9 @@ export class GameScene extends Phaser.Scene {
   onEnemyDied(e: Enemy): void {
     const st = this.runState;
     st.kills += 1;
+    st.combo += 1;
+    st.comboTimer = COMBO.windowMs;
+    if (st.combo > st.comboBest) st.comboBest = st.combo;
     (this.deathEmitter as unknown as { setParticleTint?: (c: number) => void }).setParticleTint?.(
       e.color
     );
@@ -378,6 +421,26 @@ export class GameScene extends Phaser.Scene {
         t.setVisible(false).setActive(false);
         if (this.lastDmg && this.lastDmg.obj === t) this.lastDmg = null;
       },
+    });
+  }
+
+  /** След игрока: тот же спрайт, но бледнее и меньше — ощущение скорости. */
+  private spawnTrail(): void {
+    const t = this.trail[this.trailCursor];
+    this.trailCursor = (this.trailCursor + 1) % this.trail.length;
+    this.tweens.killTweensOf(t);
+    t.setPosition(this.player.x, this.player.y)
+      .setVisible(true)
+      .setAlpha(0.32)
+      .setScale(1)
+      .setRotation(0);
+    this.tweens.add({
+      targets: t,
+      alpha: 0,
+      scale: 0.62,
+      duration: JUICE.trailFadeMs,
+      ease: 'Quad.Out',
+      onComplete: () => t.setVisible(false),
     });
   }
 
@@ -651,6 +714,7 @@ export class GameScene extends Phaser.Scene {
       xpNext: st.xpNext,
       timeMs: st.timeMs,
       kills: st.kills,
+      combo: st.combo,
       bossHp: this.wave.boss?.hp ?? 0,
       bossMax: this.wave.boss?.maxHp ?? 0,
     };

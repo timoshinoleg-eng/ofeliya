@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS, FONT, JUICE, fmtTime } from '../game/config';
+import { COLORS, COMBO, FONT, JUICE, fmtTime } from '../game/config';
 import { Joystick } from '../game/Joystick';
 import { MaxBridge } from '../systems/MaxBridge';
 import { Sfx } from '../systems/Sfx';
@@ -14,6 +14,7 @@ interface RunSnapshot {
   xpNext: number;
   timeMs: number;
   kills: number;
+  combo: number;
   bossHp: number;
   bossMax: number;
 }
@@ -46,6 +47,8 @@ export class UIScene extends Phaser.Scene {
   private joystick!: Joystick;
   private hpWarn!: Phaser.GameObjects.Graphics;
   private fanfare!: Phaser.GameObjects.Particles.ParticleEmitter;
+  private comboText!: Phaser.GameObjects.Text;
+  private lastCombo = 0;
 
   private modal: Phaser.GameObjects.Container | null = null;
   private modalOpen = false;
@@ -117,6 +120,19 @@ export class UIScene extends Phaser.Scene {
       })
       .setDepth(101);
 
+    // комбо — под уровнем, слева: не мешает таймеру и полосам
+    this.lastCombo = 0;
+    this.comboText = this.add
+      .text(16, 54, '', {
+        fontFamily: FONT,
+        fontSize: '18px',
+        fontStyle: 'bold',
+        color: '#ffe066',
+      })
+      .setResolution(2)
+      .setDepth(DEPTH + 1)
+      .setVisible(false);
+
     this.joystick = new Joystick(this, () => this.uiBlocked);
 
     this.scale.on('resize', this.layout, this);
@@ -145,6 +161,24 @@ export class UIScene extends Phaser.Scene {
       this.timerText.setText(fmtTime(run.timeMs));
       this.levelText.setText(`УР ${run.level}`);
       this.killsText.setText(`уб. ${run.kills}`);
+
+      // комбо: пульс на каждом приросте серии
+      const showCombo = run.combo >= COMBO.showFrom;
+      this.comboText.setVisible(showCombo);
+      if (showCombo && run.combo !== this.lastCombo) {
+        this.lastCombo = run.combo;
+        this.comboText.setText(`×${run.combo}`);
+        this.tweens.killTweensOf(this.comboText);
+        this.comboText.setScale(1.4);
+        this.tweens.add({
+          targets: this.comboText,
+          scale: 1,
+          duration: 200,
+          ease: 'Quad.Out',
+        });
+      } else if (!showCombo) {
+        this.lastCombo = 0;
+      }
 
       // HP-бар
       const bw = 200;
@@ -286,8 +320,15 @@ export class UIScene extends Phaser.Scene {
       const bg = this.add
         .rectangle(0, 0, cw, ch, COLORS.panel, 0.98)
         .setStrokeStyle(2, COLORS.cyan, 0.85);
+      // иконка рисуется кодом в BootScene (ключ up-<id>); если текстуры нет —
+      // просто едем без неё, карточка остаётся текстовой
+      card.add(bg);
+      const iconKey = `up-${def.id}`;
+      const hasIcon = this.textures.exists(iconKey);
+      if (hasIcon) card.add(this.add.image(-cw / 2 + 38, 0, iconKey));
+      const tx = -cw / 2 + (hasIcon ? 68 : 16);
       const nameT = this.add
-        .text(-cw / 2 + 16, -ch / 2 + 12, def.name, {
+        .text(tx, -ch / 2 + 12, def.name, {
           fontFamily: FONT,
           fontSize: '17px',
           fontStyle: 'bold',
@@ -295,14 +336,14 @@ export class UIScene extends Phaser.Scene {
         })
         .setResolution(2);
       const descT = this.add
-        .text(-cw / 2 + 16, -ch / 2 + 38, def.desc, {
+        .text(tx, -ch / 2 + 38, def.desc, {
           fontFamily: FONT,
           fontSize: '12px',
           color: '#aab4d4',
-          wordWrap: { width: cw - 70 },
+          wordWrap: { width: cw - 16 - (tx + cw / 2) },
         })
         .setResolution(2);
-      card.add([bg, nameT, descT]);
+      card.add([nameT, descT]);
       const stacks = gs.runState.stackOf(def.id);
       if (stacks > 0) {
         card.add(
