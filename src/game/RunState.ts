@@ -18,6 +18,10 @@ export class RunState {
   comboTimer = 0;
   comboBest = 0;
 
+  /** Текущая и лучшая серия без получения урона. */
+  noDamageMs = 0;
+  maxNoDamageMs = 0;
+
   hp = PLAYER.hp;
   maxHp = PLAYER.hp;
 
@@ -32,7 +36,6 @@ export class RunState {
   regen = 0;
 
   stacks: Record<string, number> = {};
-  /** Эволюции живут только в рамках текущего забега; meta-history появится в #6. */
   evolutions = new Set<EvolutionId>();
 
   get bulletDamage(): number {
@@ -40,7 +43,6 @@ export class RunState {
   }
 
   get bulletPierce(): number {
-    // ПРИЗМА получает небольшой механический отпечаток, но основная награда — presentation.
     return this.pierce + (this.hasEvolution('prism') ? 1 : 0);
   }
 
@@ -68,7 +70,6 @@ export class RunState {
     return NOVA.intervalMs * Math.max(0.55, 1 - 0.1 * (this.novaLevel - 1));
   }
 
-  /** Возвращает количество полученных уровней. */
   addXp(v: number): number {
     this.xp += v;
     let levels = 0;
@@ -79,6 +80,15 @@ export class RunState {
       levels += 1;
     }
     return levels;
+  }
+
+  tickNoDamage(delta: number): void {
+    this.noDamageMs += delta;
+    if (this.noDamageMs > this.maxNoDamageMs) this.maxNoDamageMs = this.noDamageMs;
+  }
+
+  resetNoDamage(): void {
+    this.noDamageMs = 0;
   }
 
   stackOf(id: string): number {
