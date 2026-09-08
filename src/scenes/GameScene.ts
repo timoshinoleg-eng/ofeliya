@@ -31,6 +31,7 @@ import { MaxBridge } from '../systems/MaxBridge';
 import { SaveSystem } from '../systems/SaveSystem';
 import { Sfx } from '../systems/Sfx';
 import { VfxSystem } from '../systems/VfxSystem';
+import { HostCellSystem, type HostCellLysisEvent } from '../systems/HostCellSystem';
 
 interface RunSnapshot {
   hp: number;
@@ -52,6 +53,7 @@ export class GameScene extends Phaser.Scene {
   private atmosphere!: AtmosphereSystem;
   private vignette!: Phaser.GameObjects.Image;
   private vfx!: VfxSystem;
+  private hostCells!: HostCellSystem;
   private bullets!: Phaser.Physics.Arcade.Group;
   private enemies!: Phaser.Physics.Arcade.Group;
   private gems!: Phaser.Physics.Arcade.Group;
@@ -133,6 +135,7 @@ export class GameScene extends Phaser.Scene {
     this.enemies = this.physics.add.group({ classType: Enemy, maxSize: 260 });
     this.gems = this.physics.add.group({ classType: Gem, maxSize: 220 });
     this.vfx = new VfxSystem(this);
+    this.hostCells = new HostCellSystem(this, this.player, (event) => this.onHostCellLysis(event));
 
     this.dmgTexts = [];
     for (let i = 0; i < JUICE.dmgTextPool; i++) {
@@ -194,6 +197,7 @@ export class GameScene extends Phaser.Scene {
       this.scale.off('resize', this.onResize, this);
       this.atmosphere.destroy();
       this.vfx.destroy();
+      this.hostCells.destroy();
       this.registry.remove('run');
       this.registry.remove('runResult');
       this.registry.remove('joy');
@@ -275,6 +279,7 @@ export class GameScene extends Phaser.Scene {
     if (st.regen > 0) st.hp = Math.min(st.maxHp, st.hp + (st.regen * delta) / 1000);
 
     this.wave.update(delta);
+    this.hostCells.update(time, delta, st.timeMs);
     this.atmosphere.update(time, delta, st.timeMs);
 
     this.playerBar.clear();
@@ -338,6 +343,33 @@ export class GameScene extends Phaser.Scene {
       this.wave.boss = null;
       this.cameras.main.shake(400, 0.01);
       this.finish(true);
+    }
+  }
+
+  private onHostCellLysis(event: HostCellLysisEvent): void {
+    const st = this.runState;
+    st.hostCellsInfected += 1;
+    this.vfx.nova(event.x, event.y, event.radius);
+    this.atmosphere.pulse(COLORS.green, 0.14);
+    Sfx.play('nova');
+    MaxBridge.haptic('medium');
+
+    for (let i = 0; i < event.rna; i++) {
+      const a = (i / event.rna) * Math.PI * 2 + Math.random() * 0.35;
+      const r = 18 + Math.random() * 24;
+      this.spawnGem(event.x + Math.cos(a) * r, event.y + Math.sin(a) * r, 1);
+    }
+
+    const list = this.enemies.getChildren() as Enemy[];
+    for (const e of list) {
+      if (!e.active) continue;
+      const dx = e.x - event.x;
+      const dy = e.y - event.y;
+      const d = Math.hypot(dx, dy);
+      if (d > event.radius + e.radius) continue;
+      const dd = d || 1;
+      this.vfx.hit(e.x, e.y, COLORS.green);
+      e.takeDamage(event.damage, (dx / dd) * 210, (dy / dd) * 210);
     }
   }
 
