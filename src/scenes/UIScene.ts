@@ -2,10 +2,15 @@ import Phaser from 'phaser';
 import { COLORS, COMBO, FONT, JUICE, fmtTime } from '../game/config';
 import { IDENTITY } from '../game/identity';
 import { Joystick } from '../game/Joystick';
+import {
+  EVOLUTION_NAMES,
+  UPGRADE_FAMILY_LABELS,
+  getUpgradeProgress,
+  type UpgradeDef,
+} from '../game/UpgradeSystem';
 import { MaxBridge } from '../systems/MaxBridge';
 import { Sfx } from '../systems/Sfx';
 import type { GameScene } from './GameScene';
-import type { UpgradeDef } from '../game/UpgradeSystem';
 
 interface RunSnapshot {
   hp: number;
@@ -108,7 +113,6 @@ export class UIScene extends Phaser.Scene {
           .setColor(muted ? '#5a6480' : '#35e0ff');
       });
 
-    // рамка «мало HP» — под HUD, но над игрой (модалки поверх, на глубине 100+)
     this.hpWarn = this.add.graphics().setDepth(DEPTH - 1);
     this.fanfare = this.add
       .particles(0, 0, 'spark', {
@@ -121,7 +125,6 @@ export class UIScene extends Phaser.Scene {
       })
       .setDepth(101);
 
-    // комбо — под уровнем, слева: не мешает таймеру и полосам
     this.lastCombo = 0;
     this.comboText = this.add
       .text(16, 54, '', {
@@ -148,7 +151,6 @@ export class UIScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
     if (run) {
-      // XP-бар / поток фрагментов данных
       this.xpBack.clear();
       this.xpBack.fillStyle(0x1a2136, 0.9);
       this.xpBack.fillRoundedRect(12, 12, W - 24, 10, 5);
@@ -163,7 +165,6 @@ export class UIScene extends Phaser.Scene {
       this.levelText.setText(`ЯДРО ${run.level}`);
       this.killsText.setText(`ОЧИЩ. ${run.kills}`);
 
-      // комбо: пульс на каждом приросте серии
       const showCombo = run.combo >= COMBO.showFrom;
       this.comboText.setVisible(showCombo);
       if (showCombo && run.combo !== this.lastCombo) {
@@ -181,7 +182,6 @@ export class UIScene extends Phaser.Scene {
         this.lastCombo = 0;
       }
 
-      // HP-бар
       const bw = 200;
       const bx = W / 2 - bw / 2;
       this.hpBack.clear();
@@ -195,7 +195,6 @@ export class UIScene extends Phaser.Scene {
       }
       this.hpText.setText(`${Math.ceil(Math.max(0, run.hp))} / ${run.maxHp}`);
 
-      // предупреждение на низком HP: пульсирующая красная рамка по краю экрана
       this.hpWarn.clear();
       if (run.hp > 0 && hf <= JUICE.lowHpFraction) {
         const a = 0.22 + 0.22 * Math.sin(this.time.now / 120);
@@ -203,7 +202,6 @@ export class UIScene extends Phaser.Scene {
         this.hpWarn.strokeRect(8, 8, W - 16, H - 16);
       }
 
-      // полоска босса
       const boss = run.bossMax > 0;
       this.bossBack.setVisible(boss);
       this.bossFill.setVisible(boss);
@@ -224,12 +222,10 @@ export class UIScene extends Phaser.Scene {
       }
     }
 
-    // модификация ядра
     if (this.gs && this.gs.awaitingChoice && !this.modalOpen && !this.overShown) {
       this.showLevelUp();
     }
 
-    // итог сеанса
     const res = this.registry.get('runResult') as RunResult | undefined | null;
     if (res && !this.overShown) {
       this.overShown = true;
@@ -255,7 +251,6 @@ export class UIScene extends Phaser.Scene {
     if (!gs) return;
     this.modalOpen = true;
     this.uiBlocked = true;
-    // пауза боя на время выбора улучшения
     this.scene.pause('Game');
     Sfx.play('levelup');
     MaxBridge.notify('success');
@@ -263,14 +258,13 @@ export class UIScene extends Phaser.Scene {
 
     const W = this.scale.width;
     const H = this.scale.height;
+    const compact = H < 620;
     const c = this.add.container(0, 0).setDepth(100);
     this.modal = c;
 
-    const dim = this.add.rectangle(W / 2, H / 2, W, H, 0x05070f, 0.72).setInteractive();
+    const dim = this.add.rectangle(W / 2, H / 2, W, H, 0x05070f, 0.76).setInteractive();
     c.add(dim);
 
-    // фанфары: кольцо + искры в центре (камера следует за игроком, он ~в центре).
-    // Живут в UI-сцене — она не ставится на паузу, эффект доигрывает до конца.
     const ring = this.add
       .circle(W / 2, H / 2, 20)
       .setStrokeStyle(3, COLORS.cyan, 0.9)
@@ -285,12 +279,14 @@ export class UIScene extends Phaser.Scene {
     });
     this.fanfare.emitParticleAt(W / 2, H / 2, 22);
 
+    const titleY = compact ? H * 0.1 : H * 0.13;
     const titleT = this.add
-      .text(W / 2, H * 0.14, IDENTITY.levelUp, {
+      .text(W / 2, titleY, IDENTITY.levelUp, {
         fontFamily: FONT,
-        fontSize: '27px',
+        fontSize: compact ? '23px' : '27px',
         fontStyle: 'bold',
         color: '#35e0ff',
+        align: 'center',
       })
       .setOrigin(0.5)
       .setResolution(2)
@@ -300,9 +296,9 @@ export class UIScene extends Phaser.Scene {
     this.tweens.add({ targets: titleT, scale: 1, duration: 260, ease: 'Back.Out' });
     c.add(
       this.add
-        .text(W / 2, H * 0.14 + 40, `ядро ${gs.runState.level} · выбери протокол`, {
+        .text(W / 2, titleY + (compact ? 31 : 38), `ядро ${gs.runState.level} · выбери протокол`, {
           fontFamily: FONT,
-          fontSize: '14px',
+          fontSize: compact ? '12px' : '14px',
           color: '#aab4d4',
         })
         .setOrigin(0.5)
@@ -310,54 +306,134 @@ export class UIScene extends Phaser.Scene {
     );
 
     const cards = gs.pendingChoices;
-    const cw = Math.min(W - 40, 340);
-    const ch = 88;
-    const gap = 14;
+    const cw = Math.min(W - 28, 360);
+    const ch = compact ? 94 : 106;
+    const gap = compact ? 8 : 10;
     const totalH = cards.length * ch + (cards.length - 1) * gap;
-    let y = H / 2 - totalH / 2 + ch / 2;
+    const blockCenter = compact ? H * 0.56 : H * 0.55;
+    let y = blockCenter - totalH / 2 + ch / 2;
 
-    cards.forEach((def: UpgradeDef) => {
+    cards.forEach((def: UpgradeDef, cardIndex: number) => {
       const card = this.add.container(W / 2, y);
+      const accent = def.rarity === 'rare' ? COLORS.purple : COLORS.cyan;
+      const progress = getUpgradeProgress(gs.runState, def);
       const bg = this.add
-        .rectangle(0, 0, cw, ch, COLORS.panel, 0.98)
-        .setStrokeStyle(2, COLORS.cyan, 0.85);
-      // иконка рисуется кодом в BootScene (ключ up-<id>); если текстуры нет —
-      // просто едем без неё, карточка остаётся текстовой
+        .rectangle(0, 0, cw, ch, COLORS.panel, 0.985)
+        .setStrokeStyle(def.rarity === 'rare' ? 2.5 : 2, accent, def.rarity === 'rare' ? 1 : 0.82);
       card.add(bg);
+
       const iconKey = `up-${def.id}`;
       const hasIcon = this.textures.exists(iconKey);
-      if (hasIcon) card.add(this.add.image(-cw / 2 + 38, 0, iconKey));
-      const tx = -cw / 2 + (hasIcon ? 68 : 16);
-      const nameT = this.add
-        .text(tx, -ch / 2 + 12, def.name, {
-          fontFamily: FONT,
-          fontSize: '17px',
-          fontStyle: 'bold',
-          color: '#e8f4ff',
-        })
-        .setResolution(2);
-      const descT = this.add
-        .text(tx, -ch / 2 + 38, def.desc, {
-          fontFamily: FONT,
-          fontSize: '12px',
-          color: '#aab4d4',
-          wordWrap: { width: cw - 16 - (tx + cw / 2) },
-        })
-        .setResolution(2);
-      card.add([nameT, descT]);
-      const stacks = gs.runState.stackOf(def.id);
-      if (stacks > 0) {
+      if (hasIcon) {
         card.add(
           this.add
-            .text(cw / 2 - 12, -ch / 2 + 10, `×${stacks}`, {
+            .image(-cw / 2 + 38, -2, iconKey)
+            .setScale(compact ? 0.82 : 0.9)
+            .setTint(def.rarity === 'rare' ? 0xe9dcff : 0xffffff)
+        );
+      }
+
+      const tx = -cw / 2 + (hasIcon ? 68 : 16);
+      const right = cw / 2 - 12;
+      const family = `${UPGRADE_FAMILY_LABELS[def.family]} · ${def.rarity === 'rare' ? 'РЕДКИЙ' : 'СТАНДАРТ'}`;
+      card.add(
+        this.add
+          .text(tx, -ch / 2 + 8, family, {
+            fontFamily: FONT,
+            fontSize: compact ? '9px' : '10px',
+            fontStyle: 'bold',
+            color: def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
+          })
+          .setResolution(2)
+      );
+
+      card.add(
+        this.add
+          .text(tx, -ch / 2 + (compact ? 22 : 24), def.shortName, {
+            fontFamily: FONT,
+            fontSize: compact ? '14px' : '15px',
+            fontStyle: 'bold',
+            color: '#e8f4ff',
+          })
+          .setResolution(2)
+      );
+
+      card.add(
+        this.add
+          .text(tx, -ch / 2 + (compact ? 42 : 46), def.name, {
+            fontFamily: FONT,
+            fontSize: compact ? '11px' : '12px',
+            fontStyle: 'bold',
+            color: def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
+          })
+          .setResolution(2)
+      );
+
+      if (!compact) {
+        card.add(
+          this.add
+            .text(tx, -ch / 2 + 64, def.desc, {
               fontFamily: FONT,
-              fontSize: '12px',
-              color: '#5a6480',
+              fontSize: '10px',
+              color: '#8f9ab7',
+              wordWrap: { width: Math.max(100, right - tx - 4) },
+            })
+            .setResolution(2)
+        );
+      }
+
+      if (def.evolutionHint) {
+        card.add(
+          this.add
+            .text(right, -ch / 2 + 9, `→ ${EVOLUTION_NAMES[def.evolutionHint]}`, {
+              fontFamily: FONT,
+              fontSize: compact ? '9px' : '10px',
+              fontStyle: 'bold',
+              color: '#ffe066',
             })
             .setOrigin(1, 0)
             .setResolution(2)
         );
       }
+
+      if (def.showProgress !== false && def.max <= 8) {
+        const pg = this.add.graphics();
+        const barX = tx;
+        const barY = ch / 2 - 13;
+        const available = Math.min(118, Math.max(72, right - tx - 64));
+        const segGap = 3;
+        const segW = (available - segGap * (def.max - 1)) / def.max;
+        for (let i = 0; i < def.max; i++) {
+          const x = barX + i * (segW + segGap);
+          const completed = i < progress.current;
+          const next = i === progress.current;
+          pg.fillStyle(accent, completed ? 0.95 : next ? 0.42 : 0.1);
+          pg.fillRoundedRect(x, barY, segW, 5, 2);
+        }
+        card.add(pg);
+        card.add(
+          this.add
+            .text(right, barY - 5, `${progress.current} → ${progress.next} / ${progress.max}`, {
+              fontFamily: FONT,
+              fontSize: '9px',
+              color: '#7f8aa7',
+            })
+            .setOrigin(1, 0)
+            .setResolution(2)
+        );
+      } else {
+        card.add(
+          this.add
+            .text(right, ch / 2 - 19, 'РАЗОВЫЙ ПРОТОКОЛ', {
+              fontFamily: FONT,
+              fontSize: '9px',
+              color: '#7dff6e',
+            })
+            .setOrigin(1, 0)
+            .setResolution(2)
+        );
+      }
+
       bg.setInteractive({ useHandCursor: true }).on('pointerup', () => {
         Sfx.play('click');
         const more = gs.chooseUpgrade(def.id);
@@ -369,12 +445,19 @@ export class UIScene extends Phaser.Scene {
           this.scene.resume('Game');
         }
       });
-      bg.on('pointerover', () => bg.setFillStyle(COLORS.panelHover, 0.98));
-      bg.on('pointerout', () => bg.setFillStyle(COLORS.panel, 0.98));
+      bg.on('pointerover', () => bg.setFillStyle(COLORS.panelHover, 1));
+      bg.on('pointerout', () => bg.setFillStyle(COLORS.panel, 0.985));
 
       c.add(card);
-      card.setScale(0.92).setAlpha(0);
-      this.tweens.add({ targets: card, scale: 1, alpha: 1, duration: 150, ease: 'Back.Out' });
+      card.setScale(0.94).setAlpha(0);
+      this.tweens.add({
+        targets: card,
+        scale: 1,
+        alpha: 1,
+        duration: 170,
+        delay: cardIndex * 35,
+        ease: 'Back.Out',
+      });
 
       y += ch + gap;
     });
