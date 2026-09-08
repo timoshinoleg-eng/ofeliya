@@ -206,6 +206,49 @@ export class BootScene extends Phaser.Scene {
     g.generateTexture('spark', 8, 8);
     g.clear();
 
+    // Фоновые системные глифы: намеренно тонкие — AtmosphereSystem держит их почти прозрачными.
+    g.lineStyle(2, COLORS.cyan, 1);
+    for (let i = 0; i < 6; i++) {
+      const a = i * (Math.PI / 3) + 0.08;
+      g.beginPath();
+      g.arc(48, 48, 38, a, a + 0.68);
+      g.strokePath();
+    }
+    g.lineStyle(1, COLORS.white, 0.7);
+    g.strokeCircle(48, 48, 26);
+    g.fillStyle(COLORS.cyan, 1);
+    g.fillCircle(48, 10, 2);
+    g.fillCircle(86, 48, 2);
+    g.fillCircle(48, 86, 2);
+    g.fillCircle(10, 48, 2);
+    g.generateTexture('atmo-ring', 96, 96);
+    g.clear();
+
+    g.lineStyle(2, COLORS.purple, 1);
+    g.beginPath();
+    g.moveTo(8, 18);
+    g.lineTo(30, 18);
+    g.lineTo(30, 38);
+    g.lineTo(52, 38);
+    g.lineTo(52, 16);
+    g.lineTo(82, 16);
+    g.moveTo(16, 76);
+    g.lineTo(38, 76);
+    g.lineTo(38, 56);
+    g.lineTo(68, 56);
+    g.lineTo(68, 78);
+    g.lineTo(88, 78);
+    g.strokePath();
+    g.fillStyle(COLORS.purple, 1);
+    g.fillCircle(8, 18, 3);
+    g.fillCircle(52, 38, 3);
+    g.fillCircle(82, 16, 3);
+    g.fillCircle(16, 76, 3);
+    g.fillCircle(68, 56, 3);
+    g.fillCircle(88, 78, 3);
+    g.generateTexture('atmo-circuit', 96, 96);
+    g.clear();
+
     this.makeIcons(g);
 
     g.destroy();
