@@ -1,0 +1,61 @@
+name: Wire host cells
+
+on:
+  push:
+    branches:
+      - feat/strain-zero-redesign
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ contains(github.event.head_commit.message, '[wire-host-cells]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/strain-zero-redesign
+      - name: Wire HostCellSystem into GameScene
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/scenes/GameScene.ts')
+          s = p.read_text()
+
+          def rep(old, new):
+              global s
+              if old not in s:
+                  raise SystemExit('patch anchor not found: ' + old[:80])
+              s = s.replace(old, new, 1)
+
+          rep(
+              "import { VfxSystem } from '../systems/VfxSystem';",
+              "import { VfxSystem } from '../systems/VfxSystem';\nimport { HostCellSystem, type HostCellLysisEvent } from '../systems/HostCellSystem';"
+          )
+          rep(
+              "  private vfx!: VfxSystem;\n  private bullets!:",
+              "  private vfx!: VfxSystem;\n  private hostCells!: HostCellSystem;\n  private bullets!:"
+          )
+          rep(
+              "    this.vfx = new VfxSystem(this);\n\n    this.dmgTexts = [];",
+              "    this.vfx = new VfxSystem(this);\n    this.hostCells = new HostCellSystem(this, this.player, (event) => this.onHostCellLysis(event));\n\n    this.dmgTexts = [];"
+          )
+          rep(
+              "    this.wave.update(delta);\n    this.atmosphere.update(time, delta, st.timeMs);",
+              "    this.wave.update(delta);\n    this.hostCells.update(time, delta, st.timeMs);\n    this.atmosphere.update(time, delta, st.timeMs);"
+          )
+          rep(
+              "      this.atmosphere.destroy();\n      this.vfx.destroy();",
+              "      this.atmosphere.destroy();\n      this.vfx.destroy();\n      this.hostCells.destroy();"
+          )
+          anchor = "  private hitStop(ms: number): void {"
+          method = """  private onHostCellLysis(event: HostCellLysisEvent): void {\n    const st = this.runState;\n    st.hostCellsInfected += 1;\n    this.vfx.nova(event.x, event.y, event.radius);\n    this.atmosphere.pulse(COLORS.green, 0.14);\n    Sfx.play('nova');\n    MaxBridge.haptic('medium');\n\n    for (let i = 0; i < event.rna; i++) {\n      const a = (i / event.rna) * Math.PI * 2 + Math.random() * 0.35;\n      const r = 18 + Math.random() * 24;\n      this.spawnGem(event.x + Math.cos(a) * r, event.y + Math.sin(a) * r, 1);\n    }\n\n    const list = this.enemies.getChildren() as Enemy[];\n    for (const e of list) {\n      if (!e.active) continue;\n      const dx = e.x - event.x;\n      const dy = e.y - event.y;\n      const d = Math.hypot(dx, dy);\n      if (d > event.radius + e.radius) continue;\n      const dd = d || 1;\n      this.vfx.hit(e.x, e.y, COLORS.green);\n      e.takeDamage(event.damage, (dx / dd) * 210, (dy / dd) * 210);\n    }\n  }\n\n"""
+          rep(anchor, method + anchor)
+          p.write_text(s)
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/scenes/GameScene.ts
+          git commit -m 'feat: wire host-cell infection into the combat loop'
+          git push origin HEAD:feat/strain-zero-redesign
