@@ -33,6 +33,7 @@ interface RunResult {
   win: boolean;
   timeMs: number;
   kills: number;
+  hostCellsInfected: number;
   level: number;
   comboBest: number;
   stacks: Record<string, number>;
@@ -108,8 +109,8 @@ export class UIScene extends Phaser.Scene {
         .setDepth(DEPTH + 1);
 
     this.timerText = text(W / 2, 28, '00:00', 24, '#e8f4ff');
-    this.levelText = text(16, 30, 'ЯДРО 1', 14, '#35e0ff', 0);
-    this.killsText = text(W - 16, 30, 'ОЧИЩ. 0', 14, '#aab4d4', 1);
+    this.levelText = text(16, 30, 'МУТАЦИЯ 1', 13, '#ff78c8', 0);
+    this.killsText = text(W - 16, 30, 'ИММУН. 0', 13, '#dff8ff', 1);
     this.hpText = text(W / 2, 58, '', 10, '#e8f4ff');
     this.bossLabel = text(W / 2, 72, IDENTITY.boss, 11, '#ff3860');
     this.muteText = this.add
@@ -167,13 +168,13 @@ export class UIScene extends Phaser.Scene {
       this.xpFill.clear();
       const xf = Phaser.Math.Clamp(run.xp / run.xpNext, 0, 1);
       if (xf > 0) {
-        this.xpFill.fillStyle(COLORS.cyan, 1);
+        this.xpFill.fillStyle(COLORS.magenta, 1);
         this.xpFill.fillRoundedRect(12, 12, Math.max((W - 24) * xf, 10), 10, 5);
       }
 
       this.timerText.setText(fmtTime(run.timeMs));
-      this.levelText.setText(`ЯДРО ${run.level}`);
-      this.killsText.setText(`ОЧИЩ. ${run.kills}`);
+      this.levelText.setText(`МУТАЦИЯ ${run.level}`);
+      this.killsText.setText(`ИММУН. ${run.kills}`);
 
       const showCombo = run.combo >= COMBO.showFrom;
       this.comboText.setVisible(showCombo);
@@ -299,7 +300,7 @@ export class UIScene extends Phaser.Scene {
     this.tweens.add({ targets: titleT, scale: 1, duration: 260, ease: 'Back.Out' });
     c.add(
       this.add
-        .text(W / 2, titleY + (compact ? 31 : 38), `ядро ${gs.runState.level} · выбери протокол`, {
+        .text(W / 2, titleY + (compact ? 31 : 38), `стадия ${gs.runState.level} · выбери мутацию`, {
           fontFamily: FONT,
           fontSize: compact ? '12px' : '14px',
           color: '#aab4d4',
@@ -348,7 +349,7 @@ export class UIScene extends Phaser.Scene {
       const tx = -cw / 2 + (hasIcon ? 68 : 16);
       const right = cw / 2 - 12;
       const family = evolution
-        ? 'ЭВОЛЮЦИЯ ГОТОВА'
+        ? 'КРИТИЧЕСКАЯ МУТАЦИЯ'
         : `${UPGRADE_FAMILY_LABELS[def.family]} · ${def.rarity === 'rare' ? 'РЕДКИЙ' : 'СТАНДАРТ'}`;
       card.add(
         this.add
@@ -439,7 +440,7 @@ export class UIScene extends Phaser.Scene {
       } else {
         card.add(
           this.add
-            .text(right, ch / 2 - 19, evolution ? 'ПЕРЕПИСАТЬ ПРОТОКОЛ' : 'РАЗОВЫЙ ПРОТОКОЛ', {
+            .text(right, ch / 2 - 19, evolution ? 'ЗАКРЕПИТЬ МУТАЦИЮ' : 'РАЗОВАЯ АДАПТАЦИЯ', {
               fontFamily: FONT,
               fontSize: '9px',
               fontStyle: evolution ? 'bold' : 'normal',
@@ -514,7 +515,7 @@ export class UIScene extends Phaser.Scene {
 
     c.add(
       this.add
-        .text(W / 2, H * 0.21, 'ЭВОЛЮЦИЯ ЯДРА', {
+        .text(W / 2, H * 0.21, 'КРИТИЧЕСКАЯ МУТАЦИЯ', {
           fontFamily: FONT,
           fontSize: '18px',
           fontStyle: 'bold',
@@ -554,7 +555,7 @@ export class UIScene extends Phaser.Scene {
     );
     c.add(
       this.add
-        .text(W / 2, H * 0.69, 'ПРОТОКОЛ ПЕРЕПИСАН', {
+        .text(W / 2, H * 0.69, 'ШТАММ ИЗМЕНИЛСЯ', {
           fontFamily: FONT,
           fontSize: '12px',
           fontStyle: 'bold',
@@ -611,7 +612,7 @@ export class UIScene extends Phaser.Scene {
     const titleY = compact ? H * 0.1 : H * 0.13;
     c.add(
       this.add
-        .text(W / 2, titleY, res.win ? 'ЯДРО СТАБИЛИЗИРОВАНО' : 'ЯДРО ПОТЕРЯНО', {
+        .text(W / 2, titleY, res.win ? 'ИММУНИТЕТ ПОДАВЛЕН' : 'ШТАММ УНИЧТОЖЕН', {
           fontFamily: FONT,
           fontSize: res.win ? (compact ? '22px' : '27px') : compact ? '27px' : '32px',
           fontStyle: 'bold',
@@ -641,7 +642,7 @@ export class UIScene extends Phaser.Scene {
         .text(
           W / 2,
           statY,
-          `${IDENTITY.kills}: ${res.kills}   ·   Ядро: ${res.level}   ·   Комбо: ×${res.comboBest}`,
+          `${IDENTITY.kills}: ${res.kills}   ·   Клеток: ${res.hostCellsInfected}   ·   Мутация: ${res.level}   ·   ×${res.comboBest}`,
           {
             fontFamily: FONT,
             fontSize: compact ? '11px' : '13px',
@@ -658,7 +659,7 @@ export class UIScene extends Phaser.Scene {
       : 'нет';
     c.add(
       this.add
-        .text(W / 2, detailY, `ЭВОЛЮЦИИ: ${evoText}`, {
+        .text(W / 2, detailY, `КРИТ. МУТАЦИИ: ${evoText}`, {
           fontFamily: FONT,
           fontSize: compact ? '10px' : '11px',
           fontStyle: 'bold',
@@ -674,7 +675,7 @@ export class UIScene extends Phaser.Scene {
     const build = this.buildSummary(res.stacks);
     c.add(
       this.add
-        .text(W / 2, detailY, `СБОРКА: ${build || 'базовое ядро'}`, {
+        .text(W / 2, detailY, `ШТАММ: ${build || 'базовый штамм'}`, {
           fontFamily: FONT,
           fontSize: compact ? '9px' : '10px',
           color: '#8f9ab7',
@@ -687,8 +688,8 @@ export class UIScene extends Phaser.Scene {
 
     const rec: string[] = [];
     if (res.records.timeRecord && res.timeMs > 0) rec.push(res.win ? 'победа' : 'выживание');
-    if (res.records.killsRecord) rec.push('очищено');
-    if (res.records.levelRecord) rec.push('ядро');
+    if (res.records.killsRecord) rec.push('иммунитет');
+    if (res.records.levelRecord) rec.push('мутация');
     if (rec.length > 0) {
       detailY += compact ? 24 : 28;
       c.add(
@@ -726,7 +727,7 @@ export class UIScene extends Phaser.Scene {
     const gs = this.gs;
     let y = Math.max(H * (compact ? 0.66 : 0.68), detailY + (compact ? 54 : 62));
     const gap = compact ? 50 : 56;
-    this.button(c, 'ЕЩЁ РАЗ', W / 2, y, true, () => {
+    this.button(c, 'ЕЩЁ ОДИН ЦИКЛ', W / 2, y, true, () => {
       this.scene.stop();
       if (gs) {
         gs.scene.resume();
@@ -738,10 +739,10 @@ export class UIScene extends Phaser.Scene {
       const mins = fmtTime(res.timeMs);
       const evoShare = res.evolutions.length > 0 ? ` Эволюции: ${res.evolutions.map((id) => EVOLUTION_NAMES[id]).join(', ')}.` : '';
       const shareText = res.win
-        ? `Я стабилизировал ядро OFELIYA за ${mins}! Очищено угроз: ${res.kills}.${evoShare} Сможешь быстрее?`
-        : `Моё ядро OFELIYA продержалось ${mins}. Очищено угроз: ${res.kills}.${evoShare} Сможешь больше?`;
+        ? `OFELIYA / STRAIN-0 подавила иммунитет за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${evoShare} Сможешь быстрее?`
+        : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${evoShare} Сможешь дольше?`;
       void MaxBridge.shareResult(shareText).then((ok) => {
-        if (!ok) this.toast(c, 'Поделиться можно внутри MAX');
+        if (!ok) this.toast(c, 'Нативный шаринг недоступен в этом клиенте');
       });
     });
     y += gap;
@@ -756,16 +757,16 @@ export class UIScene extends Phaser.Scene {
 
   private buildSummary(stacks: Record<string, number>): string {
     const labels: Record<string, string> = {
-      dmg: 'ИМПУЛЬС',
-      rate: 'РАЗГОН',
-      multi: 'ЗАЛП',
-      pierce: 'СКВОЗНОЙ',
-      speed: 'СКОРОСТЬ',
-      hp: 'БРОНЯ',
-      magnet: 'ПОЛЕ',
-      orbit: 'КОЛЬЦО',
-      nova: 'ВОЛНА',
-      regen: 'РЕМОНТ',
+      dmg: 'ШИПЫ',
+      rate: 'РЕПЛИКАЦИЯ',
+      multi: 'КОПИИ',
+      pierce: 'ПРОНИКН.',
+      speed: 'ПОДВИЖН.',
+      hp: 'КАПСИД',
+      magnet: 'АФФИНИТЕТ',
+      orbit: 'СПУТНИКИ',
+      nova: 'ЛИЗИС',
+      regen: 'РЕКОМБ.',
     };
     return Object.entries(stacks)
       .filter(([id, n]) => n > 0 && UPGRADES.some((u) => u.id === id))
@@ -786,21 +787,21 @@ export class UIScene extends Phaser.Scene {
     const w = 230;
     const h = 46;
     const bg = this.add
-      .rectangle(x, y, w, h, primary ? COLORS.cyan : COLORS.panel, primary ? 0.18 : 0.95)
-      .setStrokeStyle(2, primary ? COLORS.cyan : COLORS.stroke, 1);
+      .rectangle(x, y, w, h, primary ? COLORS.magenta : COLORS.panel, primary ? 0.18 : 0.95)
+      .setStrokeStyle(2, primary ? COLORS.magenta : COLORS.stroke, 1);
     const t = this.add
       .text(x, y, label, {
         fontFamily: FONT,
         fontSize: '16px',
         fontStyle: 'bold',
-        color: primary ? '#35e0ff' : '#e8f4ff',
+        color: primary ? '#ff78c8' : '#fff4ec',
       })
       .setOrigin(0.5)
       .setResolution(2);
     bg.setInteractive({ useHandCursor: true }).on('pointerup', () => cb());
     bg.on('pointerover', () => bg.setFillStyle(COLORS.panelHover, 1));
     bg.on('pointerout', () =>
-      bg.setFillStyle(primary ? COLORS.cyan : COLORS.panel, primary ? 0.18 : 0.95)
+      bg.setFillStyle(primary ? COLORS.magenta : COLORS.panel, primary ? 0.18 : 0.95)
     );
     c.add([bg, t]);
   }

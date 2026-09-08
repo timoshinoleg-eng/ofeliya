@@ -160,7 +160,7 @@ export class GameScene extends Phaser.Scene {
     for (let i = 0; i < JUICE.trailPool; i++) {
       this.trail.push(
         this.add
-          .image(0, 0, 'player')
+          .image(0, 0, 'virus-player')
           .setDepth(14)
           .setBlendMode(Phaser.BlendModes.ADD)
           .setVisible(false)
@@ -499,6 +499,7 @@ export class GameScene extends Phaser.Scene {
       win,
       timeMs: st.timeMs,
       kills: st.kills,
+      hostCellsInfected: st.hostCellsInfected,
       level: st.level,
       comboBest: st.comboBest,
       stacks: { ...st.stacks },
