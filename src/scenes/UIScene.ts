@@ -1,11 +1,13 @@
 import Phaser from 'phaser';
 import { COLORS, COMBO, FONT, JUICE, fmtTime } from '../game/config';
+import { getEvolutionDef } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
 import { Joystick } from '../game/Joystick';
 import {
   EVOLUTION_NAMES,
   UPGRADE_FAMILY_LABELS,
   getUpgradeProgress,
+  type EvolutionId,
   type UpgradeDef,
 } from '../game/UpgradeSystem';
 import { MaxBridge } from '../systems/MaxBridge';
@@ -34,6 +36,10 @@ interface RunResult {
 }
 
 const DEPTH = 50;
+
+type TintableEmitter = Phaser.GameObjects.Particles.ParticleEmitter & {
+  setParticleTint?: (color: number) => void;
+};
 
 export class UIScene extends Phaser.Scene {
   private gs: GameScene | null = null;
@@ -108,9 +114,7 @@ export class UIScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerup', () => {
         const muted = Sfx.toggle();
-        this.muteText
-          .setText('♪')
-          .setColor(muted ? '#5a6480' : '#35e0ff');
+        this.muteText.setText('♪').setColor(muted ? '#5a6480' : '#35e0ff');
       });
 
     this.hpWarn = this.add.graphics().setDepth(DEPTH - 1);
@@ -172,12 +176,7 @@ export class UIScene extends Phaser.Scene {
         this.comboText.setText(`×${run.combo}`);
         this.tweens.killTweensOf(this.comboText);
         this.comboText.setScale(1.4);
-        this.tweens.add({
-          targets: this.comboText,
-          scale: 1,
-          duration: 200,
-          ease: 'Quad.Out',
-        });
+        this.tweens.add({ targets: this.comboText, scale: 1, duration: 200, ease: 'Quad.Out' });
       } else if (!showCombo) {
         this.lastCombo = 0;
       }
@@ -243,8 +242,6 @@ export class UIScene extends Phaser.Scene {
     this.bossLabel.setX(W / 2);
     this.muteText.setX(W - 16);
   }
-
-  // --- модалка модификации ядра ---
 
   private showLevelUp(): void {
     const gs = this.gs;
@@ -315,34 +312,44 @@ export class UIScene extends Phaser.Scene {
 
     cards.forEach((def: UpgradeDef, cardIndex: number) => {
       const card = this.add.container(W / 2, y);
-      const accent = def.rarity === 'rare' ? COLORS.purple : COLORS.cyan;
+      const evolution = def.kind === 'evolution';
+      const accent = evolution ? COLORS.gold : def.rarity === 'rare' ? COLORS.purple : COLORS.cyan;
       const progress = getUpgradeProgress(gs.runState, def);
       const bg = this.add
         .rectangle(0, 0, cw, ch, COLORS.panel, 0.985)
-        .setStrokeStyle(def.rarity === 'rare' ? 2.5 : 2, accent, def.rarity === 'rare' ? 1 : 0.82);
+        .setStrokeStyle(evolution ? 3 : def.rarity === 'rare' ? 2.5 : 2, accent, evolution ? 1 : 0.85);
       card.add(bg);
 
-      const iconKey = `up-${def.id}`;
+      if (evolution) {
+        const glow = this.add
+          .rectangle(0, 0, cw - 6, ch - 6, COLORS.gold, 0.035)
+          .setStrokeStyle(1, COLORS.gold, 0.28);
+        card.add(glow);
+      }
+
+      const iconKey = evolution && def.evolutionId ? `up-${this.evolutionIcon(def.evolutionId)}` : `up-${def.id}`;
       const hasIcon = this.textures.exists(iconKey);
       if (hasIcon) {
         card.add(
           this.add
             .image(-cw / 2 + 38, -2, iconKey)
             .setScale(compact ? 0.82 : 0.9)
-            .setTint(def.rarity === 'rare' ? 0xe9dcff : 0xffffff)
+            .setTint(evolution ? COLORS.gold : def.rarity === 'rare' ? 0xe9dcff : 0xffffff)
         );
       }
 
       const tx = -cw / 2 + (hasIcon ? 68 : 16);
       const right = cw / 2 - 12;
-      const family = `${UPGRADE_FAMILY_LABELS[def.family]} · ${def.rarity === 'rare' ? 'РЕДКИЙ' : 'СТАНДАРТ'}`;
+      const family = evolution
+        ? 'ЭВОЛЮЦИЯ ГОТОВА'
+        : `${UPGRADE_FAMILY_LABELS[def.family]} · ${def.rarity === 'rare' ? 'РЕДКИЙ' : 'СТАНДАРТ'}`;
       card.add(
         this.add
           .text(tx, -ch / 2 + 8, family, {
             fontFamily: FONT,
             fontSize: compact ? '9px' : '10px',
             fontStyle: 'bold',
-            color: def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
+            color: evolution ? '#ffe066' : def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
           })
           .setResolution(2)
       );
@@ -351,25 +358,26 @@ export class UIScene extends Phaser.Scene {
         this.add
           .text(tx, -ch / 2 + (compact ? 22 : 24), def.shortName, {
             fontFamily: FONT,
-            fontSize: compact ? '14px' : '15px',
+            fontSize: evolution ? (compact ? '16px' : '18px') : compact ? '14px' : '15px',
             fontStyle: 'bold',
-            color: '#e8f4ff',
+            color: evolution ? '#ffe066' : '#e8f4ff',
           })
           .setResolution(2)
       );
 
       card.add(
         this.add
-          .text(tx, -ch / 2 + (compact ? 42 : 46), def.name, {
+          .text(tx, -ch / 2 + (compact ? 43 : 47), def.name, {
             fontFamily: FONT,
-            fontSize: compact ? '11px' : '12px',
+            fontSize: compact ? '10px' : '11px',
             fontStyle: 'bold',
-            color: def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
+            color: evolution ? '#fff1ac' : def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
+            wordWrap: { width: Math.max(100, right - tx) },
           })
           .setResolution(2)
       );
 
-      if (!compact) {
+      if (!compact && !evolution) {
         card.add(
           this.add
             .text(tx, -ch / 2 + 64, def.desc, {
@@ -382,7 +390,7 @@ export class UIScene extends Phaser.Scene {
         );
       }
 
-      if (def.evolutionHint) {
+      if (!evolution && def.evolutionHint) {
         card.add(
           this.add
             .text(right, -ch / 2 + 9, `→ ${EVOLUTION_NAMES[def.evolutionHint]}`, {
@@ -424,10 +432,11 @@ export class UIScene extends Phaser.Scene {
       } else {
         card.add(
           this.add
-            .text(right, ch / 2 - 19, 'РАЗОВЫЙ ПРОТОКОЛ', {
+            .text(right, ch / 2 - 19, evolution ? 'ПЕРЕПИСАТЬ ПРОТОКОЛ' : 'РАЗОВЫЙ ПРОТОКОЛ', {
               fontFamily: FONT,
               fontSize: '9px',
-              color: '#7dff6e',
+              fontStyle: evolution ? 'bold' : 'normal',
+              color: evolution ? '#ffe066' : '#7dff6e',
             })
             .setOrigin(1, 0)
             .setResolution(2)
@@ -437,15 +446,22 @@ export class UIScene extends Phaser.Scene {
       bg.setInteractive({ useHandCursor: true }).on('pointerup', () => {
         Sfx.play('click');
         const more = gs.chooseUpgrade(def.id);
-        if (more) {
+        const evolutionId = gs.consumeEvolutionCeremony();
+        if (evolutionId) {
           c.destroy();
+          if (this.modal === c) this.modal = null;
+          this.showEvolutionCeremony(evolutionId, more);
+        } else if (more) {
+          c.destroy();
+          if (this.modal === c) this.modal = null;
+          this.modalOpen = false;
           this.showLevelUp();
         } else {
           this.hideModal();
           this.scene.resume('Game');
         }
       });
-      bg.on('pointerover', () => bg.setFillStyle(COLORS.panelHover, 1));
+      bg.on('pointerover', () => bg.setFillStyle(evolution ? 0x332d18 : COLORS.panelHover, 1));
       bg.on('pointerout', () => bg.setFillStyle(COLORS.panel, 0.985));
 
       c.add(card);
@@ -463,14 +479,118 @@ export class UIScene extends Phaser.Scene {
     });
   }
 
+  private showEvolutionCeremony(id: EvolutionId, moreChoices: boolean): void {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const def = getEvolutionDef(id);
+    this.modalOpen = true;
+    this.uiBlocked = true;
+
+    const c = this.add.container(0, 0).setDepth(106);
+    this.modal = c;
+    c.add(this.add.rectangle(W / 2, H / 2, W, H, 0x03040a, 0.9).setInteractive());
+
+    const outer = this.add
+      .circle(W / 2, H * 0.43, 58)
+      .setStrokeStyle(3, COLORS.gold, 0.9)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    const inner = this.add
+      .circle(W / 2, H * 0.43, 30)
+      .setStrokeStyle(2, COLORS.white, 0.7)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    c.add([outer, inner]);
+    this.tweens.add({ targets: outer, scale: 1.75, alpha: 0.08, duration: 760, ease: 'Quad.Out' });
+    this.tweens.add({ targets: inner, scale: 0.55, alpha: 1, duration: 300, yoyo: true, ease: 'Sine.InOut' });
+
+    (this.fanfare as TintableEmitter).setParticleTint?.(COLORS.gold);
+    this.fanfare.emitParticleAt(W / 2, H * 0.43, 38);
+
+    c.add(
+      this.add
+        .text(W / 2, H * 0.21, 'ЭВОЛЮЦИЯ ЯДРА', {
+          fontFamily: FONT,
+          fontSize: '18px',
+          fontStyle: 'bold',
+          color: '#fff1ac',
+          letterSpacing: 2,
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+
+    const name = this.add
+      .text(W / 2, H * 0.31, def.name, {
+        fontFamily: FONT,
+        fontSize: H < 620 ? '30px' : '38px',
+        fontStyle: 'bold',
+        color: '#ffe066',
+        align: 'center',
+      })
+      .setOrigin(0.5)
+      .setResolution(2)
+      .setShadow(0, 0, 'rgba(255,224,102,0.85)', 20, true, true);
+    c.add(name);
+    name.setScale(0.6);
+    this.tweens.add({ targets: name, scale: 1, duration: 380, ease: 'Back.Out' });
+
+    c.add(
+      this.add
+        .text(W / 2, H * 0.61, def.effect, {
+          fontFamily: FONT,
+          fontSize: '13px',
+          color: '#e8f4ff',
+          align: 'center',
+          wordWrap: { width: Math.min(W - 48, 360) },
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+    c.add(
+      this.add
+        .text(W / 2, H * 0.69, 'ПРОТОКОЛ ПЕРЕПИСАН', {
+          fontFamily: FONT,
+          fontSize: '12px',
+          fontStyle: 'bold',
+          color: '#ffe066',
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+
+    Sfx.play('levelup');
+    this.time.delayedCall(130, () => Sfx.play(id === 'singularity' ? 'nova' : 'elite'));
+    MaxBridge.haptic('heavy');
+
+    this.time.delayedCall(1050, () => {
+      this.tweens.add({
+        targets: c,
+        alpha: 0,
+        duration: 240,
+        onComplete: () => {
+          c.destroy();
+          if (this.modal === c) this.modal = null;
+          this.modalOpen = false;
+          this.uiBlocked = false;
+          (this.fanfare as TintableEmitter).setParticleTint?.(COLORS.cyan);
+          if (moreChoices) this.showLevelUp();
+          else this.scene.resume('Game');
+        },
+      });
+    });
+  }
+
+  private evolutionIcon(id: EvolutionId): string {
+    if (id === 'prism') return 'pierce';
+    if (id === 'halo') return 'orbit';
+    return 'nova';
+  }
+
   private hideModal(): void {
     this.modal?.destroy();
     this.modal = null;
     this.modalOpen = false;
     this.uiBlocked = false;
   }
-
-  // --- итог сеанса ---
 
   private showGameOver(res: RunResult): void {
     this.uiBlocked = true;
