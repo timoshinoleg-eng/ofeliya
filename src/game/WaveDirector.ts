@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { RUN, difficulty, type EnemyKind } from './config';
+import { RUN, type EnemyKind } from './config';
+import { RunMilestones } from './RunMilestones';
 import type { GameScene } from '../scenes/GameScene';
 
 /** Управляет темпом и составом волн врагов, элитами и боссом. */
@@ -8,6 +9,7 @@ export class WaveDirector {
 
   private scene: GameScene;
   private enemies: Phaser.Physics.Arcade.Group;
+  private milestones: RunMilestones;
   private spawnAcc = 0;
   private spawnedElites = 0;
   private bossSpawned = false;
@@ -16,10 +18,14 @@ export class WaveDirector {
   constructor(scene: GameScene, enemies: Phaser.Physics.Arcade.Group) {
     this.scene = scene;
     this.enemies = enemies;
+    this.milestones = new RunMilestones(scene);
   }
 
   update(delta: number): void {
     const t = this.scene.runState.timeMs;
+
+    // Presentation observer only: не меняет spawn/difficulty contracts.
+    this.milestones.update(t);
 
     if (!this.bossSpawned && t >= RUN.bossTimeMs) this.spawnBoss();
 
