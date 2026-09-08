@@ -42,6 +42,8 @@ class SaveImpl {
         const parsed = JSON.parse(raw) as Partial<SaveData> | null;
         if (parsed && typeof parsed === 'object') {
           const legacyTime = this.num(parsed.bestTimeMs);
+          // Old builds mixed all run times together. Preserve that value as survival history;
+          // never guess a historical victory that the old schema could not prove.
           const survival = this.num(parsed.bestSurvivalMs) || legacyTime;
           this.data = {
             bestTimeMs: survival,
@@ -79,6 +81,7 @@ class SaveImpl {
       achievements: patch.achievements ? [...patch.achievements] : this.data.achievements,
       evolutionsSeen: patch.evolutionsSeen ? [...patch.evolutionsSeen] : this.data.evolutionsSeen,
     };
+    // Keep the old field coherent for older clients that may read the same localStorage key.
     this.data.bestTimeMs = this.data.bestSurvivalMs;
     try {
       localStorage.setItem(KEY, JSON.stringify(this.data));
@@ -92,35 +95,8 @@ class SaveImpl {
     timeMs: number,
     kills: number,
     level: number,
-    evolutions?: EvolutionId[]
-  ): { timeRecord: boolean; killsRecord: boolean; levelRecord: boolean };
-  /** Temporary source-compatible overload for callers not yet migrated to the explicit win flag. */
-  recordRun(
-    timeMs: number,
-    kills: number,
-    level: number,
-    evolutions?: EvolutionId[]
-  ): { timeRecord: boolean; killsRecord: boolean; levelRecord: boolean };
-  recordRun(
-    winOrTime: boolean | number,
-    timeOrKills: number,
-    killsOrLevel: number,
-    levelOrEvolutions: number | EvolutionId[] = [],
-    maybeEvolutions: EvolutionId[] = []
+    evolutions: EvolutionId[] = []
   ): { timeRecord: boolean; killsRecord: boolean; levelRecord: boolean } {
-    const explicitOutcome = typeof winOrTime === 'boolean';
-    const win = explicitOutcome ? winOrTime : false;
-    const timeMs = explicitOutcome ? timeOrKills : winOrTime;
-    const kills = explicitOutcome ? killsOrLevel : timeOrKills;
-    const level = explicitOutcome
-      ? (levelOrEvolutions as number)
-      : killsOrLevel;
-    const evolutions = explicitOutcome
-      ? maybeEvolutions
-      : Array.isArray(levelOrEvolutions)
-        ? levelOrEvolutions
-        : [];
-
     const survivalRecord = !win && timeMs > this.data.bestSurvivalMs;
     const victoryRecord =
       win && timeMs > 0 && (this.data.bestWinTimeMs === 0 || timeMs < this.data.bestWinTimeMs);
