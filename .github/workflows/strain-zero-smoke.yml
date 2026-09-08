@@ -72,7 +72,11 @@ jobs:
             assert(clicked, 'mutation card pointer handler missing');
             await page.waitForFunction(() => window.__game.scene.isActive('Game') && !window.__game.scene.isPaused('Game'), null, { timeout:3000 });
 
-            await page.waitForFunction(() => window.__game.scene.getScene('Game').hostCells.cells.some(c => c.active), null, { timeout:9000 });
+            // Host-cell behavior is deterministic here: move run-time just beyond its documented
+            // first-spawn threshold, then let one real Game update create the pooled cell. This
+            // avoids a second random level-up pausing the scene while the smoke waits 7 wall seconds.
+            await page.evaluate(() => { window.__game.scene.getScene('Game').runState.timeMs = 7010; });
+            await page.waitForFunction(() => window.__game.scene.getScene('Game').hostCells.cells.some(c => c.active), null, { timeout:1500 });
             await page.evaluate(() => {
               const gs=window.__game.scene.getScene('Game'); const cell=gs.hostCells.cells.find(c=>c.active);
               gs.player.setPosition(cell.image.x, cell.image.y);
