@@ -2,6 +2,9 @@ import { GEM, NOVA, ORBIT, PLAYER, WEAPON } from './config';
 import type { EvolutionId } from './UpgradeSystem';
 
 export function xpForLevel(level: number): number {
+  // Strain Zero must reward the player almost immediately: the opening mutation is intentionally
+  // cheaper, while the existing progression curve resumes from level 2 onward.
+  if (level <= 1) return 5;
   return Math.floor(6 + level * 4 + level * level * 0.35);
 }
 
