@@ -12,6 +12,7 @@ import {
   difficulty,
   type EnemyKind,
 } from '../game/config';
+import { IDENTITY } from '../game/identity';
 import { Player } from '../game/Player';
 import { Enemy } from '../game/Enemy';
 import { Bullet } from '../game/Bullet';
@@ -19,9 +20,11 @@ import { Gem } from '../game/Gem';
 import { RunState } from '../game/RunState';
 import { rollChoices, type UpgradeDef } from '../game/UpgradeSystem';
 import { WaveDirector } from '../game/WaveDirector';
+import { AtmosphereSystem } from '../systems/AtmosphereSystem';
 import { MaxBridge } from '../systems/MaxBridge';
 import { SaveSystem } from '../systems/SaveSystem';
 import { Sfx } from '../systems/Sfx';
+import { VfxSystem } from '../systems/VfxSystem';
 
 interface RunSnapshot {
   hp: number;
@@ -40,8 +43,9 @@ export class GameScene extends Phaser.Scene {
   player!: Player;
   runState!: RunState;
 
-  private grid!: Phaser.GameObjects.TileSprite;
+  private atmosphere!: AtmosphereSystem;
   private vignette!: Phaser.GameObjects.Image;
+  private vfx!: VfxSystem;
   private bullets!: Phaser.Physics.Arcade.Group;
   private enemies!: Phaser.Physics.Arcade.Group;
   private gems!: Phaser.Physics.Arcade.Group;
@@ -49,8 +53,6 @@ export class GameScene extends Phaser.Scene {
   private wave!: WaveDirector;
   private aimMarker!: Phaser.GameObjects.Image;
   private playerBar!: Phaser.GameObjects.Graphics;
-  private deathEmitter!: Phaser.GameObjects.Particles.ParticleEmitter;
-  private pickupEmitter!: Phaser.GameObjects.Particles.ParticleEmitter;
 
   private nextFireAt = 0;
   private novaAcc = 0;
@@ -96,11 +98,8 @@ export class GameScene extends Phaser.Scene {
     const H = this.scale.height;
     this.cameras.main.setBackgroundColor(COLORS.bg);
 
-    this.grid = this.add
-      .tileSprite(0, 0, W, H, 'grid')
-      .setOrigin(0)
-      .setScrollFactor(0)
-      .setDepth(-10);
+    // Сетка, parallax-глифы и digital dust живут отдельно от gameplay scene logic.
+    this.atmosphere = new AtmosphereSystem(this);
     this.vignette = this.add
       .image(W / 2, H / 2, 'vignette')
       .setScrollFactor(0)
@@ -108,9 +107,7 @@ export class GameScene extends Phaser.Scene {
       .setDisplaySize(W * 1.25, H * 1.25);
 
     // Встроенные постэффекты (только WebGL): неоновый bloom + мягкая виньетка.
-    // addBloom/addVignette сами резолвят пайплайны по строковым именам и линкуют
-    // контроллеры; успех проверяется через hasPostPipeline (postFX.list — только pre-FX).
-    // В Canvas-режиме остаётся текстурная виньетка, флаг — в POSTFX.enabled.
+    // В Canvas-режиме остаётся текстурная виньетка.
     const fxEnabled = POSTFX.enabled && this.game.renderer.type === Phaser.WEBGL;
     if (fxEnabled) {
       const fx = this.cameras.main.postFX;
@@ -126,25 +123,7 @@ export class GameScene extends Phaser.Scene {
     this.bullets = this.physics.add.group({ classType: Bullet, maxSize: 160 });
     this.enemies = this.physics.add.group({ classType: Enemy, maxSize: 260 });
     this.gems = this.physics.add.group({ classType: Gem, maxSize: 220 });
-
-    this.deathEmitter = this.add
-      .particles(0, 0, 'spark', {
-        speed: { min: 60, max: 190 },
-        lifespan: { min: 200, max: 420 },
-        scale: { start: 1, end: 0 },
-        blendMode: 'ADD',
-        emitting: false,
-      })
-      .setDepth(20);
-    this.pickupEmitter = this.add
-      .particles(0, 0, 'spark', {
-        speed: { min: 40, max: 110 },
-        lifespan: 260,
-        scale: { start: 0.8, end: 0 },
-        blendMode: 'ADD',
-        emitting: false,
-      })
-      .setDepth(20);
+    this.vfx = new VfxSystem(this);
 
     // пул всплывающих цифр урона: создаём заранее, в бою только переиспользуем
     this.dmgTexts = [];
@@ -207,6 +186,8 @@ export class GameScene extends Phaser.Scene {
     this.scale.on('resize', this.onResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.onResize, this);
+      this.atmosphere.destroy();
+      this.vfx.destroy();
       this.registry.remove('run');
       this.registry.remove('runResult');
       this.registry.remove('joy');
@@ -290,10 +271,7 @@ export class GameScene extends Phaser.Scene {
     if (st.regen > 0) st.hp = Math.min(st.maxHp, st.hp + (st.regen * delta) / 1000);
 
     this.wave.update(delta);
-
-    const cam = this.cameras.main;
-    this.grid.tilePositionX = cam.scrollX;
-    this.grid.tilePositionY = cam.scrollY;
+    this.atmosphere.update(time, delta, st.timeMs);
 
     // мини-полоска HP над игроком
     this.playerBar.clear();
@@ -332,10 +310,12 @@ export class GameScene extends Phaser.Scene {
     });
     if (kind === 'boss') {
       Sfx.play('boss');
+      this.atmosphere.pulse(COLORS.red, 0.32);
       this.cameras.main.shake(320, 0.008);
       MaxBridge.haptic('heavy');
     } else if (elite) {
       Sfx.play('elite');
+      this.atmosphere.pulse(COLORS.gold, 0.12);
     }
     return e;
   }
@@ -346,10 +326,7 @@ export class GameScene extends Phaser.Scene {
     st.combo += 1;
     st.comboTimer = COMBO.windowMs;
     if (st.combo > st.comboBest) st.comboBest = st.combo;
-    (this.deathEmitter as unknown as { setParticleTint?: (c: number) => void }).setParticleTint?.(
-      e.color
-    );
-    this.deathEmitter.emitParticleAt(e.x, e.y, e.isBoss ? 30 : e.isElite ? 16 : 8);
+    this.vfx.kill(e.x, e.y, e.color, e.isBoss ? 'boss' : e.isElite ? 'elite' : 'normal');
     if (e.isElite || e.isBoss) {
       // элита и босс — заметные смерти: фриз + тряска, обычная толпа — без фриза,
       // иначе на 200+ убийств и рассыпается в слайд-шоу
@@ -454,10 +431,7 @@ export class GameScene extends Phaser.Scene {
 
   onGemCollected(value: number): void {
     Sfx.play('pickup');
-    (this.pickupEmitter as unknown as { setParticleTint?: (c: number) => void }).setParticleTint?.(
-      COLORS.green
-    );
-    this.pickupEmitter.emitParticleAt(this.player.x, this.player.y, 3);
+    this.vfx.pickup(this.player.x, this.player.y);
     this.queuedLevels += this.runState.addXp(value);
   }
 
@@ -578,6 +552,7 @@ export class GameScene extends Phaser.Scene {
           const dx = e.x - this.player.x;
           const dy = e.y - this.player.y;
           const d = Math.hypot(dx, dy) || 1;
+          this.vfx.hit(e.x, e.y, e.color);
           e.takeDamage(st.bladeDamage, (dx / d) * 170, (dy / d) * 170);
           Sfx.play('hit');
           this.showDamage(e.x, e.y, st.bladeDamage);
@@ -591,17 +566,7 @@ export class GameScene extends Phaser.Scene {
     const st = this.runState;
     Sfx.play('nova');
     MaxBridge.haptic('light');
-    const ring = this.add
-      .circle(this.player.x, this.player.y, 12, COLORS.cyan, 0.3)
-      .setDepth(19);
-    this.tweens.add({
-      targets: ring,
-      scale: st.novaRadius / 12,
-      alpha: 0,
-      duration: 360,
-      ease: 'Quad.Out',
-      onComplete: () => ring.destroy(),
-    });
+    this.vfx.nova(this.player.x, this.player.y, st.novaRadius);
     const list = this.enemies.getChildren() as Enemy[];
     for (const e of list) {
       if (!e.active) continue;
@@ -626,6 +591,7 @@ export class GameScene extends Phaser.Scene {
     b.lastHitAt = this.time.now;
     const bv = (b.body as Phaser.Physics.Arcade.Body).velocity;
     const vm = Math.hypot(bv.x, bv.y) || 1;
+    this.vfx.hit(e.x, e.y, e.color);
     e.takeDamage(b.damage, (bv.x / vm) * 130, (bv.y / vm) * 130);
     Sfx.play('hit');
     this.showDamage(e.x, e.y, b.damage);
@@ -678,7 +644,7 @@ export class GameScene extends Phaser.Scene {
     const c = this.add.container(0, 0).setDepth(60);
 
     const title = this.add
-      .text(W / 2, H * 0.3, 'Двигай — джойстик или WASD', {
+      .text(W / 2, H * 0.3, IDENTITY.copy.introTitle, {
         fontFamily: FONT,
         fontSize: '18px',
         fontStyle: 'bold',
@@ -687,7 +653,7 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setResolution(2);
     const sub = this.add
-      .text(W / 2, H * 0.3 + 30, 'оружие стреляет само · собирай опыт', {
+      .text(W / 2, H * 0.3 + 30, IDENTITY.copy.introSub, {
         fontFamily: FONT,
         fontSize: '13px',
         color: '#aab4d4',
@@ -724,7 +690,7 @@ export class GameScene extends Phaser.Scene {
   private onResize(): void {
     const W = this.scale.width;
     const H = this.scale.height;
-    this.grid.setSize(W, H);
+    this.atmosphere.resize();
     this.vignette.setPosition(W / 2, H / 2).setDisplaySize(W * 1.25, H * 1.25);
   }
 }
