@@ -72,26 +72,36 @@ jobs:
             assert(clicked, 'mutation card pointer handler missing');
             await page.waitForFunction(() => window.__game.scene.isActive('Game') && !window.__game.scene.isPaused('Game'), null, { timeout:3000 });
 
-            // Host-cell behavior is deterministic here: move run-time just beyond its documented
-            // first-spawn threshold, then let one real Game update create the pooled cell. This
-            // avoids a second random level-up pausing the scene while the smoke waits 7 wall seconds.
             await page.evaluate(() => { window.__game.scene.getScene('Game').runState.timeMs = 7010; });
             await page.waitForFunction(() => window.__game.scene.getScene('Game').hostCells.cells.some(c => c.active), null, { timeout:1500 });
-            await page.evaluate(() => {
-              const gs=window.__game.scene.getScene('Game'); const cell=gs.hostCells.cells.find(c=>c.active);
+            const infected = await page.evaluate(() => {
+              const gs=window.__game.scene.getScene('Game');
+              const cell=gs.hostCells.cells.find(c=>c.active);
+              if (!cell) return -1;
               gs.player.setPosition(cell.image.x, cell.image.y);
+              // Test exactly one uninterrupted infection window; random combat cannot insert a
+              // level-up pause between frames and make this systems test flaky.
+              gs.hostCells.update(performance.now(), 1300, gs.runState.timeMs);
+              return gs.runState.hostCellsInfected;
             });
-            await page.waitForFunction(() => window.__game.scene.getScene('Game').runState.hostCellsInfected >= 1, null, { timeout:3000 });
+            assert(infected >= 1, `host-cell lysis callback missing: ${infected}`);
 
-            await page.evaluate(() => { window.__game.scene.getScene('Game').runState.timeMs=15010; });
-            await page.waitForTimeout(150);
             const milestone = await page.evaluate(() => {
-              const scene=window.__game.scene.getScene('Game');
+              const gs=window.__game.scene.getScene('Game');
+              gs.runState.timeMs=15010;
+              gs.wave.update(16);
               const scan=o => !!o && (o.text?.includes('ЧУЖЕРОДНАЯ РНК') || (Array.isArray(o.list) && o.list.some(scan)));
-              return scene.children.list.some(scan);
+              return gs.children.list.some(scan);
             });
             assert(milestone, '15s immune milestone missing');
 
+            // Close any incidental progression modal before testing raw movement input.
+            await page.evaluate(() => {
+              const g=window.__game, ui=g.scene.getScene('UI'), gs=g.scene.getScene('Game');
+              if (ui.modalOpen) ui.hideModal();
+              gs.awaitingChoice=false; gs.pendingChoices=[];
+              if (g.scene.isPaused('Game')) ui.scene.resume('Game');
+            });
             await page.mouse.move(viewport.width*0.2, viewport.height*0.78); await page.mouse.down();
             await page.mouse.move(viewport.width*0.32, viewport.height*0.72, {steps:3}); await page.waitForTimeout(80);
             const joy = await page.evaluate(() => window.__game.registry.get('joy'));
@@ -100,7 +110,7 @@ jobs:
             const finalJoy = await page.evaluate(() => window.__game.registry.get('joy'));
             assert(finalJoy.x===0 && finalJoy.y===0, 'joystick did not release');
             assert(errors.length===0, errors.join('\n'));
-            console.log(JSON.stringify({viewport, killMs, levelMs, mutationMs, initial, status:'ok'}));
+            console.log(JSON.stringify({viewport, killMs, levelMs, mutationMs, initial, infected, status:'ok'}));
             await ctx.close();
           }
 
