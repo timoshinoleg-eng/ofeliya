@@ -20,10 +20,9 @@ export class WaveDirector {
     this.enemies = enemies;
     this.milestones = new RunMilestones(scene);
 
-    // Strain Zero opening: the player should see the immune system almost immediately rather
-    // than spending the first second in an empty arena. Normal cadence continues unchanged.
-    this.spawn('swarm', false);
-    this.spawn('swarm', false);
+    // First-session hook: three antibodies begin inside auto-fire range so the player sees
+    // shooting immediately, while their spacing leaves a clear escape lane for a new player.
+    this.spawnOpeningAntibodies();
   }
 
   update(delta: number): void {
@@ -71,6 +70,23 @@ export class WaveDirector {
     if (t < 90000) return r < 0.8 ? 'swarm' : 'runner';
     if (t < 180000) return r < 0.6 ? 'swarm' : r < 0.9 ? 'runner' : 'brute';
     return r < 0.5 ? 'swarm' : r < 0.8 ? 'runner' : 'brute';
+  }
+
+  private spawnOpeningAntibodies(): void {
+    const p = this.scene.player;
+    const layout = [
+      { angle: -0.3, radius: 205 },
+      { angle: 2.05, radius: 235 },
+      { angle: 3.85, radius: 255 },
+    ];
+    for (const spot of layout) {
+      this.scene.spawnEnemy(
+        'swarm',
+        p.x + Math.cos(spot.angle) * spot.radius,
+        p.y + Math.sin(spot.angle) * spot.radius,
+        false
+      );
+    }
   }
 
   private spawn(kind: EnemyKind, elite: boolean): void {
