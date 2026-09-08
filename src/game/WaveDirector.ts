@@ -28,7 +28,8 @@ export class WaveDirector {
   update(delta: number): void {
     const t = this.scene.runState.timeMs;
 
-    // Presentation observer only: не меняет spawn/difficulty contracts.
+    // Presentation observer only: it mirrors the immune-response timeline while this director
+    // owns the actual composition changes below.
     this.milestones.update(t);
 
     if (!this.bossSpawned && t >= RUN.bossTimeMs) this.spawnBoss();
@@ -45,6 +46,7 @@ export class WaveDirector {
       }
     }
 
+    // First NK-cell presentation arrives with the adaptive-immunity beat at 02:00.
     const expectedElites = Math.floor(t / 120000);
     if (expectedElites > this.spawnedElites) {
       this.spawnedElites = expectedElites;
@@ -54,7 +56,7 @@ export class WaveDirector {
 
     const progress = Phaser.Math.Clamp(t / RUN.bossTimeMs, 0, 1);
     let interval = Phaser.Math.Linear(1150, 330, progress);
-    // бой с боссом — дуэль: обычный спавн реже, иначе босс теряется в толпе
+    // Boss phase stays readable: ordinary immune traffic is reduced while IMMUNE PRIME is active.
     if (this.bossSpawned) interval /= RUN.bossPhaseSpawnMul;
     this.spawnAcc += delta;
     while (this.spawnAcc >= interval) {
@@ -66,10 +68,19 @@ export class WaveDirector {
 
   private pickKind(t: number): EnemyKind {
     const r = Math.random();
-    if (t < 45000) return 'swarm';
-    if (t < 90000) return r < 0.8 ? 'swarm' : 'runner';
-    if (t < 180000) return r < 0.6 ? 'swarm' : r < 0.9 ? 'runner' : 'brute';
-    return r < 0.5 ? 'swarm' : r < 0.8 ? 'runner' : 'brute';
+
+    // 0:00–1:30: innate response / antibodies only. The first 45-second milestone increases
+    // pressure through density, not by prematurely revealing the T-killer silhouette.
+    if (t < 90_000) return 'swarm';
+
+    // 1:30: T-killers join the hunt, matching the player-facing milestone exactly.
+    if (t < 120_000) return r < 0.78 ? 'swarm' : 'runner';
+
+    // 2:00+: macrophages enter as the adaptive response becomes visibly heavier.
+    if (t < 180_000) return r < 0.6 ? 'swarm' : r < 0.9 ? 'runner' : 'brute';
+
+    // Systemic response: all three ordinary immune roles are now established.
+    return r < 0.48 ? 'swarm' : r < 0.79 ? 'runner' : 'brute';
   }
 
   private spawnOpeningAntibodies(): void {
