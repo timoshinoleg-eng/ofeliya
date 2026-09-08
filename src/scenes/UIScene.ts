@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { getAchievementDef, type AchievementId } from '../game/AchievementSystem';
 import { COLORS, COMBO, FONT, JUICE, fmtTime } from '../game/config';
 import { getEvolutionDef } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
@@ -6,6 +7,7 @@ import { Joystick } from '../game/Joystick';
 import {
   EVOLUTION_NAMES,
   UPGRADE_FAMILY_LABELS,
+  UPGRADES,
   getUpgradeProgress,
   type EvolutionId,
   type UpgradeDef,
@@ -32,6 +34,10 @@ interface RunResult {
   timeMs: number;
   kills: number;
   level: number;
+  comboBest: number;
+  stacks: Record<string, number>;
+  evolutions: EvolutionId[];
+  newAchievements: AchievementId[];
   records: { timeRecord: boolean; killsRecord: boolean; levelRecord: boolean };
 }
 
@@ -321,10 +327,11 @@ export class UIScene extends Phaser.Scene {
       card.add(bg);
 
       if (evolution) {
-        const glow = this.add
-          .rectangle(0, 0, cw - 6, ch - 6, COLORS.gold, 0.035)
-          .setStrokeStyle(1, COLORS.gold, 0.28);
-        card.add(glow);
+        card.add(
+          this.add
+            .rectangle(0, 0, cw - 6, ch - 6, COLORS.gold, 0.035)
+            .setStrokeStyle(1, COLORS.gold, 0.28)
+        );
       }
 
       const iconKey = evolution && def.evolutionId ? `up-${this.evolutionIcon(def.evolutionId)}` : `up-${def.id}`;
@@ -596,15 +603,17 @@ export class UIScene extends Phaser.Scene {
     this.uiBlocked = true;
     const W = this.scale.width;
     const H = this.scale.height;
+    const compact = H < 650;
     const c = this.add.container(0, 0).setDepth(110);
 
-    c.add(this.add.rectangle(W / 2, H / 2, W, H, 0x05070f, 0.8).setInteractive());
+    c.add(this.add.rectangle(W / 2, H / 2, W, H, 0x05070f, 0.84).setInteractive());
 
+    const titleY = compact ? H * 0.1 : H * 0.13;
     c.add(
       this.add
-        .text(W / 2, H * 0.2, res.win ? 'ЯДРО СТАБИЛИЗИРОВАНО' : 'ЯДРО ПОТЕРЯНО', {
+        .text(W / 2, titleY, res.win ? 'ЯДРО СТАБИЛИЗИРОВАНО' : 'ЯДРО ПОТЕРЯНО', {
           fontFamily: FONT,
-          fontSize: res.win ? '27px' : '32px',
+          fontSize: res.win ? (compact ? '22px' : '27px') : compact ? '27px' : '32px',
           fontStyle: 'bold',
           color: res.win ? '#ffe066' : '#ff3860',
           align: 'center',
@@ -616,9 +625,9 @@ export class UIScene extends Phaser.Scene {
 
     c.add(
       this.add
-        .text(W / 2, H * 0.2 + 58, fmtTime(res.timeMs), {
+        .text(W / 2, titleY + (compact ? 42 : 54), fmtTime(res.timeMs), {
           fontFamily: FONT,
-          fontSize: '46px',
+          fontSize: compact ? '38px' : '46px',
           fontStyle: 'bold',
           color: '#e8f4ff',
         })
@@ -626,12 +635,51 @@ export class UIScene extends Phaser.Scene {
         .setResolution(2)
     );
 
+    const statY = titleY + (compact ? 79 : 100);
     c.add(
       this.add
-        .text(W / 2, H * 0.2 + 104, `${IDENTITY.kills}: ${res.kills}   ·   Ядро: ${res.level}`, {
+        .text(
+          W / 2,
+          statY,
+          `${IDENTITY.kills}: ${res.kills}   ·   Ядро: ${res.level}   ·   Комбо: ×${res.comboBest}`,
+          {
+            fontFamily: FONT,
+            fontSize: compact ? '11px' : '13px',
+            color: '#aab4d4',
+          }
+        )
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+
+    let detailY = statY + 27;
+    const evoText = res.evolutions.length > 0
+      ? res.evolutions.map((id) => EVOLUTION_NAMES[id]).join(' · ')
+      : 'нет';
+    c.add(
+      this.add
+        .text(W / 2, detailY, `ЭВОЛЮЦИИ: ${evoText}`, {
           fontFamily: FONT,
-          fontSize: '14px',
-          color: '#aab4d4',
+          fontSize: compact ? '10px' : '11px',
+          fontStyle: 'bold',
+          color: res.evolutions.length > 0 ? '#ffe066' : '#5a6480',
+          align: 'center',
+          wordWrap: { width: W - 42 },
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+
+    detailY += compact ? 25 : 29;
+    const build = this.buildSummary(res.stacks);
+    c.add(
+      this.add
+        .text(W / 2, detailY, `СБОРКА: ${build || 'базовое ядро'}`, {
+          fontFamily: FONT,
+          fontSize: compact ? '9px' : '10px',
+          color: '#8f9ab7',
+          align: 'center',
+          wordWrap: { width: W - 42 },
         })
         .setOrigin(0.5)
         .setResolution(2)
@@ -642,13 +690,33 @@ export class UIScene extends Phaser.Scene {
     if (res.records.killsRecord) rec.push('очищено');
     if (res.records.levelRecord) rec.push('ядро');
     if (rec.length > 0) {
+      detailY += compact ? 24 : 28;
       c.add(
         this.add
-          .text(W / 2, H * 0.2 + 130, `НОВЫЕ ЗАПИСИ: ${rec.join(' · ')}`, {
+          .text(W / 2, detailY, `НОВЫЕ ЗАПИСИ: ${rec.join(' · ')}`, {
             fontFamily: FONT,
-            fontSize: '13px',
+            fontSize: compact ? '10px' : '11px',
+            fontStyle: 'bold',
+            color: '#73eaff',
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+      );
+    }
+
+    if (res.newAchievements.length > 0) {
+      detailY += compact ? 24 : 29;
+      const labels = res.newAchievements.slice(0, 2).map((id) => getAchievementDef(id).name);
+      const extra = res.newAchievements.length > 2 ? ` +${res.newAchievements.length - 2}` : '';
+      c.add(
+        this.add
+          .text(W / 2, detailY, `НОВОЕ ДОСТИЖЕНИЕ: ${labels.join(' · ')}${extra}`, {
+            fontFamily: FONT,
+            fontSize: compact ? '9px' : '10px',
             fontStyle: 'bold',
             color: '#ffe066',
+            align: 'center',
+            wordWrap: { width: W - 42 },
           })
           .setOrigin(0.5)
           .setResolution(2)
@@ -656,7 +724,8 @@ export class UIScene extends Phaser.Scene {
     }
 
     const gs = this.gs;
-    let y = H * 0.6;
+    let y = Math.max(H * (compact ? 0.66 : 0.68), detailY + (compact ? 54 : 62));
+    const gap = compact ? 50 : 56;
     this.button(c, 'ЕЩЁ РАЗ', W / 2, y, true, () => {
       this.scene.stop();
       if (gs) {
@@ -664,17 +733,18 @@ export class UIScene extends Phaser.Scene {
         gs.scene.restart();
       }
     });
-    y += 58;
+    y += gap;
     this.button(c, 'ПОДЕЛИТЬСЯ', W / 2, y, false, () => {
       const mins = fmtTime(res.timeMs);
+      const evoShare = res.evolutions.length > 0 ? ` Эволюции: ${res.evolutions.map((id) => EVOLUTION_NAMES[id]).join(', ')}.` : '';
       const shareText = res.win
-        ? `Я стабилизировал ядро OFELIYA за ${mins}! Очищено угроз: ${res.kills}. Сможешь быстрее?`
-        : `Моё ядро OFELIYA продержалось ${mins}. Очищено угроз: ${res.kills}. Сможешь больше?`;
+        ? `Я стабилизировал ядро OFELIYA за ${mins}! Очищено угроз: ${res.kills}.${evoShare} Сможешь быстрее?`
+        : `Моё ядро OFELIYA продержалось ${mins}. Очищено угроз: ${res.kills}.${evoShare} Сможешь больше?`;
       void MaxBridge.shareResult(shareText).then((ok) => {
         if (!ok) this.toast(c, 'Поделиться можно внутри MAX');
       });
     });
-    y += 58;
+    y += gap;
     this.button(c, 'В МЕНЮ', W / 2, y, false, () => {
       this.scene.stop();
       if (gs) {
@@ -682,6 +752,27 @@ export class UIScene extends Phaser.Scene {
         gs.scene.start('Menu');
       }
     });
+  }
+
+  private buildSummary(stacks: Record<string, number>): string {
+    const labels: Record<string, string> = {
+      dmg: 'ИМПУЛЬС',
+      rate: 'РАЗГОН',
+      multi: 'ЗАЛП',
+      pierce: 'СКВОЗНОЙ',
+      speed: 'СКОРОСТЬ',
+      hp: 'БРОНЯ',
+      magnet: 'ПОЛЕ',
+      orbit: 'КОЛЬЦО',
+      nova: 'ВОЛНА',
+      regen: 'РЕМОНТ',
+    };
+    return Object.entries(stacks)
+      .filter(([id, n]) => n > 0 && UPGRADES.some((u) => u.id === id))
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([id, n]) => `${labels[id] ?? id.toUpperCase()} ${n}`)
+      .join(' · ');
   }
 
   private button(
