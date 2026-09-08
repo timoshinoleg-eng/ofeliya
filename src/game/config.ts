@@ -1,18 +1,22 @@
 // Вся стартовая балансировка игры — в этом файле.
 
 export const COLORS = {
-  bg: 0x0b0e1a,
-  cyan: 0x35e0ff,
-  magenta: 0xff4fd8,
-  orange: 0xffa645,
-  purple: 0x9d5cff,
-  gold: 0xffe066,
-  red: 0xff3860,
-  green: 0x7dff6e,
-  white: 0xffffff,
-  panel: 0x141a2e,
-  panelHover: 0x1b2440,
-  stroke: 0x2a3452,
+  bg: 0x12070d,
+  cyan: 0x8fe8ff,
+  magenta: 0xff4fb5,
+  orange: 0xff9b66,
+  purple: 0x9b6dff,
+  gold: 0xffd56a,
+  red: 0xff3e5f,
+  green: 0x7fffa1,
+  white: 0xfff4ec,
+  panel: 0x1d0d18,
+  panelHover: 0x2a1222,
+  stroke: 0x583044,
+  blood: 0xb92c42,
+  plasma: 0x38101d,
+  immune: 0xe8faff,
+  virus: 0xff4fb5,
 };
 
 export const FONT = "'Chakra Petch', Arial, sans-serif";
@@ -40,34 +44,23 @@ export const JUICE = {
   hitStopMs: 55,
   hitStopBossMs: 90,
   hitStopMinGapMs: 170,
-  /** Пул всплывающих цифр урона: в бою только переиспользуем, без аллокаций. */
   dmgTextPool: 22,
   dmgTextMs: 620,
-  /** Минимальный интервал между новыми цифрами (кроме склейки). */
   dmgTextMinGapMs: 50,
-  /** Попадания ближе чем N мс и R px склеиваются в одну цифру — читаемее. */
   dmgTextMergeMs: 130,
   dmgTextMergeDist: 34,
-  /** Порог «крита»: другая цифра и цвет. */
   critDamage: 30,
-  /** Ниже этой доли HP включается пульсирующая красная рамка. */
   lowHpFraction: 0.3,
   shakeHurt: { duration: 190, intensity: 0.009 },
   shakeEliteKill: { duration: 150, intensity: 0.006 },
-  /** Трейл игрока: след каждые N мс, живёт trailFadeMs. */
   trailEveryMs: 55,
   trailFadeMs: 260,
   trailPool: 8,
 };
 
-/**
- * Комбо-счётчик: серия убийств без пауз. Чисто визуальная мотивация «ещё разок»,
- * на баланс не влияет (в дуэлях пригодится как метрика мастерства).
- */
+/** Комбо-счётчик: серия убийств без пауз. */
 export const COMBO = {
-  /** Сколько держится серия после последнего убийства. */
   windowMs: 2500,
-  /** Ниже этого значения счётчик не показываем — не засорять экран. */
   showFrom: 3,
 };
 
@@ -104,13 +97,9 @@ export const GEM = {
   attractSpeed: 460,
 };
 
-/** Момент появления босса — победа, если убить его. */
+/** Момент появления финального иммунного ответа — победа, если уничтожить его. */
 export const RUN = {
   bossTimeMs: 5 * 60 * 1000,
-  /**
-   * Во сколько раз реже спавнятся обычные враги после появления босса.
-   * 0.35 → интервал ×2.9: босс читается как дуэль, а не теряется в толпе.
-   */
   bossPhaseSpawnMul: 0.35,
 };
 
@@ -127,18 +116,16 @@ export interface EnemyDef {
 }
 
 export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
-  swarm: { tex: 'enemy-swarm', hp: 20, speed: 92, dmg: 8, xp: 1, scale: 1, radius: 11 },
-  runner: { tex: 'enemy-runner', hp: 12, speed: 152, dmg: 6, xp: 1, scale: 1, radius: 10 },
-  brute: { tex: 'enemy-brute', hp: 85, speed: 56, dmg: 16, xp: 4, scale: 1, radius: 13 },
-  boss: { tex: 'boss', hp: 2600, speed: 66, dmg: 26, xp: 0, scale: 1, radius: 25 },
+  swarm: { tex: 'immune-antibody', hp: 20, speed: 92, dmg: 8, xp: 1, scale: 1, radius: 11 },
+  runner: { tex: 'immune-tcell', hp: 12, speed: 152, dmg: 6, xp: 1, scale: 1, radius: 10 },
+  brute: { tex: 'immune-macrophage', hp: 85, speed: 56, dmg: 16, xp: 4, scale: 1, radius: 13 },
+  boss: { tex: 'immune-prime', hp: 2600, speed: 66, dmg: 26, xp: 0, scale: 1, radius: 25 },
 };
 
 export const ELITE = { hpMul: 6, dmgMul: 1.7, xpMul: 8, scale: 1.45 };
 
 /**
- * Босс — фиксированный климакс забега, НЕ масштабируется кривой сложности.
- * difficulty() даёт на 5:00 ×3.1 HP: 2600 → 8060 HP. При ~100–150 DPS игрока
- * это минута боя и нулевой винрейт у недамажных сборок (победа = шеринг).
+ * IMMUNE PRIME — фиксированный климакс забега, НЕ масштабируется кривой сложности.
  * 2600 HP — расчётный бой ~20 с. Менять здесь, а не в ENEMY_DEFS.boss.
  */
 export const BOSS_SCALE = { hp: 1, dmg: 1 };
