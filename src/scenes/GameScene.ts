@@ -76,6 +76,7 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.runState = new RunState();
+    Sfx.startMusic();
     this.queuedLevels = 0;
     this.awaitingChoice = false;
     this.pendingChoices = [];

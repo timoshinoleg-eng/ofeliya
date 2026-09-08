@@ -1,5 +1,6 @@
-// Простейший синтез звука через WebAudio — без аудиофайлов и лицензионных рисков.
-// AudioContext создаётся лениво по первому вызову (после пользовательского жеста).
+// Звук: процедурный WebAudio-синтез (фолбэк) + готовые SFX/музыка из Kenney CC0.
+// Ассеты (public/audio/*.ogg) грузятся по сети и декодируются лениво, НЕ входят в JS-бандл.
+// Лицензия Kenney: CC0 1.0 (https://kenney.nl) — атрибуция не требуется.
 
 import { SaveSystem } from './SaveSystem';
 
@@ -22,20 +23,55 @@ const THROTTLE_MS: Partial<Record<SfxName, number>> = {
   pickup: 45,
 };
 
+const BASE: string = import.meta.env.BASE_URL || './';
+
+// Маппинг событий на файлы Kenney (vol — относительная громкость проигрывания).
+const MANIFEST: Record<SfxName, { file: string; vol: number }> = {
+  shoot: { file: 'audio/sfx/shoot.ogg', vol: 0.5 },
+  hit: { file: 'audio/sfx/hit.ogg', vol: 0.45 },
+  pickup: { file: 'audio/sfx/pickup.ogg', vol: 0.5 },
+  levelup: { file: 'audio/sfx/levelup.ogg', vol: 0.7 },
+  hurt: { file: 'audio/sfx/hurt.ogg', vol: 0.7 },
+  click: { file: 'audio/sfx/click.ogg', vol: 0.6 },
+  nova: { file: 'audio/sfx/nova.ogg', vol: 0.7 },
+  elite: { file: 'audio/sfx/elite.ogg', vol: 0.7 },
+  boss: { file: 'audio/sfx/boss.ogg', vol: 0.8 },
+  gameover: { file: 'audio/sfx/gameover.ogg', vol: 0.8 },
+  victory: { file: 'audio/sfx/victory.ogg', vol: 0.8 },
+};
+
+// Фоновая музыка: 8-Bit jingles (Kenney, CC0). Случайный трек на каждый забег.
+const MUSIC_TRACKS: string[] = [
+  'audio/music/nes_2.ogg',
+  'audio/music/nes_3.ogg',
+  'audio/music/nes_8.ogg',
+];
+
 class SfxImpl {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  private sfxGain: GainNode | null = null;
+  private musicGain: GainNode | null = null;
   private lastAt: Partial<Record<SfxName, number>> = {};
+  private buffers: Partial<Record<SfxName, AudioBuffer>> = {};
+  private loading: Partial<Record<SfxName, Promise<AudioBuffer | null>>> = {};
+  private musicSrc: AudioBufferSourceNode | null = null;
+  private musicBuf: AudioBuffer | null = null;
   muted = SaveSystem.get().muted;
 
   setMuted(m: boolean): void {
     this.muted = m;
     SaveSystem.update({ muted: m });
+    this.applyGain();
   }
 
   toggle(): boolean {
     this.setMuted(!this.muted);
     return this.muted;
+  }
+
+  private applyGain(): void {
+    if (this.master) this.master.gain.value = this.muted ? 0 : 0.5;
   }
 
   private ensure(): AudioContext | null {
@@ -47,8 +83,14 @@ class SfxImpl {
       try {
         this.ctx = new AC();
         this.master = this.ctx.createGain();
-        this.master.gain.value = 0.5;
+        this.master.gain.value = this.muted ? 0 : 0.5;
         this.master.connect(this.ctx.destination);
+        this.sfxGain = this.ctx.createGain();
+        this.sfxGain.gain.value = 1;
+        this.sfxGain.connect(this.master);
+        this.musicGain = this.ctx.createGain();
+        this.musicGain.gain.value = 0.35;
+        this.musicGain.connect(this.master);
       } catch {
         return null;
       }
@@ -57,32 +99,40 @@ class SfxImpl {
     return this.ctx;
   }
 
-  private blip(f0: number, f1: number, dur: number, type: OscillatorType, vol: number, delay = 0): void {
+  private load(name: SfxName): Promise<AudioBuffer | null> {
+    if (this.buffers[name]) return Promise.resolve(this.buffers[name] ?? null);
+    if (this.loading[name]) return this.loading[name] as Promise<AudioBuffer | null>;
     const ctx = this.ensure();
-    if (!ctx || !this.master) return;
-    const t0 = ctx.currentTime + delay;
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(Math.max(1, f0), t0);
-    osc.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t0 + dur);
-    g.gain.setValueAtTime(vol, t0);
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    osc.connect(g);
-    g.connect(this.master);
-    osc.start(t0);
-    osc.stop(t0 + dur + 0.02);
+    if (!ctx) return Promise.resolve(null);
+    const url = BASE + MANIFEST[name].file;
+    const p = fetch(url)
+      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('HTTP ' + r.status))))
+      .then((ab) => ctx.decodeAudioData(ab))
+      .then((buf) => {
+        this.buffers[name] = buf;
+        return buf;
+      })
+      .catch(() => null);
+    this.loading[name] = p;
+    return p;
   }
 
-  play(name: SfxName): void {
-    if (this.muted) return;
-    const gap = THROTTLE_MS[name];
-    if (gap) {
-      const now = performance.now();
-      const last = this.lastAt[name] ?? -1e9;
-      if (now - last < gap) return;
-      this.lastAt[name] = now;
-    }
+  private playBuf(buf: AudioBuffer, out: GainNode, vol: number): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const g = ctx.createGain();
+    g.gain.value = vol;
+    src.connect(g);
+    g.connect(out);
+    src.start();
+  }
+
+  // Процедурный фолбэк — тот же синтез, что был раньше, на случай недоступности ассета.
+  private fallback(name: SfxName): void {
+    const ctx = this.ensure();
+    if (!ctx || !this.sfxGain) return;
     switch (name) {
       case 'shoot':
         this.blip(900, 480, 0.06, 'square', 0.035);
@@ -122,6 +172,91 @@ class SfxImpl {
       case 'victory':
         [523, 659, 784, 1046].forEach((f, i) => this.blip(f, f, 0.14, 'square', 0.07, i * 0.12));
         break;
+    }
+  }
+
+  play(name: SfxName): void {
+    if (this.muted) return;
+    const gap = THROTTLE_MS[name];
+    if (gap) {
+      const now = performance.now();
+      const last = this.lastAt[name] ?? -1e9;
+      if (now - last < gap) return;
+      this.lastAt[name] = now;
+    }
+    const buf = this.buffers[name];
+    if (buf && this.ctx && this.sfxGain && this.ctx.state === 'running') {
+      this.playBuf(buf, this.sfxGain, MANIFEST[name].vol);
+      return;
+    }
+    // Ассет ещё не готов — грузим в фоне, а сейчас даём процедурный звук для отклика.
+    if (!this.loading[name]) void this.load(name);
+    this.fallback(name);
+  }
+
+  private blip(
+    f0: number,
+    f1: number,
+    dur: number,
+    type: OscillatorType,
+    vol: number,
+    delay = 0
+  ): void {
+    const ctx = this.ensure();
+    if (!ctx || !this.sfxGain) return;
+    const t0 = ctx.currentTime + delay;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(Math.max(1, f0), t0);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t0 + dur);
+    g.gain.setValueAtTime(vol, t0);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g);
+    g.connect(this.sfxGain);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.02);
+  }
+
+  // --- музыка ---
+
+  startMusic(): void {
+    const ctx = this.ensure();
+    if (!ctx || !this.musicGain) return;
+    if (this.musicSrc) return;
+    const track = MUSIC_TRACKS[Math.floor(Math.random() * MUSIC_TRACKS.length)];
+    fetch(BASE + track)
+      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('HTTP ' + r.status))))
+      .then((ab) => ctx.decodeAudioData(ab))
+      .then((buf) => {
+        this.musicBuf = buf;
+        this.spawnMusic();
+      })
+      .catch(() => {
+        /* музыка опциональна — тихий отказ */
+      });
+  }
+
+  private spawnMusic(): void {
+    if (!this.ctx || !this.musicBuf || !this.musicGain || this.musicSrc) return;
+    if (this.ctx.state === 'suspended') void this.ctx.resume();
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.musicBuf;
+    src.loop = true;
+    src.connect(this.musicGain);
+    src.start();
+    this.musicSrc = src;
+  }
+
+  stopMusic(): void {
+    if (this.musicSrc) {
+      try {
+        this.musicSrc.stop();
+      } catch {
+        /* уже остановлен */
+      }
+      this.musicSrc.disconnect();
+      this.musicSrc = null;
     }
   }
 }

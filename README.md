@@ -6,7 +6,9 @@
 
 ## Стек
 
-- **Phaser 3 + TypeScript + Vite** — сама игра (весь арт генерируется кодом, ассетов нет).
+- **Phaser 3 + TypeScript + Vite** — сама игра (весь арт генерируется кодом). Единственные
+  внешние ассеты — аудио (SFX + музыка) из пака **Kenney CC0** в `public/audio/`, грузятся по сети
+  и не входят в JS-бандл.
 - **MAX Bridge** (`window.WebApp`, подключается CDN-скриптом в `index.html`) — авторизация,
   хаптика, шаринг результата. В обычном браузере безопасно деградирует в no-op
   (см. `src/systems/MaxBridge.ts`).
@@ -43,7 +45,7 @@ src/
   scenes/               — Boot (генерация текстур), Menu, Game, UI (HUD/модалки)
   game/                 — Player, Enemy, Bullet, Gem, WaveDirector, UpgradeSystem,
                           RunState (статы забега), Joystick, config (весь баланс)
-  systems/              — MaxBridge (обёртка window.WebApp), SaveSystem (localStorage), Sfx (WebAudio-синтез)
+  systems/              — MaxBridge (обёртка window.WebApp), SaveSystem (localStorage), Sfx (Kenney CC0 + WebAudio-фолбэк)
 ```
 
 Вся интеграция с MAX изолирована за интерфейсом `MaxBridge` — игра работает в любом браузере,

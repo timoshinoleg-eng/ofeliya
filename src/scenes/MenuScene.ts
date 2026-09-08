@@ -13,6 +13,7 @@ export class MenuScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
     this.cameras.main.setBackgroundColor(COLORS.bg);
+    Sfx.stopMusic();
 
     const grid = this.add
       .tileSprite(0, 0, W, H, 'grid')
