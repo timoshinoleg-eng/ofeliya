@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { COLORS, COMBO, FONT, JUICE, fmtTime } from '../game/config';
+import { IDENTITY } from '../game/identity';
 import { Joystick } from '../game/Joystick';
 import { MaxBridge } from '../systems/MaxBridge';
 import { Sfx } from '../systems/Sfx';
@@ -90,10 +91,10 @@ export class UIScene extends Phaser.Scene {
         .setDepth(DEPTH + 1);
 
     this.timerText = text(W / 2, 28, '00:00', 24, '#e8f4ff');
-    this.levelText = text(16, 30, 'УР 1', 15, '#35e0ff', 0);
-    this.killsText = text(W - 16, 30, 'уб. 0', 15, '#aab4d4', 1);
+    this.levelText = text(16, 30, 'ЯДРО 1', 14, '#35e0ff', 0);
+    this.killsText = text(W - 16, 30, 'ОЧИЩ. 0', 14, '#aab4d4', 1);
     this.hpText = text(W / 2, 58, '', 10, '#e8f4ff');
-    this.bossLabel = text(W / 2, 72, 'БОСС', 11, '#ff3860');
+    this.bossLabel = text(W / 2, 72, IDENTITY.boss, 11, '#ff3860');
     this.muteText = this.add
       .text(W - 16, 54, '♪', { fontFamily: FONT, fontSize: '16px', color: Sfx.muted ? '#5a6480' : '#35e0ff' })
       .setOrigin(1, 0)
@@ -147,7 +148,7 @@ export class UIScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
     if (run) {
-      // XP-бар
+      // XP-бар / поток фрагментов данных
       this.xpBack.clear();
       this.xpBack.fillStyle(0x1a2136, 0.9);
       this.xpBack.fillRoundedRect(12, 12, W - 24, 10, 5);
@@ -159,8 +160,8 @@ export class UIScene extends Phaser.Scene {
       }
 
       this.timerText.setText(fmtTime(run.timeMs));
-      this.levelText.setText(`УР ${run.level}`);
-      this.killsText.setText(`уб. ${run.kills}`);
+      this.levelText.setText(`ЯДРО ${run.level}`);
+      this.killsText.setText(`ОЧИЩ. ${run.kills}`);
 
       // комбо: пульс на каждом приросте серии
       const showCombo = run.combo >= COMBO.showFrom;
@@ -223,12 +224,12 @@ export class UIScene extends Phaser.Scene {
       }
     }
 
-    // левелап
+    // модификация ядра
     if (this.gs && this.gs.awaitingChoice && !this.modalOpen && !this.overShown) {
       this.showLevelUp();
     }
 
-    // итог забега
+    // итог сеанса
     const res = this.registry.get('runResult') as RunResult | undefined | null;
     if (res && !this.overShown) {
       this.overShown = true;
@@ -247,7 +248,7 @@ export class UIScene extends Phaser.Scene {
     this.muteText.setX(W - 16);
   }
 
-  // --- модалка левелапа ---
+  // --- модалка модификации ядра ---
 
   private showLevelUp(): void {
     const gs = this.gs;
@@ -285,9 +286,9 @@ export class UIScene extends Phaser.Scene {
     this.fanfare.emitParticleAt(W / 2, H / 2, 22);
 
     const titleT = this.add
-      .text(W / 2, H * 0.14, `УРОВЕНЬ ${gs.runState.level}`, {
+      .text(W / 2, H * 0.14, IDENTITY.levelUp, {
         fontFamily: FONT,
-        fontSize: '30px',
+        fontSize: '27px',
         fontStyle: 'bold',
         color: '#35e0ff',
       })
@@ -299,7 +300,7 @@ export class UIScene extends Phaser.Scene {
     this.tweens.add({ targets: titleT, scale: 1, duration: 260, ease: 'Back.Out' });
     c.add(
       this.add
-        .text(W / 2, H * 0.14 + 40, 'выбери улучшение', {
+        .text(W / 2, H * 0.14 + 40, `ядро ${gs.runState.level} · выбери протокол`, {
           fontFamily: FONT,
           fontSize: '14px',
           color: '#aab4d4',
@@ -386,7 +387,7 @@ export class UIScene extends Phaser.Scene {
     this.uiBlocked = false;
   }
 
-  // --- итог забега ---
+  // --- итог сеанса ---
 
   private showGameOver(res: RunResult): void {
     this.uiBlocked = true;
@@ -398,11 +399,12 @@ export class UIScene extends Phaser.Scene {
 
     c.add(
       this.add
-        .text(W / 2, H * 0.2, res.win ? 'ПОБЕДА!' : 'ИГРА ОКОНЧЕНА', {
+        .text(W / 2, H * 0.2, res.win ? 'ЯДРО СТАБИЛИЗИРОВАНО' : 'ЯДРО ПОТЕРЯНО', {
           fontFamily: FONT,
-          fontSize: '34px',
+          fontSize: res.win ? '27px' : '32px',
           fontStyle: 'bold',
           color: res.win ? '#ffe066' : '#ff3860',
+          align: 'center',
         })
         .setOrigin(0.5)
         .setResolution(2)
@@ -423,7 +425,7 @@ export class UIScene extends Phaser.Scene {
 
     c.add(
       this.add
-        .text(W / 2, H * 0.2 + 104, `Убийств: ${res.kills}   ·   Уровень: ${res.level}`, {
+        .text(W / 2, H * 0.2 + 104, `${IDENTITY.kills}: ${res.kills}   ·   Ядро: ${res.level}`, {
           fontFamily: FONT,
           fontSize: '14px',
           color: '#aab4d4',
@@ -433,13 +435,13 @@ export class UIScene extends Phaser.Scene {
     );
 
     const rec: string[] = [];
-    if (res.records.timeRecord && res.timeMs > 0) rec.push('время');
-    if (res.records.killsRecord) rec.push('убийства');
-    if (res.records.levelRecord) rec.push('уровень');
+    if (res.records.timeRecord && res.timeMs > 0) rec.push('сеанс');
+    if (res.records.killsRecord) rec.push('очищено');
+    if (res.records.levelRecord) rec.push('ядро');
     if (rec.length > 0) {
       c.add(
         this.add
-          .text(W / 2, H * 0.2 + 130, `НОВЫЕ РЕКОРДЫ: ${rec.join(' · ')}`, {
+          .text(W / 2, H * 0.2 + 130, `НОВЫЕ ЗАПИСИ: ${rec.join(' · ')}`, {
             fontFamily: FONT,
             fontSize: '13px',
             fontStyle: 'bold',
@@ -463,8 +465,8 @@ export class UIScene extends Phaser.Scene {
     this.button(c, 'ПОДЕЛИТЬСЯ', W / 2, y, false, () => {
       const mins = fmtTime(res.timeMs);
       const shareText = res.win
-        ? `Я убил босса в OFELIYA за ${mins}! Убийств: ${res.kills}. Сможешь быстрее?`
-        : `Я продержался ${mins} в OFELIYA и набил ${res.kills} убийств. Сможешь больше?`;
+        ? `Я стабилизировал ядро OFELIYA за ${mins}! Очищено угроз: ${res.kills}. Сможешь быстрее?`
+        : `Моё ядро OFELIYA продержалось ${mins}. Очищено угроз: ${res.kills}. Сможешь больше?`;
       void MaxBridge.shareResult(shareText).then((ok) => {
         if (!ok) this.toast(c, 'Поделиться можно внутри MAX');
       });
