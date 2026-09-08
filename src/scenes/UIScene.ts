@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS, FONT, fmtTime } from '../game/config';
+import { COLORS, FONT, JUICE, fmtTime } from '../game/config';
 import { Joystick } from '../game/Joystick';
 import { MaxBridge } from '../systems/MaxBridge';
 import { Sfx } from '../systems/Sfx';
@@ -44,6 +44,8 @@ export class UIScene extends Phaser.Scene {
   private hpText!: Phaser.GameObjects.Text;
   private muteText!: Phaser.GameObjects.Text;
   private joystick!: Joystick;
+  private hpWarn!: Phaser.GameObjects.Graphics;
+  private fanfare!: Phaser.GameObjects.Particles.ParticleEmitter;
 
   private modal: Phaser.GameObjects.Container | null = null;
   private modalOpen = false;
@@ -102,6 +104,19 @@ export class UIScene extends Phaser.Scene {
           .setColor(muted ? '#5a6480' : '#35e0ff');
       });
 
+    // рамка «мало HP» — под HUD, но над игрой (модалки поверх, на глубине 100+)
+    this.hpWarn = this.add.graphics().setDepth(DEPTH - 1);
+    this.fanfare = this.add
+      .particles(0, 0, 'spark', {
+        speed: { min: 140, max: 330 },
+        lifespan: { min: 320, max: 620 },
+        scale: { start: 1, end: 0 },
+        blendMode: 'ADD',
+        tint: COLORS.cyan,
+        emitting: false,
+      })
+      .setDepth(101);
+
     this.joystick = new Joystick(this, () => this.uiBlocked);
 
     this.scale.on('resize', this.layout, this);
@@ -114,6 +129,7 @@ export class UIScene extends Phaser.Scene {
   update(): void {
     const run = this.registry.get('run') as RunSnapshot | undefined;
     const W = this.scale.width;
+    const H = this.scale.height;
     if (run) {
       // XP-бар
       this.xpBack.clear();
@@ -143,6 +159,14 @@ export class UIScene extends Phaser.Scene {
         this.hpFill.fillRoundedRect(bx, 54, Math.max(bw * hf, 10), 12, 6);
       }
       this.hpText.setText(`${Math.ceil(Math.max(0, run.hp))} / ${run.maxHp}`);
+
+      // предупреждение на низком HP: пульсирующая красная рамка по краю экрана
+      this.hpWarn.clear();
+      if (run.hp > 0 && hf <= JUICE.lowHpFraction) {
+        const a = 0.22 + 0.22 * Math.sin(this.time.now / 120);
+        this.hpWarn.lineStyle(16, COLORS.red, a);
+        this.hpWarn.strokeRect(8, 8, W - 16, H - 16);
+      }
 
       // полоска босса
       const boss = run.bossMax > 0;
@@ -200,6 +224,7 @@ export class UIScene extends Phaser.Scene {
     this.scene.pause('Game');
     Sfx.play('levelup');
     MaxBridge.notify('success');
+    MaxBridge.haptic('medium');
 
     const W = this.scale.width;
     const H = this.scale.height;
@@ -209,18 +234,35 @@ export class UIScene extends Phaser.Scene {
     const dim = this.add.rectangle(W / 2, H / 2, W, H, 0x05070f, 0.72).setInteractive();
     c.add(dim);
 
-    c.add(
-      this.add
-        .text(W / 2, H * 0.14, `УРОВЕНЬ ${gs.runState.level}`, {
-          fontFamily: FONT,
-          fontSize: '30px',
-          fontStyle: 'bold',
-          color: '#35e0ff',
-        })
-        .setOrigin(0.5)
-        .setResolution(2)
-        .setShadow(0, 0, 'rgba(53,224,255,0.7)', 14, true, true)
-    );
+    // фанфары: кольцо + искры в центре (камера следует за игроком, он ~в центре).
+    // Живут в UI-сцене — она не ставится на паузу, эффект доигрывает до конца.
+    const ring = this.add
+      .circle(W / 2, H / 2, 20)
+      .setStrokeStyle(3, COLORS.cyan, 0.9)
+      .setDepth(101);
+    this.tweens.add({
+      targets: ring,
+      scale: 7,
+      alpha: 0,
+      duration: 520,
+      ease: 'Quad.Out',
+      onComplete: () => ring.destroy(),
+    });
+    this.fanfare.emitParticleAt(W / 2, H / 2, 22);
+
+    const titleT = this.add
+      .text(W / 2, H * 0.14, `УРОВЕНЬ ${gs.runState.level}`, {
+        fontFamily: FONT,
+        fontSize: '30px',
+        fontStyle: 'bold',
+        color: '#35e0ff',
+      })
+      .setOrigin(0.5)
+      .setResolution(2)
+      .setShadow(0, 0, 'rgba(53,224,255,0.7)', 14, true, true);
+    c.add(titleT);
+    titleT.setScale(0.7);
+    this.tweens.add({ targets: titleT, scale: 1, duration: 260, ease: 'Back.Out' });
     c.add(
       this.add
         .text(W / 2, H * 0.14 + 40, 'выбери улучшение', {

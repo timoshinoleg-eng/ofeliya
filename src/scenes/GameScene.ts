@@ -3,6 +3,7 @@ import {
   BOSS_SCALE,
   COLORS,
   FONT,
+  JUICE,
   ORBIT,
   PLAYER,
   POSTFX,
@@ -55,6 +56,13 @@ export class GameScene extends Phaser.Scene {
   awaitingChoice = false;
   pendingChoices: UpgradeDef[] = [];
   private finished = false;
+  // hit-stop: пока время заморожено, симуляция стоит (см. update)
+  private hitStopUntil = 0;
+  private hitStopped = false;
+  private dmgTexts: Phaser.GameObjects.Text[] = [];
+  private dmgCursor = 0;
+  private lastDmgAt = 0;
+  private lastDmg: { obj: Phaser.GameObjects.Text; value: number; at: number } | null = null;
   private keys: Record<string, Phaser.Input.Keyboard.Key> = {};
 
   constructor() {
@@ -70,6 +78,13 @@ export class GameScene extends Phaser.Scene {
     this.nextFireAt = 0;
     this.novaAcc = 0;
     this.blades = [];
+    this.hitStopUntil = 0;
+    this.hitStopped = false;
+    this.lastDmg = null;
+    this.lastDmgAt = 0;
+    this.dmgCursor = 0;
+    // на старом забеге мог остаться замороженный мир (hit-stop на момент смерти)
+    this.physics.world.resume();
 
     const W = this.scale.width;
     const H = this.scale.height;
@@ -125,6 +140,26 @@ export class GameScene extends Phaser.Scene {
       })
       .setDepth(20);
 
+    // пул всплывающих цифр урона: создаём заранее, в бою только переиспользуем
+    this.dmgTexts = [];
+    for (let i = 0; i < JUICE.dmgTextPool; i++) {
+      this.dmgTexts.push(
+        this.add
+          .text(0, 0, '', {
+            fontFamily: FONT,
+            fontSize: '14px',
+            fontStyle: 'bold',
+            color: '#e8f4ff',
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+          .setDepth(26)
+          .setStroke('#0b0e1a', 3)
+          .setVisible(false)
+          .setActive(false)
+      );
+    }
+
     this.physics.add.overlap(this.bullets, this.enemies, this.onBulletHit, undefined, this);
     this.physics.add.overlap(this.player, this.enemies, this.onPlayerHit, undefined, this);
     this.physics.add.overlap(this.player, this.gems, this.onGemTouch, undefined, this);
@@ -160,6 +195,14 @@ export class GameScene extends Phaser.Scene {
 
   update(time: number, delta: number): void {
     if (this.finished) return;
+    // hit-stop: физика заморожена через world.pause, здесь — выход из фриза.
+    // Снимаем по игровому времени, а не таймером: если сцену поставили на паузу
+    // модалкой левелапа, мир поднимется сразу на первом же кадре после снятия.
+    if (this.hitStopped) {
+      if (time < this.hitStopUntil) return;
+      this.hitStopped = false;
+      this.physics.world.resume();
+    }
     const st = this.runState;
     st.timeMs += delta;
 
@@ -263,12 +306,86 @@ export class GameScene extends Phaser.Scene {
       e.color
     );
     this.deathEmitter.emitParticleAt(e.x, e.y, e.isBoss ? 30 : e.isElite ? 16 : 8);
+    if (e.isElite || e.isBoss) {
+      // элита и босс — заметные смерти: фриз + тряска, обычная толпа — без фриза,
+      // иначе на 200+ убийств и рассыпается в слайд-шоу
+      this.hitStop(e.isBoss ? JUICE.hitStopBossMs : JUICE.hitStopMs);
+      const s = JUICE.shakeEliteKill;
+      this.cameras.main.shake(s.duration, s.intensity);
+    }
     if (e.xpValue > 0) this.spawnGem(e.x, e.y, e.xpValue);
     if (e.isBoss && this.wave.boss === e) {
       this.wave.boss = null;
       this.cameras.main.shake(400, 0.01);
       this.finish(true);
     }
+  }
+
+  // --- фидбек: hit-stop и цифры урона ---
+
+  /**
+   * Короткая остановка симуляции. Физика замирает через world.pause()
+   * (иначе враги продолжают идти по preUpdate), сцена — через hitStopUntil.
+   * minGapMs не даёт фризам накладываться друг на друга.
+   */
+  private hitStop(ms: number): void {
+    if (this.finished) return;
+    const now = this.time.now;
+    if (now < this.hitStopUntil + JUICE.hitStopMinGapMs) return;
+    this.hitStopUntil = now + ms;
+    this.hitStopped = true;
+    this.physics.world.pause();
+  }
+
+  /** Всплывающая цифра урона над врагом (пул, без аллокаций в бою). */
+  private showDamage(x: number, y: number, amount: number): void {
+    if (amount <= 0) return;
+    const now = this.time.now;
+    const last = this.lastDmg;
+    // склейка: серия попаданий в одну цель — одна растущая цифра вместо россыпи
+    if (
+      last &&
+      last.obj.visible &&
+      now - last.at < JUICE.dmgTextMergeMs &&
+      Math.hypot(last.obj.x - x, last.obj.y - y) < JUICE.dmgTextMergeDist
+    ) {
+      last.value += amount;
+      last.at = now;
+      this.styleDmg(last.obj, last.value);
+      return;
+    }
+    if (now - this.lastDmgAt < JUICE.dmgTextMinGapMs) return;
+
+    const t = this.dmgTexts[this.dmgCursor];
+    this.dmgCursor = (this.dmgCursor + 1) % this.dmgTexts.length;
+    this.tweens.killTweensOf(t);
+    this.styleDmg(t, amount);
+    t.setActive(true)
+      .setVisible(true)
+      .setAlpha(1)
+      .setScale(0.75)
+      .setPosition(x + Phaser.Math.Between(-6, 6), y - 10);
+    this.lastDmg = { obj: t, value: amount, at: now };
+    this.lastDmgAt = now;
+    this.tweens.add({
+      targets: t,
+      y: t.y - 30,
+      alpha: 0,
+      scale: 1.05,
+      duration: JUICE.dmgTextMs,
+      ease: 'Quad.Out',
+      onComplete: () => {
+        t.setVisible(false).setActive(false);
+        if (this.lastDmg && this.lastDmg.obj === t) this.lastDmg = null;
+      },
+    });
+  }
+
+  private styleDmg(t: Phaser.GameObjects.Text, value: number): void {
+    const crit = value >= JUICE.critDamage;
+    t.setText(String(Math.round(value)));
+    t.setFontSize(crit ? 18 : 14);
+    t.setColor(crit ? '#ffe066' : '#e8f4ff');
   }
 
   onGemCollected(value: number): void {
@@ -399,6 +516,7 @@ export class GameScene extends Phaser.Scene {
           const d = Math.hypot(dx, dy) || 1;
           e.takeDamage(st.bladeDamage, (dx / d) * 170, (dy / d) * 170);
           Sfx.play('hit');
+          this.showDamage(e.x, e.y, st.bladeDamage);
           break;
         }
       }
@@ -446,6 +564,7 @@ export class GameScene extends Phaser.Scene {
     const vm = Math.hypot(bv.x, bv.y) || 1;
     e.takeDamage(b.damage, (bv.x / vm) * 130, (bv.y / vm) * 130);
     Sfx.play('hit');
+    this.showDamage(e.x, e.y, b.damage);
     if (b.pierceLeft > 0) b.pierceLeft -= 1;
     else b.disableBody(true, true);
   };
@@ -460,6 +579,9 @@ export class GameScene extends Phaser.Scene {
     Sfx.play('hurt');
     MaxBridge.haptic('medium');
     this.cameras.main.flash(140, 255, 60, 100);
+    const s = JUICE.shakeHurt;
+    this.cameras.main.shake(s.duration, s.intensity);
+    this.hitStop(JUICE.hitStopMs);
     const dx = e.x - this.player.x;
     const dy = e.y - this.player.y;
     const d = Math.hypot(dx, dy) || 1;
