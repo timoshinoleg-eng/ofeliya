@@ -14,6 +14,7 @@ export class RunState {
   xp = 0;
   xpNext = xpForLevel(1);
   kills = 0;
+  hostCellsInfected = 0;
   timeMs = 0;
 
   /** Текущая серия убийств и сколько ей осталось (мс) — см. COMBO в config. */
