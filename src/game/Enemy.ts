@@ -24,7 +24,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private eliteRing: Phaser.GameObjects.Image | null = null;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
-    super(scene, x, y, 'enemy-swarm');
+    super(scene, x, y, 'immune-antibody');
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setDepth(10);
@@ -57,12 +57,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.color = opts.elite
       ? COLORS.gold
       : kind === 'boss'
-        ? COLORS.red
+        ? COLORS.cyan
         : kind === 'swarm'
-          ? COLORS.magenta
+          ? COLORS.white
           : kind === 'runner'
-            ? COLORS.orange
-            : COLORS.purple;
+            ? COLORS.cyan
+            : 0xffd6a1;
 
     this.flashUntil = 0;
     this.bladeImmuneUntil = 0;
@@ -84,7 +84,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       }
       this.eliteRing
         .setVisible(true)
-        .setAlpha(0.82)
+        .setAlpha(0.74)
+        .setTint(COLORS.gold)
         .setPosition(x, y)
         .setScale(def.scale)
         .setRotation(0);
@@ -115,13 +116,15 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.knockY *= 0.82;
 
     if (this.kind === 'runner') this.setRotation(Math.atan2(dy, dx));
+    else if (this.kind === 'brute') this.setRotation(Math.sin(time * 0.0012 + this.x * 0.01) * 0.1);
+    else if (this.kind === 'swarm') this.setRotation(Math.atan2(dy, dx) + Math.PI / 2);
 
     if (this.isElite && this.eliteRing) {
       this.eliteRing
         .setVisible(true)
         .setPosition(this.x, this.y)
         .setRotation(-time * 0.00115)
-        .setAlpha(0.72 + Math.sin(time / 180) * 0.16);
+        .setAlpha(0.68 + Math.sin(time / 180) * 0.14);
     }
   }
 
