@@ -21,25 +21,22 @@ export const COLORS = {
 
 export const FONT = "'Chakra Petch', Arial, sans-serif";
 
-/**
- * Встроенные постэффекты Phaser 3.60+ (только WebGL).
- * При просадках на слабых устройствах выключить enabled — канвас-режим
- * автоматически вернётся к старой виньетке-текстуре.
- */
+function postFxAllowed(): boolean {
+  if (typeof navigator === 'undefined') return true;
+  const nav = navigator as Navigator & { deviceMemory?: number };
+  const memory = nav.deviceMemory;
+  const cores = nav.hardwareConcurrency || 4;
+  return !((typeof memory === 'number' && memory <= 4) || cores <= 4);
+}
+
+/** Phaser camera postFX are reserved for devices with enough headroom; reduced devices use the
+ * existing lightweight vignette texture instead. This never changes gameplay density. */
 export const POSTFX = {
-  enabled: true,
+  enabled: postFxAllowed(),
   bloom: { strength: 0.8, blurStrength: 0.9, steps: 4 },
   vignette: { radius: 0.72, strength: 0.6 },
 };
 
-/**
- * Параметры «сочности» (game feel). Вынесены отдельно от баланса: крутить их
- * можно без риска сломать матчасть.
- *
- * hitStop — короткий фриз симуляции на важных событиях (смерть элиты/босса,
- * урон игроку). 50–90 мс читаются как «удар», а не как лаг. minGapMs защищает
- * от дробления: частые фризы подряд превращают игру в слайд-шоу.
- */
 export const JUICE = {
   hitStopMs: 55,
   hitStopBossMs: 90,
@@ -58,18 +55,8 @@ export const JUICE = {
   trailPool: 8,
 };
 
-/** Комбо-счётчик: серия убийств без пауз. */
-export const COMBO = {
-  windowMs: 2500,
-  showFrom: 3,
-};
-
-export const PLAYER = {
-  hp: 100,
-  speed: 180,
-  iframeMs: 700,
-};
-
+export const COMBO = { windowMs: 2500, showFrom: 3 };
+export const PLAYER = { hp: 100, speed: 180, iframeMs: 700 };
 export const WEAPON = {
   damage: 10,
   fireIntervalMs: 550,
@@ -78,30 +65,12 @@ export const WEAPON = {
   range: 380,
   spreadDeg: 9,
 };
-
-export const ORBIT = {
-  damage: 11,
-  radius: 82,
-  speedDeg: 260,
-  hitCooldownMs: 340,
-};
-
-export const NOVA = {
-  damage: 15,
-  radius: 140,
-  intervalMs: 2500,
-};
-
-export const GEM = {
-  magnetRadius: 90,
-  attractSpeed: 460,
-};
+export const ORBIT = { damage: 11, radius: 82, speedDeg: 260, hitCooldownMs: 340 };
+export const NOVA = { damage: 15, radius: 140, intervalMs: 2500 };
+export const GEM = { magnetRadius: 90, attractSpeed: 460 };
 
 /** Момент появления финального иммунного ответа — победа, если уничтожить его. */
-export const RUN = {
-  bossTimeMs: 5 * 60 * 1000,
-  bossPhaseSpawnMul: 0.35,
-};
+export const RUN = { bossTimeMs: 5 * 60 * 1000, bossPhaseSpawnMul: 0.35 };
 
 export type EnemyKind = 'swarm' | 'runner' | 'brute' | 'boss';
 
@@ -123,20 +92,11 @@ export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
 };
 
 export const ELITE = { hpMul: 6, dmgMul: 1.7, xpMul: 8, scale: 1.45 };
-
-/**
- * IMMUNE PRIME — фиксированный климакс забега, НЕ масштабируется кривой сложности.
- * 2600 HP — расчётный бой ~20 с. Менять здесь, а не в ENEMY_DEFS.boss.
- */
 export const BOSS_SCALE = { hp: 1, dmg: 1 };
 
-/** Множители сложности, растущие со временем забега. */
 export function difficulty(timeMs: number): { hpScale: number; dmgScale: number } {
   const minutes = timeMs / 60000;
-  return {
-    hpScale: 1 + minutes * 0.42,
-    dmgScale: 1 + minutes * 0.12,
-  };
+  return { hpScale: 1 + minutes * 0.42, dmgScale: 1 + minutes * 0.12 };
 }
 
 export function fmtTime(ms: number): string {
