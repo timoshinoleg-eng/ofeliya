@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { COLORS, FONT, fmtTime } from '../game/config';
+import { IDENTITY } from '../game/identity';
 import { MaxBridge } from '../systems/MaxBridge';
 import { SaveSystem } from '../systems/SaveSystem';
 import { Sfx } from '../systems/Sfx';
@@ -23,7 +24,7 @@ export class MenuScene extends Phaser.Scene {
     grid.tilePositionY = 90;
     this.add.image(W / 2, H / 2, 'vignette').setDisplaySize(W * 1.25, H * 1.25).setDepth(-9);
 
-    // декоративные враги, лениво плавающие по меню
+    // декоративные угрозы, лениво плавающие по меню
     const decor = [
       { tex: 'enemy-swarm', x: 0.16, y: 0.3 },
       { tex: 'enemy-runner', x: 0.86, y: 0.24 },
@@ -58,7 +59,7 @@ export class MenuScene extends Phaser.Scene {
     title.setShadow(0, 0, 'rgba(53,224,255,0.85)', 22, true, true);
 
     this.add
-      .text(W / 2, H * 0.24 + 46, 'рогалик-выживание · продержись 5 минут', {
+      .text(W / 2, H * 0.24 + 46, IDENTITY.copy.menuTagline, {
         fontFamily: FONT,
         fontSize: '14px',
         color: '#aab4d4',
@@ -81,8 +82,8 @@ export class MenuScene extends Phaser.Scene {
     const save = SaveSystem.get();
     const records =
       save.runs > 0
-        ? `Рекорд: ${fmtTime(save.bestTimeMs)}   ·   убийств: ${save.bestKills}   ·   уровень: ${save.bestLevel}`
-        : 'Твой первый забег — удачи!';
+        ? `Сеанс: ${fmtTime(save.bestTimeMs)}   ·   очищено: ${save.bestKills}   ·   модификация: ${save.bestLevel}`
+        : IDENTITY.copy.firstRun;
     this.add
       .text(W / 2, H * 0.46, records, {
         fontFamily: FONT,
@@ -98,9 +99,9 @@ export class MenuScene extends Phaser.Scene {
       .rectangle(W / 2, btnY, 250, 64, COLORS.cyan, 0.16)
       .setStrokeStyle(2, COLORS.cyan, 1);
     const btnText = this.add
-      .text(W / 2, btnY, 'ИГРАТЬ', {
+      .text(W / 2, btnY, 'ЗАПУСТИТЬ ЯДРО', {
         fontFamily: FONT,
-        fontSize: '24px',
+        fontSize: '21px',
         fontStyle: 'bold',
         color: '#35e0ff',
       })
@@ -129,7 +130,7 @@ export class MenuScene extends Phaser.Scene {
       });
 
     this.add
-      .text(W / 2, H - 52, 'Автоогонь по ближайшему врагу. Двигайся, собирай кристаллы\nопыта и выбирай улучшения на новых уровнях.', {
+      .text(W / 2, H - 52, IDENTITY.copy.howToPlay, {
         fontFamily: FONT,
         fontSize: '12px',
         color: '#8a94b0',
