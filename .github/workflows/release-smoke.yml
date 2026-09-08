@@ -24,25 +24,6 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Clarify result record label
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('src/scenes/UIScene.ts')
-          text = path.read_text()
-          old = "if (res.records.timeRecord && res.timeMs > 0) rec.push('сеанс');"
-          new = "if (res.records.timeRecord && res.timeMs > 0) rec.push(res.win ? 'победа' : 'выживание');"
-          if old in text:
-              path.write_text(text.replace(old, new, 1))
-          PY
-          if ! git diff --quiet; then
-            git config user.name github-actions[bot]
-            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-            git add src/scenes/UIScene.ts
-            git commit -m 'fix: label survival and victory records explicitly'
-            git push origin HEAD:feat/visual-engagement-sprint-v1
-          fi
-
       - name: Install project
         run: npm ci
 
@@ -196,7 +177,7 @@ jobs:
               const gs = window.__game.scene.getScene('Game');
               return gs.awaitingChoice && gs.pendingChoices.some((x) => x.id === 'evo:prism');
             }, null, { timeout: 5000 });
-            await page.waitForFunction(() => window.__game.scene.getScene('UI').modalOpen === true);
+            await page.waitForFunction(() => window.__game.scene.getScene('UI').modalOpen === true, null, { timeout: 5000 });
             const evoRendered = await page.evaluate(() => {
               const g = window.__game;
               const gs = g.scene.getScene('Game');
@@ -211,8 +192,14 @@ jobs:
             assert(evoRendered, 'PRISM evolution was not applied/rendered');
             await page.waitForFunction(() => {
               const ui = window.__game.scene.getScene('UI');
-              return ui.children.list.some((o) => o && o.text === 'ПРИЗМА');
-            });
+              const hasText = (obj) => {
+                if (!obj) return false;
+                if (obj.text === 'ПРИЗМА') return true;
+                if (Array.isArray(obj.list)) return obj.list.some(hasText);
+                return false;
+              };
+              return ui.children.list.some(hasText);
+            }, null, { timeout: 5000 });
             await page.waitForTimeout(1450);
 
             const density = await page.evaluate(() => {
@@ -238,10 +225,25 @@ jobs:
             assert(boss && boss.maxHp > 0, `Boss did not spawn at 5:00: ${JSON.stringify(boss)}`);
 
             await page.evaluate(() => window.__game.scene.getScene('Game').finish(false));
-            await page.waitForFunction(() => window.__game.scene.getScene('UI').overShown === true);
+            await page.waitForFunction(() => window.__game.scene.getScene('UI').overShown === true, null, { timeout: 5000 });
             const retry = await page.evaluate(() => {
               const ui = window.__game.scene.getScene('UI');
-              const t = ui.children.list.find((o) => o && o.text === 'ЕЩЁ РАЗ');
+              const findText = (obj) => {
+                if (!obj) return null;
+                if (obj.text === 'ЕЩЁ РАЗ') return obj;
+                if (Array.isArray(obj.list)) {
+                  for (const child of obj.list) {
+                    const found = findText(child);
+                    if (found) return found;
+                  }
+                }
+                return null;
+              };
+              let t = null;
+              for (const obj of ui.children.list) {
+                t = findText(obj);
+                if (t) break;
+              }
               return t ? { x: t.x, y: t.y, visible: t.visible } : null;
             });
             assert(retry && retry.visible, 'Primary retry control missing');
