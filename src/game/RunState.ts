@@ -1,4 +1,5 @@
 import { GEM, NOVA, ORBIT, PLAYER, WEAPON } from './config';
+import type { EvolutionId } from './UpgradeSystem';
 
 export function xpForLevel(level: number): number {
   return Math.floor(6 + level * 4 + level * level * 0.35);
@@ -31,9 +32,16 @@ export class RunState {
   regen = 0;
 
   stacks: Record<string, number> = {};
+  /** Эволюции живут только в рамках текущего забега; meta-history появится в #6. */
+  evolutions = new Set<EvolutionId>();
 
   get bulletDamage(): number {
     return WEAPON.damage * this.damageMul;
+  }
+
+  get bulletPierce(): number {
+    // ПРИЗМА получает небольшой механический отпечаток, но основная награда — presentation.
+    return this.pierce + (this.hasEvolution('prism') ? 1 : 0);
   }
 
   get fireInterval(): number {
@@ -79,5 +87,15 @@ export class RunState {
 
   bump(id: string): void {
     this.stacks[id] = (this.stacks[id] ?? 0) + 1;
+  }
+
+  hasEvolution(id: EvolutionId): boolean {
+    return this.evolutions.has(id);
+  }
+
+  addEvolution(id: EvolutionId): boolean {
+    if (this.evolutions.has(id)) return false;
+    this.evolutions.add(id);
+    return true;
   }
 }
