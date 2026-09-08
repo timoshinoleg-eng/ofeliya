@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { COLORS, RUN } from '../game/config';
 import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
+import { PERFORMANCE } from './PerformanceProfile';
 
 interface AmbientCell {
   image: Phaser.GameObjects.Image;
@@ -55,7 +56,7 @@ export class AtmosphereSystem {
       .setAlpha(1);
 
     // Mid/deep erythrocytes: enough to sell a bloodstream while remaining cheap on mobile.
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < PERFORMANCE.ambientErythrocytes; i++) {
       const x = Phaser.Math.FloatBetween(-40, this.width + 40);
       const y = Phaser.Math.FloatBetween(-40, this.height + 40);
       const alpha = Phaser.Math.FloatBetween(0.16, 0.42);
@@ -80,9 +81,8 @@ export class AtmosphereSystem {
       });
     }
 
-    // Large soft host cells create depth now; later the interactive infection cells use a
-    // separate gameplay pool and remain visually distinct from these background silhouettes.
-    for (let i = 0; i < 4; i++) {
+    // Large soft host cells create depth now; interactive cells use a separate gameplay pool.
+    for (let i = 0; i < PERFORMANCE.ambientHostCells; i++) {
       const x = Phaser.Math.FloatBetween(-80, this.width + 80);
       const y = Phaser.Math.FloatBetween(-80, this.height + 80);
       const alpha = Phaser.Math.FloatBetween(0.07, 0.15);
@@ -106,8 +106,8 @@ export class AtmosphereSystem {
       });
     }
 
-    // Fixed micro-particle pool. These are plasma proteins/debris, not digital dust.
-    for (let i = 0; i < 24; i++) {
+    // Fixed micro-particle pool. Reduced tier cuts decoration, never gameplay objects.
+    for (let i = 0; i < PERFORMANCE.ambientParticles; i++) {
       const x = Phaser.Math.FloatBetween(0, this.width);
       const y = Phaser.Math.FloatBetween(0, this.height);
       const alpha = Phaser.Math.FloatBetween(0.035, 0.12);
@@ -145,7 +145,6 @@ export class AtmosphereSystem {
     const dt = Math.min(delta, 50) / 1000;
     const response = Phaser.Math.Clamp(progress + this.phaseBoost, 0, 1.3);
 
-    // The bloodstream subtly accelerates as immune response rises.
     const flow = 1 + progress * 0.65;
     this.plasma.tilePositionX = cam.scrollX * 0.7 - time * 0.007 * flow;
     this.plasma.tilePositionY = cam.scrollY * 0.7 + Math.sin(time * 0.00018) * 8;
@@ -186,7 +185,6 @@ export class AtmosphereSystem {
     this.phaseBoost *= Math.pow(0.2, dt);
   }
 
-  /** Short systemic/immune response pulse. */
   pulse(color = COLORS.immune, strength = 0.22): void {
     this.phaseBoost = Math.max(this.phaseBoost, strength);
     const flash = this.scene.add
