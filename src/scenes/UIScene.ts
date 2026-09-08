@@ -686,7 +686,7 @@ export class UIScene extends Phaser.Scene {
     );
 
     const rec: string[] = [];
-    if (res.records.timeRecord && res.timeMs > 0) rec.push('сеанс');
+    if (res.records.timeRecord && res.timeMs > 0) rec.push(res.win ? 'победа' : 'выживание');
     if (res.records.killsRecord) rec.push('очищено');
     if (res.records.levelRecord) rec.push('ядро');
     if (rec.length > 0) {
