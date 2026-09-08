@@ -34,9 +34,6 @@ jobs:
 
           async function run(browser, viewport) {
             const ctx = await browser.newContext({ viewport });
-            // This is a browser-game smoke, not a MAX SDK integration test. Loading the MAX CDN
-            // outside its host can reject promises internally, so replace only that external script
-            // with an empty successful response and keep all application runtime errors visible.
             await ctx.route('https://st.max.ru/**', route => route.fulfill({ status:200, contentType:'application/javascript', body:'' }));
             const page = await ctx.newPage();
             const errors=[]; page.on('pageerror', e => errors.push(String(e)));
@@ -61,11 +58,20 @@ jobs:
             assert(levelMs <= 7000, `first RNA/level ${levelMs}ms`);
             assert(mutationMs <= 12000, `mutation modal ${mutationMs}ms`);
 
-            await page.evaluate(() => {
-              const g=window.__game, gs=g.scene.getScene('Game'), ui=g.scene.getScene('UI');
-              const first=gs.pendingChoices[0]; if (first) gs.chooseUpgrade(first.id);
-              ui.hideModal(); gs.awaitingChoice=false; gs.pendingChoices=[]; ui.scene.resume('Game');
+            const clicked = await page.evaluate(() => {
+              const ui=window.__game.scene.getScene('UI');
+              const scan = obj => {
+                if (!obj) return null;
+                if (typeof obj.listenerCount === 'function' && obj.listenerCount('pointerup') > 0) return obj;
+                if (Array.isArray(obj.list)) for (const child of obj.list) { const x=scan(child); if (x) return x; }
+                return null;
+              };
+              const target=scan(ui.modal); if (!target) return false;
+              target.emit('pointerup'); return true;
             });
+            assert(clicked, 'mutation card pointer handler missing');
+            await page.waitForFunction(() => window.__game.scene.isActive('Game') && !window.__game.scene.isPaused('Game'), null, { timeout:3000 });
+
             await page.waitForFunction(() => window.__game.scene.getScene('Game').hostCells.cells.some(c => c.active), null, { timeout:9000 });
             await page.evaluate(() => {
               const gs=window.__game.scene.getScene('Game'); const cell=gs.hostCells.cells.find(c=>c.active);
