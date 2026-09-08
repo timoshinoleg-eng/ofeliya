@@ -338,7 +338,12 @@ export class GameScene extends Phaser.Scene {
       const s = JUICE.shakeEliteKill;
       this.cameras.main.shake(s.duration, s.intensity);
     }
-    if (e.xpValue > 0) this.spawnGem(e.x, e.y, e.xpValue);
+    if (e.xpValue > 0) {
+      // The first readable pickup teaches the mutation loop immediately instead of requiring
+      // five scattered one-XP drops before the player sees the first choice.
+      const value = st.kills === 1 ? Math.max(5, e.xpValue) : e.xpValue;
+      this.spawnGem(e.x, e.y, value);
+    }
     if (e.isBoss && this.wave.boss === e) {
       this.wave.boss = null;
       this.cameras.main.shake(400, 0.01);
@@ -463,6 +468,7 @@ export class GameScene extends Phaser.Scene {
       def.apply(this.runState);
       if (def.kind === 'evolution' && def.evolutionId) {
         this.pendingEvolutionCeremony = def.evolutionId;
+        this.syncPlayerMutationSilhouette();
         this.atmosphere.pulse(COLORS.gold, 0.3);
       } else {
         this.runState.bump(id);
@@ -479,6 +485,15 @@ export class GameScene extends Phaser.Scene {
     this.awaitingChoice = false;
     this.pendingChoices = [];
     return false;
+  }
+
+  private syncPlayerMutationSilhouette(): void {
+    const st = this.runState;
+    this.player.setMutationState(
+      st.hasEvolution('prism'),
+      st.hasEvolution('halo'),
+      st.hasEvolution('singularity')
+    );
   }
 
   consumeEvolutionCeremony(): EvolutionId | null {
