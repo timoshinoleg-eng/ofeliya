@@ -6,13 +6,15 @@
 финальный иммунный ответ `IMMUNE PRIME`; победа засчитывается после его уничтожения.
 
 Продуктовый контракт и визуальная терминология: [`STRAIN_ZERO_PRODUCT_BIBLE.md`](./STRAIN_ZERO_PRODUCT_BIBLE.md).
+Release-gate evidence: [`RELEASE_VALIDATION.md`](./RELEASE_VALIDATION.md).
+Third-party provenance: [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md).
 
 ## Стек
 
 - **Phaser 3 + TypeScript + Vite** — gameplay и UI.
-- **MAX Bridge** через platform-neutral слой `src/platform/*` — launch context, viewport, BackButton,
-  haptics и share/deeplink surface.
-- **Telegram adapter** уже изолирован архитектурно, но его отдельный release QA идёт после MAX RC.
+- **MAX Bridge** через platform-neutral слой `src/platform/*` — launch context, viewport,
+  BackButton, haptics и share/deeplink surface.
+- **Telegram adapter** изолирован архитектурно, но отдельный Telegram release QA идёт после MAX RC.
 - Основной визуал генерируется кодом: вирус, иммунные клетки, кровоток, host cells, мутации и VFX.
 - Аудио лежит отдельно в `public/audio/`: SFX Kenney CC0 и CC0 Music с OpenGameArt.
 - Chakra Petch — self-hosted OFL font с системным fallback.
@@ -23,6 +25,7 @@
 npm install
 npm run dev
 npm run test:challenge
+npm run test:viewport
 npm run build
 npm run preview
 ```
@@ -30,57 +33,82 @@ npm run preview
 Управление: tap/drag — floating one-thumb joystick; на desktop также работают WASD/стрелки.
 Атака автоматическая.
 
-## MAX Mini App
+## MAX viewport и safe area
 
-1. `npm run build` создаёт `dist/`.
-2. Разместите `dist/` на HTTPS-хостинге.
-3. Привяжите URL мини-приложения к MAX-боту.
-4. Для challenge deeplink задайте публичное имя этого бота при сборке:
+Приложение не полагается только на `window.innerWidth/innerHeight`. `ViewportManager` запрашивает
+`window.WebApp.getViewportSize()` через `PlatformBridge`, применяет host-reported viewport к Phaser
+и дополнительно учитывает CSS `safe-area-inset-*`. Синхронизация повторяется при resize,
+orientation change и возврате приложения из background.
+
+Platform facade выбирает MAX adapter во время вызова, а не один раз при module import. Поэтому
+медленная загрузка MAX CDN не может навсегда перевести Mini App в browser fallback.
+
+## Production build для MAX
+
+Обычный `npm run build` предназначен для разработки/CI. Публикационный RC собирается только через:
 
 ```bash
-VITE_MAX_BOT_NAME=your_max_bot_name
+npm run build:max
 ```
 
-Пример есть в `.env.example`. Значение указывается без `@`. Реальное имя бота не хранится в
-репозитории и должно быть задано в deployment environment; его корректность проверяется в
-`VIR-16` внутри настоящего MAX-клиента.
+`build:max` сначала запускает release-config gate и прекращает сборку, если отсутствуют или остались
+placeholder-значениями обязательные параметры:
 
-Challenge deeplink соответствует MAX contract:
+```text
+VITE_MAX_BOT_NAME
+VITE_DEVELOPER_LEGAL_NAME
+VITE_DEVELOPER_REGISTRATION
+VITE_DEVELOPER_ADDRESS
+VITE_SUPPORT_EMAIL
+```
+
+Дополнительно поддерживаются:
+
+```text
+VITE_DEVELOPER_BRAND
+VITE_SUPPORT_PHONE
+```
+
+Шаблон находится в `.env.example`. Реальные юридические данные должны совпадать с подтверждённым
+профилем разработчика MAX; репозиторий намеренно не угадывает их.
+
+В главном меню доступна ссылка **«О приложении · Политика · Поддержка»**. Она показывает сведения
+о разработчике, privacy notice, условия использования и контакты поддержки из release environment.
+
+## Challenge flow
+
+После забега **«БРОСИТЬ ВЫЗОВ»** создаёт compact versioned payload:
+
+- победный забег → получатель должен уничтожить `IMMUNE PRIME` быстрее;
+- проигранный забег → получатель должен продержаться дольше.
+
+MAX deeplink:
 
 ```text
 https://max.ru/<botName>?startapp=<payload>
 ```
 
-`payload` versioned, укладывается в лимит 512 символов и использует только допустимые MAX
-символы `A-Z a-z 0-9 _ -`. Входящий payload читается через `start_param` и используется только
-как **недоверенный социальный контекст**: показать цель и сравнить локальный результат.
-Он не меняет баланс, награды и не считается доказательством результата.
+Payload использует только `A-Z a-z 0-9 _ -`, укладывается в 512 символов и читается через
+`start_param`. В меню получатель видит **«ВЫЗОВ ПОЛУЧЕН»**, а после цикла — verdict
+**«ВЫЗОВ ПРЕВЗОЙДЁН / НЕ ПРЕВЗОЙДЁН»**.
 
-## Challenge flow
-
-После забега кнопка **«БРОСИТЬ ВЫЗОВ»** создаёт compact payload с типом цели и run-метриками:
-
-- победный забег → получатель должен уничтожить `IMMUNE PRIME` быстрее;
-- проигранный забег → получатель должен продержаться дольше.
-
-При запуске по challenge deeplink меню показывает **«ВЫЗОВ ПОЛУЧЕН»** и цель. После забега result
-screen показывает, превзойдён вызов или нет. Browser adapter поддерживает тот же round-trip через
-`?startapp=...` для локального QA.
+Challenge data — только **недоверенный социальный контекст**. Он не меняет gameplay, не выдаёт
+награды и не является доказательством результата.
 
 ## Безопасность MAX initData
 
-`window.WebApp.initDataUnsafe` используется только как удобный клиентский контекст для имени,
-viewport/start payload и подобных UI-задач. Он **не является доверенной авторизацией**.
+`window.WebApp.initDataUnsafe` используется только для клиентского UI-контекста — имени,
+`start_param` и capability data. Он **не является доверенной авторизацией**.
 
-Для будущих leaderboard, персональных данных и competitive score сервер должен получать подписанную
-строку `window.WebApp.initData`, проверять её на доверенном backend и отдельно валидировать score
-contract. Challenge payload не заменяет эту проверку.
+Если позже появятся leaderboard, аккаунтные данные или competitive score, сервер должен получать
+подписанную строку `window.WebApp.initData`, валидировать её на доверенном backend и отдельно
+проверять score contract. Challenge payload эту проверку не заменяет.
 
 ## Основной игровой цикл
 
 - первые секунды: ближайшие антитела, первая РНК и ранняя мутация;
-- по ходу цикла подключаются T-клетки, макрофаги и NK response;
-- neutral host cells можно заражать proximity-механикой;
+- далее подключаются T-клетки, макрофаги и NK response;
+- host cells заражаются proximity-механикой;
 - полный infection вызывает **lysis**: разрыв мембраны, RNA release и radial damage;
 - доступны три critical mutations: `ГИПЕРШИП`, `СВЕРХКАПСИД`, `ЛИЗИС`;
 - на 5:00 появляется `IMMUNE PRIME`.
@@ -101,24 +129,55 @@ Boss/difficulty rebalance намеренно вынесен за пределы 
 
 Схема сохраняет совместимость со старым `ofeliya_save_v1`.
 
-## Performance
+## Performance и audio lifecycle
 
-Есть два presentation tier: `full` и `reduced`. На слабых устройствах отключаются/сокращаются
-postFX и декоративные эффекты, но **enemy density и gameplay не меняются**. Object pools и bounded
-VFX сохраняются.
+Есть два presentation tier: `full` и `reduced`. `PerformanceProfile` — единый источник решения о
+postFX/декоративной плотности. Reduced tier уменьшает только presentation cost и не меняет enemy
+density или gameplay.
 
-## Quality gate
+SFX/music грузятся лениво. Асинхронная загрузка music защищена AbortController/generation guard,
+а transient WebAudio source/gain/oscillator nodes disconnect после `ended`, чтобы длинные циклы и
+повторные рестарты не накапливали audio graph.
 
-Canonical GitHub Actions выполняет:
+## Canonical quality gate
+
+PR CI выполняет два независимых job.
+
+Build gate:
 
 ```bash
 npm ci
 npm run test:challenge
+npm run test:viewport
+npm run release:check   # CI fixture с непустыми non-placeholder release values
 npm run build
 ```
 
-`test:challenge` без дополнительного test framework проверяет encode/decode, MAX-safe charset/length,
-reject malformed payload и семантику «быстрее clear / дольше survival».
+Browser gate запускает system Chrome с MAX Android mock и проверяет:
 
-Перед публичным MAX-релизом отдельно требуется real-client QA: launch/initData, viewport/safe areas,
-BackButton, haptics/share, audio unlock, restart/menu lifecycle и dense late-run combat performance.
+- host + Phaser используют viewport, возвращённый MAX bridge;
+- MAX user context и входящий `start_param`;
+- challenge menu/CTA;
+- legal/privacy/support overlay с release config;
+- challenge result verdict и mobile bounds;
+- реальный интерактивный share control;
+- сформированный `https://max.ru/<bot>?startapp=...` передаётся в MAX share adapter;
+- отсутствие page runtime errors.
+
+Browser smoke сохраняет текущие menu/result PNG как Actions artifact для визуальной приёмки.
+
+## Что ещё обязательно перед публичным релизом
+
+Автоматический MAX mock не заменяет реальный клиент. `VIR-16` должен пройти на настоящем MAX
+Android/iOS RC с реальными deployment values:
+
+- launch + `initData` / `start_param`;
+- viewport/safe-area/orientation/background-resume;
+- native BackButton;
+- haptics/share/deeplink round-trip;
+- audio unlock;
+- 10 restart/menu cycles;
+- cold-start до playable;
+- dense late-run combat/FPS и финальная фаза `IMMUNE PRIME`.
+
+До закрытия `VIR-16` PR #16 остаётся draft.
