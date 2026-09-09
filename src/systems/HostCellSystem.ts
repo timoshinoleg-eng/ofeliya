@@ -207,56 +207,59 @@ export class HostCellSystem {
     // a few frames, so the player reads cause -> rupture instead of an arbitrary explosion.
     const membraneGhost = this.scene.add
       .image(x, y, 'host-cell-shadow')
-      .setDepth(9)
+      .setDepth(11)
       .setScale(scale)
       .setTint(COLORS.green)
-      .setAlpha(0.76)
-      .setBlendMode(Phaser.BlendModes.ADD);
+      .setAlpha(0.82);
     const infectionGhost = this.scene.add
       .image(x, y, 'host-cell-infection')
-      .setDepth(10)
+      .setDepth(12)
       .setScale(scale)
       .setAlpha(0.95)
       .setBlendMode(Phaser.BlendModes.ADD);
 
-    // Keep a broken membrane contour visible through the brightest nova frames. This gives the
-    // lysis event a semantic silhouette on a 60 Hz phone: cell ruptures first, RNA escapes second.
-    const ruptureContour = this.scene.add.graphics().setPosition(x, y).setDepth(12);
+    // Explicit Arc game objects are more reliable than a transient Graphics path here and retain
+    // a broken membrane silhouette across several 60 Hz frames before the RNA fragments dominate.
     const segments = [
-      [-2.9, -2.15],
-      [-1.72, -0.8],
-      [-0.3, 0.48],
-      [0.92, 1.72],
-      [2.08, 2.72],
+      [-166, -123],
+      [-99, -46],
+      [-17, 28],
+      [53, 99],
+      [119, 156],
     ] as const;
-    ruptureContour.lineStyle(4, COLORS.green, 0.96);
-    for (const [a0, a1] of segments) {
-      ruptureContour.beginPath();
-      ruptureContour.arc(0, 0, 40, a0, a1, false);
-      ruptureContour.strokePath();
-    }
-    ruptureContour.lineStyle(1.5, COLORS.white, 0.48);
-    ruptureContour.beginPath();
-    ruptureContour.arc(0, 0, 35, -2.55, -1.95, false);
-    ruptureContour.strokePath();
-    ruptureContour.beginPath();
-    ruptureContour.arc(0, 0, 35, 0.35, 1.05, false);
-    ruptureContour.strokePath();
-    ruptureContour.setScale(0.92).setAlpha(1);
+    const ruptureArcs = segments.map(([a0, a1], index) =>
+      this.scene.add
+        .arc(x, y, 39 + (index % 2) * 3, a0, a1, false, 0x000000, 0)
+        .setStrokeStyle(index === 2 ? 5 : 4, COLORS.green, 1)
+        .setDepth(14)
+        .setBlendMode(Phaser.BlendModes.ADD)
+    );
+    const ruptureHighlights = [
+      this.scene.add
+        .arc(x, y, 34, -146, -111, false, 0x000000, 0)
+        .setStrokeStyle(2, COLORS.white, 0.78)
+        .setDepth(15),
+      this.scene.add
+        .arc(x, y, 34, 20, 61, false, 0x000000, 0)
+        .setStrokeStyle(2, COLORS.white, 0.78)
+        .setDepth(15),
+    ];
+    const ruptureShapes = [...ruptureArcs, ...ruptureHighlights];
+    for (const arc of ruptureShapes) arc.setScale(0.94).setAlpha(1);
     this.scene.tweens.add({
-      targets: ruptureContour,
-      scale: 1.5,
+      targets: ruptureShapes,
+      scale: 1.48,
       alpha: 0,
-      duration: 560,
+      duration: 640,
       ease: 'Cubic.Out',
-      onComplete: () => ruptureContour.destroy(),
+      onComplete: () => ruptureShapes.forEach((arc) => arc.destroy()),
     });
 
     this.scene.tweens.add({
       targets: membraneGhost,
-      scale: scale * 1.72,
+      scale: scale * 1.62,
       alpha: 0,
-      duration: 390,
+      duration: 470,
       ease: 'Quad.Out',
       onComplete: () => membraneGhost.destroy(),
     });
@@ -265,22 +268,23 @@ export class HostCellSystem {
       scale: scale * 1.3,
       rotation: 0.4,
       alpha: 0,
-      duration: 300,
+      duration: 320,
       ease: 'Cubic.Out',
       onComplete: () => infectionGhost.destroy(),
     });
 
     // Membrane fragments make lysis look biological rather than like a generic neon nova.
-    for (let i = 0; i < 7; i++) {
-      const a = (i / 7) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.18, 0.18);
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.14, 0.14);
       const fragment = this.scene.add
-        .image(x + Math.cos(a) * 18, y + Math.sin(a) * 18, 'membrane-fragment')
-        .setDepth(11)
+        .image(x + Math.cos(a) * 24, y + Math.sin(a) * 24, 'membrane-fragment')
+        .setDepth(13)
         .setRotation(a + Math.PI / 2)
-        .setScale(Phaser.Math.FloatBetween(0.65, 1.05))
-        .setAlpha(0.88)
+        .setScale(Phaser.Math.FloatBetween(0.9, 1.25))
+        .setTint(COLORS.green)
+        .setAlpha(1)
         .setBlendMode(Phaser.BlendModes.ADD);
-      const travel = Phaser.Math.FloatBetween(54, 92);
+      const travel = Phaser.Math.FloatBetween(62, 98);
       this.scene.tweens.add({
         targets: fragment,
         x: x + Math.cos(a) * travel,
@@ -288,7 +292,7 @@ export class HostCellSystem {
         rotation: fragment.rotation + Phaser.Math.FloatBetween(-0.7, 0.7),
         scale: fragment.scaleX * 0.45,
         alpha: 0,
-        duration: Phaser.Math.Between(280, 420),
+        duration: Phaser.Math.Between(480, 650),
         ease: 'Quad.Out',
         onComplete: () => fragment.destroy(),
       });
