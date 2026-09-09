@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { parseChallengePayload } from '../game/Challenge';
 import { COLORS, FONT, fmtTime } from '../game/config';
 import { IDENTITY } from '../game/identity';
 import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
@@ -18,6 +19,11 @@ export class MenuScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(COLORS.bg);
     Sfx.stopMusic();
     PlatformBridge.setBackHandler(null);
+
+    const incomingChallenge = parseChallengePayload(PlatformBridge.getStartParam());
+    // Registry keeps the social target across Menu -> Game -> UI and fast restarts. It is display
+    // context only: gameplay/rewards never consume it.
+    this.registry.set('challengeTarget', incomingChallenge);
 
     const plasma = this.add
       .tileSprite(0, 0, W, H, 'blood-plasma')
@@ -156,34 +162,84 @@ export class MenuScene extends Phaser.Scene {
         .setDepth(5);
     }
 
-    const save = SaveSystem.get();
-    const survival = save.bestSurvivalMs > 0 ? fmtTime(save.bestSurvivalMs) : '—';
-    const victory = save.bestWinTimeMs > 0 ? fmtTime(save.bestWinTimeMs) : '—';
-    const records =
-      save.runs > 0
-        ? `Лучшее выживание ${survival}   ·   подавление иммунитета ${victory}\nИммунных клеток ${save.bestKills}   ·   стадия мутации ${save.bestLevel}`
-        : 'STRAIN-0 · ПЕРВЫЙ ЦИКЛ ЗАРАЖЕНИЯ';
-    this.add
-      .text(W / 2, H * 0.57, records, {
-        fontFamily: FONT,
-        fontSize: H < 650 ? '10px' : '11px',
-        color: '#e8c9d4',
-        align: 'center',
-        lineSpacing: 4,
-        wordWrap: { width: W - 42 },
-      })
-      .setOrigin(0.5)
-      .setResolution(2)
-      .setDepth(5);
+    if (incomingChallenge) {
+      const challengeY = H * 0.57;
+      const panelW = Math.min(W - 42, 330);
+      this.add
+        .rectangle(W / 2, challengeY, panelW, 58, 0x251020, 0.9)
+        .setStrokeStyle(1.5, COLORS.gold, 0.78)
+        .setDepth(4);
+      this.add
+        .text(W / 2, challengeY - 15, 'ВЫЗОВ ПОЛУЧЕН', {
+          fontFamily: FONT,
+          fontSize: H < 650 ? '10px' : '11px',
+          fontStyle: 'bold',
+          color: '#ffe066',
+          letterSpacing: 1,
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setDepth(5);
+      const target =
+        incomingChallenge.objective === 'clear'
+          ? `Подави IMMUNE PRIME быстрее ${fmtTime(incomingChallenge.timeMs)}`
+          : `Продержись дольше ${fmtTime(incomingChallenge.timeMs)}`;
+      this.add
+        .text(W / 2, challengeY + 2, target, {
+          fontFamily: FONT,
+          fontSize: H < 650 ? '10px' : '11px',
+          fontStyle: 'bold',
+          color: '#fff4ec',
+          align: 'center',
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setDepth(5);
+      this.add
+        .text(
+          W / 2,
+          challengeY + 18,
+          `${incomingChallenge.kills} иммун. · ${incomingChallenge.hostCellsInfected} клеток · мутация ${incomingChallenge.level}`,
+          {
+            fontFamily: FONT,
+            fontSize: '9px',
+            color: '#c89aaf',
+            align: 'center',
+          }
+        )
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setDepth(5);
+    } else {
+      const save = SaveSystem.get();
+      const survival = save.bestSurvivalMs > 0 ? fmtTime(save.bestSurvivalMs) : '—';
+      const victory = save.bestWinTimeMs > 0 ? fmtTime(save.bestWinTimeMs) : '—';
+      const records =
+        save.runs > 0
+          ? `Лучшее выживание ${survival}   ·   подавление иммунитета ${victory}\nИммунных клеток ${save.bestKills}   ·   стадия мутации ${save.bestLevel}`
+          : 'STRAIN-0 · ПЕРВЫЙ ЦИКЛ ЗАРАЖЕНИЯ';
+      this.add
+        .text(W / 2, H * 0.57, records, {
+          fontFamily: FONT,
+          fontSize: H < 650 ? '10px' : '11px',
+          color: '#e8c9d4',
+          align: 'center',
+          lineSpacing: 4,
+          wordWrap: { width: W - 42 },
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setDepth(5);
+    }
 
     const btnY = H * 0.7;
     const btnW = Math.min(W - 44, 300);
     const btnBg = this.add
       .rectangle(W / 2, btnY, btnW, 66, 0x5c143e, 0.92)
-      .setStrokeStyle(2, COLORS.magenta, 1)
+      .setStrokeStyle(2, incomingChallenge ? COLORS.gold : COLORS.magenta, 1)
       .setDepth(5);
     this.add
-      .text(W / 2, btnY - 5, 'НАЧАТЬ ЗАРАЖЕНИЕ', {
+      .text(W / 2, btnY - 5, incomingChallenge ? 'ПРИНЯТЬ ВЫЗОВ' : 'НАЧАТЬ ЗАРАЖЕНИЕ', {
         fontFamily: FONT,
         fontSize: H < 650 ? '17px' : '19px',
         fontStyle: 'bold',
