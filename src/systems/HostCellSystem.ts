@@ -219,6 +219,39 @@ export class HostCellSystem {
       .setAlpha(0.95)
       .setBlendMode(Phaser.BlendModes.ADD);
 
+    // Keep a broken membrane contour visible through the brightest nova frames. This gives the
+    // lysis event a semantic silhouette on a 60 Hz phone: cell ruptures first, RNA escapes second.
+    const ruptureContour = this.scene.add.graphics().setPosition(x, y).setDepth(12);
+    const segments = [
+      [-2.9, -2.15],
+      [-1.72, -0.8],
+      [-0.3, 0.48],
+      [0.92, 1.72],
+      [2.08, 2.72],
+    ] as const;
+    ruptureContour.lineStyle(4, COLORS.green, 0.96);
+    for (const [a0, a1] of segments) {
+      ruptureContour.beginPath();
+      ruptureContour.arc(0, 0, 40, a0, a1, false);
+      ruptureContour.strokePath();
+    }
+    ruptureContour.lineStyle(1.5, COLORS.white, 0.48);
+    ruptureContour.beginPath();
+    ruptureContour.arc(0, 0, 35, -2.55, -1.95, false);
+    ruptureContour.strokePath();
+    ruptureContour.beginPath();
+    ruptureContour.arc(0, 0, 35, 0.35, 1.05, false);
+    ruptureContour.strokePath();
+    ruptureContour.setScale(0.92).setAlpha(1);
+    this.scene.tweens.add({
+      targets: ruptureContour,
+      scale: 1.5,
+      alpha: 0,
+      duration: 560,
+      ease: 'Cubic.Out',
+      onComplete: () => ruptureContour.destroy(),
+    });
+
     this.scene.tweens.add({
       targets: membraneGhost,
       scale: scale * 1.72,
