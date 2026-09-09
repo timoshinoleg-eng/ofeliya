@@ -1,0 +1,360 @@
+name: Apply screenshot-driven art corrections
+
+on:
+  push:
+    branches: [feat/strain-zero-redesign]
+
+permissions:
+  contents: write
+
+jobs:
+  polish:
+    if: ${{ contains(github.event.head_commit.message, '[art-polish]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/strain-zero-redesign
+      - name: Apply targeted art corrections
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          def must_sub(text, pattern, replacement, label, flags=re.S):
+              out, count = re.subn(pattern, replacement, text, count=1, flags=flags)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one match, got {count}')
+              return out
+
+          # ------------------------------------------------------------------
+          # Phone-safe first-run hint: explicit two-line layout + local backing panel.
+          # ------------------------------------------------------------------
+          p = Path('src/scenes/GameScene.ts')
+          s = p.read_text()
+          new_intro = r'''  private showIntroHint(): void {
+            const W = this.scale.width;
+            const H = this.scale.height;
+            const c = this.add.container(0, 0).setDepth(60);
+            const panelW = Math.min(W - 28, 370);
+            const panelY = H * 0.3 + 8;
+
+            const panel = this.add
+              .rectangle(W / 2, panelY, panelW, 86, 0x12070c, 0.68)
+              .setStrokeStyle(1, COLORS.magenta, 0.18);
+            const title = this.add
+              .text(W / 2, H * 0.275, IDENTITY.copy.introTitle, {
+                fontFamily: FONT,
+                fontSize: W < 370 ? '14px' : '16px',
+                fontStyle: 'bold',
+                color: '#ff78c8',
+                align: 'center',
+                lineSpacing: 3,
+                wordWrap: { width: panelW - 24 },
+              })
+              .setOrigin(0.5)
+              .setResolution(2)
+              .setShadow(0, 0, 'rgba(255,79,181,0.34)', 8, true, true);
+            const sub = this.add
+              .text(W / 2, H * 0.275 + 45, IDENTITY.copy.introSub, {
+                fontFamily: FONT,
+                fontSize: W < 370 ? '10px' : '11px',
+                color: '#d9b7c5',
+                align: 'center',
+                wordWrap: { width: panelW - 26 },
+              })
+              .setOrigin(0.5)
+              .setResolution(2);
+            c.add([panel, title, sub]);
+
+            c.setAlpha(0);
+            this.tweens.add({ targets: c, alpha: 1, duration: 220 });
+            this.time.delayedCall(4600, () => {
+              if (!c.active) return;
+              this.tweens.add({ targets: c, alpha: 0, duration: 260, onComplete: () => c.destroy() });
+            });
+          }
+
+          private snapshot'''
+          s = must_sub(
+              s,
+              r"  private showIntroHint\(\): void \{.*?\n  \}\n\n  private snapshot",
+              new_intro,
+              'GameScene.showIntroHint',
+          )
+          p.write_text(s)
+
+          # ------------------------------------------------------------------
+          # Mutation UI: biological accent, stronger modal isolation, bespoke critical emblems.
+          # ------------------------------------------------------------------
+          p = Path('src/scenes/UIScene.ts')
+          s = p.read_text()
+          replacements = [
+              ("const dim = this.add.rectangle(W / 2, H / 2, W, H, 0x05070f, 0.76).setInteractive();",
+               "const dim = this.add.rectangle(W / 2, H / 2, W, H, 0x09040a, 0.91).setInteractive();"),
+              (".setStrokeStyle(3, COLORS.cyan, 0.9)", ".setStrokeStyle(3, COLORS.magenta, 0.92)"),
+              ("color: '#35e0ff',\n        align: 'center',", "color: '#ff78c8',\n        align: 'center',"),
+              (".setShadow(0, 0, 'rgba(53,224,255,0.7)', 14, true, true);",
+               ".setShadow(0, 0, 'rgba(255,79,181,0.72)', 16, true, true);"),
+              ("const iconKey = evolution && def.evolutionId ? `up-${this.evolutionIcon(def.evolutionId)}` : `up-${def.id}`;",
+               "const iconKey = evolution && def.evolutionId ? `mutation-${def.evolutionId}` : `up-${def.id}`;"),
+          ]
+          for old, new in replacements:
+              if old not in s:
+                  raise SystemExit(f'UIScene replacement missing: {old[:80]}')
+              s = s.replace(old, new, 1)
+
+          old = """    c.add([outer, inner]);
+    this.tweens.add({ targets: outer, scale: 1.75, alpha: 0.08, duration: 760, ease: 'Quad.Out' });
+    this.tweens.add({ targets: inner, scale: 0.55, alpha: 1, duration: 300, yoyo: true, ease: 'Sine.InOut' });"""
+          new = """    const emblem = this.add
+      .image(W / 2, H * 0.43, `mutation-${id}`)
+      .setScale(1.18)
+      .setAlpha(0.96)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    c.add([outer, inner, emblem]);
+    this.tweens.add({ targets: outer, scale: 1.75, alpha: 0.08, duration: 760, ease: 'Quad.Out' });
+    this.tweens.add({ targets: inner, scale: 0.55, alpha: 1, duration: 300, yoyo: true, ease: 'Sine.InOut' });
+    emblem.setScale(0.62);
+    this.tweens.add({ targets: emblem, scale: 1.18, duration: 420, ease: 'Back.Out' });"""
+          if old not in s:
+              raise SystemExit('UIScene evolution ceremony anchor missing')
+          s = s.replace(old, new, 1)
+          s = must_sub(
+              s,
+              r"\n  private evolutionIcon\(id: EvolutionId\): string \{.*?\n  \}\n",
+              "\n",
+              'UIScene.evolutionIcon',
+          )
+          p.write_text(s)
+
+          # ------------------------------------------------------------------
+          # Player mutation silhouette: fewer, stronger shapes so all three coexist cleanly.
+          # ------------------------------------------------------------------
+          p = Path('src/game/Player.ts')
+          s = p.read_text()
+          new_spike = r'''  private drawSpikeCrown(g: Phaser.GameObjects.Graphics): void {
+            for (let i = 0; i < 8; i++) {
+              const a = (i / 8) * Math.PI * 2 - Math.PI / 2;
+              const inner = 22;
+              const outer = i % 2 === 0 ? 36 : 32;
+              const color = i % 2 === 0 ? COLORS.green : COLORS.gold;
+              g.lineStyle(i % 2 === 0 ? 2.4 : 1.8, color, 0.78);
+              g.beginPath();
+              g.moveTo(Math.cos(a) * inner, Math.sin(a) * inner);
+              g.lineTo(Math.cos(a) * outer, Math.sin(a) * outer);
+              g.strokePath();
+
+              const tx = Math.cos(a) * outer;
+              const ty = Math.sin(a) * outer;
+              g.fillStyle(color, 0.82);
+              g.fillCircle(tx, ty, i % 2 === 0 ? 2.5 : 2);
+              if (i % 2 === 0) {
+                const tangent = a + Math.PI / 2;
+                g.lineStyle(1.1, COLORS.white, 0.38);
+                g.beginPath();
+                g.moveTo(tx, ty);
+                g.lineTo(tx + Math.cos(tangent) * 3, ty + Math.sin(tangent) * 3);
+                g.moveTo(tx, ty);
+                g.lineTo(tx - Math.cos(tangent) * 3, ty - Math.sin(tangent) * 3);
+                g.strokePath();
+              }
+            }
+          }
+
+          /** СВЕРХКАПСИД'''
+          s = must_sub(
+              s,
+              r"  private drawSpikeCrown\(g: Phaser\.GameObjects\.Graphics\): void \{.*?\n  \}\n\n  /\*\* СВЕРХКАПСИД",
+              new_spike,
+              'Player.drawSpikeCrown',
+          )
+          new_capsid = r'''  private drawCapsidShell(g: Phaser.GameObjects.Graphics): void {
+            for (let i = 0; i < 4; i++) {
+              const centre = (i / 4) * Math.PI * 2 + Math.PI / 4;
+              const a0 = centre - 0.42;
+              const a1 = centre + 0.42;
+              g.lineStyle(4.6, COLORS.gold, 0.76);
+              g.beginPath();
+              g.arc(0, 0, 27.5, a0, a1, false);
+              g.strokePath();
+              g.fillStyle(COLORS.white, 0.5);
+              g.fillCircle(Math.cos(centre) * 27.5, Math.sin(centre) * 27.5, 1.7);
+            }
+            g.lineStyle(1.1, COLORS.gold, 0.18);
+            g.strokeCircle(0, 0, 25);
+          }
+
+          /** ЛИЗИС'''
+          s = must_sub(
+              s,
+              r"  private drawCapsidShell\(g: Phaser\.GameObjects\.Graphics\): void \{.*?\n  \}\n\n  /\*\* ЛИЗИС",
+              new_capsid,
+              'Player.drawCapsidShell',
+          )
+          new_lysis = r'''  private drawLysisCore(g: Phaser.GameObjects.Graphics): void {
+            g.fillStyle(COLORS.green, 0.12);
+            g.fillCircle(0, 0, 13);
+            g.lineStyle(2.2, COLORS.green, 0.68);
+            g.strokeCircle(0, 0, 11);
+
+            for (let i = 0; i < 5; i++) {
+              const a = (i / 5) * Math.PI * 2;
+              g.lineStyle(1.1, i % 2 ? COLORS.magenta : COLORS.green, 0.42);
+              g.beginPath();
+              g.moveTo(Math.cos(a) * 6, Math.sin(a) * 6);
+              g.lineTo(Math.cos(a + 0.2) * 14, Math.sin(a + 0.2) * 14);
+              g.strokePath();
+            }
+
+            for (let i = 0; i < 3; i++) {
+              const a = (i / 3) * Math.PI * 2 + 0.35;
+              const x = Math.cos(a) * 30;
+              const y = Math.sin(a) * 30;
+              g.fillStyle(COLORS.magenta, 0.24);
+              g.fillCircle(x, y, 5.6);
+              g.lineStyle(1.4, COLORS.green, 0.64);
+              g.strokeCircle(x, y, 4.4);
+              g.fillStyle(COLORS.white, 0.62);
+              g.fillCircle(x - 1.2, y - 1.2, 1);
+            }
+          }
+'''
+          s = must_sub(
+              s,
+              r"  private drawLysisCore\(g: Phaser\.GameObjects\.Graphics\): void \{.*?\n  \}\n\}",
+              new_lysis + "}",
+              'Player.drawLysisCore',
+          )
+          p.write_text(s)
+
+          # ------------------------------------------------------------------
+          # Baked art: smooth macrophage and horizontally seamless plasma tile.
+          # ------------------------------------------------------------------
+          p = Path('src/game/StrainZeroTextures.ts')
+          s = p.read_text()
+          new_macrophage = r'''  make('immune-macrophage', 62, 62, (ctx) => {
+            const pts = [
+              [5, 31], [8, 21], [15, 18], [17, 9], [27, 12], [34, 5], [42, 14], [53, 14],
+              [51, 25], [59, 31], [51, 38], [53, 49], [42, 48], [34, 58], [26, 50], [14, 52],
+              [15, 42], [6, 39],
+            ] as const;
+            const last = pts[pts.length - 1];
+            const first = pts[0];
+            ctx.beginPath();
+            ctx.moveTo((last[0] + first[0]) / 2, (last[1] + first[1]) / 2);
+            for (let i = 0; i < pts.length; i++) {
+              const cur = pts[i];
+              const next = pts[(i + 1) % pts.length];
+              ctx.quadraticCurveTo(cur[0], cur[1], (cur[0] + next[0]) / 2, (cur[1] + next[1]) / 2);
+            }
+            ctx.closePath();
+            ctx.fillStyle = radial(ctx, 29, 27, 30, '#fff8ef', '#d9aa91', '#7d5264');
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255,214,196,0.92)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.fillStyle = radial(ctx, 29, 31, 13, '#b976a2', '#6f426f', '#39284b');
+            ctx.beginPath();
+            ctx.ellipse(29, 31, 14, 10.5, 0.25, 0, Math.PI * 2);
+            ctx.fill();
+
+            const vesicles = [[16, 27, 3.2], [41, 21, 2.8], [43, 39, 3], [22, 43, 2.2]] as const;
+            for (const [x, y, r] of vesicles) {
+              ctx.fillStyle = 'rgba(255,248,235,0.54)';
+              ctx.beginPath();
+              ctx.arc(x, y, r, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.strokeStyle = 'rgba(119,73,99,0.45)';
+              ctx.lineWidth = 0.8;
+              ctx.stroke();
+            }
+            ctx.fillStyle = 'rgba(255,255,255,0.2)';
+            ctx.beginPath();
+            ctx.ellipse(22, 17, 7, 2.8, -0.45, 0, Math.PI * 2);
+            ctx.fill();
+          });
+
+          make('immune-prime' '''
+          s = must_sub(
+              s,
+              r"  make\('immune-macrophage', 62, 62, \(ctx\) => \{.*?\n  \}\);\n\n  make\('immune-prime' ",
+              new_macrophage,
+              'StrainZeroTextures.macrophage',
+          )
+
+          new_plasma = r'''  const plasma = scene.textures.createCanvas('blood-plasma', 256, 256);
+            if (plasma) {
+              const ctx = plasma.getContext();
+              // Y-only gradient has identical left/right edges: TileSprite can scroll forever without seams.
+              const bg = ctx.createLinearGradient(0, 0, 0, 256);
+              bg.addColorStop(0, '#16070f');
+              bg.addColorStop(0.5, '#250a14');
+              bg.addColorStop(1, '#16070f');
+              ctx.fillStyle = bg;
+              ctx.fillRect(0, 0, 256, 256);
+
+              // Every ribbon enters and leaves at the same Y, so horizontal repetition is continuous.
+              for (let i = 0; i < 7; i++) {
+                const y = 18 + i * 38;
+                ctx.strokeStyle = i % 2
+                  ? 'rgba(255,71,96,0.035)'
+                  : 'rgba(255,126,145,0.025)';
+                ctx.lineWidth = 12 + (i % 3) * 7;
+                ctx.beginPath();
+                ctx.moveTo(-20, y);
+                ctx.bezierCurveTo(62, y - 25, 194, y + 25, 276, y);
+                ctx.stroke();
+                ctx.strokeStyle = 'rgba(255,150,164,0.035)';
+                ctx.lineWidth = 1.2;
+                ctx.stroke();
+              }
+
+              // Wrap membrane ghosts across the X edges instead of clipping them at tile boundaries.
+              for (let i = 0; i < 22; i++) {
+                const x = (i * 83 + 17) % 256;
+                const y = (i * 47 + 29) % 256;
+                const r = 7 + ((i * 13) % 23);
+                for (const ox of [-256, 0, 256]) {
+                  ctx.beginPath();
+                  ctx.arc(x + ox, y, r, 0, Math.PI * 2);
+                  ctx.strokeStyle = i % 4 === 0 ? 'rgba(255,92,119,0.065)' : 'rgba(185,44,66,0.038)';
+                  ctx.lineWidth = 1 + (i % 2) * 0.6;
+                  ctx.stroke();
+                }
+              }
+
+              for (let i = 0; i < 42; i++) {
+                const x = (i * 37 + 11) % 256;
+                const y = (i * 71 + 5) % 256;
+                const a = 0.018 + (i % 4) * 0.008;
+                ctx.fillStyle = `rgba(255,190,199,${a})`;
+                ctx.beginPath();
+                ctx.arc(x, y, 0.8 + (i % 3) * 0.45, 0, Math.PI * 2);
+                ctx.fill();
+              }
+
+              const sheen = ctx.createLinearGradient(0, 0, 0, 256);
+              sheen.addColorStop(0, 'rgba(255,97,128,0.025)');
+              sheen.addColorStop(0.5, 'rgba(0,0,0,0)');
+              sheen.addColorStop(1, 'rgba(255,97,128,0.025)');
+              ctx.fillStyle = sheen;
+              ctx.fillRect(0, 0, 256, 256);
+              plasma.refresh();
+            }
+
+            // Keep a tiny colour-token'''
+          s = must_sub(
+              s,
+              r"  const plasma = scene\.textures\.createCanvas\('blood-plasma', 256, 256\);.*?\n  \}\n\n  // Keep a tiny colour-token",
+              new_plasma,
+              'StrainZeroTextures.plasma',
+          )
+          p.write_text(s)
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/scenes/GameScene.ts src/scenes/UIScene.ts src/game/Player.ts src/game/StrainZeroTextures.ts
+          git commit -m 'feat: apply screenshot-driven premium art corrections'
+          git push origin HEAD:feat/strain-zero-redesign
