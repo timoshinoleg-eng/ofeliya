@@ -3,7 +3,7 @@ export const IDENTITY = {
   xp: 'ФРАГМЕНТЫ РНК',
   levelUp: 'МУТАЦИЯ',
   run: 'ЦИКЛ ЗАРАЖЕНИЯ',
-  kills: 'ИММУННЫХ КЛЕТОК',
+  kills: 'ИММУНИТЕТ',
   boss: 'IMMUNE PRIME',
   enemies: {
     swarm: 'АНТИТЕЛО',
