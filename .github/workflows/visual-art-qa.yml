@@ -119,6 +119,6 @@ jobs:
           NODE_PATH="$GITHUB_WORKSPACE/node_modules" node /tmp/capture.cjs
       - uses: actions/upload-artifact@v4
         with:
-          name: strain-zero-art-qa-v4
+          name: strain-zero-art-qa-v5
           path: /tmp/art/*.png
           if-no-files-found: error
