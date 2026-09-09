@@ -85,7 +85,6 @@ class SfxImpl {
     gain.gain.setValueAtTime(0.0001, t);
     gain.gain.exponentialRampToValueAtTime(peak, t + 0.025);
     gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
-    // A softer second ventricular pulse gives a biological feel without a sampled heartbeat.
     gain.gain.exponentialRampToValueAtTime(peak * 0.5, t + 0.21);
     gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.34);
   }
@@ -160,8 +159,18 @@ class SfxImpl {
 
   private playBuf(buf: AudioBuffer, out: GainNode, vol: number): void {
     const ctx = this.ctx; if (!ctx) return;
-    const src = ctx.createBufferSource(); src.buffer = buf;
-    const g = ctx.createGain(); g.gain.value = vol; src.connect(g); g.connect(out); src.start();
+    const src = ctx.createBufferSource();
+    const gain = ctx.createGain();
+    src.buffer = buf;
+    gain.gain.value = vol;
+    src.connect(gain);
+    gain.connect(out);
+    src.onended = () => {
+      try { src.disconnect(); } catch { /* no-op */ }
+      try { gain.disconnect(); } catch { /* no-op */ }
+      src.onended = null;
+    };
+    src.start();
   }
 
   private fallback(name: SfxName): void {
@@ -203,11 +212,23 @@ class SfxImpl {
 
   private blip(f0: number, f1: number, dur: number, type: OscillatorType, vol: number, delay = 0): void {
     const ctx = this.ensure(); if (!ctx || !this.sfxGain) return;
-    const t0 = ctx.currentTime + delay; const osc = ctx.createOscillator(); const g = ctx.createGain();
-    osc.type = type; osc.frequency.setValueAtTime(Math.max(1, f0), t0);
+    const t0 = ctx.currentTime + delay;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(Math.max(1, f0), t0);
     osc.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t0 + dur);
-    g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    osc.connect(g); g.connect(this.sfxGain); osc.start(t0); osc.stop(t0 + dur + 0.02);
+    gain.gain.setValueAtTime(vol, t0);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.onended = () => {
+      try { osc.disconnect(); } catch { /* no-op */ }
+      try { gain.disconnect(); } catch { /* no-op */ }
+      osc.onended = null;
+    };
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.02);
   }
 
   startMusic(): void {
