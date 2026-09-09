@@ -24,7 +24,7 @@ jobs:
           for i in $(seq 1 40); do curl -fsS http://127.0.0.1:5173/ >/dev/null && exit 0; sleep .5; done
           cat /tmp/vite.log
           exit 1
-      - name: Capture visual states
+      - name: Capture corrected visual states
         run: |
           mkdir -p /tmp/art
           cat > /tmp/capture.cjs <<'NODE'
@@ -47,64 +47,77 @@ jobs:
 
             await page.evaluate(()=>window.__game.scene.getScene('Menu').scene.start('Game'));
             await page.waitForFunction(()=>window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI'));
-            await sleep(1800);
+            // Capture the actual opening before the very fast first RNA mutation appears.
+            await sleep(800);
             await page.screenshot({path:'/tmp/art/02-opening-combat.png'});
 
             await page.waitForFunction(()=>window.__game.scene.getScene('Game').awaitingChoice === true, null, {timeout:10000});
-            await sleep(250);
+            await sleep(220);
             await page.screenshot({path:'/tmp/art/03-first-mutation.png'});
 
-            // Close progression modal for deterministic art staging; gameplay contract is tested separately.
+            // Close progression modal and freeze progression. Gameplay contracts are covered by a separate smoke.
             await page.evaluate(()=>{
               const g=window.__game, gs=g.scene.getScene('Game'), ui=g.scene.getScene('UI');
               const choice=gs.pendingChoices?.[0];
               if (choice) gs.chooseUpgrade(choice.id);
               ui.hideModal();
               g.scene.resume('Game');
+              gs.finished=true;
               gs.physics.world.pause();
-
-              const kinds=[['swarm',-95,-70],['runner',105,-55],['brute',-105,80],['boss',95,95]];
+              for(const e of gs.enemies.getChildren()) if(e?.active) e.disableBody(true,true);
+              gs.player.setMutationState(true,true,true);
+              const kinds=[['swarm',-92,-78],['runner',104,-58],['brute',-100,86],['boss',100,94]];
               for(const [kind,dx,dy] of kinds){
                 const x=gs.player.x+dx, y=gs.player.y+dy;
                 const e=gs.enemies.get(x,y);
                 if(e) e.activate(gs,kind,x,y,{elite:false,hpScale:1,dmgScale:1});
               }
-              gs.player.setMutationState(true,true,true);
             });
-            await sleep(180);
+            await sleep(220);
             await page.screenshot({path:'/tmp/art/04-immune-cast-and-critical-virus.png'});
 
+            // Isolate host-cell states from staged enemies so infection/lysis can be judged on their own.
             await page.evaluate(()=>{
               const gs=window.__game.scene.getScene('Game');
+              for(const e of gs.enemies.getChildren()) if(e?.active) e.disableBody(true,true);
+              gs.player.setMutationState(false,false,false);
               const hs=gs.hostCells;
               hs.spawnNearPlayer();
               const cell=hs.cells.find(c=>c.active);
               if(!cell) throw new Error('host cell slot unavailable');
-              cell.image.setPosition(gs.player.x+62,gs.player.y+105);
+              cell.image.setPosition(gs.player.x,gs.player.y+112);
               cell.infectionOverlay.setPosition(cell.image.x,cell.image.y);
               cell.infection=0.82;
               hs.update(performance.now(),16,10000);
               window.__visualCell=cell;
             });
-            await sleep(100);
+            await sleep(120);
             await page.screenshot({path:'/tmp/art/05-host-cell-infected.png'});
 
             await page.evaluate(()=>{
               const gs=window.__game.scene.getScene('Game');
               const cell=window.__visualCell;
-              cell.infection=0.995;
-              gs.hostCells.update(performance.now(),20,10000);
+              gs.hostCells.lyse(cell);
             });
-            await sleep(110);
+            await sleep(100);
             await page.screenshot({path:'/tmp/art/06-host-cell-lysis.png'});
 
-            if(errors.length) console.log('page errors:', errors);
+            // Bespoke critical-mutation emblem/ceremony must read as a premium reward, not generic cyber UI.
+            await page.evaluate(()=>{
+              const ui=window.__game.scene.getScene('UI');
+              ui.hideModal();
+              ui.showEvolutionCeremony('prism',false);
+            });
+            await sleep(260);
+            await page.screenshot({path:'/tmp/art/07-critical-mutation-ceremony.png'});
+
+            if(errors.length) throw new Error('page errors: '+errors.join(' | '));
             await browser.close();
           })().catch(e=>{console.error(e.stack||e);process.exit(1)});
           NODE
           NODE_PATH="$GITHUB_WORKSPACE/node_modules" node /tmp/capture.cjs
       - uses: actions/upload-artifact@v4
         with:
-          name: strain-zero-art-qa
+          name: strain-zero-art-qa-v2
           path: /tmp/art/*.png
           if-no-files-found: error
