@@ -3,6 +3,7 @@ import { parseChallengePayload } from '../game/Challenge';
 import { COLORS, FONT, fmtTime } from '../game/config';
 import { IDENTITY } from '../game/identity';
 import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
+import { showLegalOverlay } from '../legal/LegalOverlay';
 import { PlatformBridge } from '../platform';
 import { SaveSystem } from '../systems/SaveSystem';
 import { Sfx } from '../systems/Sfx';
@@ -283,7 +284,7 @@ export class MenuScene extends Phaser.Scene {
       });
 
     this.add
-      .text(W / 2, H - 44, 'Двигай штамм · собирай РНК · выбирай мутации', {
+      .text(W / 2, H - 54, 'Двигай штамм · собирай РНК · выбирай мутации', {
         fontFamily: FONT,
         fontSize: '10px',
         color: '#8d6678',
@@ -295,7 +296,23 @@ export class MenuScene extends Phaser.Scene {
       .setDepth(5);
 
     this.add
-      .text(W / 2, H - 10, `mini-app · ${PlatformBridge.platform} · v0.1.0`, {
+      .text(W / 2, H - 31, 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА', {
+        fontFamily: FONT,
+        fontSize: '9px',
+        fontStyle: 'bold',
+        color: '#8fe8ff',
+      })
+      .setOrigin(0.5)
+      .setResolution(2)
+      .setDepth(6)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerup', () => {
+        Sfx.play('click');
+        showLegalOverlay();
+      });
+
+    this.add
+      .text(W / 2, H - 9, `mini-app · ${PlatformBridge.platform} · v0.1.0`, {
         fontFamily: FONT,
         fontSize: '9px',
         color: '#654454',
