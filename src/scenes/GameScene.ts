@@ -200,6 +200,7 @@ export class GameScene extends Phaser.Scene {
       this.scale.off('resize', this.onResize, this);
       PlatformBridge.setBackHandler(null);
       this.dismissIntroHint(true);
+      this.cameras.main.resetFX();
       this.atmosphere.destroy();
       this.vfx.destroy();
       this.hostCells.destroy();
