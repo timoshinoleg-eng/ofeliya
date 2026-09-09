@@ -203,23 +203,22 @@ export class HostCellSystem {
     cell.infection = 0;
     cell.ring.setVisible(false).clear();
 
-    // Two-layer rupture flash preserves the healthy membrane and infected replication pattern for
-    // a few frames, so the player reads cause -> rupture instead of an arbitrary explosion.
+    // Preserve the texture's native magenta/green membrane colors. Applying a green tint here
+    // multiplies away most of the magenta pixels and made the rupture nearly disappear on device.
     const membraneGhost = this.scene.add
       .image(x, y, 'host-cell-shadow')
-      .setDepth(11)
-      .setScale(scale)
-      .setTint(COLORS.green)
-      .setAlpha(0.82);
+      .setDepth(13)
+      .setScale(scale * 0.98)
+      .setAlpha(0.96);
     const infectionGhost = this.scene.add
       .image(x, y, 'host-cell-infection')
-      .setDepth(12)
+      .setDepth(14)
       .setScale(scale)
-      .setAlpha(0.95)
+      .setAlpha(0.98)
       .setBlendMode(Phaser.BlendModes.ADD);
 
-    // Explicit Arc game objects are more reliable than a transient Graphics path here and retain
-    // a broken membrane silhouette across several 60 Hz frames before the RNA fragments dominate.
+    // Explicit Arc objects remain a secondary contour; the textured membrane and shards carry the
+    // primary biological read so the cue survives WebGL blend differences on mobile.
     const segments = [
       [-166, -123],
       [-99, -46],
@@ -231,18 +230,17 @@ export class HostCellSystem {
       this.scene.add
         .arc(x, y, 39 + (index % 2) * 3, a0, a1, false, 0x000000, 0)
         .setStrokeStyle(index === 2 ? 5 : 4, COLORS.green, 1)
-        .setDepth(14)
-        .setBlendMode(Phaser.BlendModes.ADD)
+        .setDepth(15)
     );
     const ruptureHighlights = [
       this.scene.add
         .arc(x, y, 34, -146, -111, false, 0x000000, 0)
         .setStrokeStyle(2, COLORS.white, 0.78)
-        .setDepth(15),
+        .setDepth(16),
       this.scene.add
         .arc(x, y, 34, 20, 61, false, 0x000000, 0)
         .setStrokeStyle(2, COLORS.white, 0.78)
-        .setDepth(15),
+        .setDepth(16),
     ];
     const ruptureShapes = [...ruptureArcs, ...ruptureHighlights];
     for (const arc of ruptureShapes) arc.setScale(0.94).setAlpha(1);
@@ -257,42 +255,41 @@ export class HostCellSystem {
 
     this.scene.tweens.add({
       targets: membraneGhost,
-      scale: scale * 1.62,
+      scale: scale * 1.48,
       alpha: 0,
-      duration: 470,
+      duration: 610,
       ease: 'Quad.Out',
       onComplete: () => membraneGhost.destroy(),
     });
     this.scene.tweens.add({
       targets: infectionGhost,
-      scale: scale * 1.3,
-      rotation: 0.4,
+      scale: scale * 1.28,
+      rotation: 0.35,
       alpha: 0,
-      duration: 320,
+      duration: 430,
       ease: 'Cubic.Out',
       onComplete: () => infectionGhost.destroy(),
     });
 
-    // Membrane fragments make lysis look biological rather than like a generic neon nova.
-    for (let i = 0; i < 9; i++) {
-      const a = (i / 9) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.14, 0.14);
+    // The fragment texture already contains both membrane colors; keep them intact and large enough
+    // to read as torn tissue rather than generic particles.
+    for (let i = 0; i < 11; i++) {
+      const a = (i / 11) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.12, 0.12);
       const fragment = this.scene.add
-        .image(x + Math.cos(a) * 24, y + Math.sin(a) * 24, 'membrane-fragment')
-        .setDepth(13)
+        .image(x + Math.cos(a) * 27, y + Math.sin(a) * 27, 'membrane-fragment')
+        .setDepth(17)
         .setRotation(a + Math.PI / 2)
-        .setScale(Phaser.Math.FloatBetween(0.9, 1.25))
-        .setTint(COLORS.green)
-        .setAlpha(1)
-        .setBlendMode(Phaser.BlendModes.ADD);
-      const travel = Phaser.Math.FloatBetween(62, 98);
+        .setScale(Phaser.Math.FloatBetween(1.35, 1.85))
+        .setAlpha(1);
+      const travel = Phaser.Math.FloatBetween(70, 108);
       this.scene.tweens.add({
         targets: fragment,
         x: x + Math.cos(a) * travel,
         y: y + Math.sin(a) * travel,
-        rotation: fragment.rotation + Phaser.Math.FloatBetween(-0.7, 0.7),
-        scale: fragment.scaleX * 0.45,
+        rotation: fragment.rotation + Phaser.Math.FloatBetween(-0.75, 0.75),
+        scale: fragment.scaleX * 0.52,
         alpha: 0,
-        duration: Phaser.Math.Between(480, 650),
+        duration: Phaser.Math.Between(560, 760),
         ease: 'Quad.Out',
         onComplete: () => fragment.destroy(),
       });
