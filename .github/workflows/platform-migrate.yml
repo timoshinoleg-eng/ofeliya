@@ -1,0 +1,62 @@
+name: Platform facade migration
+
+on:
+  push:
+    branches: [feat/strain-zero-redesign]
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    if: ${{ contains(github.event.head_commit.message, '[platform-migrate]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/strain-zero-redesign
+      - name: Migrate scenes and wire native back
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          for name in ['src/scenes/MenuScene.ts', 'src/scenes/UIScene.ts', 'src/scenes/GameScene.ts']:
+              p = Path(name)
+              s = p.read_text()
+              s = s.replace("import { MaxBridge } from '../systems/MaxBridge';", "import { PlatformBridge } from '../platform';")
+              s = s.replace('MaxBridge.', 'PlatformBridge.')
+              p.write_text(s)
+
+          p = Path('src/scenes/GameScene.ts')
+          s = p.read_text()
+          needle = "    this.runState = new RunState();\n    Sfx.startMusic();"
+          replacement = "    this.runState = new RunState();\n    Sfx.startMusic();\n    PlatformBridge.setBackHandler(() => this.exitToMenu());"
+          if needle not in s:
+              raise SystemExit('GameScene create hook not found')
+          s = s.replace(needle, replacement, 1)
+
+          needle = "      this.scale.off('resize', this.onResize, this);\n      this.atmosphere.destroy();"
+          replacement = "      this.scale.off('resize', this.onResize, this);\n      PlatformBridge.setBackHandler(null);\n      this.atmosphere.destroy();"
+          if needle not in s:
+              raise SystemExit('GameScene shutdown hook not found')
+          s = s.replace(needle, replacement, 1)
+
+          anchor = "  update(time: number, delta: number): void {"
+          method = """  private exitToMenu(): void {
+    Sfx.stopMusic();
+    if (this.scene.isActive('UI') || this.scene.isPaused('UI')) this.scene.stop('UI');
+    this.scene.stop();
+    this.scene.start('Menu');
+  }
+
+"""
+          if anchor not in s:
+              raise SystemExit('GameScene method anchor not found')
+          s = s.replace(anchor, method + anchor, 1)
+          p.write_text(s)
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/scenes/MenuScene.ts src/scenes/UIScene.ts src/scenes/GameScene.ts
+          git commit -m 'feat: use platform-neutral facade in game scenes'
+          git push origin HEAD:feat/strain-zero-redesign
