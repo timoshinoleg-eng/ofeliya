@@ -82,6 +82,7 @@ export class GameScene extends Phaser.Scene {
   private trailCursor = 0;
   private trailAcc = 0;
   private keys: Record<string, Phaser.Input.Keyboard.Key> = {};
+  private introHint: Phaser.GameObjects.Container | null = null;
 
   constructor() {
     super('Game');
@@ -107,6 +108,7 @@ export class GameScene extends Phaser.Scene {
     this.lastDmg = null;
     this.lastDmgAt = 0;
     this.dmgCursor = 0;
+    this.introHint = null;
     this.physics.world.resume();
 
     const W = this.scale.width;
@@ -197,6 +199,7 @@ export class GameScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.onResize, this);
       PlatformBridge.setBackHandler(null);
+      this.dismissIntroHint(true);
       this.atmosphere.destroy();
       this.vfx.destroy();
       this.hostCells.destroy();
@@ -306,6 +309,8 @@ export class GameScene extends Phaser.Scene {
     this.registry.set('run', this.snapshot());
 
     if (this.queuedLevels > 0 && !this.awaitingChoice) {
+      // Progression supersedes onboarding; never render tutorial copy beneath a mutation modal.
+      this.dismissIntroHint();
       this.pendingChoices = rollRunChoices(st);
       this.awaitingChoice = true;
       this.queuedLevels -= 1;
@@ -363,7 +368,8 @@ export class GameScene extends Phaser.Scene {
   private onHostCellLysis(event: HostCellLysisEvent): void {
     const st = this.runState;
     st.hostCellsInfected += 1;
-    this.vfx.nova(event.x, event.y, event.radius);
+    // Gameplay radius is unchanged; the smaller visual nova leaves room for the membrane contour.
+    this.vfx.nova(event.x, event.y, event.radius * 0.72);
     this.atmosphere.pulse(COLORS.green, 0.14);
     Sfx.play('nova');
     PlatformBridge.haptic('medium');
@@ -765,9 +771,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private showIntroHint(): void {
+    this.dismissIntroHint(true);
     const W = this.scale.width;
     const H = this.scale.height;
     const c = this.add.container(0, 0).setDepth(60);
+    this.introHint = c;
     const panelW = Math.min(W - 28, 370);
     const panelY = H * 0.3 + 8;
 
@@ -802,8 +810,27 @@ export class GameScene extends Phaser.Scene {
     c.setAlpha(0);
     this.tweens.add({ targets: c, alpha: 1, duration: 220 });
     this.time.delayedCall(4600, () => {
-      if (!c.active) return;
+      if (!c.active || this.introHint !== c) return;
+      this.introHint = null;
       this.tweens.add({ targets: c, alpha: 0, duration: 260, onComplete: () => c.destroy() });
+    });
+  }
+
+  private dismissIntroHint(immediate = false): void {
+    const c = this.introHint;
+    if (!c) return;
+    this.introHint = null;
+    this.tweens.killTweensOf(c);
+    if (immediate) {
+      c.destroy();
+      return;
+    }
+    this.tweens.add({
+      targets: c,
+      alpha: 0,
+      duration: 110,
+      ease: 'Quad.Out',
+      onComplete: () => c.destroy(),
     });
   }
 
