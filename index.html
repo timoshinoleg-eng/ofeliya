@@ -6,13 +6,11 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#0b0e1a" />
-    <title>Ofeliya</title>
-    <!-- MAX Bridge: глобальный объект window.WebApp (см. dev.max.ru/docs/webapps/bridge).
-         В обычном браузере скрипт просто не определяет WebApp — игра работает и без него. -->
+    <meta name="theme-color" content="#12070d" />
+    <title>OFELIYA: STRAIN ZERO</title>
+    <!-- MAX Bridge. Platform detection is late-safe, so a slow CDN cannot permanently demote MAX to browser mode. -->
     <script src="https://st.max.ru/js/max-web-app.js" defer></script>
     <style>
-      /* Chakra Petch (OFL, self-hosted) — современный дисплейный шрифт вместо Arial. */
       @font-face {
         font-family: 'Chakra Petch';
         font-style: normal;
@@ -31,16 +29,25 @@
       body {
         margin: 0;
         padding: 0;
-        background: #0b0e1a;
+        width: 100%;
         height: 100%;
+        background: #12070d;
         overflow: hidden;
         overscroll-behavior: none;
       }
       #game {
-        width: 100%;
-        height: 100%;
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 100vw;
+        height: 100dvh;
+        max-width: 100%;
+        max-height: 100%;
+        overflow: hidden;
+        background: #12070d;
       }
       #game canvas {
+        display: block;
         touch-action: none;
       }
       #splash {
@@ -49,7 +56,8 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        color: #35e0ff;
+        color: #ff78c8;
+        background: #12070d;
         font-family: 'Chakra Petch', Arial, sans-serif;
         font-size: 18px;
         letter-spacing: 3px;
@@ -58,7 +66,7 @@
   </head>
   <body>
     <div id="game"></div>
-    <div id="splash">OFELIYA</div>
+    <div id="splash">OFELIYA · STRAIN ZERO</div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
