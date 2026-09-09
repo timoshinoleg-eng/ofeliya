@@ -1,4 +1,4 @@
-name: Force synchronous tutorial dismissal
+name: Harden rupture silhouette rendering
 
 on:
   push:
@@ -20,16 +20,80 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Make mutation transition synchronous
+      - name: Replace transient Graphics contour with explicit Arc objects
         run: |
           python - <<'PY'
           from pathlib import Path
-          p = Path('src/scenes/GameScene.ts')
+          p = Path('src/systems/HostCellSystem.ts')
           s = p.read_text()
-          old = "      this.dismissIntroHint();\n      this.pendingChoices = rollRunChoices(st);"
-          new = "      this.dismissIntroHint(true);\n      this.pendingChoices = rollRunChoices(st);"
+          old = '''    const ruptureContour = this.scene.add.graphics().setPosition(x, y).setDepth(12);
+    const segments = [
+      [-2.9, -2.15],
+      [-1.72, -0.8],
+      [-0.3, 0.48],
+      [0.92, 1.72],
+      [2.08, 2.72],
+    ] as const;
+    ruptureContour.lineStyle(4, COLORS.green, 0.96);
+    for (const [a0, a1] of segments) {
+      ruptureContour.beginPath();
+      ruptureContour.arc(0, 0, 40, a0, a1, false);
+      ruptureContour.strokePath();
+    }
+    ruptureContour.lineStyle(1.5, COLORS.white, 0.48);
+    ruptureContour.beginPath();
+    ruptureContour.arc(0, 0, 35, -2.55, -1.95, false);
+    ruptureContour.strokePath();
+    ruptureContour.beginPath();
+    ruptureContour.arc(0, 0, 35, 0.35, 1.05, false);
+    ruptureContour.strokePath();
+    ruptureContour.setScale(0.92).setAlpha(1);
+    this.scene.tweens.add({
+      targets: ruptureContour,
+      scale: 1.5,
+      alpha: 0,
+      duration: 560,
+      ease: 'Cubic.Out',
+      onComplete: () => ruptureContour.destroy(),
+    });
+'''
+          new = '''    const segments = [
+      [-166, -123],
+      [-99, -46],
+      [-17, 28],
+      [53, 99],
+      [119, 156],
+    ] as const;
+    const ruptureArcs = segments.map(([a0, a1], index) =>
+      this.scene.add
+        .arc(x, y, 39 + (index % 2) * 3, a0, a1, false, 0x000000, 0)
+        .setStrokeStyle(index === 2 ? 5 : 4, COLORS.green, 1)
+        .setDepth(13)
+        .setBlendMode(Phaser.BlendModes.ADD)
+    );
+    const ruptureHighlights = [
+      this.scene.add
+        .arc(x, y, 34, -146, -111, false, 0x000000, 0)
+        .setStrokeStyle(2, COLORS.white, 0.72)
+        .setDepth(14),
+      this.scene.add
+        .arc(x, y, 34, 20, 61, false, 0x000000, 0)
+        .setStrokeStyle(2, COLORS.white, 0.72)
+        .setDepth(14),
+    ];
+    const ruptureShapes = [...ruptureArcs, ...ruptureHighlights];
+    for (const arc of ruptureShapes) arc.setScale(0.94).setAlpha(1);
+    this.scene.tweens.add({
+      targets: ruptureShapes,
+      scale: 1.48,
+      alpha: 0,
+      duration: 640,
+      ease: 'Cubic.Out',
+      onComplete: () => ruptureShapes.forEach((arc) => arc.destroy()),
+    });
+'''
           if s.count(old) != 1:
-              raise SystemExit(f'expected exactly one progression dismissal, found {s.count(old)}')
+              raise SystemExit(f'expected exactly one rupture contour block, found {s.count(old)}')
           p.write_text(s.replace(old, new, 1))
           PY
       - run: npm ci
@@ -38,7 +102,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/scenes/GameScene.ts
+          git add src/systems/HostCellSystem.ts
           git diff --cached --quiet && exit 0
-          git commit -m 'fix: destroy onboarding before pausing for mutation'
+          git commit -m 'fix: render lysis as explicit broken membrane arcs'
           git push origin HEAD:feat/strain-zero-redesign
