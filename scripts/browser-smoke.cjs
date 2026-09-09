@@ -113,6 +113,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     ui.children.list.forEach(visit);
     const shareText = flat.find((obj) => obj.text === 'БРОСИТЬ ВЫЗОВ');
     const verdict = flat.find((obj) => typeof obj.text === 'string' && obj.text.includes('ВЫЗОВ ПРЕВЗОЙДЁН'));
+    const stats = flat.find((obj) => typeof obj.text === 'string' && obj.text.startsWith('ИММУНИТЕТ:') && obj.text.includes('Клеток:'));
+    const statsBounds = stats?.getBounds?.();
     let shareControl = null;
     if (shareText?.parentContainer?.list) {
       shareControl = shareText.parentContainer.list.find((obj) =>
@@ -123,10 +125,14 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       share: !!shareText,
       verdict: verdict?.text ?? null,
       control: !!shareControl,
+      stats: stats?.text ?? null,
+      statsInside: !!statsBounds && statsBounds.left >= 4 && statsBounds.right <= ui.scale.width - 4,
+      statsBounds: statsBounds ? { left: statsBounds.left, right: statsBounds.right, width: statsBounds.width } : null,
+      viewportWidth: ui.scale.width,
     };
   });
-  if (!resultState.share || !resultState.verdict || !resultState.control) {
-    throw new Error(`challenge result missing: ${JSON.stringify(resultState)}`);
+  if (!resultState.share || !resultState.verdict || !resultState.control || !resultState.stats || !resultState.statsInside) {
+    throw new Error(`challenge result layout failed: ${JSON.stringify(resultState)}`);
   }
   await sleep(120);
   await page.screenshot({ path: '/tmp/browser-smoke/02-challenge-result.png' });
