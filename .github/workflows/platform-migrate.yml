@@ -42,14 +42,7 @@ jobs:
           s = s.replace(needle, replacement, 1)
 
           anchor = "  update(time: number, delta: number): void {"
-          method = """  private exitToMenu(): void {
-    Sfx.stopMusic();
-    if (this.scene.isActive('UI') || this.scene.isPaused('UI')) this.scene.stop('UI');
-    this.scene.stop();
-    this.scene.start('Menu');
-  }
-
-"""
+          method = "  private exitToMenu(): void {\n    Sfx.stopMusic();\n    if (this.scene.isActive('UI') || this.scene.isPaused('UI')) this.scene.stop('UI');\n    this.scene.stop();\n    this.scene.start('Menu');\n  }\n\n"
           if anchor not in s:
               raise SystemExit('GameScene method anchor not found')
           s = s.replace(anchor, method + anchor, 1)
