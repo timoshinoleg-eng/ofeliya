@@ -1,22 +1,23 @@
 # OFELIYA: STRAIN ZERO — Third-Party Asset Notices
 
-This file records the provenance that is verifiable from the repository and upstream license pages.
-It is intentionally conservative: no upstream URL is invented when the original import did not
-record the exact item URL.
+This file records provenance that is verifiable from the repository and upstream license pages.
+It is intentionally conservative: no per-file upstream identity is invented when the historical
+import did not record it.
 
 ## Kenney sound effects
 
 Files: `public/audio/sfx/*.ogg` (11 files).
 
 - Source family: Kenney audio assets.
-- License: Creative Commons Zero (CC0 / public domain dedication).
+- License recorded at import: Creative Commons Zero (CC0 / public domain dedication).
 - Repository provenance: imported in commit `e43d5dc9e473dfb40ca8f819bcb82829315d093c`
   (`audio: Kenney CC0 SFX + music, lazy WebAudio load with procedural fallback`).
-- Kenney states that assets on its asset pages are CC0 and attribution is not required.
-- Upstream license/support reference: `https://kenney.nl/support`.
+- Kenney currently states that assets on its asset pages are CC0 and attribution is not required.
+- General upstream license/support reference: `https://kenney.nl/support`.
 
-The original import commit did not record the exact Kenney pack/file URLs. The repository commit,
-file blobs and CC0 source family are retained as the reproducible local provenance record.
+The historical import commit did not record the exact Kenney pack/file URLs. The repository commit,
+file blobs and recorded CC0 source family are therefore the local provenance evidence; exact pack
+URLs should be added if the original download notes are recovered.
 
 ## OpenGameArt music
 
@@ -35,13 +36,14 @@ Files:
 - Repository provenance: imported/replaced in commit
   `fd1185425c572c4ba27951ea00658574611d07ab`
   (`audio: replace 8-bit music loop with modern CC0 tracks (OpenGameArt)`).
-- Collection reference: `https://opengameart.org/content/cc0-music-0`.
+- A currently verifiable OpenGameArt collection with the recorded title exists at
+  `https://opengameart.org/content/cc0-music-0`; the historical commit does **not** prove that this
+  exact collection URL was the download page used for every local track.
 
 The historical import did **not** preserve a per-file mapping from `loop0..loop6` to individual
-OpenGameArt item URLs/authors. Because CC0 does not require attribution, this does not alter the
-runtime license grant recorded by the import; however, the per-file upstream mapping should be
-recovered from the original download/source notes before final marketplace moderation if available.
-Do not invent individual track authors or titles without that evidence.
+OpenGameArt item URLs/authors. Do not invent individual track authors or titles. If the original
+download/source notes are available, recover and append the exact seven mappings before marketplace
+moderation; otherwise preserve the repository import commit and binary hashes as the evidence trail.
 
 ## Chakra Petch font
 
@@ -56,7 +58,7 @@ Files:
   `de88f23d8b503ad1be8b07813c822145cde69308`.
 
 Before redistribution outside this application repository, preserve the OFL license/notice required
-by the upstream font package. The application itself does not modify or rename the font.
+by the upstream font package. The application does not modify or rename the font.
 
 ## Generated game art
 
@@ -72,4 +74,4 @@ Any new third-party binary asset must add, in the same change:
 3. author/attribution text when required;
 4. local file mapping.
 
-This avoids repeating the incomplete per-file provenance of the early audio import.
+This prevents repeating the incomplete per-file provenance of the early audio import.
