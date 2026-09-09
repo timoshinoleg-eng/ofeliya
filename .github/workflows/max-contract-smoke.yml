@@ -1,0 +1,82 @@
+name: MAX platform contract smoke
+
+on:
+  push:
+    branches: [feat/strain-zero-redesign]
+
+jobs:
+  smoke:
+    if: ${{ contains(github.event.head_commit.message, '[max-smoke]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm install --no-save --package-lock=false playwright-core@1.55.0
+      - name: Start dev server
+        run: |
+          npm run dev -- --host 127.0.0.1 > /tmp/vite.log 2>&1 &
+          for i in $(seq 1 40); do curl -fsS http://127.0.0.1:5173/ >/dev/null && exit 0; sleep .5; done
+          cat /tmp/vite.log; exit 1
+      - name: Validate MAX adapter contract
+        run: |
+          cat > /tmp/max-smoke.cjs <<'NODE'
+          const fs = require('fs');
+          const { chromium } = require('playwright-core');
+          const chrome = ['/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/usr/bin/chromium'].find(fs.existsSync);
+          if (!chrome) throw new Error('Chrome not found');
+          const assert=(v,m)=>{if(!v)throw new Error(m)};
+          (async()=>{
+            const browser=await chromium.launch({executablePath:chrome,headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+            const ctx=await browser.newContext({viewport:{width:390,height:844}});
+            await ctx.route('https://st.max.ru/**', route => route.fulfill({status:200,contentType:'application/javascript',body:''}));
+            await ctx.addInitScript(() => {
+              window.__max={shown:0,hidden:0,handler:null,haptics:0,shares:0};
+              window.WebApp={
+                platform:'android', version:'contract-smoke', initData:'signed-contract-payload',
+                initDataUnsafe:{user:{id:42,first_name:'Макс',last_name:'Тестер',username:'max_test'},start_param:'challenge-123'},
+                getViewportSize:async()=>({width:String(innerWidth),height:String(innerHeight)}),
+                shareContent:async()=>{window.__max.shares++; return {};},
+                BackButton:{
+                  show(){window.__max.shown++}, hide(){window.__max.hidden++},
+                  onClick(cb){window.__max.handler=cb}, offClick(cb){if(window.__max.handler===cb)window.__max.handler=null}
+                },
+                HapticFeedback:{impactOccurred(){window.__max.haptics++},notificationOccurred(){window.__max.haptics++}}
+              };
+              localStorage.setItem('ofeliya_save_v1', JSON.stringify({muted:true,runs:0}));
+            });
+            const page=await ctx.newPage(); const errors=[]; page.on('pageerror',e=>errors.push(String(e)));
+            await page.goto('http://127.0.0.1:5173/',{waitUntil:'domcontentloaded'});
+            await page.waitForFunction(()=>window.__game?.scene.isActive('Menu'));
+            const menu=await page.evaluate(()=>{
+              const g=window.__game,s=g.scene.getScene('Menu');
+              const texts=s.children.list.filter(o=>typeof o?.text==='string').map(o=>o.text);
+              return {greeting:texts.some(t=>t.includes('Макс Тестер')), width:g.scale.width,height:g.scale.height,max:window.__max};
+            });
+            assert(menu.greeting,'MAX first_name/last_name greeting missing');
+            assert(menu.width===390&&menu.height===844,`viewport mismatch ${JSON.stringify(menu)}`);
+            assert(menu.max.hidden>=1,'BackButton not hidden on Menu');
+
+            await page.evaluate(()=>window.__game.scene.getScene('Menu').scene.start('Game'));
+            await page.waitForFunction(()=>window.__game.scene.isActive('Game')&&window.__game.scene.isActive('UI'));
+            const inGame=await page.evaluate(()=>({shown:window.__max.shown,hasHandler:typeof window.__max.handler==='function'}));
+            assert(inGame.shown>=1,'BackButton not shown in Game');
+            assert(inGame.hasHandler,'BackButton handler missing in Game');
+
+            await page.evaluate(()=>window.__max.handler());
+            await page.waitForFunction(()=>window.__game.scene.isActive('Menu')&&!window.__game.scene.isActive('Game'),null,{timeout:3000});
+            const returned=await page.evaluate(()=>({hidden:window.__max.hidden,handler:window.__max.handler,ui:window.__game.scene.isActive('UI')}));
+            assert(returned.hidden>=2,'BackButton not hidden after returning to Menu');
+            assert(returned.handler===null,'BackButton handler leaked after Game shutdown');
+            assert(returned.ui===false,'UI scene leaked after native Back');
+            assert(errors.length===0,errors.join('\n'));
+            console.log(JSON.stringify({menu,inGame,returned,status:'ok'}));
+            await browser.close();
+          })().catch(e=>{console.error(e.stack||e);process.exit(1)});
+          NODE
+          NODE_PATH="$GITHUB_WORKSPACE/node_modules" node /tmp/max-smoke.cjs
