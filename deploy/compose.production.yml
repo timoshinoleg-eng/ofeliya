@@ -1,0 +1,40 @@
+services:
+  bot:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: runtime
+    image: ofeliya-runtime:${OFELIYA_RELEASE:?OFELIYA_RELEASE is required}
+    command: ["node", "bot/index.mjs"]
+    env_file: /opt/hub/.env
+    environment:
+      NODE_ENV: production
+      NODE_EXTRA_CA_CERTS: /app/certs/extra-ca.crt
+    volumes:
+      - ${HUB_EXTRA_CA_CERT:?HUB_EXTRA_CA_CERT is required}:/app/certs/extra-ca.crt:ro
+    restart: unless-stopped
+    networks:
+      quiz-battle:
+        aliases: [ofeliya-bot]
+
+  static:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: static
+    image: ofeliya-static:${OFELIYA_RELEASE:?OFELIYA_RELEASE is required}
+    restart: unless-stopped
+    networks:
+      quiz-battle:
+        aliases: [ofeliya-static]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+networks:
+  quiz-battle:
+    external: true
+    name: ${HUB_SHARED_NETWORK:-quiz-battle_default}

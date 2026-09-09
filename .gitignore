@@ -9,6 +9,7 @@ dist/
 # служебные данные инструментов
 .workbuddy-ai/
 .mimosa/
+.codegraph/
 
 # отдельный продукт со своим репозиторием: github.com/timoshinoleg-eng/hub
 hub/
