@@ -21,18 +21,8 @@ export const COLORS = {
 
 export const FONT = "'Chakra Petch', Arial, sans-serif";
 
-function postFxAllowed(): boolean {
-  if (typeof navigator === 'undefined') return true;
-  const nav = navigator as Navigator & { deviceMemory?: number };
-  const memory = nav.deviceMemory;
-  const cores = nav.hardwareConcurrency || 4;
-  return !((typeof memory === 'number' && memory <= 4) || cores <= 4);
-}
-
-/** Phaser camera postFX are reserved for devices with enough headroom; reduced devices use the
- * existing lightweight vignette texture instead. This never changes gameplay density. */
+/** Visual parameters only. Whether postFX are enabled is owned by PerformanceProfile. */
 export const POSTFX = {
-  enabled: postFxAllowed(),
   bloom: { strength: 0.8, blurStrength: 0.9, steps: 4 },
   vignette: { radius: 0.72, strength: 0.6 },
 };
