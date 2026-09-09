@@ -83,6 +83,12 @@ export class TelegramPlatform implements PlatformAdapter {
     return this.wa?.initDataUnsafe?.start_param ?? null;
   }
 
+  buildStartLink(_payload: string): string | null {
+    // Telegram Mini App link format needs both the bot and Mini App short name. VIR-17 owns that
+    // configuration; keeping this null avoids inventing a broken cross-platform link in MAX v1.
+    return null;
+  }
+
   async getViewportSize(): Promise<{ width: number; height: number } | null> {
     if (typeof window === 'undefined') return null;
     const width = window.innerWidth;
@@ -114,10 +120,10 @@ export class TelegramPlatform implements PlatformAdapter {
     }
   }
 
-  async shareResult(text: string): Promise<boolean> {
+  async shareResult(text: string, link?: string): Promise<boolean> {
     if (typeof navigator === 'undefined' || !navigator.share) return false;
     try {
-      await navigator.share({ text });
+      await navigator.share(link ? { text, url: link } : { text });
       return true;
     } catch {
       return false;
