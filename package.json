@@ -6,6 +6,7 @@
   "description": "Рогалик-выживание (Vampire Survivors-like) — мини-приложение для мессенджера MAX",
   "scripts": {
     "dev": "vite",
+    "test:challenge": "node scripts/check-challenge.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview"
   },
