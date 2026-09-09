@@ -12,7 +12,7 @@ import {
   type EvolutionId,
   type UpgradeDef,
 } from '../game/UpgradeSystem';
-import { MaxBridge } from '../systems/MaxBridge';
+import { PlatformBridge } from '../platform';
 import { Sfx } from '../systems/Sfx';
 import type { GameScene } from './GameScene';
 
@@ -257,8 +257,8 @@ export class UIScene extends Phaser.Scene {
     this.uiBlocked = true;
     this.scene.pause('Game');
     Sfx.play('levelup');
-    MaxBridge.notify('success');
-    MaxBridge.haptic('medium');
+    PlatformBridge.notify('success');
+    PlatformBridge.haptic('medium');
 
     const W = this.scale.width;
     const H = this.scale.height;
@@ -567,7 +567,7 @@ export class UIScene extends Phaser.Scene {
 
     Sfx.play('levelup');
     this.time.delayedCall(130, () => Sfx.play(id === 'singularity' ? 'nova' : 'elite'));
-    MaxBridge.haptic('heavy');
+    PlatformBridge.haptic('heavy');
 
     this.time.delayedCall(1050, () => {
       this.tweens.add({
@@ -741,7 +741,7 @@ export class UIScene extends Phaser.Scene {
       const shareText = res.win
         ? `OFELIYA / STRAIN-0 подавила иммунитет за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${evoShare} Сможешь быстрее?`
         : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${evoShare} Сможешь дольше?`;
-      void MaxBridge.shareResult(shareText).then((ok) => {
+      void PlatformBridge.shareResult(shareText).then((ok) => {
         if (!ok) this.toast(c, 'Нативный шаринг недоступен в этом клиенте');
       });
     });

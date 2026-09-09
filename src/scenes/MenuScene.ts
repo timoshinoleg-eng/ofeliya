@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { COLORS, FONT, fmtTime } from '../game/config';
 import { IDENTITY } from '../game/identity';
 import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
-import { MaxBridge } from '../systems/MaxBridge';
+import { PlatformBridge } from '../platform';
 import { SaveSystem } from '../systems/SaveSystem';
 import { Sfx } from '../systems/Sfx';
 
@@ -17,7 +17,7 @@ export class MenuScene extends Phaser.Scene {
     const H = this.scale.height;
     this.cameras.main.setBackgroundColor(COLORS.bg);
     Sfx.stopMusic();
-    MaxBridge.setBackHandler(null);
+    PlatformBridge.setBackHandler(null);
 
     const plasma = this.add
       .tileSprite(0, 0, W, H, 'blood-plasma')
@@ -143,8 +143,8 @@ export class MenuScene extends Phaser.Scene {
       .setResolution(2)
       .setDepth(5);
 
-    const displayName = MaxBridge.getDisplayName();
-    if (MaxBridge.available && displayName) {
+    const displayName = PlatformBridge.getDisplayName();
+    if (PlatformBridge.available && displayName) {
       this.add
         .text(W / 2, hookY + 70, `Носитель: ${displayName}`, {
           fontFamily: FONT,
@@ -204,7 +204,7 @@ export class MenuScene extends Phaser.Scene {
 
     btnBg.setInteractive({ useHandCursor: true }).on('pointerup', () => {
       Sfx.play('click');
-      MaxBridge.haptic('medium');
+      PlatformBridge.haptic('medium');
       this.scene.start('Game');
     });
     btnBg.on('pointerover', () => btnBg.setFillStyle(0x7a1a52, 1));
@@ -239,7 +239,7 @@ export class MenuScene extends Phaser.Scene {
       .setDepth(5);
 
     this.add
-      .text(W / 2, H - 10, `mini-app · ${MaxBridge.platform} · v0.1.0`, {
+      .text(W / 2, H - 10, `mini-app · ${PlatformBridge.platform} · v0.1.0`, {
         fontFamily: FONT,
         fontSize: '9px',
         color: '#654454',

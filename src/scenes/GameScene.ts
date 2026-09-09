@@ -27,7 +27,7 @@ import { RunState } from '../game/RunState';
 import type { EvolutionId, UpgradeDef } from '../game/UpgradeSystem';
 import { WaveDirector } from '../game/WaveDirector';
 import { AtmosphereSystem } from '../systems/AtmosphereSystem';
-import { MaxBridge } from '../systems/MaxBridge';
+import { PlatformBridge } from '../platform';
 import { SaveSystem } from '../systems/SaveSystem';
 import { Sfx } from '../systems/Sfx';
 import { VfxSystem } from '../systems/VfxSystem';
@@ -90,6 +90,7 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     this.runState = new RunState();
     Sfx.startMusic();
+    PlatformBridge.setBackHandler(() => this.exitToMenu());
     this.queuedLevels = 0;
     this.awaitingChoice = false;
     this.pendingChoices = [];
@@ -195,6 +196,7 @@ export class GameScene extends Phaser.Scene {
     this.scale.on('resize', this.onResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.onResize, this);
+      PlatformBridge.setBackHandler(null);
       this.atmosphere.destroy();
       this.vfx.destroy();
       this.hostCells.destroy();
@@ -202,6 +204,13 @@ export class GameScene extends Phaser.Scene {
       this.registry.remove('runResult');
       this.registry.remove('joy');
     });
+  }
+
+  private exitToMenu(): void {
+    Sfx.stopMusic();
+    if (this.scene.isActive('UI') || this.scene.isPaused('UI')) this.scene.stop('UI');
+    this.scene.stop();
+    this.scene.start('Menu');
   }
 
   update(time: number, delta: number): void {
@@ -317,7 +326,7 @@ export class GameScene extends Phaser.Scene {
       Sfx.play('boss');
       this.atmosphere.pulse(COLORS.red, 0.32);
       this.cameras.main.shake(320, 0.008);
-      MaxBridge.haptic('heavy');
+      PlatformBridge.haptic('heavy');
     } else if (elite) {
       Sfx.play('elite');
       this.atmosphere.pulse(COLORS.gold, 0.12);
@@ -357,7 +366,7 @@ export class GameScene extends Phaser.Scene {
     this.vfx.nova(event.x, event.y, event.radius);
     this.atmosphere.pulse(COLORS.green, 0.14);
     Sfx.play('nova');
-    MaxBridge.haptic('medium');
+    PlatformBridge.haptic('medium');
 
     for (let i = 0; i < event.rna; i++) {
       const a = (i / event.rna) * Math.PI * 2 + Math.random() * 0.35;
@@ -475,7 +484,7 @@ export class GameScene extends Phaser.Scene {
       }
       this.captureAchievements(false, false);
       Sfx.play('click');
-      MaxBridge.notify('success');
+      PlatformBridge.notify('success');
     }
     if (this.queuedLevels > 0) {
       this.queuedLevels -= 1;
@@ -523,7 +532,7 @@ export class GameScene extends Phaser.Scene {
       records,
     });
     Sfx.play(win ? 'victory' : 'gameover');
-    MaxBridge.notify(win ? 'success' : 'error');
+    PlatformBridge.notify(win ? 'success' : 'error');
     this.cameras.main.resetFX();
     this.scene.pause();
   }
@@ -639,7 +648,7 @@ export class GameScene extends Phaser.Scene {
     const st = this.runState;
     const singularity = st.hasEvolution('singularity');
     Sfx.play('nova');
-    MaxBridge.haptic('light');
+    PlatformBridge.haptic('light');
     if (singularity) this.vfx.singularity(this.player.x, this.player.y, st.novaRadius);
     else this.vfx.nova(this.player.x, this.player.y, st.novaRadius);
     const list = this.enemies.getChildren() as Enemy[];
@@ -681,7 +690,7 @@ export class GameScene extends Phaser.Scene {
     this.runState.resetNoDamage();
     this.player.markHurt(now);
     Sfx.play('hurt');
-    MaxBridge.haptic('medium');
+    PlatformBridge.haptic('medium');
     this.cameras.main.flash(140, 255, 60, 100);
     const s = JUICE.shakeHurt;
     this.cameras.main.shake(s.duration, s.intensity);
@@ -743,7 +752,7 @@ export class GameScene extends Phaser.Scene {
       .setResolution(2);
     c.add([panel, title, name]);
     Sfx.play('levelup');
-    MaxBridge.haptic('light');
+    PlatformBridge.haptic('light');
     this.tweens.add({
       targets: c,
       alpha: 1,
