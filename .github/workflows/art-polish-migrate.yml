@@ -1,4 +1,4 @@
-name: Apply tutorial lifecycle P0
+name: Force synchronous tutorial dismissal
 
 on:
   push:
@@ -20,10 +20,18 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Apply tutorial lifecycle fix
+      - name: Make mutation transition synchronous
         run: |
-          printf '%s' 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpkZWYgcmVwbGFjZV9vbmNlKHRleHQsIG9sZCwgbmV3LCBsYWJlbCk6CiAgICBuID0gdGV4dC5jb3VudChvbGQpCiAgICBpZiBuICE9IDE6CiAgICAgICAgcmFpc2UgU3lzdGVtRXhpdChmIntsYWJlbH06IGV4cGVjdGVkIDEsIGdvdCB7bn0iKQogICAgcmV0dXJuIHRleHQucmVwbGFjZShvbGQsIG5ldywgMSkKCnAgPSBQYXRoKCJzcmMvc2NlbmVzL0dhbWVTY2VuZS50cyIpCnMgPSBwLnJlYWRfdGV4dCgpCgpzID0gcmVwbGFjZV9vbmNlKAogICAgcywKICAgICIgIHByaXZhdGUga2V5czogUmVjb3JkPHN0cmluZywgUGhhc2VyLklucHV0LktleWJvYXJkLktleT4gPSB7fTtcbiIsCiAgICAiICBwcml2YXRlIGtleXM6IFJlY29yZDxzdHJpbmcsIFBoYXNlci5JbnB1dC5LZXlib2FyZC5LZXk+ID0ge307XG4iCiAgICAiICBwcml2YXRlIGludHJvSGludDogUGhhc2VyLkdhbWVPYmplY3RzLkNvbnRhaW5lciB8IG51bGwgPSBudWxsO1xuIiwKICAgICJmaWVsZCIsCikKCnMgPSByZXBsYWNlX29uY2UoCiAgICBzLAogICAgIiAgICB0aGlzLmRtZ0N1cnNvciA9IDA7XG4gICAgdGhpcy5waHlzaWNzLndvcmxkLnJlc3VtZSgpO1xuIiwKICAgICIgICAgdGhpcy5kbWdDdXJzb3IgPSAwO1xuIgogICAgIiAgICB0aGlzLmludHJvSGludCA9IG51bGw7XG4iCiAgICAiICAgIHRoaXMucGh5c2ljcy53b3JsZC5yZXN1bWUoKTtcbiIsCiAgICAicmVzZXQiLAopCgpzID0gcmVwbGFjZV9vbmNlKAogICAgcywKICAgICIgICAgICBQbGF0Zm9ybUJyaWRnZS5zZXRCYWNrSGFuZGxlcihudWxsKTtcbiAgICAgIHRoaXMuYXRtb3NwaGVyZS5kZXN0cm95KCk7XG4iLAogICAgIiAgICAgIFBsYXRmb3JtQnJpZGdlLnNldEJhY2tIYW5kbGVyKG51bGwpO1xuIgogICAgIiAgICAgIHRoaXMuZGlzbWlzc0ludHJvSGludCh0cnVlKTtcbiIKICAgICIgICAgICB0aGlzLmF0bW9zcGhlcmUuZGVzdHJveSgpO1xuIiwKICAgICJzaHV0ZG93biIsCikKCnMgPSByZXBsYWNlX29uY2UoCiAgICBzLAogICAgIiAgICBpZiAodGhpcy5xdWV1ZWRMZXZlbHMgPiAwICYmICF0aGlzLmF3YWl0aW5nQ2hvaWNlKSB7XG4iCiAgICAiICAgICAgdGhpcy5wZW5kaW5nQ2hvaWNlcyA9IHJvbGxSdW5DaG9pY2VzKHN0KTtcbiIsCiAgICAiICAgIGlmICh0aGlzLnF1ZXVlZExldmVscyA+IDAgJiYgIXRoaXMuYXdhaXRpbmdDaG9pY2UpIHtcbiIKICAgICIgICAgICAvLyBQcm9ncmVzc2lvbiBzdXBlcnNlZGVzIG9uYm9hcmRpbmc7IG5ldmVyIHJlbmRlciB0dXRvcmlhbCBjb3B5IGJlbmVhdGggYSBtdXRhdGlvbiBtb2RhbC5cbiIKICAgICIgICAgICB0aGlzLmRpc21pc3NJbnRyb0hpbnQoKTtcbiIKICAgICIgICAgICB0aGlzLnBlbmRpbmdDaG9pY2VzID0gcm9sbFJ1bkNob2ljZXMoc3QpO1xuIiwKICAgICJwcm9ncmVzc2lvbiIsCikKCnMgPSByZXBsYWNlX29uY2UoCiAgICBzLAogICAgIiAgICB0aGlzLnZmeC5ub3ZhKGV2ZW50LngsIGV2ZW50LnksIGV2ZW50LnJhZGl1cyk7XG4iLAogICAgIiAgICAvLyBHYW1lcGxheSByYWRpdXMgaXMgdW5jaGFuZ2VkOyB0aGUgc21hbGxlciB2aXN1YWwgbm92YSBsZWF2ZXMgcm9vbSBmb3IgdGhlIG1lbWJyYW5lIGNvbnRvdXIuXG4iCiAgICAiICAgIHRoaXMudmZ4Lm5vdmEoZXZlbnQueCwgZXZlbnQueSwgZXZlbnQucmFkaXVzICogMC43Mik7XG4iLAogICAgImx5c2lzLXZmeCIsCikKCnMgPSByZXBsYWNlX29uY2UoCiAgICBzLAogICAgIiAgcHJpdmF0ZSBzaG93SW50cm9IaW50KCk6IHZvaWQge1xuIgogICAgIiAgICBjb25zdCBXID0gdGhpcy5zY2FsZS53aWR0aDtcbiIKICAgICIgICAgY29uc3QgSCA9IHRoaXMuc2NhbGUuaGVpZ2h0O1xuIgogICAgIiAgICBjb25zdCBjID0gdGhpcy5hZGQuY29udGFpbmVyKDAsIDApLnNldERlcHRoKDYwKTtcbiIsCiAgICAiICBwcml2YXRlIHNob3dJbnRyb0hpbnQoKTogdm9pZCB7XG4iCiAgICAiICAgIHRoaXMuZGlzbWlzc0ludHJvSGludCh0cnVlKTtcbiIKICAgICIgICAgY29uc3QgVyA9IHRoaXMuc2NhbGUud2lkdGg7XG4iCiAgICAiICAgIGNvbnN0IEggPSB0aGlzLnNjYWxlLmhlaWdodDtcbiIKICAgICIgICAgY29uc3QgYyA9IHRoaXMuYWRkLmNvbnRhaW5lcigwLCAwKS5zZXREZXB0aCg2MCk7XG4iCiAgICAiICAgIHRoaXMuaW50cm9IaW50ID0gYztcbiIsCiAgICAic2hvdy1pbnRyby1oZWFkIiwKKQoKcyA9IHJlcGxhY2Vfb25jZSgKICAgIHMsCiAgICAiICAgIHRoaXMudGltZS5kZWxheWVkQ2FsbCg0NjAwLCAoKSA9PiB7XG4iCiAgICAiICAgICAgaWYgKCFjLmFjdGl2ZSkgcmV0dXJuO1xuIgogICAgIiAgICAgIHRoaXMudHdlZW5zLmFkZCh7IHRhcmdldHM6IGMsIGFscGhhOiAwLCBkdXJhdGlvbjogMjYwLCBvbkNvbXBsZXRlOiAoKSA9PiBjLmRlc3Ryb3koKSB9KTtcbiIKICAgICIgICAgfSk7XG4iCiAgICAiICB9XG5cbiIKICAgICIgIHByaXZhdGUgc25hcHNob3QoKTogUnVuU25hcHNob3Qge1xuIiwKICAgICIgICAgdGhpcy50aW1lLmRlbGF5ZWRDYWxsKDQ2MDAsICgpID0+IHtcbiIKICAgICIgICAgICBpZiAoIWMuYWN0aXZlIHx8IHRoaXMuaW50cm9IaW50ICE9PSBjKSByZXR1cm47XG4iCiAgICAiICAgICAgdGhpcy5pbnRyb0hpbnQgPSBudWxsO1xuIgogICAgIiAgICAgIHRoaXMudHdlZW5zLmFkZCh7IHRhcmdldHM6IGMsIGFscGhhOiAwLCBkdXJhdGlvbjogMjYwLCBvbkNvbXBsZXRlOiAoKSA9PiBjLmRlc3Ryb3koKSB9KTtcbiIKICAgICIgICAgfSk7XG4iCiAgICAiICB9XG5cbiIKICAgICIgIHByaXZhdGUgZGlzbWlzc0ludHJvSGludChpbW1lZGlhdGUgPSBmYWxzZSk6IHZvaWQge1xuIgogICAgIiAgICBjb25zdCBjID0gdGhpcy5pbnRyb0hpbnQ7XG4iCiAgICAiICAgIGlmICghYykgcmV0dXJuO1xuIgogICAgIiAgICB0aGlzLmludHJvSGludCA9IG51bGw7XG4iCiAgICAiICAgIHRoaXMudHdlZW5zLmtpbGxUd2VlbnNPZihjKTtcbiIKICAgICIgICAgaWYgKGltbWVkaWF0ZSkge1xuIgogICAgIiAgICAgIGMuZGVzdHJveSgpO1xuIgogICAgIiAgICAgIHJldHVybjtcbiIKICAgICIgICAgfVxuIgogICAgIiAgICB0aGlzLnR3ZWVucy5hZGQoe1xuIgogICAgIiAgICAgIHRhcmdldHM6IGMsXG4iCiAgICAiICAgICAgYWxwaGE6IDAsXG4iCiAgICAiICAgICAgZHVyYXRpb246IDExMCxcbiIKICAgICIgICAgICBlYXNlOiAnUXVhZC5PdXQnLFxuIgogICAgIiAgICAgIG9uQ29tcGxldGU6ICgpID0+IGMuZGVzdHJveSgpLFxuIgogICAgIiAgICB9KTtcbiIKICAgICIgIH1cblxuIgogICAgIiAgcHJpdmF0ZSBzbmFwc2hvdCgpOiBSdW5TbmFwc2hvdCB7XG4iLAogICAgImRpc21pc3MtbWV0aG9kIiwKKQoKcC53cml0ZV90ZXh0KHMpCg==' | base64 -d > /tmp/tutorial_p0.py
-          python /tmp/tutorial_p0.py
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/scenes/GameScene.ts')
+          s = p.read_text()
+          old = "      this.dismissIntroHint();\n      this.pendingChoices = rollRunChoices(st);"
+          new = "      this.dismissIntroHint(true);\n      this.pendingChoices = rollRunChoices(st);"
+          if s.count(old) != 1:
+              raise SystemExit(f'expected exactly one progression dismissal, found {s.count(old)}')
+          p.write_text(s.replace(old, new, 1))
+          PY
       - run: npm ci
       - run: npm run build
       - name: Commit source fix
@@ -32,5 +40,5 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add src/scenes/GameScene.ts
           git diff --cached --quiet && exit 0
-          git commit -m 'fix: dismiss onboarding before mutation UI'
+          git commit -m 'fix: destroy onboarding before pausing for mutation'
           git push origin HEAD:feat/strain-zero-redesign
