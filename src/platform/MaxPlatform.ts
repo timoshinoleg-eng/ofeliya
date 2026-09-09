@@ -6,6 +6,9 @@ import {
   platformDisplayName,
 } from './PlatformBridge';
 
+const START_PAYLOAD_RE = /^[A-Za-z0-9_-]{1,512}$/;
+const BOT_NAME_RE = /^[A-Za-z0-9_-]{1,128}$/;
+
 interface MaxInitDataUnsafe {
   query_id?: string;
   ip?: string;
@@ -25,13 +28,16 @@ interface MaxBackButton {
   offClick?: (callback: () => void) => unknown;
 }
 
+type MaxShareParams = { text?: string; link?: string };
+
 interface MaxWebAppGlobal {
   initData?: string;
   initDataUnsafe?: MaxInitDataUnsafe;
   platform?: string;
   version?: string;
   getViewportSize?: () => Promise<{ height: string; width: string }>;
-  shareContent?: (data: { text?: string; link?: string }) => Promise<unknown>;
+  shareContent?: (data: MaxShareParams) => Promise<unknown>;
+  shareMaxContent?: (data: MaxShareParams) => Promise<unknown>;
   BackButton?: MaxBackButton;
   HapticFeedback?: {
     impactOccurred?: (style: HapticStyle, options?: unknown) => unknown;
@@ -81,6 +87,13 @@ export class MaxPlatform implements PlatformAdapter {
     return this.wa?.initDataUnsafe?.start_param ?? null;
   }
 
+  buildStartLink(payload: string): string | null {
+    if (!START_PAYLOAD_RE.test(payload)) return null;
+    const configured = String(import.meta.env.VITE_MAX_BOT_NAME ?? '').trim().replace(/^@/, '');
+    if (!BOT_NAME_RE.test(configured)) return null;
+    return `https://max.ru/${configured}?startapp=${payload}`;
+  }
+
   async getViewportSize(): Promise<{ width: number; height: number } | null> {
     const fn = this.wa?.getViewportSize;
     if (!fn) return null;
@@ -118,12 +131,14 @@ export class MaxPlatform implements PlatformAdapter {
     }
   }
 
-  shareResult(text: string): Promise<boolean> {
-    const share = this.wa?.shareContent;
+  shareResult(text: string, link?: string): Promise<boolean> {
+    // Prefer the in-MAX share sheet for challenge loops. shareContent remains the mobile fallback.
+    const share = this.wa?.shareMaxContent ?? this.wa?.shareContent;
     if (!share) return Promise.resolve(false);
+    const params: MaxShareParams = link ? { text, link } : { text };
     try {
       return share
-        .call(this.wa, { text })
+        .call(this.wa, params)
         .then(() => true)
         .catch(() => false);
     } catch {
