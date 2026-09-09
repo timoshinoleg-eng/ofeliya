@@ -77,8 +77,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     return {
       developer: text.includes('CI Test Developer'),
       registration: text.includes('CI-REG-1'),
-      privacy: text.includes('ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ'),
-      terms: text.includes('УСЛОВИЯ ИСПОЛЬЗОВАНИЯ'),
+      privacy: /политика конфиденциальности/i.test(text),
+      terms: /условия использования/i.test(text),
       support: text.includes('qa@example.test'),
       warning: text.includes('Pre-release:'),
     };
@@ -99,23 +99,53 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     gs.runState.level = 10;
     gs.runState.comboBest = 24;
     gs.finish(false);
-  });
-  await page.waitForFunction(() => {
     const ui = window.__game.scene.getScene('UI');
-    const texts = ui.children.list.filter((obj) => typeof obj.text === 'string').map((obj) => obj.text);
-    return texts.some((text) => text.includes('ВЫЗОВ ПРЕВЗОЙДЁН')) && texts.includes('БРОСИТЬ ВЫЗОВ');
+    ui.update();
   });
-  await sleep(120);
 
   const resultState = await page.evaluate(() => {
     const ui = window.__game.scene.getScene('UI');
-    const shareText = ui.children.list.find((obj) => obj.text === 'БРОСИТЬ ВЫЗОВ');
-    const verdict = ui.children.list.find((obj) => typeof obj.text === 'string' && obj.text.includes('ВЫЗОВ ПРЕВЗОЙДЁН'));
-    return { share: shareText ? { x: shareText.x, y: shareText.y } : null, verdict: verdict?.text ?? null };
+    const flat = [];
+    const visit = (obj) => {
+      flat.push(obj);
+      if (Array.isArray(obj?.list)) obj.list.forEach(visit);
+    };
+    ui.children.list.forEach(visit);
+    const shareText = flat.find((obj) => obj.text === 'БРОСИТЬ ВЫЗОВ');
+    const verdict = flat.find((obj) => typeof obj.text === 'string' && obj.text.includes('ВЫЗОВ ПРЕВЗОЙДЁН'));
+    let shareControl = null;
+    if (shareText?.parentContainer?.list) {
+      shareControl = shareText.parentContainer.list.find((obj) =>
+        obj !== shareText && obj.input?.enabled && Math.abs((obj.y ?? -9999) - shareText.y) < 1
+      );
+    }
+    return {
+      share: !!shareText,
+      verdict: verdict?.text ?? null,
+      control: !!shareControl,
+    };
   });
-  if (!resultState.share || !resultState.verdict) throw new Error(`challenge result missing: ${JSON.stringify(resultState)}`);
+  if (!resultState.share || !resultState.verdict || !resultState.control) {
+    throw new Error(`challenge result missing: ${JSON.stringify(resultState)}`);
+  }
+  await sleep(120);
   await page.screenshot({ path: '/tmp/browser-smoke/02-challenge-result.png' });
-  await page.mouse.click(resultState.share.x, resultState.share.y);
+
+  await page.evaluate(() => {
+    const ui = window.__game.scene.getScene('UI');
+    const flat = [];
+    const visit = (obj) => {
+      flat.push(obj);
+      if (Array.isArray(obj?.list)) obj.list.forEach(visit);
+    };
+    ui.children.list.forEach(visit);
+    const shareText = flat.find((obj) => obj.text === 'БРОСИТЬ ВЫЗОВ');
+    const control = shareText?.parentContainer?.list?.find((obj) =>
+      obj !== shareText && obj.input?.enabled && Math.abs((obj.y ?? -9999) - shareText.y) < 1
+    );
+    if (!control) throw new Error('interactive share control missing');
+    control.emit('pointerup');
+  });
   await page.waitForFunction(() => !!window.__shared);
 
   const shared = await page.evaluate(() => window.__shared);
