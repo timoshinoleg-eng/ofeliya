@@ -1,5 +1,7 @@
 import type { HapticStyle, NotifyType, PlatformAdapter, PlatformUser } from './PlatformBridge';
 
+const START_PAYLOAD_RE = /^[A-Za-z0-9_-]{1,512}$/;
+
 export class BrowserPlatform implements PlatformAdapter {
   readonly kind = 'browser' as const;
   readonly available = false;
@@ -17,7 +19,20 @@ export class BrowserPlatform implements PlatformAdapter {
 
   getStartParam(): string | null {
     if (typeof window === 'undefined') return null;
-    return new URLSearchParams(window.location.search).get('startapp');
+    const params = new URLSearchParams(window.location.search);
+    return params.get('startapp') ?? params.get('WebAppStartParam');
+  }
+
+  buildStartLink(payload: string): string | null {
+    if (typeof window === 'undefined' || !START_PAYLOAD_RE.test(payload)) return null;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('WebAppStartParam');
+      url.searchParams.set('startapp', payload);
+      return url.toString();
+    } catch {
+      return null;
+    }
   }
 
   async getViewportSize(): Promise<{ width: number; height: number } | null> {
@@ -32,10 +47,10 @@ export class BrowserPlatform implements PlatformAdapter {
     // Browser has no native messenger BackButton.
   }
 
-  async shareResult(text: string): Promise<boolean> {
+  async shareResult(text: string, link?: string): Promise<boolean> {
     if (typeof navigator === 'undefined' || !navigator.share) return false;
     try {
-      await navigator.share({ text });
+      await navigator.share(link ? { text, url: link } : { text });
       return true;
     } catch {
       return false;
