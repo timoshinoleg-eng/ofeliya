@@ -1,11 +1,16 @@
 import { RELEASE_INFO, missingReleaseLegalFields } from './ReleaseInfo';
 
 const ID = 'ofeliya-legal-overlay';
+const HTML_ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  "'": '&#39;',
+  '"': '&quot;',
+};
 
 function escapeHtml(value: string): string {
-  return value.replace(/[&<>'"]/g, (ch) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
-  })[ch] ?? ch);
+  return value.replace(/[&<>'"]/g, (ch) => HTML_ESCAPES[ch] ?? ch);
 }
 
 function row(label: string, value: string): string {
@@ -31,6 +36,7 @@ export function showLegalOverlay(): void {
       #${ID} h1{font-size:20px;margin:0;color:#ff78c8;letter-spacing:.5px}
       #${ID} h2{font-size:14px;margin:24px 0 9px;color:#ffe066;text-transform:uppercase;letter-spacing:.7px}
       #${ID} p,#${ID} li{font:400 12px/1.55 'Chakra Petch',Arial,sans-serif;color:#d9c0cc}
+      #${ID} code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;color:#8fe8ff}
       #${ID} ul{padding-left:20px;margin:8px 0}
       #${ID} .legal-row{display:grid;grid-template-columns:minmax(105px,.8fr) 1.5fr;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:11px}
       #${ID} .legal-row span{color:#9e788b} #${ID} .legal-row strong{font-weight:600;overflow-wrap:anywhere}
@@ -74,14 +80,16 @@ export function showLegalOverlay(): void {
       <div class="legal-muted">Редакция: 09.09.2026. Перед публичной публикацией юридические реквизиты должны соответствовать данным подтверждённого профиля разработчика MAX.</div>
     </div>`;
 
-  const close = (): void => root.remove();
+  const onKey = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape') close();
+  };
+  const close = (): void => {
+    document.removeEventListener('keydown', onKey);
+    root.remove();
+  };
   root.querySelector<HTMLButtonElement>('.legal-close')?.addEventListener('click', close);
   root.addEventListener('click', (event) => { if (event.target === root) close(); });
-  document.addEventListener('keydown', function onKey(event) {
-    if (event.key !== 'Escape' || !root.isConnected) return;
-    document.removeEventListener('keydown', onKey);
-    close();
-  });
+  document.addEventListener('keydown', onKey);
   document.body.appendChild(root);
   root.querySelector<HTMLButtonElement>('.legal-close')?.focus();
 }
