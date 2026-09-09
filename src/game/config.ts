@@ -1,3 +1,5 @@
+import { PERFORMANCE } from '../systems/PerformanceProfile';
+
 // Вся стартовая балансировка игры — в этом файле.
 
 export const COLORS = {
@@ -21,8 +23,9 @@ export const COLORS = {
 
 export const FONT = "'Chakra Petch', Arial, sans-serif";
 
-/** Visual parameters only. Whether postFX are enabled is owned by PerformanceProfile. */
+/** Visual parameters. PerformanceProfile is the single authority for whether postFX are enabled. */
 export const POSTFX = {
+  enabled: PERFORMANCE.postFx,
   bloom: { strength: 0.8, blurStrength: 0.9, steps: 4 },
   vignette: { radius: 0.72, strength: 0.6 },
 };
