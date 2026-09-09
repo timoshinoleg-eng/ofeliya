@@ -26,5 +26,61 @@ jobs:
       - name: Challenge contract smoke
         run: npm run test:challenge
 
+      - name: Viewport math smoke
+        run: npm run test:viewport
+
+      - name: MAX release config gate smoke
+        env:
+          VITE_MAX_BOT_NAME: ofeliya_ci_bot
+          VITE_DEVELOPER_LEGAL_NAME: CI Test Developer
+          VITE_DEVELOPER_REGISTRATION: CI-REG-1
+          VITE_DEVELOPER_ADDRESS: CI Test Address
+          VITE_SUPPORT_EMAIL: qa@example.test
+        run: npm run release:check
+
       - name: Typecheck and build
         run: npm run build
+
+  browser-smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install browser smoke driver
+        run: npm install --no-save --package-lock=false playwright-core@1.55.0
+
+      - name: Start configured dev server
+        env:
+          VITE_MAX_BOT_NAME: ofeliya_ci_bot
+          VITE_DEVELOPER_LEGAL_NAME: CI Test Developer
+          VITE_DEVELOPER_REGISTRATION: CI-REG-1
+          VITE_DEVELOPER_ADDRESS: CI Test Address
+          VITE_SUPPORT_EMAIL: qa@example.test
+        run: |
+          npm run dev -- --host 127.0.0.1 > /tmp/vite.log 2>&1 &
+          for i in $(seq 1 40); do curl -fsS http://127.0.0.1:5173/ >/dev/null && exit 0; sleep .5; done
+          cat /tmp/vite.log
+          exit 1
+
+      - name: MAX viewport challenge and legal browser smoke
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/browser-smoke.cjs
+
+      - name: Upload browser smoke captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: max-browser-smoke
+          path: /tmp/browser-smoke/*.png
+          if-no-files-found: ignore
