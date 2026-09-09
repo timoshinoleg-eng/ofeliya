@@ -52,11 +52,12 @@ jobs:
 
             await page.waitForFunction(()=>window.__game.scene.getScene('Game').awaitingChoice === true, null, {timeout:10000});
             await sleep(220);
-            const tutorialGone = await page.evaluate(()=>{
+            const tutorialState = await page.evaluate(()=>{
               const gs=window.__game.scene.getScene('Game');
-              return gs.introHint === null || !gs.introHint?.active;
+              const leakedText=gs.children.list.some(o=>o?.active && typeof o.text==='string' && o.text.includes('ТЫ ВНУТРИ КРОВОТОКА'));
+              return { refGone: gs.introHint === null || !gs.introHint?.active, leakedText };
             });
-            if(!tutorialGone) throw new Error('first-run tutorial survived under mutation modal');
+            if(!tutorialState.refGone || tutorialState.leakedText) throw new Error('first-run tutorial survived under mutation modal: '+JSON.stringify(tutorialState));
             await page.screenshot({path:'/tmp/art/03-first-mutation.png'});
 
             await page.evaluate(()=>{
@@ -118,6 +119,6 @@ jobs:
           NODE_PATH="$GITHUB_WORKSPACE/node_modules" node /tmp/capture.cjs
       - uses: actions/upload-artifact@v4
         with:
-          name: strain-zero-art-qa-v3
+          name: strain-zero-art-qa-v4
           path: /tmp/art/*.png
           if-no-files-found: error
