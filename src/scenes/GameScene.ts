@@ -310,7 +310,7 @@ export class GameScene extends Phaser.Scene {
 
     if (this.queuedLevels > 0 && !this.awaitingChoice) {
       // Progression supersedes onboarding; never render tutorial copy beneath a mutation modal.
-      this.dismissIntroHint();
+      this.dismissIntroHint(true);
       this.pendingChoices = rollRunChoices(st);
       this.awaitingChoice = true;
       this.queuedLevels -= 1;
