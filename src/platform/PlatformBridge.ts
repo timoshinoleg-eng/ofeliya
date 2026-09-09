@@ -22,10 +22,13 @@ export interface PlatformAdapter {
 
   getUser(): PlatformUser | null;
   getDisplayName(): string | null;
+  /** Untrusted social/deeplink context. Never use as authorization or authoritative score input. */
   getStartParam(): string | null;
+  /** Build a platform-native app deeplink for a validated start payload, when configured. */
+  buildStartLink(payload: string): string | null;
   getViewportSize(): Promise<{ width: number; height: number } | null>;
   setBackHandler(callback: (() => void) | null): void;
-  shareResult(text: string): Promise<boolean>;
+  shareResult(text: string, link?: string): Promise<boolean>;
   haptic(style?: HapticStyle): void;
   notify(type: NotifyType): void;
 }
