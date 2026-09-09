@@ -1,5 +1,11 @@
 import Phaser from 'phaser';
 import { getAchievementDef, type AchievementId } from '../game/AchievementSystem';
+import {
+  createChallengePayload,
+  encodeChallengePayload,
+  isChallengeBeaten,
+  type ChallengePayloadV1,
+} from '../game/Challenge';
 import { COLORS, COMBO, FONT, JUICE, fmtTime } from '../game/config';
 import { getEvolutionDef } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
@@ -594,7 +600,6 @@ export class UIScene extends Phaser.Scene {
     });
   }
 
-
   private hideModal(): void {
     this.modal?.destroy();
     this.modal = null;
@@ -726,9 +731,34 @@ export class UIScene extends Phaser.Scene {
       );
     }
 
+    const challengeTarget = this.registry.get('challengeTarget') as ChallengePayloadV1 | null | undefined;
+    if (challengeTarget) {
+      detailY += compact ? 24 : 29;
+      const beaten = isChallengeBeaten(challengeTarget, res);
+      const target =
+        challengeTarget.objective === 'clear'
+          ? `быстрее ${fmtTime(challengeTarget.timeMs)}`
+          : `дольше ${fmtTime(challengeTarget.timeMs)}`;
+      c.add(
+        this.add
+          .text(W / 2, detailY, `ВЫЗОВ ${beaten ? 'ПРЕВЗОЙДЁН' : 'НЕ ПРЕВЗОЙДЁН'} · цель ${target}`, {
+            fontFamily: FONT,
+            fontSize: compact ? '10px' : '11px',
+            fontStyle: 'bold',
+            color: beaten ? '#7fffa1' : '#ff9b66',
+            align: 'center',
+            wordWrap: { width: W - 42 },
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+      );
+    }
+
     const gs = this.gs;
-    let y = Math.max(H * (compact ? 0.66 : 0.68), detailY + (compact ? 54 : 62));
     const gap = compact ? 50 : 56;
+    const desiredY = Math.max(H * (compact ? 0.66 : 0.68), detailY + (compact ? 54 : 62));
+    const maxFirstY = H - 24 - gap * 2;
+    let y = Math.min(desiredY, maxFirstY);
     this.button(c, 'ЕЩЁ ОДИН ЦИКЛ', W / 2, y, true, () => {
       this.scene.stop();
       if (gs) {
@@ -737,14 +767,20 @@ export class UIScene extends Phaser.Scene {
       }
     });
     y += gap;
-    this.button(c, 'ПОДЕЛИТЬСЯ', W / 2, y, false, () => {
+    this.button(c, 'БРОСИТЬ ВЫЗОВ', W / 2, y, false, () => {
       const mins = fmtTime(res.timeMs);
-      const evoShare = res.evolutions.length > 0 ? ` Эволюции: ${res.evolutions.map((id) => EVOLUTION_NAMES[id]).join(', ')}.` : '';
+      const evoShare = res.evolutions.length > 0 ? ` Критические мутации: ${res.evolutions.map((id) => EVOLUTION_NAMES[id]).join(', ')}.` : '';
       const shareText = res.win
         ? `OFELIYA / STRAIN-0 подавила иммунитет за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${evoShare} Сможешь быстрее?`
         : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${evoShare} Сможешь дольше?`;
-      void PlatformBridge.shareResult(shareText).then((ok) => {
-        if (!ok) this.toast(c, 'Нативный шаринг недоступен в этом клиенте');
+      const payload = encodeChallengePayload(createChallengePayload(res));
+      const link = payload ? PlatformBridge.buildStartLink(payload) : null;
+      void PlatformBridge.shareResult(shareText, link ?? undefined).then((ok) => {
+        if (!ok) {
+          this.toast(c, 'Нативный шаринг недоступен в этом клиенте');
+        } else if (!link && PlatformBridge.kind === 'max') {
+          this.toast(c, 'Ссылка вызова не настроена');
+        }
       });
     });
     y += gap;
