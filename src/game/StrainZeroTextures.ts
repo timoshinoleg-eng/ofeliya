@@ -241,36 +241,45 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
 
   make('immune-macrophage', 62, 62, (ctx) => {
     const pts = [
-      [7, 23], [4, 14], [13, 16], [14, 7], [23, 11], [30, 4], [37, 11], [49, 8],
-      [47, 18], [58, 23], [51, 31], [57, 41], [46, 43], [43, 55], [33, 50], [24, 58],
-      [20, 48], [9, 50], [12, 39], [3, 34],
+      [5, 31], [8, 21], [15, 18], [17, 9], [27, 12], [34, 5], [42, 14], [53, 14],
+      [51, 25], [59, 31], [51, 38], [53, 49], [42, 48], [34, 58], [26, 50], [14, 52],
+      [15, 42], [6, 39],
     ] as const;
+    const last = pts[pts.length - 1];
+    const first = pts[0];
     ctx.beginPath();
-    ctx.moveTo(pts[0][0], pts[0][1]);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.moveTo((last[0] + first[0]) / 2, (last[1] + first[1]) / 2);
+    for (let i = 0; i < pts.length; i++) {
+      const cur = pts[i];
+      const next = pts[(i + 1) % pts.length];
+      ctx.quadraticCurveTo(cur[0], cur[1], (cur[0] + next[0]) / 2, (cur[1] + next[1]) / 2);
+    }
     ctx.closePath();
-    ctx.fillStyle = radial(ctx, 29, 29, 29, '#fff7df', '#e8bb7e', '#8c5a55');
+    ctx.fillStyle = radial(ctx, 29, 27, 30, '#fff8ef', '#d9aa91', '#7d5264');
     ctx.fill();
-    ctx.strokeStyle = '#ffd99b';
-    ctx.lineWidth = 2.2;
+    ctx.strokeStyle = 'rgba(255,214,196,0.92)';
+    ctx.lineWidth = 2;
     ctx.stroke();
 
-    ctx.fillStyle = radial(ctx, 29, 31, 13, '#b5759c', '#6e3d6b', '#3a234a');
+    ctx.fillStyle = radial(ctx, 29, 31, 13, '#b976a2', '#6f426f', '#39284b');
     ctx.beginPath();
     ctx.ellipse(29, 31, 14, 10.5, 0.25, 0, Math.PI * 2);
     ctx.fill();
 
-    // Phagocytic vesicles.
-    const vesicles = [[16, 26, 3.4], [40, 21, 2.8], [42, 39, 3.1], [22, 43, 2.2]] as const;
+    const vesicles = [[16, 27, 3.2], [41, 21, 2.8], [43, 39, 3], [22, 43, 2.2]] as const;
     for (const [x, y, r] of vesicles) {
-      ctx.fillStyle = 'rgba(255,248,230,0.58)';
+      ctx.fillStyle = 'rgba(255,248,235,0.54)';
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = 'rgba(132,74,97,0.5)';
+      ctx.strokeStyle = 'rgba(119,73,99,0.45)';
       ctx.lineWidth = 0.8;
       ctx.stroke();
     }
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(22, 17, 7, 2.8, -0.45, 0, Math.PI * 2);
+    ctx.fill();
   });
 
   make('immune-prime', 94, 94, (ctx) => {
@@ -548,15 +557,13 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
   const plasma = scene.textures.createCanvas('blood-plasma', 256, 256);
   if (plasma) {
     const ctx = plasma.getContext();
-    const bg = ctx.createRadialGradient(116, 104, 12, 128, 128, 190);
-    bg.addColorStop(0, '#3a101f');
-    bg.addColorStop(0.42, '#240a15');
-    bg.addColorStop(0.76, '#18070f');
-    bg.addColorStop(1, '#0d0408');
+    const bg = ctx.createLinearGradient(0, 0, 0, 256);
+    bg.addColorStop(0, '#16070f');
+    bg.addColorStop(0.5, '#250a14');
+    bg.addColorStop(1, '#16070f');
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, 256, 256);
 
-    // Long vessel-flow ribbons sell a living medium more effectively than a tech grid.
     for (let i = 0; i < 7; i++) {
       const y = 18 + i * 38;
       ctx.strokeStyle = i % 2
@@ -564,24 +571,25 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
         : 'rgba(255,126,145,0.025)';
       ctx.lineWidth = 12 + (i % 3) * 7;
       ctx.beginPath();
-      ctx.moveTo(-35, y);
-      ctx.bezierCurveTo(45, y - 26, 142, y + 28, 291, y - 9);
+      ctx.moveTo(-20, y);
+      ctx.bezierCurveTo(62, y - 25, 194, y + 25, 276, y);
       ctx.stroke();
       ctx.strokeStyle = 'rgba(255,150,164,0.035)';
       ctx.lineWidth = 1.2;
       ctx.stroke();
     }
 
-    // Cellular membrane ghosts and protein dust baked into the material.
-    for (let i = 0; i < 26; i++) {
+    for (let i = 0; i < 22; i++) {
       const x = (i * 83 + 17) % 256;
       const y = (i * 47 + 29) % 256;
       const r = 7 + ((i * 13) % 23);
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.strokeStyle = i % 4 === 0 ? 'rgba(255,92,119,0.07)' : 'rgba(185,44,66,0.04)';
-      ctx.lineWidth = 1 + (i % 2) * 0.6;
-      ctx.stroke();
+      for (const ox of [-256, 0, 256]) {
+        ctx.beginPath();
+        ctx.arc(x + ox, y, r, 0, Math.PI * 2);
+        ctx.strokeStyle = i % 4 === 0 ? 'rgba(255,92,119,0.065)' : 'rgba(185,44,66,0.038)';
+        ctx.lineWidth = 1 + (i % 2) * 0.6;
+        ctx.stroke();
+      }
     }
 
     for (let i = 0; i < 42; i++) {
@@ -594,10 +602,10 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
       ctx.fill();
     }
 
-    const sheen = ctx.createLinearGradient(0, 0, 256, 256);
-    sheen.addColorStop(0, 'rgba(255,97,128,0.035)');
-    sheen.addColorStop(0.48, 'rgba(0,0,0,0)');
-    sheen.addColorStop(1, 'rgba(124,22,58,0.07)');
+    const sheen = ctx.createLinearGradient(0, 0, 0, 256);
+    sheen.addColorStop(0, 'rgba(255,97,128,0.025)');
+    sheen.addColorStop(0.5, 'rgba(0,0,0,0)');
+    sheen.addColorStop(1, 'rgba(255,97,128,0.025)');
     ctx.fillStyle = sheen;
     ctx.fillRect(0, 0, 256, 256);
     plasma.refresh();

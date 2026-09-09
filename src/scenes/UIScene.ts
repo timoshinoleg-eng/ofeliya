@@ -266,12 +266,12 @@ export class UIScene extends Phaser.Scene {
     const c = this.add.container(0, 0).setDepth(100);
     this.modal = c;
 
-    const dim = this.add.rectangle(W / 2, H / 2, W, H, 0x05070f, 0.76).setInteractive();
+    const dim = this.add.rectangle(W / 2, H / 2, W, H, 0x09040a, 0.91).setInteractive();
     c.add(dim);
 
     const ring = this.add
       .circle(W / 2, H / 2, 20)
-      .setStrokeStyle(3, COLORS.cyan, 0.9)
+      .setStrokeStyle(3, COLORS.magenta, 0.92)
       .setDepth(101);
     this.tweens.add({
       targets: ring,
@@ -289,12 +289,12 @@ export class UIScene extends Phaser.Scene {
         fontFamily: FONT,
         fontSize: compact ? '23px' : '27px',
         fontStyle: 'bold',
-        color: '#35e0ff',
+        color: '#ff78c8',
         align: 'center',
       })
       .setOrigin(0.5)
       .setResolution(2)
-      .setShadow(0, 0, 'rgba(53,224,255,0.7)', 14, true, true);
+      .setShadow(0, 0, 'rgba(255,79,181,0.72)', 16, true, true);
     c.add(titleT);
     titleT.setScale(0.7);
     this.tweens.add({ targets: titleT, scale: 1, duration: 260, ease: 'Back.Out' });
@@ -335,7 +335,7 @@ export class UIScene extends Phaser.Scene {
         );
       }
 
-      const iconKey = evolution && def.evolutionId ? `up-${this.evolutionIcon(def.evolutionId)}` : `up-${def.id}`;
+      const iconKey = evolution && def.evolutionId ? `mutation-${def.evolutionId}` : `up-${def.id}`;
       const hasIcon = this.textures.exists(iconKey);
       if (hasIcon) {
         card.add(
@@ -506,9 +506,16 @@ export class UIScene extends Phaser.Scene {
       .circle(W / 2, H * 0.43, 30)
       .setStrokeStyle(2, COLORS.white, 0.7)
       .setBlendMode(Phaser.BlendModes.ADD);
-    c.add([outer, inner]);
+    const emblem = this.add
+      .image(W / 2, H * 0.43, `mutation-${id}`)
+      .setScale(1.18)
+      .setAlpha(0.96)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    c.add([outer, inner, emblem]);
     this.tweens.add({ targets: outer, scale: 1.75, alpha: 0.08, duration: 760, ease: 'Quad.Out' });
     this.tweens.add({ targets: inner, scale: 0.55, alpha: 1, duration: 300, yoyo: true, ease: 'Sine.InOut' });
+    emblem.setScale(0.62);
+    this.tweens.add({ targets: emblem, scale: 1.18, duration: 420, ease: 'Back.Out' });
 
     (this.fanfare as TintableEmitter).setParticleTint?.(COLORS.gold);
     this.fanfare.emitParticleAt(W / 2, H * 0.43, 38);
@@ -587,11 +594,6 @@ export class UIScene extends Phaser.Scene {
     });
   }
 
-  private evolutionIcon(id: EvolutionId): string {
-    if (id === 'prism') return 'pierce';
-    if (id === 'halo') return 'orbit';
-    return 'nova';
-  }
 
   private hideModal(): void {
     this.modal?.destroy();

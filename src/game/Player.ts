@@ -93,32 +93,29 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   /** ГИПЕРШИП: the silhouette becomes visibly more predatory, not just recoloured. */
   private drawSpikeCrown(g: Phaser.GameObjects.Graphics): void {
-    for (let i = 0; i < 16; i++) {
-      const a = (i / 16) * Math.PI * 2;
-      const major = i % 2 === 0;
-      const inner = major ? 21 : 23;
-      const outer = major ? 39 : 33;
-      const color = i % 4 === 0 ? COLORS.green : COLORS.gold;
-
-      g.lineStyle(major ? 2.5 : 1.5, color, major ? 0.92 : 0.7);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 - Math.PI / 2;
+      const inner = 22;
+      const outer = i % 2 === 0 ? 36 : 32;
+      const color = i % 2 === 0 ? COLORS.green : COLORS.gold;
+      g.lineStyle(i % 2 === 0 ? 2.4 : 1.8, color, 0.78);
       g.beginPath();
       g.moveTo(Math.cos(a) * inner, Math.sin(a) * inner);
       g.lineTo(Math.cos(a) * outer, Math.sin(a) * outer);
       g.strokePath();
 
-      if (major) {
-        const tx = Math.cos(a) * outer;
-        const ty = Math.sin(a) * outer;
-        g.fillStyle(color, 0.9);
-        g.fillCircle(tx, ty, 2.4);
-        // Two tiny receptor branches turn every long spike into a recognisable protein head.
+      const tx = Math.cos(a) * outer;
+      const ty = Math.sin(a) * outer;
+      g.fillStyle(color, 0.82);
+      g.fillCircle(tx, ty, i % 2 === 0 ? 2.5 : 2);
+      if (i % 2 === 0) {
         const tangent = a + Math.PI / 2;
-        g.lineStyle(1.2, COLORS.white, 0.46);
+        g.lineStyle(1.1, COLORS.white, 0.38);
         g.beginPath();
         g.moveTo(tx, ty);
-        g.lineTo(tx + Math.cos(tangent) * 3.2, ty + Math.sin(tangent) * 3.2);
+        g.lineTo(tx + Math.cos(tangent) * 3, ty + Math.sin(tangent) * 3);
         g.moveTo(tx, ty);
-        g.lineTo(tx - Math.cos(tangent) * 3.2, ty - Math.sin(tangent) * 3.2);
+        g.lineTo(tx - Math.cos(tangent) * 3, ty - Math.sin(tangent) * 3);
         g.strokePath();
       }
     }
@@ -126,52 +123,47 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   /** СВЕРХКАПСИД: segmented armour wraps the virion with a heavy golden membrane. */
   private drawCapsidShell(g: Phaser.GameObjects.Graphics): void {
-    const segments = 8;
-    for (let i = 0; i < segments; i++) {
-      const a0 = (i / segments) * Math.PI * 2 + 0.08;
-      const a1 = ((i + 0.7) / segments) * Math.PI * 2 + 0.08;
-      g.lineStyle(i % 2 === 0 ? 4.2 : 3.2, COLORS.gold, i % 2 === 0 ? 0.88 : 0.68);
+    for (let i = 0; i < 4; i++) {
+      const centre = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      const a0 = centre - 0.42;
+      const a1 = centre + 0.42;
+      g.lineStyle(4.6, COLORS.gold, 0.76);
       g.beginPath();
-      g.arc(0, 0, 29, a0, a1, false);
+      g.arc(0, 0, 27.5, a0, a1, false);
       g.strokePath();
-
-      const mid = (a0 + a1) / 2;
-      g.fillStyle(COLORS.white, 0.58);
-      g.fillCircle(Math.cos(mid) * 29, Math.sin(mid) * 29, 1.6);
+      g.fillStyle(COLORS.white, 0.5);
+      g.fillCircle(Math.cos(centre) * 27.5, Math.sin(centre) * 27.5, 1.7);
     }
-    g.lineStyle(1.2, COLORS.white, 0.32);
-    g.strokeCircle(0, 0, 33);
-    g.lineStyle(1, COLORS.gold, 0.25);
+    g.lineStyle(1.1, COLORS.gold, 0.18);
     g.strokeCircle(0, 0, 25);
   }
 
   /** ЛИЗИС: an unstable replication core plus three budding daughter virions. */
   private drawLysisCore(g: Phaser.GameObjects.Graphics): void {
-    g.lineStyle(2.4, COLORS.green, 0.78);
+    g.fillStyle(COLORS.green, 0.12);
+    g.fillCircle(0, 0, 13);
+    g.lineStyle(2.2, COLORS.green, 0.68);
     g.strokeCircle(0, 0, 11);
-    g.lineStyle(1.5, COLORS.magenta, 0.62);
-    g.strokeCircle(0, 0, 17);
 
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2;
-      g.lineStyle(1.2, i % 2 ? COLORS.magenta : COLORS.green, 0.5);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      g.lineStyle(1.1, i % 2 ? COLORS.magenta : COLORS.green, 0.42);
       g.beginPath();
-      g.moveTo(Math.cos(a) * 7, Math.sin(a) * 7);
-      g.lineTo(Math.cos(a + 0.18) * 15, Math.sin(a + 0.18) * 15);
+      g.moveTo(Math.cos(a) * 6, Math.sin(a) * 6);
+      g.lineTo(Math.cos(a + 0.2) * 14, Math.sin(a + 0.2) * 14);
       g.strokePath();
     }
 
-    // Budding satellites are the strongest silhouette cue for replication/lysis.
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * Math.PI * 2 + 0.35;
-      const x = Math.cos(a) * 24;
-      const y = Math.sin(a) * 24;
-      g.fillStyle(COLORS.magenta, 0.35);
-      g.fillCircle(x, y, 5.2);
-      g.lineStyle(1.5, COLORS.green, 0.75);
-      g.strokeCircle(x, y, 4.2);
-      g.fillStyle(COLORS.white, 0.7);
-      g.fillCircle(x - 1.2, y - 1.2, 1.1);
+      const x = Math.cos(a) * 30;
+      const y = Math.sin(a) * 30;
+      g.fillStyle(COLORS.magenta, 0.24);
+      g.fillCircle(x, y, 5.6);
+      g.lineStyle(1.4, COLORS.green, 0.64);
+      g.strokeCircle(x, y, 4.4);
+      g.fillStyle(COLORS.white, 0.62);
+      g.fillCircle(x - 1.2, y - 1.2, 1);
     }
   }
 }

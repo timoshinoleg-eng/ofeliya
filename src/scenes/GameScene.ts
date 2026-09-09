@@ -768,31 +768,42 @@ export class GameScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
     const c = this.add.container(0, 0).setDepth(60);
+    const panelW = Math.min(W - 28, 370);
+    const panelY = H * 0.3 + 8;
 
+    const panel = this.add
+      .rectangle(W / 2, panelY, panelW, 86, 0x12070c, 0.68)
+      .setStrokeStyle(1, COLORS.magenta, 0.18);
     const title = this.add
-      .text(W / 2, H * 0.3, IDENTITY.copy.introTitle, {
+      .text(W / 2, H * 0.275, IDENTITY.copy.introTitle, {
         fontFamily: FONT,
-        fontSize: '18px',
+        fontSize: W < 370 ? '14px' : '16px',
         fontStyle: 'bold',
-        color: '#35e0ff',
-      })
-      .setOrigin(0.5)
-      .setResolution(2);
-    const sub = this.add
-      .text(W / 2, H * 0.3 + 30, IDENTITY.copy.introSub, {
-        fontFamily: FONT,
-        fontSize: '13px',
-        color: '#aab4d4',
+        color: '#ff78c8',
         align: 'center',
+        lineSpacing: 3,
+        wordWrap: { width: panelW - 24 },
+      })
+      .setOrigin(0.5)
+      .setResolution(2)
+      .setShadow(0, 0, 'rgba(255,79,181,0.34)', 8, true, true);
+    const sub = this.add
+      .text(W / 2, H * 0.275 + 45, IDENTITY.copy.introSub, {
+        fontFamily: FONT,
+        fontSize: W < 370 ? '10px' : '11px',
+        color: '#d9b7c5',
+        align: 'center',
+        wordWrap: { width: panelW - 26 },
       })
       .setOrigin(0.5)
       .setResolution(2);
-    c.add([title, sub]);
+    c.add([panel, title, sub]);
 
     c.setAlpha(0);
-    this.tweens.add({ targets: c, alpha: 1, duration: 250 });
-    this.time.delayedCall(5000, () => {
-      this.tweens.add({ targets: c, alpha: 0, duration: 300, onComplete: () => c.destroy() });
+    this.tweens.add({ targets: c, alpha: 1, duration: 220 });
+    this.time.delayedCall(4600, () => {
+      if (!c.active) return;
+      this.tweens.add({ targets: c, alpha: 0, duration: 260, onComplete: () => c.destroy() });
     });
   }
 
