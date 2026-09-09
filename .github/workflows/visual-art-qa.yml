@@ -24,7 +24,7 @@ jobs:
           for i in $(seq 1 40); do curl -fsS http://127.0.0.1:5173/ >/dev/null && exit 0; sleep .5; done
           cat /tmp/vite.log
           exit 1
-      - name: Capture corrected visual states
+      - name: Capture final visual states
         run: |
           mkdir -p /tmp/art
           cat > /tmp/capture.cjs <<'NODE'
@@ -47,15 +47,18 @@ jobs:
 
             await page.evaluate(()=>window.__game.scene.getScene('Menu').scene.start('Game'));
             await page.waitForFunction(()=>window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI'));
-            // Capture the actual opening before the very fast first RNA mutation appears.
             await sleep(800);
             await page.screenshot({path:'/tmp/art/02-opening-combat.png'});
 
             await page.waitForFunction(()=>window.__game.scene.getScene('Game').awaitingChoice === true, null, {timeout:10000});
             await sleep(220);
+            const tutorialGone = await page.evaluate(()=>{
+              const gs=window.__game.scene.getScene('Game');
+              return gs.introHint === null || !gs.introHint?.active;
+            });
+            if(!tutorialGone) throw new Error('first-run tutorial survived under mutation modal');
             await page.screenshot({path:'/tmp/art/03-first-mutation.png'});
 
-            // Close progression modal and freeze progression. Gameplay contracts are covered by a separate smoke.
             await page.evaluate(()=>{
               const g=window.__game, gs=g.scene.getScene('Game'), ui=g.scene.getScene('UI');
               const choice=gs.pendingChoices?.[0];
@@ -76,7 +79,6 @@ jobs:
             await sleep(220);
             await page.screenshot({path:'/tmp/art/04-immune-cast-and-critical-virus.png'});
 
-            // Isolate host-cell states from staged enemies so infection/lysis can be judged on their own.
             await page.evaluate(()=>{
               const gs=window.__game.scene.getScene('Game');
               for(const e of gs.enemies.getChildren()) if(e?.active) e.disableBody(true,true);
@@ -96,13 +98,11 @@ jobs:
 
             await page.evaluate(()=>{
               const gs=window.__game.scene.getScene('Game');
-              const cell=window.__visualCell;
-              gs.hostCells.lyse(cell);
+              gs.hostCells.lyse(window.__visualCell);
             });
-            await sleep(100);
+            await sleep(110);
             await page.screenshot({path:'/tmp/art/06-host-cell-lysis.png'});
 
-            // Bespoke critical-mutation emblem/ceremony must read as a premium reward, not generic cyber UI.
             await page.evaluate(()=>{
               const ui=window.__game.scene.getScene('UI');
               ui.hideModal();
@@ -118,6 +118,6 @@ jobs:
           NODE_PATH="$GITHUB_WORKSPACE/node_modules" node /tmp/capture.cjs
       - uses: actions/upload-artifact@v4
         with:
-          name: strain-zero-art-qa-v2
+          name: strain-zero-art-qa-v3
           path: /tmp/art/*.png
           if-no-files-found: error
