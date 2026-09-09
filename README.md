@@ -41,7 +41,9 @@ npm run preview
 VITE_MAX_BOT_NAME=your_max_bot_name
 ```
 
-Пример есть в `.env.example`. Значение указывается без `@`.
+Пример есть в `.env.example`. Значение указывается без `@`. Реальное имя бота не хранится в
+репозитории и должно быть задано в deployment environment; его корректность проверяется в
+`VIR-16` внутри настоящего MAX-клиента.
 
 Challenge deeplink соответствует MAX contract:
 
