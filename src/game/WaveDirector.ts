@@ -1,12 +1,17 @@
 import Phaser from 'phaser';
-import { RUN, type EnemyKind } from './config';
+import { RUN, type BossType, type EnemyKind } from './config';
 import { RunMilestones } from './RunMilestones';
 import type { Rng } from './SeededRng';
 import type { GameScene } from '../scenes/GameScene';
+import type { Enemy } from './Enemy';
 
 /** Управляет темпом и составом волн врагов, элитами и боссом. */
 export class WaveDirector {
-  boss: import('./Enemy').Enemy | null = null;
+  boss: Enemy | null = null;
+  /** K4: тип босса текущего забега (seeded). */
+  bossType: BossType = 'crown';
+  /** K4: осколки расколовшегося босса (победа = последний погиб). */
+  bossParts: Enemy[] = [];
 
   private scene: GameScene;
   private enemies: Phaser.Physics.Arcade.Group;
@@ -30,7 +35,9 @@ export class WaveDirector {
 
     if (!this.bossSpawned && t >= RUN.bossTimeMs) this.spawnBoss();
 
-    if (this.boss) {
+    // K4: после раскола босс-«мина» (boss=null) миньоны больше не зовёт —
+    // бой уже идёт с осколками, не надо усложнять.
+    if (this.boss && this.bossParts.length === 0) {
       this.minionAcc += delta;
       if (this.minionAcc >= 12000) {
         this.minionAcc = 0;
@@ -76,17 +83,19 @@ export class WaveDirector {
     if (t < 90000) return r < 0.8 ? 'swarm' : 'runner';
     // K2: с 1.5 мин в ротацию входит сплиттер (взрыв на миньонов).
     if (t < 180000) return r < 0.55 ? 'swarm' : r < 0.85 ? 'runner' : 'splitter';
-    // K2: с 3 мин — щитоны (фронтальная защита от пуль).
+    // K2/K5: с 3 мин — щитоны, с ~3 мин в ротации и бомбёр (взрыв при смерти).
     if (t < 300000) {
-      return r < 0.42 ? 'swarm' : r < 0.66 ? 'runner' : r < 0.84 ? 'brute' : 'splitter';
+      return r < 0.42 ? 'swarm' : r < 0.64 ? 'runner' : r < 0.8 ? 'brute' : r < 0.92 ? 'splitter' : 'bomber';
     }
-    // K2: с 5 мин — снайперы (дистанционная угроза) + вся ротация.
-    return r < 0.3 ? 'swarm'
-      : r < 0.5 ? 'runner'
-      : r < 0.66 ? 'brute'
-      : r < 0.8 ? 'splitter'
-      : r < 0.91 ? 'shield'
-      : 'sniper';
+    // K2/K5: с 5 мин — снайперы, мины (неподвижная угроза) + вся ротация.
+    return r < 0.28 ? 'swarm'
+      : r < 0.46 ? 'runner'
+      : r < 0.6 ? 'brute'
+      : r < 0.72 ? 'splitter'
+      : r < 0.82 ? 'shield'
+      : r < 0.9 ? 'sniper'
+      : r < 0.96 ? 'bomber'
+      : 'mine';
   }
 
   private spawn(kind: EnemyKind, elite: boolean): void {
@@ -97,8 +106,27 @@ export class WaveDirector {
 
   private spawnBoss(): void {
     this.bossSpawned = true;
+    // K4: тип босса — seeded (daily: все получают одного и того же).
+    this.bossType = this.rng.pick(['crown', 'orbital', 'splitter'] as const);
     const p = this.ringPos();
-    this.boss = this.scene.spawnEnemy('boss', p.x, p.y, false);
+    this.boss = this.scene.spawnEnemy('boss', p.x, p.y, false, this.bossType);
+  }
+
+  /**
+   * K4: раскол «Разделяющего ядра» (50% HP). Оригинал убирается (взрыв
+   * отрисовал GameScene), появляются 2 осколка; победа — когда оба погибли
+   * (см. onEnemyDied).
+   */
+  splitBoss(boss: Enemy): void {
+    if (this.bossParts.length > 0) return;
+    this.bossParts = [];
+    for (const off of [-46, 46]) {
+      const s = this.scene.spawnEnemy('boss', boss.x + off, boss.y, false, 'shard');
+      if (s) this.bossParts.push(s);
+    }
+    // Оригинальное ядро «тратится» на раскол: убиваем без награды/лоута.
+    this.boss = null;
+    boss.disableBody(true, true);
   }
 
   private ringPos(): { x: number; y: number } {

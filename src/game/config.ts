@@ -139,7 +139,11 @@ export type EnemyKind =
   /** K2: фронтальный щит — пули спереди бьют на -78%. */
   | 'shield'
   /** K2: держит дистанцию и стреляет. */
-  | 'sniper';
+  | 'sniper'
+  /** K5: медленный, взрывается при смерти (АОЕ по игроку). */
+  | 'bomber'
+  /** K5: неподвижная, детонирует при сближении или по урону. */
+  | 'mine';
 
 export interface EnemyDef {
   tex: string;
@@ -160,6 +164,8 @@ export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
   minion: { tex: 'enemy-minion', hp: 8, speed: 175, dmg: 4, xp: 1, scale: 0.7, radius: 8 },
   shield: { tex: 'enemy-shield', hp: 130, speed: 48, dmg: 14, xp: 5, scale: 1.1, radius: 15 },
   sniper: { tex: 'enemy-sniper', hp: 40, speed: 85, dmg: 9, xp: 4, scale: 1, radius: 11 },
+  bomber: { tex: 'enemy-bomber', hp: 40, speed: 58, dmg: 10, xp: 4, scale: 1.15, radius: 14 },
+  mine: { tex: 'enemy-mine', hp: 120, speed: 0, dmg: 0, xp: 3, scale: 1, radius: 12 },
 };
 
 /** K2: снаряды снайпера (стреляют В игрока). */
@@ -186,6 +192,17 @@ export const K2_BEHAVIOR = {
   sniperMinShotDist: 90,
 };
 
+/** K5: поведение взрывных (бомбёр/мина). */
+export const K5_BEHAVIOR = {
+  /** Радиус взрыва (по игроку), px. */
+  boomRadius: 84,
+  /** Урон взрыва по игроку. */
+  bomberBoomDmg: 12,
+  mineBoomDmg: 13,
+  /** Мина детонирует, если игрок ближе этой дистанции. */
+  mineTriggerDist: 46,
+};
+
 export const ELITE = { hpMul: 6, dmgMul: 1.7, xpMul: 8, scale: 1.45 };
 
 /**
@@ -195,6 +212,52 @@ export const ELITE = { hpMul: 6, dmgMul: 1.7, xpMul: 8, scale: 1.45 };
  * 2600 HP — расчётный бой ~20 с. Менять здесь, а не в ENEMY_DEFS.boss.
  */
 export const BOSS_SCALE = { hp: 1, dmg: 1 };
+
+/**
+ * K4: типы босса (выбор при спавне, seeded → daily-честность).
+ *  - crown: базовый (текущее поведение: melee + миньоны через WaveDirector);
+ *  - orbital: медленный, два орбитальных клинка + радиальные залпы;
+ *  - splitter: в 50% HP раскалывается на 2 осколка — убить оба.
+ */
+export type BossType = 'crown' | 'orbital' | 'splitter';
+
+export interface BossTypeDef {
+  tex: string;
+  hp: number;
+  speed: number;
+  dmg: number;
+  radius: number;
+  /** orbital: радиус орбиты клинков. */
+  orbitRadius?: number;
+  /** orbital: урон клинка при касании. */
+  shardDmg?: number;
+  /** orbital: интервал радиального залпа, мс (0 = не стреляет). */
+  burstEveryMs?: number;
+}
+
+export const BOSS_TYPES: Record<BossType, BossTypeDef> = {
+  crown: { tex: 'boss', hp: 2600, speed: 66, dmg: 26, radius: 25 },
+  orbital: {
+    tex: 'boss-orbital',
+    hp: 2400,
+    speed: 52,
+    dmg: 22,
+    radius: 24,
+    orbitRadius: 74,
+    shardDmg: 10,
+    burstEveryMs: 6000,
+  },
+  splitter: { tex: 'boss-splitter', hp: 2600, speed: 70, dmg: 24, radius: 24 },
+};
+
+/** K4: осколок делящегося босса (каждый по половине HP). */
+export const BOSS_SHARD = {
+  tex: 'boss-shard',
+  hp: 1300,
+  speed: 96,
+  dmg: 18,
+  radius: 18,
+};
 
 /** Множители сложности, растущие со временем забега. */
 export function difficulty(timeMs: number): { hpScale: number; dmgScale: number } {

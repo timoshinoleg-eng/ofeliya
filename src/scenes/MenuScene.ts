@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { COLORS, FONT, fmtTime } from '../game/config';
 import { IDENTITY } from '../game/identity';
-import { META_UPGRADES, buyMeta, metaCost, metaLevel } from '../game/MetaSystem';
+import { META_ACHIEVEMENTS, META_UPGRADES, buyMeta, metaCost, metaLevel } from '../game/MetaSystem';
 import { todayKey } from '../game/SeededRng';
 import { Analytics } from '../systems/Analytics';
 import { MessengerBridge } from '../systems/MessengerBridge';
@@ -294,10 +294,10 @@ export class MenuScene extends Phaser.Scene {
   }
 
   /**
-   * K1: мета-шоп — покупка персистентных усилений за осколки.
-   * После покупки модалка пересобирается (простое и точное обновление строк).
+   * K1/K6: мета-шоп — персистентные усиления + достижения (одноразовые
+   * бонусы). Табы переключают тело; после покупки/смены модалка пересобирается.
    */
-  private openMetaShop(): void {
+  private openMetaShop(tab: 'up' | 'ach' = 'up'): void {
     if (this.metaShop || !this.scene.isActive()) return;
     Sfx.play('click');
     MessengerBridge.haptic('light');
@@ -307,8 +307,9 @@ export class MenuScene extends Phaser.Scene {
     const c = this.add.container(0, 0).setDepth(60);
 
     const panelW = Math.min(W - 24, 384);
-    const rowH = 62;
-    const panelH = Math.min(H - 32, 96 + META_UPGRADES.length * rowH + 58);
+    const upRows = META_UPGRADES.length * 62;
+    const achRows = META_ACHIEVEMENTS.length * 30;
+    const panelH = Math.min(H - 32, 96 + 42 + Math.max(upRows, achRows) + 58);
     const topY = H / 2 - panelH / 2;
     const dim = this.add.rectangle(W / 2, H / 2, W, H, 0x05070f, 0.82);
     const panel = this.add
@@ -317,7 +318,7 @@ export class MenuScene extends Phaser.Scene {
     c.add([dim, panel]);
     c.add(
       this.add
-        .text(W / 2, topY + 26, 'ЯДРО · УСИЛЕНИЯ', {
+        .text(W / 2, topY + 24, 'ЯДРО', {
           fontFamily: FONT,
           fontSize: '17px',
           fontStyle: 'bold',
@@ -328,7 +329,7 @@ export class MenuScene extends Phaser.Scene {
     );
     c.add(
       this.add
-        .text(W / 2, topY + 52, `⬢ ${save.shards} осколков`, {
+        .text(W / 2, topY + 48, `⬢ ${save.shards} осколков`, {
           fontFamily: FONT,
           fontSize: '13px',
           fontStyle: 'bold',
@@ -338,66 +339,134 @@ export class MenuScene extends Phaser.Scene {
         .setResolution(2)
     );
 
-    META_UPGRADES.forEach((def, i) => {
-      const y = topY + 96 + i * rowH + rowH / 2 - 6;
-      const level = metaLevel(save.meta, def.id);
-      const maxed = level >= def.max;
-      const cost = maxed ? 0 : metaCost(def, level);
-      const afford = !maxed && save.shards >= cost;
+    // K6: табы «УСИЛЕНИЯ / ДОСТИЖЕНИЯ».
+    const tabY = topY + 70;
+    const mkTab = (label: string, x: number, active: boolean, next: 'up' | 'ach'): void => {
+      const bg = this.add
+        .rectangle(x, tabY, 120, 32, active ? 0x2a2410 : 0x0f1424, 1)
+        .setStrokeStyle(2, active ? COLORS.gold : COLORS.stroke, 1);
+      c.add(bg);
       c.add(
         this.add
-          .text(W / 2 - panelW / 2 + 16, y - 9, def.name, {
+          .text(x, tabY, label, {
             fontFamily: FONT,
-            fontSize: '13px',
+            fontSize: '12px',
             fontStyle: 'bold',
-            color: '#e8f4ff',
-          })
-          .setOrigin(0, 0.5)
-          .setResolution(2)
-      );
-      c.add(
-        this.add
-          .text(W / 2 - panelW / 2 + 16, y + 11, `${def.effect} · Lv ${level}/${def.max}`, {
-            fontFamily: FONT,
-            fontSize: '11px',
-            color: afford ? '#9fb6d8' : '#5a6480',
-          })
-          .setOrigin(0, 0.5)
-          .setResolution(2)
-      );
-      const bx = W / 2 + panelW / 2 - 16 - 46;
-      const btn = this.add
-        .rectangle(bx, y, 92, 38, afford ? 0x14301f : 0x0f1424, 1)
-        .setStrokeStyle(2, maxed ? 0x3a4258 : afford ? COLORS.green : 0x3a4258, 1);
-      c.add(btn);
-      c.add(
-        this.add
-          .text(bx, y, maxed ? 'MAX' : `⬢ ${cost}`, {
-            fontFamily: FONT,
-            fontSize: '13px',
-            fontStyle: 'bold',
-            color: maxed ? '#5a6480' : afford ? '#7dff6e' : '#5a6480',
+            color: active ? '#ffe066' : '#5a6480',
           })
           .setOrigin(0.5)
           .setResolution(2)
       );
-      btn.setInteractive({ useHandCursor: afford }).on('pointerup', () => {
-        if (!afford) {
-          Sfx.play('hurt');
-          return;
-        }
-        const r = buyMeta(def.id);
-        if (r.ok) {
-          Sfx.play('levelup');
-          MessengerBridge.haptic('light');
-          Analytics.track('meta_bought', { id: def.id, level: r.level, cost: r.cost });
-          this.closeMetaShop();
-          this.openMetaShop();
-        } else {
-          Sfx.play('hurt');
-        }
+      bg.setInteractive({ useHandCursor: true }).on('pointerup', () => {
+        this.closeMetaShop();
+        this.openMetaShop(next);
       });
-    });
+    };
+    mkTab('УСИЛЕНИЯ', W / 2 - 62, tab === 'up', 'up');
+    mkTab('ДОСТИЖЕНИЯ', W / 2 + 62, tab === 'ach', 'ach');
+
+    const bodyY = topY + 92;
+    if (tab === 'up') {
+      META_UPGRADES.forEach((def, i) => {
+        const y = bodyY + i * 62 + 31 - 6;
+        const level = metaLevel(save.meta, def.id);
+        const maxed = level >= def.max;
+        const cost = maxed ? 0 : metaCost(def, level);
+        const afford = !maxed && save.shards >= cost;
+        c.add(
+          this.add
+            .text(W / 2 - panelW / 2 + 16, y - 9, def.name, {
+              fontFamily: FONT,
+              fontSize: '13px',
+              fontStyle: 'bold',
+              color: '#e8f4ff',
+            })
+            .setOrigin(0, 0.5)
+            .setResolution(2)
+        );
+        c.add(
+          this.add
+            .text(W / 2 - panelW / 2 + 16, y + 11, `${def.effect} · Lv ${level}/${def.max}`, {
+              fontFamily: FONT,
+              fontSize: '11px',
+              color: afford ? '#9fb6d8' : '#5a6480',
+            })
+            .setOrigin(0, 0.5)
+            .setResolution(2)
+        );
+        const bx = W / 2 + panelW / 2 - 16 - 46;
+        const btn = this.add
+          .rectangle(bx, y, 92, 38, afford ? 0x14301f : 0x0f1424, 1)
+          .setStrokeStyle(2, maxed ? 0x3a4258 : afford ? COLORS.green : 0x3a4258, 1);
+        c.add(btn);
+        c.add(
+          this.add
+            .text(bx, y, maxed ? 'MAX' : `⬢ ${cost}`, {
+              fontFamily: FONT,
+              fontSize: '13px',
+              fontStyle: 'bold',
+              color: maxed ? '#5a6480' : afford ? '#7dff6e' : '#5a6480',
+            })
+            .setOrigin(0.5)
+            .setResolution(2)
+        );
+        btn.setInteractive({ useHandCursor: afford }).on('pointerup', () => {
+          if (!afford) {
+            Sfx.play('hurt');
+            return;
+          }
+          const r = buyMeta(def.id);
+          if (r.ok) {
+            Sfx.play('levelup');
+            MessengerBridge.haptic('light');
+            Analytics.track('meta_bought', { id: def.id, level: r.level, cost: r.cost });
+            this.closeMetaShop();
+            this.openMetaShop('up');
+          } else {
+            Sfx.play('hurt');
+          }
+        });
+      });
+    } else {
+      // K6: достижения — ✓ выданные (бонус уже в балансе) / не выполненные.
+      const granted = new Set(save.metaAchievements);
+      META_ACHIEVEMENTS.forEach((a, i) => {
+        const y = bodyY + i * 30 + 15;
+        const done = granted.has(a.id);
+        c.add(
+          this.add
+            .text(W / 2 - panelW / 2 + 16, y, `${done ? '✓' : '⬢'} ${a.name}`, {
+              fontFamily: FONT,
+              fontSize: '12px',
+              fontStyle: 'bold',
+              color: done ? '#7dff6e' : '#e8f4ff',
+            })
+            .setOrigin(0, 0.5)
+            .setResolution(2)
+        );
+        c.add(
+          this.add
+            .text(W / 2 - panelW / 2 + 38, y, a.desc, {
+              fontFamily: FONT,
+              fontSize: '11px',
+              color: done ? '#5a8a5a' : '#9fb6d8',
+            })
+            .setOrigin(0, 0.5)
+            .setResolution(2)
+        );
+        c.add(
+          this.add
+            .text(W / 2 + panelW / 2 - 16, y, `+${a.reward}`, {
+              fontFamily: FONT,
+              fontSize: '11px',
+              fontStyle: 'bold',
+              color: done ? '#5a6480' : '#ffe066',
+            })
+            .setOrigin(1, 0.5)
+            .setResolution(2)
+        );
+      });
+    }
 
     const closeY = topY + panelH - 27;
     const close = this.add

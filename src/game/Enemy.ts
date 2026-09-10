@@ -1,5 +1,16 @@
 import Phaser from 'phaser';
-import { COLORS, ELITE, ENEMY_DEFS, K2_BEHAVIOR, type EnemyKind } from './config';
+import {
+  BOSS_SHARD,
+  BOSS_TYPES,
+  COLORS,
+  ELITE,
+  ENEMY_DEFS,
+  K2_BEHAVIOR,
+  K5_BEHAVIOR,
+  type BossType,
+  type EnemyDef,
+  type EnemyKind,
+} from './config';
 import type { GameScene } from '../scenes/GameScene';
 import type { Player } from './Player';
 
@@ -12,6 +23,8 @@ const KIND_COLOR: Record<EnemyKind, number> = {
   minion: COLORS.green,
   shield: 0x4f9dff,
   sniper: COLORS.purple,
+  bomber: COLORS.orange,
+  mine: 0xff5577,
 };
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
@@ -24,6 +37,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   radius = 12;
   isElite = false;
   isBoss = false;
+  /** K4: тип босса (crown/orbital/splitter/shard); null — не босс. */
+  bossType: BossType | 'shard' | null = null;
   color = 0xffffff;
   flashUntil = 0;
   bladeImmuneUntil = 0;
@@ -41,6 +56,18 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private sniperNextShot = 0;
   /** K2: снайпер — направление стрейфа (+1/-1). */
   private strafeDir = 1;
+  /** K4: орбитальная крепость — параметры (0 = не орбитальный). */
+  private bossOrbitRadius = 0;
+  private bossShardDmg = 0;
+  private bossBurstEvery = 0;
+  private bossBurstAt = 0;
+  private bossShardAngle = 0;
+  /** K4: разделение босса выполнено (раскол в 50% HP). */
+  private splitDone = false;
+  /** K5: базовый масштаб (для пульса мины). */
+  private baseScale = 1;
+  /** K5: время появления мины (авто-сгорание, чтобы не копить поле). */
+  private mineSpawnAt = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'enemy-swarm');
@@ -54,18 +81,39 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     kind: EnemyKind,
     x: number,
     y: number,
-    opts: { elite: boolean; hpScale: number; dmgScale: number }
+    opts: { elite: boolean; hpScale: number; dmgScale: number; bossType?: BossType | 'shard' }
   ): void {
     this.gs = gs;
     this.target = gs.player;
     this.kind = kind;
-    const def = ENEMY_DEFS[kind];
+    // K4: босс — параметры по типу (crown/orbital/splitter), осколок — BOSS_SHARD.
+    const bossType: BossType | 'shard' | null = kind === 'boss' ? (opts.bossType ?? 'crown') : null;
+    const bd = bossType === 'shard' ? null : bossType ? BOSS_TYPES[bossType] : null;
+    const def: EnemyDef =
+      bossType === 'shard'
+        ? {
+            tex: BOSS_SHARD.tex,
+            hp: BOSS_SHARD.hp,
+            speed: BOSS_SHARD.speed,
+            dmg: BOSS_SHARD.dmg,
+            xp: 0,
+            scale: 1,
+            radius: BOSS_SHARD.radius,
+          }
+        : bd
+          ? { tex: bd.tex, hp: bd.hp, speed: bd.speed, dmg: bd.dmg, xp: 0, scale: 1, radius: bd.radius }
+          : ENEMY_DEFS[kind];
+    this.bossOrbitRadius = bd?.orbitRadius ?? 0;
+    this.bossShardDmg = bd?.shardDmg ?? 0;
+    this.bossBurstEvery = bd?.burstEveryMs ?? 0;
     const scale = def.scale * (opts.elite ? ELITE.scale : 1);
+    this.baseScale = scale;
 
     this.enableBody(true, x, y, true, true);
     this.setTexture(def.tex).setScale(scale);
     this.isElite = opts.elite;
     this.isBoss = kind === 'boss';
+    this.bossType = bossType;
 
     this.maxHp = def.hp * opts.hpScale * (opts.elite ? ELITE.hpMul : 1);
     this.hp = this.maxHp;
@@ -85,6 +133,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.sniperNextShot =
       kind === 'sniper' ? this.scene.time.now + 900 + gs.runState.rng.next() * 900 : 0;
     this.strafeDir = Math.random() < 0.5 ? -1 : 1;
+    // K4: сброс босс-поведения.
+    this.splitDone = false;
+    this.bossBurstAt = this.scene.time.now + (this.bossBurstEvery ? 2500 : 0);
+    this.bossShardAngle = 0;
+    // K5: отсчёт жизни мины.
+    this.mineSpawnAt = this.scene.time.now;
     this.setAlpha(1);
     this.clearTint();
     this.setRotation(0);
@@ -177,6 +231,42 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     if (this.kind === 'runner') this.setRotation(Math.atan2(dy, dx));
 
+    // K5: мина — неподвижна (speed 0), детонирует при сближении; чем ближе
+    // игрок, тем сильнее пульс «сдетонирует» (визуальная подсказка).
+    if (this.kind === 'mine' && p) {
+      if (time - this.mineSpawnAt > 25000) {
+        this.disableBody(true, true); // фатиг: мина «разряжается» тихо
+      } else if (d < K5_BEHAVIOR.mineTriggerDist) {
+        this.takeDamage(999999); // смерть → onEnemyDied → взрыв
+      } else {
+        const prox = Phaser.Math.Clamp(1 - d / (K5_BEHAVIOR.mineTriggerDist * 3), 0, 1);
+        const pulse = 1 + 0.2 * prox * (0.6 + 0.4 * Math.sin(this.scene.time.now / 80));
+        this.setScale(this.baseScale * pulse);
+      }
+    }
+
+    // K4: орбитальная крепость — два клинка по окружности + радиальный залп.
+    if (this.isBoss && this.bossOrbitRadius > 0) {
+      this.ensureBossBlades();
+      this.bossShardAngle += delta * 0.0016;
+      const p = this.target;
+      for (let i = 0; i < 2; i++) {
+        const blade = this.bossBlades[i];
+        if (!blade) continue;
+        const a = this.bossShardAngle + i * Math.PI;
+        const bx = this.x + Math.cos(a) * this.bossOrbitRadius;
+        const by = this.y + Math.sin(a) * this.bossOrbitRadius;
+        blade.setPosition(bx, by).setRotation(a + Math.PI / 2);
+        if (p && Math.hypot(p.x - bx, p.y - by) < 13 + 11 && p.hurtUntil < time) {
+          this.gs?.applyPlayerDamage(this.bossShardDmg);
+        }
+      }
+      if (this.bossBurstEvery > 0 && time >= this.bossBurstAt) {
+        this.bossBurstAt = time + this.bossBurstEvery;
+        this.gs?.foeBurst(this.x, this.y, 8);
+      }
+    }
+
     this.updateEliteRing(time);
   }
 
@@ -210,10 +300,41 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.flashUntil = this.scene.time.now + 70;
     this.knockX += kx;
     this.knockY += ky;
+    // K4: «Разделяющее ядро» раскалывается на 50% HP (однократно, пока живо).
+    if (
+      this.isBoss &&
+      this.bossType === 'splitter' &&
+      !this.splitDone &&
+      this.hp > 0 &&
+      this.hp <= this.maxHp * 0.5
+    ) {
+      this.splitDone = true;
+      this.speed = 0; // сам «труп» угрозы больше не несёт
+      this.dmg = 0;
+      this.gs?.onBossSplit(this);
+    }
     if (this.hp <= 0) {
       this.eliteRing?.setVisible(false);
+      this.destroyBossBlades();
       this.disableBody(true, true);
       this.gs?.onEnemyDied(this);
     }
+  }
+
+  /** K4: клинки орбитальной крепости (визуал + источник урона). */
+  private bossBlades: Phaser.GameObjects.Image[] = [];
+
+  private ensureBossBlades(): void {
+    if (this.bossBlades.length > 0 || this.bossOrbitRadius <= 0) return;
+    for (let i = 0; i < 2; i++) {
+      this.bossBlades.push(
+        this.scene.add.image(this.x, this.y, 'blade').setDepth(11).setBlendMode(Phaser.BlendModes.ADD)
+      );
+    }
+  }
+
+  private destroyBossBlades(): void {
+    for (const b of this.bossBlades) b.destroy();
+    this.bossBlades = [];
   }
 }

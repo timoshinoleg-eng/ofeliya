@@ -9,7 +9,7 @@
  * Баланс: первая ступенька стоит ~1 забег, max-трек ~30–40 забегов.
  * Итоговый пул всех треков ≈ 3000+ осколков — на недели ежедневной игры.
  */
-import { SaveSystem } from '../systems/SaveSystem';
+import { SaveSystem, type SaveData } from '../systems/SaveSystem';
 
 export type MetaId = 'dmg' | 'hp' | 'speed' | 'magnet' | 'shard';
 
@@ -115,6 +115,57 @@ export interface BuyResult {
   cost: number;
   level: number;
   shards: number;
+}
+
+/**
+ * K6: мета-достижения — одноразовые бонусы осколков за долгосрочные цели.
+ * Проверяются после каждого забега; выданные фиксируются в save.metaAchievements.
+ */
+export interface MetaAchievement {
+  id: string;
+  name: string;
+  desc: string;
+  reward: number;
+  check: (s: SaveData) => boolean;
+}
+
+export const META_ACHIEVEMENTS: MetaAchievement[] = [
+  { id: 'first_win', name: 'СТАБИЛИЗАЦИЯ', desc: 'Первая победа над боссом', reward: 30, check: (s) => s.totalWins >= 1 },
+  { id: 'kills_100', name: 'СОТНЯ', desc: '100 убийств суммарно', reward: 20, check: (s) => s.totalKills >= 100 },
+  { id: 'kills_500', name: 'КАТЕЧ', desc: '500 убийств суммарно', reward: 30, check: (s) => s.totalKills >= 500 },
+  { id: 'kills_2000', name: 'КАЗНЬ', desc: '2000 убийств суммарно', reward: 50, check: (s) => s.totalKills >= 2000 },
+  { id: 'runs_10', name: 'ЗАВСЕГДАТАЙ', desc: '10 забегов', reward: 15, check: (s) => s.runs >= 10 },
+  { id: 'runs_50', name: 'ВЕТЕРАН', desc: '50 забегов', reward: 25, check: (s) => s.runs >= 50 },
+  { id: 'fast_win', name: 'СПИДРАН', desc: 'Победа за 5:30', reward: 25, check: (s) => s.bestWinTimeMs > 0 && s.bestWinTimeMs <= 330_000 },
+  { id: 'level_15', name: 'РОСТ', desc: 'Ядро уровня 15', reward: 20, check: (s) => s.bestLevel >= 15 },
+  { id: 'combo_20', name: 'КОМБО ×20', desc: 'Серия из 20 убийств', reward: 20, check: (s) => s.bestCombo >= 20 },
+  { id: 'evo_3', name: 'АЛХИМИК', desc: '3 эволюции открыто', reward: 30, check: (s) => s.evolutionsSeen.length >= 3 },
+  { id: 'shard_1000', name: 'КОЗЫРЬ', desc: '1000 осколков заработано', reward: 40, check: (s) => s.totalShardsEarned >= 1000 },
+];
+
+/** После забега: все вновь выполненные достижения → бонус осколков. */
+export function grantMetaAchievements(): { id: string; reward: number }[] {
+  const save = SaveSystem.get();
+  const known = new Set(save.metaAchievements);
+  const granted: { id: string; reward: number }[] = [];
+  for (const a of META_ACHIEVEMENTS) {
+    if (known.has(a.id)) continue;
+    let ok = false;
+    try {
+      ok = a.check(save);
+    } catch {
+      ok = false;
+    }
+    if (ok) {
+      known.add(a.id);
+      granted.push({ id: a.id, reward: a.reward });
+    }
+  }
+  if (granted.length > 0) {
+    SaveSystem.addMetaAchievements(granted.map((g) => g.id));
+    SaveSystem.addShards(granted.reduce((sum, g) => sum + g.reward, 0));
+  }
+  return granted;
 }
 
 /** Купить ступеньку: проверка баланса → списание → сохранение. */

@@ -46,6 +46,14 @@ export interface SaveData {
   shards: number;
   /** K1: купленные ступеньки мета-усилений (id → level). */
   meta: Record<string, number>;
+  /** K6: сумма осколков, заработанных за всё время (для достижений). */
+  totalShardsEarned: number;
+  /** K6: всего побед (для достижений). */
+  totalWins: number;
+  /** K6: лучший комбо за всё время. */
+  bestCombo: number;
+  /** K6: выданные мета-достижения (id). */
+  metaAchievements: string[];
 }
 
 const KEY = 'ofeliya_save_v1';
@@ -75,6 +83,10 @@ const DEFAULTS: SaveData = {
   refBonusUsed: false,
   shards: 0,
   meta: {},
+  totalShardsEarned: 0,
+  totalWins: 0,
+  bestCombo: 0,
+  metaAchievements: [],
 };
 
 const VALID_EVOLUTIONS = new Set<EvolutionId>([
@@ -118,6 +130,10 @@ class SaveImpl {
             refBonusUsed: parsed.refBonusUsed === true,
             shards: this.num(parsed.shards),
             meta: this.metaFrom(parsed.meta),
+            totalShardsEarned: this.num(parsed.totalShardsEarned),
+            totalWins: this.num(parsed.totalWins),
+            bestCombo: this.num(parsed.bestCombo),
+            metaAchievements: this.stringArray(parsed.metaAchievements).slice(0, 64),
           };
         }
       }
@@ -134,6 +150,7 @@ class SaveImpl {
       daily: { ...this.data.daily },
       leaderboard: [...this.data.leaderboard],
       meta: { ...this.data.meta },
+      metaAchievements: [...this.data.metaAchievements],
     };
   }
 
@@ -333,6 +350,20 @@ class SaveImpl {
     if (typeof id !== 'string' || !Number.isFinite(level) || level < 0) return;
     const meta = { ...this.data.meta, [id]: Math.floor(level) };
     this.update({ meta });
+  }
+
+  /** K6: отметить выданные мета-достижения (id), если ещё не выданы. */
+  addMetaAchievements(ids: string[]): void {
+    if (ids.length === 0) return;
+    const known = new Set(this.data.metaAchievements);
+    let changed = false;
+    for (const id of ids) {
+      if (typeof id === 'string' && id.length > 0 && id.length <= 32 && !known.has(id)) {
+        known.add(id);
+        changed = true;
+      }
+    }
+    if (changed) this.update({ metaAchievements: [...known] });
   }
 
   private metaFrom(v: unknown): Record<string, number> {

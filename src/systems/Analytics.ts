@@ -43,7 +43,8 @@ export type AnalyticsEvent =
   | 'pause_shown'
   | 'game_over_shown'
   | 'shards_earned'
-  | 'meta_bought';
+  | 'meta_bought'
+  | 'meta_achievement';
 
 interface QueuedEvent {
   name: AnalyticsEvent;

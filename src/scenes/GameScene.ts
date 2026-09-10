@@ -8,11 +8,13 @@ import {
   FONT,
   JUICE,
   K2_BEHAVIOR,
+  K5_BEHAVIOR,
   ORBIT,
   PLAYER,
   POSTFX,
   WEAPON,
   difficulty,
+  type BossType,
   type EnemyKind,
 } from '../game/config';
 import {
@@ -26,7 +28,7 @@ import { dailyRng, mathRandom, todayKey } from '../game/SeededRng';
 import { Player } from '../game/Player';
 import { Enemy } from '../game/Enemy';
 import { FoeBullet } from '../game/FoeBullet';
-import { earnShards, metaEffects } from '../game/MetaSystem';
+import { earnShards, grantMetaAchievements, metaEffects } from '../game/MetaSystem';
 import { Bullet } from '../game/Bullet';
 import { Gem } from '../game/Gem';
 import { RunState } from '../game/RunState';
@@ -447,7 +449,13 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  spawnEnemy(kind: EnemyKind, x: number, y: number, elite: boolean): Enemy | null {
+  spawnEnemy(
+    kind: EnemyKind,
+    x: number,
+    y: number,
+    elite: boolean,
+    bossType?: BossType | 'shard'
+  ): Enemy | null {
     const e = this.enemies.get(x, y) as Enemy | null;
     if (!e) return null;
     const isBoss = kind === 'boss';
@@ -456,6 +464,7 @@ export class GameScene extends Phaser.Scene {
       elite,
       hpScale: isBoss ? BOSS_SCALE.hp : hpScale,
       dmgScale: isBoss ? BOSS_SCALE.dmg : dmgScale,
+      bossType,
     });
     if (kind === 'boss') {
       Sfx.play('boss');
@@ -463,7 +472,7 @@ export class GameScene extends Phaser.Scene {
       this.cameras.main.shake(320, 0.008);
       MessengerBridge.haptic('heavy');
       this.showBossIntro();
-      Analytics.track('boss_spawned');
+      Analytics.track('boss_spawned', { type: this.wave.bossType });
     } else if (elite) {
       Sfx.play('elite');
       this.atmosphere.pulse(COLORS.gold, 0.12);
@@ -481,6 +490,28 @@ export class GameScene extends Phaser.Scene {
     if (!b) return;
     b.shoot(this.time.now, angle);
     Sfx.play('shoot');
+  }
+
+  /** K4: радиальный залп врага (орбитальный босс) — n снарядов по кругу. */
+  foeBurst(x: number, y: number, n: number): void {
+    if (this.finished) return;
+    for (let i = 0; i < n; i++) {
+      this.foeShoot(x, y, (i / n) * Math.PI * 2);
+    }
+    Sfx.play('nova');
+  }
+
+  /**
+   * K4: босс «Разделяющее ядро» раскалывается (50% HP) → WaveDirector
+   * спавнит два осколка; победа = убить оба.
+   */
+  onBossSplit(boss: Enemy): void {
+    if (this.finished) return;
+    this.vfx.boom(boss.x, boss.y, 130, COLORS.red);
+    this.cameras.main.shake(320, 0.011);
+    Sfx.play('elite');
+    MessengerBridge.haptic('heavy');
+    this.wave.splitBoss(boss);
   }
 
   /**
@@ -525,16 +556,40 @@ export class GameScene extends Phaser.Scene {
         this.spawnEnemy('minion', e.x + Math.cos(a) * 16, e.y + Math.sin(a) * 16, false);
       }
     }
+    // K5: бомбёр/мина — взрыв (АОЕ по игроку; рывок/i-frames гасят урон).
+    if ((e.kind === 'bomber' || e.kind === 'mine') && !this.finished) {
+      const R = K5_BEHAVIOR.boomRadius;
+      const isMine = e.kind === 'mine';
+      this.vfx.boom(e.x, e.y, R, isMine ? 0xff5577 : COLORS.orange);
+      this.cameras.main.shake(180, 0.007);
+      Sfx.play('nova');
+      const pd = Math.hypot(this.player.x - e.x, this.player.y - e.y);
+      if (pd < R) this.applyPlayerDamage(isMine ? K5_BEHAVIOR.mineBoomDmg : K5_BEHAVIOR.bomberBoomDmg);
+    }
     if (e.isElite || e.isBoss) {
       this.hitStop(e.isBoss ? JUICE.hitStopBossMs : JUICE.hitStopMs);
       const s = JUICE.shakeEliteKill;
       this.cameras.main.shake(s.duration, s.intensity);
     }
     if (e.xpValue > 0) this.spawnGem(e.x, e.y, e.xpValue);
-    if (e.isBoss && this.wave.boss === e) {
-      this.wave.boss = null;
-      this.cameras.main.shake(400, 0.01);
-      this.finish(true);
+    // Победа: обычный босс — когда погиб он; расколовшийся — когда погиб
+    // последний из двух осколков (K4).
+    if (e.isBoss) {
+      let victory = false;
+      if (this.wave.bossParts.length > 0) {
+        const i = this.wave.bossParts.indexOf(e);
+        if (i >= 0) {
+          this.wave.bossParts.splice(i, 1);
+          victory = this.wave.bossParts.length === 0;
+        }
+      } else if (this.wave.boss === e) {
+        this.wave.boss = null;
+        victory = true;
+      }
+      if (victory) {
+        this.cameras.main.shake(400, 0.01);
+        this.finish(true);
+      }
     }
   }
 
@@ -694,10 +749,29 @@ export class GameScene extends Phaser.Scene {
     });
     this.captureAchievements(true, false);
     // K1: осколки ядра — валюта метапрогресса (киллы + уровень + победа).
-    const shardsEarned = earnShards(st.kills, st.level, win, SaveSystem.get().meta);
+    let shardsEarned = earnShards(st.kills, st.level, win, SaveSystem.get().meta);
     if (shardsEarned > 0) {
       SaveSystem.addShards(shardsEarned);
       Analytics.track('shards_earned', { n: shardsEarned, win });
+    }
+    // K6: долгосрочная статистика СНАЧАЛА (достижения смотрят её), затем
+    // выдача мета-достижений (одноразовые бонусы осколков).
+    {
+      const prev = SaveSystem.get();
+      SaveSystem.update({
+        totalWins: prev.totalWins + (win ? 1 : 0),
+        bestCombo: Math.max(prev.bestCombo, st.comboBest),
+      });
+      const granted = grantMetaAchievements();
+      const bonus = granted.reduce((s, g) => s + g.reward, 0);
+      if (granted.length > 0) {
+        Analytics.track('meta_achievement', {
+          ids: granted.map((g) => g.id).join(','),
+          bonus,
+        });
+      }
+      SaveSystem.update({ totalShardsEarned: prev.totalShardsEarned + shardsEarned + bonus });
+      if (bonus > 0) shardsEarned += bonus; // в строке game over — итого за забег
     }
     this.registry.set('run', this.snapshot());
     this.registry.set('runResult', {
@@ -961,11 +1035,12 @@ export class GameScene extends Phaser.Scene {
   };
 
   /**
-   * Общий урон игроку (контакт врага / снаряд врага). true — урон применён
-   * (i-frames не закрывали), false — засчитан сквозь кадры неуязвимости.
-   * K3: АЭГИС — при попадании запускает контр-нову (кулдаун 8 с).
+   * Общий урон игроку (контакт врага / снаряд врага / клинки босса).
+   * true — урон применён (i-frames не закрывали), false — засчитан сквозь
+   * кадры неуязвимости. K3: АЭГИС — при попадании запускает контр-нову (8 с).
+   * Публичный: K4 — клинки орбитального босса зовут из Enemy.
    */
-  private applyPlayerDamage(amount: number): boolean {
+  applyPlayerDamage(amount: number): boolean {
     if (this.finished) return false;
     const now = this.time.now;
     if (now < this.player.hurtUntil) return false;
@@ -1116,8 +1191,17 @@ export class GameScene extends Phaser.Scene {
     s.timeMs = st.timeMs;
     s.kills = st.kills;
     s.combo = st.combo;
-    s.bossHp = this.wave.boss?.hp ?? 0;
-    s.bossMax = this.wave.boss?.maxHp ?? 0;
+    // K4: после раскола бар показывает СУММУ HP осколков (честный индикатор).
+    if (this.wave.boss) {
+      s.bossHp = this.wave.boss.hp;
+      s.bossMax = this.wave.boss.maxHp;
+    } else if (this.wave.bossParts.length > 0) {
+      s.bossHp = this.wave.bossParts.reduce((acc, e) => acc + Math.max(0, e.hp), 0);
+      s.bossMax = this.wave.bossParts.reduce((acc, e) => acc + e.maxHp, 0);
+    } else {
+      s.bossHp = 0;
+      s.bossMax = 0;
+    }
     return s;
   }
 

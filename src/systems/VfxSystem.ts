@@ -107,6 +107,14 @@ export class VfxSystem {
     this.ring(x, y, COLORS.cyan, radius, 360, 0.3);
   }
 
+  /** K4/K5: взрыв — двойное кольцо + частицы (взрыв бомбёра/мины, раскол босса). */
+  boom(x: number, y: number, radius: number, color = COLORS.red): void {
+    this.tint(this.rewardEmitter, color);
+    this.rewardEmitter.emitParticleAt(x, y, 16);
+    this.ring(x, y, color, radius, 320, 0.5);
+    this.ring(x, y, COLORS.white, radius * 0.55, 240, 0.35, 60);
+  }
+
   singularity(x: number, y: number, radius: number): void {
     this.tint(this.rewardEmitter, COLORS.purple);
     this.rewardEmitter.emitParticleAt(x, y, 18);
