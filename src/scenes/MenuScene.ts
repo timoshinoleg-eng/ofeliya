@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { COLORS, FONT, fmtTime } from '../game/config';
 import { IDENTITY } from '../game/identity';
+import { META_UPGRADES, buyMeta, metaCost, metaLevel } from '../game/MetaSystem';
 import { todayKey } from '../game/SeededRng';
 import { Analytics } from '../systems/Analytics';
 import { MessengerBridge } from '../systems/MessengerBridge';
@@ -10,6 +11,11 @@ import { Sfx } from '../systems/Sfx';
 import { ServerClient } from '../systems/ServerClient';
 
 export class MenuScene extends Phaser.Scene {
+  /** K1: открытый ли мета-шоп (модалка). */
+  private metaShop: Phaser.GameObjects.Container | null = null;
+  /** K1: лейбл баланса осколков в меню (обновляем после покупки). */
+  private metaTextRef: Phaser.GameObjects.Text | null = null;
+
   constructor() {
     super('Menu');
   }
@@ -132,13 +138,13 @@ export class MenuScene extends Phaser.Scene {
     btnBg.on('pointerover', () => btnBg.setFillStyle(COLORS.cyan, 0.28));
     btnBg.on('pointerout', () => btnBg.setFillStyle(COLORS.cyan, 0.16));
 
-    // Второстепенные кнопки в ряд: daily + звук (обе ≥ 44×44).
+    // Второстепенные кнопки в ряд: daily + мета-шоп (K1) + звук (все ≥ 44×44).
     const rowY = btnY + (compact ? 44 : 50);
     const dailyBg = this.add
-      .rectangle(W / 2 - 24, rowY, 170, 44, COLORS.panel, 0.95)
+      .rectangle(W / 2 - 124, rowY, 144, 44, COLORS.panel, 0.95)
       .setStrokeStyle(2, COLORS.cyan, 0.7);
     this.add
-      .text(W / 2 - 24, rowY, `ЕЖЕДНЕВНОЕ · ${today.slice(8)}`, {
+      .text(W / 2 - 124, rowY, 'ЕЖЕДНЕВНОЕ', {
         fontFamily: FONT,
         fontSize: '13px',
         fontStyle: 'bold',
@@ -150,11 +156,30 @@ export class MenuScene extends Phaser.Scene {
     dailyBg.on('pointerover', () => dailyBg.setFillStyle(COLORS.panelHover, 1));
     dailyBg.on('pointerout', () => dailyBg.setFillStyle(COLORS.panel, 0.95));
 
+    const metaBg = this.add
+      .rectangle(W / 2 + 28, rowY, 144, 44, COLORS.panel, 0.95)
+      .setStrokeStyle(2, COLORS.gold, 0.75);
+    const metaText = this.add
+      .text(W / 2 + 28, rowY, `ЯДРО · ⬢ ${save.shards}`, {
+        fontFamily: FONT,
+        fontSize: '13px',
+        fontStyle: 'bold',
+        color: '#ffe066',
+      })
+      .setOrigin(0.5)
+      .setResolution(2);
+    metaBg.setInteractive({ useHandCursor: true }).on('pointerup', () => {
+      this.openMetaShop();
+    });
+    metaBg.on('pointerover', () => metaBg.setFillStyle(COLORS.panelHover, 1));
+    metaBg.on('pointerout', () => metaBg.setFillStyle(COLORS.panel, 0.95));
+    this.metaTextRef = metaText; // обновляется после покупки (closeMetaShop)
+
     const soundBg = this.add
-      .rectangle(W / 2 + 102, rowY, 44, 44, COLORS.panel, 0.95)
+      .rectangle(W / 2 + 130, rowY, 44, 44, COLORS.panel, 0.95)
       .setStrokeStyle(2, COLORS.stroke, 1);
     const soundText = this.add
-      .text(W / 2 + 102, rowY, Sfx.muted ? '🔇' : '🔊', {
+      .text(W / 2 + 130, rowY, Sfx.muted ? '🔇' : '🔊', {
         fontFamily: FONT,
         fontSize: '18px',
       })
@@ -261,10 +286,149 @@ export class MenuScene extends Phaser.Scene {
   private startRun(daily: boolean): void {
     Sfx.play('click');
     MessengerBridge.haptic('light');
+    this.closeMetaShop();
     this.cameras.main.fadeOut(280, 11, 14, 26);
     this.cameras.main.once('camerafadeoutcomplete', () =>
       this.scene.start('Game', daily ? { daily: true, dateKey: todayKey() } : undefined)
     );
+  }
+
+  /**
+   * K1: мета-шоп — покупка персистентных усилений за осколки.
+   * После покупки модалка пересобирается (простое и точное обновление строк).
+   */
+  private openMetaShop(): void {
+    if (this.metaShop || !this.scene.isActive()) return;
+    Sfx.play('click');
+    MessengerBridge.haptic('light');
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const save = SaveSystem.get();
+    const c = this.add.container(0, 0).setDepth(60);
+
+    const panelW = Math.min(W - 24, 384);
+    const rowH = 62;
+    const panelH = Math.min(H - 32, 96 + META_UPGRADES.length * rowH + 58);
+    const topY = H / 2 - panelH / 2;
+    const dim = this.add.rectangle(W / 2, H / 2, W, H, 0x05070f, 0.82);
+    const panel = this.add
+      .rectangle(W / 2, H / 2, panelW, panelH, COLORS.panel, 0.98)
+      .setStrokeStyle(2, COLORS.gold, 0.8);
+    c.add([dim, panel]);
+    c.add(
+      this.add
+        .text(W / 2, topY + 26, 'ЯДРО · УСИЛЕНИЯ', {
+          fontFamily: FONT,
+          fontSize: '17px',
+          fontStyle: 'bold',
+          color: '#ffe066',
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+    c.add(
+      this.add
+        .text(W / 2, topY + 52, `⬢ ${save.shards} осколков`, {
+          fontFamily: FONT,
+          fontSize: '13px',
+          fontStyle: 'bold',
+          color: '#7dff6e',
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+
+    META_UPGRADES.forEach((def, i) => {
+      const y = topY + 96 + i * rowH + rowH / 2 - 6;
+      const level = metaLevel(save.meta, def.id);
+      const maxed = level >= def.max;
+      const cost = maxed ? 0 : metaCost(def, level);
+      const afford = !maxed && save.shards >= cost;
+      c.add(
+        this.add
+          .text(W / 2 - panelW / 2 + 16, y - 9, def.name, {
+            fontFamily: FONT,
+            fontSize: '13px',
+            fontStyle: 'bold',
+            color: '#e8f4ff',
+          })
+          .setOrigin(0, 0.5)
+          .setResolution(2)
+      );
+      c.add(
+        this.add
+          .text(W / 2 - panelW / 2 + 16, y + 11, `${def.effect} · Lv ${level}/${def.max}`, {
+            fontFamily: FONT,
+            fontSize: '11px',
+            color: afford ? '#9fb6d8' : '#5a6480',
+          })
+          .setOrigin(0, 0.5)
+          .setResolution(2)
+      );
+      const bx = W / 2 + panelW / 2 - 16 - 46;
+      const btn = this.add
+        .rectangle(bx, y, 92, 38, afford ? 0x14301f : 0x0f1424, 1)
+        .setStrokeStyle(2, maxed ? 0x3a4258 : afford ? COLORS.green : 0x3a4258, 1);
+      c.add(btn);
+      c.add(
+        this.add
+          .text(bx, y, maxed ? 'MAX' : `⬢ ${cost}`, {
+            fontFamily: FONT,
+            fontSize: '13px',
+            fontStyle: 'bold',
+            color: maxed ? '#5a6480' : afford ? '#7dff6e' : '#5a6480',
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+      );
+      btn.setInteractive({ useHandCursor: afford }).on('pointerup', () => {
+        if (!afford) {
+          Sfx.play('hurt');
+          return;
+        }
+        const r = buyMeta(def.id);
+        if (r.ok) {
+          Sfx.play('levelup');
+          MessengerBridge.haptic('light');
+          Analytics.track('meta_bought', { id: def.id, level: r.level, cost: r.cost });
+          this.closeMetaShop();
+          this.openMetaShop();
+        } else {
+          Sfx.play('hurt');
+        }
+      });
+    });
+
+    const closeY = topY + panelH - 27;
+    const close = this.add
+      .rectangle(W / 2, closeY, 130, 36, COLORS.panelHover, 1)
+      .setStrokeStyle(2, COLORS.stroke, 1);
+    c.add(close);
+    c.add(
+      this.add
+        .text(W / 2, closeY, 'ЗАКРЫТЬ', {
+          fontFamily: FONT,
+          fontSize: '13px',
+          fontStyle: 'bold',
+          color: '#aab4d4',
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+    close.setInteractive({ useHandCursor: true }).on('pointerup', () => this.closeMetaShop());
+    dim.setInteractive({ useHandCursor: false }).on('pointerup', () => this.closeMetaShop());
+
+    this.metaShop = c;
+  }
+
+  /** K1: закрыть мета-шоп и обновить баланс в меню. */
+  private closeMetaShop(): void {
+    if (!this.metaShop) return;
+    const c = this.metaShop;
+    this.metaShop = null;
+    c.destroy(true);
+    const save = SaveSystem.get();
+    this.metaTextRef?.setText(`ЯДРО · ⬢ ${save.shards}`);
   }
 
   /**

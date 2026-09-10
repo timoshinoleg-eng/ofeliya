@@ -47,6 +47,8 @@ interface RunResult {
   records: { timeRecord: boolean; killsRecord: boolean; levelRecord: boolean };
   daily: { streak: number; dailyRecord: boolean; newStreak: boolean } | null;
   rank: number | null;
+  /** K1: осколки ядра, заработанные в забеге. */
+  shardsEarned: number;
 }
 
 const DEPTH = 50;
@@ -1048,6 +1050,23 @@ export class UIScene extends Phaser.Scene {
             /* overlay уже закрыт */
           }
         }
+      );
+    }
+
+    // K1: осколки ядра за забег — валюта метапрогресса.
+    if (res.shardsEarned > 0) {
+      detailY += compact ? 22 : 26;
+      c.add(
+        this.add
+          .text(W / 2, detailY, `⬢ +${res.shardsEarned} ОСКОЛКИ`, {
+            fontFamily: FONT,
+            fontSize: compact ? '10px' : '11px',
+            fontStyle: 'bold',
+            color: '#7dff6e',
+            align: 'center',
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
       );
     }
 

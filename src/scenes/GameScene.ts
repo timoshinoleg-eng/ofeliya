@@ -23,6 +23,7 @@ import { IDENTITY } from '../game/identity';
 import { dailyRng, mathRandom, todayKey } from '../game/SeededRng';
 import { Player } from '../game/Player';
 import { Enemy } from '../game/Enemy';
+import { earnShards, metaEffects } from '../game/MetaSystem';
 import { Bullet } from '../game/Bullet';
 import { Gem } from '../game/Gem';
 import { RunState } from '../game/RunState';
@@ -129,6 +130,14 @@ export class GameScene extends Phaser.Scene {
     this.dailyMode = !!(data && data.daily);
     this.dailyDateKey = (data && data.dateKey) || todayKey();
     this.runState.rng = this.dailyMode ? dailyRng(this.dailyDateKey) : mathRandom;
+    // K1: метапрогресс — купленные ступеньки усиливают СТАРТ забега.
+    // (Daily-режим честный: осколки — статы игрока, как и ранги/рекорды.)
+    const metaFx = metaEffects(SaveSystem.get().meta);
+    this.runState.damageMul *= metaFx.damageMul;
+    this.runState.speedMul *= metaFx.speedMul;
+    this.runState.magnetMul *= metaFx.magnetMul;
+    this.runState.maxHp = Math.round(this.runState.maxHp * metaFx.hpMul);
+    this.runState.hp = this.runState.maxHp;
     // Реф-бонус (V1): первый забег по приглашению — +1 HP и рывк быстрее.
     this.refBuffActive = SaveSystem.peekRefBonus() !== null;
     if (this.refBuffActive) {
@@ -637,6 +646,12 @@ export class GameScene extends Phaser.Scene {
       level: st.level,
     });
     this.captureAchievements(true, false);
+    // K1: осколки ядра — валюта метапрогресса (киллы + уровень + победа).
+    const shardsEarned = earnShards(st.kills, st.level, win, SaveSystem.get().meta);
+    if (shardsEarned > 0) {
+      SaveSystem.addShards(shardsEarned);
+      Analytics.track('shards_earned', { n: shardsEarned, win });
+    }
     this.registry.set('run', this.snapshot());
     this.registry.set('runResult', {
       win,
@@ -650,6 +665,7 @@ export class GameScene extends Phaser.Scene {
       records,
       daily,
       rank,
+      shardsEarned,
     });
     // V5: клип последних секунд → registry (Promise; UIScene дождётся и
     // покажет кнопку шаринга клипа). Fire-and-forget: сбой записи не трогает UI.

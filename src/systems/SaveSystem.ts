@@ -42,6 +42,10 @@ export interface SaveData {
   pendingRef: string | null;
   /** Бонус первого забега по рефу уже выдан. */
   refBonusUsed: boolean;
+  /** K1: осколки ядра — валюта метапрогресса. */
+  shards: number;
+  /** K1: купленные ступеньки мета-усилений (id → level). */
+  meta: Record<string, number>;
 }
 
 const KEY = 'ofeliya_save_v1';
@@ -69,6 +73,8 @@ const DEFAULTS: SaveData = {
   leaderboard: [],
   pendingRef: null,
   refBonusUsed: false,
+  shards: 0,
+  meta: {},
 };
 
 const VALID_EVOLUTIONS = new Set<EvolutionId>(['prism', 'halo', 'singularity']);
@@ -103,6 +109,8 @@ class SaveImpl {
             leaderboard: this.leaderboardFrom(parsed.leaderboard),
             pendingRef: this.optString(parsed.pendingRef),
             refBonusUsed: parsed.refBonusUsed === true,
+            shards: this.num(parsed.shards),
+            meta: this.metaFrom(parsed.meta),
           };
         }
       }
@@ -118,6 +126,7 @@ class SaveImpl {
       evolutionsSeen: [...this.data.evolutionsSeen],
       daily: { ...this.data.daily },
       leaderboard: [...this.data.leaderboard],
+      meta: { ...this.data.meta },
     };
   }
 
@@ -303,6 +312,31 @@ class SaveImpl {
         level: this.num(e.level),
       }))
       .slice(0, 10);
+  }
+
+  /** K1: осколки (может быть отрицательным при списании, но итог ≥ 0). */
+  addShards(delta: number): number {
+    const next = Math.max(0, Math.round(this.data.shards + delta));
+    this.update({ shards: next });
+    return next;
+  }
+
+  /** K1: установить уровень мета-усиления (только валидные id, level ≥ 0). */
+  setMetaLevel(id: string, level: number): void {
+    if (typeof id !== 'string' || !Number.isFinite(level) || level < 0) return;
+    const meta = { ...this.data.meta, [id]: Math.floor(level) };
+    this.update({ meta });
+  }
+
+  private metaFrom(v: unknown): Record<string, number> {
+    if (!v || typeof v !== 'object') return {};
+    const out: Record<string, number> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      if (typeof val === 'number' && Number.isFinite(val) && val >= 0 && k.length <= 24) {
+        out[k] = Math.floor(val);
+      }
+    }
+    return out;
   }
 
   private num(v: unknown): number {

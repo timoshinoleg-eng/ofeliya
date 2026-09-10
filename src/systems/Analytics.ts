@@ -41,7 +41,9 @@ export type AnalyticsEvent =
   | 'reward_ad_opened'
   | 'reward_ad_done'
   | 'pause_shown'
-  | 'game_over_shown';
+  | 'game_over_shown'
+  | 'shards_earned'
+  | 'meta_bought';
 
 interface QueuedEvent {
   name: AnalyticsEvent;
