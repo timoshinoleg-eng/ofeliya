@@ -183,6 +183,131 @@ export class BootScene extends Phaser.Scene {
     g.generateTexture('boss', 56, 56);
     g.clear();
 
+    // K2 РАЗДЕЛИТЕЛЬ — зелёный ромб со «швом», который треснет при смерти.
+    g.fillStyle(0x0e2417, 1);
+    g.fillPoints(
+      [
+        { x: 12, y: 2 },
+        { x: 22, y: 12 },
+        { x: 12, y: 22 },
+        { x: 2, y: 12 },
+      ],
+      true
+    );
+    g.lineStyle(2, COLORS.green, 1);
+    g.strokePoints(
+      [
+        { x: 12, y: 2 },
+        { x: 22, y: 12 },
+        { x: 12, y: 22 },
+        { x: 2, y: 12 },
+      ],
+      true
+    );
+    g.lineStyle(1.5, COLORS.green, 0.8);
+    g.beginPath();
+    g.moveTo(12, 4);
+    g.lineTo(9, 9);
+    g.lineTo(14, 13);
+    g.lineTo(11, 18);
+    g.strokePath();
+    g.fillStyle(COLORS.green, 0.9);
+    g.fillCircle(12, 12, 2);
+    g.generateTexture('enemy-splitter', 24, 24);
+    g.clear();
+
+    // K2 МИНЬОН — маленький зелёный сгусток (потомок разделителя).
+    g.fillStyle(0x0e2417, 1);
+    g.fillCircle(8, 8, 7);
+    g.lineStyle(1.5, COLORS.green, 0.95);
+    g.strokeCircle(8, 8, 6);
+    g.fillStyle(COLORS.green, 1);
+    g.fillCircle(8, 8, 3);
+    g.generateTexture('enemy-minion', 16, 16);
+    g.clear();
+
+    // K2 ЩИТОНОС — синий, с яркой дугой-щитом СЕРЕДИНЫ (в сторону игрока).
+    // «Лицом» считается +X текстуры (вращается к цели в Enemy.preUpdate).
+    g.fillStyle(0x0a1a2e, 1);
+    g.fillPoints(
+      [
+        { x: 13, y: 3 },
+        { x: 22, y: 9 },
+        { x: 20, y: 18 },
+        { x: 6, y: 18 },
+        { x: 4, y: 9 },
+      ],
+      true
+    );
+    g.lineStyle(2, 0x4f9dff, 1);
+    g.strokePoints(
+      [
+        { x: 13, y: 3 },
+        { x: 22, y: 9 },
+        { x: 20, y: 18 },
+        { x: 6, y: 18 },
+        { x: 4, y: 9 },
+      ],
+      true
+    );
+    g.fillStyle(0x4f9dff, 0.9);
+    g.fillCircle(10, 11, 2.5);
+    // щит — дуга справа (лицо)
+    g.lineStyle(3.5, COLORS.cyan, 0.95);
+    g.beginPath();
+    g.arc(13, 11, 10, -0.9, 0.9);
+    g.strokePath();
+    g.lineStyle(1.5, COLORS.white, 0.5);
+    g.beginPath();
+    g.arc(13, 11, 10, -0.7, 0.7);
+    g.strokePath();
+    g.generateTexture('enemy-shield', 26, 26);
+    g.clear();
+
+    // K2 СНИПЕР — фиолетовый «глаз» в рамке, прицелится и выстрелит.
+    g.fillStyle(0x170e2e, 1);
+    g.fillPoints(
+      [
+        { x: 12, y: 2 },
+        { x: 22, y: 12 },
+        { x: 12, y: 22 },
+        { x: 2, y: 12 },
+      ],
+      true
+    );
+    g.lineStyle(2, COLORS.purple, 1);
+    g.strokePoints(
+      [
+        { x: 12, y: 2 },
+        { x: 22, y: 12 },
+        { x: 12, y: 22 },
+        { x: 2, y: 12 },
+      ],
+      true
+    );
+    g.fillStyle(0x2a1650, 1);
+    g.fillCircle(12, 12, 5);
+    g.lineStyle(1.5, COLORS.white, 0.7);
+    g.strokeCircle(12, 12, 5);
+    g.fillStyle(COLORS.purple, 1);
+    g.fillCircle(12, 12, 2.5);
+    // «прицел» — линия вправо (сторона выстрела)
+    g.lineStyle(1.5, COLORS.white, 0.5);
+    g.beginPath();
+    g.moveTo(17, 12);
+    g.lineTo(23, 12);
+    g.strokePath();
+    g.generateTexture('enemy-sniper', 24, 24);
+    g.clear();
+
+    // K2 снаряд снайпера — розовая капсула (в сторону игрока).
+    g.fillStyle(0xff9dcf, 1);
+    g.fillRoundedRect(0, 0, 12, 6, 3);
+    g.fillStyle(COLORS.white, 0.8);
+    g.fillRoundedRect(3, 1.5, 6, 3, 1.5);
+    g.generateTexture('foebullet', 12, 6);
+    g.clear();
+
     // фрагмент данных — ромб
     g.fillStyle(COLORS.green, 1);
     g.fillTriangle(6, 0, 0, 8, 12, 8);

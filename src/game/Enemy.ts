@@ -1,7 +1,18 @@
 import Phaser from 'phaser';
-import { COLORS, ELITE, ENEMY_DEFS, type EnemyKind } from './config';
+import { COLORS, ELITE, ENEMY_DEFS, K2_BEHAVIOR, type EnemyKind } from './config';
 import type { GameScene } from '../scenes/GameScene';
 import type { Player } from './Player';
+
+const KIND_COLOR: Record<EnemyKind, number> = {
+  swarm: COLORS.magenta,
+  runner: COLORS.orange,
+  brute: COLORS.purple,
+  boss: COLORS.red,
+  splitter: COLORS.green,
+  minion: COLORS.green,
+  shield: 0x4f9dff,
+  sniper: COLORS.purple,
+};
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
   kind: EnemyKind = 'swarm';
@@ -16,12 +27,20 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   color = 0xffffff;
   flashUntil = 0;
   bladeImmuneUntil = 0;
+  /** K2: щит — направление «лица» (к игроку). null — не щит. */
+  shieldFacing: { x: number; y: number } | null = null;
+  /** K2: замедление (вортекс/ноу) до момента времени. */
+  slowUntil = 0;
 
   private gs: GameScene | null = null;
   private target: Player | null = null;
   private knockX = 0;
   private knockY = 0;
   private eliteRing: Phaser.GameObjects.Image | null = null;
+  /** K2: снайпер — таймер следующего выстрела. */
+  private sniperNextShot = 0;
+  /** K2: снайпер — направление стрейфа (+1/-1). */
+  private strafeDir = 1;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'enemy-swarm');
@@ -54,20 +73,18 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.xpValue = def.xp * (opts.elite ? ELITE.xpMul : 1);
     this.speed = def.speed * (opts.elite ? 0.92 : 1);
     this.radius = def.radius * scale;
-    this.color = opts.elite
-      ? COLORS.gold
-      : kind === 'boss'
-        ? COLORS.red
-        : kind === 'swarm'
-          ? COLORS.magenta
-          : kind === 'runner'
-            ? COLORS.orange
-            : COLORS.purple;
+    this.color = opts.elite ? COLORS.gold : KIND_COLOR[kind];
 
     this.flashUntil = 0;
     this.bladeImmuneUntil = 0;
     this.knockX = 0;
     this.knockY = 0;
+    // K2: сброс поведенческих полей при повторном использовании из пула.
+    this.shieldFacing = kind === 'shield' ? { x: 1, y: 0 } : null;
+    this.slowUntil = 0;
+    this.sniperNextShot =
+      kind === 'sniper' ? this.scene.time.now + 900 + gs.runState.rng.next() * 900 : 0;
+    this.strafeDir = Math.random() < 0.5 ? -1 : 1;
     this.setAlpha(1);
     this.clearTint();
     this.setRotation(0);
@@ -107,15 +124,63 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const dx = p.x - this.x;
     const dy = p.y - this.y;
     const d = Math.hypot(dx, dy) || 1;
+
+    // K2: щит всегда «лицом» к игроку (+X текстуры = направление атаки).
+    if (this.kind === 'shield') {
+      this.shieldFacing = { x: dx / d, y: dy / d };
+      this.setRotation(Math.atan2(dy, dx));
+    }
+
+    // K2: снайпер держит дистанцию в полосе, иначе приближается/отходит;
+    // в полосе — стрейф. Выстрел раз в ~2.2 с (jitter не рушит daily-сид:
+    // он влияет только на тайминг, не на состав волн).
+    if (this.kind === 'sniper') {
+      const B = K2_BEHAVIOR;
+      let vx: number;
+      let vy: number;
+      if (d < B.sniperMinDist) {
+        vx = -dx / d;
+        vy = -dy / d;
+      } else if (d > B.sniperMaxDist) {
+        vx = dx / d;
+        vy = dy / d;
+      } else {
+        // периодически сменить сторону стрейфа, чтобы не рисовать окружность
+        if (Math.random() < 0.004) this.strafeDir *= -1;
+        vx = (-dy / d) * this.strafeDir;
+        vy = (dx / d) * this.strafeDir;
+      }
+      this.setRotation(Math.atan2(dy, dx));
+      if (time >= this.sniperNextShot && d > B.sniperMinShotDist && d < 520) {
+        this.sniperNextShot =
+          time + B.sniperShotIntervalMs + Math.random() * B.sniperShotJitterMs;
+        this.gs?.foeShoot(this.x, this.y, Math.atan2(dy, dx));
+      }
+      (this.body as Phaser.Physics.Arcade.Body).setVelocity(
+        vx * this.speed + this.knockX,
+        vy * this.speed + this.knockY
+      );
+      this.knockX *= 0.82;
+      this.knockY *= 0.82;
+      this.updateEliteRing(time);
+      return;
+    }
+
+    // К2: замедление (вортекс в K3): множитель 0.55 скорости.
+    const speedMul = time < this.slowUntil ? 0.55 : 1;
     (this.body as Phaser.Physics.Arcade.Body).setVelocity(
-      (dx / d) * this.speed + this.knockX,
-      (dy / d) * this.speed + this.knockY
+      (dx / d) * this.speed * speedMul + this.knockX,
+      (dy / d) * this.speed * speedMul + this.knockY
     );
     this.knockX *= 0.82;
     this.knockY *= 0.82;
 
     if (this.kind === 'runner') this.setRotation(Math.atan2(dy, dx));
 
+    this.updateEliteRing(time);
+  }
+
+  private updateEliteRing(time: number): void {
     if (this.isElite && this.eliteRing) {
       this.eliteRing
         .setVisible(true)
@@ -125,8 +190,22 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
-  takeDamage(amount: number, kx = 0, ky = 0): void {
+  /**
+   * урон. K2: fromDir — направление атаки (нормализованное). Для щитона:
+   * атака «в лицо» (dot > K2_BEHAVIOR.shieldDot) даёт только
+   * shieldFrontDmgMul урона; клинки/нова зовут без fromDir → полный урон.
+   */
+  takeDamage(
+    amount: number,
+    kx = 0,
+    ky = 0,
+    fromDir: { x: number; y: number } | null = null
+  ): void {
     if (!this.active) return;
+    if (this.kind === 'shield' && this.shieldFacing && fromDir) {
+      const dot = this.shieldFacing.x * fromDir.x + this.shieldFacing.y * fromDir.y;
+      if (dot > K2_BEHAVIOR.shieldDot) amount *= K2_BEHAVIOR.shieldFrontDmgMul;
+    }
     this.hp -= amount;
     this.flashUntil = this.scene.time.now + 70;
     this.knockX += kx;

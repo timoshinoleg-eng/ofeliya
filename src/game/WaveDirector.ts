@@ -45,7 +45,12 @@ export class WaveDirector {
     const expectedElites = Math.floor(t / 120000);
     if (expectedElites > this.spawnedElites) {
       this.spawnedElites = expectedElites;
-      const kind: EnemyKind = this.rng.pick(['swarm', 'runner', 'brute'] as const);
+      // K2: после 4 мин элита может быть сплиттером/щитоном (больше фактур).
+      const pool =
+        t >= 240000
+          ? (['swarm', 'runner', 'brute', 'splitter', 'shield'] as const)
+          : (['swarm', 'runner', 'brute'] as const);
+      const kind: EnemyKind = this.rng.pick(pool);
       this.spawn(kind, true);
     }
 
@@ -69,8 +74,19 @@ export class WaveDirector {
     const r = this.rng.next();
     if (t < 45000) return 'swarm';
     if (t < 90000) return r < 0.8 ? 'swarm' : 'runner';
-    if (t < 180000) return r < 0.6 ? 'swarm' : r < 0.9 ? 'runner' : 'brute';
-    return r < 0.5 ? 'swarm' : r < 0.8 ? 'runner' : 'brute';
+    // K2: с 1.5 мин в ротацию входит сплиттер (взрыв на миньонов).
+    if (t < 180000) return r < 0.55 ? 'swarm' : r < 0.85 ? 'runner' : 'splitter';
+    // K2: с 3 мин — щитоны (фронтальная защита от пуль).
+    if (t < 300000) {
+      return r < 0.42 ? 'swarm' : r < 0.66 ? 'runner' : r < 0.84 ? 'brute' : 'splitter';
+    }
+    // K2: с 5 мин — снайперы (дистанционная угроза) + вся ротация.
+    return r < 0.3 ? 'swarm'
+      : r < 0.5 ? 'runner'
+      : r < 0.66 ? 'brute'
+      : r < 0.8 ? 'splitter'
+      : r < 0.91 ? 'shield'
+      : 'sniper';
   }
 
   private spawn(kind: EnemyKind, elite: boolean): void {

@@ -4,8 +4,10 @@ import {
   COLORS,
   COMBO,
   DODGE,
+  FOE_BULLET,
   FONT,
   JUICE,
+  K2_BEHAVIOR,
   ORBIT,
   PLAYER,
   POSTFX,
@@ -23,6 +25,7 @@ import { IDENTITY } from '../game/identity';
 import { dailyRng, mathRandom, todayKey } from '../game/SeededRng';
 import { Player } from '../game/Player';
 import { Enemy } from '../game/Enemy';
+import { FoeBullet } from '../game/FoeBullet';
 import { earnShards, metaEffects } from '../game/MetaSystem';
 import { Bullet } from '../game/Bullet';
 import { Gem } from '../game/Gem';
@@ -61,6 +64,8 @@ export class GameScene extends Phaser.Scene {
   private bullets!: Phaser.Physics.Arcade.Group;
   private enemies!: Phaser.Physics.Arcade.Group;
   private gems!: Phaser.Physics.Arcade.Group;
+  /** K2: снаряды врагов (снайпер). */
+  private foeBullets!: Phaser.Physics.Arcade.Group;
   private blades: Phaser.GameObjects.Image[] = [];
   private haloRing: Phaser.GameObjects.Arc | null = null;
   private wave!: WaveDirector;
@@ -211,6 +216,7 @@ export class GameScene extends Phaser.Scene {
     this.bullets = this.physics.add.group({ classType: Bullet, maxSize: 160 });
     this.enemies = this.physics.add.group({ classType: Enemy, maxSize: 260 });
     this.gems = this.physics.add.group({ classType: Gem, maxSize: 220 });
+    this.foeBullets = this.physics.add.group({ classType: FoeBullet, maxSize: 60 });
     this.vfx = new VfxSystem(this);
 
     this.dmgTexts = [];
@@ -248,6 +254,7 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.bullets, this.enemies, this.onBulletHit, undefined, this);
     this.physics.add.overlap(this.player, this.enemies, this.onPlayerHit, undefined, this);
     this.physics.add.overlap(this.player, this.gems, this.onGemTouch, undefined, this);
+    this.physics.add.overlap(this.player, this.foeBullets, this.onFoeBulletHit, undefined, this);
 
     this.wave = new WaveDirector(this, this.enemies);
     this.cameras.main.startFollow(this.player, true, 0.14, 0.14);
@@ -447,6 +454,18 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * K2: выстрел врага (снайпер). Публичный — Enemy вызывает по таймеру.
+   * Fire-and-forget: если пул исчерпан — просто не стреляет.
+   */
+  foeShoot(x: number, y: number, angle: number): void {
+    if (this.finished) return;
+    const b = this.foeBullets.get(x, y) as FoeBullet | null;
+    if (!b) return;
+    b.shoot(this.time.now, angle);
+    Sfx.play('shoot');
+  }
+
+  /**
    * Уклонение в направлении (nx, ny). true — если рывок стартовал.
    * i-frames на время рывка + запас: читается как «успел уйти», а не «почти».
    */
@@ -478,6 +497,16 @@ export class GameScene extends Phaser.Scene {
     if (st.combo > st.comboBest) st.comboBest = st.combo;
     this.captureAchievements(false, true);
     this.vfx.kill(e.x, e.y, e.color, e.isBoss ? 'boss' : e.isElite ? 'elite' : 'normal');
+    // K2: сплиттер трескается на 2–3 миньонов (только если босс-фаза не
+    // поменяла контекст; миньоны не спавнятся после финиша).
+    if (e.kind === 'splitter' && !this.finished) {
+      const [lo, hi] = K2_BEHAVIOR.splitterMinions;
+      const n = lo + (this.runState.rng.next() < 0.5 ? 0 : hi - lo);
+      for (let i = 0; i < n; i++) {
+        const a = this.runState.rng.next() * Math.PI * 2;
+        this.spawnEnemy('minion', e.x + Math.cos(a) * 16, e.y + Math.sin(a) * 16, false);
+      }
+    }
     if (e.isElite || e.isBoss) {
       this.hitStop(e.isBoss ? JUICE.hitStopBossMs : JUICE.hitStopMs);
       const s = JUICE.shakeEliteKill;
@@ -847,7 +876,8 @@ export class GameScene extends Phaser.Scene {
     const bv = (b.body as Phaser.Physics.Arcade.Body).velocity;
     const vm = Math.hypot(bv.x, bv.y) || 1;
     this.vfx.hit(e.x, e.y, b.prism ? COLORS.gold : e.color);
-    e.takeDamage(b.damage, (bv.x / vm) * 130, (bv.y / vm) * 130);
+    // K2: направление атаки — щитона гасит попадание «в лицо».
+    e.takeDamage(b.damage, (bv.x / vm) * 130, (bv.y / vm) * 130, { x: bv.x / vm, y: bv.y / vm });
     Sfx.play('hit');
     this.showDamage(e.x, e.y, b.damage);
     if (b.pierceLeft > 0) b.pierceLeft -= 1;
@@ -872,6 +902,25 @@ export class GameScene extends Phaser.Scene {
     const dy = e.y - this.player.y;
     const d = Math.hypot(dx, dy) || 1;
     e.takeDamage(0, (dx / d) * 240, (dy / d) * 240);
+    if (this.runState.hp <= 0) this.finish(false);
+  };
+
+  /** K2: снаряд снайпера долетел до игрока (учитывает i-frames/рывок). */
+  private onFoeBulletHit = (obj1: unknown, obj2: unknown): void => {
+    const b = obj2 as FoeBullet;
+    if (!b.active || this.finished) return;
+    const now = this.time.now;
+    if (now < this.player.hurtUntil) return;
+    b.disableBody(true, true);
+    this.runState.hp -= b.damage;
+    this.runState.resetNoDamage();
+    this.player.markHurt(now);
+    Sfx.play('hurt');
+    MessengerBridge.haptic('medium');
+    this.cameras.main.flash(140, 255, 60, 100);
+    const s = JUICE.shakeHurt;
+    this.cameras.main.shake(s.duration, s.intensity);
+    this.hitStop(JUICE.hitStopMs);
     if (this.runState.hp <= 0) this.finish(false);
   };
 

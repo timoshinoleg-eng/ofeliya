@@ -127,7 +127,19 @@ export const RUN = {
   bossPhaseSpawnMul: 0.35,
 };
 
-export type EnemyKind = 'swarm' | 'runner' | 'brute' | 'boss';
+export type EnemyKind =
+  | 'swarm'
+  | 'runner'
+  | 'brute'
+  | 'boss'
+  /** K2: делится на 2–3 мелких при смерти. */
+  | 'splitter'
+  /** K2: мелкий потомок сплиттера (спавнится только при его смерти). */
+  | 'minion'
+  /** K2: фронтальный щит — пули спереди бьют на -78%. */
+  | 'shield'
+  /** K2: держит дистанцию и стреляет. */
+  | 'sniper';
 
 export interface EnemyDef {
   tex: string;
@@ -144,6 +156,34 @@ export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
   runner: { tex: 'enemy-runner', hp: 12, speed: 152, dmg: 6, xp: 1, scale: 1, radius: 10 },
   brute: { tex: 'enemy-brute', hp: 85, speed: 56, dmg: 16, xp: 4, scale: 1, radius: 13 },
   boss: { tex: 'boss', hp: 2600, speed: 66, dmg: 26, xp: 0, scale: 1, radius: 25 },
+  splitter: { tex: 'enemy-splitter', hp: 55, speed: 78, dmg: 10, xp: 3, scale: 1, radius: 13 },
+  minion: { tex: 'enemy-minion', hp: 8, speed: 175, dmg: 4, xp: 1, scale: 0.7, radius: 8 },
+  shield: { tex: 'enemy-shield', hp: 130, speed: 48, dmg: 14, xp: 5, scale: 1.1, radius: 15 },
+  sniper: { tex: 'enemy-sniper', hp: 40, speed: 85, dmg: 9, xp: 4, scale: 1, radius: 11 },
+};
+
+/** K2: снаряды снайпера (стреляют В игрока). */
+export const FOE_BULLET = {
+  speed: 200,
+  dmg: 8,
+  lifetimeMs: 4200,
+  radius: 6,
+};
+
+/** K2: поведение сплиттера/щита/снайпера. */
+export const K2_BEHAVIOR = {
+  /** Сплиттер: сколько миньонов спавнится при смерти (2–3). */
+  splitterMinions: [2, 3] as const,
+  /** Щит: урон спереди (cos угла > threshold) снижается до этой доли. */
+  shieldDot: 0.55,
+  shieldFrontDmgMul: 0.22,
+  /** Снайпер: держать дистанцию в полосе [min, max]; дальше — приближаться. */
+  sniperMinDist: 150,
+  sniperMaxDist: 240,
+  sniperShotIntervalMs: 2200,
+  sniperShotJitterMs: 500,
+  /** Снайпер не стреляет ближе этой дистанции (контакт решён контактным уроном). */
+  sniperMinShotDist: 90,
 };
 
 export const ELITE = { hpMul: 6, dmgMul: 1.7, xpMul: 8, scale: 1.45 };
