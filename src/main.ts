@@ -34,6 +34,31 @@ function syncThemeColor(): void {
   }
 }
 
+/**
+ * Дождаться дисплейного шрифта, но не дольше FONT_READY_TIMEOUT_MS:
+ * в MAX Font API может не завершить promise — шрифт не вправе удерживать
+ * заставку (фикс с main 5c83390 «fix(max): use canvas renderer in mini app»).
+ */
+const FONT_READY_TIMEOUT_MS = 700;
+
+function waitForFonts(): Promise<void> {
+  const fonts = document.fonts;
+  if (!fonts) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timeout = window.setTimeout(resolve, FONT_READY_TIMEOUT_MS);
+    void Promise.all([
+      fonts.load('400 16px "Chakra Petch"'),
+      fonts.load('700 16px "Chakra Petch"'),
+    ])
+      .then(() => fonts.ready)
+      .catch(() => undefined)
+      .finally(() => {
+        window.clearTimeout(timeout);
+        resolve();
+      });
+  });
+}
+
 async function boot(): Promise<void> {
   // Safe-area пересчитываем до старта сцен (HUD от него зависит).
   SafeArea.update();
@@ -44,20 +69,17 @@ async function boot(): Promise<void> {
   MessengerBridge.init();
   if (MessengerBridge.kind === 'vk') void VkBridge.ready.then(() => VkBridge.requestFullscreen());
 
-  // Дождаться загрузки дисплейного шрифта: иначе Phaser запечёт текстуры текста
-  // с фолбэком (Arial) и не перерисует их после подгрузки шрифта.
-  try {
-    await Promise.all([
-      document.fonts.load('400 16px "Chakra Petch"'),
-      document.fonts.load('700 16px "Chakra Petch"'),
-    ]);
-    await document.fonts.ready;
-  } catch {
-    /* шрифт опционален — игра работает на Arial-фолбэке */
-  }
+  // Дождаться загрузки дисплейного шрифта (с таймаутом): иначе Phaser запечёт
+  // текстуры текста с фолбэком (Arial) и не перерисует их после подгрузки.
+  await waitForFonts();
 
   const game = new Phaser.Game({
-    type: Phaser.AUTO,
+    // MAX (Android WebView) может создавать WebGL-контекст с невалидным
+    // framebuffer — Phaser падает до BootScene (фикс с main 5c83390).
+    // В MAX — CANVAS (постэффекты вне WebGL код уже отключает: GameScene
+    // проверяет renderer.type === WebGL, VfxSystem — canvas-safe).
+    // В браузере/на десктопе остаётся WebGL (AUTO) — быстрее и с bloom.
+    type: MessengerBridge.kind === 'max' ? Phaser.CANVAS : Phaser.AUTO,
     parent: 'game',
     backgroundColor: '#0b0e1a',
     disableContextMenu: true,

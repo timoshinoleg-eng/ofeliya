@@ -220,6 +220,10 @@ npm run server:test  # score-сервер + бот: валидация initData,
     analytics `control_mode_changed`; intro-hint объясняет зоны.
 - **Модуль `Sticks`** (`src/game/Sticks.ts`) заменяет `Joystick`: два
   независимых плавающих стика с зонами, snap-back, pointercancel-safe.
+- **MAX-совместимость (портирован fix c main 5c83390)**: в MAX (Android
+  WebView) игра стартует на CANVAS-рендерере (WebGL-контекст MAX может быть
+  невалидным — Phaser падал до BootScene); в браузере остаётся WebGL + bloom.
+  Загрузка шрифта — с таймаутом 700мс (Font API MAX может не завершиться).
 
 ### v0.4.0 — content-глубина (K1/K2/K3)
 
