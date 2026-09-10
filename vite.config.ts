@@ -10,5 +10,19 @@ export default defineConfig({
   },
   server: {
     host: true,
+    // Превью-хосты платформы (e2b.app и др.) должны проходить без 403.
+    allowedHosts: true,
+    // Дев: клиент шлёт относительные /api/* — проксируем на score-сервер.
+    // Если сервер не запущен, запросы просто 502/404, игра не страдает.
+    proxy: {
+      '/api': { target: 'http://127.0.0.1:8787', changeOrigin: true },
+    },
+  },
+  preview: {
+    host: true,
+    allowedHosts: true,
+    proxy: {
+      '/api': { target: 'http://127.0.0.1:8787', changeOrigin: true },
+    },
   },
 });

@@ -1,13 +1,18 @@
 {
   "name": "ofeliya",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Рогалик-выживание (Vampire Survivors-like) — мини-приложение для мессенджера MAX",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "smoke": "esbuild scripts/smoke-daily.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/smoke-daily.mjs --log-level=error && node node_modules/.cache/smoke-daily.mjs",
+    "icons": "node scripts/gen-icons.mjs",
+    "server": "node server/index.mjs",
+    "server:test": "node server/test.mjs",
+    "bot": "node server/bot.mjs"
   },
   "dependencies": {
     "phaser": "^3.90.0"

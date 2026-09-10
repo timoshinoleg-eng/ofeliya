@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { RUN, type EnemyKind } from './config';
 import { RunMilestones } from './RunMilestones';
+import type { Rng } from './SeededRng';
 import type { GameScene } from '../scenes/GameScene';
 
 /** Управляет темпом и составом волн врагов, элитами и боссом. */
@@ -44,7 +45,7 @@ export class WaveDirector {
     const expectedElites = Math.floor(t / 120000);
     if (expectedElites > this.spawnedElites) {
       this.spawnedElites = expectedElites;
-      const kind: EnemyKind = Phaser.Utils.Array.GetRandom(['swarm', 'runner', 'brute'] as EnemyKind[]);
+      const kind: EnemyKind = this.rng.pick(['swarm', 'runner', 'brute'] as const);
       this.spawn(kind, true);
     }
 
@@ -60,8 +61,12 @@ export class WaveDirector {
     }
   }
 
+  private get rng(): Rng {
+    return this.scene.runState.rng;
+  }
+
   private pickKind(t: number): EnemyKind {
-    const r = Math.random();
+    const r = this.rng.next();
     if (t < 45000) return 'swarm';
     if (t < 90000) return r < 0.8 ? 'swarm' : 'runner';
     if (t < 180000) return r < 0.6 ? 'swarm' : r < 0.9 ? 'runner' : 'brute';
@@ -82,8 +87,8 @@ export class WaveDirector {
 
   private ringPos(): { x: number; y: number } {
     const cam = this.scene.cameras.main;
-    const a = Math.random() * Math.PI * 2;
-    const r = Math.max(cam.width, cam.height) / 2 + 90 + Math.random() * 60;
+    const a = this.rng.next() * Math.PI * 2;
+    const r = Math.max(cam.width, cam.height) / 2 + 90 + this.rng.next() * 60;
     return { x: cam.midPoint.x + Math.cos(a) * r, y: cam.midPoint.y + Math.sin(a) * r };
   }
 }

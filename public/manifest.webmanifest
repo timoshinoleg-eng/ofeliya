@@ -1,0 +1,42 @@
+{
+  "name": "OFELIYA — ядро выживания",
+  "short_name": "OFELIYA",
+  "description": "Рогалик-выживание в стиле Vampire Survivors: удержи ядро до босса. Ежедневное испытание, рывки, эволюции.",
+  "id": "ofeliya-mini-app",
+  "start_url": ".",
+  "scope": ".",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#0b0e1a",
+  "theme_color": "#0b0e1a",
+  "lang": "ru",
+  "categories": ["games"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Ежедневное",
+      "short_name": "Daily",
+      "description": "Запустить ежедневное испытание",
+      "url": "?daily=1"
+    }
+  ]
+}

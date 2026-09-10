@@ -202,7 +202,7 @@ const HEAL: UpgradeDef = {
 export function rollChoices(s: RunState, n = 3): UpgradeDef[] {
   const pool = UPGRADES.filter((u) => s.stackOf(u.id) < u.max);
   for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(s.rng.next() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
   const picks = pool.slice(0, n);

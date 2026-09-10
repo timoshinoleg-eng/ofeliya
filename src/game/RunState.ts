@@ -1,4 +1,5 @@
 import { GEM, NOVA, ORBIT, PLAYER, WEAPON } from './config';
+import { mathRandom, type Rng } from './SeededRng';
 import type { EvolutionId } from './UpgradeSystem';
 
 export function xpForLevel(level: number): number {
@@ -7,6 +8,12 @@ export function xpForLevel(level: number): number {
 
 /** Состояние одного забега: статы игрока и прогресс. */
 export class RunState {
+  /**
+   * Источник случайности: Math.random в обычном режиме, сидированный rng
+   * в daily-режиме (seed от даты → одинаковый забег у всех игроков).
+   */
+  rng: Rng = mathRandom;
+
   level = 1;
   xp = 0;
   xpNext = xpForLevel(1);

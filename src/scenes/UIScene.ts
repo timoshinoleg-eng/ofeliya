@@ -2,7 +2,11 @@ import Phaser from 'phaser';
 import { getAchievementDef, type AchievementId } from '../game/AchievementSystem';
 import { COLORS, COMBO, FONT, JUICE, fmtTime } from '../game/config';
 import { getEvolutionDef } from '../game/EvolutionSystem';
+import { buildRefLink, buildShareLink, buildShareText, shareCard } from '../game/share';
 import { IDENTITY } from '../game/identity';
+import { Analytics } from '../systems/Analytics';
+import { ServerClient } from '../systems/ServerClient';
+import { VK_ADS, VkBridge } from '../systems/VkBridge';
 import { Joystick } from '../game/Joystick';
 import {
   EVOLUTION_NAMES,
@@ -12,8 +16,10 @@ import {
   type EvolutionId,
   type UpgradeDef,
 } from '../game/UpgradeSystem';
-import { MaxBridge } from '../systems/MaxBridge';
+import { MessengerBridge } from '../systems/MessengerBridge';
+import { SafeArea } from '../systems/SafeArea';
 import { Sfx } from '../systems/Sfx';
+import { shareClip, type RecordedClip } from '../systems/ShareVideo';
 import type { GameScene } from './GameScene';
 
 interface RunSnapshot {
@@ -39,6 +45,8 @@ interface RunResult {
   evolutions: EvolutionId[];
   newAchievements: AchievementId[];
   records: { timeRecord: boolean; killsRecord: boolean; levelRecord: boolean };
+  daily: { streak: number; dailyRecord: boolean; newStreak: boolean } | null;
+  rank: number | null;
 }
 
 const DEPTH = 50;
@@ -63,6 +71,7 @@ export class UIScene extends Phaser.Scene {
   private hpText!: Phaser.GameObjects.Text;
   private muteText!: Phaser.GameObjects.Text;
   private joystick!: Joystick;
+  private muteBg!: Phaser.GameObjects.Rectangle;
   private hpWarn!: Phaser.GameObjects.Graphics;
   private fanfare!: Phaser.GameObjects.Particles.ParticleEmitter;
   private comboText!: Phaser.GameObjects.Text;
@@ -72,9 +81,40 @@ export class UIScene extends Phaser.Scene {
   private modalOpen = false;
   private overShown = false;
   private uiBlocked = false;
+  private dailyBadge: Phaser.GameObjects.Text | null = null;
+
+  private pauseOverlay: Phaser.GameObjects.Container | null = null;
+  private autoPaused = false;
+  private pauseBtnBg: Phaser.GameObjects.Rectangle | null = null;
+  private pauseBtnText: Phaser.GameObjects.Text | null = null;
+  private readonly onVisibility: () => void;
+  private readonly onBack: () => void;
+  /** Кэш перерисовки баров: Graphics.clear()+fill каждый кадр — лишний GPU-стейт. */
+  private barKey = '';
 
   constructor() {
     super('UI');
+    this.onVisibility = () => {
+      if (document.hidden) {
+        // rAF в фоне замёрзнет, но WebAudio-граф продолжит играть — гасим.
+        Sfx.suspend();
+        if (this.canPauseGame()) {
+          this.autoPaused = true;
+          this.openPauseMenu();
+        }
+      } else {
+        Sfx.resume();
+        // При возврате из фона не запускаем бой молча: если автопауза открыта,
+        // игрок сам жмёт «продолжить» (защита от сюрприза-урона при развороте).
+      }
+    };
+    this.onBack = () => {
+      if (this.pauseOverlay) {
+        this.closePauseMenu();
+        return;
+      }
+      if (this.canPauseGame()) this.openPauseMenu();
+    };
   }
 
   create(): void {
@@ -107,16 +147,22 @@ export class UIScene extends Phaser.Scene {
         .setResolution(2)
         .setDepth(DEPTH + 1);
 
-    this.timerText = text(W / 2, 28, '00:00', 24, '#e8f4ff');
-    this.levelText = text(16, 30, 'ЯДРО 1', 14, '#35e0ff', 0);
-    this.killsText = text(W - 16, 30, 'ОЧИЩ. 0', 14, '#aab4d4', 1);
-    this.hpText = text(W / 2, 58, '', 10, '#e8f4ff');
-    this.bossLabel = text(W / 2, 72, IDENTITY.boss, 11, '#ff3860');
+    const st = SafeArea.top;
+    this.timerText = text(W / 2, 28 + st, '00:00', 24, '#e8f4ff');
+    this.levelText = text(16, 30 + st, 'ЯДРО 1', 14, '#35e0ff', 0);
+    this.killsText = text(W - 16, 30 + st, 'ОЧИЩ. 0', 14, '#aab4d4', 1);
+    this.hpText = text(W / 2, 58 + st, '', 10, '#e8f4ff');
+    this.bossLabel = text(W / 2, 72 + st, IDENTITY.boss, 11, '#ff3860');
+
+    // Кнопка звука: видимый глиф 16px, но hit-area ≥ 44×44 (требование к тач-целям).
     this.muteText = this.add
-      .text(W - 16, 54, '♪', { fontFamily: FONT, fontSize: '16px', color: Sfx.muted ? '#5a6480' : '#35e0ff' })
+      .text(W - 16, 54 + st, '♪', { fontFamily: FONT, fontSize: '16px', color: Sfx.muted ? '#5a6480' : '#35e0ff' })
       .setOrigin(1, 0)
       .setResolution(2)
-      .setDepth(DEPTH + 1)
+      .setDepth(DEPTH + 1);
+    this.muteBg = this.add
+      .rectangle(W - 16 - 22, 54 + st + 14, 44, 44, 0x141a2e, 0.0)
+      .setDepth(DEPTH)
       .setInteractive({ useHandCursor: true })
       .on('pointerup', () => {
         const muted = Sfx.toggle();
@@ -137,7 +183,7 @@ export class UIScene extends Phaser.Scene {
 
     this.lastCombo = 0;
     this.comboText = this.add
-      .text(16, 54, '', {
+      .text(16, 54 + st, '', {
         fontFamily: FONT,
         fontSize: '18px',
         fontStyle: 'bold',
@@ -147,30 +193,191 @@ export class UIScene extends Phaser.Scene {
       .setDepth(DEPTH + 1)
       .setVisible(false);
 
-    this.joystick = new Joystick(this, () => this.uiBlocked);
+    // Флик (быстрый свайп) → уклонение. Работает и второй рукой, пока джойстик занят.
+    this.joystick = new Joystick(this, () => this.uiBlocked, (dx, dy) => {
+      if (this.gs) this.gs.tryDodge(dx, dy);
+    });
+
+    // Бейдж daily-режима: виден весь забег, сравниваемость результата в одном месте.
+    const runMode = this.registry.get('runMode') as
+      | { daily: boolean; dateKey: string }
+      | undefined;
+    if (runMode?.daily) {
+      this.dailyBadge = this.add
+        .text(W / 2, 100 + st, `ЕЖЕДНЕВНОЕ · ${runMode.dateKey.slice(5).replace('-', '.')}`, {
+          fontFamily: FONT,
+          fontSize: '10px',
+          fontStyle: 'bold',
+          color: '#73eaff',
+        })
+        .setOrigin(0.5, 0)
+        .setResolution(2)
+        .setDepth(DEPTH + 1);
+    }
+
+    // Кнопка паузы (браузер/десктоп; в мессенджерах срабатывает и нативный Back).
+    const px = W - 16 - 44 - 8 - 22;
+    this.pauseBtnBg = this.add
+      .rectangle(px, 54 + st + 14, 44, 44, 0x141a2e, 0.0)
+      .setDepth(DEPTH)
+      .setInteractive({ useHandCursor: true });
+    this.pauseBtnText = this.add
+      .text(px, 54 + st + 14, 'II', { fontFamily: FONT, fontSize: '15px', fontStyle: 'bold', color: '#35e0ff' })
+      .setOrigin(0.5)
+      .setResolution(2)
+      .setDepth(DEPTH + 1);
+    this.pauseBtnBg.on('pointerup', () => {
+      if (this.uiBlocked) return;
+      if (this.pauseOverlay) this.closePauseMenu();
+      else if (this.canPauseGame()) this.openPauseMenu();
+    });
+
+    // Жизненный цикл: фон/foreground и нативная кнопка «назад».
+    document.addEventListener('visibilitychange', this.onVisibility, { passive: true });
+    MessengerBridge.setBackHandler(this.onBack);
 
     this.scale.on('resize', this.layout, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      document.removeEventListener('visibilitychange', this.onVisibility);
+      MessengerBridge.setBackHandler(null);
+      Sfx.resume();
       this.scale.off('resize', this.layout, this);
     });
     this.layout();
+  }
+
+  /** Пауза разрешена только в активном, незавершённом бою без модалок. */
+  private canPauseGame(): boolean {
+    return (
+      !!this.gs &&
+      !this.gs.finished &&
+      !this.modalOpen &&
+      !this.overShown &&
+      !this.pauseOverlay
+    );
+  }
+
+  private openPauseMenu(): void {
+    if (!this.canPauseGame()) return;
+    const gs = this.gs;
+    if (!gs) return;
+    gs.scene.pause();
+    this.uiBlocked = true;
+    Analytics.track('pause_shown', { auto: this.autoPaused });
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const c = this.add.container(0, 0).setDepth(112);
+    this.pauseOverlay = c;
+    c.add(this.add.rectangle(W / 2, H / 2, W, H, 0x05070f, 0.82).setInteractive());
+
+    c.add(
+      this.add
+        .text(W / 2, H * 0.3, 'ПАУЗА', {
+          fontFamily: FONT,
+          fontSize: '30px',
+          fontStyle: 'bold',
+          color: '#35e0ff',
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setShadow(0, 0, 'rgba(53,224,255,0.7)', 14, true, true)
+    );
+
+    if (this.autoPaused) {
+      c.add(
+        this.add
+          .text(W / 2, H * 0.3 + 34, 'протокол на удержании — бой остановлен', {
+            fontFamily: FONT,
+            fontSize: '11px',
+            color: '#aab4d4',
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+      );
+    }
+
+    const gap = 54;
+    const y0 = H * 0.52;
+    this.button(c, 'ПРОДОЛЖИТЬ', W / 2, y0, true, () => this.closePauseMenu());
+    this.button(c, 'ЗАНОВО', W / 2, y0 + gap, false, () => {
+      this.scene.stop();
+      if (gs) {
+        gs.scene.resume();
+        gs.scene.restart();
+      }
+    });
+    this.button(c, 'В МЕНЮ', W / 2, y0 + 2 * gap, false, () => {
+      this.scene.stop();
+      if (gs) {
+        gs.scene.stop();
+        gs.scene.start('Menu');
+      }
+    });
+
+    // Rewarded-слот (V6, VK): +1 HP за просмотр рекламы. Показываем ТОЛЬКО когда
+    // реклама реально доступна (VKWebAppCheckNativeAds) и есть лимит исцелений.
+    // Бонус выдаётся только при outcome 'completed'.
+    const rewardY = y0 + 3 * gap;
+    if (
+      MessengerBridge.kind === 'vk' &&
+      VK_ADS.rewardedPlacementId &&
+      gs.rewardHealsLeft() > 0
+    ) {
+      void VkBridge.rewardedAvailable(VK_ADS.rewardedPlacementId).then((ok) => {
+        if (!ok || !this.scene.isActive() || !this.pauseOverlay || gs.rewardHealsLeft() <= 0) {
+          return;
+        }
+        try {
+          this.button(this.pauseOverlay, 'СМОТРЕТЬ РЕКЛАМУ: +1 HP', W / 2, rewardY, false, () => {
+            Analytics.track('reward_ad_opened');
+            void VkBridge.showRewarded(VK_ADS.rewardedPlacementId).then((outcome) => {
+              Analytics.track('reward_ad_done', { outcome });
+              if (outcome === 'completed' && gs.tryRewardHeal()) {
+                Sfx.play('levelup');
+                MessengerBridge.haptic('medium');
+              }
+            });
+          });
+        } catch {
+          /* overlay уже закрыт — безопасно игнорируем */
+        }
+      });
+    }
+
+    const soundLabel = `звук: ${Sfx.muted ? 'выкл' : 'вкл'}`;
+    const soundText = this.add
+      .text(W / 2, rewardY + gap - 6, soundLabel, {
+        fontFamily: FONT,
+        fontSize: '13px',
+        color: Sfx.muted ? '#5a6480' : '#aab4d4',
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .setResolution(2)
+      .on('pointerup', () => {
+        const muted = Sfx.toggle();
+        soundText.setText(`звук: ${muted ? 'выкл' : 'вкл'}`).setColor(muted ? '#5a6480' : '#aab4d4');
+        if (!muted) Sfx.play('click');
+      });
+    c.add(soundText);
+  }
+
+  private closePauseMenu(): void {
+    if (!this.pauseOverlay) return;
+    this.pauseOverlay.destroy();
+    this.pauseOverlay = null;
+    this.autoPaused = false;
+    this.uiBlocked = false;
+    if (this.gs && !this.gs.finished && !this.overShown) this.gs.scene.resume();
   }
 
   update(): void {
     const run = this.registry.get('run') as RunSnapshot | undefined;
     const W = this.scale.width;
     const H = this.scale.height;
+    const st = SafeArea.top;
     if (run) {
-      this.xpBack.clear();
-      this.xpBack.fillStyle(0x1a2136, 0.9);
-      this.xpBack.fillRoundedRect(12, 12, W - 24, 10, 5);
-      this.xpFill.clear();
-      const xf = Phaser.Math.Clamp(run.xp / run.xpNext, 0, 1);
-      if (xf > 0) {
-        this.xpFill.fillStyle(COLORS.cyan, 1);
-        this.xpFill.fillRoundedRect(12, 12, Math.max((W - 24) * xf, 10), 10, 5);
-      }
-
       this.timerText.setText(fmtTime(run.timeMs));
       this.levelText.setText(`ЯДРО ${run.level}`);
       this.killsText.setText(`ОЧИЩ. ${run.kills}`);
@@ -187,43 +394,63 @@ export class UIScene extends Phaser.Scene {
         this.lastCombo = 0;
       }
 
-      const bw = 200;
-      const bx = W / 2 - bw / 2;
-      this.hpBack.clear();
-      this.hpBack.fillStyle(0x1a2136, 0.9);
-      this.hpBack.fillRoundedRect(bx, 54, bw, 12, 6);
-      this.hpFill.clear();
-      const hf = Phaser.Math.Clamp(run.hp / run.maxHp, 0, 1);
-      if (hf > 0) {
-        this.hpFill.fillStyle(hf > 0.35 ? COLORS.green : 0xff5a5a, 1);
-        this.hpFill.fillRoundedRect(bx, 54, Math.max(bw * hf, 10), 12, 6);
-      }
-      this.hpText.setText(`${Math.ceil(Math.max(0, run.hp))} / ${run.maxHp}`);
+      // Бары (Graphics = GPU-стейт): перерисовываем только при изменении значений.
+      const barKey = `${W}|${st}|${run.xp.toFixed(1)}|${run.xpNext}|${run.hp.toFixed(1)}|${run.maxHp}|${run.bossHp.toFixed(0)}|${run.bossMax}`;
+      if (barKey !== this.barKey) {
+        this.barKey = barKey;
 
+        this.xpBack.clear();
+        this.xpBack.fillStyle(0x1a2136, 0.9);
+        this.xpBack.fillRoundedRect(12, 12 + st, W - 24, 10, 5);
+        this.xpFill.clear();
+        const xf = Phaser.Math.Clamp(run.xp / run.xpNext, 0, 1);
+        if (xf > 0) {
+          this.xpFill.fillStyle(COLORS.cyan, 1);
+          this.xpFill.fillRoundedRect(12, 12 + st, Math.max((W - 24) * xf, 10), 10, 5);
+        }
+
+        const bw = 200;
+        const bx = W / 2 - bw / 2;
+        const hf = Phaser.Math.Clamp(run.hp / run.maxHp, 0, 1);
+        this.hpBack.clear();
+        this.hpBack.fillStyle(0x1a2136, 0.9);
+        this.hpBack.fillRoundedRect(bx, 54 + st, bw, 12, 6);
+        this.hpFill.clear();
+        if (hf > 0) {
+          this.hpFill.fillStyle(hf > 0.35 ? COLORS.green : 0xff5a5a, 1);
+          this.hpFill.fillRoundedRect(bx, 54 + st, Math.max(bw * hf, 10), 12, 6);
+        }
+        this.hpText.setText(`${Math.ceil(Math.max(0, run.hp))} / ${run.maxHp}`);
+
+        const boss = run.bossMax > 0;
+        this.bossBack.setVisible(boss);
+        this.bossFill.setVisible(boss);
+        this.bossLabel.setVisible(boss);
+        if (boss) {
+          this.bossBack.clear();
+          this.bossBack.fillStyle(0x1a2136, 0.9);
+          this.bossBack.fillRoundedRect(W / 2 - 140, 82 + st, 280, 9, 4);
+          this.bossFill.clear();
+          this.bossFill.fillStyle(COLORS.red, 1);
+          this.bossFill.fillRoundedRect(
+            W / 2 - 140,
+            82 + st,
+            Math.max(280 * Phaser.Math.Clamp(run.bossHp / run.bossMax, 0, 1), 8),
+            9,
+            4
+          );
+        }
+      }
+
+      // Рамка низкого HP пульсирует по sin — каждый кадр, но только когда hp низкий.
       this.hpWarn.clear();
-      if (run.hp > 0 && hf <= JUICE.lowHpFraction) {
-        const a = 0.22 + 0.22 * Math.sin(this.time.now / 120);
-        this.hpWarn.lineStyle(16, COLORS.red, a);
-        this.hpWarn.strokeRect(8, 8, W - 16, H - 16);
-      }
-
-      const boss = run.bossMax > 0;
-      this.bossBack.setVisible(boss);
-      this.bossFill.setVisible(boss);
-      this.bossLabel.setVisible(boss);
-      if (boss) {
-        this.bossBack.clear();
-        this.bossBack.fillStyle(0x1a2136, 0.9);
-        this.bossBack.fillRoundedRect(W / 2 - 140, 82, 280, 9, 4);
-        this.bossFill.clear();
-        this.bossFill.fillStyle(COLORS.red, 1);
-        this.bossFill.fillRoundedRect(
-          W / 2 - 140,
-          82,
-          Math.max(280 * Phaser.Math.Clamp(run.bossHp / run.bossMax, 0, 1), 8),
-          9,
-          4
-        );
+      if (run.hp > 0) {
+        const hf = Phaser.Math.Clamp(run.hp / run.maxHp, 0, 1);
+        if (hf <= JUICE.lowHpFraction) {
+          const a = 0.22 + 0.22 * Math.sin(this.time.now / 120);
+          this.hpWarn.lineStyle(16, COLORS.red, a);
+          this.hpWarn.strokeRect(8, 8, W - 16, H - 16);
+        }
       }
     }
 
@@ -241,12 +468,18 @@ export class UIScene extends Phaser.Scene {
 
   private layout(): void {
     const W = this.scale.width;
-    this.timerText.setX(W / 2);
-    this.levelText.setX(16);
-    this.killsText.setX(W - 16);
-    this.hpText.setX(W / 2);
-    this.bossLabel.setX(W / 2);
-    this.muteText.setX(W - 16);
+    const st = SafeArea.top;
+    this.timerText.setPosition(W / 2, 28 + st);
+    this.levelText.setPosition(16, 30 + st);
+    this.killsText.setPosition(W - 16, 30 + st);
+    this.hpText.setPosition(W / 2, 58 + st);
+    this.bossLabel.setPosition(W / 2, 72 + st);
+    this.muteText.setPosition(W - 16, 54 + st);
+    this.muteBg.setPosition(W - 16 - 22, 54 + st + 14);
+    const px = W - 16 - 44 - 8 - 22;
+    this.pauseBtnBg?.setPosition(px, 54 + st + 14);
+    this.pauseBtnText?.setPosition(px, 54 + st + 14);
+    this.dailyBadge?.setPosition(W / 2, 100 + st);
   }
 
   private showLevelUp(): void {
@@ -256,8 +489,8 @@ export class UIScene extends Phaser.Scene {
     this.uiBlocked = true;
     this.scene.pause('Game');
     Sfx.play('levelup');
-    MaxBridge.notify('success');
-    MaxBridge.haptic('medium');
+    MessengerBridge.notify('success');
+    MessengerBridge.haptic('medium');
 
     const W = this.scale.width;
     const H = this.scale.height;
@@ -566,7 +799,7 @@ export class UIScene extends Phaser.Scene {
 
     Sfx.play('levelup');
     this.time.delayedCall(130, () => Sfx.play(id === 'singularity' ? 'nova' : 'elite'));
-    MaxBridge.haptic('heavy');
+    MessengerBridge.haptic('heavy');
 
     this.time.delayedCall(1050, () => {
       this.tweens.add({
@@ -601,6 +834,11 @@ export class UIScene extends Phaser.Scene {
 
   private showGameOver(res: RunResult): void {
     this.uiBlocked = true;
+    Analytics.track('game_over_shown', {
+      win: res.win,
+      daily: !!res.daily,
+      rank: res.rank,
+    });
     const W = this.scale.width;
     const H = this.scale.height;
     const compact = H < 650;
@@ -609,6 +847,30 @@ export class UIScene extends Phaser.Scene {
     c.add(this.add.rectangle(W / 2, H / 2, W, H, 0x05070f, 0.84).setInteractive());
 
     const titleY = compact ? H * 0.1 : H * 0.13;
+
+    // «Скриншот-момент»: финальный кадр должен быть красивым — свечение за
+    // заголовком, вспышка (победа) и салют частиц.
+    const glow = this.add
+      .image(W / 2, titleY - 12, 'glow')
+      .setDisplaySize(Math.min(W * 0.95, 460), 300)
+      .setTint(res.win ? COLORS.gold : COLORS.red)
+      .setAlpha(res.win ? 0.5 : 0.32)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    c.add(glow);
+    this.tweens.add({
+      targets: glow,
+      scale: 1.07,
+      duration: 900,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.InOut',
+    });
+    (this.fanfare as TintableEmitter).setParticleTint?.(res.win ? COLORS.gold : COLORS.red);
+    this.fanfare.emitParticleAt(W / 2, titleY, res.win ? 36 : 12);
+    if (res.win) {
+      this.cameras.main.flash(240, 255, 236, 200);
+      (this.fanfare as TintableEmitter).setParticleTint?.(COLORS.cyan);
+    }
     c.add(
       this.add
         .text(W / 2, titleY, res.win ? 'ЯДРО СТАБИЛИЗИРОВАНО' : 'ЯДРО ПОТЕРЯНО', {
@@ -723,35 +985,191 @@ export class UIScene extends Phaser.Scene {
       );
     }
 
+    // Daily-результат: стрик + рекорд дня.
+    if (res.daily) {
+      detailY += compact ? 24 : 29;
+      const n = res.daily.streak;
+      const days = n === 1 ? 'день' : n < 5 ? 'дня' : 'дней';
+      const parts = [`стрик: ${n} ${days}`];
+      if (res.daily.newStreak) parts.push('НОВЫЙ СТРИК!');
+      if (res.daily.dailyRecord) parts.push('РЕКОРД ДНЯ');
+      c.add(
+        this.add
+          .text(W / 2, detailY, `📅 ЕЖЕДНЕВНОЕ · ${parts.join(' · ')}`, {
+            fontFamily: FONT,
+            fontSize: compact ? '10px' : '11px',
+            fontStyle: 'bold',
+            color: '#73eaff',
+            align: 'center',
+            wordWrap: { width: W - 42 },
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+      );
+    }
+
+    // Мест в локальном топе-10.
+    if (res.rank && res.rank <= 5) {
+      detailY += compact ? 22 : 26;
+      c.add(
+        this.add
+          .text(W / 2, detailY, `🏅 В ЛОКАЛЬНОМ ТОПЕ: №${res.rank}`, {
+            fontFamily: FONT,
+            fontSize: compact ? '10px' : '11px',
+            fontStyle: 'bold',
+            color: '#ffe066',
+            align: 'center',
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+      );
+    }
+
+    // V4: «общий» результат дня — «ты №N из M сегодня» (для daily-забега).
+    if (res.daily) {
+      detailY += compact ? 22 : 26;
+      const drY = detailY;
+      void ServerClient.getDailyRank(ServerClient.serverUid() ?? '', MessengerBridge.kind).then(
+        (d) => {
+          if (!d || d.rank == null || !this.scene.isActive()) return;
+          const t = this.add
+            .text(W / 2, drY, `📅 СЕГОДНЯ: №${d.rank} из ${d.total}`, {
+              fontFamily: FONT,
+              fontSize: compact ? '10px' : '11px',
+              fontStyle: 'bold',
+              color: '#73eaff',
+              align: 'center',
+            })
+            .setOrigin(0.5)
+            .setResolution(2);
+          try {
+            c.add(t);
+          } catch {
+            /* overlay уже закрыт */
+          }
+        }
+      );
+    }
+
     const gs = this.gs;
-    let y = Math.max(H * (compact ? 0.66 : 0.68), detailY + (compact ? 54 : 62));
     const gap = compact ? 50 : 56;
-    this.button(c, 'ЕЩЁ РАЗ', W / 2, y, true, () => {
-      this.scene.stop();
-      if (gs) {
-        gs.scene.resume();
-        gs.scene.restart();
-      }
+    const btnH = 46;
+    // Нижняя кнопка не должна уходить за home-indicator / нижнюю панель.
+    const maxFirstY = H - SafeArea.bottom - 16 - (btnH * 4 + gap * 3);
+    let y = Math.min(
+      Math.max(H * (compact ? 0.66 : 0.68), detailY + (compact ? 54 : 62)),
+      maxFirstY
+    );
+
+    // V2: топ друзей по реф-рёбрам — над кнопками, только если есть связи.
+    // Асинхронно; без друзей — ничего не рисуем (без пустого слота).
+    const friendUid = ServerClient.localUid();
+    if (friendUid && MessengerBridge.kind !== 'browser') {
+      void ServerClient.getFriends(friendUid, MessengerBridge.kind).then((friends) => {
+        if (!friends || friends.length === 0 || !this.scene.isActive()) return;
+        const lines = friends.slice(0, 2).map((f) => {
+          const rel = f.relation === 'inviter' ? 'позвал' : f.relation === 'invited' ? 'ты позвал' : 'друзья';
+          const last = f.uid.length > 4 ? '···' + f.uid.slice(-4) : f.uid;
+          return `${f.win ? '🏆' : '⏱'} ${last}  ${fmtTime(f.timeMs)} · ${f.kills}  (${rel})`;
+        });
+        const t = this.add
+          .text(W / 2, y - (compact ? 30 : 38), `ДРУЗЬЯ\n${lines.join('\n')}`, {
+            fontFamily: FONT,
+            fontSize: compact ? '10px' : '11px',
+            color: '#73eaff',
+            align: 'center',
+            lineSpacing: 3,
+          })
+          .setOrigin(0.5)
+          .setResolution(2);
+        try {
+          c.add(t);
+        } catch {
+          /* overlay уже закрыт */
+        }
+      });
+    }
+
+    const cam = this.cameras.main;
+    // Все «выходы» — через тёмный fade, без жёстких склеек сцены.
+    const go = (fn: () => void): void => {
+      Sfx.play('click');
+      cam.fadeOut(240, 11, 14, 26);
+      cam.once('camerafadeoutcomplete', fn);
+    };
+    this.button(c, 'ЕЩЁ РАЗ', W / 2, y, true, () =>
+      go(() => {
+        this.scene.stop();
+        if (gs) {
+          gs.scene.resume();
+          gs.scene.restart();
+        }
+      })
+    );
+    y += gap;
+    // V5: при победе и доступном клипе «ПОДЕЛИТЬСЯ» сначала шлёт видео-клип
+    // (Web Share API с файлом); не поддержано/отмена → фолбэк на карточку.
+    const clipPromise =
+      (this.registry.get('runClip') as Promise<RecordedClip | null> | null) ?? null;
+    this.button(c, 'ПОДЕЛИТЬСЯ', W / 2, y, false, () => {
+      Analytics.track('share_opened');
+      const mode = this.registry.get('runMode') as
+        | { daily: boolean; dateKey: string }
+        | undefined;
+      const input = {
+        win: res.win,
+        timeMs: res.timeMs,
+        kills: res.kills,
+        level: res.level,
+        evolutions: res.evolutions,
+        daily: mode?.daily ?? false,
+        dateKey: mode?.dateKey ?? '',
+        records: res.records,
+      };
+      const text = buildShareText(input);
+      const link = buildShareLink(input);
+      const card = (): void => {
+        void shareCard(text, link).then((outcome) => {
+          Analytics.track('share_done', { channel: outcome });
+          if (outcome === 'clipboard') this.toast(c, 'Скопировано — вставь в чат');
+          else if (outcome === 'failed') this.toast(c, 'Шеринг работает в MAX / Telegram');
+        });
+      };
+      void (async () => {
+        if (res.win && clipPromise) {
+          const clip = await clipPromise;
+          if (clip && (await shareClip(clip, text, link))) {
+            Analytics.track('share_done', { channel: 'clip' });
+            return;
+          }
+        }
+        card();
+      })();
     });
     y += gap;
-    this.button(c, 'ПОДЕЛИТЬСЯ', W / 2, y, false, () => {
-      const mins = fmtTime(res.timeMs);
-      const evoShare = res.evolutions.length > 0 ? ` Эволюции: ${res.evolutions.map((id) => EVOLUTION_NAMES[id]).join(', ')}.` : '';
-      const shareText = res.win
-        ? `Я стабилизировал ядро OFELIYA за ${mins}! Очищено угроз: ${res.kills}.${evoShare} Сможешь быстрее?`
-        : `Моё ядро OFELIYA продержалось ${mins}. Очищено угроз: ${res.kills}.${evoShare} Сможешь больше?`;
-      void MaxBridge.shareResult(shareText).then((ok) => {
-        if (!ok) this.toast(c, 'Поделиться можно внутри MAX');
+    // V1: виральный рост — приглашение по личной реф-ссылке.
+    this.button(c, 'ПРИГЛАСИТЬ', W / 2, y, false, () => {
+      Analytics.track('ref_shared');
+      const uid = ServerClient.localUid() ?? ServerClient.anonId();
+      const link = buildRefLink(uid);
+      const text =
+        '⚡️ OFELIYA — удержи ядро\nПриходи по моей ссылке: бонус на первый забег!';
+      void shareCard(text, link).then((outcome) => {
+        Analytics.track('ref_share_done', { channel: outcome });
+        if (outcome === 'clipboard') this.toast(c, 'Ссылка скопирована — отправь другу');
+        else if (outcome === 'failed') this.toast(c, 'Ссылка работает в MAX / Telegram');
       });
     });
     y += gap;
-    this.button(c, 'В МЕНЮ', W / 2, y, false, () => {
-      this.scene.stop();
-      if (gs) {
-        gs.scene.stop();
-        gs.scene.start('Menu');
-      }
-    });
+    this.button(c, 'В МЕНЮ', W / 2, y, false, () =>
+      go(() => {
+        this.scene.stop();
+        if (gs) {
+          gs.scene.stop();
+          gs.scene.start('Menu');
+        }
+      })
+    );
   }
 
   private buildSummary(stacks: Record<string, number>): string {

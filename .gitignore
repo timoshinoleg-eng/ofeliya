@@ -3,6 +3,9 @@ dist/
 *.local
 .DS_Store
 
+# runtime-данные бэкенда (JSON-store, реестр пользователей бота)
+server/data/
+
 # клон пакета игр (временный)
 .tmp-pack/
 

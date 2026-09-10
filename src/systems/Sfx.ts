@@ -15,6 +15,7 @@ export type SfxName =
   | 'nova'
   | 'elite'
   | 'boss'
+  | 'dodge'
   | 'gameover'
   | 'victory';
 
@@ -26,7 +27,9 @@ const THROTTLE_MS: Partial<Record<SfxName, number>> = {
 
 const BASE: string = import.meta.env.BASE_URL || './';
 
-const MANIFEST: Record<SfxName, { file: string; vol: number }> = {
+// 'dodge' — только процедурный фолбэк (blip), внешнего файла нет: звук короткий
+// и частый, CC0-файл ему не нужен (см. CREDITS.md).
+const MANIFEST: Partial<Record<SfxName, { file: string; vol: number }>> = {
   shoot: { file: 'audio/sfx/shoot.ogg', vol: 0.5 },
   hit: { file: 'audio/sfx/hit.ogg', vol: 0.45 },
   pickup: { file: 'audio/sfx/pickup.ogg', vol: 0.5 },
@@ -80,6 +83,15 @@ class SfxImpl {
     return this.muted;
   }
 
+  /** Приложение в фоне: rAF встаёт, но WebAudio-граф работает — гасим его целиком. */
+  suspend(): void {
+    if (this.ctx && this.ctx.state === 'running') void this.ctx.suspend();
+  }
+
+  resume(): void {
+    if (this.ctx && this.ctx.state === 'suspended') void this.ctx.resume();
+  }
+
   private applyGain(): void {
     if (this.master) this.master.gain.value = this.muted ? 0 : 0.5;
   }
@@ -114,7 +126,9 @@ class SfxImpl {
     if (this.loading[name]) return this.loading[name] as Promise<AudioBuffer | null>;
     const ctx = this.ensure();
     if (!ctx) return Promise.resolve(null);
-    const url = BASE + MANIFEST[name].file;
+    const man = MANIFEST[name];
+    if (!man) return Promise.resolve(null);
+    const url = BASE + man.file;
     const p = fetch(url)
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('HTTP ' + r.status))))
       .then((ab) => ctx.decodeAudioData(ab))
@@ -177,6 +191,10 @@ class SfxImpl {
         this.blip(90, 55, 0.7, 'sawtooth', 0.14);
         this.blip(120, 70, 0.7, 'square', 0.06, 0.1);
         break;
+      case 'dodge':
+        // короткий «whoosh»: быстрый подъём частоты, тихий
+        this.blip(280, 980, 0.1, 'sine', 0.055);
+        break;
       case 'gameover':
         this.blip(440, 220, 0.3, 'square', 0.08);
         this.blip(330, 165, 0.3, 'square', 0.08, 0.25);
@@ -198,11 +216,12 @@ class SfxImpl {
       this.lastAt[name] = now;
     }
     const buf = this.buffers[name];
-    if (buf && this.ctx && this.sfxGain && this.ctx.state === 'running') {
-      this.playBuf(buf, this.sfxGain, MANIFEST[name].vol);
+    const man = MANIFEST[name];
+    if (buf && man && this.ctx && this.sfxGain && this.ctx.state === 'running') {
+      this.playBuf(buf, this.sfxGain, man.vol);
       return;
     }
-    if (!this.loading[name]) void this.load(name);
+    if (!this.loading[name] && man) void this.load(name);
     this.fallback(name);
   }
 

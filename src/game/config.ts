@@ -77,6 +77,19 @@ export const PLAYER = {
   iframeMs: 700,
 };
 
+/**
+ * Уклонение (dodge/рывок): свайп-флик на мобильном, Space/Shift на десктопе.
+ * i-frames на всё время рывка + небольшой запас. Кулдаун длиннее рывка —
+ * dodge — осознанное действие, а не спам.
+ */
+export const DODGE = {
+  durationMs: 220,
+  cooldownMs: 1100,
+  speed: 640,
+  /** Запас i-frames после конца рывка, мс. */
+  iframeExtraMs: 80,
+};
+
 export const WEAPON = {
   damage: 10,
   fireIntervalMs: 550,

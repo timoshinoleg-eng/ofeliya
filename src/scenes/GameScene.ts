@@ -3,6 +3,7 @@ import {
   BOSS_SCALE,
   COLORS,
   COMBO,
+  DODGE,
   FONT,
   JUICE,
   ORBIT,
@@ -19,6 +20,7 @@ import {
 } from '../game/AchievementSystem';
 import { rollRunChoices } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
+import { dailyRng, mathRandom, todayKey } from '../game/SeededRng';
 import { Player } from '../game/Player';
 import { Enemy } from '../game/Enemy';
 import { Bullet } from '../game/Bullet';
@@ -26,10 +28,13 @@ import { Gem } from '../game/Gem';
 import { RunState } from '../game/RunState';
 import type { EvolutionId, UpgradeDef } from '../game/UpgradeSystem';
 import { WaveDirector } from '../game/WaveDirector';
+import { Analytics } from '../systems/Analytics';
 import { AtmosphereSystem } from '../systems/AtmosphereSystem';
-import { MaxBridge } from '../systems/MaxBridge';
+import { MessengerBridge } from '../systems/MessengerBridge';
+import { ServerClient } from '../systems/ServerClient';
 import { SaveSystem } from '../systems/SaveSystem';
 import { Sfx } from '../systems/Sfx';
+import { ShareVideo } from '../systems/ShareVideo';
 import { VfxSystem } from '../systems/VfxSystem';
 
 interface RunSnapshot {
@@ -69,7 +74,12 @@ export class GameScene extends Phaser.Scene {
   private pendingEvolutionCeremony: EvolutionId | null = null;
   private newAchievements: AchievementId[] = [];
   private achievementCheckAcc = 0;
-  private finished = false;
+  private dailyMode = false;
+  private dailyDateKey = '';
+  /** Публичный: UIScene читает для логики паузы/модалок. */
+  finished = false;
+  /** V5: идёт ли запись клипа (canRecord). */
+  private recording = false;
   private hitStopUntil = 0;
   private hitStopped = false;
   private dmgTexts: Phaser.GameObjects.Text[] = [];
@@ -80,15 +90,54 @@ export class GameScene extends Phaser.Scene {
   private trailCursor = 0;
   private trailAcc = 0;
   private keys: Record<string, Phaser.Input.Keyboard.Key> = {};
+  private bloomFx: Phaser.FX.Bloom | null = null;
+  private vigFx: Phaser.FX.Vignette | null = null;
+  private qualityAcc = 0;
+  private qualityFrames = 0;
+  private qualityDecided = false;
+  private snap: RunSnapshot = {
+    hp: 0,
+    maxHp: 0,
+    level: 1,
+    xp: 0,
+    xpNext: 1,
+    timeMs: 0,
+    kills: 0,
+    combo: 0,
+    bossHp: 0,
+    bossMax: 0,
+  };
+  private dodgeUntil = 0;
+  private dodgeCdUntil = 0;
+  private dodgeVx = 0;
+  private dodgeVy = 0;
+  private lastMoveX = 1;
+  private lastMoveY = 0;
+  /** Реф-бонус (V1): кулдаун рывка −30% на первом забеге по приглашению. */
+  private refBuffActive = false;
+  /** Rewarded (V6): сколько лечащих бонусов за рекламу уже выдано в этом забеге. */
+  private rewardHealsUsed = 0;
+  static readonly REWARD_HEAL_LIMIT = 3;
 
   constructor() {
     super('Game');
   }
 
-  create(): void {
+  create(data?: { daily?: boolean; dateKey?: string }): void {
     this.runState = new RunState();
+    // Daily: сид от даты → одинаковый забег у всех игроков этого дня.
+    this.dailyMode = !!(data && data.daily);
+    this.dailyDateKey = (data && data.dateKey) || todayKey();
+    this.runState.rng = this.dailyMode ? dailyRng(this.dailyDateKey) : mathRandom;
+    // Реф-бонус (V1): первый забег по приглашению — +1 HP и рывк быстрее.
+    this.refBuffActive = SaveSystem.peekRefBonus() !== null;
+    if (this.refBuffActive) {
+      this.runState.maxHp += 1;
+      this.runState.hp += 1;
+    }
     Sfx.startMusic();
     this.queuedLevels = 0;
+    this.rewardHealsUsed = 0;
     this.awaitingChoice = false;
     this.pendingChoices = [];
     this.pendingEvolutionCeremony = null;
@@ -109,6 +158,8 @@ export class GameScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
     this.cameras.main.setBackgroundColor(COLORS.bg);
+    // Плавное появление после fadeOut из меню / game over.
+    this.cameras.main.fadeIn(320, 11, 14, 26);
 
     this.atmosphere = new AtmosphereSystem(this);
     this.vignette = this.add
@@ -117,11 +168,30 @@ export class GameScene extends Phaser.Scene {
       .setDepth(28)
       .setDisplaySize(W * 1.25, H * 1.25);
 
-    const fxEnabled = POSTFX.enabled && this.game.renderer.type === Phaser.WEBGL;
+    // Постпроцесс (bloom/vignette) — самый дорогой расход GPU на мобильном.
+    // Включаем только если устройство не похоже на слабое; первые 6 секунд
+    // меряем FPS и при просадке откатываемся на виньетку-текстуру (см. update).
+    const nav = navigator as { hardwareConcurrency?: number; deviceMemory?: number };
+    const lowEnd =
+      (nav.hardwareConcurrency ?? 8) <= 4 || (nav.deviceMemory ?? 8) <= 4;
+    const fxEnabled =
+      POSTFX.enabled && this.game.renderer.type === Phaser.WEBGL && !lowEnd;
     if (fxEnabled) {
       const fx = this.cameras.main.postFX;
-      fx.addBloom(0xffffff, 0, 0, POSTFX.bloom.blurStrength, POSTFX.bloom.strength, POSTFX.bloom.steps);
-      fx.addVignette(0.5, 0.5, POSTFX.vignette.radius, POSTFX.vignette.strength);
+      this.bloomFx = fx.addBloom(
+        0xffffff,
+        0,
+        0,
+        POSTFX.bloom.blurStrength,
+        POSTFX.bloom.strength,
+        POSTFX.bloom.steps
+      );
+      this.vigFx = fx.addVignette(
+        0.5,
+        0.5,
+        POSTFX.vignette.radius,
+        POSTFX.vignette.strength
+      );
     }
     this.vignette.setVisible(!fxEnabled);
 
@@ -179,24 +249,47 @@ export class GameScene extends Phaser.Scene {
         string,
         Phaser.Input.Keyboard.Key
       >;
+      // Додж на десктопе: Space или Shift, в текущем направлении движения.
+      const dodgeKeys = kb.addKeys(['SPACE', 'SHIFT']);
+      for (const k of Object.values(dodgeKeys)) {
+        k.on('down', () => this.tryDodge(this.lastMoveX, this.lastMoveY));
+      }
     }
 
     if (!this.scene.isActive('UI')) this.scene.launch('UI');
 
     this.registry.set('joy', { x: 0, y: 0 });
     this.registry.set('runResult', null);
+    this.registry.set('runMode', { daily: this.dailyMode, dateKey: this.dailyDateKey });
     this.registry.set('run', this.snapshot());
 
-    if (SaveSystem.get().runs === 0) this.showIntroHint();
+    // V5: запись клипа последних секунд (скользящее окно). Только если устройство
+    // реально умеет (MediaRecorder/captureStream); иначе тихо пропускаем.
+    this.recording = ShareVideo.start(this.game.canvas as HTMLCanvasElement | null);
+    if (this.recording) this.registry.set('runClip', null);
+
+    if (SaveSystem.get().runs === 0) {
+      this.showIntroHint();
+      Analytics.track('first_run');
+    }
+    Analytics.track('run_started', { daily: this.dailyMode });
 
     this.scale.on('resize', this.onResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.onResize, this);
       this.atmosphere.destroy();
       this.vfx.destroy();
+      // V5: запись не завершена забегом (перезапуск/смена сцены) → просто
+      // останавливаем без сохранения клипа.
+      if (this.recording) {
+        this.recording = false;
+        void ShareVideo.stop();
+      }
       this.registry.remove('run');
       this.registry.remove('runResult');
+      this.registry.remove('runMode');
       this.registry.remove('joy');
+      this.registry.remove('runClip');
     });
   }
 
@@ -210,6 +303,18 @@ export class GameScene extends Phaser.Scene {
     const st = this.runState;
     st.timeMs += delta;
     st.tickNoDamage(delta);
+
+    // Адаптивное качество: первые 6 секунд считаем средний FPS; <45 —
+    // снимаем постпроцесс (bloom = основной бюджет) и возвращаем виньетку-текстуру.
+    if (!this.qualityDecided && this.bloomFx) {
+      this.qualityAcc += delta;
+      this.qualityFrames += 1;
+      if (this.qualityAcc >= 6000) {
+        this.qualityDecided = true;
+        const fps = this.qualityFrames / (this.qualityAcc / 1000);
+        if (fps < 45) this.disablePostFX();
+      }
+    }
     this.achievementCheckAcc += delta;
     if (this.achievementCheckAcc >= 500) {
       this.achievementCheckAcc = 0;
@@ -233,8 +338,18 @@ export class GameScene extends Phaser.Scene {
       vx /= len;
       vy /= len;
     }
-    const speed = PLAYER.speed * st.speedMul;
-    (this.player.body as Phaser.Physics.Arcade.Body).setVelocity(vx * speed, vy * speed);
+    if (len > 0.1) {
+      this.lastMoveX = vx;
+      this.lastMoveY = vy;
+    }
+    const body = this.player.body as Phaser.Physics.Arcade.Body;
+    if (time < this.dodgeUntil) {
+      // Рывок: фиксированный импульс, игнорирует обычный ввод (но не кулдаун).
+      body.setVelocity(this.dodgeVx, this.dodgeVy);
+    } else {
+      const speed = PLAYER.speed * st.speedMul;
+      body.setVelocity(vx * speed, vy * speed);
+    }
 
     if (len > 0.1) {
       this.trailAcc += delta;
@@ -312,12 +427,38 @@ export class GameScene extends Phaser.Scene {
       Sfx.play('boss');
       this.atmosphere.pulse(COLORS.red, 0.32);
       this.cameras.main.shake(320, 0.008);
-      MaxBridge.haptic('heavy');
+      MessengerBridge.haptic('heavy');
+      this.showBossIntro();
+      Analytics.track('boss_spawned');
     } else if (elite) {
       Sfx.play('elite');
       this.atmosphere.pulse(COLORS.gold, 0.12);
     }
     return e;
+  }
+
+  /**
+   * Уклонение в направлении (nx, ny). true — если рывок стартовал.
+   * i-frames на время рывка + запас: читается как «успел уйти», а не «почти».
+   */
+  tryDodge(nx: number, ny: number): boolean {
+    if (this.finished) return false;
+    const now = this.time.now;
+    if (now < this.dodgeCdUntil) return false;
+    const d = Math.hypot(nx, ny);
+    if (d < 0.15) return false;
+    this.dodgeVx = (nx / d) * DODGE.speed;
+    this.dodgeVy = (ny / d) * DODGE.speed;
+    this.lastMoveX = nx;
+    this.lastMoveY = ny;
+    this.dodgeUntil = now + DODGE.durationMs;
+    this.dodgeCdUntil = now + (this.refBuffActive ? DODGE.cooldownMs * 0.7 : DODGE.cooldownMs);
+    this.player.hurtUntil = Math.max(this.player.hurtUntil, this.dodgeUntil + DODGE.iframeExtraMs);
+    Sfx.play('dodge');
+    MessengerBridge.haptic('light');
+    this.vfx.dodge(this.player.x, this.player.y, this.dodgeVx, this.dodgeVy);
+    Analytics.track('dodge_used', { t: Math.round(this.runState.timeMs / 1000) });
+    return true;
   }
 
   onEnemyDied(e: Enemy): void {
@@ -422,7 +563,9 @@ export class GameScene extends Phaser.Scene {
   onGemCollected(value: number): void {
     Sfx.play('pickup');
     this.vfx.pickup(this.player.x, this.player.y);
-    this.queuedLevels += this.runState.addXp(value);
+    const gained = this.runState.addXp(value);
+    this.queuedLevels += gained;
+    if (gained > 0) Analytics.track('level_up', { level: this.runState.level });
   }
 
   chooseUpgrade(id: string): boolean {
@@ -437,7 +580,7 @@ export class GameScene extends Phaser.Scene {
       }
       this.captureAchievements(false, false);
       Sfx.play('click');
-      MaxBridge.notify('success');
+      MessengerBridge.notify('success');
     }
     if (this.queuedLevels > 0) {
       this.queuedLevels -= 1;
@@ -455,12 +598,44 @@ export class GameScene extends Phaser.Scene {
     return id;
   }
 
+  /** Сколько лечащих rewarded-бонусов ещё доступно в этом забеге. */
+  rewardHealsLeft(): number {
+    return GameScene.REWARD_HEAL_LIMIT - this.rewardHealsUsed;
+  }
+
+  /**
+   * Rewarded-бонус (V6): +1 HP за просмотр рекламы. true — если бонус выдан.
+   * Лимит на забег, чтобы не спамить; вызывается ТОЛЬКО после 'completed'.
+   */
+  tryRewardHeal(): boolean {
+    if (this.finished) return false;
+    if (this.rewardHealsUsed >= GameScene.REWARD_HEAL_LIMIT) return false;
+    this.rewardHealsUsed += 1;
+    const st = this.runState;
+    st.hp = Math.min(st.maxHp, st.hp + 1);
+    this.vfx.pickup(this.player.x, this.player.y); // зелёные частицы = здоровье
+    return true;
+  }
+
   finish(win: boolean): void {
     if (this.finished) return;
     this.finished = true;
     const st = this.runState;
     const evolutions = [...st.evolutions];
     const records = SaveSystem.recordRun(win, st.timeMs, st.kills, st.level, evolutions);
+    // Daily: стрик + результат дня (только в daily-режиме).
+    const daily = this.dailyMode
+      ? SaveSystem.recordDaily(this.dailyDateKey, { win, timeMs: st.timeMs, kills: st.kills })
+      : null;
+    // Локальный лидерборд (топ-10).
+    const rank = SaveSystem.recordLeaderboard({
+      dateKey: this.dailyDateKey || todayKey(),
+      daily: this.dailyMode,
+      win,
+      timeMs: st.timeMs,
+      kills: st.kills,
+      level: st.level,
+    });
     this.captureAchievements(true, false);
     this.registry.set('run', this.snapshot());
     this.registry.set('runResult', {
@@ -473,9 +648,48 @@ export class GameScene extends Phaser.Scene {
       evolutions,
       newAchievements: [...this.newAchievements],
       records,
+      daily,
+      rank,
     });
+    // V5: клип последних секунд → registry (Promise; UIScene дождётся и
+    // покажет кнопку шаринга клипа). Fire-and-forget: сбой записи не трогает UI.
+    if (this.recording) {
+      this.recording = false;
+      this.registry.set('runClip', ShareVideo.stop());
+    }
+    Analytics.track('run_completed', {
+      win,
+      timeMs: Math.round(st.timeMs / 1000) * 1000,
+      kills: st.kills,
+      level: st.level,
+      daily: this.dailyMode,
+    });
+    // Глобальный лидерборд + реферальное рёбро: fire-and-forget,
+    // сбой сети не трогает геймплей. Реф привязывается к первому забегу.
+    const refFrom = SaveSystem.takeRefBonus();
+    if (refFrom) {
+      void ServerClient.submitScore({
+        daily: this.dailyMode,
+        win,
+        timeMs: Math.round(st.timeMs),
+        kills: st.kills,
+        level: st.level,
+        dateKey: this.dailyDateKey || todayKey(),
+        ref: refFrom,
+      });
+    } else {
+      void ServerClient.submitScore({
+        daily: this.dailyMode,
+        win,
+        timeMs: Math.round(st.timeMs),
+        kills: st.kills,
+        level: st.level,
+        dateKey: this.dailyDateKey || todayKey(),
+        ref: null,
+      });
+    }
     Sfx.play(win ? 'victory' : 'gameover');
-    MaxBridge.notify(win ? 'success' : 'error');
+    MessengerBridge.notify(win ? 'success' : 'error');
     this.cameras.main.resetFX();
     this.scene.pause();
   }
@@ -591,7 +805,7 @@ export class GameScene extends Phaser.Scene {
     const st = this.runState;
     const singularity = st.hasEvolution('singularity');
     Sfx.play('nova');
-    MaxBridge.haptic('light');
+    MessengerBridge.haptic('light');
     if (singularity) this.vfx.singularity(this.player.x, this.player.y, st.novaRadius);
     else this.vfx.nova(this.player.x, this.player.y, st.novaRadius);
     const list = this.enemies.getChildren() as Enemy[];
@@ -633,7 +847,7 @@ export class GameScene extends Phaser.Scene {
     this.runState.resetNoDamage();
     this.player.markHurt(now);
     Sfx.play('hurt');
-    MaxBridge.haptic('medium');
+    MessengerBridge.haptic('medium');
     this.cameras.main.flash(140, 255, 60, 100);
     const s = JUICE.shakeHurt;
     this.cameras.main.shake(s.duration, s.intensity);
@@ -695,7 +909,7 @@ export class GameScene extends Phaser.Scene {
       .setResolution(2);
     c.add([panel, title, name]);
     Sfx.play('levelup');
-    MaxBridge.haptic('light');
+    MessengerBridge.haptic('light');
     this.tweens.add({
       targets: c,
       alpha: 1,
@@ -739,20 +953,79 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  /**
+   * Переиспользуемый snapshot (один объект на всё время забега): UIScene читает
+   * его из registry каждый кадр, аллокация — ноль.
+   */
   private snapshot(): RunSnapshot {
     const st = this.runState;
-    return {
-      hp: st.hp,
-      maxHp: st.maxHp,
-      level: st.level,
-      xp: st.xp,
-      xpNext: st.xpNext,
-      timeMs: st.timeMs,
-      kills: st.kills,
-      combo: st.combo,
-      bossHp: this.wave.boss?.hp ?? 0,
-      bossMax: this.wave.boss?.maxHp ?? 0,
-    };
+    const s = this.snap;
+    s.hp = st.hp;
+    s.maxHp = st.maxHp;
+    s.level = st.level;
+    s.xp = st.xp;
+    s.xpNext = st.xpNext;
+    s.timeMs = st.timeMs;
+    s.kills = st.kills;
+    s.combo = st.combo;
+    s.bossHp = this.wave.boss?.hp ?? 0;
+    s.bossMax = this.wave.boss?.maxHp ?? 0;
+    return s;
+  }
+
+  /** Откат постпроцесса на слабом устройстве: один раз, необратимо в пределах забега. */
+  private disablePostFX(): void {
+    const fx = this.cameras.main.postFX;
+    if (this.bloomFx) {
+      fx.remove(this.bloomFx);
+      this.bloomFx = null;
+    }
+    if (this.vigFx) {
+      fx.remove(this.vigFx);
+      this.vigFx = null;
+    }
+    this.vignette.setVisible(true);
+  }
+
+  /** Скриншот-момент: появление босса — заголовок над ареной. */
+  private showBossIntro(): void {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const c = this.add
+      .container(W / 2, Math.max(H * 0.3, 170))
+      .setScrollFactor(0)
+      .setDepth(46)
+      .setAlpha(0);
+    c.add(
+      this.add
+        .text(0, 0, IDENTITY.boss, {
+          fontFamily: FONT,
+          fontSize: '30px',
+          fontStyle: 'bold',
+          color: '#ff3860',
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setShadow(0, 0, 'rgba(255,56,96,0.85)', 18, true, true)
+    );
+    c.add(
+      this.add
+        .text(0, 34, 'уничтожь узел — это единственная победа', {
+          fontFamily: FONT,
+          fontSize: '12px',
+          color: '#aab4d4',
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+    this.tweens.add({
+      targets: c,
+      alpha: 1,
+      duration: 180,
+      yoyo: true,
+      hold: 1100,
+      onComplete: () => c.destroy(),
+    });
   }
 
   private onResize(): void {

@@ -1,9 +1,13 @@
 import Phaser from 'phaser';
 import { COLORS, FONT, fmtTime } from '../game/config';
 import { IDENTITY } from '../game/identity';
-import { MaxBridge } from '../systems/MaxBridge';
+import { todayKey } from '../game/SeededRng';
+import { Analytics } from '../systems/Analytics';
+import { MessengerBridge } from '../systems/MessengerBridge';
+import { SafeArea } from '../systems/SafeArea';
 import { SaveSystem } from '../systems/SaveSystem';
 import { Sfx } from '../systems/Sfx';
+import { ServerClient } from '../systems/ServerClient';
 
 export class MenuScene extends Phaser.Scene {
   constructor() {
@@ -13,9 +17,12 @@ export class MenuScene extends Phaser.Scene {
   create(): void {
     const W = this.scale.width;
     const H = this.scale.height;
+    const compact = H < 620;
     this.cameras.main.setBackgroundColor(COLORS.bg);
+    this.cameras.main.fadeIn(320, 11, 14, 26);
     Sfx.stopMusic();
-    MaxBridge.setBackHandler(null);
+    MessengerBridge.setBackHandler(null);
+    Analytics.track('open', { platform: MessengerBridge.kind });
 
     const grid = this.add
       .tileSprite(0, 0, W, H, 'grid')
@@ -48,9 +55,9 @@ export class MenuScene extends Phaser.Scene {
     });
 
     const title = this.add
-      .text(W / 2, H * 0.24, 'OFELIYA', {
+      .text(W / 2, H * (compact ? 0.12 : 0.15), 'OFELIYA', {
         fontFamily: FONT,
-        fontSize: '56px',
+        fontSize: compact ? '46px' : '54px',
         fontStyle: 'bold',
         color: '#35e0ff',
       })
@@ -59,25 +66,18 @@ export class MenuScene extends Phaser.Scene {
     title.setShadow(0, 0, 'rgba(53,224,255,0.85)', 22, true, true);
 
     this.add
-      .text(W / 2, H * 0.24 + 46, IDENTITY.copy.menuTagline, {
-        fontFamily: FONT,
-        fontSize: '14px',
-        color: '#aab4d4',
-      })
+      .text(
+        W / 2,
+        H * (compact ? 0.12 : 0.15) + (compact ? 38 : 44),
+        IDENTITY.copy.menuTagline,
+        { fontFamily: FONT, fontSize: '13px', color: '#aab4d4' }
+      )
       .setOrigin(0.5)
       .setResolution(2);
 
-    const displayName = MaxBridge.getDisplayName();
-    if (MaxBridge.available && displayName) {
-      this.add
-        .text(W / 2, H * 0.24 + 70, `Привет, ${displayName}!`, {
-          fontFamily: FONT,
-          fontSize: '13px',
-          color: '#7dff6e',
-        })
-        .setOrigin(0.5)
-        .setResolution(2);
-    }
+    // Персонализация (приветствие + deep-link) — после готовности моста:
+    // MAX/TG/браузер сразу, VK — после VKWebAppInit (user/start_param асинхронны).
+    void MessengerBridge.whenReady().then(() => this.personalize());
 
     const save = SaveSystem.get();
     const survival = save.bestSurvivalMs > 0 ? fmtTime(save.bestSurvivalMs) : '—';
@@ -87,9 +87,9 @@ export class MenuScene extends Phaser.Scene {
         ? `Выживание ${survival}   ·   Победа ${victory}\nОчищено ${save.bestKills}   ·   Ядро ${save.bestLevel}`
         : IDENTITY.copy.firstRun;
     this.add
-      .text(W / 2, H * 0.45, records, {
+      .text(W / 2, H * (compact ? 0.3 : 0.33), records, {
         fontFamily: FONT,
-        fontSize: '14px',
+        fontSize: '13px',
         color: '#e8f4ff',
         align: 'center',
         lineSpacing: 5,
@@ -97,43 +97,139 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setResolution(2);
 
-    const btnY = H * 0.64;
+    // — Ежедневное испытание: один сид на всех, результаты сравнимы, стрики.
+    const today = todayKey();
+    const daily = save.daily;
+    const dailyLines: string[] = [`📅 ЕЖЕДНЕВНОЕ ${today.slice(5).replace('-', '.')}`];
+    if (daily.streak > 0) dailyLines.push(`🔥 стрик ${daily.streak}`);
+    if (daily.dateKey === today && (daily.timeMs > 0 || daily.kills > 0)) {
+      dailyLines.push(`сегодня: ${daily.win ? '🏆' : '⏱'} ${fmtTime(daily.timeMs)}`);
+    }
+    this.add
+      .text(W / 2, H * (compact ? 0.41 : 0.435), dailyLines.join('  ·  '), {
+        fontFamily: FONT,
+        fontSize: '12px',
+        fontStyle: 'bold',
+        color: '#73eaff',
+      })
+      .setOrigin(0.5)
+      .setResolution(2);
+
+    const btnY = H * (compact ? 0.53 : 0.56);
     const btnBg = this.add
-      .rectangle(W / 2, btnY, 250, 64, COLORS.cyan, 0.16)
+      .rectangle(W / 2, btnY, 250, 58, COLORS.cyan, 0.16)
       .setStrokeStyle(2, COLORS.cyan, 1);
     this.add
       .text(W / 2, btnY, 'ЗАПУСТИТЬ ЯДРО', {
         fontFamily: FONT,
-        fontSize: '21px',
+        fontSize: '19px',
         fontStyle: 'bold',
         color: '#35e0ff',
       })
       .setOrigin(0.5)
       .setResolution(2);
-    btnBg.setInteractive({ useHandCursor: true }).on('pointerup', () => {
-      Sfx.play('click');
-      this.scene.start('Game');
-    });
+    btnBg.setInteractive({ useHandCursor: true }).on('pointerup', () => this.startRun(false));
     btnBg.on('pointerover', () => btnBg.setFillStyle(COLORS.cyan, 0.28));
     btnBg.on('pointerout', () => btnBg.setFillStyle(COLORS.cyan, 0.16));
 
-    const soundText = this.add
-      .text(W / 2, btnY + 58, `звук: ${Sfx.muted ? 'выкл' : 'вкл'}`, {
+    // Второстепенные кнопки в ряд: daily + звук (обе ≥ 44×44).
+    const rowY = btnY + (compact ? 44 : 50);
+    const dailyBg = this.add
+      .rectangle(W / 2 - 24, rowY, 170, 44, COLORS.panel, 0.95)
+      .setStrokeStyle(2, COLORS.cyan, 0.7);
+    this.add
+      .text(W / 2 - 24, rowY, `ЕЖЕДНЕВНОЕ · ${today.slice(8)}`, {
         fontFamily: FONT,
         fontSize: '13px',
-        color: Sfx.muted ? '#5a6480' : '#aab4d4',
+        fontStyle: 'bold',
+        color: '#73eaff',
       })
       .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .setResolution(2)
-      .on('pointerup', () => {
-        const muted = Sfx.toggle();
-        soundText.setText(`звук: ${muted ? 'выкл' : 'вкл'}`).setColor(muted ? '#5a6480' : '#aab4d4');
-        if (!muted) Sfx.play('click');
-      });
+      .setResolution(2);
+    dailyBg.setInteractive({ useHandCursor: true }).on('pointerup', () => this.startRun(true));
+    dailyBg.on('pointerover', () => dailyBg.setFillStyle(COLORS.panelHover, 1));
+    dailyBg.on('pointerout', () => dailyBg.setFillStyle(COLORS.panel, 0.95));
 
+    const soundBg = this.add
+      .rectangle(W / 2 + 102, rowY, 44, 44, COLORS.panel, 0.95)
+      .setStrokeStyle(2, COLORS.stroke, 1);
+    const soundText = this.add
+      .text(W / 2 + 102, rowY, Sfx.muted ? '🔇' : '🔊', {
+        fontFamily: FONT,
+        fontSize: '18px',
+      })
+      .setOrigin(0.5)
+      .setResolution(2);
+    soundBg.setInteractive({ useHandCursor: true }).on('pointerup', () => {
+      const muted = Sfx.toggle();
+      soundText.setText(muted ? '🔇' : '🔊');
+      if (!muted) Sfx.play('click');
+    });
+
+    // Локальный топ-3: витрина «с чем ты соревнуешься».
+    if (!compact && save.leaderboard.length > 0) {
+      const top = save.leaderboard.slice(0, 3);
+      const lbY = rowY + (compact ? 0 : 46);
+      this.add
+        .text(
+          W / 2,
+          lbY,
+          top
+            .map(
+              (e, i) =>
+                `${i + 1}. ${fmtTime(e.timeMs)} · ${e.kills}${e.win ? ' · 🏆' : ''}${e.daily ? ' · 📅' : ''}`
+            )
+            .join('\n'),
+          {
+            fontFamily: FONT,
+            fontSize: '12px',
+            color: '#aab4d4',
+            align: 'center',
+            lineSpacing: 4,
+          }
+        )
+        .setOrigin(0.5, 0)
+        .setResolution(2);
+    }
+
+    // Глобальный топ-3 (с сервера, V3) + сезон (C5): витрина «с кем ты
+    // соревнуешься». Асинхронно; если сервер недоступен — блок не показываем.
+    // Топ — сезонный (честная конкуренция внутри окна, сброс между сезонами).
+    if (!compact && ServerClient.enabled) {
+      const hasLocal = save.leaderboard.length > 0;
+      const gy = rowY + (hasLocal ? 88 : 46);
+      void Promise.all([ServerClient.getSeason(), ServerClient.getTop('season')]).then(
+        ([season, entries]) => {
+          if (!this.scene.isActive()) return;
+          const lines: string[] = [];
+          if (season) lines.push(`🏆 СЕЗОН ${season.index} · ${season.daysLeft} дн до конца`);
+          if (entries && entries.length > 0) {
+            const mark = (p: string) =>
+              p === 'telegram' ? '✈' : p === 'max' ? '✉' : p === 'vk' ? '📱' : '🖥';
+            lines.push(
+              ...entries
+                .slice(0, 3)
+                .map((e) => `${e.rank}. ${mark(e.platform)} ${fmtTime(e.timeMs)} · ${e.kills}${e.win ? ' · 🏆' : ''}`)
+            );
+          }
+          if (lines.length === 0) return;
+          this.add
+            .text(W / 2, gy, lines.join('\n'), {
+              fontFamily: FONT,
+              fontSize: '12px',
+              color: '#7f8bb0',
+              align: 'center',
+              lineSpacing: 4,
+            })
+            .setOrigin(0.5, 0)
+            .setResolution(2);
+        }
+      );
+    }
+
+    const sb = SafeArea.bottom;
     this.add
-      .text(W / 2, H - 52, IDENTITY.copy.howToPlay, {
+      .text(W / 2, H - 52 - sb, IDENTITY.copy.howToPlay, {
         fontFamily: FONT,
         fontSize: '12px',
         color: '#8a94b0',
@@ -144,11 +240,12 @@ export class MenuScene extends Phaser.Scene {
       .setResolution(2);
 
     this.add
-      .text(W / 2, H - 12, `mini-app · MAX · v0.1.0 · ${MaxBridge.platform}`, {
-        fontFamily: FONT,
-        fontSize: '10px',
-        color: '#5a6480',
-      })
+      .text(
+        W / 2,
+        H - 12 - sb,
+        `mini-app · ${MessengerBridge.kind === 'browser' ? 'browser' : MessengerBridge.platform} · v0.2.0`,
+        { fontFamily: FONT, fontSize: '10px', color: '#5a6480' }
+      )
       .setOrigin(0.5, 1)
       .setResolution(2);
 
@@ -156,6 +253,97 @@ export class MenuScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.onResize, this);
     });
+
+    this.tryDailyShortcut();
+  }
+
+  /** Старт забега: обычный или daily (сид от сегодняшней даты). */
+  private startRun(daily: boolean): void {
+    Sfx.play('click');
+    MessengerBridge.haptic('light');
+    this.cameras.main.fadeOut(280, 11, 14, 26);
+    this.cameras.main.once('camerafadeoutcomplete', () =>
+      this.scene.start('Game', daily ? { daily: true, dateKey: todayKey() } : undefined)
+    );
+  }
+
+  /**
+   * Персонализация после готовности моста (MessengerBridge.whenReady):
+   * приветствие + deep-link (реф/вызов). Для VK user и start_param приходят
+   * асинхронно — отсюда и асинхронный вызов.
+   */
+  private personalize(): void {
+    if (!this.scene.isActive()) return;
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const compact = H < 620;
+
+    const displayName = MessengerBridge.getDisplayName();
+    if (MessengerBridge.available && displayName) {
+      this.add
+        .text(
+          W / 2,
+          H * (compact ? 0.12 : 0.15) + (compact ? 58 : 68),
+          `Привет, ${displayName}!`,
+          { fontFamily: FONT, fontSize: '12px', color: '#7dff6e' }
+        )
+        .setOrigin(0.5)
+        .setResolution(2);
+    }
+
+    // Пришли по deep link: либо реф-ссылка (ref_<uid>), либо карточка друга.
+    const startParam = this.readStartParam();
+    if (startParam?.startsWith('ref_')) {
+      const from = startParam.slice(4);
+      const hadRef = SaveSystem.get().pendingRef !== null;
+      SaveSystem.setPendingRef(from);
+      if (!hadRef) Analytics.track('ref_opened');
+      this.add
+        .text(
+          W / 2,
+          H * (compact ? 0.12 : 0.15) + (compact ? 76 : 88),
+          '👋 друг позвал тебя в ядро — бонус на первый забег!',
+          { fontFamily: FONT, fontSize: '11px', color: '#ffe066' }
+        )
+        .setOrigin(0.5)
+        .setResolution(2);
+    } else if (startParam) {
+      this.add
+        .text(
+          W / 2,
+          H * (compact ? 0.12 : 0.15) + (compact ? 76 : 88),
+          '⚡ ты пришёл по вызову — обнови их результат!',
+          { fontFamily: FONT, fontSize: '11px', color: '#ffe066' }
+        )
+        .setOrigin(0.5)
+        .setResolution(2);
+    }
+  }
+
+  /**
+   * Старт-параметр: masonry-мост (MAX/TG/VK) или query-string (браузер/PWA:
+   * ?ref=<uid> и ?startapp=<payload>).
+   */
+  private readStartParam(): string | null {
+    const viaBridge = MessengerBridge.getStartParam();
+    if (viaBridge) return viaBridge;
+    try {
+      const q = new URLSearchParams(location.search);
+      return q.get('ref') || q.get('startapp');
+    } catch {
+      return null;
+    }
+  }
+
+  /** PWA-shortcut «Ежедневное» (?daily=1 в manifest) — сразу в daily-забег. */
+  private tryDailyShortcut(): void {
+    try {
+      if (new URLSearchParams(location.search).get('daily') === '1') {
+        this.time.delayedCall(600, () => this.startRun(true));
+      }
+    } catch {
+      /* file:// и т.п. */
+    }
   }
 
   private onResize(): void {

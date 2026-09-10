@@ -92,6 +92,15 @@ export class VfxSystem {
     this.pickupEmitter.emitParticleAt(x, y, 3);
   }
 
+  /** Рывок: короткая синяя вспышка и хвост в сторону движения. */
+  dodge(x: number, y: number, vx: number, vy: number): void {
+    this.tint(this.rewardEmitter, COLORS.cyan);
+    const d = Math.hypot(vx, vy) || 1;
+    // хвост — за игроком, против движения
+    this.rewardEmitter.emitParticleAt(x - (vx / d) * 10, y - (vy / d) * 10, 5);
+    this.ring(x, y, COLORS.cyan, 46, 220, 0.3);
+  }
+
   nova(x: number, y: number, radius: number): void {
     this.tint(this.rewardEmitter, COLORS.cyan);
     this.rewardEmitter.emitParticleAt(x, y, 10);
