@@ -1,6 +1,5 @@
 import Phaser from 'phaser';
 import { COLORS } from '../game/config';
-import { reportStartup } from '../systems/StartupProbe';
 
 /** Генерирует все текстуры кодом — ассеты не нужны, лицензионных рисков нет. */
 export class BootScene extends Phaser.Scene {
@@ -9,7 +8,6 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
-    reportStartup('boot-scene');
     this.makeTextures();
     document.getElementById('splash')?.remove();
     this.scene.start('Menu');

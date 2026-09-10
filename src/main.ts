@@ -3,7 +3,6 @@ import { BootScene } from './scenes/BootScene';
 import { MenuScene } from './scenes/MenuScene';
 import { GameScene } from './scenes/GameScene';
 import { UIScene } from './scenes/UIScene';
-import { reportStartup, reportStartupFailure } from './systems/StartupProbe';
 
 // Dev-ручка для автотестов: в панели IAB requestAnimationFrame заморожен,
 // поэтому QA прокачивает кадры вручную через __game.loop.step(time).
@@ -38,12 +37,13 @@ async function boot(): Promise<void> {
   // Дождаться загрузки дисплейного шрифта: иначе Phaser запечёт текстуры текста
   // с фолбэком (Arial) и не перерисует их после подгрузки. В MAX Font API
   // может не завершить promise, поэтому шрифт не вправе удерживать заставку.
-  reportStartup('module');
   await waitForFonts();
-  reportStartup('fonts-ready');
 
   const game = new Phaser.Game({
-    type: Phaser.AUTO,
+    // Некоторые Android WebView в MAX создают WebGL-контекст с невалидным
+    // framebuffer и Phaser падает до BootScene. Игра использует Canvas-safe
+    // объекты; постэффекты уже отключаются вне WebGL.
+    type: Phaser.CANVAS,
     parent: 'game',
     backgroundColor: '#0b0e1a',
     disableContextMenu: true,
@@ -67,18 +67,10 @@ async function boot(): Promise<void> {
     },
     scene: [BootScene, MenuScene, GameScene, UIScene],
   });
-  reportStartup('game-created');
 
   // Dev-ручка для автотестов: в панели IAB requestAnimationFrame заморожен,
   // поэтому QA прокачивает кадры вручную через __game.loop.step(time).
   if (import.meta.env.DEV) window.__game = game;
 }
 
-window.addEventListener('error', (event) => {
-  const source = event.filename
-    ? `${new URL(event.filename, window.location.href).hostname}:${event.lineno}:${event.colno}`
-    : undefined;
-  reportStartupFailure(event.error ?? event.message, source);
-});
-window.addEventListener('unhandledrejection', (event) => reportStartupFailure(event.reason));
 void boot();

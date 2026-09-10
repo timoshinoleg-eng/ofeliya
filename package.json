@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "bot": "node bot/index.mjs",
     "smoke:bot": "node bot/smoke.mjs",
-    "test:startup": "node tests/startup-font-timeout.mjs"
+    "test:startup": "node tests/startup-font-timeout.mjs && node tests/startup-renderer-contract.mjs"
   },
   "dependencies": {
     "@maxhub/max-bot-api": "^0.3.1",

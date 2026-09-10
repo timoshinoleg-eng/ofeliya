@@ -24,10 +24,12 @@ try {
   const state = await page.evaluate(() => ({
     splash: Boolean(document.querySelector('#splash')),
     canvases: document.querySelectorAll('#game canvas').length,
+    renderer: window.__game?.renderer.constructor.name,
   }));
 
   assert.equal(state.splash, false, 'font readiness must not block the Mini App startup');
   assert.equal(state.canvases, 1, 'Phaser canvas must be created after the font timeout');
+  assert.match(state.renderer ?? '', /^CanvasRenderer/, 'MAX startup must not initialize WebGL');
 } finally {
   await browser?.close();
   await server.close();
