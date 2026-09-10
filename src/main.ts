@@ -3,7 +3,7 @@ import { BootScene } from './scenes/BootScene';
 import { MenuScene } from './scenes/MenuScene';
 import { GameScene } from './scenes/GameScene';
 import { UIScene } from './scenes/UIScene';
-import { reportStartup } from './systems/StartupProbe';
+import { reportStartup, reportStartupFailure } from './systems/StartupProbe';
 
 // Dev-ручка для автотестов: в панели IAB requestAnimationFrame заморожен,
 // поэтому QA прокачивает кадры вручную через __game.loop.step(time).
@@ -74,6 +74,11 @@ async function boot(): Promise<void> {
   if (import.meta.env.DEV) window.__game = game;
 }
 
-window.addEventListener('error', () => reportStartup('uncaught-error'));
-window.addEventListener('unhandledrejection', () => reportStartup('unhandled-rejection'));
+window.addEventListener('error', (event) => {
+  const source = event.filename
+    ? `${new URL(event.filename, window.location.href).hostname}:${event.lineno}:${event.colno}`
+    : undefined;
+  reportStartupFailure(event.error ?? event.message, source);
+});
+window.addEventListener('unhandledrejection', (event) => reportStartupFailure(event.reason));
 void boot();
