@@ -74,12 +74,12 @@ async function boot(): Promise<void> {
   await waitForFonts();
 
   const game = new Phaser.Game({
-    // MAX (Android WebView) может создавать WebGL-контекст с невалидным
-    // framebuffer — Phaser падает до BootScene (фикс с main 5c83390).
-    // В MAX — CANVAS (постэффекты вне WebGL код уже отключает: GameScene
-    // проверяет renderer.type === WebGL, VfxSystem — canvas-safe).
-    // В браузере/на десктопе остаётся WebGL (AUTO) — быстрее и с bloom.
-    type: MessengerBridge.kind === 'max' ? Phaser.CANVAS : Phaser.AUTO,
+    // Некоторые Android WebView в MAX создают WebGL-контекст с невалидным
+    // framebuffer, и Phaser падает до BootScene. Игра использует Canvas-safe
+    // объекты; постэффекты (bloom) вне WebGL автоматически отключаются
+    // (GameScene: fxEnabled проверяет renderer.type === WebGL).
+    // Фикс с main pre-v0.4.1 (5c83390) — закреплён тестами tests/startup-*.mjs.
+    type: Phaser.CANVAS,
     parent: 'game',
     backgroundColor: '#0b0e1a',
     disableContextMenu: true,

@@ -8,6 +8,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "bot:max": "node bot/index.mjs",
+    "smoke:bot": "node bot/smoke.mjs",
+    "test:startup": "node tests/startup-font-timeout.mjs && node tests/startup-renderer-contract.mjs",
     "smoke": "esbuild scripts/smoke-daily.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/smoke-daily.mjs --log-level=error && node node_modules/.cache/smoke-daily.mjs",
     "icons": "node scripts/gen-icons.mjs",
     "server": "node server/index.mjs",
@@ -15,9 +18,11 @@
     "bot": "node server/bot.mjs"
   },
   "dependencies": {
+    "@maxhub/max-bot-api": "^0.3.1",
     "phaser": "^3.90.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "typescript": "^5.6.3",
     "vite": "^6.0.7"
   }

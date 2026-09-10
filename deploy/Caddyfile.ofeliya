@@ -1,0 +1,25 @@
+# Insert these routes before the catch-all handle in the production Caddyfile.
+@ofeliya_runtime path /hub/runtime-config.js
+handle @ofeliya_runtime {
+  uri replace /hub/runtime-config.js /runtime-config.js
+  reverse_proxy ofeliya-static:8080
+}
+
+@ofeliya_webhook path /hub/bot/webhook
+handle @ofeliya_webhook {
+  request_body {
+    max_size 64KB
+  }
+  header -Server
+  reverse_proxy ofeliya-bot:8788
+}
+
+handle_path /hub/* {
+  header {
+    -Server
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+    Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://st.max.ru; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://st.max.ru; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self' https://*.max.ru https://web.max.ru"
+  }
+  reverse_proxy ofeliya-static:8080
+}
