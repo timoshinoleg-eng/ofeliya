@@ -3,6 +3,7 @@ import { BootScene } from './scenes/BootScene';
 import { MenuScene } from './scenes/MenuScene';
 import { GameScene } from './scenes/GameScene';
 import { UIScene } from './scenes/UIScene';
+import { reportStartup } from './systems/StartupProbe';
 
 // Dev-ручка для автотестов: в панели IAB requestAnimationFrame заморожен,
 // поэтому QA прокачивает кадры вручную через __game.loop.step(time).
@@ -37,7 +38,9 @@ async function boot(): Promise<void> {
   // Дождаться загрузки дисплейного шрифта: иначе Phaser запечёт текстуры текста
   // с фолбэком (Arial) и не перерисует их после подгрузки. В MAX Font API
   // может не завершить promise, поэтому шрифт не вправе удерживать заставку.
+  reportStartup('module');
   await waitForFonts();
+  reportStartup('fonts-ready');
 
   const game = new Phaser.Game({
     type: Phaser.AUTO,
@@ -64,10 +67,13 @@ async function boot(): Promise<void> {
     },
     scene: [BootScene, MenuScene, GameScene, UIScene],
   });
+  reportStartup('game-created');
 
   // Dev-ручка для автотестов: в панели IAB requestAnimationFrame заморожен,
   // поэтому QA прокачивает кадры вручную через __game.loop.step(time).
   if (import.meta.env.DEV) window.__game = game;
 }
 
+window.addEventListener('error', () => reportStartup('uncaught-error'));
+window.addEventListener('unhandledrejection', () => reportStartup('unhandled-rejection'));
 void boot();
