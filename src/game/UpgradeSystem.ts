@@ -2,7 +2,13 @@ import type { RunState } from './RunState';
 
 export type UpgradeFamily = 'weapon' | 'core' | 'defense' | 'utility';
 export type UpgradeRarity = 'common' | 'rare';
-export type EvolutionId = 'prism' | 'halo' | 'singularity';
+export type EvolutionId =
+  | 'prism'
+  | 'halo'
+  | 'singularity'
+  | 'vortex'
+  | 'overclock'
+  | 'aegis';
 export type ChoiceKind = 'upgrade' | 'evolution';
 
 export const UPGRADE_FAMILY_LABELS: Record<UpgradeFamily, string> = {
@@ -16,6 +22,9 @@ export const EVOLUTION_NAMES: Record<EvolutionId, string> = {
   prism: 'ПРИЗМА',
   halo: 'ОРЕОЛ',
   singularity: 'СИНГУЛЯРНОСТЬ',
+  vortex: 'ВОРТЕКС',
+  overclock: 'ПЕРЕГРУЗКА',
+  aegis: 'АЭГИС',
 };
 
 export interface UpgradeDef {
@@ -180,6 +189,31 @@ export const UPGRADES: UpgradeDef[] = [
     rarity: 'common',
     apply: (s) => {
       s.regen += 0.6;
+    },
+  },
+  // K3: новое оружие
+  {
+    id: 'comet',
+    shortName: 'КОМЕТА',
+    name: 'Каждый 5-й залп — комета (×2.5, +2 пробития)',
+    desc: 'Раз в несколько залпов летит тяжёлый сгусток, прожигающий толпу',
+    max: 3,
+    family: 'weapon',
+    rarity: 'rare',
+    apply: (s) => {
+      s.cometLevel += 1;
+    },
+  },
+  {
+    id: 'lens',
+    shortName: 'ФОКУС-ЛЕНЗА',
+    name: 'Пули +12% скорость и +15% дальность',
+    desc: 'Импульс летит быстрее и дальше до рассеивания',
+    max: 3,
+    family: 'utility',
+    rarity: 'common',
+    apply: (s) => {
+      s.bulletSpeedMul *= 1.12;
     },
   },
 ];

@@ -268,7 +268,7 @@ export class MenuScene extends Phaser.Scene {
       .text(
         W / 2,
         H - 12 - sb,
-        `mini-app · ${MessengerBridge.kind === 'browser' ? 'browser' : MessengerBridge.platform} · v0.2.0`,
+        `mini-app · ${MessengerBridge.kind === 'browser' ? 'browser' : MessengerBridge.platform} · v0.4.0`,
         { fontFamily: FONT, fontSize: '10px', color: '#5a6480' }
       )
       .setOrigin(0.5, 1)

@@ -41,6 +41,10 @@ export class RunState {
   orbitBlades = 0;
   novaLevel = 0;
   regen = 0;
+  /** K3: КОМЕТА — уровень (0 = нет). */
+  cometLevel = 0;
+  /** K3: ФОКУС-ЛЕНЗА — множитель скорости пуль. */
+  bulletSpeedMul = 1;
 
   stacks: Record<string, number> = {};
   evolutions = new Set<EvolutionId>();
@@ -75,6 +79,25 @@ export class RunState {
 
   get novaInterval(): number {
     return NOVA.intervalMs * Math.max(0.55, 1 - 0.1 * (this.novaLevel - 1));
+  }
+
+  /** K3: КОМЕТА — каждые N залпов (уровень 1: 5, 2: 4, 3: 3; 0 — выкл). */
+  get cometEvery(): number {
+    return this.cometLevel > 0 ? Math.max(3, 6 - this.cometLevel) : 0;
+  }
+
+  /** K3: урон кометы (база × damageMul × множитель уровня). */
+  get cometDamage(): number {
+    return WEAPON.damage * this.damageMul * (2 + 0.5 * this.cometLevel);
+  }
+
+  /** K3: скорость и время жизни пули (ФОКУС-ЛЕНЗА). */
+  get bulletSpeed(): number {
+    return WEAPON.bulletSpeed * this.bulletSpeedMul;
+  }
+
+  get bulletLifetimeMs(): number {
+    return WEAPON.bulletLifetimeMs * (1 + 0.15 * this.stackOf('lens'));
   }
 
   addXp(v: number): number {

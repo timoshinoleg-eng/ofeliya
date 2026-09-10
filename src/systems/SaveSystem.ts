@@ -77,7 +77,14 @@ const DEFAULTS: SaveData = {
   meta: {},
 };
 
-const VALID_EVOLUTIONS = new Set<EvolutionId>(['prism', 'halo', 'singularity']);
+const VALID_EVOLUTIONS = new Set<EvolutionId>([
+  'prism',
+  'halo',
+  'singularity',
+  'vortex',
+  'overclock',
+  'aegis',
+]);
 
 class SaveImpl {
   private data: SaveData = { ...DEFAULTS };

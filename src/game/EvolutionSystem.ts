@@ -41,6 +41,31 @@ export const EVOLUTIONS: EvolutionDef[] = [
     recipe: 'ВОЛНА ЯДРА III + ПОЛЕ СБОРА II',
     eligible: (s) => s.stackOf('nova') >= 3 && s.stackOf('magnet') >= 2,
   },
+  // K3: новые эволюции
+  {
+    id: 'vortex',
+    name: EVOLUTION_NAMES.vortex,
+    effect: 'Нова засасывает врагов к ядру и замедляет их на 2 с',
+    desc: 'Ударная волна становится воронкой: толпа стягивается в центр.',
+    recipe: 'ВОЛНА ЯДРА II + ПОЛЕ СБОРА II',
+    eligible: (s) => s.stackOf('nova') >= 2 && s.stackOf('magnet') >= 2,
+  },
+  {
+    id: 'overclock',
+    name: EVOLUTION_NAMES.overclock,
+    effect: 'Каждые 7 с — автоматический залп из 8 импульсов по кругу',
+    desc: 'Ядро перегружается и сбрасывает энергию во все стороны.',
+    recipe: 'РАЗГОН ПРОТОКОЛА III + ПАРАЛЛЕЛЬНЫЙ ЗАЛП II',
+    eligible: (s) => s.stackOf('rate') >= 3 && s.stackOf('multi') >= 2,
+  },
+  {
+    id: 'aegis',
+    name: EVOLUTION_NAMES.aegis,
+    effect: 'При получении урона — контр-нова вокруг ядра (кулдаун 8 с)',
+    desc: 'Попадание по ядру запускает защитный импульс в обидчика.',
+    recipe: 'БРОНЯ ЯДРА II + КОЛЬЦО ЗАЩИТЫ II',
+    eligible: (s) => s.stackOf('hp') >= 2 && s.stackOf('orbit') >= 2,
+  },
 ];
 
 export function getEvolutionDef(id: EvolutionId): EvolutionDef {

@@ -74,6 +74,12 @@ export class GameScene extends Phaser.Scene {
 
   private nextFireAt = 0;
   private novaAcc = 0;
+  /** K3: ПЕРЕГРУЗКА — аккумулятор авто-залпа (7 с). */
+  private overclockAcc = 0;
+  /** K3: АЭГИС — время, когда контр-нова снова доступна. */
+  private aegisReadyAt = 0;
+  /** K3: КОМЕТА — счётчик залпов. */
+  private shotCounter = 0;
   private queuedLevels = 0;
   awaitingChoice = false;
   pendingChoices: UpgradeDef[] = [];
@@ -160,6 +166,9 @@ export class GameScene extends Phaser.Scene {
     this.finished = false;
     this.nextFireAt = 0;
     this.novaAcc = 0;
+    this.overclockAcc = 0;
+    this.aegisReadyAt = 0;
+    this.shotCounter = 0;
     this.blades = [];
     this.haloRing = null;
     this.hitStopUntil = 0;
@@ -400,6 +409,15 @@ export class GameScene extends Phaser.Scene {
       if (this.novaAcc >= st.novaInterval) {
         this.novaAcc = 0;
         this.fireNova();
+      }
+    }
+
+    // K3: ПЕРЕГРУЗКА — автоматический круговой залп раз в 7 с.
+    if (st.hasEvolution('overclock')) {
+      this.overclockAcc += delta;
+      if (this.overclockAcc >= 7000) {
+        this.overclockAcc = 0;
+        this.fireOverclock();
       }
     }
 
@@ -753,13 +771,27 @@ export class GameScene extends Phaser.Scene {
     if (time < this.nextFireAt) return;
     this.nextFireAt = time + this.runState.fireInterval;
     Sfx.play('shoot');
-    const n = this.runState.projectiles;
+    const st = this.runState;
+    const n = st.projectiles;
     const spread = (WEAPON.spreadDeg * Math.PI) / 180;
-    const prism = this.runState.hasEvolution('prism');
+    const prism = st.hasEvolution('prism');
+    // K3: КОМЕТА — счётчик залпов; на «своем» залпе первый снаряд — комета
+    // (×урон, +2 пробития). Остальные снаряды залпа — обычные.
+    this.shotCounter += 1;
+    const cometNow = st.cometLevel > 0 && this.shotCounter % st.cometEvery === 0;
+    const shootOpts = { speed: st.bulletSpeed, lifetimeMs: st.bulletLifetimeMs };
     for (let i = 0; i < n; i++) {
       const a = ang + (i - (n - 1) / 2) * spread;
       const b = this.bullets.get(this.player.x, this.player.y) as Bullet | null;
-      if (b) b.fire(time, a, this.runState.bulletDamage, this.runState.bulletPierce, prism);
+      if (!b) continue;
+      if (i === 0 && cometNow) {
+        b.fire(time, a, st.cometDamage, st.bulletPierce + 2, false, {
+          ...shootOpts,
+          comet: true,
+        });
+      } else {
+        b.fire(time, a, st.bulletDamage, st.bulletPierce, prism, shootOpts);
+      }
     }
   }
 
@@ -853,6 +885,9 @@ export class GameScene extends Phaser.Scene {
     MessengerBridge.haptic('light');
     if (singularity) this.vfx.singularity(this.player.x, this.player.y, st.novaRadius);
     else this.vfx.nova(this.player.x, this.player.y, st.novaRadius);
+    // K3: ВОРТЕКС — нова засасывает (вместо отброса — к ядру) и замедляет.
+    const vortex = st.hasEvolution('vortex');
+    const now = this.time.now;
     const list = this.enemies.getChildren() as Enemy[];
     for (const e of list) {
       if (!e.active) continue;
@@ -861,7 +896,48 @@ export class GameScene extends Phaser.Scene {
       const d = Math.hypot(dx, dy);
       if (d < st.novaRadius + e.radius) {
         const dd = d || 1;
-        e.takeDamage(st.novaDamage, (dx / dd) * 220, (dy / dd) * 220);
+        const knock = vortex ? -1 : 1;
+        e.takeDamage(st.novaDamage, (dx / dd) * 220 * knock, (dy / dd) * 220 * knock);
+        if (vortex) e.slowUntil = now + 2000;
+      }
+    }
+  }
+
+  /** K3: ПЕРЕГРУЗКА — 8 импульсов по кругу (авто, не зависит от прицела). */
+  private fireOverclock(): void {
+    if (this.finished) return;
+    const st = this.runState;
+    Sfx.play('nova');
+    MessengerBridge.haptic('light');
+    this.atmosphere.pulse(COLORS.orange, 0.18);
+    const N = 8;
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      const b = this.bullets.get(this.player.x, this.player.y) as Bullet | null;
+      if (b) b.fire(this.time.now, a, st.bulletDamage, st.bulletPierce, false, {
+        speed: st.bulletSpeed,
+        lifetimeMs: st.bulletLifetimeMs,
+      });
+    }
+  }
+
+  /** K3: АЭГИС — контр-нова при получении урона (радиус/урон меньше новой). */
+  private fireAegis(): void {
+    if (this.finished) return;
+    const st = this.runState;
+    Sfx.play('nova');
+    const radius = st.novaRadius * 0.7 + 30;
+    const dmg = st.novaDamage * 0.6 + 10;
+    this.vfx.nova(this.player.x, this.player.y, radius);
+    const list = this.enemies.getChildren() as Enemy[];
+    for (const e of list) {
+      if (!e.active) continue;
+      const dx = e.x - this.player.x;
+      const dy = e.y - this.player.y;
+      const d = Math.hypot(dx, dy);
+      if (d < radius + e.radius) {
+        const dd = d || 1;
+        e.takeDamage(dmg, (dx / dd) * 260, (dy / dd) * 260);
       }
     }
   }
@@ -884,12 +960,16 @@ export class GameScene extends Phaser.Scene {
     else b.disableBody(true, true);
   };
 
-  private onPlayerHit = (obj1: unknown, obj2: unknown): void => {
-    const e = obj2 as Enemy;
-    if (!e.active || this.finished) return;
+  /**
+   * Общий урон игроку (контакт врага / снаряд врага). true — урон применён
+   * (i-frames не закрывали), false — засчитан сквозь кадры неуязвимости.
+   * K3: АЭГИС — при попадании запускает контр-нову (кулдаун 8 с).
+   */
+  private applyPlayerDamage(amount: number): boolean {
+    if (this.finished) return false;
     const now = this.time.now;
-    if (now < this.player.hurtUntil) return;
-    this.runState.hp -= e.dmg;
+    if (now < this.player.hurtUntil) return false;
+    this.runState.hp -= amount;
     this.runState.resetNoDamage();
     this.player.markHurt(now);
     Sfx.play('hurt');
@@ -898,6 +978,17 @@ export class GameScene extends Phaser.Scene {
     const s = JUICE.shakeHurt;
     this.cameras.main.shake(s.duration, s.intensity);
     this.hitStop(JUICE.hitStopMs);
+    if (this.runState.hasEvolution('aegis') && now >= this.aegisReadyAt) {
+      this.aegisReadyAt = now + 8000;
+      this.fireAegis();
+    }
+    return true;
+  }
+
+  private onPlayerHit = (obj1: unknown, obj2: unknown): void => {
+    const e = obj2 as Enemy;
+    if (!e.active) return;
+    if (!this.applyPlayerDamage(e.dmg)) return;
     const dx = e.x - this.player.x;
     const dy = e.y - this.player.y;
     const d = Math.hypot(dx, dy) || 1;
@@ -908,19 +999,11 @@ export class GameScene extends Phaser.Scene {
   /** K2: снаряд снайпера долетел до игрока (учитывает i-frames/рывок). */
   private onFoeBulletHit = (obj1: unknown, obj2: unknown): void => {
     const b = obj2 as FoeBullet;
-    if (!b.active || this.finished) return;
-    const now = this.time.now;
-    if (now < this.player.hurtUntil) return;
+    if (!b.active) return;
+    // Гасим ДО проверки урона: overlap дёргается каждый физ-тик, пока снаряд
+    // в контакте; иначе при i-frames он «висел» и бил позже.
     b.disableBody(true, true);
-    this.runState.hp -= b.damage;
-    this.runState.resetNoDamage();
-    this.player.markHurt(now);
-    Sfx.play('hurt');
-    MessengerBridge.haptic('medium');
-    this.cameras.main.flash(140, 255, 60, 100);
-    const s = JUICE.shakeHurt;
-    this.cameras.main.shake(s.duration, s.intensity);
-    this.hitStop(JUICE.hitStopMs);
+    if (!this.applyPlayerDamage(b.damage)) return;
     if (this.runState.hp <= 0) this.finish(false);
   };
 

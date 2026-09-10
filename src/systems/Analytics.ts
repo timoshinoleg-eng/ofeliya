@@ -18,7 +18,7 @@ import { MessengerBridge } from './MessengerBridge';
 import { VkBridge } from './VkBridge';
 
 const URL = (import.meta.env.VITE_ANALYTICS_URL as string | undefined) ?? '';
-const APP_VERSION = '0.3.0';
+const APP_VERSION = '0.4.0';
 const FLUSH_INTERVAL_MS = 30_000;
 const FLUSH_SIZE = 10;
 const BUFFER_KEY = 'ofeliya_analytics_buffer';
