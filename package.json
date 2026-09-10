@@ -9,13 +9,15 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "bot": "node bot/index.mjs",
-    "smoke:bot": "node bot/smoke.mjs"
+    "smoke:bot": "node bot/smoke.mjs",
+    "test:startup": "node tests/startup-font-timeout.mjs"
   },
   "dependencies": {
     "@maxhub/max-bot-api": "^0.3.1",
     "phaser": "^3.90.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "typescript": "^5.6.3",
     "vite": "^6.0.7"
   }
