@@ -23,6 +23,12 @@ export interface LeaderboardEntry {
   level: number;
 }
 
+/**
+ * M-блок: режим управления. 'one' — 1 палец (плавающий стик + авто-прицел,
+ * дефолт, casual); 'dual' — twin-stick (левый стик движение, правый прицел/огонь).
+ */
+export type ControlMode = 'one' | 'dual';
+
 export interface SaveData {
   /** Legacy compatibility alias. New code should use bestSurvivalMs. */
   bestTimeMs: number;
@@ -54,6 +60,8 @@ export interface SaveData {
   bestCombo: number;
   /** K6: выданные мета-достижения (id). */
   metaAchievements: string[];
+  /** M-блок: режим управления ('one' — 1 палец + авто-прицел, 'dual' — twin-stick). */
+  controlMode: ControlMode;
 }
 
 const KEY = 'ofeliya_save_v1';
@@ -87,6 +95,7 @@ const DEFAULTS: SaveData = {
   totalWins: 0,
   bestCombo: 0,
   metaAchievements: [],
+  controlMode: 'one',
 };
 
 const VALID_EVOLUTIONS = new Set<EvolutionId>([
@@ -134,6 +143,7 @@ class SaveImpl {
             totalWins: this.num(parsed.totalWins),
             bestCombo: this.num(parsed.bestCombo),
             metaAchievements: this.stringArray(parsed.metaAchievements).slice(0, 64),
+            controlMode: parsed.controlMode === 'dual' ? 'dual' : 'one',
           };
         }
       }
@@ -151,6 +161,7 @@ class SaveImpl {
       leaderboard: [...this.data.leaderboard],
       meta: { ...this.data.meta },
       metaAchievements: [...this.data.metaAchievements],
+      controlMode: this.data.controlMode,
     };
   }
 

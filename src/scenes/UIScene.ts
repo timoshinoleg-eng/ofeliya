@@ -1,13 +1,13 @@
 import Phaser from 'phaser';
 import { getAchievementDef, type AchievementId } from '../game/AchievementSystem';
-import { COLORS, COMBO, FONT, JUICE, fmtTime } from '../game/config';
+import { COLORS, COMBO, FONT, JUICE, fmtTime, isPortrait } from '../game/config';
 import { getEvolutionDef } from '../game/EvolutionSystem';
 import { buildRefLink, buildShareLink, buildShareText, shareCard } from '../game/share';
 import { IDENTITY } from '../game/identity';
 import { Analytics } from '../systems/Analytics';
 import { ServerClient } from '../systems/ServerClient';
 import { VK_ADS, VkBridge } from '../systems/VkBridge';
-import { Joystick } from '../game/Joystick';
+import { Sticks } from '../game/Sticks';
 import {
   EVOLUTION_NAMES,
   UPGRADE_FAMILY_LABELS,
@@ -18,6 +18,7 @@ import {
 } from '../game/UpgradeSystem';
 import { MessengerBridge } from '../systems/MessengerBridge';
 import { SafeArea } from '../systems/SafeArea';
+import { SaveSystem } from '../systems/SaveSystem';
 import { Sfx } from '../systems/Sfx';
 import { shareClip, type RecordedClip } from '../systems/ShareVideo';
 import type { GameScene } from './GameScene';
@@ -72,7 +73,7 @@ export class UIScene extends Phaser.Scene {
   private killsText!: Phaser.GameObjects.Text;
   private hpText!: Phaser.GameObjects.Text;
   private muteText!: Phaser.GameObjects.Text;
-  private joystick!: Joystick;
+  private sticks!: Sticks;
   private muteBg!: Phaser.GameObjects.Rectangle;
   private hpWarn!: Phaser.GameObjects.Graphics;
   private fanfare!: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -195,8 +196,9 @@ export class UIScene extends Phaser.Scene {
       .setDepth(DEPTH + 1)
       .setVisible(false);
 
-    // Флик (быстрый свайп) → уклонение. Работает и второй рукой, пока джойстик занят.
-    this.joystick = new Joystick(this, () => this.uiBlocked, (dx, dy) => {
+    // M-блок: стики (режим из SaveSystem: 'one' — 1 палец, 'dual' — twin-stick).
+    // Флик (быстрый свайп) → уклонение: один стик / только левая половина.
+    this.sticks = new Sticks(this, SaveSystem.get().controlMode, () => this.uiBlocked, (dx, dy) => {
       if (this.gs) this.gs.tryDodge(dx, dy);
     });
 
@@ -496,7 +498,8 @@ export class UIScene extends Phaser.Scene {
 
     const W = this.scale.width;
     const H = this.scale.height;
-    const compact = H < 620;
+    // M-блок: портрет (MAX/Android) тоже получает компактные размеры модалок.
+    const compact = H < 620 || isPortrait(W, H);
     const c = this.add.container(0, 0).setDepth(100);
     this.modal = c;
 

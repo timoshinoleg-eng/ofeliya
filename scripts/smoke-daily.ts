@@ -84,5 +84,12 @@ for (let i = 0; i < 12; i++) {
 check('лидерборд обрезается до 10', SaveSystem.get().leaderboard.length === 10);
 check('ранг вне топа = null', SaveSystem.recordLeaderboard({ dateKey: 'x', daily: false, win: false, timeMs: 1000, kills: 1, level: 1 }) === null);
 
+// 6. M-блок (MAX/Android): режим управления
+check('controlMode по умолчанию — one', SaveSystem.get().controlMode === 'one');
+SaveSystem.update({ controlMode: 'dual' });
+check('controlMode переключается на dual', SaveSystem.get().controlMode === 'dual');
+SaveSystem.update({ controlMode: 'one' });
+check('controlMode возвращается на one', SaveSystem.get().controlMode === 'one');
+
 console.log(failed === 0 ? '\nALL PASS' : `\n${failed} FAILURES`);
 process.exit(failed === 0 ? 0 : 1);

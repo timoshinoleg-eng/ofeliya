@@ -18,7 +18,7 @@ import { MessengerBridge } from './MessengerBridge';
 import { VkBridge } from './VkBridge';
 
 const URL = (import.meta.env.VITE_ANALYTICS_URL as string | undefined) ?? '';
-const APP_VERSION = '0.4.0';
+const APP_VERSION = '0.4.1';
 const FLUSH_INTERVAL_MS = 30_000;
 const FLUSH_SIZE = 10;
 const BUFFER_KEY = 'ofeliya_analytics_buffer';
@@ -44,7 +44,8 @@ export type AnalyticsEvent =
   | 'game_over_shown'
   | 'shards_earned'
   | 'meta_bought'
-  | 'meta_achievement';
+  | 'meta_achievement'
+  | 'control_mode_changed';
 
 interface QueuedEvent {
   name: AnalyticsEvent;

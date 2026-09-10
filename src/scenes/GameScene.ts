@@ -38,7 +38,8 @@ import { Analytics } from '../systems/Analytics';
 import { AtmosphereSystem } from '../systems/AtmosphereSystem';
 import { MessengerBridge } from '../systems/MessengerBridge';
 import { ServerClient } from '../systems/ServerClient';
-import { SaveSystem } from '../systems/SaveSystem';
+import { SaveSystem, type ControlMode } from '../systems/SaveSystem';
+import { type AimState } from '../game/Sticks';
 import { Sfx } from '../systems/Sfx';
 import { ShareVideo } from '../systems/ShareVideo';
 import { VfxSystem } from '../systems/VfxSystem';
@@ -127,6 +128,8 @@ export class GameScene extends Phaser.Scene {
   private dodgeVy = 0;
   private lastMoveX = 1;
   private lastMoveY = 0;
+  /** M-блок: режим управления на весь забег (смена — со следующего). */
+  private controlMode: ControlMode = 'one';
   /** Реф-бонус (V1): кулдаун рывка −30% на первом забеге по приглашению. */
   private refBuffActive = false;
   /** Rewarded (V6): сколько лечащих бонусов за рекламу уже выдано в этом забеге. */
@@ -139,6 +142,9 @@ export class GameScene extends Phaser.Scene {
 
   create(data?: { daily?: boolean; dateKey?: string }): void {
     this.runState = new RunState();
+    // M-блок: режим управления фиксируется на забег (Sticks живёт в UIScene
+    // и читает тот же SaveSystem; переключение в меню — со следующего забега).
+    this.controlMode = SaveSystem.get().controlMode;
     // Daily: сид от даты → одинаковый забег у всех игроков этого дня.
     this.dailyMode = !!(data && data.daily);
     this.dailyDateKey = (data && data.dateKey) || todayKey();
@@ -832,12 +838,21 @@ export class GameScene extends Phaser.Scene {
   }
 
   private tryFire(time: number): void {
-    const target = this.nearestEnemy(WEAPON.range);
-    if (!target) {
-      this.aimMarker.setVisible(false);
-      return;
+    // M-блок: twin-stick — пока правый стик удержан за dead-zone, огонь идёт
+    // в ЕГО направлении (ручное прицеливание); иначе — авто-прицел (ассист).
+    const aim = this.registry.get('aim') as AimState | undefined;
+    const manual = this.controlMode === 'dual' && !!aim && aim.active;
+    let ang: number;
+    if (manual) {
+      ang = Math.atan2(aim.y, aim.x);
+    } else {
+      const target = this.nearestEnemy(WEAPON.range);
+      if (!target) {
+        this.aimMarker.setVisible(false);
+        return;
+      }
+      ang = Math.atan2(target.y - this.player.y, target.x - this.player.x);
     }
-    const ang = Math.atan2(target.y - this.player.y, target.x - this.player.x);
     this.aimMarker
       .setVisible(true)
       .setPosition(this.player.x + Math.cos(ang) * 22, this.player.y + Math.sin(ang) * 22)
@@ -1167,7 +1182,25 @@ export class GameScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setResolution(2);
-    c.add([title, sub]);
+    // M-блок: в twin-stick подсказка о зонах (левая — движение, правая — прицел).
+    const ctrl = this.add
+      .text(
+        W / 2,
+        H * 0.3 + (this.controlMode === 'dual' ? 52 : 30),
+        this.controlMode === 'dual'
+          ? 'левая половина — движение · правая — прицел и огонь'
+          : IDENTITY.copy.introSub,
+        {
+          fontFamily: FONT,
+          fontSize: '13px',
+          color: this.controlMode === 'dual' ? '#ffe066' : '#aab4d4',
+          align: 'center',
+        }
+      )
+      .setOrigin(0.5)
+      .setResolution(2);
+    if (this.controlMode !== 'dual') ctrl.setVisible(false);
+    c.add([title, sub, ctrl]);
 
     c.setAlpha(0);
     this.tweens.add({ targets: c, alpha: 1, duration: 250 });
