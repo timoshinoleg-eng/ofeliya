@@ -24,6 +24,9 @@ services:
       target: static
     image: ofeliya-static:${OFELIYA_RELEASE:?OFELIYA_RELEASE is required}
     restart: unless-stopped
+    depends_on:
+      score:
+        condition: service_healthy
     networks:
       quiz-battle:
         aliases: [ofeliya-static]
@@ -53,6 +56,12 @@ services:
     networks:
       quiz-battle:
         aliases: [ofeliya-score]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
 networks:
   quiz-battle:
