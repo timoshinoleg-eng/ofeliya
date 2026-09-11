@@ -125,6 +125,7 @@ async function boot(): Promise<void> {
   await viewport.sync();
   await waitForFonts();
 
+  const rendererOverride = explicitRenderer();
   const rendererType = chooseRenderer();
   if (rendererType === Phaser.CANVAS) installCanvasTextResolutionGuard();
 
@@ -152,7 +153,9 @@ async function boot(): Promise<void> {
         antialiasGL: true,
         roundPixels: true,
         powerPreference: 'high-performance',
-        failIfMajorPerformanceCaveat: true,
+        // Normal clients reject software/very slow WebGL. The explicit WebGL QA override is
+        // allowed to use SwiftShader so CI can exercise the High-DPI WebGL path deterministically.
+        failIfMajorPerformanceCaveat: rendererOverride !== 'webgl',
       },
       input: {
         activePointers: 3,
