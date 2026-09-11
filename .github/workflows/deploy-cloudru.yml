@@ -1,0 +1,113 @@
+name: Deploy Cloud.ru production
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: 'Full 40-character main commit SHA. Empty = current main.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ofeliya-cloudru-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: cloudru-production
+    timeout-minutes: 30
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve immutable release SHA
+        id: release
+        shell: bash
+        env:
+          REQUESTED_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -Eeuo pipefail
+          git fetch --prune origin main
+          sha="${REQUESTED_SHA:-}"
+          if [[ -z "$sha" ]]; then
+            sha="$(git rev-parse origin/main)"
+          fi
+          if [[ ! "$sha" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "release_sha must be a full 40-character SHA" >&2
+            exit 2
+          fi
+          git cat-file -e "${sha}^{commit}"
+          if ! git merge-base --is-ancestor "$sha" origin/main; then
+            echo "Refusing deploy: $sha is not contained in origin/main" >&2
+            exit 3
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Validate Cloud.ru SSH configuration
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.CLOUDRU_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.CLOUDRU_DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.CLOUDRU_DEPLOY_SSH_KEY }}
+        run: |
+          set -Eeuo pipefail
+          [[ -n "$DEPLOY_HOST" ]] || { echo 'Missing CLOUDRU_DEPLOY_HOST' >&2; exit 10; }
+          [[ -n "$DEPLOY_USER" ]] || { echo 'Missing CLOUDRU_DEPLOY_USER' >&2; exit 10; }
+          [[ -n "$DEPLOY_KEY" ]] || { echo 'Missing CLOUDRU_DEPLOY_SSH_KEY' >&2; exit 10; }
+
+      - name: Configure SSH
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.CLOUDRU_DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.CLOUDRU_DEPLOY_PORT }}
+          DEPLOY_KEY: ${{ secrets.CLOUDRU_DEPLOY_SSH_KEY }}
+        run: |
+          set -Eeuo pipefail
+          port="${DEPLOY_PORT:-22}"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/cloudru_ofeliya
+          chmod 600 ~/.ssh/cloudru_ofeliya
+          ssh-keyscan -p "$port" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy exact main SHA to Cloud.ru VM
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.CLOUDRU_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.CLOUDRU_DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.CLOUDRU_DEPLOY_PORT }}
+          APP_DIR: ${{ vars.CLOUDRU_OFELIYA_APP_DIR }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+        run: |
+          set -Eeuo pipefail
+          port="${DEPLOY_PORT:-22}"
+          app_dir="${APP_DIR:-/opt/ofeliya}"
+          ssh -i ~/.ssh/cloudru_ofeliya -p "$port" \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "OFELIYA_RELEASE='$RELEASE_SHA' OFELIYA_APP_DIR='$app_dir' bash -s" \
+            < deploy/deploy-cloudru.sh
+
+      - name: Public HTTPS smoke
+        shell: bash
+        env:
+          PUBLIC_URL: ${{ vars.CLOUDRU_OFELIYA_URL }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+        run: |
+          set -Eeuo pipefail
+          if [[ -z "${PUBLIC_URL:-}" ]]; then
+            echo 'CLOUDRU_OFELIYA_URL is not configured; refusing to call deployment verified.' >&2
+            exit 20
+          fi
+          case "$PUBLIC_URL" in
+            https://*) ;;
+            *) echo 'CLOUDRU_OFELIYA_URL must use HTTPS' >&2; exit 20 ;;
+          esac
+          curl --fail --show-error --silent --location --retry 5 --retry-all-errors \
+            --max-time 20 "$PUBLIC_URL" >/dev/null
+          printf 'Cloud.ru public smoke passed for %s at %s\n' "$RELEASE_SHA" "$PUBLIC_URL"

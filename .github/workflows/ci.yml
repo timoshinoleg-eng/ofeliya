@@ -120,6 +120,9 @@ jobs:
       - name: Strain Zero production release contract
         run: node scripts/check-max-rc-production.mjs
 
+      - name: Validate Cloud.ru deployment script
+        run: bash -n deploy/deploy-cloudru.sh
+
       - name: Validate production compose config
         shell: bash
         run: |
