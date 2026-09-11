@@ -30,6 +30,7 @@ const BUTTONS = ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В М
     );
     await ctx.addInitScript(({ width, height }) => {
       localStorage.setItem('ofeliya_save_v1', JSON.stringify({ muted: true, runs: 1 }));
+      sessionStorage.clear();
       window.WebApp = {
         platform: 'android',
         version: '26.20.0',
@@ -60,13 +61,27 @@ const BUTTONS = ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В М
       const visible = texts.filter(
         (obj) => obj.visible !== false && (obj.alpha ?? 1) > 0.01 && typeof obj.getBounds === 'function'
       );
+      const renderer = game.renderer?.constructor?.name ?? '';
+      const title = texts.find((obj) => obj.text === 'OFELIYA');
+      const resolutionViolations = [];
+      if (renderer === 'CanvasRenderer') {
+        for (const obj of texts) {
+          if (typeof obj.resolution === 'number' && obj.resolution !== 1) {
+            resolutionViolations.push({ text: obj.text, resolution: obj.resolution });
+          }
+        }
+      } else if (renderer === 'WebGLRenderer') {
+        if (!title || typeof title.resolution !== 'number' || title.resolution < 2) {
+          resolutionViolations.push({ text: title?.text ?? 'OFELIYA', resolution: title?.resolution ?? null });
+        }
+      } else {
+        resolutionViolations.push({ text: 'renderer', resolution: renderer });
+      }
+
       const overflow = visible
-        .map((obj) => ({ text: obj.text, bounds: obj.getBounds(), resolution: obj.resolution }))
+        .map((obj) => ({ text: obj.text, bounds: obj.getBounds() }))
         .filter(({ bounds }) => bounds.left < 1 || bounds.right > width - 1 || bounds.top < 1 || bounds.bottom > height - 1)
         .map(({ text, bounds }) => ({ text, left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom }));
-      const nonNativeResolution = texts
-        .filter((obj) => typeof obj.resolution === 'number' && obj.resolution !== 1)
-        .map((obj) => ({ text: obj.text, resolution: obj.resolution }));
 
       const isFlowText = (text) =>
         text.startsWith('ОРГАНИЗМ ЕЩЁ НЕ ЗНАЕТ') ||
@@ -96,10 +111,11 @@ const BUTTONS = ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В М
       }
 
       return {
+        renderer,
         scale: [game.scale.width, game.scale.height],
         overflow,
         overlaps,
-        nonNativeResolution,
+        resolutionViolations,
         hasTitle: texts.some((obj) => obj.text === 'OFELIYA'),
         hasChallenge: texts.some((obj) => obj.text === 'ВЫЗОВ ПОЛУЧЕН'),
         hasAction: texts.some((obj) => obj.text === 'ПРИНЯТЬ ВЫЗОВ'),
@@ -114,7 +130,7 @@ const BUTTONS = ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В М
       !menu.hasAction ||
       menu.overflow.length ||
       menu.overlaps.length ||
-      menu.nonNativeResolution.length
+      menu.resolutionViolations.length
     ) {
       throw new Error(`menu ${size.width}x${size.height} failed: ${JSON.stringify(menu)}`);
     }
@@ -139,6 +155,8 @@ const BUTTONS = ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В М
 
     const result = await page.evaluate(({ width, height, buttonLabels }) => {
       const ui = window.__game.scene.getScene('UI');
+      const game = window.__game;
+      const renderer = game.renderer?.constructor?.name ?? '';
       const normalize = (value) => String(value ?? '').replace(/\n/g, ' ');
       const container = ui.children.list.find(
         (obj) => Array.isArray(obj?.list) && obj.list.some(
@@ -148,14 +166,27 @@ const BUTTONS = ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В М
       if (!container) return { missing: 'result container' };
 
       const texts = container.list.filter((obj) => typeof obj.text === 'string');
+      const title = texts.find((obj) => ['ШТАММ УНИЧТОЖЕН', 'ИММУНИТЕТ ПОДАВЛЕН'].includes(normalize(obj.text)));
+      const resolutionViolations = [];
+      if (renderer === 'CanvasRenderer') {
+        for (const obj of texts) {
+          if (typeof obj.resolution === 'number' && obj.resolution !== 1) {
+            resolutionViolations.push({ text: obj.text, resolution: obj.resolution });
+          }
+        }
+      } else if (renderer === 'WebGLRenderer') {
+        if (!title || typeof title.resolution !== 'number' || title.resolution < 2) {
+          resolutionViolations.push({ text: title?.text ?? 'result-title', resolution: title?.resolution ?? null });
+        }
+      } else {
+        resolutionViolations.push({ text: 'renderer', resolution: renderer });
+      }
+
       const overflow = texts
         .filter((obj) => obj.visible !== false && (obj.alpha ?? 1) > 0.01 && typeof obj.getBounds === 'function')
-        .map((obj) => ({ text: obj.text, bounds: obj.getBounds(), resolution: obj.resolution }))
+        .map((obj) => ({ text: obj.text, bounds: obj.getBounds() }))
         .filter(({ bounds }) => bounds.left < 1 || bounds.right > width - 1 || bounds.top < 1 || bounds.bottom > height - 1)
         .map(({ text, bounds }) => ({ text, left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom }));
-      const nonNativeResolution = texts
-        .filter((obj) => typeof obj.resolution === 'number' && obj.resolution !== 1)
-        .map((obj) => ({ text: obj.text, resolution: obj.resolution }));
 
       const buttons = buttonLabels.map((label) => {
         const text = texts.find((obj) => obj.text === label);
@@ -183,13 +214,13 @@ const BUTTONS = ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В М
         }
       }
 
-      return { overflow, nonNativeResolution, buttons, overlaps };
+      return { renderer, overflow, resolutionViolations, buttons, overlaps };
     }, { ...size, buttonLabels: BUTTONS });
 
     if (
       result.missing ||
       result.overflow?.length ||
-      result.nonNativeResolution?.length ||
+      result.resolutionViolations?.length ||
       result.buttons?.some((item) => !item.ok) ||
       result.overlaps?.length
     ) {
