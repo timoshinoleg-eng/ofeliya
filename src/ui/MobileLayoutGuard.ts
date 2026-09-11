@@ -28,7 +28,8 @@ function menuSignature(scene: Phaser.Scene, texts: Phaser.GameObjects.Text[]): s
 
 function guardMenu(scene: Phaser.Scene): void {
   const W = scene.scale.width;
-  if (W <= 0) return;
+  const H = scene.scale.height;
+  if (W <= 0 || H <= 0) return;
 
   const texts = textObjects(scene);
   const signature = menuSignature(scene, texts);
@@ -46,6 +47,17 @@ function guardMenu(scene: Phaser.Scene): void {
 
   const hook = texts.find((text) => text.text.startsWith('ОРГАНИЗМ ЕЩЁ НЕ ЗНАЕТ'));
   if (hook) fitToWidth(hook, W - 34, 0.68);
+
+  const subtitle = texts.find((text) => text.text.startsWith('Мутируй быстрее'));
+  const carrier = texts.find((text) => text.text.startsWith('Носитель:'));
+  // The carrier greeting is useful context, not a release-critical control. On short MAX
+  // viewports it competes with the challenge card, so omit it instead of shrinking every
+  // important challenge label into unreadable text.
+  if (carrier && H < 680) carrier.setVisible(false);
+  if (hook && subtitle && H < 620) {
+    const subtitleHalf = subtitle.getBounds().height / 2;
+    subtitle.setY(hook.getBounds().bottom + 12 + subtitleHalf);
+  }
 
   const challengeHeader = byExact('ВЫЗОВ ПОЛУЧЕН');
   if (challengeHeader) fitToWidth(challengeHeader, Math.min(W - 64, 286), 0.72);
