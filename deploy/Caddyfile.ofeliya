@@ -1,11 +1,15 @@
-# Insert these routes before the catch-all handle in the production Caddyfile.
-@ofeliya_runtime path /hub/runtime-config.js
+# OFELIYA owns its own production namespace. Do not reuse /hub/* here: that
+# route belongs to timoshinoleg-eng/hub and caused MAX to open the Hub/old app.
+# Configure the MAX Mini App URL as https://<public-host>/ofeliya/.
+redir /ofeliya /ofeliya/ 308
+
+@ofeliya_runtime path /ofeliya/runtime-config.js
 handle @ofeliya_runtime {
-  uri replace /hub/runtime-config.js /runtime-config.js
+  uri replace /ofeliya/runtime-config.js /runtime-config.js
   reverse_proxy ofeliya-static:8080
 }
 
-@ofeliya_webhook path /hub/bot/webhook
+@ofeliya_webhook path /ofeliya/bot/webhook
 handle @ofeliya_webhook {
   request_body {
     max_size 64KB
@@ -14,7 +18,7 @@ handle @ofeliya_webhook {
   reverse_proxy ofeliya-bot:8788
 }
 
-handle_path /hub/* {
+handle_path /ofeliya/* {
   header {
     -Server
     Referrer-Policy "strict-origin-when-cross-origin"
