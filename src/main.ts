@@ -14,6 +14,7 @@ declare global {
 }
 
 const FONT_READY_TIMEOUT_MS = 700;
+const CANVAS_FALLBACK_KEY = 'ofeliya_canvas_fallback_v2';
 
 function waitForFonts(): Promise<void> {
   const fonts = document.fonts;
@@ -34,15 +35,10 @@ function waitForFonts(): Promise<void> {
 }
 
 /**
- * Phaser Text resolution > 1 is useful under WebGL, but in the Canvas renderer used by the
- * MAX reliability fallback it can make the rasterized glyphs visibly larger than their
- * logical getBounds() box. That is especially destructive on a 360 px Mini App viewport:
- * automated bounds checks pass while the actual canvas clips titles and button labels.
- *
- * Keep every Canvas text texture at native resolution. Scenes may continue to call
- * setResolution(2); the guard intentionally normalizes those calls to 1 so layout bounds and
- * rendered pixels agree. If WebGL is re-enabled later, remove this guard together with the
- * Canvas-only renderer contract.
+ * Phaser Text resolution > 1 is desirable in WebGL because it keeps the UI crisp on High-DPI
+ * phones. The Canvas renderer has a different failure mode in our MAX fallback: high-resolution
+ * text textures can render larger than their logical getBounds() box. Only clamp Text resolution
+ * when we intentionally use Canvas; WebGL keeps the scenes' existing setResolution(2) calls.
  */
 function installCanvasTextResolutionGuard(): void {
   const proto = Phaser.GameObjects.Text.prototype as typeof Phaser.GameObjects.Text.prototype & {
@@ -60,6 +56,66 @@ function installCanvasTextResolutionGuard(): void {
   proto.__ofeliyaCanvasResolutionGuard = true;
 }
 
+function explicitRenderer(): 'canvas' | 'webgl' | null {
+  const value = new URLSearchParams(window.location.search).get('renderer');
+  if (value === 'canvas' || value === 'webgl') return value;
+  return null;
+}
+
+function webGLPreflight(): boolean {
+  const canvas = document.createElement('canvas');
+  let gl: WebGLRenderingContext | WebGL2RenderingContext | null = null;
+  try {
+    gl =
+      (canvas.getContext('webgl2', {
+        antialias: true,
+        failIfMajorPerformanceCaveat: true,
+      }) as WebGL2RenderingContext | null) ??
+      (canvas.getContext('webgl', {
+        antialias: true,
+        failIfMajorPerformanceCaveat: true,
+      }) as WebGLRenderingContext | null);
+    if (!gl) return false;
+    return gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+  } catch {
+    return false;
+  } finally {
+    try {
+      gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    } catch {
+      // Best-effort probe cleanup only.
+    }
+  }
+}
+
+function chooseRenderer(): number {
+  const override = explicitRenderer();
+  if (override === 'canvas') return Phaser.CANVAS;
+  if (override === 'webgl') return webGLPreflight() ? Phaser.WEBGL : Phaser.CANVAS;
+
+  if (sessionStorage.getItem(CANVAS_FALLBACK_KEY) === '1') return Phaser.CANVAS;
+  return webGLPreflight() ? Phaser.WEBGL : Phaser.CANVAS;
+}
+
+function rememberCanvasFallback(): boolean {
+  if (sessionStorage.getItem(CANVAS_FALLBACK_KEY) === '1') return false;
+  sessionStorage.setItem(CANVAS_FALLBACK_KEY, '1');
+  return true;
+}
+
+function installWebGLRecovery(game: Phaser.Game): void {
+  if (game.renderer.type !== Phaser.WEBGL) return;
+  game.canvas.addEventListener(
+    'webglcontextlost',
+    (event) => {
+      event.preventDefault();
+      if (!rememberCanvasFallback()) return;
+      window.location.reload();
+    },
+    { once: true }
+  );
+}
+
 async function boot(): Promise<void> {
   const host = document.getElementById('game');
   if (!host) throw new Error('Missing #game host');
@@ -70,36 +126,49 @@ async function boot(): Promise<void> {
   await viewport.sync();
   await waitForFonts();
 
-  installCanvasTextResolutionGuard();
+  const rendererType = chooseRenderer();
+  if (rendererType === Phaser.CANVAS) installCanvasTextResolutionGuard();
 
-  const game = new Phaser.Game({
-    // MAX Android WebView has shown invalid WebGL framebuffer startup failures in production.
-    // Strain Zero gameplay and its core presentation are Canvas-safe, so reliability wins for RC QA.
-    type: Phaser.CANVAS,
-    parent: host,
-    backgroundColor: '#12070d',
-    disableContextMenu: true,
-    scale: {
-      mode: Phaser.Scale.RESIZE,
-      autoCenter: Phaser.Scale.NO_CENTER,
-      width: host.clientWidth || '100%',
-      height: host.clientHeight || '100%',
-    },
-    physics: {
-      default: 'arcade',
-      arcade: { debug: false },
-    },
-    render: {
-      antialias: true,
-      roundPixels: true,
-      powerPreference: 'high-performance',
-    },
-    input: {
-      activePointers: 3,
-    },
-    scene: [BootScene, MenuScene, GameScene, UIScene],
-  });
+  let game: Phaser.Game;
+  try {
+    game = new Phaser.Game({
+      // Prefer WebGL for sharp High-DPI text and effects. If WebGL is unavailable or loses its
+      // context in a problematic MAX Android WebView, reload once into the proven Canvas fallback.
+      type: rendererType,
+      parent: host,
+      backgroundColor: '#12070d',
+      disableContextMenu: true,
+      scale: {
+        mode: Phaser.Scale.RESIZE,
+        autoCenter: Phaser.Scale.NO_CENTER,
+        width: host.clientWidth || '100%',
+        height: host.clientHeight || '100%',
+      },
+      physics: {
+        default: 'arcade',
+        arcade: { debug: false },
+      },
+      render: {
+        antialias: true,
+        antialiasGL: true,
+        roundPixels: true,
+        powerPreference: 'high-performance',
+        failIfMajorPerformanceCaveat: true,
+      },
+      input: {
+        activePointers: 3,
+      },
+      scene: [BootScene, MenuScene, GameScene, UIScene],
+    });
+  } catch (error) {
+    if (rendererType === Phaser.WEBGL && rememberCanvasFallback()) {
+      window.location.reload();
+      return;
+    }
+    throw error;
+  }
 
+  installWebGLRecovery(game);
   installMobileLayoutGuard(game);
   viewport.attachGame(game);
   await viewport.sync();
