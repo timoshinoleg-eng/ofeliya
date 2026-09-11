@@ -11,4 +11,10 @@ export default defineConfig({
   server: {
     host: true,
   },
+  // Render QA serves the production bundle through `vite preview`.
+  // Vite 6 blocks unknown Host headers by default, so allow only the dedicated
+  // Strain Zero QA hostname instead of disabling host validation globally.
+  preview: {
+    allowedHosts: ['ofeliya-strain-zero-main-qa.onrender.com'],
+  },
 });
