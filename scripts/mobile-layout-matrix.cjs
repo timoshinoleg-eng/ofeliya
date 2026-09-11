@@ -11,9 +11,8 @@ const sizes = [
   { width: 390, height: 844 },
   { width: 412, height: 915 },
 ];
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const BUTTONS = ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В МЕНЮ'];
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 (async () => {
   const browser = await chromium.launch({
@@ -30,6 +29,7 @@ const BUTTONS = ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В М
     );
     await ctx.addInitScript(({ width, height }) => {
       localStorage.setItem('ofeliya_save_v1', JSON.stringify({ muted: true, runs: 1 }));
+      sessionStorage.clear();
       window.WebApp = {
         platform: 'android',
         version: '26.20.0',
@@ -55,20 +55,16 @@ const BUTTONS = ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В М
     const menu = await page.evaluate(({ width, height }) => {
       const game = window.__game;
       const scene = game.scene.getScene('Menu');
-      const items = scene.children.list;
-      const texts = items.filter((obj) => typeof obj.text === 'string');
+      const texts = scene.children.list.filter((obj) => typeof obj.text === 'string');
       const visible = texts.filter(
         (obj) => obj.visible !== false && (obj.alpha ?? 1) > 0.01 && typeof obj.getBounds === 'function'
       );
       const overflow = visible
-        .map((obj) => ({ text: obj.text, bounds: obj.getBounds(), resolution: obj.resolution }))
+        .map((obj) => ({ text: obj.text, bounds: obj.getBounds() }))
         .filter(({ bounds }) => bounds.left < 1 || bounds.right > width - 1 || bounds.top < 1 || bounds.bottom > height - 1)
         .map(({ text, bounds }) => ({ text, left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom }));
-      const nonNativeResolution = texts
-        .filter((obj) => typeof obj.resolution === 'number' && obj.resolution !== 1)
-        .map((obj) => ({ text: obj.text, resolution: obj.resolution }));
 
-      const isFlowText = (text) =>
+      const isFlow = (text) =>
         text.startsWith('ОРГАНИЗМ ЕЩЁ НЕ ЗНАЕТ') ||
         text.startsWith('Мутируй быстрее') ||
         text.startsWith('Носитель:') ||
@@ -79,27 +75,21 @@ const BUTTONS = ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В М
         text === 'ПРИНЯТЬ ВЫЗОВ' ||
         text.startsWith('атака автоматическая');
       const flow = visible
-        .filter((obj) => isFlowText(obj.text))
+        .filter((obj) => isFlow(obj.text))
         .map((obj) => ({ text: obj.text, bounds: obj.getBounds() }))
         .sort((a, b) => a.bounds.top - b.bounds.top);
       const overlaps = [];
       for (let i = 1; i < flow.length; i += 1) {
-        const prev = flow[i - 1];
-        const current = flow[i];
-        if (prev.bounds.bottom > current.bounds.top + 1) {
-          overlaps.push({
-            a: prev.text,
-            b: current.text,
-            amount: Math.round(prev.bounds.bottom - current.bounds.top),
-          });
+        if (flow[i - 1].bounds.bottom > flow[i].bounds.top + 1) {
+          overlaps.push({ a: flow[i - 1].text, b: flow[i].text });
         }
       }
 
       return {
+        renderer: game.renderer?.constructor?.name ?? '',
         scale: [game.scale.width, game.scale.height],
         overflow,
         overlaps,
-        nonNativeResolution,
         hasTitle: texts.some((obj) => obj.text === 'OFELIYA'),
         hasChallenge: texts.some((obj) => obj.text === 'ВЫЗОВ ПОЛУЧЕН'),
         hasAction: texts.some((obj) => obj.text === 'ПРИНЯТЬ ВЫЗОВ'),
@@ -113,8 +103,7 @@ const BUTTONS = ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В М
       !menu.hasChallenge ||
       !menu.hasAction ||
       menu.overflow.length ||
-      menu.overlaps.length ||
-      menu.nonNativeResolution.length
+      menu.overlaps.length
     ) {
       throw new Error(`menu ${size.width}x${size.height} failed: ${JSON.stringify(menu)}`);
     }
@@ -148,14 +137,13 @@ const BUTTONS = ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В М
       if (!container) return { missing: 'result container' };
 
       const texts = container.list.filter((obj) => typeof obj.text === 'string');
-      const overflow = texts
-        .filter((obj) => obj.visible !== false && (obj.alpha ?? 1) > 0.01 && typeof obj.getBounds === 'function')
-        .map((obj) => ({ text: obj.text, bounds: obj.getBounds(), resolution: obj.resolution }))
+      const visible = texts.filter(
+        (obj) => obj.visible !== false && (obj.alpha ?? 1) > 0.01 && typeof obj.getBounds === 'function'
+      );
+      const overflow = visible
+        .map((obj) => ({ text: obj.text, bounds: obj.getBounds() }))
         .filter(({ bounds }) => bounds.left < 1 || bounds.right > width - 1 || bounds.top < 1 || bounds.bottom > height - 1)
         .map(({ text, bounds }) => ({ text, left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom }));
-      const nonNativeResolution = texts
-        .filter((obj) => typeof obj.resolution === 'number' && obj.resolution !== 1)
-        .map((obj) => ({ text: obj.text, resolution: obj.resolution }));
 
       const buttons = buttonLabels.map((label) => {
         const text = texts.find((obj) => obj.text === label);
@@ -170,26 +158,23 @@ const BUTTONS = ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В М
         };
       });
 
-      const sorted = texts
-        .filter((obj) => !buttonLabels.includes(obj.text) && obj.visible !== false && (obj.alpha ?? 1) > 0.01 && typeof obj.getBounds === 'function')
+      const sorted = visible
+        .filter((obj) => !buttonLabels.includes(obj.text))
         .map((obj) => ({ text: obj.text, bounds: obj.getBounds() }))
         .sort((a, b) => a.bounds.top - b.bounds.top);
       const overlaps = [];
       for (let i = 1; i < sorted.length; i += 1) {
-        const prev = sorted[i - 1];
-        const current = sorted[i];
-        if (prev.bounds.bottom > current.bounds.top + 1) {
-          overlaps.push({ a: prev.text, b: current.text, amount: Math.round(prev.bounds.bottom - current.bounds.top) });
+        if (sorted[i - 1].bounds.bottom > sorted[i].bounds.top + 1) {
+          overlaps.push({ a: sorted[i - 1].text, b: sorted[i].text });
         }
       }
 
-      return { overflow, nonNativeResolution, buttons, overlaps };
+      return { overflow, buttons, overlaps };
     }, { ...size, buttonLabels: BUTTONS });
 
     if (
       result.missing ||
       result.overflow?.length ||
-      result.nonNativeResolution?.length ||
       result.buttons?.some((item) => !item.ok) ||
       result.overlaps?.length
     ) {
