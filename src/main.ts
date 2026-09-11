@@ -62,19 +62,17 @@ function explicitRenderer(): 'canvas' | 'webgl' | null {
   return null;
 }
 
-function webGLPreflight(): boolean {
+function webGLPreflight(allowMajorPerformanceCaveat = false): boolean {
   const canvas = document.createElement('canvas');
   let gl: WebGLRenderingContext | WebGL2RenderingContext | null = null;
   try {
+    const attrs: WebGLContextAttributes = {
+      antialias: true,
+      failIfMajorPerformanceCaveat: !allowMajorPerformanceCaveat,
+    };
     gl =
-      (canvas.getContext('webgl2', {
-        antialias: true,
-        failIfMajorPerformanceCaveat: true,
-      }) as WebGL2RenderingContext | null) ??
-      (canvas.getContext('webgl', {
-        antialias: true,
-        failIfMajorPerformanceCaveat: true,
-      }) as WebGLRenderingContext | null);
+      (canvas.getContext('webgl2', attrs) as WebGL2RenderingContext | null) ??
+      (canvas.getContext('webgl', attrs) as WebGLRenderingContext | null);
     if (!gl) return false;
     return gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
   } catch {
@@ -91,7 +89,8 @@ function webGLPreflight(): boolean {
 function chooseRenderer(): number {
   const override = explicitRenderer();
   if (override === 'canvas') return Phaser.CANVAS;
-  if (override === 'webgl') return webGLPreflight() ? Phaser.WEBGL : Phaser.CANVAS;
+  // Explicit WebGL is a diagnostics/QA override, so allow software WebGL in CI.
+  if (override === 'webgl') return webGLPreflight(true) ? Phaser.WEBGL : Phaser.CANVAS;
 
   if (sessionStorage.getItem(CANVAS_FALLBACK_KEY) === '1') return Phaser.CANVAS;
   return webGLPreflight() ? Phaser.WEBGL : Phaser.CANVAS;
