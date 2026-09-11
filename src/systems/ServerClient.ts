@@ -135,13 +135,16 @@ export const ServerClient = {
     ).then((r) => (r?.ok ? r.season : null));
   },
 
-  /** Зафиксировать реферальное рёбро (legacy; текущий GameScene передаёт ref вместе со score). */
+  /**
+   * Legacy compatibility shim. Referral writes now happen only as part of the
+   * authenticated /api/score submission. Production reverse-proxy blocks
+   * POST /api/ref, so this intentionally performs no network request.
+   */
   sendRef(from: string, toUid: string, platform: MessengerKind): Promise<{ first: boolean } | null> {
-    if (!from || !toUid) return Promise.resolve(null);
-    return request<{ ok: boolean; first: boolean }>('/api/ref', {
-      method: 'POST',
-      body: JSON.stringify({ from, to: toUid, platform }),
-    }).then((r) => (r?.ok ? { first: r.first } : null));
+    void from;
+    void toUid;
+    void platform;
+    return Promise.resolve(null);
   },
 
   /**
