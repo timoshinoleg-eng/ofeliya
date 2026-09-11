@@ -77,6 +77,9 @@ jobs:
       - name: MAX viewport challenge and legal browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/browser-smoke.cjs
 
+      - name: MAX compact viewport matrix
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/mobile-layout-matrix.cjs
+
       - name: Upload browser smoke captures
         if: always()
         uses: actions/upload-artifact@v4
