@@ -70,7 +70,7 @@ const BUTTONS = ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В М
             resolutionViolations.push({ text: obj.text, resolution: obj.resolution });
           }
         }
-      } else if (renderer === 'WebGLRenderer') {
+      } else if (renderer.startsWith('WebGLRenderer')) {
         if (!title || typeof title.resolution !== 'number' || title.resolution < 2) {
           resolutionViolations.push({ text: title?.text ?? 'OFELIYA', resolution: title?.resolution ?? null });
         }
@@ -174,7 +174,7 @@ const BUTTONS = ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В М
             resolutionViolations.push({ text: obj.text, resolution: obj.resolution });
           }
         }
-      } else if (renderer === 'WebGLRenderer') {
+      } else if (renderer.startsWith('WebGLRenderer')) {
         if (!title || typeof title.resolution !== 'number' || title.resolution < 2) {
           resolutionViolations.push({ text: title?.text ?? 'result-title', resolution: title?.resolution ?? null });
         }
