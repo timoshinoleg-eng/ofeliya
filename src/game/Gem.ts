@@ -8,7 +8,7 @@ export class Gem extends Phaser.Physics.Arcade.Sprite {
   private gs: GameScene | null = null;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
-    super(scene, x, y, 'gem');
+    super(scene, x, y, 'rna-fragment');
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setDepth(5);
@@ -26,13 +26,21 @@ export class Gem extends Phaser.Physics.Arcade.Sprite {
   preUpdate(time: number, delta: number): void {
     super.preUpdate(time, delta);
     if (!this.active || !this.gs) return;
+    this.setRotation(Math.sin(time * 0.003 + this.x * 0.01) * 0.18);
     const p = this.gs.player;
     const dx = p.x - this.x;
     const dy = p.y - this.y;
     const d = Math.hypot(dx, dy) || 1;
     const body = this.body as Phaser.Physics.Arcade.Body;
-    if (d < this.gs.runState.magnetRadius) {
-      body.setVelocity((dx / d) * GEM.attractSpeed, (dy / d) * GEM.attractSpeed);
+
+    // Onboarding contract: the first meaningful RNA drop contains enough XP for level 2.
+    // Pull that one drop in from anywhere so a passive first-time player still sees the
+    // mutation choice in the opening seconds. Normal magnet rules resume after level 1.
+    const openingMutationPickup =
+      this.gs.runState.level === 1 && this.value >= this.gs.runState.xpNext;
+    if (openingMutationPickup || d < this.gs.runState.magnetRadius) {
+      const speed = openingMutationPickup ? GEM.attractSpeed * 1.35 : GEM.attractSpeed;
+      body.setVelocity((dx / d) * speed, (dy / d) * speed);
     } else if (body.velocity.lengthSq() > 1) {
       body.setVelocity(body.velocity.x * 0.85, body.velocity.y * 0.85);
     }

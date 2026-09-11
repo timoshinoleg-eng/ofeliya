@@ -1,102 +1,55 @@
+import { PERFORMANCE } from '../systems/PerformanceProfile';
+
 // Вся стартовая балансировка игры — в этом файле.
 
 export const COLORS = {
-  bg: 0x0b0e1a,
-  cyan: 0x35e0ff,
-  magenta: 0xff4fd8,
-  orange: 0xffa645,
-  purple: 0x9d5cff,
-  gold: 0xffe066,
-  red: 0xff3860,
-  green: 0x7dff6e,
-  white: 0xffffff,
-  panel: 0x141a2e,
-  panelHover: 0x1b2440,
-  stroke: 0x2a3452,
+  bg: 0x12070d,
+  cyan: 0x8fe8ff,
+  magenta: 0xff4fb5,
+  orange: 0xff9b66,
+  purple: 0x9b6dff,
+  gold: 0xffd56a,
+  red: 0xff3e5f,
+  green: 0x7fffa1,
+  white: 0xfff4ec,
+  panel: 0x1d0d18,
+  panelHover: 0x2a1222,
+  stroke: 0x583044,
+  blood: 0xb92c42,
+  plasma: 0x38101d,
+  immune: 0xe8faff,
+  virus: 0xff4fb5,
 };
 
 export const FONT = "'Chakra Petch', Arial, sans-serif";
 
-/**
- * M-блок (MAX/Android): портретная вёрстка. Мессенджеры (MAX) держат
- * мини-приложение вертикально (~360×780 CSS px), поэтому «компактный»
- * лейаут должен срабатывать и по форме экрана, а не только по высоте.
- */
-export const isPortrait = (w: number, h: number): boolean => h > w * 1.15;
-
-/**
- * Встроенные постэффекты Phaser 3.60+ (только WebGL).
- * При просадках на слабых устройствах выключить enabled — канвас-режим
- * автоматически вернётся к старой виньетке-текстуре.
- */
+/** Visual parameters. PerformanceProfile is the single authority for whether postFX are enabled. */
 export const POSTFX = {
-  enabled: true,
+  enabled: PERFORMANCE.postFx,
   bloom: { strength: 0.8, blurStrength: 0.9, steps: 4 },
   vignette: { radius: 0.72, strength: 0.6 },
 };
 
-/**
- * Параметры «сочности» (game feel). Вынесены отдельно от баланса: крутить их
- * можно без риска сломать матчасть.
- *
- * hitStop — короткий фриз симуляции на важных событиях (смерть элиты/босса,
- * урон игроку). 50–90 мс читаются как «удар», а не как лаг. minGapMs защищает
- * от дробления: частые фризы подряд превращают игру в слайд-шоу.
- */
 export const JUICE = {
   hitStopMs: 55,
   hitStopBossMs: 90,
   hitStopMinGapMs: 170,
-  /** Пул всплывающих цифр урона: в бою только переиспользуем, без аллокаций. */
   dmgTextPool: 22,
   dmgTextMs: 620,
-  /** Минимальный интервал между новыми цифрами (кроме склейки). */
   dmgTextMinGapMs: 50,
-  /** Попадания ближе чем N мс и R px склеиваются в одну цифру — читаемее. */
   dmgTextMergeMs: 130,
   dmgTextMergeDist: 34,
-  /** Порог «крита»: другая цифра и цвет. */
   critDamage: 30,
-  /** Ниже этой доли HP включается пульсирующая красная рамка. */
   lowHpFraction: 0.3,
   shakeHurt: { duration: 190, intensity: 0.009 },
   shakeEliteKill: { duration: 150, intensity: 0.006 },
-  /** Трейл игрока: след каждые N мс, живёт trailFadeMs. */
   trailEveryMs: 55,
   trailFadeMs: 260,
   trailPool: 8,
 };
 
-/**
- * Комбо-счётчик: серия убийств без пауз. Чисто визуальная мотивация «ещё разок»,
- * на баланс не влияет (в дуэлях пригодится как метрика мастерства).
- */
-export const COMBO = {
-  /** Сколько держится серия после последнего убийства. */
-  windowMs: 2500,
-  /** Ниже этого значения счётчик не показываем — не засорять экран. */
-  showFrom: 3,
-};
-
-export const PLAYER = {
-  hp: 100,
-  speed: 180,
-  iframeMs: 700,
-};
-
-/**
- * Уклонение (dodge/рывок): свайп-флик на мобильном, Space/Shift на десктопе.
- * i-frames на всё время рывка + небольшой запас. Кулдаун длиннее рывка —
- * dodge — осознанное действие, а не спам.
- */
-export const DODGE = {
-  durationMs: 220,
-  cooldownMs: 1100,
-  speed: 640,
-  /** Запас i-frames после конца рывка, мс. */
-  iframeExtraMs: 80,
-};
-
+export const COMBO = { windowMs: 2500, showFrom: 3 };
+export const PLAYER = { hp: 100, speed: 180, iframeMs: 700 };
 export const WEAPON = {
   damage: 10,
   fireIntervalMs: 550,
@@ -105,52 +58,14 @@ export const WEAPON = {
   range: 380,
   spreadDeg: 9,
 };
+export const ORBIT = { damage: 11, radius: 82, speedDeg: 260, hitCooldownMs: 340 };
+export const NOVA = { damage: 15, radius: 140, intervalMs: 2500 };
+export const GEM = { magnetRadius: 90, attractSpeed: 460 };
 
-export const ORBIT = {
-  damage: 11,
-  radius: 82,
-  speedDeg: 260,
-  hitCooldownMs: 340,
-};
+/** Момент появления финального иммунного ответа — победа, если уничтожить его. */
+export const RUN = { bossTimeMs: 5 * 60 * 1000, bossPhaseSpawnMul: 0.35 };
 
-export const NOVA = {
-  damage: 15,
-  radius: 140,
-  intervalMs: 2500,
-};
-
-export const GEM = {
-  magnetRadius: 90,
-  attractSpeed: 460,
-};
-
-/** Момент появления босса — победа, если убить его. */
-export const RUN = {
-  bossTimeMs: 5 * 60 * 1000,
-  /**
-   * Во сколько раз реже спавнятся обычные враги после появления босса.
-   * 0.35 → интервал ×2.9: босс читается как дуэль, а не теряется в толпе.
-   */
-  bossPhaseSpawnMul: 0.35,
-};
-
-export type EnemyKind =
-  | 'swarm'
-  | 'runner'
-  | 'brute'
-  | 'boss'
-  /** K2: делится на 2–3 мелких при смерти. */
-  | 'splitter'
-  /** K2: мелкий потомок сплиттера (спавнится только при его смерти). */
-  | 'minion'
-  /** K2: фронтальный щит — пули спереди бьют на -78%. */
-  | 'shield'
-  /** K2: держит дистанцию и стреляет. */
-  | 'sniper'
-  /** K5: медленный, взрывается при смерти (АОЕ по игроку). */
-  | 'bomber'
-  /** K5: неподвижная, детонирует при сближении или по урону. */
-  | 'mine';
+export type EnemyKind = 'swarm' | 'runner' | 'brute' | 'boss';
 
 export interface EnemyDef {
   tex: string;
@@ -163,116 +78,18 @@ export interface EnemyDef {
 }
 
 export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
-  swarm: { tex: 'enemy-swarm', hp: 20, speed: 92, dmg: 8, xp: 1, scale: 1, radius: 11 },
-  runner: { tex: 'enemy-runner', hp: 12, speed: 152, dmg: 6, xp: 1, scale: 1, radius: 10 },
-  brute: { tex: 'enemy-brute', hp: 85, speed: 56, dmg: 16, xp: 4, scale: 1, radius: 13 },
-  boss: { tex: 'boss', hp: 2600, speed: 66, dmg: 26, xp: 0, scale: 1, radius: 25 },
-  splitter: { tex: 'enemy-splitter', hp: 55, speed: 78, dmg: 10, xp: 3, scale: 1, radius: 13 },
-  minion: { tex: 'enemy-minion', hp: 8, speed: 175, dmg: 4, xp: 1, scale: 0.7, radius: 8 },
-  shield: { tex: 'enemy-shield', hp: 130, speed: 48, dmg: 14, xp: 5, scale: 1.1, radius: 15 },
-  sniper: { tex: 'enemy-sniper', hp: 40, speed: 85, dmg: 9, xp: 4, scale: 1, radius: 11 },
-  bomber: { tex: 'enemy-bomber', hp: 40, speed: 58, dmg: 10, xp: 4, scale: 1.15, radius: 14 },
-  mine: { tex: 'enemy-mine', hp: 120, speed: 0, dmg: 0, xp: 3, scale: 1, radius: 12 },
-};
-
-/** K2: снаряды снайпера (стреляют В игрока). */
-export const FOE_BULLET = {
-  speed: 200,
-  dmg: 8,
-  lifetimeMs: 4200,
-  radius: 6,
-};
-
-/** K2: поведение сплиттера/щита/снайпера. */
-export const K2_BEHAVIOR = {
-  /** Сплиттер: сколько миньонов спавнится при смерти (2–3). */
-  splitterMinions: [2, 3] as const,
-  /** Щит: урон спереди (cos угла > threshold) снижается до этой доли. */
-  shieldDot: 0.55,
-  shieldFrontDmgMul: 0.22,
-  /** Снайпер: держать дистанцию в полосе [min, max]; дальше — приближаться. */
-  sniperMinDist: 150,
-  sniperMaxDist: 240,
-  sniperShotIntervalMs: 2200,
-  sniperShotJitterMs: 500,
-  /** Снайпер не стреляет ближе этой дистанции (контакт решён контактным уроном). */
-  sniperMinShotDist: 90,
-};
-
-/** K5: поведение взрывных (бомбёр/мина). */
-export const K5_BEHAVIOR = {
-  /** Радиус взрыва (по игроку), px. */
-  boomRadius: 84,
-  /** Урон взрыва по игроку. */
-  bomberBoomDmg: 12,
-  mineBoomDmg: 13,
-  /** Мина детонирует, если игрок ближе этой дистанции. */
-  mineTriggerDist: 46,
+  swarm: { tex: 'immune-antibody', hp: 20, speed: 92, dmg: 8, xp: 1, scale: 1, radius: 11 },
+  runner: { tex: 'immune-tcell', hp: 12, speed: 152, dmg: 6, xp: 1, scale: 1, radius: 10 },
+  brute: { tex: 'immune-macrophage', hp: 85, speed: 56, dmg: 16, xp: 4, scale: 1, radius: 13 },
+  boss: { tex: 'immune-prime', hp: 2600, speed: 66, dmg: 26, xp: 0, scale: 1, radius: 25 },
 };
 
 export const ELITE = { hpMul: 6, dmgMul: 1.7, xpMul: 8, scale: 1.45 };
-
-/**
- * Босс — фиксированный климакс забега, НЕ масштабируется кривой сложности.
- * difficulty() даёт на 5:00 ×3.1 HP: 2600 → 8060 HP. При ~100–150 DPS игрока
- * это минута боя и нулевой винрейт у недамажных сборок (победа = шеринг).
- * 2600 HP — расчётный бой ~20 с. Менять здесь, а не в ENEMY_DEFS.boss.
- */
 export const BOSS_SCALE = { hp: 1, dmg: 1 };
 
-/**
- * K4: типы босса (выбор при спавне, seeded → daily-честность).
- *  - crown: базовый (текущее поведение: melee + миньоны через WaveDirector);
- *  - orbital: медленный, два орбитальных клинка + радиальные залпы;
- *  - splitter: в 50% HP раскалывается на 2 осколка — убить оба.
- */
-export type BossType = 'crown' | 'orbital' | 'splitter';
-
-export interface BossTypeDef {
-  tex: string;
-  hp: number;
-  speed: number;
-  dmg: number;
-  radius: number;
-  /** orbital: радиус орбиты клинков. */
-  orbitRadius?: number;
-  /** orbital: урон клинка при касании. */
-  shardDmg?: number;
-  /** orbital: интервал радиального залпа, мс (0 = не стреляет). */
-  burstEveryMs?: number;
-}
-
-export const BOSS_TYPES: Record<BossType, BossTypeDef> = {
-  crown: { tex: 'boss', hp: 2600, speed: 66, dmg: 26, radius: 25 },
-  orbital: {
-    tex: 'boss-orbital',
-    hp: 2400,
-    speed: 52,
-    dmg: 22,
-    radius: 24,
-    orbitRadius: 74,
-    shardDmg: 10,
-    burstEveryMs: 6000,
-  },
-  splitter: { tex: 'boss-splitter', hp: 2600, speed: 70, dmg: 24, radius: 24 },
-};
-
-/** K4: осколок делящегося босса (каждый по половине HP). */
-export const BOSS_SHARD = {
-  tex: 'boss-shard',
-  hp: 1300,
-  speed: 96,
-  dmg: 18,
-  radius: 18,
-};
-
-/** Множители сложности, растущие со временем забега. */
 export function difficulty(timeMs: number): { hpScale: number; dmgScale: number } {
   const minutes = timeMs / 60000;
-  return {
-    hpScale: 1 + minutes * 0.42,
-    dmgScale: 1 + minutes * 0.12,
-  };
+  return { hpScale: 1 + minutes * 0.42, dmgScale: 1 + minutes * 0.12 };
 }
 
 export function fmtTime(ms: number): string {

@@ -1,16 +1,13 @@
 /**
- * OFELIYA Service Worker (R2 — PWA). Стратегия:
+ * OFELIYA Service Worker — Strain Zero MAX RC.
  *
- * - App shell (index, manifest, иконки, шрифты) — pre-cache on install;
- * - Навигации — network-first с фолбэком на кэшированный index.html;
- * - /assets/* — stale-while-revalidate;
- * - /audio/* — не кэшируем;
- * - Чужие origin — не трогаем.
- *
- * VERSION меняется на каждом production routing/cache release, чтобы MAX
- * WebView гарантированно удалял старый shell после activate.
+ * - App shell: pre-cache on install;
+ * - navigation: network-first with cached index fallback;
+ * - assets/fonts: stale-while-revalidate;
+ * - audio: network only;
+ * - cache cleanup is scoped to OFELIYA only.
  */
-const VERSION = 'ofeliya-v041-r2';
+const VERSION = 'ofeliya-strain-zero-rc1';
 const CACHE_PREFIX = 'ofeliya-';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
@@ -26,8 +23,6 @@ const SHELL = [
   './fonts/chakra-petch-2.woff2',
 ];
 
-// Service worker живёт под deployment prefix (/ofeliya/ в production),
-// поэтому нельзя проверять только root-path вроде /audio/.
 const AUDIO_PREFIX = new URL('./audio/', self.registration.scope).pathname;
 const ASSET_PREFIX = new URL('./assets/', self.registration.scope).pathname;
 const FONT_PREFIX = new URL('./fonts/', self.registration.scope).pathname;
@@ -62,7 +57,6 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
-
   const path = url.pathname;
 
   if (path.startsWith(AUDIO_PREFIX)) return;
@@ -72,7 +66,7 @@ self.addEventListener('fetch', (event) => {
       fetch(req)
         .then((res) => {
           const copy = res.clone();
-          caches.open(SHELL_CACHE).then((c) => c.put('./index.html', copy));
+          caches.open(SHELL_CACHE).then((cache) => cache.put('./index.html', copy));
           return res;
         })
         .catch(() =>
@@ -88,7 +82,7 @@ self.addEventListener('fetch', (event) => {
         .then((res) => {
           if (res.ok && (path.startsWith(ASSET_PREFIX) || path.startsWith(FONT_PREFIX))) {
             const copy = res.clone();
-            caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy));
+            caches.open(RUNTIME_CACHE).then((cache) => cache.put(req, copy));
           }
           return res;
         })

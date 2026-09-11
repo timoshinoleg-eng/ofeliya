@@ -1,8 +1,6 @@
 (() => {
-  // v0.4.1 production routing hotfix: dedicated /ofeliya/ namespace + bot identity.
-  // Changing this tag forces MAX WebView to navigate to a distinct URL and
-  // bypass any stale document/service-worker state from the previous /hub/ deploy.
-  const release = 'ofeliya-20260911-v041-r2';
+  // Strain Zero MAX RC: dedicated /ofeliya/ namespace and a fresh WebView URL.
+  const release = 'ofeliya-20260911-strain-zero-rc1';
   const url = new URL(window.location.href);
   if (url.searchParams.get('app') === release) return;
   url.searchParams.set('app', release);

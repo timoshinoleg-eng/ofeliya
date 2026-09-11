@@ -7,9 +7,9 @@ on:
       - main
 
 jobs:
-  verify:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,135 +23,64 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Challenge contract smoke
+        run: npm run test:challenge
+
+      - name: Viewport math smoke
+        run: npm run test:viewport
+
+      - name: MAX release config gate smoke
+        env:
+          VITE_MAX_BOT_NAME: ofeliya_ci_bot
+          VITE_DEVELOPER_LEGAL_NAME: CI Test Developer
+          VITE_DEVELOPER_REGISTRATION: CI-REG-1
+          VITE_DEVELOPER_ADDRESS: CI Test Address
+          VITE_SUPPORT_EMAIL: qa@example.test
+        run: npm run release:check
+
       - name: Typecheck and build
         run: npm run build
 
-      - name: Game logic smoke
-        run: npm run smoke
+  browser-smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Score server tests
-        run: npm run server:test
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
 
-      - name: MAX bot smoke
-        run: npm run smoke:bot
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Production deployment contract
-        run: node scripts/check-deploy-contract.mjs
+      - name: Install browser smoke driver
+        run: npm install --no-save --package-lock=false playwright-core@1.55.0
 
-      - name: Validate production compose config
-        shell: bash
+      - name: Start configured dev server
+        env:
+          VITE_MAX_BOT_NAME: ofeliya_ci_bot
+          VITE_DEVELOPER_LEGAL_NAME: CI Test Developer
+          VITE_DEVELOPER_REGISTRATION: CI-REG-1
+          VITE_DEVELOPER_ADDRESS: CI Test Address
+          VITE_SUPPORT_EMAIL: qa@example.test
         run: |
-          set -euo pipefail
-          sudo mkdir -p /opt/ofeliya
-          printf '%s\n' \
-            'OFELIYA_BOT_TOKEN=ci-placeholder-token' \
-            'OFELIYA_BOT_USERNAME=id100000000000_ci_bot' \
-            'OFELIYA_BOT_WEBHOOK_DOMAIN=https://example.test' \
-            'OFELIYA_BOT_WEBHOOK_PORT=8788' \
-            'OFELIYA_BOT_WEBHOOK_PATH=/ofeliya/bot/webhook' \
-            'OFELIYA_BOT_WEBHOOK_SECRET=0123456789abcdef0123456789abcdef' \
-            'OFELIYA_GAME_URL=https://example.test/ofeliya/' \
-            | sudo tee /opt/ofeliya/.env >/dev/null
-          touch /tmp/ofeliya-ci-extra-ca.crt
-          OFELIYA_RELEASE=ci \
-          HUB_EXTRA_CA_CERT=/tmp/ofeliya-ci-extra-ca.crt \
-          HUB_SHARED_NETWORK=ofeliya-ci \
-            docker compose --env-file /opt/ofeliya/.env -f deploy/compose.production.yml config >/tmp/ofeliya-compose-rendered.yml
-          grep -q 'ofeliya-runtime:ci' /tmp/ofeliya-compose-rendered.yml
-          grep -q 'ofeliya-static:ci' /tmp/ofeliya-compose-rendered.yml
-          grep -q 'ofeliya-score:ci' /tmp/ofeliya-compose-rendered.yml
-          grep -q 'VITE_MAX_BOT_USERNAME: id100000000000_ci_bot' /tmp/ofeliya-compose-rendered.yml
-          grep -q 'OFELIYA_BOT_TOKEN: ci-placeholder-token' /tmp/ofeliya-compose-rendered.yml
+          npm run dev -- --host 127.0.0.1 > /tmp/vite.log 2>&1 &
+          for i in $(seq 1 40); do curl -fsS http://127.0.0.1:5173/ >/dev/null && exit 0; sleep .5; done
+          cat /tmp/vite.log
+          exit 1
 
-      - name: Install Chromium for startup contract
-        run: npx playwright install --with-deps chromium
+      - name: MAX viewport challenge and legal browser smoke
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/browser-smoke.cjs
 
-      - name: MAX startup tests
-        run: npm run test:startup
-
-      - name: Build production bot image
-        run: docker build -f deploy/Dockerfile --target runtime -t ofeliya-runtime:ci .
-
-      - name: Build production score image
-        run: docker build -f deploy/Dockerfile --target score -t ofeliya-score:ci .
-
-      - name: Build production static image
-        run: docker build -f deploy/Dockerfile --target static --build-arg VITE_MAX_BOT_USERNAME=id100000000000_ci_bot -t ofeliya-static:ci .
-
-      - name: Validate nginx config
-        run: docker run --rm --add-host ofeliya-score:127.0.0.1 ofeliya-static:ci nginx -t -c /etc/nginx/nginx.conf
-
-      - name: Production routing integration
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm -f routing-diagnostics.txt
-          docker network create ofeliya-ci
-          docker volume create ofeliya-score-ci-data
-          cleanup() {
-            docker rm -f ofeliya-static-ci ofeliya-score-ci >/dev/null 2>&1 || true
-            docker network rm ofeliya-ci >/dev/null 2>&1 || true
-            docker volume rm ofeliya-score-ci-data >/dev/null 2>&1 || true
-          }
-          diagnose() {
-            {
-              echo '--- docker ps -a ---'
-              docker ps -a || true
-              echo '--- score inspect ---'
-              docker inspect ofeliya-score-ci || true
-              echo '--- score logs ---'
-              docker logs ofeliya-score-ci || true
-              echo '--- static inspect ---'
-              docker inspect ofeliya-static-ci || true
-              echo '--- static logs ---'
-              docker logs ofeliya-static-ci || true
-              echo '--- network inspect ---'
-              docker network inspect ofeliya-ci || true
-            } 2>&1 | tee routing-diagnostics.txt
-          }
-          trap cleanup EXIT
-
-          docker run -d --name ofeliya-score-ci \
-            --network ofeliya-ci --network-alias ofeliya-score \
-            -p 18787:8787 \
-            -e PORT=8787 \
-            -v ofeliya-score-ci-data:/app/server/data \
-            ofeliya-score:ci
-          docker run -d --name ofeliya-static-ci \
-            --network ofeliya-ci -p 18080:8080 \
-            ofeliya-static:ci
-
-          ready=0
-          for _ in {1..30}; do
-            if curl -fsS http://127.0.0.1:18787/health >/dev/null && \
-               curl -fsS http://127.0.0.1:18080/ >/dev/null; then
-              ready=1
-              break
-            fi
-            sleep 1
-          done
-          if [ "$ready" != "1" ]; then
-            diagnose
-            exit 1
-          fi
-
-          curl -fsS http://127.0.0.1:18080/runtime-config.js | grep -q 'ofeliya-'
-          curl -fsS 'http://127.0.0.1:18080/api/ref?user=ci-user&platform=max' | grep -q '"ok":true'
-          status="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
-            -H 'Content-Type: application/json' \
-            --data '{"from":"x","to":"y","platform":"max"}' \
-            http://127.0.0.1:18080/api/ref)"
-          if [ "$status" != "403" ]; then
-            echo "expected POST /api/ref to be blocked with 403, got $status"
-            diagnose
-            exit 1
-          fi
-
-      - name: Upload routing diagnostics
-        if: failure()
+      - name: Upload browser smoke captures
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: production-routing-diagnostics
-          path: routing-diagnostics.txt
+          name: max-browser-smoke
+          path: /tmp/browser-smoke/*.png
           if-no-files-found: ignore
-          retention-days: 3

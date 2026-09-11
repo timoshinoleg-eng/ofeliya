@@ -6,31 +6,20 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#0b0e1a" />
-    <!-- Мини-апп в fullscreen-режиме мессенджера: статусбар не блокируем, но UI учитывает safe-area. -->
+    <meta name="theme-color" content="#12070d" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="OFELIYA" />
-    <meta name="description" content="OFELIYA — рогалик-выживание: удержи ядро до босса. Ежедневное испытание, рывки, эволюции." />
+    <meta name="apple-mobile-web-app-title" content="OFELIYA: STRAIN ZERO" />
+    <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" type="image/png" href="icons/icon-192.png" />
     <link rel="apple-touch-icon" href="icons/icon-180.png" />
-    <link rel="manifest" href="manifest.webmanifest" />
-    <title>OFELIYA — ядро выживания</title>
-    <!-- Release cache-buster. Относительный URL обязателен: production живёт под /hub/. -->
+    <title>OFELIYA: STRAIN ZERO</title>
+    <!-- Must run before MAX Bridge/app boot so each release gets a distinct WebView URL. -->
     <script src="./runtime-config.js"></script>
-    <!-- MAX Bridge: глобальный объект window.WebApp (см. dev.max.ru/docs/webapps/bridge).
-         В обычном браузере скрипт просто не определяет WebApp — игра работает и без него. -->
+    <!-- MAX Bridge. Platform detection is late-safe, so a slow CDN cannot permanently demote MAX to browser mode. -->
     <script src="https://st.max.ru/js/max-web-app.js" defer></script>
-    <!-- Telegram Mini Apps: window.Telegram.WebApp (см. core.telegram.org/bots/webapps).
-         В MAX/браузере скрипт тоже безопасно деградирует в no-op. -->
-    <script src="https://telegram.org/js/telegram-web-app.js" defer></script>
-    <!-- VK Mini Apps / OK (V6): window.vkBridge (Web SDK, методы VKWebApp*).
-         В обычном браузере скрипт безвреден: детект VK идёт по user agent, а не
-         по наличию объекта (см. MessengerBridge.isVkClient). -->
-    <script src="https://cdn.jsdelivr.net/npm/@vkontakte/vk-bridge@2.8.2/dist/browser.min.js" defer></script>
     <style>
-      /* Chakra Petch (OFL, self-hosted) — современный дисплейный шрифт вместо Arial. */
       @font-face {
         font-family: 'Chakra Petch';
         font-style: normal;
@@ -45,33 +34,33 @@
         font-display: swap;
         src: url('fonts/chakra-petch-2.woff2') format('woff2');
       }
-      :root {
-        --safe-top: env(safe-area-inset-top, 0px);
-        --safe-right: env(safe-area-inset-right, 0px);
-        --safe-bottom: env(safe-area-inset-bottom, 0px);
-        --safe-left: env(safe-area-inset-left, 0px);
-      }
       html,
       body {
         margin: 0;
         padding: 0;
-        background: #0b0e1a;
+        width: 100%;
         height: 100%;
+        background: #12070d;
         overflow: hidden;
-        /* pull-to-refresh и rubber-band: off */
         overscroll-behavior: none;
-        /* системные «жесты» браузера: отключаем */
         -webkit-tap-highlight-color: transparent;
         -webkit-touch-callout: none;
         -webkit-user-select: none;
         user-select: none;
       }
       #game {
-        width: 100%;
-        height: 100%;
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 100vw;
+        height: 100dvh;
+        max-width: 100%;
+        max-height: 100%;
+        overflow: hidden;
+        background: #12070d;
       }
       #game canvas {
-        /* pinch/zoom и double-tap на канвасе: off (Phaser сам управляет поинтерами) */
+        display: block;
         touch-action: none;
       }
       #splash {
@@ -80,7 +69,8 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        color: #35e0ff;
+        color: #ff78c8;
+        background: #12070d;
         font-family: 'Chakra Petch', Arial, sans-serif;
         font-size: 18px;
         letter-spacing: 3px;
@@ -89,22 +79,7 @@
   </head>
   <body>
     <div id="game"></div>
-    <div id="splash">OFELIYA</div>
-    <script>
-      // Запрет системных жестов, которые ломают управление в игре.
-      // (touch-action:none на канвасе уже гасит pinch; эти обработчики страхуют остальное.)
-      (function () {
-        var prevent = function (e) {
-          e.preventDefault();
-        };
-        document.addEventListener('dblclick', prevent, { passive: false });
-        document.addEventListener('contextmenu', prevent, { passive: false });
-        document.addEventListener('selectstart', prevent, { passive: false });
-        // iOS Safari: жест пинча на уровне документа
-        document.addEventListener('gesturestart', prevent, { passive: false });
-        document.addEventListener('gesturechange', prevent, { passive: false });
-      })();
-    </script>
+    <div id="splash">OFELIYA · STRAIN ZERO</div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

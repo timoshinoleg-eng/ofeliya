@@ -1,17 +1,11 @@
 import Phaser from 'phaser';
-import { RUN, type BossType, type EnemyKind } from './config';
+import { RUN, type EnemyKind } from './config';
 import { RunMilestones } from './RunMilestones';
-import type { Rng } from './SeededRng';
 import type { GameScene } from '../scenes/GameScene';
-import type { Enemy } from './Enemy';
 
 /** Управляет темпом и составом волн врагов, элитами и боссом. */
 export class WaveDirector {
-  boss: Enemy | null = null;
-  /** K4: тип босса текущего забега (seeded). */
-  bossType: BossType = 'crown';
-  /** K4: осколки расколовшегося босса (победа = последний погиб). */
-  bossParts: Enemy[] = [];
+  boss: import('./Enemy').Enemy | null = null;
 
   private scene: GameScene;
   private enemies: Phaser.Physics.Arcade.Group;
@@ -25,19 +19,23 @@ export class WaveDirector {
     this.scene = scene;
     this.enemies = enemies;
     this.milestones = new RunMilestones(scene);
+
+    // First-session hook: three antibodies begin inside auto-fire range. The nearest one is
+    // intentionally close enough for its RNA drop to enter the default magnet radius after the
+    // opening two-shot kill, while the offset pair leaves a readable escape lane.
+    this.spawnOpeningAntibodies();
   }
 
   update(delta: number): void {
     const t = this.scene.runState.timeMs;
 
-    // Presentation observer only: не меняет spawn/difficulty contracts.
+    // Presentation observer only: it mirrors the immune-response timeline while this director
+    // owns the actual composition changes below.
     this.milestones.update(t);
 
     if (!this.bossSpawned && t >= RUN.bossTimeMs) this.spawnBoss();
 
-    // K4: после раскола босс-«мина» (boss=null) миньоны больше не зовёт —
-    // бой уже идёт с осколками, не надо усложнять.
-    if (this.boss && this.bossParts.length === 0) {
+    if (this.boss) {
       this.minionAcc += delta;
       if (this.minionAcc >= 12000) {
         this.minionAcc = 0;
@@ -49,21 +47,17 @@ export class WaveDirector {
       }
     }
 
+    // First NK-cell presentation arrives with the adaptive-immunity beat at 02:00.
     const expectedElites = Math.floor(t / 120000);
     if (expectedElites > this.spawnedElites) {
       this.spawnedElites = expectedElites;
-      // K2: после 4 мин элита может быть сплиттером/щитоном (больше фактур).
-      const pool =
-        t >= 240000
-          ? (['swarm', 'runner', 'brute', 'splitter', 'shield'] as const)
-          : (['swarm', 'runner', 'brute'] as const);
-      const kind: EnemyKind = this.rng.pick(pool);
+      const kind: EnemyKind = Phaser.Utils.Array.GetRandom(['swarm', 'runner', 'brute'] as EnemyKind[]);
       this.spawn(kind, true);
     }
 
     const progress = Phaser.Math.Clamp(t / RUN.bossTimeMs, 0, 1);
     let interval = Phaser.Math.Linear(1150, 330, progress);
-    // бой с боссом — дуэль: обычный спавн реже, иначе босс теряется в толпе
+    // Boss phase stays readable: ordinary immune traffic is reduced while IMMUNE PRIME is active.
     if (this.bossSpawned) interval /= RUN.bossPhaseSpawnMul;
     this.spawnAcc += delta;
     while (this.spawnAcc >= interval) {
@@ -73,29 +67,38 @@ export class WaveDirector {
     }
   }
 
-  private get rng(): Rng {
-    return this.scene.runState.rng;
+  private pickKind(t: number): EnemyKind {
+    const r = Math.random();
+
+    // 0:00–1:30: innate response / antibodies only. The first 45-second milestone increases
+    // pressure through density, not by prematurely revealing the T-killer silhouette.
+    if (t < 90_000) return 'swarm';
+
+    // 1:30: T-killers join the hunt, matching the player-facing milestone exactly.
+    if (t < 120_000) return r < 0.78 ? 'swarm' : 'runner';
+
+    // 2:00+: macrophages enter as the adaptive response becomes visibly heavier.
+    if (t < 180_000) return r < 0.6 ? 'swarm' : r < 0.9 ? 'runner' : 'brute';
+
+    // Systemic response: all three ordinary immune roles are now established.
+    return r < 0.48 ? 'swarm' : r < 0.79 ? 'runner' : 'brute';
   }
 
-  private pickKind(t: number): EnemyKind {
-    const r = this.rng.next();
-    if (t < 45000) return 'swarm';
-    if (t < 90000) return r < 0.8 ? 'swarm' : 'runner';
-    // K2: с 1.5 мин в ротацию входит сплиттер (взрыв на миньонов).
-    if (t < 180000) return r < 0.55 ? 'swarm' : r < 0.85 ? 'runner' : 'splitter';
-    // K2/K5: с 3 мин — щитоны, с ~3 мин в ротации и бомбёр (взрыв при смерти).
-    if (t < 300000) {
-      return r < 0.42 ? 'swarm' : r < 0.64 ? 'runner' : r < 0.8 ? 'brute' : r < 0.92 ? 'splitter' : 'bomber';
+  private spawnOpeningAntibodies(): void {
+    const p = this.scene.player;
+    const layout = [
+      { angle: -0.28, radius: 150 },
+      { angle: 2.1, radius: 205 },
+      { angle: 3.9, radius: 235 },
+    ];
+    for (const spot of layout) {
+      this.scene.spawnEnemy(
+        'swarm',
+        p.x + Math.cos(spot.angle) * spot.radius,
+        p.y + Math.sin(spot.angle) * spot.radius,
+        false
+      );
     }
-    // K2/K5: с 5 мин — снайперы, мины (неподвижная угроза) + вся ротация.
-    return r < 0.28 ? 'swarm'
-      : r < 0.46 ? 'runner'
-      : r < 0.6 ? 'brute'
-      : r < 0.72 ? 'splitter'
-      : r < 0.82 ? 'shield'
-      : r < 0.9 ? 'sniper'
-      : r < 0.96 ? 'bomber'
-      : 'mine';
   }
 
   private spawn(kind: EnemyKind, elite: boolean): void {
@@ -106,33 +109,14 @@ export class WaveDirector {
 
   private spawnBoss(): void {
     this.bossSpawned = true;
-    // K4: тип босса — seeded (daily: все получают одного и того же).
-    this.bossType = this.rng.pick(['crown', 'orbital', 'splitter'] as const);
     const p = this.ringPos();
-    this.boss = this.scene.spawnEnemy('boss', p.x, p.y, false, this.bossType);
-  }
-
-  /**
-   * K4: раскол «Разделяющего ядра» (50% HP). Оригинал убирается (взрыв
-   * отрисовал GameScene), появляются 2 осколка; победа — когда оба погибли
-   * (см. onEnemyDied).
-   */
-  splitBoss(boss: Enemy): void {
-    if (this.bossParts.length > 0) return;
-    this.bossParts = [];
-    for (const off of [-46, 46]) {
-      const s = this.scene.spawnEnemy('boss', boss.x + off, boss.y, false, 'shard');
-      if (s) this.bossParts.push(s);
-    }
-    // Оригинальное ядро «тратится» на раскол: убиваем без награды/лоута.
-    this.boss = null;
-    boss.disableBody(true, true);
+    this.boss = this.scene.spawnEnemy('boss', p.x, p.y, false);
   }
 
   private ringPos(): { x: number; y: number } {
     const cam = this.scene.cameras.main;
-    const a = this.rng.next() * Math.PI * 2;
-    const r = Math.max(cam.width, cam.height) / 2 + 90 + this.rng.next() * 60;
+    const a = Math.random() * Math.PI * 2;
+    const r = Math.max(cam.width, cam.height) / 2 + 90 + Math.random() * 60;
     return { x: cam.midPoint.x + Math.cos(a) * r, y: cam.midPoint.y + Math.sin(a) * r };
   }
 }

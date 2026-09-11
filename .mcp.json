@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "codegraph": {
-      "command": "npx",
-      "args": ["--yes", "codegraph", "serve"]
-    }
-  }
-}

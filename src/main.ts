@@ -1,44 +1,17 @@
 import Phaser from 'phaser';
+import { ViewportManager } from './platform/ViewportManager';
 import { BootScene } from './scenes/BootScene';
 import { MenuScene } from './scenes/MenuScene';
 import { GameScene } from './scenes/GameScene';
 import { UIScene } from './scenes/UIScene';
-import { Analytics } from './systems/Analytics';
-import { MessengerBridge } from './systems/MessengerBridge';
-import { SafeArea } from './systems/SafeArea';
-import { VkBridge } from './systems/VkBridge';
-import { ShareVideo } from './systems/ShareVideo';
 
-// Dev-ручка для автотестов: в панели IAB requestAnimationFrame заморожен,
-// поэтому QA прокачивает кадры вручную через __game.loop.step(time).
 declare global {
   interface Window {
     __game?: Phaser.Game;
+    __viewportManager?: ViewportManager;
   }
 }
 
-/**
- * Синхронизировать meta theme-color с темой мессенджера (TG themeParams /
- * системная схема). Игра сама рисуется тёмным неоном, но webview-хром
- * (статус-бар, шапка) должен совпадать с окружением.
- */
-function syncThemeColor(): void {
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (!meta) return;
-  const theme = MessengerBridge.getTheme();
-  if (theme.bg) {
-    meta.setAttribute('content', theme.bg);
-  } else if (!theme.dark) {
-    // Лёгкая системная тема без явного цвета — приглушённо-серый, не белый.
-    meta.setAttribute('content', '#1b2030');
-  }
-}
-
-/**
- * Дождаться дисплейного шрифта, но не дольше FONT_READY_TIMEOUT_MS:
- * в MAX Font API может не завершить promise — шрифт не вправе удерживать
- * заставку (фикс с main 5c83390 «fix(max): use canvas renderer in mini app»).
- */
 const FONT_READY_TIMEOUT_MS = 700;
 
 function waitForFonts(): Promise<void> {
@@ -60,34 +33,27 @@ function waitForFonts(): Promise<void> {
 }
 
 async function boot(): Promise<void> {
-  // Safe-area пересчитываем до старта сцен (HUD от него зависит).
-  SafeArea.update();
-  syncThemeColor();
-  Analytics.init();
-  // VK (V6): стартуем VKWebAppInit + запрос fullscreen (скрыть шапку VK).
-  // Идемпотентно и no-op вне VK/мессенджеров.
-  MessengerBridge.init();
-  if (MessengerBridge.kind === 'vk') void VkBridge.ready.then(() => VkBridge.requestFullscreen());
+  const host = document.getElementById('game');
+  if (!host) throw new Error('Missing #game host');
 
-  // Дождаться загрузки дисплейного шрифта (с таймаутом): иначе Phaser запечёт
-  // текстуры текста с фолбэком (Arial) и не перерисует их после подгрузки.
+  const viewport = new ViewportManager(host);
+  viewport.start();
+  // Let MAX Bridge answer before Phaser reads the parent size. Browser fallback resolves immediately.
+  await viewport.sync();
   await waitForFonts();
 
   const game = new Phaser.Game({
-    // Некоторые Android WebView в MAX создают WebGL-контекст с невалидным
-    // framebuffer, и Phaser падает до BootScene. Игра использует Canvas-safe
-    // объекты; постэффекты (bloom) вне WebGL автоматически отключаются
-    // (GameScene: fxEnabled проверяет renderer.type === WebGL).
-    // Фикс с main pre-v0.4.1 (5c83390) — закреплён тестами tests/startup-*.mjs.
+    // MAX Android WebView has shown invalid WebGL framebuffer startup failures in production.
+    // Strain Zero gameplay and its core presentation are Canvas-safe, so reliability wins for RC QA.
     type: Phaser.CANVAS,
-    parent: 'game',
-    backgroundColor: '#0b0e1a',
+    parent: host,
+    backgroundColor: '#12070d',
     disableContextMenu: true,
     scale: {
       mode: Phaser.Scale.RESIZE,
       autoCenter: Phaser.Scale.NO_CENTER,
-      width: '100%',
-      height: '100%',
+      width: host.clientWidth || '100%',
+      height: host.clientHeight || '100%',
     },
     physics: {
       default: 'arcade',
@@ -97,10 +63,6 @@ async function boot(): Promise<void> {
       antialias: true,
       roundPixels: true,
       powerPreference: 'high-performance',
-      // V5: WebGL-захват canvas.captureStream() требует preserveDrawingBuffer,
-      // иначе клип — чёрный. Включаем ТОЛЬКО на устройствах, где запись реально
-      // доступна (canRecord), чтобы не терять FPS на остальных.
-      preserveDrawingBuffer: ShareVideo.canRecord(),
     },
     input: {
       activePointers: 3,
@@ -108,11 +70,14 @@ async function boot(): Promise<void> {
     scene: [BootScene, MenuScene, GameScene, UIScene],
   });
 
-  // Dev-ручка для автотестов: в панели IAB requestAnimationFrame заморожен,
-  // поэтому QA прокачивает кадры вручную через __game.loop.step(time).
-  if (import.meta.env.DEV) window.__game = game;
+  viewport.attachGame(game);
+  await viewport.sync();
 
-  // PWA: офлайн-запуск app shell (R2). Только прод и http(s)-контекст.
+  if (import.meta.env.DEV) {
+    window.__game = game;
+    window.__viewportManager = viewport;
+  }
+
   if (
     'serviceWorker' in navigator &&
     import.meta.env.PROD &&
@@ -121,7 +86,7 @@ async function boot(): Promise<void> {
     window.addEventListener('load', () => {
       navigator.serviceWorker
         .register(`${import.meta.env.BASE_URL}sw.js`)
-        .catch((e) => console.warn('[sw] registration failed:', e));
+        .catch((error) => console.warn('[sw] registration failed:', error));
     });
   }
 }
