@@ -15,20 +15,6 @@ const sizes = [
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const BUTTONS = ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В МЕНЮ'];
 
-function visibleTextOverflow(items, width, height) {
-  return items
-    .filter((obj) => typeof obj.text === 'string' && obj.visible !== false && (obj.alpha ?? 1) > 0.01 && typeof obj.getBounds === 'function')
-    .map((obj) => ({ text: obj.text, bounds: obj.getBounds() }))
-    .filter(({ bounds }) => bounds.left < 1 || bounds.right > width - 1 || bounds.top < 1 || bounds.bottom > height - 1)
-    .map(({ text, bounds }) => ({
-      text,
-      left: Math.round(bounds.left),
-      right: Math.round(bounds.right),
-      top: Math.round(bounds.top),
-      bottom: Math.round(bounds.bottom),
-    }));
-}
-
 (async () => {
   const browser = await chromium.launch({
     executablePath: chrome,
@@ -71,17 +57,48 @@ function visibleTextOverflow(items, width, height) {
       const scene = game.scene.getScene('Menu');
       const items = scene.children.list;
       const texts = items.filter((obj) => typeof obj.text === 'string');
-      const overflow = items
-        .filter((obj) => typeof obj.text === 'string' && obj.visible !== false && (obj.alpha ?? 1) > 0.01 && typeof obj.getBounds === 'function')
+      const visible = texts.filter(
+        (obj) => obj.visible !== false && (obj.alpha ?? 1) > 0.01 && typeof obj.getBounds === 'function'
+      );
+      const overflow = visible
         .map((obj) => ({ text: obj.text, bounds: obj.getBounds(), resolution: obj.resolution }))
         .filter(({ bounds }) => bounds.left < 1 || bounds.right > width - 1 || bounds.top < 1 || bounds.bottom > height - 1)
         .map(({ text, bounds }) => ({ text, left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom }));
       const nonNativeResolution = texts
         .filter((obj) => typeof obj.resolution === 'number' && obj.resolution !== 1)
         .map((obj) => ({ text: obj.text, resolution: obj.resolution }));
+
+      const isFlowText = (text) =>
+        text.startsWith('ОРГАНИЗМ ЕЩЁ НЕ ЗНАЕТ') ||
+        text.startsWith('Мутируй быстрее') ||
+        text.startsWith('Носитель:') ||
+        text === 'ВЫЗОВ ПОЛУЧЕН' ||
+        text.startsWith('Подави IMMUNE PRIME') ||
+        text.startsWith('Продержись дольше') ||
+        /иммун\.\s*·.*клеток.*мутация/i.test(text) ||
+        text === 'ПРИНЯТЬ ВЫЗОВ' ||
+        text.startsWith('атака автоматическая');
+      const flow = visible
+        .filter((obj) => isFlowText(obj.text))
+        .map((obj) => ({ text: obj.text, bounds: obj.getBounds() }))
+        .sort((a, b) => a.bounds.top - b.bounds.top);
+      const overlaps = [];
+      for (let i = 1; i < flow.length; i += 1) {
+        const prev = flow[i - 1];
+        const current = flow[i];
+        if (prev.bounds.bottom > current.bounds.top + 1) {
+          overlaps.push({
+            a: prev.text,
+            b: current.text,
+            amount: Math.round(prev.bounds.bottom - current.bounds.top),
+          });
+        }
+      }
+
       return {
         scale: [game.scale.width, game.scale.height],
         overflow,
+        overlaps,
         nonNativeResolution,
         hasTitle: texts.some((obj) => obj.text === 'OFELIYA'),
         hasChallenge: texts.some((obj) => obj.text === 'ВЫЗОВ ПОЛУЧЕН'),
@@ -96,6 +113,7 @@ function visibleTextOverflow(items, width, height) {
       !menu.hasChallenge ||
       !menu.hasAction ||
       menu.overflow.length ||
+      menu.overlaps.length ||
       menu.nonNativeResolution.length
     ) {
       throw new Error(`menu ${size.width}x${size.height} failed: ${JSON.stringify(menu)}`);
