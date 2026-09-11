@@ -60,6 +60,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          rm -f routing-diagnostics.txt
           docker network create ofeliya-ci
           docker volume create ofeliya-score-ci-data
           cleanup() {
@@ -68,12 +69,20 @@ jobs:
             docker volume rm ofeliya-score-ci-data >/dev/null 2>&1 || true
           }
           diagnose() {
-            echo '--- docker ps -a ---'
-            docker ps -a || true
-            echo '--- score logs ---'
-            docker logs ofeliya-score-ci || true
-            echo '--- static logs ---'
-            docker logs ofeliya-static-ci || true
+            {
+              echo '--- docker ps -a ---'
+              docker ps -a || true
+              echo '--- score inspect ---'
+              docker inspect ofeliya-score-ci || true
+              echo '--- score logs ---'
+              docker logs ofeliya-score-ci || true
+              echo '--- static inspect ---'
+              docker inspect ofeliya-static-ci || true
+              echo '--- static logs ---'
+              docker logs ofeliya-static-ci || true
+              echo '--- network inspect ---'
+              docker network inspect ofeliya-ci || true
+            } 2>&1 | tee routing-diagnostics.txt
           }
           trap cleanup EXIT
 
@@ -112,3 +121,12 @@ jobs:
             diagnose
             exit 1
           fi
+
+      - name: Upload routing diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-routing-diagnostics
+          path: routing-diagnostics.txt
+          if-no-files-found: ignore
+          retention-days: 3
