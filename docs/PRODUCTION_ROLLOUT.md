@@ -251,3 +251,13 @@ After an observation window with stable containers and successful MAX sessions:
 - record deployed Git SHA + `OFELIYA_RELEASE` in the release notes;
 - only then consider pruning older Docker images;
 - do not delete the Astra recovery refs/tags used as historical rollback points.
+
+## Viral deep-link build input
+
+For full MAX share/referral rollout export the public bot username before building static image:
+
+```bash
+export VITE_MAX_BOT_USERNAME='<max-bot-username-without-@>'
+```
+
+This value is public, not a secret. If omitted, core gameplay and authenticated scores still work, but bot-style startapp share/referral links fall back/are unavailable.

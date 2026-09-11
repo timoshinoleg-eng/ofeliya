@@ -3,6 +3,10 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . ./
+ARG VITE_MAX_BOT_USERNAME=""
+ARG VITE_TG_BOT_USERNAME=""
+ENV VITE_MAX_BOT_USERNAME=$VITE_MAX_BOT_USERNAME
+ENV VITE_TG_BOT_USERNAME=$VITE_TG_BOT_USERNAME
 RUN npm run build
 
 FROM node:22-alpine AS runtime

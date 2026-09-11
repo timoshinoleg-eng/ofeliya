@@ -12,13 +12,29 @@
  */
 import { fmtTime } from './config';
 import { EVOLUTION_NAMES, type EvolutionId } from './UpgradeSystem';
-import { MessengerBridge } from '../systems/MessengerBridge';
+import { MessengerBridge, type MessengerKind } from '../systems/MessengerBridge';
 
-/** Заполнить username ботов перед публикацией (см. README «Публикация»). */
+const botUsername = (value: string | undefined): string =>
+  (value ?? '').trim().replace(/^@/, '').replace(/[^A-Za-z0-9_.-]/g, '');
+
+/** Username ботов приходит из build env; секретом не является. */
 export const SHARE = {
-  maxBot: '',
-  tgBot: '',
+  maxBot: botUsername(import.meta.env.VITE_MAX_BOT_USERNAME as string | undefined),
+  tgBot: botUsername(import.meta.env.VITE_TG_BOT_USERNAME as string | undefined),
 } as const;
+
+const REF_PLATFORM_CODE: Record<MessengerKind, string> = {
+  max: 'm',
+  telegram: 't',
+  vk: 'v',
+  browser: 'b',
+};
+
+export function buildReferralToken(kind: MessengerKind, uid: string): string | null {
+  const clean = uid.trim();
+  if (!/^[A-Za-z0-9-]{1,48}$/.test(clean)) return null;
+  return `${REF_PLATFORM_CODE[kind]}_${clean}`;
+}
 
 export interface ShareInput {
   win: boolean;
@@ -75,12 +91,16 @@ export function buildShareLink(inp: ShareInput): string | undefined {
 }
 
 /**
- * Реферальная ссылка (V1): открывает игру со startapp-параметром `ref_<uid>`.
- * Новый игрок получает бонус на первый забег; рёбро фиксируется на сервере.
+ * Реферальная ссылка V2: payload `ref_<platformCode>_<uid>`.
+ * Платформа referrer'а сохраняется в payload, чтобы MAX id никогда не
+ * интерпретировался как Telegram chat id. Старые `ref_<uid>` сервер принимает
+ * как legacy, но без outbound push.
  */
 export function buildRefLink(uid: string): string | undefined {
-  const param = `ref_${uid}`;
   const kind = MessengerBridge.kind;
+  const token = buildReferralToken(kind, uid);
+  if (!token) return undefined;
+  const param = `ref_${token}`;
   if (kind === 'max' && SHARE.maxBot) {
     return `https://max.ru/${SHARE.maxBot}?startapp=${param}`;
   }
@@ -88,7 +108,7 @@ export function buildRefLink(uid: string): string | undefined {
     return `https://t.me/${SHARE.tgBot}?startapp=${param}`;
   }
   if (typeof location !== 'undefined' && location.origin.startsWith('http')) {
-    return `${location.origin}${location.pathname}?ref=${uid}`;
+    return `${location.origin}${location.pathname}?ref=${encodeURIComponent(param)}`;
   }
   return undefined;
 }

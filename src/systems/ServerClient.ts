@@ -44,14 +44,13 @@ export interface ScorePayload {
   kills: number;
   level: number;
   dateKey: string;
-  /** uid друга, по чьей ссылке пришли (ref_<uid>) */
+  /** referral token: new format <platformCode>_<uid>, legacy bare uid also accepted */
   ref?: string | null;
 }
 
 export interface TopEntry {
   rank: number;
   platform: string;
-  uid: string;
   daily: boolean;
   win: boolean;
   timeMs: number;
@@ -153,11 +152,11 @@ export const ServerClient = {
   getFriends(
     user: string,
     platform: string
-  ): Promise<Array<{ relation: string; uid: string; platform: string; win: boolean; timeMs: number; kills: number; level: number; dateKey: string }> | null> {
+  ): Promise<Array<{ relation: string; platform: string; win: boolean; timeMs: number; kills: number; level: number; dateKey: string }> | null> {
     if (!user) return Promise.resolve(null);
     return request<{ ok: boolean; friends: Array<Record<string, unknown>> }>(
       `/api/friends?user=${encodeURIComponent(user)}&platform=${encodeURIComponent(platform)}`
-    ).then((r) => (r?.ok ? (r.friends as unknown) as Array<{ relation: string; uid: string; platform: string; win: boolean; timeMs: number; kills: number; level: number; dateKey: string }> : null));
+    ).then((r) => (r?.ok ? (r.friends as unknown) as Array<{ relation: string; platform: string; win: boolean; timeMs: number; kills: number; level: number; dateKey: string }> : null));
   },
 
   /** Псевдонимный id для browser-платформы (без PII). */

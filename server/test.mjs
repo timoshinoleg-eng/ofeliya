@@ -190,13 +190,12 @@ await ok('топ: лучший результат на юзера + более �
     }),
   }));
   const top = await j(await fetch(`${BASE}/api/top?period=all`));
-  const aliceRows = top.top.filter((t) => t.uid === '111');
-  assert.equal(aliceRows.length, 1);
-  assert.equal(aliceRows[0].timeMs, 320_000);
   assert.equal(top.top.length, 2);
-  assert.equal(top.top[0].uid, '111');
+  assert.equal(top.top[0].timeMs, 320_000);
+  assert.equal(top.top[0].platform, 'telegram');
   assert.equal(top.top[0].rank, 1);
-  assert.equal(top.top[1].uid, '222');
+  assert.equal(top.top[1].platform, 'max');
+  assert.ok(top.top.every((row) => !Object.hasOwn(row, 'uid')));
 });
 
 await ok('top daily: только daily-результаты сегодня', async () => {
@@ -209,8 +208,9 @@ await ok('top daily: только daily-результаты сегодня', as
   }));
   const daily = await j(await fetch(`${BASE}/api/top?period=daily`));
   assert.equal(daily.top.length, 1);
-  assert.equal(daily.top[0].uid, '111');
+  assert.equal(daily.top[0].timeMs, 120_000);
   assert.equal(daily.top[0].daily, true);
+  assert.ok(!Object.hasOwn(daily.top[0], 'uid'));
 });
 
 await ok('top weekly: результаты за 7 дней', async () => {
@@ -224,19 +224,19 @@ await ok('рефы: награда один раз, повтор без нагр
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       platform: 'max', initData: signInitData(carol, MAX_TOKEN),
-      payload: { win: true, timeMs: 400_000, kills: 200, level: 10, ref: '111' },
+      payload: { win: true, timeMs: 400_000, kills: 200, level: 10, ref: 't_111' },
     }),
   }));
   assert.ok(r1.refReward);
-  assert.equal(r1.refReward.from, '111');
+  assert.equal(r1.refReward.from, 'telegram:111');
   assert.equal(r1.refReward.first, true);
 
   const r2 = await j(await fetch(`${BASE}/api/ref`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: '111', to: '333', platform: 'max' }),
+    body: JSON.stringify({ from: 'telegram:111', to: '333', platform: 'max' }),
   }));
   assert.equal(r2.first, false);
-  const status = await j(await fetch(`${BASE}/api/ref?user=111&platform=max`));
+  const status = await j(await fetch(`${BASE}/api/ref?user=111&platform=telegram`));
   assert.equal(status.invited, 1);
 });
 
@@ -250,9 +250,10 @@ await ok('browser: anonId принимается, но не попадает в 
   }));
   assert.equal(r.ok, true);
   const top = await j(await fetch(`${BASE}/api/top?period=all`));
-  assert.ok(!top.top.some((t) => t.uid === 'anon-browser-12345678'));
+  assert.ok(!top.top.some((t) => t.platform === 'browser'));
   const shadow = await j(await fetch(`${BASE}/api/top?period=all&includeUnverified=1`));
-  assert.ok(shadow.top.some((t) => t.uid === 'anon-browser-12345678'));
+  assert.ok(shadow.top.some((t) => t.platform === 'browser'));
+  assert.ok(shadow.top.every((row) => !Object.hasOwn(row, 'uid')));
 });
 
 await ok('daily: быстрее победа получает лучший rank', async () => {
@@ -295,14 +296,12 @@ await ok('season: текущий сезон + сезонный топ (C5)', asy
 await ok('friends: топ друзей по реф-рёбрам (двунаправленно)', async () => {
   const as111 = await j(await fetch(`${BASE}/api/friends?user=111&platform=telegram`));
   assert.equal(as111.ok, true);
-  const invitedBy111 = as111.friends.find((f) => f.uid === '333');
+  const invitedBy111 = as111.friends.find((f) => f.relation === 'invited' && f.platform === 'max');
   assert.ok(invitedBy111);
-  assert.equal(invitedBy111.relation, 'invited');
-  assert.equal(invitedBy111.platform, 'max');
+  assert.ok(as111.friends.every((row) => !Object.hasOwn(row, 'uid')));
   const as333 = await j(await fetch(`${BASE}/api/friends?user=333&platform=max`));
-  const inviter = as333.friends.find((f) => f.uid === '111');
+  const inviter = as333.friends.find((f) => f.relation === 'inviter' && f.platform === 'telegram');
   assert.ok(inviter);
-  assert.equal(inviter.relation, 'inviter');
   const lonely = await j(await fetch(`${BASE}/api/friends?user=99999&platform=telegram`));
   assert.equal(lonely.friends.length, 0);
 });
@@ -317,9 +316,10 @@ await ok('vk: числовой VK user id принимается (unverified)', 
   }));
   assert.equal(r.ok, true);
   const top = await j(await fetch(`${BASE}/api/top?period=all`));
-  assert.ok(!top.top.some((t) => t.uid === '98765'));
+  assert.ok(!top.top.some((t) => t.platform === 'vk'));
   const shadow = await j(await fetch(`${BASE}/api/top?period=all&includeUnverified=1`));
-  assert.ok(shadow.top.some((t) => t.uid === '98765'));
+  assert.ok(shadow.top.some((t) => t.platform === 'vk'));
+  assert.ok(shadow.top.every((row) => !Object.hasOwn(row, 'uid')));
 });
 
 await ok('vk: валидный web_app_t → verified (общий топ)', async () => {
@@ -335,7 +335,8 @@ await ok('vk: валидный web_app_t → verified (общий топ)', asyn
   assert.equal(r.ok, true);
   assert.ok(r.rank !== null);
   const top = await j(await fetch(`${BASE}/api/top?period=all`));
-  assert.ok(top.top.some((t) => t.uid === '77777' && t.platform === 'vk'));
+  assert.ok(top.top.some((t) => t.platform === 'vk'));
+  assert.ok(top.top.every((row) => !Object.hasOwn(row, 'uid')));
 });
 
 await ok('vk: подделанный web_app_t → unverified (фолбэк на anonId)', async () => {
@@ -351,14 +352,15 @@ await ok('vk: подделанный web_app_t → unverified (фолбэк на
   }));
   assert.equal(r.ok, true);
   const top = await j(await fetch(`${BASE}/api/top?period=all`));
-  assert.ok(!top.top.some((t) => t.uid === '88888'));
+  const verifiedVk = top.top.filter((t) => t.platform === 'vk');
   const shadow = await j(await fetch(`${BASE}/api/top?period=all&includeUnverified=1`));
-  assert.ok(shadow.top.some((t) => t.uid === '88888'));
+  assert.ok(shadow.top.filter((t) => t.platform === 'vk').length > verifiedVk.length);
+  assert.ok(shadow.top.every((row) => !Object.hasOwn(row, 'uid')));
 });
 
 const { parseStartParam } = await import('./bot.mjs');
 await ok('бот: parseStartParam — deep-link ref_<uid>', async () => {
-  assert.equal(parseStartParam('/start ref_12345'), 'ref_12345');
+  assert.equal(parseStartParam('/start ref_m_12345'), 'ref_m_12345');
 });
 await ok('бот: parseStartParam — обычный start', async () => {
   assert.equal(parseStartParam('/start'), null);

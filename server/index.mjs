@@ -234,16 +234,44 @@ function antiCheatCheck(p) {
   return null;
 }
 
+const REF_PLATFORM_CODES = { t: 'telegram', m: 'max', b: 'browser', v: 'vk' };
+const KNOWN_PLATFORMS = new Set(Object.values(REF_PLATFORM_CODES));
+
+function parseReferralRef(raw) {
+  if (typeof raw !== 'string' || raw.length < 1 || raw.length > 64) return null;
+  const modern = /^([tmbv])_([A-Za-z0-9-]{1,48})$/.exec(raw);
+  if (modern) {
+    const platform = REF_PLATFORM_CODES[modern[1]];
+    return { token: raw, platform, uid: modern[2], key: `${platform}:${modern[2]}`, legacy: false };
+  }
+  // Backward compatibility for links already shared before referral V2.
+  if (/^[A-Za-z0-9-]{1,64}$/.test(raw)) {
+    return { token: raw, platform: null, uid: raw, key: raw, legacy: true };
+  }
+  return null;
+}
+
+function parseStoredIdentity(raw) {
+  const value = String(raw ?? '');
+  const split = value.indexOf(':');
+  if (split > 0) {
+    const platform = value.slice(0, split);
+    const uid = value.slice(split + 1);
+    if (KNOWN_PLATFORMS.has(platform) && uid) return { platform, uid, key: value };
+  }
+  return value ? { platform: null, uid: value, key: value } : null;
+}
+
 // ---------- push-уведомление referrer'у (V7) ----------
 /**
- * Telegram: когда приглашённый завершает первый забег по реф-ссылке,
- * шлём referrer'у сообщение «твой ход» (Bot API sendMessage, fire-and-forget).
- * Работает только для TG-рефереров (uid — числовой chat id). MAX — TODO-V7
- * (webhook-бот после получения токена).
+ * Outbound push разрешён только когда referral V2 криптографически не доказывает,
+ * но явно сохраняет исходную платформу. Legacy bare uid никогда не пушим:
+ * числовой MAX id нельзя ошибочно отправить как Telegram chat_id.
  */
-async function notifyReferrer(fromUid) {
-  if (!TG_TOKEN) return;
-  if (!/^\d+$/.test(fromUid)) return; // только TG-uid (chat id)
+async function notifyReferrer(ref) {
+  if (!TG_TOKEN || !ref || ref.platform !== 'telegram') return;
+  const fromUid = ref.uid;
+  if (!/^\d+$/.test(fromUid)) return;
   const text = [
     '⚡️ OFELIYA: твой ход!',
     `Твой друг прошёл первый забег по твоей ссылке — он уже с бонусом.`,
@@ -303,6 +331,10 @@ function sortTop(list) {
       level: s.level,
       dateKey: s.dateKey,
     }));
+}
+
+function publicTop(list) {
+  return list.map(({ uid, ...row }) => row);
 }
 
 function getTop({ period = 'all', platform, includeUnverified = false } = {}) {
@@ -447,7 +479,7 @@ const server = createServer(async (req, res) => {
         timeMs: Math.round(payload.timeMs),
         kills: Math.round(payload.kills),
         level: Math.round(payload.level),
-        ref: typeof payload.ref === 'string' ? payload.ref.slice(0, 64) : null,
+        ref: parseReferralRef(payload.ref)?.token ?? null,
         verified,
         ts: Date.now(),
       };
@@ -455,26 +487,31 @@ const server = createServer(async (req, res) => {
       store.scores.push(record);
       if (store.scores.length > MAX_SCORES) store.scores.splice(0, store.scores.length - MAX_SCORES);
 
-      // Реферал: записываем рёбро и разовую награду.
+      // Реферал V2: from хранится как platform:uid. Legacy bare uid остаётся
+      // читаемым, но не получает outbound push из-за неоднозначной платформы.
       let refReward = null;
-      if (record.ref) {
-        const edgeKey = `${record.ref}>${platform}:${uid}`;
-        if (!store.refs.some((r) => r.edge === edgeKey)) {
-          store.refs.push({ edge: edgeKey, from: record.ref, to: `${platform}:${uid}`, ts: record.ts });
-          if (store.refs.length > MAX_REFS) store.refs.splice(0, store.refs.length - MAX_REFS);
-        }
-        if (!store.refRewards[edgeKey]) {
-          store.refRewards[edgeKey] = record.ts;
-          refReward = { from: record.ref, to: `${platform}:${uid}`, first: true };
-          // V7: push referrer'у «твой ход» (best effort, не блокирует ответ).
-          void notifyReferrer(record.ref);
+      const ref = parseReferralRef(record.ref);
+      if (ref) {
+        const toKey = `${platform}:${uid}`;
+        const selfReferral = ref.uid === uid && (!ref.platform || ref.platform === platform);
+        if (!selfReferral) {
+          const edgeKey = `${ref.key}>${toKey}`;
+          if (!store.refs.some((r) => r.edge === edgeKey)) {
+            store.refs.push({ edge: edgeKey, from: ref.key, to: toKey, ts: record.ts });
+            if (store.refs.length > MAX_REFS) store.refs.splice(0, store.refs.length - MAX_REFS);
+          }
+          if (!store.refRewards[edgeKey]) {
+            store.refRewards[edgeKey] = record.ts;
+            refReward = { from: ref.key, to: toKey, first: true };
+            void notifyReferrer(ref);
+          }
         }
       }
 
       saveStore();
       const top = getTop({ period: record.daily ? 'daily' : 'all' });
       const rank = top.find((t) => t.uid === uid && t.platform === platform)?.rank ?? null;
-      return send(res, 200, { ok: true, rank, top, refReward });
+      return send(res, 200, { ok: true, rank, top: publicTop(top), refReward });
     }
 
     if (req.method === 'GET' && url.pathname === '/api/top') {
@@ -485,7 +522,7 @@ const server = createServer(async (req, res) => {
         platform: url.searchParams.get('platform') ?? undefined,
         includeUnverified: url.searchParams.get('includeUnverified') === '1',
       });
-      return send(res, 200, { ok: true, top, period, season: currentSeason() });
+      return send(res, 200, { ok: true, top: publicTop(top), period, season: currentSeason() });
     }
 
     // C5: текущий сезон (индекс, окно, дней до конца).
@@ -536,41 +573,55 @@ const server = createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && url.pathname === '/api/ref') {
-      const user = url.searchParams.get('user') ?? '';
-      const platform = url.searchParams.get('platform') ?? '';
-      const mine = store.refs.filter((r) => r.from === user).length;
-      return send(res, 200, { ok: true, user, platform, invited: mine });
+      const user = (url.searchParams.get('user') ?? '').slice(0, 64);
+      const platform = (url.searchParams.get('platform') ?? '').toLowerCase();
+      if (!user || !KNOWN_PLATFORMS.has(platform)) {
+        return send(res, 400, { ok: false, error: 'bad request' });
+      }
+      const meKey = `${platform}:${user}`;
+      const mine = store.refs.filter((r) => {
+        const from = parseStoredIdentity(r.from);
+        return r.from === meKey || (from?.platform == null && from?.uid === user);
+      }).length;
+      return send(res, 200, { ok: true, platform, invited: mine });
     }
 
-    // V2: топ друзей по реферальным рёбрам (двунаправленно: кого позвал + кто позвал).
+    // V2/V2-ref: friend graph keeps platform identity internally but public
+    // response omits raw uid. Legacy bare ref ids remain readable.
     if (req.method === 'GET' && url.pathname === '/api/friends') {
-      const user = url.searchParams.get('user') ?? '';
-      const platform = url.searchParams.get('platform') ?? '';
-      if (!user) return send(res, 400, { ok: false, error: 'no user' });
+      const user = (url.searchParams.get('user') ?? '').slice(0, 64);
+      const platform = (url.searchParams.get('platform') ?? '').toLowerCase();
+      if (!user || !KNOWN_PLATFORMS.has(platform)) {
+        return send(res, 400, { ok: false, error: 'bad request' });
+      }
+      const meKey = `${platform}:${user}`;
+      const friends = new Map(); // identity -> { platform, uid, relation }
+      const addFriend = (identity, relation) => {
+        if (!identity?.uid) return;
+        const key = identity.key;
+        const prev = friends.get(key);
+        friends.set(key, { ...identity, relation: prev && prev.relation !== relation ? 'both' : relation });
+      };
 
-      const friends = new Map(); // uid -> relation
       for (const r of store.refs) {
-        if (r.from === user) {
-          const toUid = String(r.to).split(':').slice(1).join(':');
-          if (toUid) friends.set(toUid, friends.has(toUid) ? 'both' : 'invited');
-        }
-        if (platform && r.to === `${platform}:${user}`) {
-          if (r.from) friends.set(r.from, friends.has(r.from) ? 'both' : 'inviter');
-        }
+        const from = parseStoredIdentity(r.from);
+        const to = parseStoredIdentity(r.to);
+        const legacyFromMe = from?.platform == null && from?.uid === user;
+        if (r.from === meKey || legacyFromMe) addFriend(to, 'invited');
+        if (r.to === meKey) addFriend(from, 'inviter');
       }
 
-      // лучший скор каждого друга (по uid, любая платформа)
       const out = [];
-      for (const [uid, relation] of friends) {
+      for (const friend of friends.values()) {
         let best = null;
-        for (const s of store.scores) {
-          if (s.uid !== uid) continue;
-          if (!best || compareScores(s, best) < 0) best = s;
+        for (const score of store.scores) {
+          if (score.uid !== friend.uid) continue;
+          if (friend.platform && score.platform !== friend.platform) continue;
+          if (!best || compareScores(score, best) < 0) best = score;
         }
         if (best) {
           out.push({
-            relation,
-            uid,
+            relation: friend.relation,
             platform: best.platform,
             win: !!best.win,
             timeMs: best.timeMs,
@@ -581,7 +632,7 @@ const server = createServer(async (req, res) => {
         }
       }
       out.sort(compareScores);
-      return send(res, 200, { ok: true, user, platform, friends: out.slice(0, 10) });
+      return send(res, 200, { ok: true, platform, friends: out.slice(0, 10) });
     }
 
     return send(res, 404, { ok: false, error: 'not found' });
