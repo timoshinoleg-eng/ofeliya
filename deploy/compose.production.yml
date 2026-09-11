@@ -25,9 +25,10 @@ services:
       dockerfile: deploy/Dockerfile
       target: static
       args:
-        # Optional at build time; empty safely disables bot-style share links.
-        # Never inherit VITE_MAX_BOT_USERNAME from Hub implicitly.
-        VITE_MAX_BOT_USERNAME: ${OFELIYA_BOT_USERNAME:-}
+        # Compose interpolation happens before service env_file is applied.
+        # Production must invoke compose with --env-file /opt/ofeliya/.env so
+        # client deep-links are built for this exact MAX bot.
+        VITE_MAX_BOT_USERNAME: ${OFELIYA_BOT_USERNAME:?OFELIYA_BOT_USERNAME is required; pass --env-file /opt/ofeliya/.env}
         VITE_TG_BOT_USERNAME: ${VITE_TG_BOT_USERNAME:-}
     image: ofeliya-static:${OFELIYA_RELEASE:?OFELIYA_RELEASE is required}
     restart: unless-stopped
