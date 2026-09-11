@@ -50,7 +50,7 @@ async function openRenderer(browser, renderer) {
   });
 
   if (renderer === 'webgl') {
-    if (state.renderer !== 'WebGLRenderer') {
+    if (!state.renderer.startsWith('WebGLRenderer')) {
       throw new Error(`High-DPI WebGL path did not boot WebGL: ${JSON.stringify(state)}`);
     }
     if (state.titleResolution === null || state.titleResolution < 2) {
