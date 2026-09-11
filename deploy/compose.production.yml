@@ -22,6 +22,9 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile
       target: static
+      args:
+        VITE_MAX_BOT_USERNAME: ${VITE_MAX_BOT_USERNAME:-}
+        VITE_TG_BOT_USERNAME: ${VITE_TG_BOT_USERNAME:-}
     image: ofeliya-static:${OFELIYA_RELEASE:?OFELIYA_RELEASE is required}
     restart: unless-stopped
     depends_on:

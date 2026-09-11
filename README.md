@@ -51,13 +51,16 @@ npm run bot         # Telegram-бот (long polling)
 | `TG_BOT_TOKEN` | server+bot | токен бота: валидация TG `initData` + push «твой ход» |
 | `MAX_BOT_TOKEN` | server | токен бота MAX: валидация MAX `initData` |
 | `GAME_URL` | server+bot | публичная ссылка на мини-апп (в push и ответах бота) |
-| `VITE_SERVER_URL` | клиент (build) | base score-сервера; пусто → относительные `/api/*` (dev-proxy / reverse-proxy) |
+| `VITE_SERVER_URL` | клиент (build) | base score-сервера; пусто → relative API under current deployment prefix |
+| `VITE_MAX_BOT_USERNAME` | клиент (build) | public MAX bot username без @ для startapp/share/ref links |
+| `VITE_TG_BOT_USERNAME` | клиент (build) | public Telegram bot username без @ для startapp/share/ref links |
 | `VITE_ANALYTICS_URL` | клиент (build) | PostHog-совместимый endpoint `/capture`; пусто → только буфер |
 | `VITE_VK_REWARD_PLACEMENT_ID` | клиент (build) | rewarded-реклама VK: placement_id из VK Ads (Apps→Placements). Пусто → слот не показывается |
 
-API: `POST /api/score` (initData-авторизация, анти-чит: время 1с–1ч, киллы
-≤ 30/с, уровень ≤ 100; дедупликация best на юзера), `GET /api/top?period=all|daily|weekly`,
-`POST /api/ref`, `GET /api/ref?user=`, `GET /health`.
+API: `POST /api/score` (initData-авторизация, anti-cheat и referral persistence),
+`GET /api/top?period=all|daily|weekly|season` (без raw platform uid), `GET /api/ref`
+(read-only referral stats), `GET /api/friends` (без raw uid), `GET /health`. Legacy
+`POST /api/ref` оставлен только для старых dev-клиентов и заблокирован production nginx.
 
 ## PWA
 
@@ -85,9 +88,8 @@ stale-while-revalidate, `/audio` не кэшируется (стриминг 11M
 2. Разместить `dist/` на HTTPS-хостинге (любом; рекомендован тот же регион,
    где играют пользователи).
 3. В кабинете MAX указать HTTPS URL мини-приложения у бота.
-4. Шаринг-ссылка: заполнить `SHARE.maxBot` в `src/game/share.ts` (username бота
-   без @) — deep link `https://max.ru/<бот>?startapp=<payload>` будет в карточке
-   результата. Пустое значение → ссылка на страницу мини-аппа.
+4. Для share/ref deep links перед build задать `VITE_MAX_BOT_USERNAME=<бот>` без @.
+   Docker/Compose передают его как build arg; пустое значение безопасно отключает bot-style startapp link.
 5. Серверные рейтинги/персональные данные — только после серверной проверки
    подписанного `window.WebApp.initData` (HMAC с токеном бота).
 
@@ -96,7 +98,7 @@ stale-while-revalidate, `/audio` не кэшируется (стриминг 11M
 1. `npm run build` → разместить `dist/` на HTTPS-хостинге.
 2. В [@BotFather](https://t.me/BotFather): `/newbot` → Bot Settings →
    Menu Button → URL мини-приложения.
-3. Шаринг-ссылка: заполнить `SHARE.tgBot` в `src/game/share.ts` —
+3. Для share/ref deep links перед build задать `VITE_TG_BOT_USERNAME=<бот>` без @ —
    deep link `https://t.me/<бот>?startapp=<payload>`.
 4. Адаптер уже встроен: `telegram-web-app.js` подключается в `index.html`
    (в MAX/браузере — no-op), тема/хаптика/шеринг идут через MessengerBridge.
@@ -172,7 +174,7 @@ docs/                   — SMOKE_TEST.md, OPEN_SOURCE_REFERENCES.md,
   link; MAX/Telegram — нативный шеринг, браузер — Web Share API → clipboard.
   При открытии по ссылке — подсказка «ты пришёл по вызову».
 - **Рефералы (V1)**: кнопка «ПРИГЛАСИТЬ» на game over → личная ссылка
-  `startapp=ref_<uid>` (MAX/TG) или `?ref=<uid>` (web). Приглашённый получает
+  `startapp=ref_<platformCode>_<uid>` (MAX/TG) или тот же token через `?ref=` (web). Приглашённый получает
   бонус на первый забег (+1 HP, кулдаун рывка −30%), рёбро фиксируется на
   сервере, referrer'у приходит push «твой ход» (V7, TG).
 - **Глобальный топ (V3)**: лучший результат каждого юзера в `POST /api/score`
