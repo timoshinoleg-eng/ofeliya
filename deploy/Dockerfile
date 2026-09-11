@@ -22,6 +22,7 @@ ENV NODE_ENV=production
 RUN mkdir -p /app/server/data && chown -R node:node /app/server
 COPY --chown=node:node server/index.mjs ./server/index.mjs
 USER node
+CMD ["node", "server/index.mjs"]
 
 FROM nginx:alpine AS static
 COPY deploy/nginx.conf /etc/nginx/nginx.conf
