@@ -3,18 +3,13 @@ import {
   BOSS_SCALE,
   COLORS,
   COMBO,
-  DODGE,
-  FOE_BULLET,
   FONT,
   JUICE,
-  K2_BEHAVIOR,
-  K5_BEHAVIOR,
   ORBIT,
   PLAYER,
   POSTFX,
   WEAPON,
   difficulty,
-  type BossType,
   type EnemyKind,
 } from '../game/config';
 import {
@@ -24,25 +19,19 @@ import {
 } from '../game/AchievementSystem';
 import { rollRunChoices } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
-import { dailyRng, mathRandom, todayKey } from '../game/SeededRng';
 import { Player } from '../game/Player';
 import { Enemy } from '../game/Enemy';
-import { FoeBullet } from '../game/FoeBullet';
-import { earnShards, grantMetaAchievements, metaEffects } from '../game/MetaSystem';
 import { Bullet } from '../game/Bullet';
 import { Gem } from '../game/Gem';
 import { RunState } from '../game/RunState';
 import type { EvolutionId, UpgradeDef } from '../game/UpgradeSystem';
 import { WaveDirector } from '../game/WaveDirector';
-import { Analytics } from '../systems/Analytics';
 import { AtmosphereSystem } from '../systems/AtmosphereSystem';
-import { MessengerBridge } from '../systems/MessengerBridge';
-import { ServerClient } from '../systems/ServerClient';
-import { SaveSystem, type ControlMode } from '../systems/SaveSystem';
-import { type AimState } from '../game/Sticks';
+import { PlatformBridge } from '../platform';
+import { SaveSystem } from '../systems/SaveSystem';
 import { Sfx } from '../systems/Sfx';
-import { ShareVideo } from '../systems/ShareVideo';
 import { VfxSystem } from '../systems/VfxSystem';
+import { HostCellSystem, type HostCellLysisEvent } from '../systems/HostCellSystem';
 
 interface RunSnapshot {
   hp: number;
@@ -64,11 +53,10 @@ export class GameScene extends Phaser.Scene {
   private atmosphere!: AtmosphereSystem;
   private vignette!: Phaser.GameObjects.Image;
   private vfx!: VfxSystem;
+  private hostCells!: HostCellSystem;
   private bullets!: Phaser.Physics.Arcade.Group;
   private enemies!: Phaser.Physics.Arcade.Group;
   private gems!: Phaser.Physics.Arcade.Group;
-  /** K2: снаряды врагов (снайпер). */
-  private foeBullets!: Phaser.Physics.Arcade.Group;
   private blades: Phaser.GameObjects.Image[] = [];
   private haloRing: Phaser.GameObjects.Arc | null = null;
   private wave!: WaveDirector;
@@ -77,24 +65,13 @@ export class GameScene extends Phaser.Scene {
 
   private nextFireAt = 0;
   private novaAcc = 0;
-  /** K3: ПЕРЕГРУЗКА — аккумулятор авто-залпа (7 с). */
-  private overclockAcc = 0;
-  /** K3: АЭГИС — время, когда контр-нова снова доступна. */
-  private aegisReadyAt = 0;
-  /** K3: КОМЕТА — счётчик залпов. */
-  private shotCounter = 0;
   private queuedLevels = 0;
   awaitingChoice = false;
   pendingChoices: UpgradeDef[] = [];
   private pendingEvolutionCeremony: EvolutionId | null = null;
   private newAchievements: AchievementId[] = [];
   private achievementCheckAcc = 0;
-  private dailyMode = false;
-  private dailyDateKey = '';
-  /** Публичный: UIScene читает для логики паузы/модалок. */
-  finished = false;
-  /** V5: идёт ли запись клипа (canRecord). */
-  private recording = false;
+  private finished = false;
   private hitStopUntil = 0;
   private hitStopped = false;
   private dmgTexts: Phaser.GameObjects.Text[] = [];
@@ -105,67 +82,17 @@ export class GameScene extends Phaser.Scene {
   private trailCursor = 0;
   private trailAcc = 0;
   private keys: Record<string, Phaser.Input.Keyboard.Key> = {};
-  private bloomFx: Phaser.FX.Bloom | null = null;
-  private vigFx: Phaser.FX.Vignette | null = null;
-  private qualityAcc = 0;
-  private qualityFrames = 0;
-  private qualityDecided = false;
-  private snap: RunSnapshot = {
-    hp: 0,
-    maxHp: 0,
-    level: 1,
-    xp: 0,
-    xpNext: 1,
-    timeMs: 0,
-    kills: 0,
-    combo: 0,
-    bossHp: 0,
-    bossMax: 0,
-  };
-  private dodgeUntil = 0;
-  private dodgeCdUntil = 0;
-  private dodgeVx = 0;
-  private dodgeVy = 0;
-  private lastMoveX = 1;
-  private lastMoveY = 0;
-  /** M-блок: режим управления на весь забег (смена — со следующего). */
-  private controlMode: ControlMode = 'one';
-  /** Реф-бонус (V1): кулдаун рывка −30% на первом забеге по приглашению. */
-  private refBuffActive = false;
-  /** Rewarded (V6): сколько лечащих бонусов за рекламу уже выдано в этом забеге. */
-  private rewardHealsUsed = 0;
-  static readonly REWARD_HEAL_LIMIT = 3;
+  private introHint: Phaser.GameObjects.Container | null = null;
 
   constructor() {
     super('Game');
   }
 
-  create(data?: { daily?: boolean; dateKey?: string }): void {
+  create(): void {
     this.runState = new RunState();
-    // M-блок: режим управления фиксируется на забег (Sticks живёт в UIScene
-    // и читает тот же SaveSystem; переключение в меню — со следующего забега).
-    this.controlMode = SaveSystem.get().controlMode;
-    // Daily: сид от даты → одинаковый забег у всех игроков этого дня.
-    this.dailyMode = !!(data && data.daily);
-    this.dailyDateKey = (data && data.dateKey) || todayKey();
-    this.runState.rng = this.dailyMode ? dailyRng(this.dailyDateKey) : mathRandom;
-    // K1: метапрогресс — купленные ступеньки усиливают СТАРТ забега.
-    // (Daily-режим честный: осколки — статы игрока, как и ранги/рекорды.)
-    const metaFx = metaEffects(SaveSystem.get().meta);
-    this.runState.damageMul *= metaFx.damageMul;
-    this.runState.speedMul *= metaFx.speedMul;
-    this.runState.magnetMul *= metaFx.magnetMul;
-    this.runState.maxHp = Math.round(this.runState.maxHp * metaFx.hpMul);
-    this.runState.hp = this.runState.maxHp;
-    // Реф-бонус (V1): первый забег по приглашению — +1 HP и рывк быстрее.
-    this.refBuffActive = SaveSystem.peekRefBonus() !== null;
-    if (this.refBuffActive) {
-      this.runState.maxHp += 1;
-      this.runState.hp += 1;
-    }
     Sfx.startMusic();
+    PlatformBridge.setBackHandler(() => this.exitToMenu());
     this.queuedLevels = 0;
-    this.rewardHealsUsed = 0;
     this.awaitingChoice = false;
     this.pendingChoices = [];
     this.pendingEvolutionCeremony = null;
@@ -174,9 +101,6 @@ export class GameScene extends Phaser.Scene {
     this.finished = false;
     this.nextFireAt = 0;
     this.novaAcc = 0;
-    this.overclockAcc = 0;
-    this.aegisReadyAt = 0;
-    this.shotCounter = 0;
     this.blades = [];
     this.haloRing = null;
     this.hitStopUntil = 0;
@@ -184,13 +108,12 @@ export class GameScene extends Phaser.Scene {
     this.lastDmg = null;
     this.lastDmgAt = 0;
     this.dmgCursor = 0;
+    this.introHint = null;
     this.physics.world.resume();
 
     const W = this.scale.width;
     const H = this.scale.height;
     this.cameras.main.setBackgroundColor(COLORS.bg);
-    // Плавное появление после fadeOut из меню / game over.
-    this.cameras.main.fadeIn(320, 11, 14, 26);
 
     this.atmosphere = new AtmosphereSystem(this);
     this.vignette = this.add
@@ -199,30 +122,11 @@ export class GameScene extends Phaser.Scene {
       .setDepth(28)
       .setDisplaySize(W * 1.25, H * 1.25);
 
-    // Постпроцесс (bloom/vignette) — самый дорогой расход GPU на мобильном.
-    // Включаем только если устройство не похоже на слабое; первые 6 секунд
-    // меряем FPS и при просадке откатываемся на виньетку-текстуру (см. update).
-    const nav = navigator as { hardwareConcurrency?: number; deviceMemory?: number };
-    const lowEnd =
-      (nav.hardwareConcurrency ?? 8) <= 4 || (nav.deviceMemory ?? 8) <= 4;
-    const fxEnabled =
-      POSTFX.enabled && this.game.renderer.type === Phaser.WEBGL && !lowEnd;
+    const fxEnabled = POSTFX.enabled && this.game.renderer.type === Phaser.WEBGL;
     if (fxEnabled) {
       const fx = this.cameras.main.postFX;
-      this.bloomFx = fx.addBloom(
-        0xffffff,
-        0,
-        0,
-        POSTFX.bloom.blurStrength,
-        POSTFX.bloom.strength,
-        POSTFX.bloom.steps
-      );
-      this.vigFx = fx.addVignette(
-        0.5,
-        0.5,
-        POSTFX.vignette.radius,
-        POSTFX.vignette.strength
-      );
+      fx.addBloom(0xffffff, 0, 0, POSTFX.bloom.blurStrength, POSTFX.bloom.strength, POSTFX.bloom.steps);
+      fx.addVignette(0.5, 0.5, POSTFX.vignette.radius, POSTFX.vignette.strength);
     }
     this.vignette.setVisible(!fxEnabled);
 
@@ -233,8 +137,8 @@ export class GameScene extends Phaser.Scene {
     this.bullets = this.physics.add.group({ classType: Bullet, maxSize: 160 });
     this.enemies = this.physics.add.group({ classType: Enemy, maxSize: 260 });
     this.gems = this.physics.add.group({ classType: Gem, maxSize: 220 });
-    this.foeBullets = this.physics.add.group({ classType: FoeBullet, maxSize: 60 });
     this.vfx = new VfxSystem(this);
+    this.hostCells = new HostCellSystem(this, this.player, (event) => this.onHostCellLysis(event));
 
     this.dmgTexts = [];
     for (let i = 0; i < JUICE.dmgTextPool; i++) {
@@ -259,7 +163,7 @@ export class GameScene extends Phaser.Scene {
     for (let i = 0; i < JUICE.trailPool; i++) {
       this.trail.push(
         this.add
-          .image(0, 0, 'player')
+          .image(0, 0, 'virus-player')
           .setDepth(14)
           .setBlendMode(Phaser.BlendModes.ADD)
           .setVisible(false)
@@ -271,7 +175,6 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.bullets, this.enemies, this.onBulletHit, undefined, this);
     this.physics.add.overlap(this.player, this.enemies, this.onPlayerHit, undefined, this);
     this.physics.add.overlap(this.player, this.gems, this.onGemTouch, undefined, this);
-    this.physics.add.overlap(this.player, this.foeBullets, this.onFoeBulletHit, undefined, this);
 
     this.wave = new WaveDirector(this, this.enemies);
     this.cameras.main.startFollow(this.player, true, 0.14, 0.14);
@@ -282,48 +185,36 @@ export class GameScene extends Phaser.Scene {
         string,
         Phaser.Input.Keyboard.Key
       >;
-      // Додж на десктопе: Space или Shift, в текущем направлении движения.
-      const dodgeKeys = kb.addKeys(['SPACE', 'SHIFT']);
-      for (const k of Object.values(dodgeKeys)) {
-        k.on('down', () => this.tryDodge(this.lastMoveX, this.lastMoveY));
-      }
     }
 
     if (!this.scene.isActive('UI')) this.scene.launch('UI');
 
     this.registry.set('joy', { x: 0, y: 0 });
     this.registry.set('runResult', null);
-    this.registry.set('runMode', { daily: this.dailyMode, dateKey: this.dailyDateKey });
     this.registry.set('run', this.snapshot());
 
-    // V5: запись клипа последних секунд (скользящее окно). Только если устройство
-    // реально умеет (MediaRecorder/captureStream); иначе тихо пропускаем.
-    this.recording = ShareVideo.start(this.game.canvas as HTMLCanvasElement | null);
-    if (this.recording) this.registry.set('runClip', null);
-
-    if (SaveSystem.get().runs === 0) {
-      this.showIntroHint();
-      Analytics.track('first_run');
-    }
-    Analytics.track('run_started', { daily: this.dailyMode });
+    if (SaveSystem.get().runs === 0) this.showIntroHint();
 
     this.scale.on('resize', this.onResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.onResize, this);
+      PlatformBridge.setBackHandler(null);
+      this.dismissIntroHint(true);
+      this.cameras.main.resetFX();
       this.atmosphere.destroy();
       this.vfx.destroy();
-      // V5: запись не завершена забегом (перезапуск/смена сцены) → просто
-      // останавливаем без сохранения клипа.
-      if (this.recording) {
-        this.recording = false;
-        void ShareVideo.stop();
-      }
+      this.hostCells.destroy();
       this.registry.remove('run');
       this.registry.remove('runResult');
-      this.registry.remove('runMode');
       this.registry.remove('joy');
-      this.registry.remove('runClip');
     });
+  }
+
+  private exitToMenu(): void {
+    Sfx.stopMusic();
+    if (this.scene.isActive('UI') || this.scene.isPaused('UI')) this.scene.stop('UI');
+    this.scene.stop();
+    this.scene.start('Menu');
   }
 
   update(time: number, delta: number): void {
@@ -336,18 +227,6 @@ export class GameScene extends Phaser.Scene {
     const st = this.runState;
     st.timeMs += delta;
     st.tickNoDamage(delta);
-
-    // Адаптивное качество: первые 6 секунд считаем средний FPS; <45 —
-    // снимаем постпроцесс (bloom = основной бюджет) и возвращаем виньетку-текстуру.
-    if (!this.qualityDecided && this.bloomFx) {
-      this.qualityAcc += delta;
-      this.qualityFrames += 1;
-      if (this.qualityAcc >= 6000) {
-        this.qualityDecided = true;
-        const fps = this.qualityFrames / (this.qualityAcc / 1000);
-        if (fps < 45) this.disablePostFX();
-      }
-    }
     this.achievementCheckAcc += delta;
     if (this.achievementCheckAcc >= 500) {
       this.achievementCheckAcc = 0;
@@ -371,18 +250,8 @@ export class GameScene extends Phaser.Scene {
       vx /= len;
       vy /= len;
     }
-    if (len > 0.1) {
-      this.lastMoveX = vx;
-      this.lastMoveY = vy;
-    }
-    const body = this.player.body as Phaser.Physics.Arcade.Body;
-    if (time < this.dodgeUntil) {
-      // Рывок: фиксированный импульс, игнорирует обычный ввод (но не кулдаун).
-      body.setVelocity(this.dodgeVx, this.dodgeVy);
-    } else {
-      const speed = PLAYER.speed * st.speedMul;
-      body.setVelocity(vx * speed, vy * speed);
-    }
+    const speed = PLAYER.speed * st.speedMul;
+    (this.player.body as Phaser.Physics.Arcade.Body).setVelocity(vx * speed, vy * speed);
 
     if (len > 0.1) {
       this.trailAcc += delta;
@@ -420,18 +289,10 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // K3: ПЕРЕГРУЗКА — автоматический круговой залп раз в 7 с.
-    if (st.hasEvolution('overclock')) {
-      this.overclockAcc += delta;
-      if (this.overclockAcc >= 7000) {
-        this.overclockAcc = 0;
-        this.fireOverclock();
-      }
-    }
-
     if (st.regen > 0) st.hp = Math.min(st.maxHp, st.hp + (st.regen * delta) / 1000);
 
     this.wave.update(delta);
+    this.hostCells.update(time, delta, st.timeMs);
     this.atmosphere.update(time, delta, st.timeMs);
 
     this.playerBar.clear();
@@ -449,19 +310,15 @@ export class GameScene extends Phaser.Scene {
     this.registry.set('run', this.snapshot());
 
     if (this.queuedLevels > 0 && !this.awaitingChoice) {
+      // Progression supersedes onboarding; never render tutorial copy beneath a mutation modal.
+      this.dismissIntroHint(true);
       this.pendingChoices = rollRunChoices(st);
       this.awaitingChoice = true;
       this.queuedLevels -= 1;
     }
   }
 
-  spawnEnemy(
-    kind: EnemyKind,
-    x: number,
-    y: number,
-    elite: boolean,
-    bossType?: BossType | 'shard'
-  ): Enemy | null {
+  spawnEnemy(kind: EnemyKind, x: number, y: number, elite: boolean): Enemy | null {
     const e = this.enemies.get(x, y) as Enemy | null;
     if (!e) return null;
     const isBoss = kind === 'boss';
@@ -470,78 +327,17 @@ export class GameScene extends Phaser.Scene {
       elite,
       hpScale: isBoss ? BOSS_SCALE.hp : hpScale,
       dmgScale: isBoss ? BOSS_SCALE.dmg : dmgScale,
-      bossType,
     });
     if (kind === 'boss') {
       Sfx.play('boss');
       this.atmosphere.pulse(COLORS.red, 0.32);
       this.cameras.main.shake(320, 0.008);
-      MessengerBridge.haptic('heavy');
-      this.showBossIntro();
-      Analytics.track('boss_spawned', { type: this.wave.bossType });
+      PlatformBridge.haptic('heavy');
     } else if (elite) {
       Sfx.play('elite');
       this.atmosphere.pulse(COLORS.gold, 0.12);
     }
     return e;
-  }
-
-  /**
-   * K2: выстрел врага (снайпер). Публичный — Enemy вызывает по таймеру.
-   * Fire-and-forget: если пул исчерпан — просто не стреляет.
-   */
-  foeShoot(x: number, y: number, angle: number): void {
-    if (this.finished) return;
-    const b = this.foeBullets.get(x, y) as FoeBullet | null;
-    if (!b) return;
-    b.shoot(this.time.now, angle);
-    Sfx.play('shoot');
-  }
-
-  /** K4: радиальный залп врага (орбитальный босс) — n снарядов по кругу. */
-  foeBurst(x: number, y: number, n: number): void {
-    if (this.finished) return;
-    for (let i = 0; i < n; i++) {
-      this.foeShoot(x, y, (i / n) * Math.PI * 2);
-    }
-    Sfx.play('nova');
-  }
-
-  /**
-   * K4: босс «Разделяющее ядро» раскалывается (50% HP) → WaveDirector
-   * спавнит два осколка; победа = убить оба.
-   */
-  onBossSplit(boss: Enemy): void {
-    if (this.finished) return;
-    this.vfx.boom(boss.x, boss.y, 130, COLORS.red);
-    this.cameras.main.shake(320, 0.011);
-    Sfx.play('elite');
-    MessengerBridge.haptic('heavy');
-    this.wave.splitBoss(boss);
-  }
-
-  /**
-   * Уклонение в направлении (nx, ny). true — если рывок стартовал.
-   * i-frames на время рывка + запас: читается как «успел уйти», а не «почти».
-   */
-  tryDodge(nx: number, ny: number): boolean {
-    if (this.finished) return false;
-    const now = this.time.now;
-    if (now < this.dodgeCdUntil) return false;
-    const d = Math.hypot(nx, ny);
-    if (d < 0.15) return false;
-    this.dodgeVx = (nx / d) * DODGE.speed;
-    this.dodgeVy = (ny / d) * DODGE.speed;
-    this.lastMoveX = nx;
-    this.lastMoveY = ny;
-    this.dodgeUntil = now + DODGE.durationMs;
-    this.dodgeCdUntil = now + (this.refBuffActive ? DODGE.cooldownMs * 0.7 : DODGE.cooldownMs);
-    this.player.hurtUntil = Math.max(this.player.hurtUntil, this.dodgeUntil + DODGE.iframeExtraMs);
-    Sfx.play('dodge');
-    MessengerBridge.haptic('light');
-    this.vfx.dodge(this.player.x, this.player.y, this.dodgeVx, this.dodgeVy);
-    Analytics.track('dodge_used', { t: Math.round(this.runState.timeMs / 1000) });
-    return true;
   }
 
   onEnemyDied(e: Enemy): void {
@@ -552,50 +348,49 @@ export class GameScene extends Phaser.Scene {
     if (st.combo > st.comboBest) st.comboBest = st.combo;
     this.captureAchievements(false, true);
     this.vfx.kill(e.x, e.y, e.color, e.isBoss ? 'boss' : e.isElite ? 'elite' : 'normal');
-    // K2: сплиттер трескается на 2–3 миньонов (только если босс-фаза не
-    // поменяла контекст; миньоны не спавнятся после финиша).
-    if (e.kind === 'splitter' && !this.finished) {
-      const [lo, hi] = K2_BEHAVIOR.splitterMinions;
-      const n = lo + (this.runState.rng.next() < 0.5 ? 0 : hi - lo);
-      for (let i = 0; i < n; i++) {
-        const a = this.runState.rng.next() * Math.PI * 2;
-        this.spawnEnemy('minion', e.x + Math.cos(a) * 16, e.y + Math.sin(a) * 16, false);
-      }
-    }
-    // K5: бомбёр/мина — взрыв (АОЕ по игроку; рывок/i-frames гасят урон).
-    if ((e.kind === 'bomber' || e.kind === 'mine') && !this.finished) {
-      const R = K5_BEHAVIOR.boomRadius;
-      const isMine = e.kind === 'mine';
-      this.vfx.boom(e.x, e.y, R, isMine ? 0xff5577 : COLORS.orange);
-      this.cameras.main.shake(180, 0.007);
-      Sfx.play('nova');
-      const pd = Math.hypot(this.player.x - e.x, this.player.y - e.y);
-      if (pd < R) this.applyPlayerDamage(isMine ? K5_BEHAVIOR.mineBoomDmg : K5_BEHAVIOR.bomberBoomDmg);
-    }
     if (e.isElite || e.isBoss) {
       this.hitStop(e.isBoss ? JUICE.hitStopBossMs : JUICE.hitStopMs);
       const s = JUICE.shakeEliteKill;
       this.cameras.main.shake(s.duration, s.intensity);
     }
-    if (e.xpValue > 0) this.spawnGem(e.x, e.y, e.xpValue);
-    // Победа: обычный босс — когда погиб он; расколовшийся — когда погиб
-    // последний из двух осколков (K4).
-    if (e.isBoss) {
-      let victory = false;
-      if (this.wave.bossParts.length > 0) {
-        const i = this.wave.bossParts.indexOf(e);
-        if (i >= 0) {
-          this.wave.bossParts.splice(i, 1);
-          victory = this.wave.bossParts.length === 0;
-        }
-      } else if (this.wave.boss === e) {
-        this.wave.boss = null;
-        victory = true;
-      }
-      if (victory) {
-        this.cameras.main.shake(400, 0.01);
-        this.finish(true);
-      }
+    if (e.xpValue > 0) {
+      // The first readable pickup teaches the mutation loop immediately instead of requiring
+      // five scattered one-XP drops before the player sees the first choice.
+      const value = st.kills === 1 ? Math.max(5, e.xpValue) : e.xpValue;
+      this.spawnGem(e.x, e.y, value);
+    }
+    if (e.isBoss && this.wave.boss === e) {
+      this.wave.boss = null;
+      this.cameras.main.shake(400, 0.01);
+      this.finish(true);
+    }
+  }
+
+  private onHostCellLysis(event: HostCellLysisEvent): void {
+    const st = this.runState;
+    st.hostCellsInfected += 1;
+    // Gameplay radius is unchanged; the smaller visual nova leaves room for the membrane contour.
+    this.vfx.nova(event.x, event.y, event.radius * 0.72);
+    this.atmosphere.pulse(COLORS.green, 0.14);
+    Sfx.play('nova');
+    PlatformBridge.haptic('medium');
+
+    for (let i = 0; i < event.rna; i++) {
+      const a = (i / event.rna) * Math.PI * 2 + Math.random() * 0.35;
+      const r = 18 + Math.random() * 24;
+      this.spawnGem(event.x + Math.cos(a) * r, event.y + Math.sin(a) * r, 1);
+    }
+
+    const list = this.enemies.getChildren() as Enemy[];
+    for (const e of list) {
+      if (!e.active) continue;
+      const dx = e.x - event.x;
+      const dy = e.y - event.y;
+      const d = Math.hypot(dx, dy);
+      if (d > event.radius + e.radius) continue;
+      const dd = d || 1;
+      this.vfx.hit(e.x, e.y, COLORS.green);
+      e.takeDamage(event.damage, (dx / dd) * 210, (dy / dd) * 210);
     }
   }
 
@@ -680,9 +475,7 @@ export class GameScene extends Phaser.Scene {
   onGemCollected(value: number): void {
     Sfx.play('pickup');
     this.vfx.pickup(this.player.x, this.player.y);
-    const gained = this.runState.addXp(value);
-    this.queuedLevels += gained;
-    if (gained > 0) Analytics.track('level_up', { level: this.runState.level });
+    this.queuedLevels += this.runState.addXp(value);
   }
 
   chooseUpgrade(id: string): boolean {
@@ -691,13 +484,14 @@ export class GameScene extends Phaser.Scene {
       def.apply(this.runState);
       if (def.kind === 'evolution' && def.evolutionId) {
         this.pendingEvolutionCeremony = def.evolutionId;
+        this.syncPlayerMutationSilhouette();
         this.atmosphere.pulse(COLORS.gold, 0.3);
       } else {
         this.runState.bump(id);
       }
       this.captureAchievements(false, false);
       Sfx.play('click');
-      MessengerBridge.notify('success');
+      PlatformBridge.notify('success');
     }
     if (this.queuedLevels > 0) {
       this.queuedLevels -= 1;
@@ -709,29 +503,19 @@ export class GameScene extends Phaser.Scene {
     return false;
   }
 
+  private syncPlayerMutationSilhouette(): void {
+    const st = this.runState;
+    this.player.setMutationState(
+      st.hasEvolution('prism'),
+      st.hasEvolution('halo'),
+      st.hasEvolution('singularity')
+    );
+  }
+
   consumeEvolutionCeremony(): EvolutionId | null {
     const id = this.pendingEvolutionCeremony;
     this.pendingEvolutionCeremony = null;
     return id;
-  }
-
-  /** Сколько лечащих rewarded-бонусов ещё доступно в этом забеге. */
-  rewardHealsLeft(): number {
-    return GameScene.REWARD_HEAL_LIMIT - this.rewardHealsUsed;
-  }
-
-  /**
-   * Rewarded-бонус (V6): +1 HP за просмотр рекламы. true — если бонус выдан.
-   * Лимит на забег, чтобы не спамить; вызывается ТОЛЬКО после 'completed'.
-   */
-  tryRewardHeal(): boolean {
-    if (this.finished) return false;
-    if (this.rewardHealsUsed >= GameScene.REWARD_HEAL_LIMIT) return false;
-    this.rewardHealsUsed += 1;
-    const st = this.runState;
-    st.hp = Math.min(st.maxHp, st.hp + 1);
-    this.vfx.pickup(this.player.x, this.player.y); // зелёные частицы = здоровье
-    return true;
   }
 
   finish(win: boolean): void {
@@ -740,119 +524,33 @@ export class GameScene extends Phaser.Scene {
     const st = this.runState;
     const evolutions = [...st.evolutions];
     const records = SaveSystem.recordRun(win, st.timeMs, st.kills, st.level, evolutions);
-    // Daily: стрик + результат дня (только в daily-режиме).
-    const daily = this.dailyMode
-      ? SaveSystem.recordDaily(this.dailyDateKey, { win, timeMs: st.timeMs, kills: st.kills })
-      : null;
-    // Локальный лидерборд (топ-10).
-    const rank = SaveSystem.recordLeaderboard({
-      dateKey: this.dailyDateKey || todayKey(),
-      daily: this.dailyMode,
-      win,
-      timeMs: st.timeMs,
-      kills: st.kills,
-      level: st.level,
-    });
     this.captureAchievements(true, false);
-    // K1: осколки ядра — валюта метапрогресса (киллы + уровень + победа).
-    let shardsEarned = earnShards(st.kills, st.level, win, SaveSystem.get().meta);
-    if (shardsEarned > 0) {
-      SaveSystem.addShards(shardsEarned);
-      Analytics.track('shards_earned', { n: shardsEarned, win });
-    }
-    // K6: долгосрочная статистика СНАЧАЛА (достижения смотрят её), затем
-    // выдача мета-достижений (одноразовые бонусы осколков).
-    {
-      const prev = SaveSystem.get();
-      SaveSystem.update({
-        totalWins: prev.totalWins + (win ? 1 : 0),
-        bestCombo: Math.max(prev.bestCombo, st.comboBest),
-      });
-      const granted = grantMetaAchievements();
-      const bonus = granted.reduce((s, g) => s + g.reward, 0);
-      if (granted.length > 0) {
-        Analytics.track('meta_achievement', {
-          ids: granted.map((g) => g.id).join(','),
-          bonus,
-        });
-      }
-      SaveSystem.update({ totalShardsEarned: prev.totalShardsEarned + shardsEarned + bonus });
-      if (bonus > 0) shardsEarned += bonus; // в строке game over — итого за забег
-    }
     this.registry.set('run', this.snapshot());
     this.registry.set('runResult', {
       win,
       timeMs: st.timeMs,
       kills: st.kills,
+      hostCellsInfected: st.hostCellsInfected,
       level: st.level,
       comboBest: st.comboBest,
       stacks: { ...st.stacks },
       evolutions,
       newAchievements: [...this.newAchievements],
       records,
-      daily,
-      rank,
-      shardsEarned,
     });
-    // V5: клип последних секунд → registry (Promise; UIScene дождётся и
-    // покажет кнопку шаринга клипа). Fire-and-forget: сбой записи не трогает UI.
-    if (this.recording) {
-      this.recording = false;
-      this.registry.set('runClip', ShareVideo.stop());
-    }
-    Analytics.track('run_completed', {
-      win,
-      timeMs: Math.round(st.timeMs / 1000) * 1000,
-      kills: st.kills,
-      level: st.level,
-      daily: this.dailyMode,
-    });
-    // Глобальный лидерборд + реферальное рёбро: fire-and-forget,
-    // сбой сети не трогает геймплей. Реф привязывается к первому забегу.
-    const refFrom = SaveSystem.takeRefBonus();
-    if (refFrom) {
-      void ServerClient.submitScore({
-        daily: this.dailyMode,
-        win,
-        timeMs: Math.round(st.timeMs),
-        kills: st.kills,
-        level: st.level,
-        dateKey: this.dailyDateKey || todayKey(),
-        ref: refFrom,
-      });
-    } else {
-      void ServerClient.submitScore({
-        daily: this.dailyMode,
-        win,
-        timeMs: Math.round(st.timeMs),
-        kills: st.kills,
-        level: st.level,
-        dateKey: this.dailyDateKey || todayKey(),
-        ref: null,
-      });
-    }
     Sfx.play(win ? 'victory' : 'gameover');
-    MessengerBridge.notify(win ? 'success' : 'error');
+    PlatformBridge.notify(win ? 'success' : 'error');
     this.cameras.main.resetFX();
     this.scene.pause();
   }
 
   private tryFire(time: number): void {
-    // M-блок: twin-stick — пока правый стик удержан за dead-zone, огонь идёт
-    // в ЕГО направлении (ручное прицеливание); иначе — авто-прицел (ассист).
-    const aim = this.registry.get('aim') as AimState | undefined;
-    const manual = this.controlMode === 'dual' && !!aim && aim.active;
-    let ang: number;
-    if (manual) {
-      ang = Math.atan2(aim.y, aim.x);
-    } else {
-      const target = this.nearestEnemy(WEAPON.range);
-      if (!target) {
-        this.aimMarker.setVisible(false);
-        return;
-      }
-      ang = Math.atan2(target.y - this.player.y, target.x - this.player.x);
+    const target = this.nearestEnemy(WEAPON.range);
+    if (!target) {
+      this.aimMarker.setVisible(false);
+      return;
     }
+    const ang = Math.atan2(target.y - this.player.y, target.x - this.player.x);
     this.aimMarker
       .setVisible(true)
       .setPosition(this.player.x + Math.cos(ang) * 22, this.player.y + Math.sin(ang) * 22)
@@ -860,27 +558,13 @@ export class GameScene extends Phaser.Scene {
     if (time < this.nextFireAt) return;
     this.nextFireAt = time + this.runState.fireInterval;
     Sfx.play('shoot');
-    const st = this.runState;
-    const n = st.projectiles;
+    const n = this.runState.projectiles;
     const spread = (WEAPON.spreadDeg * Math.PI) / 180;
-    const prism = st.hasEvolution('prism');
-    // K3: КОМЕТА — счётчик залпов; на «своем» залпе первый снаряд — комета
-    // (×урон, +2 пробития). Остальные снаряды залпа — обычные.
-    this.shotCounter += 1;
-    const cometNow = st.cometLevel > 0 && this.shotCounter % st.cometEvery === 0;
-    const shootOpts = { speed: st.bulletSpeed, lifetimeMs: st.bulletLifetimeMs };
+    const prism = this.runState.hasEvolution('prism');
     for (let i = 0; i < n; i++) {
       const a = ang + (i - (n - 1) / 2) * spread;
       const b = this.bullets.get(this.player.x, this.player.y) as Bullet | null;
-      if (!b) continue;
-      if (i === 0 && cometNow) {
-        b.fire(time, a, st.cometDamage, st.bulletPierce + 2, false, {
-          ...shootOpts,
-          comet: true,
-        });
-      } else {
-        b.fire(time, a, st.bulletDamage, st.bulletPierce, prism, shootOpts);
-      }
+      if (b) b.fire(time, a, this.runState.bulletDamage, this.runState.bulletPierce, prism);
     }
   }
 
@@ -971,12 +655,9 @@ export class GameScene extends Phaser.Scene {
     const st = this.runState;
     const singularity = st.hasEvolution('singularity');
     Sfx.play('nova');
-    MessengerBridge.haptic('light');
+    PlatformBridge.haptic('light');
     if (singularity) this.vfx.singularity(this.player.x, this.player.y, st.novaRadius);
     else this.vfx.nova(this.player.x, this.player.y, st.novaRadius);
-    // K3: ВОРТЕКС — нова засасывает (вместо отброса — к ядру) и замедляет.
-    const vortex = st.hasEvolution('vortex');
-    const now = this.time.now;
     const list = this.enemies.getChildren() as Enemy[];
     for (const e of list) {
       if (!e.active) continue;
@@ -985,48 +666,7 @@ export class GameScene extends Phaser.Scene {
       const d = Math.hypot(dx, dy);
       if (d < st.novaRadius + e.radius) {
         const dd = d || 1;
-        const knock = vortex ? -1 : 1;
-        e.takeDamage(st.novaDamage, (dx / dd) * 220 * knock, (dy / dd) * 220 * knock);
-        if (vortex) e.slowUntil = now + 2000;
-      }
-    }
-  }
-
-  /** K3: ПЕРЕГРУЗКА — 8 импульсов по кругу (авто, не зависит от прицела). */
-  private fireOverclock(): void {
-    if (this.finished) return;
-    const st = this.runState;
-    Sfx.play('nova');
-    MessengerBridge.haptic('light');
-    this.atmosphere.pulse(COLORS.orange, 0.18);
-    const N = 8;
-    for (let i = 0; i < N; i++) {
-      const a = (i / N) * Math.PI * 2;
-      const b = this.bullets.get(this.player.x, this.player.y) as Bullet | null;
-      if (b) b.fire(this.time.now, a, st.bulletDamage, st.bulletPierce, false, {
-        speed: st.bulletSpeed,
-        lifetimeMs: st.bulletLifetimeMs,
-      });
-    }
-  }
-
-  /** K3: АЭГИС — контр-нова при получении урона (радиус/урон меньше новой). */
-  private fireAegis(): void {
-    if (this.finished) return;
-    const st = this.runState;
-    Sfx.play('nova');
-    const radius = st.novaRadius * 0.7 + 30;
-    const dmg = st.novaDamage * 0.6 + 10;
-    this.vfx.nova(this.player.x, this.player.y, radius);
-    const list = this.enemies.getChildren() as Enemy[];
-    for (const e of list) {
-      if (!e.active) continue;
-      const dx = e.x - this.player.x;
-      const dy = e.y - this.player.y;
-      const d = Math.hypot(dx, dy);
-      if (d < radius + e.radius) {
-        const dd = d || 1;
-        e.takeDamage(dmg, (dx / dd) * 260, (dy / dd) * 260);
+        e.takeDamage(st.novaDamage, (dx / dd) * 220, (dy / dd) * 220);
       }
     }
   }
@@ -1041,59 +681,31 @@ export class GameScene extends Phaser.Scene {
     const bv = (b.body as Phaser.Physics.Arcade.Body).velocity;
     const vm = Math.hypot(bv.x, bv.y) || 1;
     this.vfx.hit(e.x, e.y, b.prism ? COLORS.gold : e.color);
-    // K2: направление атаки — щитона гасит попадание «в лицо».
-    e.takeDamage(b.damage, (bv.x / vm) * 130, (bv.y / vm) * 130, { x: bv.x / vm, y: bv.y / vm });
+    e.takeDamage(b.damage, (bv.x / vm) * 130, (bv.y / vm) * 130);
     Sfx.play('hit');
     this.showDamage(e.x, e.y, b.damage);
     if (b.pierceLeft > 0) b.pierceLeft -= 1;
     else b.disableBody(true, true);
   };
 
-  /**
-   * Общий урон игроку (контакт врага / снаряд врага / клинки босса).
-   * true — урон применён (i-frames не закрывали), false — засчитан сквозь
-   * кадры неуязвимости. K3: АЭГИС — при попадании запускает контр-нову (8 с).
-   * Публичный: K4 — клинки орбитального босса зовут из Enemy.
-   */
-  applyPlayerDamage(amount: number): boolean {
-    if (this.finished) return false;
+  private onPlayerHit = (obj1: unknown, obj2: unknown): void => {
+    const e = obj2 as Enemy;
+    if (!e.active || this.finished) return;
     const now = this.time.now;
-    if (now < this.player.hurtUntil) return false;
-    this.runState.hp -= amount;
+    if (now < this.player.hurtUntil) return;
+    this.runState.hp -= e.dmg;
     this.runState.resetNoDamage();
     this.player.markHurt(now);
     Sfx.play('hurt');
-    MessengerBridge.haptic('medium');
+    PlatformBridge.haptic('medium');
     this.cameras.main.flash(140, 255, 60, 100);
     const s = JUICE.shakeHurt;
     this.cameras.main.shake(s.duration, s.intensity);
     this.hitStop(JUICE.hitStopMs);
-    if (this.runState.hasEvolution('aegis') && now >= this.aegisReadyAt) {
-      this.aegisReadyAt = now + 8000;
-      this.fireAegis();
-    }
-    return true;
-  }
-
-  private onPlayerHit = (obj1: unknown, obj2: unknown): void => {
-    const e = obj2 as Enemy;
-    if (!e.active) return;
-    if (!this.applyPlayerDamage(e.dmg)) return;
     const dx = e.x - this.player.x;
     const dy = e.y - this.player.y;
     const d = Math.hypot(dx, dy) || 1;
     e.takeDamage(0, (dx / d) * 240, (dy / d) * 240);
-    if (this.runState.hp <= 0) this.finish(false);
-  };
-
-  /** K2: снаряд снайпера долетел до игрока (учитывает i-frames/рывок). */
-  private onFoeBulletHit = (obj1: unknown, obj2: unknown): void => {
-    const b = obj2 as FoeBullet;
-    if (!b.active) return;
-    // Гасим ДО проверки урона: overlap дёргается каждый физ-тик, пока снаряд
-    // в контакте; иначе при i-frames он «висел» и бил позже.
-    b.disableBody(true, true);
-    if (!this.applyPlayerDamage(b.damage)) return;
     if (this.runState.hp <= 0) this.finish(false);
   };
 
@@ -1147,7 +759,7 @@ export class GameScene extends Phaser.Scene {
       .setResolution(2);
     c.add([panel, title, name]);
     Sfx.play('levelup');
-    MessengerBridge.haptic('light');
+    PlatformBridge.haptic('light');
     this.tweens.add({
       targets: c,
       alpha: 1,
@@ -1160,137 +772,83 @@ export class GameScene extends Phaser.Scene {
   }
 
   private showIntroHint(): void {
+    this.dismissIntroHint(true);
     const W = this.scale.width;
     const H = this.scale.height;
     const c = this.add.container(0, 0).setDepth(60);
+    this.introHint = c;
+    const panelW = Math.min(W - 28, 370);
+    const panelY = H * 0.3 + 8;
 
+    const panel = this.add
+      .rectangle(W / 2, panelY, panelW, 86, 0x12070c, 0.68)
+      .setStrokeStyle(1, COLORS.magenta, 0.18);
     const title = this.add
-      .text(W / 2, H * 0.3, IDENTITY.copy.introTitle, {
+      .text(W / 2, H * 0.275, IDENTITY.copy.introTitle, {
         fontFamily: FONT,
-        fontSize: '18px',
+        fontSize: W < 370 ? '14px' : '16px',
         fontStyle: 'bold',
-        color: '#35e0ff',
-      })
-      .setOrigin(0.5)
-      .setResolution(2);
-    const sub = this.add
-      .text(W / 2, H * 0.3 + 30, IDENTITY.copy.introSub, {
-        fontFamily: FONT,
-        fontSize: '13px',
-        color: '#aab4d4',
+        color: '#ff78c8',
         align: 'center',
+        lineSpacing: 3,
+        wordWrap: { width: panelW - 24 },
+      })
+      .setOrigin(0.5)
+      .setResolution(2)
+      .setShadow(0, 0, 'rgba(255,79,181,0.34)', 8, true, true);
+    const sub = this.add
+      .text(W / 2, H * 0.275 + 45, IDENTITY.copy.introSub, {
+        fontFamily: FONT,
+        fontSize: W < 370 ? '10px' : '11px',
+        color: '#d9b7c5',
+        align: 'center',
+        wordWrap: { width: panelW - 26 },
       })
       .setOrigin(0.5)
       .setResolution(2);
-    // M-блок: в twin-stick подсказка о зонах (левая — движение, правая — прицел).
-    const ctrl = this.add
-      .text(
-        W / 2,
-        H * 0.3 + (this.controlMode === 'dual' ? 52 : 30),
-        this.controlMode === 'dual'
-          ? 'левая половина — движение · правая — прицел и огонь'
-          : IDENTITY.copy.introSub,
-        {
-          fontFamily: FONT,
-          fontSize: '13px',
-          color: this.controlMode === 'dual' ? '#ffe066' : '#aab4d4',
-          align: 'center',
-        }
-      )
-      .setOrigin(0.5)
-      .setResolution(2);
-    if (this.controlMode !== 'dual') ctrl.setVisible(false);
-    c.add([title, sub, ctrl]);
+    c.add([panel, title, sub]);
 
     c.setAlpha(0);
-    this.tweens.add({ targets: c, alpha: 1, duration: 250 });
-    this.time.delayedCall(5000, () => {
-      this.tweens.add({ targets: c, alpha: 0, duration: 300, onComplete: () => c.destroy() });
+    this.tweens.add({ targets: c, alpha: 1, duration: 220 });
+    this.time.delayedCall(4600, () => {
+      if (!c.active || this.introHint !== c) return;
+      this.introHint = null;
+      this.tweens.add({ targets: c, alpha: 0, duration: 260, onComplete: () => c.destroy() });
     });
   }
 
-  /**
-   * Переиспользуемый snapshot (один объект на всё время забега): UIScene читает
-   * его из registry каждый кадр, аллокация — ноль.
-   */
-  private snapshot(): RunSnapshot {
-    const st = this.runState;
-    const s = this.snap;
-    s.hp = st.hp;
-    s.maxHp = st.maxHp;
-    s.level = st.level;
-    s.xp = st.xp;
-    s.xpNext = st.xpNext;
-    s.timeMs = st.timeMs;
-    s.kills = st.kills;
-    s.combo = st.combo;
-    // K4: после раскола бар показывает СУММУ HP осколков (честный индикатор).
-    if (this.wave.boss) {
-      s.bossHp = this.wave.boss.hp;
-      s.bossMax = this.wave.boss.maxHp;
-    } else if (this.wave.bossParts.length > 0) {
-      s.bossHp = this.wave.bossParts.reduce((acc, e) => acc + Math.max(0, e.hp), 0);
-      s.bossMax = this.wave.bossParts.reduce((acc, e) => acc + e.maxHp, 0);
-    } else {
-      s.bossHp = 0;
-      s.bossMax = 0;
+  private dismissIntroHint(immediate = false): void {
+    const c = this.introHint;
+    if (!c) return;
+    this.introHint = null;
+    this.tweens.killTweensOf(c);
+    if (immediate) {
+      c.destroy();
+      return;
     }
-    return s;
-  }
-
-  /** Откат постпроцесса на слабом устройстве: один раз, необратимо в пределах забега. */
-  private disablePostFX(): void {
-    const fx = this.cameras.main.postFX;
-    if (this.bloomFx) {
-      fx.remove(this.bloomFx);
-      this.bloomFx = null;
-    }
-    if (this.vigFx) {
-      fx.remove(this.vigFx);
-      this.vigFx = null;
-    }
-    this.vignette.setVisible(true);
-  }
-
-  /** Скриншот-момент: появление босса — заголовок над ареной. */
-  private showBossIntro(): void {
-    const W = this.scale.width;
-    const H = this.scale.height;
-    const c = this.add
-      .container(W / 2, Math.max(H * 0.3, 170))
-      .setScrollFactor(0)
-      .setDepth(46)
-      .setAlpha(0);
-    c.add(
-      this.add
-        .text(0, 0, IDENTITY.boss, {
-          fontFamily: FONT,
-          fontSize: '30px',
-          fontStyle: 'bold',
-          color: '#ff3860',
-        })
-        .setOrigin(0.5)
-        .setResolution(2)
-        .setShadow(0, 0, 'rgba(255,56,96,0.85)', 18, true, true)
-    );
-    c.add(
-      this.add
-        .text(0, 34, 'уничтожь узел — это единственная победа', {
-          fontFamily: FONT,
-          fontSize: '12px',
-          color: '#aab4d4',
-        })
-        .setOrigin(0.5)
-        .setResolution(2)
-    );
     this.tweens.add({
       targets: c,
-      alpha: 1,
-      duration: 180,
-      yoyo: true,
-      hold: 1100,
+      alpha: 0,
+      duration: 110,
+      ease: 'Quad.Out',
       onComplete: () => c.destroy(),
     });
+  }
+
+  private snapshot(): RunSnapshot {
+    const st = this.runState;
+    return {
+      hp: st.hp,
+      maxHp: st.maxHp,
+      level: st.level,
+      xp: st.xp,
+      xpNext: st.xpNext,
+      timeMs: st.timeMs,
+      kills: st.kills,
+      combo: st.combo,
+      bossHp: this.wave.boss?.hp ?? 0,
+      bossMax: this.wave.boss?.maxHp ?? 0,
+    };
   }
 
   private onResize(): void {

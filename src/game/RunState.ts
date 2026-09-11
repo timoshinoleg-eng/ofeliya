@@ -1,23 +1,20 @@
 import { GEM, NOVA, ORBIT, PLAYER, WEAPON } from './config';
-import { mathRandom, type Rng } from './SeededRng';
 import type { EvolutionId } from './UpgradeSystem';
 
 export function xpForLevel(level: number): number {
+  // Strain Zero must reward the player almost immediately: the opening mutation is intentionally
+  // cheaper, while the existing progression curve resumes from level 2 onward.
+  if (level <= 1) return 5;
   return Math.floor(6 + level * 4 + level * level * 0.35);
 }
 
 /** Состояние одного забега: статы игрока и прогресс. */
 export class RunState {
-  /**
-   * Источник случайности: Math.random в обычном режиме, сидированный rng
-   * в daily-режиме (seed от даты → одинаковый забег у всех игроков).
-   */
-  rng: Rng = mathRandom;
-
   level = 1;
   xp = 0;
   xpNext = xpForLevel(1);
   kills = 0;
+  hostCellsInfected = 0;
   timeMs = 0;
 
   /** Текущая серия убийств и сколько ей осталось (мс) — см. COMBO в config. */
@@ -41,10 +38,6 @@ export class RunState {
   orbitBlades = 0;
   novaLevel = 0;
   regen = 0;
-  /** K3: КОМЕТА — уровень (0 = нет). */
-  cometLevel = 0;
-  /** K3: ФОКУС-ЛЕНЗА — множитель скорости пуль. */
-  bulletSpeedMul = 1;
 
   stacks: Record<string, number> = {};
   evolutions = new Set<EvolutionId>();
@@ -79,25 +72,6 @@ export class RunState {
 
   get novaInterval(): number {
     return NOVA.intervalMs * Math.max(0.55, 1 - 0.1 * (this.novaLevel - 1));
-  }
-
-  /** K3: КОМЕТА — каждые N залпов (уровень 1: 5, 2: 4, 3: 3; 0 — выкл). */
-  get cometEvery(): number {
-    return this.cometLevel > 0 ? Math.max(3, 6 - this.cometLevel) : 0;
-  }
-
-  /** K3: урон кометы (база × damageMul × множитель уровня). */
-  get cometDamage(): number {
-    return WEAPON.damage * this.damageMul * (2 + 0.5 * this.cometLevel);
-  }
-
-  /** K3: скорость и время жизни пули (ФОКУС-ЛЕНЗА). */
-  get bulletSpeed(): number {
-    return WEAPON.bulletSpeed * this.bulletSpeedMul;
-  }
-
-  get bulletLifetimeMs(): number {
-    return WEAPON.bulletLifetimeMs * (1 + 0.15 * this.stackOf('lens'));
   }
 
   addXp(v: number): number {
