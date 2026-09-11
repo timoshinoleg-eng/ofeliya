@@ -6,18 +6,11 @@ services:
       target: runtime
     image: ofeliya-runtime:${OFELIYA_RELEASE:?OFELIYA_RELEASE is required}
     command: ["node", "bot/index.mjs"]
-    env_file: /opt/hub/.env
+    # Separate runtime env prevents Hub's BOT_TOKEN/HUB_BOT_USERNAME from ever
+    # configuring Ofeliya by accident.
+    env_file: ${OFELIYA_ENV_FILE:-/opt/ofeliya/.env}
     environment:
       NODE_ENV: production
-      # Never inherit the Hub bot identity from the shared env file. MAX
-      # open_app is bound to the bot username, so a Hub fallback opens Hub's
-      # Mini App even when the button text says OFELIYA.
-      BOT_TOKEN: ${OFELIYA_BOT_TOKEN:?OFELIYA_BOT_TOKEN is required}
-      OFELIYA_BOT_USERNAME: ${OFELIYA_BOT_USERNAME:?OFELIYA_BOT_USERNAME is required}
-      OFELIYA_BOT_WEBHOOK_DOMAIN: ${OFELIYA_BOT_WEBHOOK_DOMAIN:?OFELIYA_BOT_WEBHOOK_DOMAIN is required}
-      OFELIYA_BOT_WEBHOOK_PORT: ${OFELIYA_BOT_WEBHOOK_PORT:-8788}
-      OFELIYA_BOT_WEBHOOK_PATH: ${OFELIYA_BOT_WEBHOOK_PATH:-/ofeliya/bot/webhook}
-      OFELIYA_BOT_WEBHOOK_SECRET: ${OFELIYA_BOT_WEBHOOK_SECRET:?OFELIYA_BOT_WEBHOOK_SECRET is required}
       NODE_EXTRA_CA_CERTS: /app/certs/extra-ca.crt
     volumes:
       - ${HUB_EXTRA_CA_CERT:?HUB_EXTRA_CA_CERT is required}:/app/certs/extra-ca.crt:ro
@@ -32,8 +25,9 @@ services:
       dockerfile: deploy/Dockerfile
       target: static
       args:
-        # Keep client deep-links bound to the same Ofeliya bot as open_app.
-        VITE_MAX_BOT_USERNAME: ${OFELIYA_BOT_USERNAME:?OFELIYA_BOT_USERNAME is required}
+        # Optional at build time; empty safely disables bot-style share links.
+        # Never inherit VITE_MAX_BOT_USERNAME from Hub implicitly.
+        VITE_MAX_BOT_USERNAME: ${OFELIYA_BOT_USERNAME:-}
         VITE_TG_BOT_USERNAME: ${VITE_TG_BOT_USERNAME:-}
     image: ofeliya-static:${OFELIYA_RELEASE:?OFELIYA_RELEASE is required}
     restart: unless-stopped
@@ -58,15 +52,17 @@ services:
       dockerfile: deploy/Dockerfile
       target: score
     image: ofeliya-score:${OFELIYA_RELEASE:?OFELIYA_RELEASE is required}
-    command: ["node", "server/index.mjs"]
+    # server/index.mjs still supports legacy MAX_BOT_TOKEN/GAME_URL names.
+    # Map the namespaced Ofeliya env inside the container (double-$ means
+    # runtime shell expansion, not Compose interpolation).
+    command:
+      - sh
+      - -c
+      - 'MAX_BOT_TOKEN="$$OFELIYA_BOT_TOKEN" GAME_URL="$$OFELIYA_GAME_URL" exec node server/index.mjs'
     environment:
       NODE_ENV: production
       PORT: 8787
-      # Explicitly override server/index.mjs's historical BOT_TOKEN fallback so
-      # MAX initData is verified with the Ofeliya bot, never the Hub bot.
-      MAX_BOT_TOKEN: ${OFELIYA_BOT_TOKEN:?OFELIYA_BOT_TOKEN is required}
-      GAME_URL: ${OFELIYA_GAME_URL:-}
-    env_file: /opt/hub/.env
+    env_file: ${OFELIYA_ENV_FILE:-/opt/ofeliya/.env}
     volumes:
       - ofeliya-score-data:/app/server/data
     restart: unless-stopped
