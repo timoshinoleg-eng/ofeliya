@@ -39,10 +39,13 @@ async function openRenderer(browser, renderer) {
     const game = window.__game;
     const menu = game.scene.getScene('Menu');
     const title = menu.children.list.find((obj) => obj.text === 'OFELIYA');
+    const titleResolution = title?.style?.resolution ?? title?.resolution ?? null;
     return {
       renderer: game.renderer?.constructor?.name ?? '',
       rendererType: game.renderer?.type ?? null,
-      titleResolution: title?.resolution ?? null,
+      titleResolution,
+      titleTextureWidth: title?.texture?.source?.[0]?.width ?? null,
+      titleDisplayWidth: title?.displayWidth ?? null,
       canvas: [game.canvas.width, game.canvas.height],
       css: [game.canvas.clientWidth, game.canvas.clientHeight],
       dpr: window.devicePixelRatio,
