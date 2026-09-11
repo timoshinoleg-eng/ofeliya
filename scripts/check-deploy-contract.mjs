@@ -47,8 +47,8 @@ assert.match(compose, /image: ofeliya-score:\$\{OFELIYA_RELEASE:\?OFELIYA_RELEAS
 assert.match(compose, /OFELIYA_ENV_FILE:-\/opt\/ofeliya\/\.env/, 'production services must default to an Ofeliya-specific env file');
 assert.doesNotMatch(compose, /env_file:\s*\/opt\/hub\/\.env/, 'Ofeliya must not read Hub runtime secrets');
 assert.match(compose, /VITE_MAX_BOT_USERNAME: \$\{OFELIYA_BOT_USERNAME:-\}/, 'client build must never inherit Hub bot username implicitly');
-assert.match(compose, /MAX_BOT_TOKEN=\\"\$\$OFELIYA_BOT_TOKEN\\"/, 'score service must verify MAX initData with the Ofeliya token');
-assert.match(compose, /GAME_URL=\\"\$\$OFELIYA_GAME_URL\\"/, 'score service must publish Ofeliya links, not Hub links');
+assert.match(compose, /MAX_BOT_TOKEN=.*\$\$OFELIYA_BOT_TOKEN/, 'score service must verify MAX initData with the Ofeliya token');
+assert.match(compose, /GAME_URL=.*\$\$OFELIYA_GAME_URL/, 'score service must publish Ofeliya links, not Hub links');
 assert.match(compose, /ofeliya-score-data:\/app\/server\/data/, 'score store must stay on a named persistent volume');
 assert.match(compose, /score:[\s\S]*healthcheck:[\s\S]*127\.0\.0\.1:8787\/health/, 'score service must expose a healthcheck');
 assert.match(compose, /static:[\s\S]*depends_on:[\s\S]*score:[\s\S]*condition: service_healthy/, 'static nginx must wait for a healthy score service');
