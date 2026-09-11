@@ -1091,8 +1091,8 @@ export class UIScene extends Phaser.Scene {
         if (!friends || friends.length === 0 || !this.scene.isActive()) return;
         const lines = friends.slice(0, 2).map((f) => {
           const rel = f.relation === 'inviter' ? 'позвал' : f.relation === 'invited' ? 'ты позвал' : 'друзья';
-          const last = f.uid.length > 4 ? '···' + f.uid.slice(-4) : f.uid;
-          return `${f.win ? '🏆' : '⏱'} ${last}  ${fmtTime(f.timeMs)} · ${f.kills}  (${rel})`;
+          const mark = f.platform === 'telegram' ? '✈' : f.platform === 'max' ? '✉' : f.platform === 'vk' ? '📱' : '🖥';
+          return `${f.win ? '🏆' : '⏱'} ${mark}  ${fmtTime(f.timeMs)} · ${f.kills}  (${rel})`;
         });
         const t = this.add
           .text(W / 2, y - (compact ? 30 : 38), `ДРУЗЬЯ\n${lines.join('\n')}`, {
