@@ -26,6 +26,7 @@ assert.match(caddy, /path \/hub\/runtime-config\.js/, 'Caddy must expose the no-
 assert.match(nginx, /location \/api\/\s*\{[\s\S]*proxy_pass http:\/\/ofeliya-score:8787;/, 'nginx must proxy score API to score service');
 assert.match(nginx, /location = \/api\/ref\s*\{[\s\S]*limit_except GET/, 'legacy unauthenticated referral writes must be blocked in production');
 assert.match(dockerfile, /mkdir -p \/app\/server\/data && chown -R node:node \/app\/server/, 'score image must create a node-writable persistent data mountpoint');
+assert.match(dockerfile, /CMD \["node", "server\/index\.mjs"\]/, 'score image must be runnable without a compose command override');
 assert.match(dockerfile, /mkdir -p \/app\/certs && chown node:node \/app\/certs/, 'bot runtime must be able to traverse/read mounted CA directory');
 assert.match(server, /MAX_BOT_TOKEN \|\| process\.env\.BOT_TOKEN/, 'score service must accept the existing production BOT_TOKEN fallback');
 assert.match(server, /minWinTimeMs:\s*300_000/, 'server must reject wins before the 5:00 boss spawn');
