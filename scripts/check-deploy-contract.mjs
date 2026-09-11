@@ -46,7 +46,7 @@ assert.match(compose, /image: ofeliya-static:\$\{OFELIYA_RELEASE:\?OFELIYA_RELEA
 assert.match(compose, /image: ofeliya-score:\$\{OFELIYA_RELEASE:\?OFELIYA_RELEASE is required\}/, 'score image must use an explicit immutable release tag');
 assert.match(compose, /OFELIYA_ENV_FILE:-\/opt\/ofeliya\/\.env/, 'production services must default to an Ofeliya-specific env file');
 assert.doesNotMatch(compose, /env_file:\s*\/opt\/hub\/\.env/, 'Ofeliya must not read Hub runtime secrets');
-assert.match(compose, /VITE_MAX_BOT_USERNAME: \$\{OFELIYA_BOT_USERNAME:-\}/, 'client build must never inherit Hub bot username implicitly');
+assert.match(compose, /VITE_MAX_BOT_USERNAME: \$\{OFELIYA_BOT_USERNAME:\?OFELIYA_BOT_USERNAME is required;/, 'client build must require an explicit Ofeliya bot username');
 assert.match(compose, /MAX_BOT_TOKEN=.*\$\$OFELIYA_BOT_TOKEN/, 'score service must verify MAX initData with the Ofeliya token');
 assert.match(compose, /GAME_URL=.*\$\$OFELIYA_GAME_URL/, 'score service must publish Ofeliya links, not Hub links');
 assert.match(compose, /ofeliya-score-data:\/app\/server\/data/, 'score store must stay on a named persistent volume');
