@@ -1,5 +1,5 @@
 import { Bot, Keyboard } from '@maxhub/max-bot-api';
-import { BOT_USERNAME } from './config.mjs';
+import { BOT_TOKEN, BOT_USERNAME } from './config.mjs';
 
 const launchButton = () => Keyboard.button.openApp('⚡ Играть в OFELIYA', BOT_USERNAME, undefined, 'ofeliya');
 const launchKeyboard = () => Keyboard.inlineKeyboard([[launchButton()]]);
@@ -12,7 +12,7 @@ async function answer(ctx, text) {
 }
 
 export function createBot() {
-  const bot = new Bot(process.env.BOT_TOKEN || 'stub');
+  const bot = new Bot(BOT_TOKEN || 'stub');
   const welcome = (name) => `${name ? `${name}, ` : ''}OFELIYA ждёт. Удержите ядро до финального босса.`;
 
   bot.command(/^start(?:\s+\S+)?$/, async (ctx) => answer(ctx, welcome(ctx.user?.first_name)));
