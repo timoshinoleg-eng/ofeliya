@@ -4,6 +4,7 @@ import { BootScene } from './scenes/BootScene';
 import { MenuScene } from './scenes/MenuScene';
 import { GameScene } from './scenes/GameScene';
 import { UIScene } from './scenes/UIScene';
+import { installMobileLayoutGuard } from './ui/MobileLayoutGuard';
 
 declare global {
   interface Window {
@@ -70,6 +71,7 @@ async function boot(): Promise<void> {
     scene: [BootScene, MenuScene, GameScene, UIScene],
   });
 
+  installMobileLayoutGuard(game);
   viewport.attachGame(game);
   await viewport.sync();
 
