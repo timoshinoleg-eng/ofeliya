@@ -33,6 +33,33 @@ function waitForFonts(): Promise<void> {
   });
 }
 
+/**
+ * Phaser Text resolution > 1 is useful under WebGL, but in the Canvas renderer used by the
+ * MAX reliability fallback it can make the rasterized glyphs visibly larger than their
+ * logical getBounds() box. That is especially destructive on a 360 px Mini App viewport:
+ * automated bounds checks pass while the actual canvas clips titles and button labels.
+ *
+ * Keep every Canvas text texture at native resolution. Scenes may continue to call
+ * setResolution(2); the guard intentionally normalizes those calls to 1 so layout bounds and
+ * rendered pixels agree. If WebGL is re-enabled later, remove this guard together with the
+ * Canvas-only renderer contract.
+ */
+function installCanvasTextResolutionGuard(): void {
+  const proto = Phaser.GameObjects.Text.prototype as typeof Phaser.GameObjects.Text.prototype & {
+    __ofeliyaCanvasResolutionGuard?: boolean;
+  };
+  if (proto.__ofeliyaCanvasResolutionGuard) return;
+
+  const originalSetResolution = proto.setResolution;
+  proto.setResolution = function (
+    this: Phaser.GameObjects.Text,
+    _resolution: number
+  ): Phaser.GameObjects.Text {
+    return originalSetResolution.call(this, 1);
+  } as typeof proto.setResolution;
+  proto.__ofeliyaCanvasResolutionGuard = true;
+}
+
 async function boot(): Promise<void> {
   const host = document.getElementById('game');
   if (!host) throw new Error('Missing #game host');
@@ -42,6 +69,8 @@ async function boot(): Promise<void> {
   // Let MAX Bridge answer before Phaser reads the parent size. Browser fallback resolves immediately.
   await viewport.sync();
   await waitForFonts();
+
+  installCanvasTextResolutionGuard();
 
   const game = new Phaser.Game({
     // MAX Android WebView has shown invalid WebGL framebuffer startup failures in production.
