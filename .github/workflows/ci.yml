@@ -30,7 +30,7 @@ jobs:
         run: npm run test:viewport
 
       - name: Startup renderer contract
-        run: npm run test:startup
+        run: node tests/startup-renderer-contract.mjs
 
       - name: MAX release config gate smoke
         env:
