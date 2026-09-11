@@ -10,7 +10,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
-COPY bot ./bot
+COPY --chown=node:node bot ./bot
+RUN mkdir -p /app/certs && chown node:node /app/certs
 USER node
 
 # v0.4.x: score-server (zero-dep: node:http + crypto + fs) — API /api/*
@@ -18,7 +19,8 @@ USER node
 FROM node:22-alpine AS score
 WORKDIR /app
 ENV NODE_ENV=production
-COPY server/index.mjs ./server/index.mjs
+RUN mkdir -p /app/server/data && chown -R node:node /app/server
+COPY --chown=node:node server/index.mjs ./server/index.mjs
 USER node
 
 FROM nginx:alpine AS static
