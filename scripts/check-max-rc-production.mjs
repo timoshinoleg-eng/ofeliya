@@ -19,7 +19,17 @@ const maxBridgePos = index.indexOf('https://st.max.ru/js/max-web-app.js');
 assert.ok(runtimePos >= 0, 'index must load runtime-config.js');
 assert.ok(maxBridgePos > runtimePos, 'cache-buster must run before MAX Bridge');
 assert.match(index, /OFELIYA: STRAIN ZERO/, 'release document must identify Strain Zero');
-assert.match(main, /type:\s*Phaser\.CANVAS/, 'MAX RC must use Canvas startup fallback');
+assert.match(
+  main,
+  /return webGLPreflight\(\) \? Phaser\.WEBGL : Phaser\.CANVAS/,
+  'MAX RC must prefer WebGL after preflight while retaining Canvas fallback'
+);
+assert.match(main, /webglcontextlost/, 'MAX RC must recover to Canvas after WebGL context loss');
+assert.match(
+  main,
+  /rendererType === Phaser\.CANVAS\) installCanvasTextResolutionGuard\(\)/,
+  'Canvas text workaround must be scoped to the fallback path only'
+);
 assert.match(main, /FONT_READY_TIMEOUT_MS\s*=\s*700/, 'font loading must not block MAX startup indefinitely');
 assert.match(caddy, /handle_path \/ofeliya\/\*/, 'Ofeliya must own /ofeliya/ namespace');
 assert.doesNotMatch(caddy, /handle_path \/hub\/\*/, 'Ofeliya must not claim Hub routes');
@@ -36,8 +46,8 @@ assert.match(dockerfile, /ARG VITE_MAX_BOT_NAME/, 'Dockerfile must accept the St
 assert.match(dockerfile, /ARG VITE_DEVELOPER_LEGAL_NAME/, 'Dockerfile must accept legal release metadata');
 assert.match(dockerfile, /RUN npm run build:max/, 'production image must execute the MAX release gate');
 assert.match(nginx, /location = \/runtime-config\.js[\s\S]*no-store/, 'runtime config must be no-store');
-assert.match(runtimeConfig, /ofeliya-20260911-strain-zero-rc1/, 'MAX WebView URL key must identify this RC');
-assert.match(serviceWorker, /ofeliya-strain-zero-rc1/, 'service worker cache must identify this RC');
+assert.match(runtimeConfig, /ofeliya-20260911-strain-zero-rc2/, 'MAX WebView URL key must identify RC2');
+assert.match(serviceWorker, /ofeliya-strain-zero-rc2/, 'service worker cache must identify RC2');
 assert.match(serviceWorker, /key\.startsWith\(CACHE_PREFIX\)/, 'cache cleanup must be scoped to Ofeliya');
 
 console.log('Strain Zero production release contract: ok');
