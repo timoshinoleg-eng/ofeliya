@@ -67,10 +67,19 @@ jobs:
             docker network rm ofeliya-ci >/dev/null 2>&1 || true
             docker volume rm ofeliya-score-ci-data >/dev/null 2>&1 || true
           }
+          diagnose() {
+            echo '--- docker ps -a ---'
+            docker ps -a || true
+            echo '--- score logs ---'
+            docker logs ofeliya-score-ci || true
+            echo '--- static logs ---'
+            docker logs ofeliya-static-ci || true
+          }
           trap cleanup EXIT
 
           docker run -d --name ofeliya-score-ci \
             --network ofeliya-ci --network-alias ofeliya-score \
+            -p 18787:8787 \
             -e PORT=8787 \
             -v ofeliya-score-ci-data:/app/server/data \
             ofeliya-score:ci
@@ -78,14 +87,28 @@ jobs:
             --network ofeliya-ci -p 18080:8080 \
             ofeliya-static:ci
 
+          ready=0
           for _ in {1..30}; do
-            if curl -fsS http://127.0.0.1:18080/ >/dev/null; then break; fi
+            if curl -fsS http://127.0.0.1:18787/health >/dev/null && \
+               curl -fsS http://127.0.0.1:18080/ >/dev/null; then
+              ready=1
+              break
+            fi
             sleep 1
           done
+          if [ "$ready" != "1" ]; then
+            diagnose
+            exit 1
+          fi
 
           curl -fsS http://127.0.0.1:18080/runtime-config.js | grep -q 'ofeliya-'
           curl -fsS 'http://127.0.0.1:18080/api/ref?user=ci-user&platform=max' | grep -q '"ok":true'
-          test "$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+          status="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
             -H 'Content-Type: application/json' \
             --data '{"from":"x","to":"y","platform":"max"}' \
-            http://127.0.0.1:18080/api/ref)" = "403"
+            http://127.0.0.1:18080/api/ref)"
+          if [ "$status" != "403" ]; then
+            echo "expected POST /api/ref to be blocked with 403, got $status"
+            diagnose
+            exit 1
+          fi
