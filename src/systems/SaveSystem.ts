@@ -117,8 +117,6 @@ class SaveImpl {
         const parsed = JSON.parse(raw) as Partial<SaveData> | null;
         if (parsed && typeof parsed === 'object') {
           const legacyTime = this.num(parsed.bestTimeMs);
-          // Old builds mixed all run times together. Preserve that value as survival history;
-          // never guess a historical victory that the old schema could not prove.
           const survival = this.num(parsed.bestSurvivalMs) || legacyTime;
           this.data = {
             bestTimeMs: survival,
@@ -165,25 +163,16 @@ class SaveImpl {
     };
   }
 
-  /** Запомнить реф-приглашение (первое — приоритет). */
   setPendingRef(from: string): void {
     const uid = from.trim();
     if (!uid || uid.length > 64) return;
     if (!this.data.pendingRef) this.update({ pendingRef: uid });
   }
 
-  /**
-   * Заглянуть: есть ли активный (ещё не потраченный) реф-бонус.
-   * Не затрагивает состояние — только для применения бонуса в начале забега.
-   */
   peekRefBonus(): string | null {
     return this.data.pendingRef && !this.data.refBonusUsed ? this.data.pendingRef : null;
   }
 
-  /**
-   * Потратить бонус первого забега по рефу. Возвращает uid приглашавшего,
-   * если бонус активен (ещё не потрачен), иначе null.
-   */
   takeRefBonus(): string | null {
     const from = this.peekRefBonus();
     if (!from) return null;
@@ -195,14 +184,6 @@ class SaveImpl {
     return typeof v === 'string' && v.length > 0 && v.length <= 64 ? v : null;
   }
 
-  /**
-   * Учёт ежедневного забега. Возвращает строку сообщения для UI
-   * (стрик/рекорд дня) и обновлённое состояние.
-   *
-   * Стрик: если dateKey — следующий календарный день после сохранённого,
-   * streak += 1; если пропуск — сброс на 1. Повторный забег в тот же день
-   * стрик не меняет, но улучшает результат дня.
-   */
   recordDaily(
     dateKey: string,
     result: { win: boolean; timeMs: number; kills: number }
@@ -248,14 +229,14 @@ class SaveImpl {
   }
 
   /**
-   * Локальный лидерборд: топ-10 по времени выживания (победы выше поражений
-   * при равном времени). Возвращает позицию (1-based) забега, если он в топе.
+   * Локальный лидерборд: победа > поражение; среди побед быстрее лучше,
+   * среди поражений дольше лучше; затем больше kills.
    */
   recordLeaderboard(entry: LeaderboardEntry): number | null {
     const list = [...this.data.leaderboard, entry];
     list.sort((a, b) => {
       if (a.win !== b.win) return a.win ? -1 : 1;
-      if (a.timeMs !== b.timeMs) return b.timeMs - a.timeMs;
+      if (a.timeMs !== b.timeMs) return a.win ? a.timeMs - b.timeMs : b.timeMs - a.timeMs;
       return b.kills - a.kills;
     });
     const top = list.slice(0, 10);
@@ -271,7 +252,6 @@ class SaveImpl {
       achievements: patch.achievements ? [...patch.achievements] : this.data.achievements,
       evolutionsSeen: patch.evolutionsSeen ? [...patch.evolutionsSeen] : this.data.evolutionsSeen,
     };
-    // Keep the old field coherent for older clients that may read the same localStorage key.
     this.data.bestTimeMs = this.data.bestSurvivalMs;
     try {
       localStorage.setItem(KEY, JSON.stringify(this.data));
@@ -349,21 +329,18 @@ class SaveImpl {
       .slice(0, 10);
   }
 
-  /** K1: осколки (может быть отрицательным при списании, но итог ≥ 0). */
   addShards(delta: number): number {
     const next = Math.max(0, Math.round(this.data.shards + delta));
     this.update({ shards: next });
     return next;
   }
 
-  /** K1: установить уровень мета-усиления (только валидные id, level ≥ 0). */
   setMetaLevel(id: string, level: number): void {
     if (typeof id !== 'string' || !Number.isFinite(level) || level < 0) return;
     const meta = { ...this.data.meta, [id]: Math.floor(level) };
     this.update({ meta });
   }
 
-  /** K6: отметить выданные мета-достижения (id), если ещё не выданы. */
   addMetaAchievements(ids: string[]): void {
     if (ids.length === 0) return;
     const known = new Set(this.data.metaAchievements);

@@ -7,9 +7,9 @@ on:
       - main
 
 jobs:
-  build:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,3 +25,108 @@ jobs:
 
       - name: Typecheck and build
         run: npm run build
+
+      - name: Game logic smoke
+        run: npm run smoke
+
+      - name: Score server tests
+        run: npm run server:test
+
+      - name: MAX bot smoke
+        run: npm run smoke:bot
+
+      - name: Production deployment contract
+        run: node scripts/check-deploy-contract.mjs
+
+      - name: Install Chromium for startup contract
+        run: npx playwright install --with-deps chromium
+
+      - name: MAX startup tests
+        run: npm run test:startup
+
+      - name: Build production bot image
+        run: docker build -f deploy/Dockerfile --target runtime -t ofeliya-runtime:ci .
+
+      - name: Build production score image
+        run: docker build -f deploy/Dockerfile --target score -t ofeliya-score:ci .
+
+      - name: Build production static image
+        run: docker build -f deploy/Dockerfile --target static -t ofeliya-static:ci .
+
+      - name: Validate nginx config
+        run: docker run --rm --add-host ofeliya-score:127.0.0.1 ofeliya-static:ci nginx -t -c /etc/nginx/nginx.conf
+
+      - name: Production routing integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f routing-diagnostics.txt
+          docker network create ofeliya-ci
+          docker volume create ofeliya-score-ci-data
+          cleanup() {
+            docker rm -f ofeliya-static-ci ofeliya-score-ci >/dev/null 2>&1 || true
+            docker network rm ofeliya-ci >/dev/null 2>&1 || true
+            docker volume rm ofeliya-score-ci-data >/dev/null 2>&1 || true
+          }
+          diagnose() {
+            {
+              echo '--- docker ps -a ---'
+              docker ps -a || true
+              echo '--- score inspect ---'
+              docker inspect ofeliya-score-ci || true
+              echo '--- score logs ---'
+              docker logs ofeliya-score-ci || true
+              echo '--- static inspect ---'
+              docker inspect ofeliya-static-ci || true
+              echo '--- static logs ---'
+              docker logs ofeliya-static-ci || true
+              echo '--- network inspect ---'
+              docker network inspect ofeliya-ci || true
+            } 2>&1 | tee routing-diagnostics.txt
+          }
+          trap cleanup EXIT
+
+          docker run -d --name ofeliya-score-ci \
+            --network ofeliya-ci --network-alias ofeliya-score \
+            -p 18787:8787 \
+            -e PORT=8787 \
+            -v ofeliya-score-ci-data:/app/server/data \
+            ofeliya-score:ci
+          docker run -d --name ofeliya-static-ci \
+            --network ofeliya-ci -p 18080:8080 \
+            ofeliya-static:ci
+
+          ready=0
+          for _ in {1..30}; do
+            if curl -fsS http://127.0.0.1:18787/health >/dev/null && \
+               curl -fsS http://127.0.0.1:18080/ >/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != "1" ]; then
+            diagnose
+            exit 1
+          fi
+
+          curl -fsS http://127.0.0.1:18080/runtime-config.js | grep -q 'ofeliya-'
+          curl -fsS 'http://127.0.0.1:18080/api/ref?user=ci-user&platform=max' | grep -q '"ok":true'
+          status="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+            -H 'Content-Type: application/json' \
+            --data '{"from":"x","to":"y","platform":"max"}' \
+            http://127.0.0.1:18080/api/ref)"
+          if [ "$status" != "403" ]; then
+            echo "expected POST /api/ref to be blocked with 403, got $status"
+            diagnose
+            exit 1
+          fi
+
+      - name: Upload routing diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-routing-diagnostics
+          path: routing-diagnostics.txt
+          if-no-files-found: ignore
+          retention-days: 3

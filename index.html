@@ -17,6 +17,8 @@
     <link rel="apple-touch-icon" href="icons/icon-180.png" />
     <link rel="manifest" href="manifest.webmanifest" />
     <title>OFELIYA — ядро выживания</title>
+    <!-- Release cache-buster. Относительный URL обязателен: production живёт под /hub/. -->
+    <script src="./runtime-config.js"></script>
     <!-- MAX Bridge: глобальный объект window.WebApp (см. dev.max.ru/docs/webapps/bridge).
          В обычном браузере скрипт просто не определяет WebApp — игра работает и без него. -->
     <script src="https://st.max.ru/js/max-web-app.js" defer></script>

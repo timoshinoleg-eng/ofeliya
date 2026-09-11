@@ -13,7 +13,8 @@
  * (см. README «Бэкенд»).
  *
  * Запуск: node server/index.mjs
- *   env: PORT=8787, DATA_DIR=server/data, TG_BOT_TOKEN, MAX_BOT_TOKEN
+ *   env: PORT=8787, DATA_DIR=server/data, TG_BOT_TOKEN,
+ *        MAX_BOT_TOKEN (или production BOT_TOKEN как fallback)
  */
 import { createServer } from 'node:http';
 import { createHmac, timingSafeEqual } from 'node:crypto';
@@ -25,7 +26,9 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT ?? 8787);
 const DATA_DIR = process.env.DATA_DIR ?? join(ROOT, 'server', 'data');
 const TG_TOKEN = process.env.TG_BOT_TOKEN ?? '';
-const MAX_TOKEN = process.env.MAX_BOT_TOKEN ?? '';
+// Прод-бот из bot/index.mjs исторически читает BOT_TOKEN. Не требуем дублировать
+// один и тот же MAX token в /opt/hub/.env только ради score-service.
+const MAX_TOKEN = process.env.MAX_BOT_TOKEN || process.env.BOT_TOKEN || '';
 // V6-server: секрет VK Mini Apps (Apps → Настройки → «Секретный ключ»).
 // Пусто — VK-скоры остаются unverified (как browser). Задан — web_app_t
 // валидируется и VK-скоры попадают в верифицированный общий топ.
@@ -55,6 +58,9 @@ function currentSeason(now = Date.now()) {
 
 // ---------- анти-чит пороги ----------
 const ANTI_CHEAT = {
+  // Босс появляется ровно на 5:00 игрового времени. Победа раньше физически
+  // невозможна, даже если initData пользователя криптографически валиден.
+  minWinTimeMs: 300_000,
   maxTimeMs: 3_600_000, // 1 час (обычный забег 5 мин, long-run 15)
   maxKillsPerSec: 30, // пик реального лейта ~15-20/с с нова
   maxLevel: 100,
@@ -103,47 +109,56 @@ function saveStore() {
 
 // ---------- initData валидация ----------
 /**
- * Telegram-схема: hash = HMAC_SHA256(data_check_string, HMAC_SHA256(b'WebAppData', bot_token)).
- * MAX использует тот же подход (токен бота); на всякий пробуем и вариант,
- * где ключ — сам токен. Валидно, если один из двух схем сходится.
+ * Telegram и MAX используют WebAppData-схему:
+ * hash = HMAC_SHA256(data_check_string, HMAC_SHA256(key='WebAppData', data=bot_token)).
+ *
+ * MAX отдельно требует, чтобы каждый параметр встречался ровно один раз —
+ * дубликаты не схлопываем через Object.fromEntries до этой проверки.
  */
 export function validateInitData(initData, token, now = Date.now()) {
   if (!token || typeof initData !== 'string' || initData.length === 0) return null;
-  let params;
+
+  let entries;
   try {
-    params = Object.fromEntries(new URLSearchParams(initData));
+    entries = [...new URLSearchParams(initData).entries()];
   } catch {
     return null;
   }
+  if (entries.length === 0) return null;
+
+  const seen = new Set();
+  for (const [key] of entries) {
+    if (seen.has(key)) return null;
+    seen.add(key);
+  }
+
+  const params = Object.fromEntries(entries);
   const { hash, ...rest } = params;
   const authDate = rest.auth_date;
   if (!hash || !authDate) return null;
   const age = (now - Number(authDate) * 1000) / 1000;
   if (!Number.isFinite(age) || age < -300 || age > 86_400) return null;
 
-  // data_check_string = ВСЕ параметры кроме hash (включая auth_date) — по спецификации.
+  // URLSearchParams уже URL-декодировал значения; сортируем ключи и собираем
+  // launch_params/data_check_string ровно по спецификации WebAppData.
   const dataCheck = Object.keys(rest)
     .sort()
     .map((k) => `${k}=${rest[k]}`)
     .join('\n');
 
-  const candidates = [
-    createHmac('sha256', createHmac('sha256', Buffer.from('WebAppData')).update(token).digest()),
-    createHmac('sha256', token),
-  ];
-  for (const key of candidates) {
-    const computed = key.update(dataCheck).digest('hex');
-    if (computed.length === hash.length && timingSafeEqual(Buffer.from(computed), Buffer.from(hash))) {
-      let user = null;
-      try {
-        user = rest.user ? JSON.parse(rest.user) : null;
-      } catch {
-        user = null;
-      }
-      return { uid: String(user?.id ?? 'unknown'), user };
-    }
+  const secret = createHmac('sha256', Buffer.from('WebAppData')).update(token).digest();
+  const computed = createHmac('sha256', secret).update(dataCheck).digest('hex');
+  if (computed.length !== hash.length) return null;
+  if (!timingSafeEqual(Buffer.from(computed), Buffer.from(hash))) return null;
+
+  let user = null;
+  try {
+    user = rest.user ? JSON.parse(rest.user) : null;
+  } catch {
+    user = null;
   }
-  return null;
+  if (user?.id == null || String(user.id).length === 0) return null;
+  return { uid: String(user.id), user };
 }
 
 /**
@@ -213,6 +228,7 @@ export function verifyVkWebAppT(webAppT, secretKey, now = Date.now()) {
 
 function antiCheatCheck(p) {
   if (!Number.isFinite(p.timeMs) || p.timeMs < 1000 || p.timeMs > ANTI_CHEAT.maxTimeMs) return 'time';
+  if (p.win === true && p.timeMs < ANTI_CHEAT.minWinTimeMs) return 'win-time';
   if (!Number.isFinite(p.kills) || p.kills < 0 || p.kills > ANTI_CHEAT.maxKillsPerSec * (p.timeMs / 1000)) return 'kills';
   if (!Number.isFinite(p.level) || p.level < 1 || p.level > ANTI_CHEAT.maxLevel) return 'level';
   return null;
@@ -248,25 +264,33 @@ async function notifyReferrer(fromUid) {
 }
 
 // ---------- топы ----------
+/**
+ * Единый порядок результатов:
+ * 1) победа выше поражения;
+ * 2) среди побед быстрее = лучше;
+ * 3) среди поражений дольше = лучше;
+ * 4) при равном времени больше kills/level = лучше.
+ */
+function compareScores(a, b) {
+  if (!!a.win !== !!b.win) return a.win ? -1 : 1;
+  if (a.timeMs !== b.timeMs) return a.win ? a.timeMs - b.timeMs : b.timeMs - a.timeMs;
+  if (a.kills !== b.kills) return b.kills - a.kills;
+  return (b.level ?? 0) - (a.level ?? 0);
+}
+
 function bestByUser(entries) {
   const best = new Map();
   for (const s of entries) {
     const k = `${s.platform}:${s.uid}`;
     const cur = best.get(k);
-    if (!cur) {
-      best.set(k, s);
-      continue;
-    }
-    // Победа > поражение; среди побед — быстрее; среди поражений — дольше.
-    const a = s.win === cur.win ? (s.win ? s.timeMs < cur.timeMs : s.timeMs > cur.timeMs) : s.win;
-    if (a) best.set(k, s);
+    if (!cur || compareScores(s, cur) < 0) best.set(k, s);
   }
   return [...best.values()];
 }
 
 function sortTop(list) {
   return list
-    .sort((a, b) => (a.win !== b.win ? (a.win ? -1 : 1) : a.timeMs !== b.timeMs ? b.timeMs - a.timeMs : b.kills - a.kills))
+    .sort(compareScores)
     .slice(0, 100)
     .map((s, i) => ({
       rank: i + 1,
@@ -311,10 +335,7 @@ function dailyStats(user, platform) {
   const daily = store.scores.filter((s) => s.daily && s.dateKey === today);
   const byUser = bestByUser(daily);
   const total = byUser.length;
-  const sorted = [...byUser].sort(
-    (a, b) =>
-      a.win !== b.win ? (a.win ? -1 : 1) : a.timeMs !== b.timeMs ? b.timeMs - a.timeMs : b.kills - a.kills
-  );
+  const sorted = [...byUser].sort(compareScores);
   const idx = sorted.findIndex((s) => s.platform === platform && s.uid === user);
   return {
     dateKey: today,
@@ -482,16 +503,28 @@ const server = createServer(async (req, res) => {
       return send(res, 200, { ok: true, ...dailyStats(user, platform) });
     }
 
+    // Legacy endpoint: текущий клиент пишет ref вместе с аутентифицированным
+    // /api/score. Оставляем совместимость со старым клиентом, но жёстко
+    // ограничиваем поля и размер store, чтобы endpoint нельзя было раздувать.
     if (req.method === 'POST' && url.pathname === '/api/ref') {
       const body = await readBody(req);
       const { from, to, platform } = body;
-      if (typeof from !== 'string' || typeof to !== 'string' || !['telegram', 'max', 'browser', 'vk'].includes(platform)) {
+      if (
+        typeof from !== 'string' ||
+        typeof to !== 'string' ||
+        from.length < 1 ||
+        from.length > 64 ||
+        to.length < 1 ||
+        to.length > 64 ||
+        !['telegram', 'max', 'browser', 'vk'].includes(platform)
+      ) {
         return send(res, 400, { ok: false, error: 'bad ref' });
       }
       const edgeKey = `${from}>${platform}:${to}`;
       let first = false;
       if (!store.refs.some((r) => r.edge === edgeKey)) {
         store.refs.push({ edge: edgeKey, from, to: `${platform}:${to}`, ts: Date.now() });
+        if (store.refs.length > MAX_REFS) store.refs.splice(0, store.refs.length - MAX_REFS);
         first = true;
       }
       if (!store.refRewards[edgeKey]) {
@@ -532,13 +565,7 @@ const server = createServer(async (req, res) => {
         let best = null;
         for (const s of store.scores) {
           if (s.uid !== uid) continue;
-          if (!best) {
-            best = s;
-            continue;
-          }
-          const a =
-            s.win === best.win ? (s.win ? s.timeMs < best.timeMs : s.timeMs > best.timeMs) : s.win;
-          if (a) best = s;
+          if (!best || compareScores(s, best) < 0) best = s;
         }
         if (best) {
           out.push({
@@ -553,9 +580,7 @@ const server = createServer(async (req, res) => {
           });
         }
       }
-      out.sort((a, b) =>
-        a.win !== b.win ? (a.win ? -1 : 1) : a.timeMs !== b.timeMs ? b.timeMs - a.timeMs : b.kills - a.kills
-      );
+      out.sort(compareScores);
       return send(res, 200, { ok: true, user, platform, friends: out.slice(0, 10) });
     }
 
@@ -568,7 +593,7 @@ const server = createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`[ofeliya-server] http://localhost:${PORT} (data: ${DATA_DIR})`);
   if (!TG_TOKEN) console.warn('[ofeliya-server] TG_BOT_TOKEN не задан — telegram-скоры не будут верифицироваться');
-  if (!MAX_TOKEN) console.warn('[ofeliya-server] MAX_BOT_TOKEN не задан — max-скоры не будут верифицироваться');
+  if (!MAX_TOKEN) console.warn('[ofeliya-server] MAX_BOT_TOKEN/BOT_TOKEN не задан — max-скоры не будут верифицироваться');
 });
 
 export { server };

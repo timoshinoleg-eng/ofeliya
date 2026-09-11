@@ -63,7 +63,7 @@ check('следующий день: стрик 2, newStreak', res.streak === 2 &
 
 res = SaveSystem.recordDaily(day3, { win: true, timeMs: 310000, kills: 205 });
 check('новый день: стрик 3, первый забег — не «рекорд»', res.streak === 3 && !res.dailyRecord);
-res = SaveSystem.recordDaily(day3, { win: true, timeMs: 290000, kills: 210 });
+res = SaveSystem.recordDaily(day3, { win: true, timeMs: 305000, kills: 210 });
 check('повтор победа быстрее → рекорд дня', res.dailyRecord);
 
 res = SaveSystem.recordDaily(day5, { win: false, timeMs: 100000, kills: 50 });
@@ -73,11 +73,16 @@ check('пропуск дня: стрик сбросился на 1', res.streak 
 const rank1 = SaveSystem.recordLeaderboard({ dateKey: '2026-09-09', daily: false, win: false, timeMs: 200000, kills: 80, level: 7 });
 check('первый забег — №1', rank1 === 1);
 const rank2 = SaveSystem.recordLeaderboard({ dateKey: '2026-09-09', daily: false, win: false, timeMs: 150000, kills: 60, level: 5 });
-check('короче/меньше — №2', rank2 === 2);
-const rankWin = SaveSystem.recordLeaderboard({ dateKey: '2026-09-09', daily: true, win: true, timeMs: 310000, kills: 150, level: 9 });
-check('победа выше поражений', rankWin === 1);
+check('короче поражение — №2', rank2 === 2);
+const slowWin = SaveSystem.recordLeaderboard({ dateKey: '2026-09-09', daily: true, win: true, timeMs: 330000, kills: 150, level: 9 });
+check('победа выше поражений', slowWin === 1);
+const fastWin = SaveSystem.recordLeaderboard({ dateKey: '2026-09-09', daily: true, win: true, timeMs: 310000, kills: 140, level: 8 });
+check('быстрая победа выше медленной', fastWin === 1);
 const save2 = SaveSystem.get();
-check('лидерборд хранит топ', save2.leaderboard.length === 3 && save2.leaderboard[0].win === true);
+check(
+  'лидерборд хранит победы по скорости',
+  save2.leaderboard.length === 4 && save2.leaderboard[0].win === true && save2.leaderboard[0].timeMs === 310000 && save2.leaderboard[1].timeMs === 330000
+);
 for (let i = 0; i < 12; i++) {
   SaveSystem.recordLeaderboard({ dateKey: '2026-09-09', daily: false, win: false, timeMs: 10000 + i * 1000, kills: 10 + i, level: 2 });
 }
