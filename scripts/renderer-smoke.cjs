@@ -60,7 +60,7 @@ async function openRenderer(browser, renderer) {
       throw new Error(`High-DPI WebGL text lost resolution: ${JSON.stringify(state)}`);
     }
   } else {
-    if (state.renderer !== 'CanvasRenderer') {
+    if (!state.renderer.startsWith('CanvasRenderer')) {
       throw new Error(`Canvas fallback did not boot Canvas: ${JSON.stringify(state)}`);
     }
     if (state.titleResolution !== 1) {
