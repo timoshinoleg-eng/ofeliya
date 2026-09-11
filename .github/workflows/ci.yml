@@ -7,9 +7,9 @@ on:
       - main
 
 jobs:
-  build:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,3 +25,27 @@ jobs:
 
       - name: Typecheck and build
         run: npm run build
+
+      - name: Game logic smoke
+        run: npm run smoke
+
+      - name: Score server tests
+        run: npm run server:test
+
+      - name: MAX bot smoke
+        run: npm run smoke:bot
+
+      - name: Install Chromium for startup contract
+        run: npx playwright install --with-deps chromium
+
+      - name: MAX startup tests
+        run: npm run test:startup
+
+      - name: Build production bot image
+        run: docker build -f deploy/Dockerfile --target runtime -t ofeliya-runtime:ci .
+
+      - name: Build production score image
+        run: docker build -f deploy/Dockerfile --target score -t ofeliya-score:ci .
+
+      - name: Build production static image
+        run: docker build -f deploy/Dockerfile --target static -t ofeliya-static:ci .
