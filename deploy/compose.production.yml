@@ -6,8 +6,6 @@ services:
       target: runtime
     image: ofeliya-runtime:${OFELIYA_RELEASE:?OFELIYA_RELEASE is required}
     command: ["node", "bot/index.mjs"]
-    # Separate runtime env prevents Hub's BOT_TOKEN/HUB_BOT_USERNAME from ever
-    # configuring Ofeliya by accident.
     env_file: ${OFELIYA_ENV_FILE:-/opt/ofeliya/.env}
     environment:
       NODE_ENV: production
@@ -25,11 +23,17 @@ services:
       dockerfile: deploy/Dockerfile
       target: static
       args:
-        # Compose interpolation happens before service env_file is applied.
-        # Production must invoke compose with --env-file /opt/ofeliya/.env so
-        # client deep-links are built for this exact MAX bot.
+        # Strain Zero uses VITE_MAX_BOT_NAME for challenge/share links.
+        # Keep the historical alias too for compatibility with shared code.
+        VITE_MAX_BOT_NAME: ${OFELIYA_BOT_USERNAME:?OFELIYA_BOT_USERNAME is required; pass --env-file /opt/ofeliya/.env}
         VITE_MAX_BOT_USERNAME: ${OFELIYA_BOT_USERNAME:?OFELIYA_BOT_USERNAME is required; pass --env-file /opt/ofeliya/.env}
         VITE_TG_BOT_USERNAME: ${VITE_TG_BOT_USERNAME:-}
+        VITE_DEVELOPER_BRAND: ${OFELIYA_DEVELOPER_BRAND:-ChatBot24}
+        VITE_DEVELOPER_LEGAL_NAME: ${OFELIYA_DEVELOPER_LEGAL_NAME:?OFELIYA_DEVELOPER_LEGAL_NAME is required}
+        VITE_DEVELOPER_REGISTRATION: ${OFELIYA_DEVELOPER_REGISTRATION:?OFELIYA_DEVELOPER_REGISTRATION is required}
+        VITE_DEVELOPER_ADDRESS: ${OFELIYA_DEVELOPER_ADDRESS:?OFELIYA_DEVELOPER_ADDRESS is required}
+        VITE_SUPPORT_EMAIL: ${OFELIYA_SUPPORT_EMAIL:?OFELIYA_SUPPORT_EMAIL is required}
+        VITE_SUPPORT_PHONE: ${OFELIYA_SUPPORT_PHONE:-}
     image: ofeliya-static:${OFELIYA_RELEASE:?OFELIYA_RELEASE is required}
     restart: unless-stopped
     depends_on:
@@ -45,17 +49,12 @@ services:
       retries: 5
       start_period: 10s
 
-  # v0.4.x: score/leaderboard API (server/index.mjs, zero-dep). nginx
-  # проксирует /api/* сюда (deploy/nginx.conf).
   score:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
       target: score
     image: ofeliya-score:${OFELIYA_RELEASE:?OFELIYA_RELEASE is required}
-    # server/index.mjs still supports legacy MAX_BOT_TOKEN/GAME_URL names.
-    # Map the namespaced Ofeliya env inside the container (double-$ means
-    # runtime shell expansion, not Compose interpolation).
     command:
       - sh
       - -c
