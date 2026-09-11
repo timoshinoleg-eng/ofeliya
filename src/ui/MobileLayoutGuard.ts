@@ -124,8 +124,12 @@ function guardGameOver(scene: Phaser.Scene): void {
 
   const titleY = Math.max(58, H * 0.1);
   title.setPosition(W / 2, titleY);
-  time.setPosition(W / 2, title.getBounds().bottom + Math.max(18, H * 0.018));
-  stats.setPosition(W / 2, time.getBounds().bottom + Math.max(16, H * 0.016));
+
+  const timeHalfHeight = time.getBounds().height / 2;
+  time.setPosition(W / 2, title.getBounds().bottom + Math.max(12, H * 0.014) + timeHalfHeight);
+
+  const statsHalfHeight = stats.getBounds().height / 2;
+  stats.setPosition(W / 2, time.getBounds().bottom + Math.max(10, H * 0.012) + statsHalfHeight);
 
   const details = texts
     .filter(
