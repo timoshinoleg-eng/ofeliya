@@ -29,6 +29,9 @@ jobs:
       - name: Viewport math smoke
         run: npm run test:viewport
 
+      - name: Startup renderer contract
+        run: npm run test:startup
+
       - name: MAX release config gate smoke
         env:
           VITE_MAX_BOT_NAME: ofeliya_ci_bot
@@ -79,6 +82,9 @@ jobs:
 
       - name: MAX compact viewport matrix
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/mobile-layout-matrix.cjs
+
+      - name: High-DPI WebGL and Canvas fallback smoke
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/renderer-smoke.cjs
 
       - name: Upload browser smoke captures
         if: always()
