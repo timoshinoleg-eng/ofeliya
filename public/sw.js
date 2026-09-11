@@ -1,16 +1,17 @@
 /**
  * OFELIYA Service Worker (R2 — PWA). Стратегия:
  *
- * - App shell (index, manifest, иконки, шрифты) — pre-cache на install;
- * - Навигации — network-first с фолбэком на кэшированный index.html
- *   (offline-запуск меню);
- * - /assets/* (JS/CSS Phasera) — stale-while-revalidate (кэш + тихое обновление);
- * - /audio/* — НЕ кэшируем (11MB стриминг — кэш только по сети, как и раньше);
+ * - App shell (index, manifest, иконки, шрифты) — pre-cache on install;
+ * - Навигации — network-first с фолбэком на кэшированный index.html;
+ * - /assets/* — stale-while-revalidate;
+ * - /audio/* — не кэшируем;
  * - Чужие origin — не трогаем.
  *
- * Версионирование: при смене VERSION старые кэши чистятся на activate.
+ * VERSION меняется на каждом production routing/cache release, чтобы MAX
+ * WebView гарантированно удалял старый shell после activate.
  */
-const VERSION = 'ofeliya-v1';
+const VERSION = 'ofeliya-v041-r2';
+const CACHE_PREFIX = 'ofeliya-';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 
@@ -24,6 +25,12 @@ const SHELL = [
   './fonts/chakra-petch-1.woff2',
   './fonts/chakra-petch-2.woff2',
 ];
+
+// Service worker живёт под deployment prefix (/ofeliya/ в production),
+// поэтому нельзя проверять только root-path вроде /audio/.
+const AUDIO_PREFIX = new URL('./audio/', self.registration.scope).pathname;
+const ASSET_PREFIX = new URL('./assets/', self.registration.scope).pathname;
+const FONT_PREFIX = new URL('./fonts/', self.registration.scope).pathname;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -39,7 +46,11 @@ self.addEventListener('activate', (event) => {
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((k) => !k.startsWith(VERSION)).map((k) => caches.delete(k)))
+        Promise.all(
+          keys
+            .filter((key) => key.startsWith(CACHE_PREFIX) && !key.startsWith(VERSION))
+            .map((key) => caches.delete(key))
+        )
       )
       .then(() => self.clients.claim())
   );
@@ -50,14 +61,12 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return; // только свои запросы
+  if (url.origin !== self.location.origin) return;
 
   const path = url.pathname;
 
-  // Аудио — стриминг по сети, кэш не трогаем (объём 11MB).
-  if (path.startsWith('/audio/')) return;
+  if (path.startsWith(AUDIO_PREFIX)) return;
 
-  // Навигация: network-first, offline → index.html.
   if (req.mode === 'navigate') {
     event.respondWith(
       fetch(req)
@@ -73,12 +82,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Assets и остальное: stale-while-revalidate.
   event.respondWith(
     caches.match(req).then((hit) => {
       const network = fetch(req)
         .then((res) => {
-          if (res.ok && (path.includes('/assets/') || path.startsWith('/fonts/'))) {
+          if (res.ok && (path.startsWith(ASSET_PREFIX) || path.startsWith(FONT_PREFIX))) {
             const copy = res.clone();
             caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy));
           }

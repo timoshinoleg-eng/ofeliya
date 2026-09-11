@@ -6,7 +6,9 @@ services:
       target: runtime
     image: ofeliya-runtime:${OFELIYA_RELEASE:?OFELIYA_RELEASE is required}
     command: ["node", "bot/index.mjs"]
-    env_file: /opt/hub/.env
+    # Separate runtime env prevents Hub's BOT_TOKEN/HUB_BOT_USERNAME from ever
+    # configuring Ofeliya by accident.
+    env_file: ${OFELIYA_ENV_FILE:-/opt/ofeliya/.env}
     environment:
       NODE_ENV: production
       NODE_EXTRA_CA_CERTS: /app/certs/extra-ca.crt
@@ -23,7 +25,10 @@ services:
       dockerfile: deploy/Dockerfile
       target: static
       args:
-        VITE_MAX_BOT_USERNAME: ${VITE_MAX_BOT_USERNAME:-}
+        # Compose interpolation happens before service env_file is applied.
+        # Production must invoke compose with --env-file /opt/ofeliya/.env so
+        # client deep-links are built for this exact MAX bot.
+        VITE_MAX_BOT_USERNAME: ${OFELIYA_BOT_USERNAME:?OFELIYA_BOT_USERNAME is required; pass --env-file /opt/ofeliya/.env}
         VITE_TG_BOT_USERNAME: ${VITE_TG_BOT_USERNAME:-}
     image: ofeliya-static:${OFELIYA_RELEASE:?OFELIYA_RELEASE is required}
     restart: unless-stopped
@@ -48,11 +53,17 @@ services:
       dockerfile: deploy/Dockerfile
       target: score
     image: ofeliya-score:${OFELIYA_RELEASE:?OFELIYA_RELEASE is required}
-    command: ["node", "server/index.mjs"]
+    # server/index.mjs still supports legacy MAX_BOT_TOKEN/GAME_URL names.
+    # Map the namespaced Ofeliya env inside the container (double-$ means
+    # runtime shell expansion, not Compose interpolation).
+    command:
+      - sh
+      - -c
+      - 'MAX_BOT_TOKEN="$$OFELIYA_BOT_TOKEN" GAME_URL="$$OFELIYA_GAME_URL" exec node server/index.mjs'
     environment:
       NODE_ENV: production
       PORT: 8787
-    env_file: /opt/hub/.env
+    env_file: ${OFELIYA_ENV_FILE:-/opt/ofeliya/.env}
     volumes:
       - ofeliya-score-data:/app/server/data
     restart: unless-stopped
