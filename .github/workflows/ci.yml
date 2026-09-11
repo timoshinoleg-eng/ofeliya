@@ -42,16 +42,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo mkdir -p /opt/hub
+          sudo mkdir -p /opt/ofeliya
           printf '%s\n' \
-            'BOT_TOKEN=ci-placeholder-token' \
+            'OFELIYA_BOT_TOKEN=ci-placeholder-token' \
             'OFELIYA_BOT_USERNAME=id100000000000_ci_bot' \
             'OFELIYA_BOT_WEBHOOK_DOMAIN=https://example.test' \
             'OFELIYA_BOT_WEBHOOK_PORT=8788' \
-            'OFELIYA_BOT_WEBHOOK_PATH=/hub/bot/webhook' \
+            'OFELIYA_BOT_WEBHOOK_PATH=/ofeliya/bot/webhook' \
             'OFELIYA_BOT_WEBHOOK_SECRET=0123456789abcdef0123456789abcdef' \
-            'GAME_URL=https://example.test/hub/' \
-            | sudo tee /opt/hub/.env >/dev/null
+            'OFELIYA_GAME_URL=https://example.test/ofeliya/' \
+            | sudo tee /opt/ofeliya/.env >/dev/null
           touch /tmp/ofeliya-ci-extra-ca.crt
           OFELIYA_RELEASE=ci \
           HUB_EXTRA_CA_CERT=/tmp/ofeliya-ci-extra-ca.crt \
@@ -60,6 +60,7 @@ jobs:
           grep -q 'ofeliya-runtime:ci' /tmp/ofeliya-compose-rendered.yml
           grep -q 'ofeliya-static:ci' /tmp/ofeliya-compose-rendered.yml
           grep -q 'ofeliya-score:ci' /tmp/ofeliya-compose-rendered.yml
+          grep -q '/opt/ofeliya/.env' /tmp/ofeliya-compose-rendered.yml
 
       - name: Install Chromium for startup contract
         run: npx playwright install --with-deps chromium
