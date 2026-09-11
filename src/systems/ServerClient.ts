@@ -3,16 +3,24 @@
  * на геймплей (таймауты, catch, без ретраев).
  *
  * env: VITE_SERVER_URL (base, например https://api.ofeliya.example).
- * Без URL — относительные пути `/api/*`: в дев-режиме их проксирует Vite
- * (server.proxy → 127.0.0.1:8787), в проде — reverse-proxy на тот же домен.
+ * Без URL API резолвится ОТНОСИТЕЛЬНО текущего URL приложения: в dev это
+ * `/api/*`, а при публикации под `/hub/` — `/hub/api/*`. Это критично для
+ * production Caddy, который снимает префикс `/hub/` перед nginx.
  * Сервер недоступен → fetch падают в catch → null, UI работает как без него.
  */
 import { MessengerBridge, type MessengerKind } from './MessengerBridge';
 import { VkBridge } from './VkBridge';
 
-const BASE = (import.meta.env.VITE_SERVER_URL as string | undefined) ?? '';
+const EXPLICIT_BASE = ((import.meta.env.VITE_SERVER_URL as string | undefined) ?? '').replace(/\/+$/, '');
 const TIMEOUT_MS = 4000;
 const ANON_KEY = 'ofeliya_anon_id';
+
+function requestUrl(path: string): string {
+  const clean = path.replace(/^\/+/, '');
+  if (EXPLICIT_BASE) return `${EXPLICIT_BASE}/${clean}`;
+  // document.baseURI сохраняет deployment prefix (`/hub/`, GitHub Pages и т.п.).
+  return new URL(clean, document.baseURI).toString();
+}
 
 function anonIdFn(): string {
   try {
@@ -53,21 +61,20 @@ export interface TopEntry {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T | null> {
-  // Пустой BASE = относительные пути /api/* (Vite proxy в дев, reverse-proxy в
-  // прод). Всегда пробуем; недоступный сервер → catch → null (не ломаем UI).
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-    const res = await fetch(`${BASE}${path}`, {
+    const res = await fetch(requestUrl(path), {
       ...init,
       signal: ctrl.signal,
       headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
     });
-    clearTimeout(t);
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {
     return null;
+  } finally {
+    clearTimeout(t);
   }
 }
 
@@ -91,7 +98,7 @@ function authBody() {
 }
 
 export const ServerClient = {
-  /** Запросы всегда возможны (baseUrl может быть пустым = относительные пути). */
+  /** Запросы всегда возможны (baseUrl может быть пустым = same-origin/subpath). */
   get enabled(): boolean {
     return true;
   },
@@ -128,7 +135,7 @@ export const ServerClient = {
     ).then((r) => (r?.ok ? r.season : null));
   },
 
-  /** Зафиксировать реферальное рёбро (когда приглашённый завершил первый забег). */
+  /** Зафиксировать реферальное рёбро (legacy; текущий GameScene передаёт ref вместе со score). */
   sendRef(from: string, toUid: string, platform: MessengerKind): Promise<{ first: boolean } | null> {
     if (!from || !toUid) return Promise.resolve(null);
     return request<{ ok: boolean; first: boolean }>('/api/ref', {
@@ -155,7 +162,6 @@ export const ServerClient = {
     return anonIdFn();
   },
 
-  /** Свой uid (из initData / VK) или null (браузер/нет initData). */
   /**
    * Идентификатор, под которым сервер хранит скор текущего игрока:
    * browser → anonId (из localStorage), vk → VK user id (или anonId),
