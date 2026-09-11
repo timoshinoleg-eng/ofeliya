@@ -58,5 +58,7 @@ assert.match(envExample, /OFELIYA_BOT_TOKEN=/, 'production env template must req
 assert.match(envExample, /OFELIYA_GAME_URL=https:\/\/games\.example\.ru\/ofeliya\//, 'production env template must document the /ofeliya/ Mini App URL');
 assert.match(runtimeConfig, /const release = 'ofeliya-[^']+';/, 'runtime config must carry an explicit release id');
 assert.match(serviceWorker, /const VERSION = 'ofeliya-v041-r2';/, 'service worker cache must rotate with the routing hotfix');
+assert.match(serviceWorker, /const CACHE_PREFIX = 'ofeliya-';/, 'service worker cache cleanup must be Ofeliya-scoped');
+assert.match(serviceWorker, /key\.startsWith\(CACHE_PREFIX\) && !key\.startsWith\(VERSION\)/, 'service worker must not delete caches owned by other apps on the same origin');
 
 console.log('production deployment contract: ok');
