@@ -11,6 +11,7 @@
  * WebView гарантированно удалял старый shell после activate.
  */
 const VERSION = 'ofeliya-v041-r2';
+const CACHE_PREFIX = 'ofeliya-';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 
@@ -45,7 +46,11 @@ self.addEventListener('activate', (event) => {
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((k) => !k.startsWith(VERSION)).map((k) => caches.delete(k)))
+        Promise.all(
+          keys
+            .filter((key) => key.startsWith(CACHE_PREFIX) && !key.startsWith(VERSION))
+            .map((key) => caches.delete(key))
+        )
       )
       .then(() => self.clients.claim())
   );
