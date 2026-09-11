@@ -13,6 +13,7 @@ const dockerfile = read('deploy/Dockerfile');
 const compose = read('deploy/compose.production.yml');
 const runtimeConfig = read('public/runtime-config.js');
 const serviceWorker = read('public/sw.js');
+const envExample = read('deploy/ofeliya.env.example');
 
 const runtimePos = index.indexOf('./runtime-config.js');
 const maxBridgePos = index.indexOf('https://st.max.ru/js/max-web-app.js');
@@ -43,15 +44,18 @@ assert.match(dockerfile, /mkdir -p \/app\/certs && chown node:node \/app\/certs/
 assert.match(compose, /image: ofeliya-runtime:\$\{OFELIYA_RELEASE:\?OFELIYA_RELEASE is required\}/, 'bot image must use an explicit immutable release tag');
 assert.match(compose, /image: ofeliya-static:\$\{OFELIYA_RELEASE:\?OFELIYA_RELEASE is required\}/, 'static image must use an explicit immutable release tag');
 assert.match(compose, /image: ofeliya-score:\$\{OFELIYA_RELEASE:\?OFELIYA_RELEASE is required\}/, 'score image must use an explicit immutable release tag');
-assert.match(compose, /BOT_TOKEN: \$\{OFELIYA_BOT_TOKEN:\?OFELIYA_BOT_TOKEN is required\}/, 'bot container must receive the Ofeliya token explicitly');
-assert.match(compose, /OFELIYA_BOT_USERNAME: \$\{OFELIYA_BOT_USERNAME:\?OFELIYA_BOT_USERNAME is required\}/, 'bot container must receive the Ofeliya username explicitly');
-assert.match(compose, /MAX_BOT_TOKEN: \$\{OFELIYA_BOT_TOKEN:\?OFELIYA_BOT_TOKEN is required\}/, 'score service must verify MAX initData with the Ofeliya token');
-assert.match(compose, /VITE_MAX_BOT_USERNAME: \$\{OFELIYA_BOT_USERNAME:\?OFELIYA_BOT_USERNAME is required\}/, 'client deep links must target the Ofeliya bot');
+assert.match(compose, /OFELIYA_ENV_FILE:-\/opt\/ofeliya\/\.env/, 'production services must default to an Ofeliya-specific env file');
+assert.doesNotMatch(compose, /env_file:\s*\/opt\/hub\/\.env/, 'Ofeliya must not read Hub runtime secrets');
+assert.match(compose, /VITE_MAX_BOT_USERNAME: \$\{OFELIYA_BOT_USERNAME:-\}/, 'client build must never inherit Hub bot username implicitly');
+assert.match(compose, /MAX_BOT_TOKEN=\\"\$\$OFELIYA_BOT_TOKEN\\"/, 'score service must verify MAX initData with the Ofeliya token');
+assert.match(compose, /GAME_URL=\\"\$\$OFELIYA_GAME_URL\\"/, 'score service must publish Ofeliya links, not Hub links');
 assert.match(compose, /ofeliya-score-data:\/app\/server\/data/, 'score store must stay on a named persistent volume');
 assert.match(compose, /score:[\s\S]*healthcheck:[\s\S]*127\.0\.0\.1:8787\/health/, 'score service must expose a healthcheck');
 assert.match(compose, /static:[\s\S]*depends_on:[\s\S]*score:[\s\S]*condition: service_healthy/, 'static nginx must wait for a healthy score service');
 assert.match(compose, /external: true[\s\S]*HUB_SHARED_NETWORK:-quiz-battle_default/, 'production services must join the shared external network explicitly');
 
+assert.match(envExample, /OFELIYA_BOT_TOKEN=/, 'production env template must require a dedicated Ofeliya token');
+assert.match(envExample, /OFELIYA_GAME_URL=https:\/\/games\.example\.ru\/ofeliya\//, 'production env template must document the /ofeliya/ Mini App URL');
 assert.match(runtimeConfig, /const release = 'ofeliya-[^']+';/, 'runtime config must carry an explicit release id');
 assert.match(serviceWorker, /const VERSION = 'ofeliya-v041-r2';/, 'service worker cache must rotate with the routing hotfix');
 
