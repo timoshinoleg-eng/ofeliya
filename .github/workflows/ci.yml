@@ -54,7 +54,7 @@ jobs:
         run: docker build -f deploy/Dockerfile --target static -t ofeliya-static:ci .
 
       - name: Validate nginx config
-        run: docker run --rm ofeliya-static:ci nginx -t -c /etc/nginx/nginx.conf
+        run: docker run --rm --add-host ofeliya-score:127.0.0.1 ofeliya-static:ci nginx -t -c /etc/nginx/nginx.conf
 
       - name: Production routing integration
         shell: bash
