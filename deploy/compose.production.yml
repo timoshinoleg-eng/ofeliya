@@ -1,4 +1,4 @@
-﻿services:
+services:
   bot:
     profiles: ["dedicated-bot"]
     build:
@@ -65,6 +65,7 @@
     environment:
       NODE_ENV: production
       PORT: 8787
+      OFELIYA_BOT_TOKEN: ${OFELIYA_BOT_TOKEN:?OFELIYA_BOT_TOKEN is required}
     env_file:
       - ${OFELIYA_BOT_ENV_FILE:-/opt/hub/.env}
       - ${OFELIYA_ENV_FILE:-/opt/ofeliya/.env}
