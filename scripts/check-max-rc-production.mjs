@@ -21,6 +21,9 @@ const maxBridgePos = index.indexOf('https://st.max.ru/js/max-web-app.js');
 assert.ok(runtimePos >= 0, 'index must load runtime-config.js');
 assert.ok(maxBridgePos > runtimePos, 'cache-buster must run before MAX Bridge');
 assert.match(index, /OFELIYA: STRAIN ZERO/, 'release document must identify Strain Zero');
+assert.match(index, /ofeliya-strain-zero-main-qa[.]onrender[.]com/, 'legacy Render host must be detected');
+assert.match(index, /https:\/\/quiz[.]chatbot24[.]su\/ofeliya\//, 'legacy Render launch must move to Cloud.ru');
+assert.match(index, /target[.]hash = window[.]location[.]hash/, 'Render cutover must preserve MAX WebAppData fragment');
 assert.match(
   main,
   /return webGLPreflight\(\) \? Phaser\.WEBGL : Phaser\.CANVAS/,
@@ -62,6 +65,10 @@ assert.match(compose, /VITE_SUPPORT_EMAIL:\s*\$\{OFELIYA_SUPPORT_EMAIL:\?/, 'sup
 assert.match(dockerfile, /ARG VITE_MAX_BOT_NAME/, 'Dockerfile must accept the Strain Zero MAX bot name');
 assert.match(dockerfile, /ARG VITE_DEVELOPER_LEGAL_NAME/, 'Dockerfile must accept legal release metadata');
 assert.match(dockerfile, /RUN npm run build:max/, 'production image must execute the MAX release gate');
+assert.ok(
+  dockerfile.indexOf('AS runtime') < dockerfile.indexOf('AS build') && dockerfile.indexOf('AS score') < dockerfile.indexOf('AS build'),
+  'runtime/score targets must precede the frontend build stage for legacy Docker builders'
+);
 assert.match(nginx, /location = \/runtime-config\.js[\s\S]*no-store/, 'runtime config must be no-store');
 assert.match(runtimeConfig, /ofeliya-20260911-strain-zero-rc2/, 'MAX WebView URL key must identify RC2');
 assert.match(serviceWorker, /ofeliya-strain-zero-rc2/, 'service worker cache must identify RC2');

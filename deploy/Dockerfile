@@ -1,3 +1,22 @@
+FROM node:22-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+COPY --chown=node:node bot ./bot
+RUN mkdir -p /app/certs && chown node:node /app/certs
+USER node
+
+FROM node:22-alpine AS score
+WORKDIR /app
+ENV NODE_ENV=production
+RUN mkdir -p /app/server/data && chown -R node:node /app/server
+COPY --chown=node:node server/index.mjs ./server/index.mjs
+USER node
+CMD ["node", "server/index.mjs"]
+
+# Keep frontend build after runtime/score so Docker's legacy builder can
+# target backend images without executing the MAX release gate first.
 FROM node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -22,23 +41,6 @@ ENV VITE_DEVELOPER_ADDRESS=$VITE_DEVELOPER_ADDRESS
 ENV VITE_SUPPORT_EMAIL=$VITE_SUPPORT_EMAIL
 ENV VITE_SUPPORT_PHONE=$VITE_SUPPORT_PHONE
 RUN npm run build:max
-
-FROM node:22-alpine AS runtime
-WORKDIR /app
-ENV NODE_ENV=production
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
-COPY --chown=node:node bot ./bot
-RUN mkdir -p /app/certs && chown node:node /app/certs
-USER node
-
-FROM node:22-alpine AS score
-WORKDIR /app
-ENV NODE_ENV=production
-RUN mkdir -p /app/server/data && chown -R node:node /app/server
-COPY --chown=node:node server/index.mjs ./server/index.mjs
-USER node
-CMD ["node", "server/index.mjs"]
 
 FROM nginx:alpine AS static
 COPY deploy/nginx.conf /etc/nginx/nginx.conf
