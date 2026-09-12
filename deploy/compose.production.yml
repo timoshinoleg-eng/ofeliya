@@ -1,4 +1,4 @@
-services:
+﻿services:
   bot:
     build:
       context: ..
@@ -11,7 +11,7 @@ services:
       NODE_ENV: production
       NODE_EXTRA_CA_CERTS: /app/certs/extra-ca.crt
     volumes:
-      - ${HUB_EXTRA_CA_CERT:?HUB_EXTRA_CA_CERT is required}:/app/certs/extra-ca.crt:ro
+      - ${OFELIYA_EXTRA_CA_CERT:?OFELIYA_EXTRA_CA_CERT is required}:/app/certs/extra-ca.crt:ro
     restart: unless-stopped
     networks:
       quiz-battle:
@@ -79,7 +79,7 @@ services:
 networks:
   quiz-battle:
     external: true
-    name: ${HUB_SHARED_NETWORK:-quiz-battle_default}
+    name: ${OFELIYA_SHARED_NETWORK:-quiz-battle_default}
 
 volumes:
   ofeliya-score-data:

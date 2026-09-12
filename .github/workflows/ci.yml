@@ -1,4 +1,4 @@
-name: CI
+﻿name: CI
 
 on:
   pull_request:
@@ -144,8 +144,8 @@ jobs:
             | sudo tee /opt/ofeliya/.env >/dev/null
           touch /tmp/ofeliya-ci-extra-ca.crt
           OFELIYA_RELEASE=strain-zero-ci \
-          HUB_EXTRA_CA_CERT=/tmp/ofeliya-ci-extra-ca.crt \
-          HUB_SHARED_NETWORK=ofeliya-ci \
+          OFELIYA_EXTRA_CA_CERT=/tmp/ofeliya-ci-extra-ca.crt \
+          OFELIYA_SHARED_NETWORK=ofeliya-ci \
             docker compose --env-file /opt/ofeliya/.env -f deploy/compose.production.yml config >/tmp/ofeliya-compose.yml
           grep -q 'ofeliya-runtime:strain-zero-ci' /tmp/ofeliya-compose.yml
           grep -q 'ofeliya-static:strain-zero-ci' /tmp/ofeliya-compose.yml
