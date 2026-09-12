@@ -62,7 +62,7 @@ jobs:
 
       - name: Commit remediated files
         run: |
-          git rm scripts/apply-audit-fixes.mjs .github/workflows/apply-audit-fixes.yml
+          git rm scripts/apply-audit-fixes.mjs .github/workflows/apply-audit-fixes.yml .audit-trigger
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
