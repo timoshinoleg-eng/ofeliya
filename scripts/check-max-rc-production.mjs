@@ -49,6 +49,7 @@ assert.match(compose, /OFELIYA_BOT_ENV_FILE:-\/opt\/hub\/\.env/, 'shared mode mu
 assert.doesNotMatch(compose, /HUB_(?:EXTRA_CA_CERT|SHARED_NETWORK)/, 'compose must not depend on Hub env names');
 assert.match(compose, /OFELIYA_EXTRA_CA_CERT/, 'compose must use Ofeliya CA path variable');
 assert.match(compose, /OFELIYA_SHARED_NETWORK/, 'compose must use Ofeliya network variable');
+assert.match(compose, /OFELIYA_BOT_TOKEN:\s*\$\{OFELIYA_BOT_TOKEN:\?/, 'score must receive the resolved shared/dedicated MAX token');
 assert.match(deployScript, /COMPOSE_PROJECT="ofeliya"/, 'Cloud.ru rollout must pin Compose project to ofeliya');
 assert.match(deployScript, /BOT_MODE="\$\{OFELIYA_BOT_MODE:-shared\}"/, 'shared MAX bot mode must be the production default');
 assert.match(deployScript, /compose --profile dedicated-bot stop bot/, 'shared rollout must keep the Ofeliya webhook process stopped');
