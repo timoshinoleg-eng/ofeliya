@@ -4,10 +4,10 @@ OFELIYA production stays on the existing Cloud.ru VM / shared hub host. Render i
 
 ## Host layout
 
-- application checkout: `/opt/ofeliya` by default;
+- application checkout: `/opt/ofeliya/current` on the existing legacy-layout host (or `/opt/ofeliya` when that root is already a git checkout);
 - release env: `/opt/ofeliya/.env`;
 - compose file: `deploy/compose.production.yml`;
-- shared external Docker network: `HUB_SHARED_NETWORK` (historically the hub/quiz-battle network);
+- shared external Docker network: `OFELIYA_SHARED_NETWORK` (the existing shared hub/quiz-battle Docker network);
 - public namespace: `/ofeliya/`;
 - dedicated MAX bot webhook: `/ofeliya/bot/webhook`.
 
@@ -21,8 +21,8 @@ The Cloud.ru VM must have:
 - Docker Engine;
 - Docker Compose v2;
 - access to `https://github.com/timoshinoleg-eng/ofeliya.git`;
-- the shared Docker network referenced by `HUB_SHARED_NETWORK`;
-- the CA bundle referenced by `HUB_EXTRA_CA_CERT`;
+- the shared Docker network referenced by `OFELIYA_SHARED_NETWORK`;
+- the CA bundle referenced by `OFELIYA_EXTRA_CA_CERT`;
 - `/opt/ofeliya/.env`, created from `deploy/ofeliya.env.example` with real release values.
 
 Never commit the real `.env`, bot token, webhook secret, SSH key or legal/private account credentials.
@@ -65,7 +65,7 @@ Configure GitHub environment `cloudru-production` with:
 
 `deploy/deploy-cloudru.sh` performs a fail-closed rollout:
 
-1. validates the release SHA and production env;
+1. validates the release SHA, dedicated Ofeliya production env, and fixed Compose project `ofeliya`;
 2. checks that the SHA belongs to `origin/main`;
 3. validates the Compose config before changing running containers;
 4. builds immutable `bot`, `score`, and `static` images;
