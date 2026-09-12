@@ -25,7 +25,17 @@ jobs:
           cache: npm
 
       - name: Apply targeted remediation
-        run: node scripts/apply-audit-fixes.mjs
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/apply-audit-fixes.mjs')
+          s = p.read_text(encoding='utf-8')
+          noop = """replaceOnce(\n  'tests/startup-font-timeout.mjs',\n  \"import { readFile } from 'node:fs/promises';\",\n  \"import { readFile } from 'node:fs/promises';\"\n);\n"""
+          if noop not in s:
+              raise SystemExit('expected no-op block not found')
+          p.write_text(s.replace(noop, ''), encoding='utf-8')
+          PY
+          node scripts/apply-audit-fixes.mjs
 
       - name: Install dependencies
         run: npm ci
