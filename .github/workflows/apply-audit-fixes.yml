@@ -40,7 +40,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Validate server and production contracts
+      - name: Challenge and viewport contracts
+        run: npm run test:challenge && npm run test:viewport
+
+      - name: Startup smoke
+        run: npm run test:startup
+
+      - name: Server tests UTC
+        run: npm run server:test
+
+      - name: Server tests Moscow timezone
+        run: TZ=Europe/Moscow npm run server:test
+
+      - name: Bot smoke
+        run: npm run smoke:bot
+
+      - name: Release and production contracts
         env:
           VITE_MAX_BOT_NAME: ofeliya_ci_bot
           VITE_DEVELOPER_LEGAL_NAME: CI Test Developer
@@ -48,17 +63,15 @@ jobs:
           VITE_DEVELOPER_ADDRESS: CI Test Address
           VITE_SUPPORT_EMAIL: qa@example.test
         run: |
-          npm run test:challenge
-          npm run test:viewport
-          npm run test:startup
-          npm run server:test
-          TZ=Europe/Moscow npm run server:test
-          npm run smoke:bot
           npm run release:check
           node scripts/check-max-rc-production.mjs
           node scripts/check-deploy-contract.mjs
-          npm run build
-          git diff --check
+
+      - name: Typecheck and build
+        run: npm run build
+
+      - name: Diff hygiene
+        run: git diff --check
 
       - name: Commit remediated files
         run: |
