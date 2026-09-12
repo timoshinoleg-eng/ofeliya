@@ -15,6 +15,14 @@
     <link rel="icon" type="image/png" href="icons/icon-192.png" />
     <link rel="apple-touch-icon" href="icons/icon-180.png" />
     <title>OFELIYA: STRAIN ZERO</title>
+    <script>
+      if (window.location.hostname === 'ofeliya-strain-zero-main-qa.onrender.com') {
+        const target = new URL('https://quiz.chatbot24.su/ofeliya/');
+        target.search = window.location.search;
+        target.hash = window.location.hash;
+        window.location.replace(target.toString());
+      }
+    </script>
     <!-- Must run before MAX Bridge/app boot so each release gets a distinct WebView URL. -->
     <script src="./runtime-config.js"></script>
     <!-- MAX Bridge. Platform detection is late-safe, so a slow CDN cannot permanently demote MAX to browser mode. -->
