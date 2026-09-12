@@ -35,14 +35,21 @@ assert.match(
 assert.match(main, /FONT_READY_TIMEOUT_MS\s*=\s*700/, 'font loading must not block MAX startup indefinitely');
 assert.match(caddy, /handle_path \/ofeliya\/\*/, 'Ofeliya must own /ofeliya/ namespace');
 assert.doesNotMatch(caddy, /handle_path \/hub\/\*/, 'Ofeliya must not claim Hub routes');
-assert.doesNotMatch(botConfig, /HUB_BOT_USERNAME/, 'bot identity must never fall back to Hub');
-assert.doesNotMatch(botRuntime, /HUB_BOT_WEBHOOK_/, 'webhook config must never fall back to Hub');
+assert.match(botConfig, /shared \? value\('HUB_BOT_USERNAME'\)/, 'shared mode may explicitly reuse the Hub bot username');
+assert.doesNotMatch(botRuntime, /HUB_BOT_WEBHOOK_/, 'Ofeliya webhook config must never inherit Hub webhook settings');
+assert.match(botRuntime, /Shared MAX bot mode must not start/, 'shared mode must refuse a second webhook process');
 assert.match(botRuntime, /\/ofeliya\/bot\/webhook/, 'webhook must use Ofeliya namespace');
 assert.match(compose, /OFELIYA_ENV_FILE:-\/opt\/ofeliya\/\.env/, 'compose must use isolated Ofeliya env');
+assert.match(compose, /profiles: \["dedicated-bot"\]/, 'Ofeliya webhook service must be opt-in only');
+assert.match(compose, /OFELIYA_BOT_ENV_FILE:-\/opt\/hub\/\.env/, 'shared mode must read the existing Hub bot env explicitly');
+
 assert.doesNotMatch(compose, /HUB_(?:EXTRA_CA_CERT|SHARED_NETWORK)/, 'compose must not depend on Hub env names');
 assert.match(compose, /OFELIYA_EXTRA_CA_CERT/, 'compose must use Ofeliya CA path variable');
 assert.match(compose, /OFELIYA_SHARED_NETWORK/, 'compose must use Ofeliya network variable');
 assert.match(deployScript, /COMPOSE_PROJECT="ofeliya"/, 'Cloud.ru rollout must pin Compose project to ofeliya');
+assert.match(deployScript, /BOT_MODE="\$\{OFELIYA_BOT_MODE:-shared\}"/, 'shared MAX bot mode must be the production default');
+assert.match(deployScript, /compose --profile dedicated-bot stop bot/, 'shared rollout must keep the Ofeliya webhook process stopped');
+
 assert.match(deployScript, /docker compose -p "\$\{COMPOSE_PROJECT\}"/, 'all rollout compose calls must use the pinned project');
 assert.match(deployScript, /APP_ROOT\}\/current/, 'legacy release layout must deploy through /opt/ofeliya/current');
 assert.match(envExample, /OFELIYA_SHARED_NETWORK=quiz-battle_default/, 'env example must declare shared network explicitly');
