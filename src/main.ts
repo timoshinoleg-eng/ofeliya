@@ -15,6 +15,7 @@ declare global {
 
 const FONT_READY_TIMEOUT_MS = 700;
 const CANVAS_FALLBACK_KEY = 'ofeliya_canvas_fallback_v2';
+const RELEASE_MARKER = 'ofeliya-20260912-utf8-cachefix';
 
 function waitForFonts(): Promise<void> {
   const fonts = document.fonts;
@@ -118,6 +119,7 @@ function installWebGLRecovery(game: Phaser.Game): void {
 async function boot(): Promise<void> {
   const host = document.getElementById('game');
   if (!host) throw new Error('Missing #game host');
+  document.documentElement.dataset.ofeliyaRelease = RELEASE_MARKER;
 
   const viewport = new ViewportManager(host);
   viewport.start();

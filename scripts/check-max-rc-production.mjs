@@ -36,6 +36,7 @@ assert.match(
   'Canvas text workaround must be scoped to the fallback path only'
 );
 assert.match(main, /FONT_READY_TIMEOUT_MS\s*=\s*700/, 'font loading must not block MAX startup indefinitely');
+assert.match(main, /ofeliya-20260912-utf8-cachefix/, 'bundle must carry a new release marker after UTF-8 cache repair');
 assert.match(caddy, /handle_path \/ofeliya\/\*/, 'Ofeliya must own /ofeliya/ namespace');
 assert.doesNotMatch(caddy, /handle_path \/hub\/\*/, 'Ofeliya must not claim Hub routes');
 assert.match(botConfig, /shared \? value\('HUB_BOT_USERNAME'\)/, 'shared mode may explicitly reuse the Hub bot username');
@@ -70,8 +71,8 @@ assert.ok(
   'runtime/score targets must precede the frontend build stage for legacy Docker builders'
 );
 assert.match(nginx, /location = \/runtime-config\.js[\s\S]*no-store/, 'runtime config must be no-store');
-assert.match(runtimeConfig, /ofeliya-20260911-strain-zero-rc2/, 'MAX WebView URL key must identify RC2');
-assert.match(serviceWorker, /ofeliya-strain-zero-rc2/, 'service worker cache must identify RC2');
+assert.match(runtimeConfig, /ofeliya-20260912-strain-zero-rc3-utf8/, 'MAX WebView URL key must identify RC3 UTF-8 cache bust');
+assert.match(serviceWorker, /ofeliya-strain-zero-rc3-utf8/, 'service worker cache must identify RC3 UTF-8 cache bust');
 assert.match(serviceWorker, /key\.startsWith\(CACHE_PREFIX\)/, 'cache cleanup must be scoped to Ofeliya');
 
 console.log('Strain Zero production release contract: ok');
