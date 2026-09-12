@@ -148,12 +148,17 @@ jobs:
           OFELIYA_RELEASE=strain-zero-ci \
           OFELIYA_EXTRA_CA_CERT=/tmp/ofeliya-ci-extra-ca.crt \
           OFELIYA_SHARED_NETWORK=ofeliya-ci \
-            docker compose --env-file /opt/ofeliya/.env -f deploy/compose.production.yml config >/tmp/ofeliya-compose.yml
-          grep -q 'ofeliya-runtime:strain-zero-ci' /tmp/ofeliya-compose.yml
-          grep -q 'ofeliya-static:strain-zero-ci' /tmp/ofeliya-compose.yml
-          grep -q 'ofeliya-score:strain-zero-ci' /tmp/ofeliya-compose.yml
-          grep -q 'VITE_MAX_BOT_NAME: id100000000000_ci_bot' /tmp/ofeliya-compose.yml
-          grep -q 'VITE_DEVELOPER_LEGAL_NAME: CI Test Developer' /tmp/ofeliya-compose.yml
+            docker compose --env-file /opt/ofeliya/.env -f deploy/compose.production.yml config >/tmp/ofeliya-shared.yml
+          ! grep -q 'ofeliya-runtime:strain-zero-ci' /tmp/ofeliya-shared.yml
+          grep -q 'ofeliya-static:strain-zero-ci' /tmp/ofeliya-shared.yml
+          grep -q 'ofeliya-score:strain-zero-ci' /tmp/ofeliya-shared.yml
+          OFELIYA_RELEASE=strain-zero-ci \
+          OFELIYA_EXTRA_CA_CERT=/tmp/ofeliya-ci-extra-ca.crt \
+          OFELIYA_SHARED_NETWORK=ofeliya-ci \
+            docker compose --profile dedicated-bot --env-file /opt/ofeliya/.env -f deploy/compose.production.yml config >/tmp/ofeliya-dedicated.yml
+          grep -q 'ofeliya-runtime:strain-zero-ci' /tmp/ofeliya-dedicated.yml
+          grep -q 'VITE_MAX_BOT_NAME: id100000000000_ci_bot' /tmp/ofeliya-dedicated.yml
+          grep -q 'VITE_DEVELOPER_LEGAL_NAME: CI Test Developer' /tmp/ofeliya-dedicated.yml
 
       - name: Build production bot image
         run: docker build -f deploy/Dockerfile --target runtime -t ofeliya-runtime:strain-zero-ci .
