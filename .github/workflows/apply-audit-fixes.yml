@@ -1,0 +1,60 @@
+name: Apply audit fixes
+
+on:
+  push:
+    branches:
+      - fix/post-utf8-production-audit
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/post-utf8-production-audit
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Apply targeted remediation
+        run: node scripts/apply-audit-fixes.mjs
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate server and production contracts
+        env:
+          VITE_MAX_BOT_NAME: ofeliya_ci_bot
+          VITE_DEVELOPER_LEGAL_NAME: CI Test Developer
+          VITE_DEVELOPER_REGISTRATION: CI-REG-1
+          VITE_DEVELOPER_ADDRESS: CI Test Address
+          VITE_SUPPORT_EMAIL: qa@example.test
+        run: |
+          npm run test:challenge
+          npm run test:viewport
+          npm run test:startup
+          npm run server:test
+          TZ=Europe/Moscow npm run server:test
+          npm run smoke:bot
+          npm run release:check
+          node scripts/check-max-rc-production.mjs
+          node scripts/check-deploy-contract.mjs
+          npm run build
+          git diff --check
+
+      - name: Commit remediated files
+        run: |
+          git rm scripts/apply-audit-fixes.mjs .github/workflows/apply-audit-fixes.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "fix(prod): remediate post-UTF8 audit findings"
+          git push origin HEAD:fix/post-utf8-production-audit
