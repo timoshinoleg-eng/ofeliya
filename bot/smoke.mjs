@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { Context } from '@maxhub/max-bot-api';
 import { botStartConfig } from './runtime.mjs';
 
+process.env.OFELIYA_BOT_MODE = 'dedicated';
 process.env.OFELIYA_BOT_TOKEN = 'smoke-token';
 process.env.OFELIYA_BOT_USERNAME = 'id100000000000_test_bot';
 
@@ -65,6 +66,11 @@ assert.throws(
   }),
   /Unsafe production bot config/,
   'Hub-only webhook settings must never configure Ofeliya'
+);
+assert.throws(
+  () => botStartConfig({ NODE_ENV: 'production', OFELIYA_BOT_MODE: 'shared' }),
+  /must not start an Ofeliya webhook process/,
+  'shared bot mode must leave webhook ownership to Hub'
 );
 assert.deepEqual(botStartConfig({ NODE_ENV: 'development' }), { mode: 'polling' }, 'non-production keeps polling mode');
 

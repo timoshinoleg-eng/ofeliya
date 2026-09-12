@@ -129,6 +129,8 @@ jobs:
           set -euo pipefail
           sudo mkdir -p /opt/ofeliya
           printf '%s\n' \
+            'OFELIYA_BOT_MODE=dedicated' \
+            'OFELIYA_BOT_ENV_FILE=/opt/ofeliya/.env' \
             'OFELIYA_BOT_TOKEN=ci-placeholder-token' \
             'OFELIYA_BOT_USERNAME=id100000000000_ci_bot' \
             'OFELIYA_BOT_WEBHOOK_DOMAIN=https://example.test' \

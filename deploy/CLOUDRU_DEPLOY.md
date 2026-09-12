@@ -9,7 +9,8 @@ OFELIYA production stays on the existing Cloud.ru VM / shared hub host. Render i
 - compose file: `deploy/compose.production.yml`;
 - shared external Docker network: `OFELIYA_SHARED_NETWORK` (the existing shared hub/quiz-battle Docker network);
 - public namespace: `/ofeliya/`;
-- dedicated MAX bot webhook: `/ofeliya/bot/webhook`.
+- MAX bot mode: `shared` by default; Ofeliya reuses the existing Quizika/Hub bot identity while Hub remains the sole webhook owner.
+- dedicated webhook `/ofeliya/bot/webhook` is only used when `OFELIYA_BOT_MODE=dedicated`.
 
 Do not publish OFELIYA under `/hub/*`. That route belongs to `timoshinoleg-eng/hub` and can make MAX open the wrong/legacy app.
 
@@ -34,6 +35,13 @@ The existing production Caddy host must include the contents of `deploy/Caddyfil
 After a Caddy change, validate before reload using the host's existing Caddy installation. Do not replace the complete host Caddyfile from this repository.
 
 The MAX Mini App URL must be the Cloud.ru-backed HTTPS URL ending in `/ofeliya/`, not the Render QA URL.
+
+
+## MAX bot ownership
+
+Production uses `OFELIYA_BOT_MODE=shared`. `/opt/hub/.env` supplies `BOT_TOKEN` and `HUB_BOT_USERNAME`; Ofeliya uses them for MAX initData verification and links. The Ofeliya `bot` service is profile-gated and stays stopped, so it cannot replace Hub's active `/hub/bot/webhook` subscription.
+
+Switch to `dedicated` only when Ofeliya receives its own MAX bot token/username and `/ofeliya/bot/webhook` subscription.
 
 ## GitHub production deployment
 

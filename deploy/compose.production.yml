@@ -1,12 +1,15 @@
 ﻿services:
   bot:
+    profiles: ["dedicated-bot"]
     build:
       context: ..
       dockerfile: deploy/Dockerfile
       target: runtime
     image: ofeliya-runtime:${OFELIYA_RELEASE:?OFELIYA_RELEASE is required}
     command: ["node", "bot/index.mjs"]
-    env_file: ${OFELIYA_ENV_FILE:-/opt/ofeliya/.env}
+    env_file:
+      - ${OFELIYA_BOT_ENV_FILE:-/opt/hub/.env}
+      - ${OFELIYA_ENV_FILE:-/opt/ofeliya/.env}
     environment:
       NODE_ENV: production
       NODE_EXTRA_CA_CERTS: /app/certs/extra-ca.crt
@@ -62,7 +65,9 @@
     environment:
       NODE_ENV: production
       PORT: 8787
-    env_file: ${OFELIYA_ENV_FILE:-/opt/ofeliya/.env}
+    env_file:
+      - ${OFELIYA_BOT_ENV_FILE:-/opt/hub/.env}
+      - ${OFELIYA_ENV_FILE:-/opt/ofeliya/.env}
     volumes:
       - ofeliya-score-data:/app/server/data
     restart: unless-stopped
