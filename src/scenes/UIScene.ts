@@ -51,6 +51,7 @@ export class UIScene extends Phaser.Scene {
   private lastCombo = 0;
 
   private modal: Phaser.GameObjects.Container | null = null;
+  private transitionOverlay: Phaser.GameObjects.Container | null = null;
   private modalOpen = false;
   private overShown = false;
   private uiBlocked = false;
@@ -65,6 +66,7 @@ export class UIScene extends Phaser.Scene {
     this.overShown = false;
     this.uiBlocked = false;
     this.modal = null;
+    this.transitionOverlay = null;
 
     const W = this.scale.width;
 
@@ -218,8 +220,74 @@ export class UIScene extends Phaser.Scene {
     if (res && !this.overShown) {
       this.overShown = true;
       this.hideModal();
+      this.hideStageTransition();
       this.showGameOver(res);
     }
+  }
+
+  showStageTransition(fromName: string, toName: string, accent: number, onSkip: () => void): void {
+    this.hideModal();
+    this.hideStageTransition();
+    this.uiBlocked = true;
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const compact = H < 620;
+    const c = this.add.container(0, 0).setDepth(160);
+    this.transitionOverlay = c;
+
+    const dim = this.add.rectangle(W / 2, H / 2, W, H, 0x070308, 0.94).setInteractive();
+    dim.on('pointerup', onSkip);
+    c.add(dim);
+
+    c.add(
+      this.add
+        .text(W / 2, H * 0.39, 'HOST COMPARTMENT BREACHED', {
+          fontFamily: FONT,
+          fontSize: compact ? '20px' : '25px',
+          fontStyle: 'bold',
+          color: '#fff4ec',
+          align: 'center',
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+    c.add(
+      this.add
+        .text(W / 2, H * 0.48, `${fromName}  →  ${toName}`, {
+          fontFamily: FONT,
+          fontSize: compact ? '14px' : '17px',
+          color: `#${accent.toString(16).padStart(6, '0')}`,
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+    c.add(
+      this.add
+        .text(W / 2, H * 0.56, 'REASSEMBLING STRAIN\nнажми, чтобы ускорить', {
+          fontFamily: FONT,
+          fontSize: compact ? '11px' : '13px',
+          color: '#aab4d4',
+          align: 'center',
+          lineSpacing: 5,
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+
+    const line = this.add.rectangle(W / 2, H * 0.52, Math.min(W - 72, 260), 3, accent, 0.85);
+    c.add(line);
+    c.setAlpha(0);
+    this.tweens.add({ targets: c, alpha: 1, duration: 180, ease: 'Quad.Out' });
+    this.tweens.add({ targets: line, scaleX: 0.35, alpha: 0.35, yoyo: true, repeat: -1, duration: 420 });
+  }
+
+  hideStageTransition(): void {
+    if (!this.transitionOverlay) return;
+    this.tweens.killTweensOf(this.transitionOverlay);
+    this.transitionOverlay.destroy(true);
+    this.transitionOverlay = null;
+    this.uiBlocked = false;
   }
 
   private layout(): void {

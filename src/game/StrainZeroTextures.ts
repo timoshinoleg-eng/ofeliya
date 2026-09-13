@@ -552,6 +552,33 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
   });
 
   // ---------------------------------------------------------------------------
+  // HEART — denser muscle tissue and a dedicated boss silhouette.
+  // ---------------------------------------------------------------------------
+  make('cardiac-titan', 108, 108, (ctx) => {
+    const c = 54;
+    ctx.fillStyle = radial(ctx, c, c, 48, '#fff0d4', '#d14f3f', '#57142a');
+    ctx.beginPath();
+    for (let i = 0; i <= 28; i++) {
+      const a = (i / 28) * Math.PI * 2;
+      const r = 42 + Math.sin(a * 4) * 5 + Math.sin(a * 9) * 2;
+      const x = c + Math.cos(a) * r;
+      const y = c + Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#ffb36b'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = '#6b1635';
+    ctx.beginPath(); ctx.ellipse(45, 51, 15, 22, -0.45, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(66, 54, 15, 23, 0.45, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,240,212,0.7)'; ctx.lineWidth = 2;
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2; ctx.beginPath();
+      ctx.moveTo(c + Math.cos(a) * 33, c + Math.sin(a) * 33);
+      ctx.lineTo(c + Math.cos(a) * 48, c + Math.sin(a) * 48); ctx.stroke();
+    }
+  });
+
+  // ---------------------------------------------------------------------------
   // PLASMA BACKDROP — baked capillary flow, no shader required.
   // ---------------------------------------------------------------------------
   const plasma = scene.textures.createCanvas('blood-plasma', 256, 256);
@@ -609,6 +636,31 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
     ctx.fillStyle = sheen;
     ctx.fillRect(0, 0, 256, 256);
     plasma.refresh();
+  }
+
+  const heartPlasma = scene.textures.createCanvas('heart-plasma', 256, 256);
+  if (heartPlasma) {
+    const ctx = heartPlasma.getContext();
+    const bg = ctx.createLinearGradient(0, 0, 256, 256);
+    bg.addColorStop(0, '#19060d'); bg.addColorStop(0.55, '#3a0d18'); bg.addColorStop(1, '#14040b');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 10; i++) {
+      const y = 8 + i * 28; ctx.strokeStyle = i % 2 ? 'rgba(255,91,72,0.09)' : 'rgba(255,179,107,0.055)';
+      ctx.lineWidth = 8 + (i % 3) * 5; ctx.beginPath(); ctx.moveTo(-30, y);
+      ctx.bezierCurveTo(55, y - 18, 180, y + 18, 286, y - 4); ctx.stroke();
+    }
+    heartPlasma.refresh();
+  }
+
+  const cardiacFiber = scene.textures.createCanvas('cardiac-fiber', 256, 256);
+  if (cardiacFiber) {
+    const ctx = cardiacFiber.getContext(); ctx.clearRect(0, 0, 256, 256);
+    for (let i = -3; i < 12; i++) {
+      const y = i * 30; ctx.strokeStyle = i % 2 ? 'rgba(255,126,92,0.16)' : 'rgba(255,195,115,0.1)';
+      ctx.lineWidth = 5 + (i % 3 + 3) % 3; ctx.beginPath(); ctx.moveTo(-30, y + 28);
+      ctx.bezierCurveTo(65, y - 8, 170, y + 52, 286, y + 12); ctx.stroke();
+    }
+    cardiacFiber.refresh();
   }
 
   // Keep a tiny colour-token side effect so TypeScript does not consider COLORS an accidental

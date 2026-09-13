@@ -79,8 +79,8 @@ export const BLOODSTREAM_STAGE: StageDefinition = {
   order: 1,
   name: 'КРОВОТОК',
   durationMs: 5 * 60 * 1000,
-  // PR 2 will turn on the warning ceremony only when the transition runtime is wired atomically.
-  bossWarningLeadMs: 0,
+  // Eight-second warning keeps the boss readable before combat locks into the boss phase.
+  bossWarningLeadMs: 8_000,
   theme: {
     backgroundColor: COLORS.bg,
     plasmaTexture: 'blood-plasma',
@@ -125,7 +125,7 @@ export const BLOODSTREAM_STAGE: StageDefinition = {
     id: 'immune-prime',
     name: 'IMMUNE PRIME',
     enemyKind: 'boss',
-    textureKey: 'enemy-boss',
+    textureKey: 'immune-prime',
     behavior: 'pressure-wave',
   },
   signatureMechanic: 'none',
@@ -175,10 +175,7 @@ export const BLOODSTREAM_STAGE: StageDefinition = {
   ],
 };
 
-/**
- * Dormant PR-2 profile. It is intentionally not part of STAGES until the transactional
- * Bloodstream -> Heart reset and transition presentation are wired in the same branch.
- */
+/** Second live campaign stage, entered transactionally after Bloodstream boss defeat. */
 export const HEART_STAGE: StageDefinition = {
   id: 'heart',
   order: 2,
@@ -267,8 +264,8 @@ export const HEART_STAGE: StageDefinition = {
   ],
 };
 
-// Keep the live catalog single-stage until PR-2 lands the full transition runtime atomically.
-export const STAGES: readonly StageDefinition[] = [BLOODSTREAM_STAGE];
+// Live campaign order. StageDirector validates contiguous order and owns all transitions.
+export const STAGES: readonly StageDefinition[] = [BLOODSTREAM_STAGE, HEART_STAGE];
 
 export function getStageById(id: StageId): StageDefinition | undefined {
   return STAGES.find((stage) => stage.id === id);

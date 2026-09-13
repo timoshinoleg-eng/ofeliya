@@ -46,6 +46,13 @@ export class Gem extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
+  deactivateForStageReset(): void {
+    this.gs = null;
+    this.value = 1;
+    this.setAlpha(1).setScale(1).setRotation(0);
+    this.disableBody(true, true);
+  }
+
   collect(): void {
     if (!this.active) return;
     this.gs?.onGemCollected(this.value);

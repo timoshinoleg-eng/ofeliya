@@ -29,7 +29,7 @@ import {
   type RunEndReason,
   type StageDirectorEvent,
 } from '../game/StageDirector';
-import { STAGES, difficultyForStage } from '../game/StageDefinitions';
+import { STAGES, difficultyForStage, type StageDefinition } from '../game/StageDefinitions';
 import type { EvolutionId, UpgradeDef } from '../game/UpgradeSystem';
 import { WaveDirector } from '../game/WaveDirector';
 import { AtmosphereSystem } from '../systems/AtmosphereSystem';
@@ -38,6 +38,7 @@ import { SaveSystem } from '../systems/SaveSystem';
 import { Sfx } from '../systems/Sfx';
 import { VfxSystem } from '../systems/VfxSystem';
 import { HostCellSystem, type HostCellLysisEvent } from '../systems/HostCellSystem';
+import type { UIScene } from './UIScene';
 
 export class GameScene extends Phaser.Scene {
   player!: Player;
@@ -77,6 +78,15 @@ export class GameScene extends Phaser.Scene {
   private trailAcc = 0;
   private keys: Record<string, Phaser.Input.Keyboard.Key> = {};
   private introHint: Phaser.GameObjects.Container | null = null;
+  private transitionGeneration = 0;
+  private stageTransition: {
+    token: number;
+    from: StageDefinition;
+    to: StageDefinition;
+    timer: Phaser.Time.TimerEvent | null;
+    committing: boolean;
+    earliestCommitAt: number;
+  } | null = null;
 
   constructor() {
     super('Game');
@@ -103,6 +113,8 @@ export class GameScene extends Phaser.Scene {
     this.lastDmgAt = 0;
     this.dmgCursor = 0;
     this.introHint = null;
+    this.transitionGeneration = 0;
+    this.stageTransition = null;
     this.physics.world.resume();
 
     const W = this.scale.width;
@@ -195,6 +207,7 @@ export class GameScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.onResize, this);
       PlatformBridge.setBackHandler(null);
+      this.cancelStageTransition();
       this.dismissIntroHint(true);
       this.cameras.main.resetFX();
       this.atmosphere.destroy();
@@ -208,6 +221,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private exitToMenu(): void {
+    this.cancelStageTransition();
     Sfx.stopMusic();
     if (this.scene.isActive('UI') || this.scene.isPaused('UI')) this.scene.stop('UI');
     this.scene.stop();
@@ -216,6 +230,9 @@ export class GameScene extends Phaser.Scene {
 
   update(time: number, delta: number): void {
     if (this.stageDirector.phase === 'RUN_ENDED') return;
+    // A stage transition is a frozen transaction: no movement, combat, wave spawns or stage clocks.
+    // The UI scene stays live and either the guarded timer or tap commits exactly one reset.
+    if (this.stageDirector.phase === 'STAGE_TRANSITION' || this.stageDirector.phase === 'BOSS_DEFEATED') return;
     if (this.hitStopped) {
       if (time < this.hitStopUntil) return;
       this.hitStopped = false;
@@ -320,10 +337,12 @@ export class GameScene extends Phaser.Scene {
       elite,
       hpScale: isBoss ? stage.difficulty.bossHpScale : hpScale,
       dmgScale: isBoss ? stage.difficulty.bossDamageScale : dmgScale,
+      textureKey: isBoss ? stage.boss.textureKey : undefined,
+      color: isBoss ? stage.theme.accentColor : undefined,
     });
     if (kind === 'boss') {
       Sfx.play('boss');
-      this.atmosphere.pulse(COLORS.red, 0.32);
+      this.atmosphere.pulse(stage.theme.dangerColor, 0.32);
       this.cameras.main.shake(320, 0.008);
       PlatformBridge.haptic('heavy');
     } else if (elite) {
@@ -352,9 +371,16 @@ export class GameScene extends Phaser.Scene {
     if (e.isBoss && this.wave.boss === e) {
       this.wave.boss = null;
       this.cameras.main.shake(400, 0.01);
+      const defeatedStageId = this.stageDirector.currentStage.id;
+      const ceremonyToken = ++this.transitionGeneration;
       this.runState.recordBossDefeated(this.stageDirector.currentStage.boss.id);
       this.handleStageEvents(this.stageDirector.bossDefeated());
-      this.handleStageEvents(this.stageDirector.completeBossDefeat());
+      this.time.delayedCall(550, () => {
+        if (this.transitionGeneration !== ceremonyToken) return;
+        if (this.stageDirector.phase !== 'BOSS_DEFEATED') return;
+        if (this.stageDirector.currentStage.id !== defeatedStageId) return;
+        this.handleStageEvents(this.stageDirector.completeBossDefeat());
+      });
     }
   }
 
@@ -509,6 +535,155 @@ export class GameScene extends Phaser.Scene {
     return id;
   }
 
+  private beginStageTransition(from: StageDefinition, to: StageDefinition): void {
+    if (this.stageDirector.phase !== 'STAGE_TRANSITION' || this.stageTransition) return;
+
+    const token = ++this.transitionGeneration;
+    const transaction = {
+      token,
+      from,
+      to,
+      timer: null as Phaser.Time.TimerEvent | null,
+      committing: false,
+      earliestCommitAt: this.time.now + 350,
+    };
+    this.stageTransition = transaction;
+
+    this.dismissIntroHint(true);
+    this.awaitingChoice = false;
+    this.pendingChoices = [];
+    this.queuedLevels = 0;
+    this.pendingEvolutionCeremony = null;
+    this.registry.set('joy', { x: 0, y: 0 });
+    (this.player.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
+    this.aimMarker.setVisible(false);
+    this.physics.world.pause();
+
+    this.getUiScene()?.showStageTransition(
+      from.name,
+      to.name,
+      to.theme.accentColor,
+      () => this.requestStageTransitionCommit(token)
+    );
+    transaction.timer = this.time.delayedCall(2400, () => this.commitStageTransition(token));
+  }
+
+  private requestStageTransitionCommit(token: number): void {
+    const transaction = this.stageTransition;
+    if (!transaction || transaction.token !== token || transaction.committing) return;
+    const remaining = transaction.earliestCommitAt - this.time.now;
+    if (remaining > 0) {
+      transaction.timer?.remove(false);
+      transaction.timer = this.time.delayedCall(remaining, () => this.commitStageTransition(token));
+      return;
+    }
+    this.commitStageTransition(token);
+  }
+
+  private commitStageTransition(token: number): void {
+    const transaction = this.stageTransition;
+    if (!transaction || transaction.token !== token || transaction.committing) return;
+    if (this.stageDirector.phase !== 'STAGE_TRANSITION') return;
+
+    transaction.committing = true;
+    transaction.timer?.remove(false);
+    transaction.timer = null;
+    this.stageDirector.completeTransition();
+
+    if (this.stageDirector.currentStage.id !== transaction.to.id) {
+      this.stageTransition = null;
+      this.physics.world.resume();
+      this.finish(false, 'abandoned');
+      return;
+    }
+
+    this.resetStageWorld(transaction.to);
+    this.stageTransition = null;
+    this.getUiScene()?.hideStageTransition();
+    const stageStartEvents = this.stageDirector.startStage();
+    if (stageStartEvents.length === 0) {
+      this.physics.world.resume();
+      this.finish(false, 'abandoned');
+      return;
+    }
+    this.handleStageEvents(stageStartEvents);
+    this.physics.world.resume();
+    PlatformBridge.haptic('medium');
+    this.registry.set('run', this.snapshot());
+  }
+
+  private resetStageWorld(nextStage: StageDefinition): void {
+    this.milestones.reset();
+    this.hostCells.resetStage();
+    this.wave.boss = null;
+
+    for (const enemy of this.enemies.getChildren() as Enemy[]) {
+      if (enemy.active) enemy.deactivateForStageReset();
+    }
+    for (const bullet of this.bullets.getChildren() as Bullet[]) {
+      if (bullet.active) bullet.deactivateForStageReset();
+    }
+    for (const gem of this.gems.getChildren() as Gem[]) {
+      if (gem.active) gem.deactivateForStageReset();
+    }
+
+    this.runState.resetStageProgression(nextStage);
+    this.queuedLevels = 0;
+    this.awaitingChoice = false;
+    this.pendingChoices = [];
+    this.pendingEvolutionCeremony = null;
+    this.novaAcc = 0;
+    this.nextFireAt = this.time.now + 250;
+    this.achievementCheckAcc = 0;
+    this.hitStopUntil = 0;
+    this.hitStopped = false;
+    this.lastDmg = null;
+    this.lastDmgAt = 0;
+    this.trailCursor = 0;
+    this.trailAcc = 0;
+
+    for (const text of this.dmgTexts) {
+      this.tweens.killTweensOf(text);
+      text.setVisible(false).setActive(false).setAlpha(0);
+    }
+    for (const trail of this.trail) {
+      this.tweens.killTweensOf(trail);
+      trail.setVisible(false).setAlpha(0);
+    }
+    for (const blade of this.blades) {
+      this.tweens.killTweensOf(blade);
+      blade.setVisible(false);
+    }
+    this.haloRing?.setVisible(false);
+
+    const centerX = this.scale.width / 2;
+    const centerY = this.scale.height / 2;
+    this.player.setMutationState(false, false, false);
+    this.player.hurtUntil = 0;
+    this.player.clearTint().setAlpha(1).setRotation(0).setScale(0.9).setPosition(centerX, centerY);
+    (this.player.body as Phaser.Physics.Arcade.Body).reset(centerX, centerY);
+    this.aimMarker.setVisible(false);
+    this.playerBar.clear();
+    this.registry.set('joy', { x: 0, y: 0 });
+  }
+
+  private cancelStageTransition(): void {
+    const transaction = this.stageTransition;
+    if (transaction) {
+      transaction.timer?.remove(false);
+      transaction.timer = null;
+    }
+    this.stageTransition = null;
+    this.transitionGeneration += 1;
+    this.getUiScene()?.hideStageTransition();
+    this.physics.world.resume();
+  }
+
+  private getUiScene(): UIScene | null {
+    if (!this.scene.isActive('UI') && !this.scene.isPaused('UI')) return null;
+    return this.scene.get('UI') as UIScene;
+  }
+
   private handleStageEvents(events: readonly StageDirectorEvent[]): void {
     for (const event of events) {
       switch (event.type) {
@@ -520,6 +695,7 @@ export class GameScene extends Phaser.Scene {
             this.runState.resetStageProgression(event.stage);
           }
           this.cameras.main.setBackgroundColor(event.stage.theme.backgroundColor);
+          this.atmosphere.setStage(event.stage);
           this.wave.startStage(event.stage);
           break;
         case 'milestone':
@@ -532,9 +708,14 @@ export class GameScene extends Phaser.Scene {
           this.finish(event.reason === 'campaign-complete', event.reason);
           break;
         case 'boss-warning':
+          this.atmosphere.pulse(event.stage.theme.dangerColor, 0.28);
+          PlatformBridge.haptic('medium');
+          break;
         case 'boss-defeated':
+          // Kill VFX/hit-stop are emitted by onEnemyDied; the director event owns lifecycle only.
+          break;
         case 'stage-transition-requested':
-          // PR 2 owns these ceremonies and the transactional world reset.
+          this.beginStageTransition(event.from, event.to);
           break;
       }
     }

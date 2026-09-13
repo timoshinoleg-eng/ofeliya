@@ -49,12 +49,12 @@ try {
     nextStage,
   } = require(join(temp, 'game/StageDefinitions.js'));
 
-  assert(STAGES.length === 1, 'live catalog must remain Bloodstream-only before atomic PR-2 wiring');
+  assert(STAGES.length === 2, 'live catalog must expose Bloodstream and Heart');
   const bloodstream = STAGES[0];
   assert(bloodstream === BLOODSTREAM_STAGE, 'live Bloodstream export mismatch');
   assert(bloodstream.id === 'bloodstream' && bloodstream.order === 1, 'Bloodstream identity changed');
   assert(bloodstream.durationMs === 300_000, 'Bloodstream boss timing changed');
-  assert(bloodstream.bossWarningLeadMs === 0, 'Bloodstream warning changed before transition runtime');
+  assert(bloodstream.bossWarningLeadMs === 8_000, 'Bloodstream boss warning mismatch');
   assert(bloodstream.waves.spawnIntervalStartMs === 1150, 'opening spawn interval changed');
   assert(bloodstream.waves.spawnIntervalEndMs === 330, 'late spawn interval changed');
   assert(bloodstream.waves.eliteEveryMs === 120_000, 'elite cadence changed');
@@ -63,7 +63,7 @@ try {
   assert(bloodstream.milestones.length === 6, 'Bloodstream story milestones changed');
   assert(getStageById('bloodstream') === bloodstream, 'stage lookup by id failed');
   assert(getStageByOrder(1) === bloodstream, 'stage lookup by order failed');
-  assert(nextStage(bloodstream) === undefined, 'Heart was exposed before transactional transition wiring');
+  assert(nextStage(bloodstream) === HEART_STAGE, 'Bloodstream must transition to Heart');
 
   assert(HEART_STAGE.id === 'heart' && HEART_STAGE.order === 2, 'Heart identity mismatch');
   assert(HEART_STAGE.durationMs === 240_000, 'Heart target duration mismatch');
@@ -92,7 +92,7 @@ try {
   assert(bloodstream.waves.pickKind(90_000, 0.8) === 'runner', 'T-cell boundary changed');
   assert(bloodstream.waves.pickKind(120_000, 0.95) === 'brute', 'macrophage boundary changed');
 
-  const single = new StageDirector(STAGES);
+  const single = new StageDirector([bloodstream]);
   assert(single.startRun()[0]?.type === 'stage-started', 'run did not start');
   assert(single.startRun().length === 0, 'run started twice');
   const terminalEvents = single.update(bloodstream.durationMs);

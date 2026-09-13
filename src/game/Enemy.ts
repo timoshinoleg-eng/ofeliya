@@ -36,7 +36,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     kind: EnemyKind,
     x: number,
     y: number,
-    opts: { elite: boolean; hpScale: number; dmgScale: number }
+    opts: { elite: boolean; hpScale: number; dmgScale: number; textureKey?: string; color?: number }
   ): void {
     this.gs = gs;
     this.target = gs.player;
@@ -46,7 +46,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.visualScale = scale;
 
     this.enableBody(true, x, y, true, true);
-    this.setTexture(def.tex).setScale(scale);
+    this.setTexture(opts.textureKey ?? def.tex).setScale(scale);
     this.isElite = opts.elite;
     this.isBoss = kind === 'boss';
 
@@ -59,7 +59,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.color = opts.elite
       ? COLORS.gold
       : kind === 'boss'
-        ? COLORS.cyan
+        ? (opts.color ?? COLORS.cyan)
         : kind === 'swarm'
           ? COLORS.white
           : kind === 'runner'
@@ -134,6 +134,17 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         .setScale(0.96 + Math.sin(time / 180) * 0.055)
         .setAlpha(0.58 + Math.sin(time / 180) * 0.15);
     }
+  }
+
+  /** Hide pooled enemy presentation before the object is reused by another stage. */
+  deactivateForStageReset(): void {
+    this.eliteRing?.setVisible(false);
+    this.target = null;
+    this.gs = null;
+    this.knockX = 0;
+    this.knockY = 0;
+    this.clearTint();
+    this.disableBody(true, true);
   }
 
   takeDamage(amount: number, kx = 0, ky = 0): void {

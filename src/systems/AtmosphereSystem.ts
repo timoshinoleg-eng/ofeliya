@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { COLORS } from '../game/config';
 import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
+import type { StageDefinition } from '../game/StageDefinitions';
 import { PERFORMANCE } from './PerformanceProfile';
 
 interface AmbientCell {
@@ -32,6 +33,7 @@ interface PlasmaParticle {
 export class AtmosphereSystem {
   private readonly scene: Phaser.Scene;
   private readonly plasma: Phaser.GameObjects.TileSprite;
+  private readonly structure: Phaser.GameObjects.TileSprite;
   private readonly erythrocytes: AmbientCell[] = [];
   private readonly hostCells: AmbientCell[] = [];
   private readonly particles: PlasmaParticle[] = [];
@@ -41,6 +43,7 @@ export class AtmosphereSystem {
   private lastCamX = 0;
   private lastCamY = 0;
   private phaseBoost = 0;
+  private stage: StageDefinition | null = null;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -54,6 +57,14 @@ export class AtmosphereSystem {
       .setScrollFactor(0)
       .setDepth(-32)
       .setAlpha(1);
+
+    this.structure = scene.add
+      .tileSprite(0, 0, this.width, this.height, 'cardiac-fiber')
+      .setOrigin(0)
+      .setScrollFactor(0)
+      .setDepth(-20)
+      .setAlpha(0)
+      .setVisible(false);
 
     // Mid/deep erythrocytes: enough to sell a bloodstream while remaining cheap on mobile.
     for (let i = 0; i < PERFORMANCE.ambientErythrocytes; i++) {
@@ -134,6 +145,20 @@ export class AtmosphereSystem {
     this.lastCamY = cam.scrollY;
   }
 
+  setStage(stage: StageDefinition): void {
+    this.stage = stage;
+    this.plasma.setTexture(stage.theme.plasmaTexture).clearTint();
+    const heart = stage.theme.ambientProfile === 'heart';
+    this.structure.setVisible(heart).setAlpha(heart ? 0.34 : 0);
+    if (heart && stage.theme.structureTexture) this.structure.setTexture(stage.theme.structureTexture);
+    this.erythrocytes.forEach((cell, index) => cell.image.setVisible(!heart || index % 3 === 0));
+    this.hostCells.forEach((cell, index) => cell.image.setVisible(!heart || index % 2 === 0));
+    this.particles.forEach((particle, index) => {
+      particle.image.setTint(index % 7 === 0 ? stage.theme.accentColor : stage.theme.particleTint);
+    });
+    this.phaseBoost = 0;
+  }
+
   update(time: number, delta: number, stageTimeMs: number, stageDurationMs: number): void {
     const cam = this.scene.cameras.main;
     const camDx = cam.scrollX - this.lastCamX;
@@ -144,11 +169,19 @@ export class AtmosphereSystem {
     const progress = Phaser.Math.Clamp(stageTimeMs / stageDurationMs, 0, 1);
     const dt = Math.min(delta, 50) / 1000;
     const response = Phaser.Math.Clamp(progress + this.phaseBoost, 0, 1.3);
+    const stage = this.stage;
+    const heart = stage?.theme.ambientProfile === 'heart';
+    const beatEvery = stage?.theme.heartbeatMs ?? 0;
+    const beatPhase = heart && beatEvery > 0 ? (stageTimeMs % beatEvery) / beatEvery : 1;
+    const beat = heart ? Math.max(Math.exp(-beatPhase * 14), Math.exp(-Math.max(0, beatPhase - 0.22) * 18) * 0.52) : 0;
 
-    const flow = 1 + progress * 0.65;
-    this.plasma.tilePositionX = cam.scrollX * 0.7 - time * 0.007 * flow;
-    this.plasma.tilePositionY = cam.scrollY * 0.7 + Math.sin(time * 0.00018) * 8;
-    this.plasma.setTint(progress > 0.72 ? 0xffd6df : 0xffffff);
+    const flow = (heart ? 0.72 : 1) + progress * (heart ? 0.42 : 0.65) + beat * 0.32;
+    this.plasma.tilePositionX = cam.scrollX * 0.7 - time * (heart ? 0.004 : 0.007) * flow;
+    this.plasma.tilePositionY = cam.scrollY * 0.7 + Math.sin(time * (heart ? 0.00034 : 0.00018)) * (heart ? 4 : 8);
+    this.plasma.setTint(heart ? 0xffe3d1 : progress > 0.72 ? 0xffd6df : 0xffffff);
+    this.structure.tilePositionX = cam.scrollX * 0.52 + time * 0.003;
+    this.structure.tilePositionY = cam.scrollY * 0.52 - time * 0.0015;
+    if (heart) this.structure.setAlpha(0.22 + beat * 0.22 + progress * 0.05);
 
     for (const cell of this.erythrocytes) {
       cell.x += cell.vx * flow * dt - camDx * cell.parallax;
@@ -206,10 +239,12 @@ export class AtmosphereSystem {
     this.width = this.scene.scale.width;
     this.height = this.scene.scale.height;
     this.plasma.setSize(this.width, this.height);
+    this.structure.setSize(this.width, this.height);
   }
 
   destroy(): void {
     this.plasma.destroy();
+    this.structure.destroy();
     for (const c of this.erythrocytes) c.image.destroy();
     for (const c of this.hostCells) c.image.destroy();
     for (const p of this.particles) p.image.destroy();
