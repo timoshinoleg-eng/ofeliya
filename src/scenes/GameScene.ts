@@ -1,6 +1,5 @@
 import Phaser from 'phaser';
 import {
-  BOSS_SCALE,
   COLORS,
   COMBO,
   FONT,
@@ -9,7 +8,6 @@ import {
   PLAYER,
   POSTFX,
   WEAPON,
-  difficulty,
   type EnemyKind,
 } from '../game/config';
 import {
@@ -23,7 +21,15 @@ import { Player } from '../game/Player';
 import { Enemy } from '../game/Enemy';
 import { Bullet } from '../game/Bullet';
 import { Gem } from '../game/Gem';
+import type { RunResult, RunSnapshot } from '../game/RunContracts';
+import { RunMilestones } from '../game/RunMilestones';
 import { RunState } from '../game/RunState';
+import {
+  StageDirector,
+  type RunEndReason,
+  type StageDirectorEvent,
+} from '../game/StageDirector';
+import { STAGES, difficultyForStage } from '../game/StageDefinitions';
 import type { EvolutionId, UpgradeDef } from '../game/UpgradeSystem';
 import { WaveDirector } from '../game/WaveDirector';
 import { AtmosphereSystem } from '../systems/AtmosphereSystem';
@@ -32,19 +38,6 @@ import { SaveSystem } from '../systems/SaveSystem';
 import { Sfx } from '../systems/Sfx';
 import { VfxSystem } from '../systems/VfxSystem';
 import { HostCellSystem, type HostCellLysisEvent } from '../systems/HostCellSystem';
-
-interface RunSnapshot {
-  hp: number;
-  maxHp: number;
-  level: number;
-  xp: number;
-  xpNext: number;
-  timeMs: number;
-  kills: number;
-  combo: number;
-  bossHp: number;
-  bossMax: number;
-}
 
 export class GameScene extends Phaser.Scene {
   player!: Player;
@@ -60,6 +53,8 @@ export class GameScene extends Phaser.Scene {
   private blades: Phaser.GameObjects.Image[] = [];
   private haloRing: Phaser.GameObjects.Arc | null = null;
   private wave!: WaveDirector;
+  private stageDirector!: StageDirector;
+  private milestones!: RunMilestones;
   private aimMarker!: Phaser.GameObjects.Image;
   private playerBar!: Phaser.GameObjects.Graphics;
 
@@ -71,7 +66,6 @@ export class GameScene extends Phaser.Scene {
   private pendingEvolutionCeremony: EvolutionId | null = null;
   private newAchievements: AchievementId[] = [];
   private achievementCheckAcc = 0;
-  private finished = false;
   private hitStopUntil = 0;
   private hitStopped = false;
   private dmgTexts: Phaser.GameObjects.Text[] = [];
@@ -89,7 +83,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.runState = new RunState();
+    this.stageDirector = new StageDirector(STAGES);
+    this.runState = new RunState(this.stageDirector.currentStage);
     Sfx.startMusic();
     PlatformBridge.setBackHandler(() => this.exitToMenu());
     this.queuedLevels = 0;
@@ -98,7 +93,6 @@ export class GameScene extends Phaser.Scene {
     this.pendingEvolutionCeremony = null;
     this.newAchievements = [];
     this.achievementCheckAcc = 0;
-    this.finished = false;
     this.nextFireAt = 0;
     this.novaAcc = 0;
     this.blades = [];
@@ -176,7 +170,9 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.enemies, this.onPlayerHit, undefined, this);
     this.physics.add.overlap(this.player, this.gems, this.onGemTouch, undefined, this);
 
-    this.wave = new WaveDirector(this, this.enemies);
+    this.wave = new WaveDirector(this, this.enemies, this.stageDirector.currentStage);
+    this.milestones = new RunMilestones(this);
+    this.handleStageEvents(this.stageDirector.startRun());
     this.cameras.main.startFollow(this.player, true, 0.14, 0.14);
 
     const kb = this.input.keyboard;
@@ -204,6 +200,7 @@ export class GameScene extends Phaser.Scene {
       this.atmosphere.destroy();
       this.vfx.destroy();
       this.hostCells.destroy();
+      this.milestones.reset();
       this.registry.remove('run');
       this.registry.remove('runResult');
       this.registry.remove('joy');
@@ -218,15 +215,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number): void {
-    if (this.finished) return;
+    if (this.stageDirector.phase === 'RUN_ENDED') return;
     if (this.hitStopped) {
       if (time < this.hitStopUntil) return;
       this.hitStopped = false;
       this.physics.world.resume();
     }
-    const st = this.runState;
-    st.timeMs += delta;
-    st.tickNoDamage(delta);
+    this.runState.tick(delta);
+    const st = this.runState.stage;
+    const stage = this.stageDirector.currentStage;
     this.achievementCheckAcc += delta;
     if (this.achievementCheckAcc >= 500) {
       this.achievementCheckAcc = 0;
@@ -263,14 +260,6 @@ export class GameScene extends Phaser.Scene {
       this.trailAcc = JUICE.trailEveryMs;
     }
 
-    if (st.combo > 0) {
-      st.comboTimer -= delta;
-      if (st.comboTimer <= 0) {
-        st.combo = 0;
-        st.comboTimer = 0;
-      }
-    }
-
     if (time < this.player.hurtUntil) {
       this.player.setAlpha(Math.sin(time / 45) > 0 ? 0.55 : 1);
     } else {
@@ -283,7 +272,7 @@ export class GameScene extends Phaser.Scene {
 
     if (st.novaLevel > 0) {
       this.novaAcc += delta;
-      if (this.novaAcc >= st.novaInterval) {
+      if (this.novaAcc >= this.runState.novaInterval) {
         this.novaAcc = 0;
         this.fireNova();
       }
@@ -291,9 +280,12 @@ export class GameScene extends Phaser.Scene {
 
     if (st.regen > 0) st.hp = Math.min(st.maxHp, st.hp + (st.regen * delta) / 1000);
 
+    // Keep the established frame order: firing resolves before timeline presentations and spawns.
+    this.milestones.setIntensity(st.timeMs / stage.durationMs);
+    this.handleStageEvents(this.stageDirector.update(st.timeMs));
     this.wave.update(delta);
     this.hostCells.update(time, delta, st.timeMs);
-    this.atmosphere.update(time, delta, st.timeMs);
+    this.atmosphere.update(time, delta, st.timeMs, stage.durationMs);
 
     this.playerBar.clear();
     if (st.hp < st.maxHp) {
@@ -312,7 +304,7 @@ export class GameScene extends Phaser.Scene {
     if (this.queuedLevels > 0 && !this.awaitingChoice) {
       // Progression supersedes onboarding; never render tutorial copy beneath a mutation modal.
       this.dismissIntroHint(true);
-      this.pendingChoices = rollRunChoices(st);
+      this.pendingChoices = rollRunChoices(this.runState);
       this.awaitingChoice = true;
       this.queuedLevels -= 1;
     }
@@ -322,11 +314,12 @@ export class GameScene extends Phaser.Scene {
     const e = this.enemies.get(x, y) as Enemy | null;
     if (!e) return null;
     const isBoss = kind === 'boss';
-    const { hpScale, dmgScale } = difficulty(this.runState.timeMs);
+    const stage = this.stageDirector.currentStage;
+    const { hpScale, dmgScale } = difficultyForStage(stage, this.runState.stage.timeMs);
     e.activate(this, kind, x, y, {
       elite,
-      hpScale: isBoss ? BOSS_SCALE.hp : hpScale,
-      dmgScale: isBoss ? BOSS_SCALE.dmg : dmgScale,
+      hpScale: isBoss ? stage.difficulty.bossHpScale : hpScale,
+      dmgScale: isBoss ? stage.difficulty.bossDamageScale : dmgScale,
     });
     if (kind === 'boss') {
       Sfx.play('boss');
@@ -341,11 +334,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   onEnemyDied(e: Enemy): void {
-    const st = this.runState;
-    st.kills += 1;
-    st.combo += 1;
-    st.comboTimer = COMBO.windowMs;
-    if (st.combo > st.comboBest) st.comboBest = st.combo;
+    const st = this.runState.stage;
+    this.runState.recordKill(COMBO.windowMs);
     this.captureAchievements(false, true);
     this.vfx.kill(e.x, e.y, e.color, e.isBoss ? 'boss' : e.isElite ? 'elite' : 'normal');
     if (e.isElite || e.isBoss) {
@@ -362,13 +352,14 @@ export class GameScene extends Phaser.Scene {
     if (e.isBoss && this.wave.boss === e) {
       this.wave.boss = null;
       this.cameras.main.shake(400, 0.01);
-      this.finish(true);
+      this.runState.recordBossDefeated(this.stageDirector.currentStage.boss.id);
+      this.handleStageEvents(this.stageDirector.bossDefeated());
+      this.handleStageEvents(this.stageDirector.completeBossDefeat());
     }
   }
 
   private onHostCellLysis(event: HostCellLysisEvent): void {
-    const st = this.runState;
-    st.hostCellsInfected += 1;
+    this.runState.recordHostCellInfected();
     // Gameplay radius is unchanged; the smaller visual nova leaves room for the membrane contour.
     this.vfx.nova(event.x, event.y, event.radius * 0.72);
     this.atmosphere.pulse(COLORS.green, 0.14);
@@ -395,7 +386,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private hitStop(ms: number): void {
-    if (this.finished) return;
+    if (this.stageDirector.phase === 'RUN_ENDED') return;
     const now = this.time.now;
     if (now < this.hitStopUntil + JUICE.hitStopMinGapMs) return;
     this.hitStopUntil = now + ms;
@@ -518,26 +509,63 @@ export class GameScene extends Phaser.Scene {
     return id;
   }
 
-  finish(win: boolean): void {
-    if (this.finished) return;
-    this.finished = true;
-    const st = this.runState;
-    const evolutions = [...st.evolutions];
-    const records = SaveSystem.recordRun(win, st.timeMs, st.kills, st.level, evolutions);
+  private handleStageEvents(events: readonly StageDirectorEvent[]): void {
+    for (const event of events) {
+      switch (event.type) {
+        case 'stage-started':
+          if (
+            this.runState.stage.id !== event.stage.id ||
+            this.runState.stage.order !== event.stage.order
+          ) {
+            this.runState.resetStageProgression(event.stage);
+          }
+          this.cameras.main.setBackgroundColor(event.stage.theme.backgroundColor);
+          this.wave.startStage(event.stage);
+          break;
+        case 'milestone':
+          this.milestones.show(event.milestone);
+          break;
+        case 'boss-spawn-requested':
+          this.wave.spawnBoss();
+          break;
+        case 'run-ended':
+          this.finish(event.reason === 'campaign-complete', event.reason);
+          break;
+        case 'boss-warning':
+        case 'boss-defeated':
+        case 'stage-transition-requested':
+          // PR 2 owns these ceremonies and the transactional world reset.
+          break;
+      }
+    }
+  }
+
+  finish(win: boolean, reason: RunEndReason = win ? 'campaign-complete' : 'defeat'): void {
+    if (this.registry.get('runResult')) return;
+    if (this.stageDirector.phase !== 'RUN_ENDED') this.stageDirector.endRun(reason);
+    const run = this.runState.run;
+    const stage = this.runState.stage;
+    const evolutions = [...run.evolutionsSeen];
+    const records = SaveSystem.recordRun(win, run.timeMs, run.kills, stage.level, evolutions);
     this.captureAchievements(true, false);
     this.registry.set('run', this.snapshot());
-    this.registry.set('runResult', {
+    const result: RunResult = {
       win,
-      timeMs: st.timeMs,
-      kills: st.kills,
-      hostCellsInfected: st.hostCellsInfected,
-      level: st.level,
-      comboBest: st.comboBest,
-      stacks: { ...st.stacks },
+      reason,
+      timeMs: run.timeMs,
+      kills: run.kills,
+      hostCellsInfected: run.hostCellsInfected,
+      level: stage.level,
+      comboBest: run.comboBest,
+      stageId: stage.id,
+      stageOrder: stage.order,
+      bossesDefeated: run.bossesDefeated,
+      stacks: { ...stage.stacks },
       evolutions,
       newAchievements: [...this.newAchievements],
       records,
-    });
+    };
+    this.registry.set('runResult', result);
     Sfx.play(win ? 'victory' : 'gameover');
     PlatformBridge.notify(win ? 'success' : 'error');
     this.cameras.main.resetFX();
@@ -558,7 +586,7 @@ export class GameScene extends Phaser.Scene {
     if (time < this.nextFireAt) return;
     this.nextFireAt = time + this.runState.fireInterval;
     Sfx.play('shoot');
-    const n = this.runState.projectiles;
+    const n = this.runState.stage.projectiles;
     const spread = (WEAPON.spreadDeg * Math.PI) / 180;
     const prism = this.runState.hasEvolution('prism');
     for (let i = 0; i < n; i++) {
@@ -585,7 +613,7 @@ export class GameScene extends Phaser.Scene {
 
   private syncBlades(now: number): void {
     const st = this.runState;
-    const want = st.orbitBlades;
+    const want = st.stage.orbitBlades;
     const halo = st.hasEvolution('halo');
     while (this.blades.length < want) {
       this.blades.push(this.add.image(this.player.x, this.player.y, 'blade').setDepth(12));
@@ -690,10 +718,10 @@ export class GameScene extends Phaser.Scene {
 
   private onPlayerHit = (obj1: unknown, obj2: unknown): void => {
     const e = obj2 as Enemy;
-    if (!e.active || this.finished) return;
+    if (!e.active || this.stageDirector.phase === 'RUN_ENDED') return;
     const now = this.time.now;
     if (now < this.player.hurtUntil) return;
-    this.runState.hp -= e.dmg;
+    this.runState.stage.hp -= e.dmg;
     this.runState.resetNoDamage();
     this.player.markHurt(now);
     Sfx.play('hurt');
@@ -706,7 +734,7 @@ export class GameScene extends Phaser.Scene {
     const dy = e.y - this.player.y;
     const d = Math.hypot(dx, dy) || 1;
     e.takeDamage(0, (dx / d) * 240, (dy / d) * 240);
-    if (this.runState.hp <= 0) this.finish(false);
+    if (this.runState.stage.hp <= 0) this.finish(false);
   };
 
   private onGemTouch = (obj1: unknown, obj2: unknown): void => {
@@ -836,18 +864,26 @@ export class GameScene extends Phaser.Scene {
   }
 
   private snapshot(): RunSnapshot {
-    const st = this.runState;
+    const run = this.runState.run;
+    const stageProgress = this.runState.stage;
+    const stage = this.stageDirector.currentStage;
     return {
-      hp: st.hp,
-      maxHp: st.maxHp,
-      level: st.level,
-      xp: st.xp,
-      xpNext: st.xpNext,
-      timeMs: st.timeMs,
-      kills: st.kills,
-      combo: st.combo,
+      hp: stageProgress.hp,
+      maxHp: stageProgress.maxHp,
+      level: stageProgress.level,
+      xp: stageProgress.xp,
+      xpNext: stageProgress.xpNext,
+      timeMs: run.timeMs,
+      stageTimeMs: stageProgress.timeMs,
+      kills: run.kills,
+      combo: stageProgress.combo,
       bossHp: this.wave.boss?.hp ?? 0,
       bossMax: this.wave.boss?.maxHp ?? 0,
+      bossName: stage.boss.name,
+      stageId: stage.id,
+      stageOrder: stage.order,
+      stageName: stage.name,
+      phase: this.stageDirector.phase,
     };
   }
 

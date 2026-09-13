@@ -26,6 +26,9 @@ jobs:
       - name: Challenge contract smoke
         run: npm run test:challenge
 
+      - name: Stage runtime contract smoke
+        run: npm run test:stages
+
       - name: Viewport math smoke
         run: npm run test:viewport
 

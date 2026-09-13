@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS, RUN } from '../game/config';
+import { COLORS } from '../game/config';
 import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
 import { PERFORMANCE } from './PerformanceProfile';
 
@@ -134,14 +134,14 @@ export class AtmosphereSystem {
     this.lastCamY = cam.scrollY;
   }
 
-  update(time: number, delta: number, runTimeMs: number): void {
+  update(time: number, delta: number, stageTimeMs: number, stageDurationMs: number): void {
     const cam = this.scene.cameras.main;
     const camDx = cam.scrollX - this.lastCamX;
     const camDy = cam.scrollY - this.lastCamY;
     this.lastCamX = cam.scrollX;
     this.lastCamY = cam.scrollY;
 
-    const progress = Phaser.Math.Clamp(runTimeMs / RUN.bossTimeMs, 0, 1);
+    const progress = Phaser.Math.Clamp(stageTimeMs / stageDurationMs, 0, 1);
     const dt = Math.min(delta, 50) / 1000;
     const response = Phaser.Math.Clamp(progress + this.phaseBoost, 0, 1.3);
 

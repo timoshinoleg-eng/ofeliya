@@ -64,7 +64,7 @@ export const UPGRADES: UpgradeDef[] = [
     rarity: 'common',
     evolutionHint: 'prism',
     apply: (s) => {
-      s.damageMul *= 1.25;
+      s.stage.damageMul *= 1.25;
     },
   },
   {
@@ -77,7 +77,7 @@ export const UPGRADES: UpgradeDef[] = [
     rarity: 'common',
     evolutionHint: 'halo',
     apply: (s) => {
-      s.fireRateMul *= 1.15;
+      s.stage.fireRateMul *= 1.15;
     },
   },
   {
@@ -89,7 +89,7 @@ export const UPGRADES: UpgradeDef[] = [
     family: 'weapon',
     rarity: 'rare',
     apply: (s) => {
-      s.projectiles += 1;
+      s.stage.projectiles += 1;
     },
   },
   {
@@ -102,7 +102,7 @@ export const UPGRADES: UpgradeDef[] = [
     rarity: 'rare',
     evolutionHint: 'prism',
     apply: (s) => {
-      s.pierce += 1;
+      s.stage.pierce += 1;
     },
   },
   {
@@ -115,7 +115,7 @@ export const UPGRADES: UpgradeDef[] = [
     rarity: 'common',
     evolutionHint: 'halo',
     apply: (s) => {
-      s.speedMul *= 1.08;
+      s.stage.speedMul *= 1.08;
     },
   },
   {
@@ -127,8 +127,8 @@ export const UPGRADES: UpgradeDef[] = [
     family: 'defense',
     rarity: 'common',
     apply: (s) => {
-      s.maxHp += 25;
-      s.hp = Math.min(s.maxHp, s.hp + 25);
+      s.stage.maxHp += 25;
+      s.stage.hp = Math.min(s.stage.maxHp, s.stage.hp + 25);
     },
   },
   {
@@ -141,7 +141,7 @@ export const UPGRADES: UpgradeDef[] = [
     rarity: 'common',
     evolutionHint: 'singularity',
     apply: (s) => {
-      s.magnetMul *= 1.35;
+      s.stage.magnetMul *= 1.35;
     },
   },
   {
@@ -154,7 +154,7 @@ export const UPGRADES: UpgradeDef[] = [
     rarity: 'rare',
     evolutionHint: 'halo',
     apply: (s) => {
-      s.orbitBlades += 1;
+      s.stage.orbitBlades += 1;
     },
   },
   {
@@ -167,7 +167,7 @@ export const UPGRADES: UpgradeDef[] = [
     rarity: 'rare',
     evolutionHint: 'singularity',
     apply: (s) => {
-      s.novaLevel += 1;
+      s.stage.novaLevel += 1;
     },
   },
   {
@@ -179,7 +179,7 @@ export const UPGRADES: UpgradeDef[] = [
     family: 'defense',
     rarity: 'common',
     apply: (s) => {
-      s.regen += 0.6;
+      s.stage.regen += 0.6;
     },
   },
 ];
@@ -194,7 +194,7 @@ const HEAL: UpgradeDef = {
   rarity: 'common',
   showProgress: false,
   apply: (s) => {
-    s.hp = Math.min(s.maxHp, s.hp + 40);
+    s.stage.hp = Math.min(s.stage.maxHp, s.stage.hp + 40);
   },
 };
 
