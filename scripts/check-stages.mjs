@@ -39,15 +39,22 @@ try {
 
   const { RunState } = require(join(temp, 'game/RunState.js'));
   const { StageDirector } = require(join(temp, 'game/StageDirector.js'));
-  const { STAGES, difficultyForStage, getStageById, getStageByOrder, nextStage } = require(
-    join(temp, 'game/StageDefinitions.js')
-  );
+  const {
+    BLOODSTREAM_STAGE,
+    HEART_STAGE,
+    STAGES,
+    difficultyForStage,
+    getStageById,
+    getStageByOrder,
+    nextStage,
+  } = require(join(temp, 'game/StageDefinitions.js'));
 
-  assert(STAGES.length === 1, 'PR 1 catalog must expose only the current Bloodstream stage');
+  assert(STAGES.length === 1, 'live catalog must remain Bloodstream-only before atomic PR-2 wiring');
   const bloodstream = STAGES[0];
+  assert(bloodstream === BLOODSTREAM_STAGE, 'live Bloodstream export mismatch');
   assert(bloodstream.id === 'bloodstream' && bloodstream.order === 1, 'Bloodstream identity changed');
   assert(bloodstream.durationMs === 300_000, 'Bloodstream boss timing changed');
-  assert(bloodstream.bossWarningLeadMs === 0, 'PR 1 must not add a boss warning ceremony');
+  assert(bloodstream.bossWarningLeadMs === 0, 'Bloodstream warning changed before transition runtime');
   assert(bloodstream.waves.spawnIntervalStartMs === 1150, 'opening spawn interval changed');
   assert(bloodstream.waves.spawnIntervalEndMs === 330, 'late spawn interval changed');
   assert(bloodstream.waves.eliteEveryMs === 120_000, 'elite cadence changed');
@@ -56,7 +63,20 @@ try {
   assert(bloodstream.milestones.length === 6, 'Bloodstream story milestones changed');
   assert(getStageById('bloodstream') === bloodstream, 'stage lookup by id failed');
   assert(getStageByOrder(1) === bloodstream, 'stage lookup by order failed');
-  assert(nextStage(bloodstream) === undefined, 'PR 1 must keep Boss 1 as the terminal encounter');
+  assert(nextStage(bloodstream) === undefined, 'Heart was exposed before transactional transition wiring');
+
+  assert(HEART_STAGE.id === 'heart' && HEART_STAGE.order === 2, 'Heart identity mismatch');
+  assert(HEART_STAGE.durationMs === 240_000, 'Heart target duration mismatch');
+  assert(HEART_STAGE.bossWarningLeadMs === 8_000, 'Heart boss warning mismatch');
+  assert(HEART_STAGE.theme.ambientProfile === 'heart', 'Heart ambient profile missing');
+  assert(HEART_STAGE.theme.heartbeatMs === 900, 'Heart beat cadence mismatch');
+  assert(HEART_STAGE.signatureMechanic === 'heartbeat-pulse', 'Heart signature mechanic missing');
+  assert(HEART_STAGE.boss.id === 'cardiac-titan', 'Heart boss identity mismatch');
+  assert(HEART_STAGE.boss.behavior === 'heartbeat-pulse', 'Heart boss behavior mismatch');
+  assert(HEART_STAGE.waves.pickKind(0, 0.99) === 'brute', 'Heart opening mix lacks brute pressure');
+  // The dormant profile itself must already satisfy the same catalog invariants as a live stage.
+  new StageDirector([BLOODSTREAM_STAGE, HEART_STAGE]);
+
   let invalidCatalogRejected = false;
   try {
     new StageDirector([{ ...bloodstream, order: 2 }]);
@@ -89,7 +109,7 @@ try {
   assert(defeated[0]?.type === 'boss-defeated', 'boss defeat event missing');
   assert(single.phase === 'BOSS_DEFEATED', 'boss death ceremony phase was skipped');
   const ending = single.completeBossDefeat();
-  assert(ending[0]?.type === 'run-ended', 'terminal boss did not end the campaign');
+  assert(ending[0]?.type === 'run-ended', 'terminal boss did not end the single-stage campaign');
   assert(single.phase === 'RUN_ENDED', 'terminal phase mismatch');
   assert(single.bossDefeated().length === 0, 'boss defeat handled more than once');
 
@@ -100,14 +120,12 @@ try {
     milestones: [{ id: 'test-beat', atMs: 400, title: 'TEST', subtitle: 'TEST', color: 0xffffff }],
   };
   const second = {
-    ...bloodstream,
+    ...HEART_STAGE,
     id: 'heart-test',
-    order: 2,
-    name: 'HEART TEST',
     durationMs: 2_000,
     bossWarningLeadMs: 0,
     milestones: [],
-    boss: { ...bloodstream.boss, id: 'heart-boss-test', name: 'HEART BOSS TEST' },
+    boss: { ...HEART_STAGE.boss, id: 'heart-boss-test', name: 'HEART BOSS TEST' },
   };
   const multi = new StageDirector([second, first]);
   multi.startRun();
