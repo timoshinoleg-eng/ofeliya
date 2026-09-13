@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { getAchievementDef, type AchievementId } from '../game/AchievementSystem';
+import { getAchievementDef } from '../game/AchievementSystem';
 import {
   createChallengePayload,
   encodeChallengePayload,
@@ -10,6 +10,7 @@ import { COLORS, COMBO, FONT, JUICE, fmtTime } from '../game/config';
 import { getEvolutionDef } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
 import { Joystick } from '../game/Joystick';
+import type { RunResult, RunSnapshot } from '../game/RunContracts';
 import {
   EVOLUTION_NAMES,
   UPGRADE_FAMILY_LABELS,
@@ -21,32 +22,6 @@ import {
 import { PlatformBridge } from '../platform';
 import { Sfx } from '../systems/Sfx';
 import type { GameScene } from './GameScene';
-
-interface RunSnapshot {
-  hp: number;
-  maxHp: number;
-  level: number;
-  xp: number;
-  xpNext: number;
-  timeMs: number;
-  kills: number;
-  combo: number;
-  bossHp: number;
-  bossMax: number;
-}
-
-interface RunResult {
-  win: boolean;
-  timeMs: number;
-  kills: number;
-  hostCellsInfected: number;
-  level: number;
-  comboBest: number;
-  stacks: Record<string, number>;
-  evolutions: EvolutionId[];
-  newAchievements: AchievementId[];
-  records: { timeRecord: boolean; killsRecord: boolean; levelRecord: boolean };
-}
 
 const DEPTH = 50;
 
@@ -219,6 +194,7 @@ export class UIScene extends Phaser.Scene {
       this.bossFill.setVisible(boss);
       this.bossLabel.setVisible(boss);
       if (boss) {
+        this.bossLabel.setText(run.bossName);
         this.bossBack.clear();
         this.bossBack.fillStyle(0x1a2136, 0.9);
         this.bossBack.fillRoundedRect(W / 2 - 140, 82, 280, 9, 4);
@@ -306,7 +282,7 @@ export class UIScene extends Phaser.Scene {
     this.tweens.add({ targets: titleT, scale: 1, duration: 260, ease: 'Back.Out' });
     c.add(
       this.add
-        .text(W / 2, titleY + (compact ? 31 : 38), `стадия ${gs.runState.level} · выбери мутацию`, {
+        .text(W / 2, titleY + (compact ? 31 : 38), `стадия ${gs.runState.stage.level} · выбери мутацию`, {
           fontFamily: FONT,
           fontSize: compact ? '12px' : '14px',
           color: '#aab4d4',

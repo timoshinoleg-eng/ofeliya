@@ -37,7 +37,7 @@ export class Gem extends Phaser.Physics.Arcade.Sprite {
     // Pull that one drop in from anywhere so a passive first-time player still sees the
     // mutation choice in the opening seconds. Normal magnet rules resume after level 1.
     const openingMutationPickup =
-      this.gs.runState.level === 1 && this.value >= this.gs.runState.xpNext;
+      this.gs.runState.stage.level === 1 && this.value >= this.gs.runState.stage.xpNext;
     if (openingMutationPickup || d < this.gs.runState.magnetRadius) {
       const speed = openingMutationPickup ? GEM.attractSpeed * 1.35 : GEM.attractSpeed;
       body.setVelocity((dx / d) * speed, (dy / d) * speed);

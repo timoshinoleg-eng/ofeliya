@@ -1,4 +1,5 @@
 import { GEM, NOVA, ORBIT, PLAYER, WEAPON } from './config';
+import type { StageDefinition, StageId } from './StageDefinitions';
 import type { EvolutionId } from './UpgradeSystem';
 
 export function xpForLevel(level: number): number {
@@ -8,108 +9,200 @@ export function xpForLevel(level: number): number {
   return Math.floor(6 + level * 4 + level * level * 0.35);
 }
 
-/** Состояние одного забега: статы игрока и прогресс. */
+export interface RunProgressState {
+  timeMs: number;
+  kills: number;
+  hostCellsInfected: number;
+  comboBest: number;
+  maxNoDamageMs: number;
+  bossesDefeated: number;
+  currentStageOrder: number;
+  highestStageOrder: number;
+  bossClearTimesMs: Record<string, number>;
+  evolutionsSeen: Set<EvolutionId>;
+}
+
+export interface StageProgressState {
+  id: StageId;
+  order: number;
+  timeMs: number;
+  level: number;
+  xp: number;
+  xpNext: number;
+  kills: number;
+  hostCellsInfected: number;
+  combo: number;
+  comboTimer: number;
+  noDamageMs: number;
+  hp: number;
+  maxHp: number;
+  damageMul: number;
+  fireRateMul: number;
+  speedMul: number;
+  magnetMul: number;
+  projectiles: number;
+  pierce: number;
+  orbitBlades: number;
+  novaLevel: number;
+  regen: number;
+  stacks: Record<string, number>;
+  evolutions: Set<EvolutionId>;
+}
+
+function createStageProgress(stage: Pick<StageDefinition, 'id' | 'order'>): StageProgressState {
+  return {
+    id: stage.id,
+    order: stage.order,
+    timeMs: 0,
+    level: 1,
+    xp: 0,
+    xpNext: xpForLevel(1),
+    kills: 0,
+    hostCellsInfected: 0,
+    combo: 0,
+    comboTimer: 0,
+    noDamageMs: 0,
+    hp: PLAYER.hp,
+    maxHp: PLAYER.hp,
+    damageMul: 1,
+    fireRateMul: 1,
+    speedMul: 1,
+    magnetMul: 1,
+    projectiles: 1,
+    pierce: 0,
+    orbitBlades: 0,
+    novaLevel: 0,
+    regen: 0,
+    stacks: {},
+    evolutions: new Set<EvolutionId>(),
+  };
+}
+
+/** Run-wide records and resettable stage combat progression. */
 export class RunState {
-  level = 1;
-  xp = 0;
-  xpNext = xpForLevel(1);
-  kills = 0;
-  hostCellsInfected = 0;
-  timeMs = 0;
+  readonly run: RunProgressState;
+  stage: StageProgressState;
 
-  /** Текущая серия убийств и сколько ей осталось (мс) — см. COMBO в config. */
-  combo = 0;
-  comboTimer = 0;
-  comboBest = 0;
-
-  /** Текущая и лучшая серия без получения урона. */
-  noDamageMs = 0;
-  maxNoDamageMs = 0;
-
-  hp = PLAYER.hp;
-  maxHp = PLAYER.hp;
-
-  damageMul = 1;
-  fireRateMul = 1;
-  speedMul = 1;
-  magnetMul = 1;
-  projectiles = 1;
-  pierce = 0;
-  orbitBlades = 0;
-  novaLevel = 0;
-  regen = 0;
-
-  stacks: Record<string, number> = {};
-  evolutions = new Set<EvolutionId>();
+  constructor(initialStage: Pick<StageDefinition, 'id' | 'order'>) {
+    this.run = {
+      timeMs: 0,
+      kills: 0,
+      hostCellsInfected: 0,
+      comboBest: 0,
+      maxNoDamageMs: 0,
+      bossesDefeated: 0,
+      currentStageOrder: initialStage.order,
+      highestStageOrder: initialStage.order,
+      bossClearTimesMs: {},
+      evolutionsSeen: new Set<EvolutionId>(),
+    };
+    this.stage = createStageProgress(initialStage);
+  }
 
   get bulletDamage(): number {
-    return WEAPON.damage * this.damageMul;
+    return WEAPON.damage * this.stage.damageMul;
   }
 
   get bulletPierce(): number {
-    return this.pierce + (this.hasEvolution('prism') ? 1 : 0);
+    return this.stage.pierce + (this.hasEvolution('prism') ? 1 : 0);
   }
 
   get fireInterval(): number {
-    return WEAPON.fireIntervalMs / this.fireRateMul;
+    return WEAPON.fireIntervalMs / this.stage.fireRateMul;
   }
 
   get bladeDamage(): number {
-    return ORBIT.damage * this.damageMul;
+    return ORBIT.damage * this.stage.damageMul;
   }
 
   get magnetRadius(): number {
-    return GEM.magnetRadius * this.magnetMul;
+    return GEM.magnetRadius * this.stage.magnetMul;
   }
 
   get novaDamage(): number {
-    return NOVA.damage * (1 + 0.6 * (this.novaLevel - 1)) * this.damageMul;
+    return NOVA.damage * (1 + 0.6 * (this.stage.novaLevel - 1)) * this.stage.damageMul;
   }
 
   get novaRadius(): number {
-    return NOVA.radius * (1 + 0.18 * (this.novaLevel - 1));
+    return NOVA.radius * (1 + 0.18 * (this.stage.novaLevel - 1));
   }
 
   get novaInterval(): number {
-    return NOVA.intervalMs * Math.max(0.55, 1 - 0.1 * (this.novaLevel - 1));
+    return NOVA.intervalMs * Math.max(0.55, 1 - 0.1 * (this.stage.novaLevel - 1));
   }
 
-  addXp(v: number): number {
-    this.xp += v;
+  tick(delta: number): void {
+    this.run.timeMs += delta;
+    this.stage.timeMs += delta;
+    this.stage.noDamageMs += delta;
+    if (this.stage.noDamageMs > this.run.maxNoDamageMs) {
+      this.run.maxNoDamageMs = this.stage.noDamageMs;
+    }
+    if (this.stage.combo <= 0) return;
+    this.stage.comboTimer -= delta;
+    if (this.stage.comboTimer <= 0) {
+      this.stage.combo = 0;
+      this.stage.comboTimer = 0;
+    }
+  }
+
+  recordKill(comboWindowMs: number): void {
+    this.run.kills += 1;
+    this.stage.kills += 1;
+    this.stage.combo += 1;
+    this.stage.comboTimer = comboWindowMs;
+    if (this.stage.combo > this.run.comboBest) this.run.comboBest = this.stage.combo;
+  }
+
+  recordHostCellInfected(): void {
+    this.run.hostCellsInfected += 1;
+    this.stage.hostCellsInfected += 1;
+  }
+
+  recordBossDefeated(bossId: string): void {
+    if (Object.prototype.hasOwnProperty.call(this.run.bossClearTimesMs, bossId)) return;
+    this.run.bossesDefeated += 1;
+    this.run.bossClearTimesMs[bossId] = this.run.timeMs;
+  }
+
+  resetStageProgression(stage: Pick<StageDefinition, 'id' | 'order'>): void {
+    this.stage = createStageProgress(stage);
+    this.run.currentStageOrder = stage.order;
+    this.run.highestStageOrder = Math.max(this.run.highestStageOrder, stage.order);
+  }
+
+  addXp(value: number): number {
+    this.stage.xp += value;
     let levels = 0;
-    while (this.xp >= this.xpNext) {
-      this.xp -= this.xpNext;
-      this.level += 1;
-      this.xpNext = xpForLevel(this.level);
+    while (this.stage.xp >= this.stage.xpNext) {
+      this.stage.xp -= this.stage.xpNext;
+      this.stage.level += 1;
+      this.stage.xpNext = xpForLevel(this.stage.level);
       levels += 1;
     }
     return levels;
   }
 
-  tickNoDamage(delta: number): void {
-    this.noDamageMs += delta;
-    if (this.noDamageMs > this.maxNoDamageMs) this.maxNoDamageMs = this.noDamageMs;
-  }
-
   resetNoDamage(): void {
-    this.noDamageMs = 0;
+    this.stage.noDamageMs = 0;
   }
 
   stackOf(id: string): number {
-    return this.stacks[id] ?? 0;
+    return this.stage.stacks[id] ?? 0;
   }
 
   bump(id: string): void {
-    this.stacks[id] = (this.stacks[id] ?? 0) + 1;
+    this.stage.stacks[id] = (this.stage.stacks[id] ?? 0) + 1;
   }
 
   hasEvolution(id: EvolutionId): boolean {
-    return this.evolutions.has(id);
+    return this.stage.evolutions.has(id);
   }
 
   addEvolution(id: EvolutionId): boolean {
-    if (this.evolutions.has(id)) return false;
-    this.evolutions.add(id);
+    if (this.stage.evolutions.has(id)) return false;
+    this.stage.evolutions.add(id);
+    this.run.evolutionsSeen.add(id);
     return true;
   }
 }

@@ -116,11 +116,11 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     await page.waitForFunction(() => window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI'));
     await page.evaluate(() => {
       const gs = window.__game.scene.getScene('Game');
-      gs.runState.timeMs = 130000;
-      gs.runState.kills = 90;
-      gs.runState.hostCellsInfected = 5;
-      gs.runState.level = 10;
-      gs.runState.comboBest = 24;
+      gs.runState.run.timeMs = 130000;
+      gs.runState.run.kills = 90;
+      gs.runState.run.hostCellsInfected = 5;
+      gs.runState.stage.level = 10;
+      gs.runState.run.comboBest = 24;
       gs.finish(false);
       window.__game.scene.getScene('UI').update();
     });

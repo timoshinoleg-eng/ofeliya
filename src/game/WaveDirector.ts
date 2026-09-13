@@ -1,122 +1,122 @@
 import Phaser from 'phaser';
-import { RUN, type EnemyKind } from './config';
-import { RunMilestones } from './RunMilestones';
+import type { EnemyKind } from './config';
+import type { StageDefinition } from './StageDefinitions';
 import type { GameScene } from '../scenes/GameScene';
 
-/** Управляет темпом и составом волн врагов, элитами и боссом. */
+/** Owns only stage-local enemy composition; StageDirector owns lifecycle and boss timing. */
 export class WaveDirector {
   boss: import('./Enemy').Enemy | null = null;
 
-  private scene: GameScene;
-  private enemies: Phaser.Physics.Arcade.Group;
-  private milestones: RunMilestones;
+  private readonly scene: GameScene;
+  private readonly enemies: Phaser.Physics.Arcade.Group;
+  private stage: StageDefinition;
   private spawnAcc = 0;
   private spawnedElites = 0;
-  private bossSpawned = false;
   private minionAcc = 0;
 
-  constructor(scene: GameScene, enemies: Phaser.Physics.Arcade.Group) {
+  constructor(
+    scene: GameScene,
+    enemies: Phaser.Physics.Arcade.Group,
+    stage: StageDefinition
+  ) {
     this.scene = scene;
     this.enemies = enemies;
-    this.milestones = new RunMilestones(scene);
+    this.stage = stage;
+  }
 
-    // First-session hook: three antibodies begin inside auto-fire range. The nearest one is
-    // intentionally close enough for its RNA drop to enter the default magnet radius after the
-    // opening two-shot kill, while the offset pair leaves a readable escape lane.
-    this.spawnOpeningAntibodies();
+  startStage(stage: StageDefinition): void {
+    this.stage = stage;
+    this.spawnAcc = 0;
+    this.spawnedElites = 0;
+    this.minionAcc = 0;
+    this.boss = null;
+    this.spawnOpeningEnemies();
   }
 
   update(delta: number): void {
-    const t = this.scene.runState.timeMs;
-
-    // Presentation observer only: it mirrors the immune-response timeline while this director
-    // owns the actual composition changes below.
-    this.milestones.update(t);
-
-    if (!this.bossSpawned && t >= RUN.bossTimeMs) this.spawnBoss();
+    const t = this.scene.runState.stage.timeMs;
+    const waves = this.stage.waves;
 
     if (this.boss) {
       this.minionAcc += delta;
-      if (this.minionAcc >= 12000) {
+      if (this.minionAcc >= waves.bossMinionIntervalMs) {
         this.minionAcc = 0;
-        const b = this.boss;
-        for (let i = 0; i < 6; i++) {
-          const a = (i / 6) * Math.PI * 2;
-          this.scene.spawnEnemy('swarm', b.x + Math.cos(a) * 130, b.y + Math.sin(a) * 130, false);
+        const boss = this.boss;
+        for (let i = 0; i < waves.bossMinionCount; i++) {
+          const angle = (i / waves.bossMinionCount) * Math.PI * 2;
+          this.scene.spawnEnemy(
+            'swarm',
+            boss.x + Math.cos(angle) * waves.bossMinionRadius,
+            boss.y + Math.sin(angle) * waves.bossMinionRadius,
+            false
+          );
         }
       }
     }
 
-    // First NK-cell presentation arrives with the adaptive-immunity beat at 02:00.
-    const expectedElites = Math.floor(t / 120000);
+    const expectedElites = waves.eliteEveryMs > 0 ? Math.floor(t / waves.eliteEveryMs) : 0;
     if (expectedElites > this.spawnedElites) {
       this.spawnedElites = expectedElites;
-      const kind: EnemyKind = Phaser.Utils.Array.GetRandom(['swarm', 'runner', 'brute'] as EnemyKind[]);
+      const kind: EnemyKind = Phaser.Utils.Array.GetRandom([
+        'swarm',
+        'runner',
+        'brute',
+      ] as EnemyKind[]);
       this.spawn(kind, true);
     }
 
-    const progress = Phaser.Math.Clamp(t / RUN.bossTimeMs, 0, 1);
-    let interval = Phaser.Math.Linear(1150, 330, progress);
-    // Boss phase stays readable: ordinary immune traffic is reduced while IMMUNE PRIME is active.
-    if (this.bossSpawned) interval /= RUN.bossPhaseSpawnMul;
+    const progress = Phaser.Math.Clamp(t / this.stage.durationMs, 0, 1);
+    let interval = Phaser.Math.Linear(
+      waves.spawnIntervalStartMs,
+      waves.spawnIntervalEndMs,
+      progress
+    );
+    if (this.boss) interval /= waves.bossPhaseSpawnMultiplier;
     this.spawnAcc += delta;
     while (this.spawnAcc >= interval) {
       this.spawnAcc -= interval;
-      const batch = Math.min(5, 1 + Math.floor(t / 45000));
-      for (let i = 0; i < batch; i++) this.spawn(this.pickKind(t), false);
+      const batch = Math.min(waves.maxBatchSize, 1 + Math.floor(t / waves.batchEveryMs));
+      for (let i = 0; i < batch; i++) this.spawn(waves.pickKind(t, Math.random()), false);
     }
   }
 
-  private pickKind(t: number): EnemyKind {
-    const r = Math.random();
-
-    // 0:00–1:30: innate response / antibodies only. The first 45-second milestone increases
-    // pressure through density, not by prematurely revealing the T-killer silhouette.
-    if (t < 90_000) return 'swarm';
-
-    // 1:30: T-killers join the hunt, matching the player-facing milestone exactly.
-    if (t < 120_000) return r < 0.78 ? 'swarm' : 'runner';
-
-    // 2:00+: macrophages enter as the adaptive response becomes visibly heavier.
-    if (t < 180_000) return r < 0.6 ? 'swarm' : r < 0.9 ? 'runner' : 'brute';
-
-    // Systemic response: all three ordinary immune roles are now established.
-    return r < 0.48 ? 'swarm' : r < 0.79 ? 'runner' : 'brute';
+  spawnBoss(): import('./Enemy').Enemy | null {
+    if (this.boss) return this.boss;
+    const position = this.ringPos();
+    this.boss = this.scene.spawnEnemy(
+      this.stage.boss.enemyKind,
+      position.x,
+      position.y,
+      false
+    );
+    return this.boss;
   }
 
-  private spawnOpeningAntibodies(): void {
-    const p = this.scene.player;
-    const layout = [
-      { angle: -0.28, radius: 150 },
-      { angle: 2.1, radius: 205 },
-      { angle: 3.9, radius: 235 },
-    ];
-    for (const spot of layout) {
+  private spawnOpeningEnemies(): void {
+    const player = this.scene.player;
+    for (const spot of this.stage.waves.openingSpawns) {
       this.scene.spawnEnemy(
-        'swarm',
-        p.x + Math.cos(spot.angle) * spot.radius,
-        p.y + Math.sin(spot.angle) * spot.radius,
+        spot.kind,
+        player.x + Math.cos(spot.angle) * spot.radius,
+        player.y + Math.sin(spot.angle) * spot.radius,
         false
       );
     }
   }
 
   private spawn(kind: EnemyKind, elite: boolean): void {
-    if (!elite && this.enemies.countActive(true) >= 240) return;
-    const p = this.ringPos();
-    this.scene.spawnEnemy(kind, p.x, p.y, elite);
-  }
-
-  private spawnBoss(): void {
-    this.bossSpawned = true;
-    const p = this.ringPos();
-    this.boss = this.scene.spawnEnemy('boss', p.x, p.y, false);
+    if (!elite && this.enemies.countActive(true) >= this.stage.waves.normalEnemyCap) return;
+    const position = this.ringPos();
+    this.scene.spawnEnemy(kind, position.x, position.y, elite);
   }
 
   private ringPos(): { x: number; y: number } {
-    const cam = this.scene.cameras.main;
-    const a = Math.random() * Math.PI * 2;
-    const r = Math.max(cam.width, cam.height) / 2 + 90 + Math.random() * 60;
-    return { x: cam.midPoint.x + Math.cos(a) * r, y: cam.midPoint.y + Math.sin(a) * r };
+    const camera = this.scene.cameras.main;
+    const angle = Math.random() * Math.PI * 2;
+    const radius = Math.max(camera.width, camera.height) / 2 + 90 + Math.random() * 60;
+    return {
+      x: camera.midPoint.x + Math.cos(angle) * radius,
+      y: camera.midPoint.y + Math.sin(angle) * radius,
+    };
   }
 }

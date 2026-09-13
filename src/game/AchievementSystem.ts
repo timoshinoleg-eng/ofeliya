@@ -46,19 +46,19 @@ export function evaluateAchievements(st: RunState, runRecorded = false): Achieve
   const save = SaveSystem.get();
   const candidate: AchievementId[] = [];
 
-  if (st.kills >= 50) candidate.push('first-contact');
-  if (st.comboBest >= 20) candidate.push('continuous-flow');
-  if (st.maxNoDamageMs >= 60_000) candidate.push('stable-core');
-  if (st.evolutions.size > 0) candidate.push('adaptation');
-  if (st.timeMs >= 180_000) candidate.push('deep-dive');
-  if (st.hostCellsInfected >= 10) candidate.push('epidemic');
+  if (st.run.kills >= 50) candidate.push('first-contact');
+  if (st.run.comboBest >= 20) candidate.push('continuous-flow');
+  if (st.run.maxNoDamageMs >= 60_000) candidate.push('stable-core');
+  if (st.run.evolutionsSeen.size > 0) candidate.push('adaptation');
+  if (st.run.timeMs >= 180_000) candidate.push('deep-dive');
+  if (st.run.hostCellsInfected >= 10) candidate.push('epidemic');
 
-  const lifetimeKills = save.totalKills + (runRecorded ? 0 : st.kills);
+  const lifetimeKills = save.totalKills + (runRecorded ? 0 : st.run.kills);
   if (lifetimeKills >= 500) candidate.push('cleanup-500');
   if (save.runs >= 3) candidate.push('restart-3');
 
   const seen = new Set<EvolutionId>(save.evolutionsSeen);
-  if (!runRecorded) for (const id of st.evolutions) seen.add(id);
+  if (!runRecorded) for (const id of st.run.evolutionsSeen) seen.add(id);
   if (seen.size >= 3) candidate.push('full-protocol');
 
   return SaveSystem.unlockAchievements(candidate);
