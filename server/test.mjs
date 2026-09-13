@@ -16,6 +16,10 @@ const TG_TOKEN = '7123456789:TEST-TOKEN-for-ofeliya';
 const MAX_TOKEN = 'TEST-MAX-TOKEN-000';
 const VK_SECURE_KEY = 'test-vk-secure-key-123';
 
+// Force server-local calendar time away from UTC so UTC/local date-key drift is deterministic.
+// UTC < 10:00 uses UTC-10 (previous local day); otherwise UTC+14 (next local day).
+process.env.TZ = new Date().getUTCHours() < 10 ? 'America/Adak' : 'Pacific/Kiritimati';
+
 process.env.TG_BOT_TOKEN = TG_TOKEN;
 // Production MAX bot historically uses BOT_TOKEN. Deliberately do NOT set
 // MAX_BOT_TOKEN here: this verifies the score-service fallback contract.
