@@ -556,7 +556,14 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
   // ---------------------------------------------------------------------------
   make('cardiac-titan', 108, 108, (ctx) => {
     const c = 54;
-    ctx.fillStyle = radial(ctx, c, c, 48, '#fff0d4', '#d14f3f', '#57142a');
+    ctx.strokeStyle = '#ff6b4a';
+    ctx.lineWidth = 9;
+    ctx.beginPath(); ctx.moveTo(42, 25); ctx.bezierCurveTo(38, 16, 34, 10, 30, 3); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(65, 24); ctx.bezierCurveTo(68, 15, 74, 10, 78, 3); ctx.stroke();
+    ctx.strokeStyle = '#ffd3a8'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(42, 24); ctx.lineTo(34, 7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(65, 23); ctx.lineTo(75, 7); ctx.stroke();
+    ctx.fillStyle = radial(ctx, c, c, 49, '#ffd9ae', '#e34f3f', '#430719');
     ctx.beginPath();
     for (let i = 0; i <= 28; i++) {
       const a = (i / 28) * Math.PI * 2;
@@ -566,11 +573,23 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
       if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     }
     ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = '#ffb36b'; ctx.lineWidth = 3; ctx.stroke();
-    ctx.fillStyle = '#6b1635';
-    ctx.beginPath(); ctx.ellipse(45, 51, 15, 22, -0.45, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(66, 54, 15, 23, 0.45, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,240,212,0.7)'; ctx.lineWidth = 2;
+    ctx.strokeStyle = '#ff9a61'; ctx.lineWidth = 5; ctx.stroke();
+    ctx.fillStyle = '#65102b';
+    ctx.beginPath(); ctx.ellipse(43, 48, 16, 23, -0.48, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(67, 51, 17, 24, 0.48, 0, Math.PI * 2); ctx.fill();
+
+    ctx.fillStyle = '#ff315e';
+    ctx.beginPath();
+    ctx.moveTo(54, 78);
+    ctx.bezierCurveTo(48, 70, 34, 61, 36, 49);
+    ctx.bezierCurveTo(38, 38, 50, 38, 54, 47);
+    ctx.bezierCurveTo(59, 38, 71, 39, 73, 50);
+    ctx.bezierCurveTo(75, 61, 62, 71, 54, 78);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#fff1c7'; ctx.lineWidth = 2.8; ctx.stroke();
+    ctx.fillStyle = '#fff6de'; ctx.beginPath(); ctx.arc(51, 53, 3.4, 0, Math.PI * 2); ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255,240,212,0.85)'; ctx.lineWidth = 2.5;
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2; ctx.beginPath();
       ctx.moveTo(c + Math.cos(a) * 33, c + Math.sin(a) * 33);

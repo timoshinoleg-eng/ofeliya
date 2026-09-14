@@ -137,19 +137,35 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const gs = window.__game.scene.getScene('Game');
     gs.runState.stage.timeMs = gs.stageDirector.currentStage.durationMs;
     gs.handleStageEvents(gs.stageDirector.update(gs.runState.stage.timeMs));
+    gs.awaitingChoice = false;
+    gs.pendingChoices = [];
+    gs.queuedLevels = 0;
+    const ui = window.__game.scene.getScene('UI');
+    ui.dismissProgressionForStageBoundary();
+    ui.scene.pause();
     const boss = gs.wave.boss;
+    if (boss) {
+      const x = gs.player.x + 104;
+      const y = gs.player.y - 104;
+      boss.setPosition(x, y);
+      boss.body.reset(x, y);
+    }
     return boss && {
       phase: gs.stageDirector.phase,
       texture: boss.texture.key,
       behavior: boss.bossBehavior,
       aura: Boolean(boss.bossAura?.visible),
+      paused: gs.scene.isPaused(),
+      x: boss.x,
+      y: boss.y,
     };
   });
   if (!heartBoss || heartBoss.phase !== 'BOSS_ACTIVE' || heartBoss.texture !== 'cardiac-titan' ||
-      heartBoss.behavior !== 'heartbeat-pulse' || !heartBoss.aura) {
+      heartBoss.behavior !== 'heartbeat-pulse' || !heartBoss.aura || heartBoss.paused) {
     throw new Error(`Cardiac Titan presentation failed: ${JSON.stringify(heartBoss)}`);
   }
   await page.locator('#game').screenshot({ path: path.join(captureDir, '04-cardiac-titan.png') });
+  await page.evaluate(() => window.__game.scene.getScene('UI').scene.resume());
 
   await page.evaluate(() => {
     const gs = window.__game.scene.getScene('Game');
@@ -161,6 +177,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const ui = window.__game.scene.getScene('UI');
     return gs.scene.isPaused() && ui.modalOpen === true;
   });
+  await page.locator('#game').screenshot({ path: path.join(captureDir, '04b-cardiac-titan-mutation-modal.png') });
 
   await page.evaluate(() => {
     const gs = window.__game.scene.getScene('Game');
@@ -182,11 +199,13 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       heartBossClear: gs.runState.run.bossClearTimesMs['cardiac-titan'],
       awaitingChoice: gs.awaitingChoice,
       modalOpen: window.__game.scene.getScene('UI').modalOpen,
+      milestonesActive: gs.milestones.active.size,
     };
   });
   if (result.phase !== 'RUN_ENDED' || result.bossesDefeated !== 2 ||
       !Number.isFinite(result.heartBossClear) || result.result?.stageId !== 'heart' ||
-      result.result?.stageOrder !== 2 || result.awaitingChoice || result.modalOpen) {
+      result.result?.stageOrder !== 2 || result.awaitingChoice || result.modalOpen ||
+      result.milestonesActive !== 0) {
     throw new Error(`campaign completion contract failed: ${JSON.stringify(result)}`);
   }
   await page.locator('#game').screenshot({ path: path.join(captureDir, '05-heart-result.png') });

@@ -93,8 +93,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     if (this.isBoss && this.bossBehavior === 'heartbeat-pulse') {
       if (!this.bossAura) this.bossAura = this.scene.add.graphics().setDepth(9);
-      this.drawCardiacAura(this.bossAura, Math.max(38, this.radius + 14), this.color);
-      this.bossAura.setVisible(true).setPosition(x, y).setAlpha(0.72);
+      this.drawCardiacAura(this.bossAura, Math.max(68, this.radius + 42), this.color);
+      this.bossAura
+        .setVisible(true)
+        .setPosition(x, y)
+        .setAlpha(0.88)
+        .setBlendMode(Phaser.BlendModes.ADD);
     } else {
       this.bossAura?.setVisible(false);
     }
@@ -144,10 +148,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     } else {
       if (this.bossBehavior === 'heartbeat-pulse' && this.heartbeatMs > 0) {
         const phase = (time % this.heartbeatMs) / this.heartbeatMs;
-        const doubleBeat = Math.max(
-          Math.exp(-phase * 15),
-          Math.exp(-Math.max(0, phase - 0.22) * 20) * 0.55
-        );
+        const secondBeat = phase >= 0.22 ? Math.exp(-(phase - 0.22) * 20) * 0.55 : 0;
+        const doubleBeat = Math.max(Math.exp(-phase * 15), secondBeat);
         this.setRotation(Math.sin(time * 0.0012) * 0.11);
         this.setScale(this.visualScale * (1 + doubleBeat * 0.085));
       } else {
@@ -168,16 +170,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     if (this.isBoss && this.bossBehavior === 'heartbeat-pulse' && this.bossAura) {
       const phase = this.heartbeatMs > 0 ? (time % this.heartbeatMs) / this.heartbeatMs : 0;
-      const beat = Math.max(
-        Math.exp(-phase * 15),
-        Math.exp(-Math.max(0, phase - 0.22) * 20) * 0.55
-      );
+      const secondBeat = phase >= 0.22 ? Math.exp(-(phase - 0.22) * 20) * 0.55 : 0;
+      const beat = Math.max(Math.exp(-phase * 15), secondBeat);
       this.bossAura
         .setVisible(true)
         .setPosition(this.x, this.y)
         .setRotation(time * 0.0008)
-        .setScale(0.94 + beat * 0.12)
-        .setAlpha(0.44 + beat * 0.36);
+        .setScale(0.98 + beat * 0.16)
+        .setAlpha(0.62 + beat * 0.28);
     }
   }
 
@@ -209,18 +209,27 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   private drawCardiacAura(g: Phaser.GameObjects.Graphics, radius: number, color: number): void {
     g.clear();
-    g.lineStyle(3, color, 0.8);
-    g.beginPath();
-    g.arc(0, 0, radius, -0.95, 0.95, false);
-    g.strokePath();
-    g.beginPath();
-    g.arc(0, 0, radius, Math.PI - 0.95, Math.PI + 0.95, false);
-    g.strokePath();
-    g.lineStyle(1.4, COLORS.white, 0.3);
-    g.strokeCircle(0, 0, radius + 7);
-    g.fillStyle(COLORS.white, 0.72);
-    for (const a of [-0.95, 0.95, Math.PI - 0.95, Math.PI + 0.95]) {
-      g.fillCircle(Math.cos(a) * radius, Math.sin(a) * radius, 2);
+    g.lineStyle(4.5, color, 0.92);
+    for (const offset of [0, Math.PI]) {
+      g.beginPath();
+      g.arc(0, 0, radius, offset - 0.98, offset + 0.98, false);
+      g.strokePath();
+    }
+    g.lineStyle(2.2, COLORS.white, 0.5);
+    g.strokeCircle(0, 0, radius + 12);
+    g.lineStyle(1.4, color, 0.42);
+    g.strokeCircle(0, 0, radius - 11);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const inner = radius + 4;
+      const outer = radius + (i % 2 === 0 ? 22 : 17);
+      g.lineStyle(i % 2 === 0 ? 3 : 2, i % 2 === 0 ? color : COLORS.white, 0.78);
+      g.beginPath();
+      g.moveTo(Math.cos(a) * inner, Math.sin(a) * inner);
+      g.lineTo(Math.cos(a) * outer, Math.sin(a) * outer);
+      g.strokePath();
+      g.fillStyle(i % 2 === 0 ? color : COLORS.white, 0.92);
+      g.fillCircle(Math.cos(a) * outer, Math.sin(a) * outer, i % 2 === 0 ? 3.2 : 2.4);
     }
   }
 
