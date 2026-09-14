@@ -16,6 +16,7 @@ import {
   type AchievementId,
 } from '../game/AchievementSystem';
 import { rollRunChoices } from '../game/EvolutionSystem';
+import { HeartbeatPulseDirector, type HeartbeatPulseEvent } from '../game/HeartbeatPulseDirector';
 import { IDENTITY } from '../game/identity';
 import { Player } from '../game/Player';
 import { Enemy } from '../game/Enemy';
@@ -79,6 +80,7 @@ export class GameScene extends Phaser.Scene {
   private keys: Record<string, Phaser.Input.Keyboard.Key> = {};
   private introHint: Phaser.GameObjects.Container | null = null;
   private transitionGeneration = 0;
+  private heartbeatPulse = new HeartbeatPulseDirector();
   private stageTransition: {
     token: number;
     from: StageDefinition;
@@ -115,6 +117,7 @@ export class GameScene extends Phaser.Scene {
     this.introHint = null;
     this.transitionGeneration = 0;
     this.stageTransition = null;
+    this.heartbeatPulse.reset();
     this.physics.world.resume();
 
     const W = this.scale.width;
@@ -300,6 +303,7 @@ export class GameScene extends Phaser.Scene {
     // Keep the established frame order: firing resolves before timeline presentations and spawns.
     this.milestones.setIntensity(st.timeMs / stage.durationMs);
     this.handleStageEvents(this.stageDirector.update(st.timeMs));
+    this.updateHeartbeatSignature(stage, st.timeMs);
     this.wave.update(delta);
     this.hostCells.update(time, delta, st.timeMs);
     this.atmosphere.update(time, delta, st.timeMs, stage.durationMs);
@@ -339,6 +343,8 @@ export class GameScene extends Phaser.Scene {
       dmgScale: isBoss ? stage.difficulty.bossDamageScale : dmgScale,
       textureKey: isBoss ? stage.boss.textureKey : undefined,
       color: isBoss ? stage.theme.accentColor : undefined,
+      bossBehavior: isBoss ? stage.boss.behavior : undefined,
+      heartbeatMs: isBoss ? stage.theme.heartbeatMs : undefined,
     });
     if (kind === 'boss') {
       Sfx.play('boss');
@@ -535,6 +541,52 @@ export class GameScene extends Phaser.Scene {
     return id;
   }
 
+  getEnemyPressureMultiplier(): number {
+    if (this.stageDirector.currentStage.signatureMechanic !== 'heartbeat-pulse') return 1;
+    return this.heartbeatPulse.pressureMultiplier;
+  }
+
+  private updateHeartbeatSignature(stage: StageDefinition, stageTimeMs: number): void {
+    if (stage.signatureMechanic !== 'heartbeat-pulse') return;
+    const bossActive =
+      this.stageDirector.phase === 'BOSS_ACTIVE' && stage.boss.behavior === 'heartbeat-pulse';
+    for (const event of this.heartbeatPulse.update(stageTimeMs, bossActive)) {
+      this.handleHeartbeatPulseEvent(stage, event);
+    }
+  }
+
+  private handleHeartbeatPulseEvent(stage: StageDefinition, event: HeartbeatPulseEvent): void {
+    if (event.type === 'heartbeat-telegraph') {
+      this.showHeartbeatTelegraph(stage, event.bossActive);
+      return;
+    }
+    if (event.type !== 'heartbeat-impact') return;
+    this.atmosphere.heartbeatPulse(
+      event.bossActive ? stage.theme.dangerColor : stage.theme.accentColor,
+      event.bossActive ? 0.4 : 0.3
+    );
+    this.cameras.main.shake(event.bossActive ? 150 : 100, event.bossActive ? 0.0045 : 0.0026);
+    PlatformBridge.haptic(event.bossActive ? 'medium' : 'light');
+  }
+
+  private showHeartbeatTelegraph(stage: StageDefinition, bossActive: boolean): void {
+    const color = bossActive ? stage.theme.dangerColor : stage.theme.accentColor;
+    const rings = [
+      this.add.circle(this.player.x, this.player.y, 28).setStrokeStyle(2, color, 0.82).setDepth(27),
+      this.add.circle(this.player.x, this.player.y, 44).setStrokeStyle(1.5, color, 0.58).setDepth(27),
+    ];
+    rings[0].setScale(2.15).setAlpha(0.24);
+    rings[1].setScale(1.75).setAlpha(0.18);
+    this.tweens.add({
+      targets: rings,
+      scale: 0.92,
+      alpha: bossActive ? 0.86 : 0.68,
+      duration: 620,
+      ease: 'Quad.In',
+      onComplete: () => rings.forEach((ring) => ring.destroy()),
+    });
+  }
+
   private beginStageTransition(from: StageDefinition, to: StageDefinition): void {
     if (this.stageDirector.phase !== 'STAGE_TRANSITION' || this.stageTransition) return;
 
@@ -696,6 +748,7 @@ export class GameScene extends Phaser.Scene {
           }
           this.cameras.main.setBackgroundColor(event.stage.theme.backgroundColor);
           this.atmosphere.setStage(event.stage);
+          this.heartbeatPulse.reset();
           this.wave.startStage(event.stage);
           break;
         case 'milestone':

@@ -19,6 +19,7 @@ try {
       'src/game/StageDefinitions.ts',
       'src/game/StageDirector.ts',
       'src/game/RunState.ts',
+      'src/game/HeartbeatPulseDirector.ts',
       '--target',
       'ES2020',
       '--module',
@@ -38,6 +39,7 @@ try {
   );
 
   const { RunState } = require(join(temp, 'game/RunState.js'));
+  const { HeartbeatPulseDirector } = require(join(temp, 'game/HeartbeatPulseDirector.js'));
   const { StageDirector } = require(join(temp, 'game/StageDirector.js'));
   const {
     BLOODSTREAM_STAGE,
@@ -165,6 +167,23 @@ try {
   assert(state.stage.id === second.id && state.stage.timeMs === 0, 'stage timer did not reset');
   assert(state.stage.level === 1 && state.stage.damageMul === 1, 'combat progression did not reset');
   assert(state.stage.kills === 0 && state.stage.evolutions.size === 0, 'stage counters did not reset');
+
+  const heartbeat = new HeartbeatPulseDirector();
+  assert(heartbeat.update(11_299, false).length === 0, 'heartbeat telegraphed too early');
+  const telegraph = heartbeat.update(11_300, false);
+  assert(telegraph[0]?.type === 'heartbeat-telegraph', 'heartbeat telegraph missing');
+  assert(heartbeat.pressureMultiplier === 1, 'telegraph must not apply pressure');
+  const impact = heartbeat.update(12_000, false);
+  assert(impact[0]?.type === 'heartbeat-impact', 'heartbeat impact missing');
+  assert(Math.abs(heartbeat.pressureMultiplier - 1.18) < 1e-9, 'Heart pressure multiplier mismatch');
+  heartbeat.update(13_050, false);
+  assert(heartbeat.pressureMultiplier === 1, 'Heart pressure did not end');
+
+  heartbeat.reset();
+  heartbeat.update(2_000, true);
+  assert(heartbeat.update(4_500, true)[0]?.type === 'heartbeat-telegraph', 'boss heartbeat telegraph missing');
+  assert(heartbeat.update(5_200, true)[0]?.type === 'heartbeat-impact', 'boss heartbeat impact missing');
+  assert(Math.abs(heartbeat.pressureMultiplier - 1.34) < 1e-9, 'boss pressure multiplier mismatch');
 
   console.log('stage runtime contract smoke: ok');
 } finally {

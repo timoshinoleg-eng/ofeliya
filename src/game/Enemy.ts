@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { COLORS, ELITE, ENEMY_DEFS, type EnemyKind } from './config';
 import type { GameScene } from '../scenes/GameScene';
 import type { Player } from './Player';
+import type { StageBossBehavior } from './StageDefinitions';
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
   kind: EnemyKind = 'swarm';
@@ -22,6 +23,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private knockX = 0;
   private knockY = 0;
   private eliteRing: Phaser.GameObjects.Graphics | null = null;
+  private bossAura: Phaser.GameObjects.Graphics | null = null;
+  private bossBehavior: StageBossBehavior = 'pressure-wave';
+  private heartbeatMs = 0;
   private visualScale = 1;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
@@ -36,7 +40,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     kind: EnemyKind,
     x: number,
     y: number,
-    opts: { elite: boolean; hpScale: number; dmgScale: number; textureKey?: string; color?: number }
+    opts: { elite: boolean; hpScale: number; dmgScale: number; textureKey?: string; color?: number; bossBehavior?: StageBossBehavior; heartbeatMs?: number }
   ): void {
     this.gs = gs;
     this.target = gs.player;
@@ -49,6 +53,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.setTexture(opts.textureKey ?? def.tex).setScale(scale);
     this.isElite = opts.elite;
     this.isBoss = kind === 'boss';
+    this.bossBehavior = opts.bossBehavior ?? 'pressure-wave';
+    this.heartbeatMs = Math.max(0, opts.heartbeatMs ?? 0);
 
     this.maxHp = def.hp * opts.hpScale * (opts.elite ? ELITE.hpMul : 1);
     this.hp = this.maxHp;
@@ -84,12 +90,21 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     } else {
       this.eliteRing?.setVisible(false);
     }
+
+    if (this.isBoss && this.bossBehavior === 'heartbeat-pulse') {
+      if (!this.bossAura) this.bossAura = this.scene.add.graphics().setDepth(9);
+      this.drawCardiacAura(this.bossAura, Math.max(38, this.radius + 14), this.color);
+      this.bossAura.setVisible(true).setPosition(x, y).setAlpha(0.72);
+    } else {
+      this.bossAura?.setVisible(false);
+    }
   }
 
   preUpdate(time: number, delta: number): void {
     super.preUpdate(time, delta);
     if (!this.active || !this.target) {
       this.eliteRing?.setVisible(false);
+      this.bossAura?.setVisible(false);
       return;
     }
 
@@ -100,10 +115,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const dx = p.x - this.x;
     const dy = p.y - this.y;
     const d = Math.hypot(dx, dy) || 1;
-    (this.body as Phaser.Physics.Arcade.Body).setVelocity(
-      (dx / d) * this.speed + this.knockX,
-      (dy / d) * this.speed + this.knockY
-    );
+    const pressure = this.gs?.getEnemyPressureMultiplier() ?? 1;
+    const forwardSpeed = this.speed * pressure;
+    let velocityX = (dx / d) * forwardSpeed + this.knockX;
+    let velocityY = (dy / d) * forwardSpeed + this.knockY;
+    if (this.isBoss && this.bossBehavior === 'heartbeat-pulse') {
+      const lateral = Math.sin(time * 0.0026) * this.speed * 0.34;
+      velocityX = (dx / d) * forwardSpeed * 0.9 + (-dy / d) * lateral + this.knockX;
+      velocityY = (dy / d) * forwardSpeed * 0.9 + (dx / d) * lateral + this.knockY;
+    }
+    (this.body as Phaser.Physics.Arcade.Body).setVelocity(velocityX, velocityY);
     this.knockX *= 0.82;
     this.knockY *= 0.82;
 
@@ -121,9 +142,19 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.setRotation(Math.atan2(dy, dx) + Math.PI / 2 + Math.sin(time * 0.003 + this.x) * 0.06);
       this.setScale(this.visualScale);
     } else {
-      this.setRotation(Math.sin(time * 0.0007) * 0.06);
-      const bossPulse = 1 + Math.sin(time * 0.0032) * 0.018;
-      this.setScale(this.visualScale * bossPulse);
+      if (this.bossBehavior === 'heartbeat-pulse' && this.heartbeatMs > 0) {
+        const phase = (time % this.heartbeatMs) / this.heartbeatMs;
+        const doubleBeat = Math.max(
+          Math.exp(-phase * 15),
+          Math.exp(-Math.max(0, phase - 0.22) * 20) * 0.55
+        );
+        this.setRotation(Math.sin(time * 0.0012) * 0.11);
+        this.setScale(this.visualScale * (1 + doubleBeat * 0.085));
+      } else {
+        this.setRotation(Math.sin(time * 0.0007) * 0.06);
+        const bossPulse = 1 + Math.sin(time * 0.0032) * 0.018;
+        this.setScale(this.visualScale * bossPulse);
+      }
     }
 
     if (this.isElite && this.eliteRing) {
@@ -134,11 +165,26 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         .setScale(0.96 + Math.sin(time / 180) * 0.055)
         .setAlpha(0.58 + Math.sin(time / 180) * 0.15);
     }
+
+    if (this.isBoss && this.bossBehavior === 'heartbeat-pulse' && this.bossAura) {
+      const phase = this.heartbeatMs > 0 ? (time % this.heartbeatMs) / this.heartbeatMs : 0;
+      const beat = Math.max(
+        Math.exp(-phase * 15),
+        Math.exp(-Math.max(0, phase - 0.22) * 20) * 0.55
+      );
+      this.bossAura
+        .setVisible(true)
+        .setPosition(this.x, this.y)
+        .setRotation(time * 0.0008)
+        .setScale(0.94 + beat * 0.12)
+        .setAlpha(0.44 + beat * 0.36);
+    }
   }
 
   /** Hide pooled enemy presentation before the object is reused by another stage. */
   deactivateForStageReset(): void {
     this.eliteRing?.setVisible(false);
+    this.bossAura?.setVisible(false);
     this.target = null;
     this.gs = null;
     this.knockX = 0;
@@ -155,8 +201,26 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.knockY += ky;
     if (this.hp <= 0) {
       this.eliteRing?.setVisible(false);
+      this.bossAura?.setVisible(false);
       this.disableBody(true, true);
       this.gs?.onEnemyDied(this);
+    }
+  }
+
+  private drawCardiacAura(g: Phaser.GameObjects.Graphics, radius: number, color: number): void {
+    g.clear();
+    g.lineStyle(3, color, 0.8);
+    g.beginPath();
+    g.arc(0, 0, radius, -0.95, 0.95, false);
+    g.strokePath();
+    g.beginPath();
+    g.arc(0, 0, radius, Math.PI - 0.95, Math.PI + 0.95, false);
+    g.strokePath();
+    g.lineStyle(1.4, COLORS.white, 0.3);
+    g.strokeCircle(0, 0, radius + 7);
+    g.fillStyle(COLORS.white, 0.72);
+    for (const a of [-0.95, 0.95, Math.PI - 0.95, Math.PI + 0.95]) {
+      g.fillCircle(Math.cos(a) * radius, Math.sin(a) * radius, 2);
     }
   }
 

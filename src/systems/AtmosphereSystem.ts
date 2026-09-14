@@ -235,6 +235,14 @@ export class AtmosphereSystem {
     });
   }
 
+  heartbeatPulse(color: number, strength = 0.32): void {
+    this.pulse(color, strength);
+    this.scene.time.delayedCall(190, () => {
+      if (!this.scene.sys.isActive()) return;
+      this.pulse(color, strength * 0.68);
+    });
+  }
+
   resize(): void {
     this.width = this.scene.scale.width;
     this.height = this.scene.scale.height;
