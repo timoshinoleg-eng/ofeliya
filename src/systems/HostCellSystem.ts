@@ -152,6 +152,22 @@ export class HostCellSystem {
     }
   }
 
+  /** Reset pooled gameplay cells between stages without reallocating scene objects. */
+  resetStage(): void {
+    this.spawnAcc = 0;
+    this.firstSpawned = false;
+    for (const cell of this.cells) {
+      this.scene.tweens.killTweensOf(cell.image);
+      this.scene.tweens.killTweensOf(cell.infectionOverlay);
+      this.scene.tweens.killTweensOf(cell.ring);
+      cell.active = false;
+      cell.infection = 0;
+      cell.image.setVisible(false).setAlpha(0).clearTint().setRotation(0).setScale(0.72);
+      cell.infectionOverlay.setVisible(false).setAlpha(0).setRotation(0).setScale(0.72);
+      cell.ring.setVisible(false).clear();
+    }
+  }
+
   destroy(): void {
     for (const cell of this.cells) {
       cell.image.destroy();

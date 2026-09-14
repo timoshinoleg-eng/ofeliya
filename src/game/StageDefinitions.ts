@@ -1,12 +1,19 @@
 import { COLORS, type EnemyKind } from './config';
 
 export type StageId = string;
+export type StageAmbientProfile = 'bloodstream' | 'heart';
+export type StageBossBehavior = 'pressure-wave' | 'heartbeat-pulse';
+export type StageSignatureMechanic = 'none' | 'heartbeat-pulse';
 
 export interface StageThemeDefinition {
   backgroundColor: number;
   plasmaTexture: string;
+  structureTexture?: string;
   accentColor: number;
   dangerColor: number;
+  particleTint: number;
+  ambientProfile: StageAmbientProfile;
+  heartbeatMs: number;
 }
 
 export interface StageDifficultyProfile {
@@ -20,6 +27,8 @@ export interface StageBossDefinition {
   id: string;
   name: string;
   enemyKind: 'boss';
+  textureKey: string;
+  behavior: StageBossBehavior;
 }
 
 export interface StageMilestoneDefinition {
@@ -61,21 +70,25 @@ export interface StageDefinition {
   difficulty: StageDifficultyProfile;
   waves: StageWaveProfile;
   boss: StageBossDefinition;
+  signatureMechanic: StageSignatureMechanic;
   milestones: readonly StageMilestoneDefinition[];
 }
 
-const BLOODSTREAM: StageDefinition = {
+export const BLOODSTREAM_STAGE: StageDefinition = {
   id: 'bloodstream',
   order: 1,
   name: 'КРОВОТОК',
   durationMs: 5 * 60 * 1000,
-  // Stage 1 keeps its current direct boss spawn. PR 2 will turn on the warning ceremony.
-  bossWarningLeadMs: 0,
+  // Eight-second warning keeps the boss readable before combat locks into the boss phase.
+  bossWarningLeadMs: 8_000,
   theme: {
     backgroundColor: COLORS.bg,
     plasmaTexture: 'blood-plasma',
     accentColor: COLORS.magenta,
     dangerColor: COLORS.red,
+    particleTint: 0xffa2b6,
+    ambientProfile: 'bloodstream',
+    heartbeatMs: 0,
   },
   difficulty: {
     enemyHpPerMinute: 0.42,
@@ -108,7 +121,14 @@ const BLOODSTREAM: StageDefinition = {
       return random < 0.48 ? 'swarm' : random < 0.79 ? 'runner' : 'brute';
     },
   },
-  boss: { id: 'immune-prime', name: 'IMMUNE PRIME', enemyKind: 'boss' },
+  boss: {
+    id: 'immune-prime',
+    name: 'IMMUNE PRIME',
+    enemyKind: 'boss',
+    textureKey: 'immune-prime',
+    behavior: 'pressure-wave',
+  },
+  signatureMechanic: 'none',
   milestones: [
     {
       id: 'rna-detected',
@@ -155,7 +175,97 @@ const BLOODSTREAM: StageDefinition = {
   ],
 };
 
-export const STAGES: readonly StageDefinition[] = [BLOODSTREAM];
+/** Second live campaign stage, entered transactionally after Bloodstream boss defeat. */
+export const HEART_STAGE: StageDefinition = {
+  id: 'heart',
+  order: 2,
+  name: 'СЕРДЦЕ',
+  durationMs: 4 * 60 * 1000,
+  bossWarningLeadMs: 8_000,
+  theme: {
+    backgroundColor: 0x16060d,
+    plasmaTexture: 'heart-plasma',
+    structureTexture: 'cardiac-fiber',
+    accentColor: 0xff6b4a,
+    dangerColor: 0xff315e,
+    particleTint: 0xffb36b,
+    ambientProfile: 'heart',
+    heartbeatMs: 900,
+  },
+  difficulty: {
+    enemyHpPerMinute: 0.52,
+    enemyDamagePerMinute: 0.16,
+    bossHpScale: 1.35,
+    bossDamageScale: 1.2,
+  },
+  waves: {
+    spawnIntervalStartMs: 950,
+    spawnIntervalEndMs: 290,
+    batchEveryMs: 38_000,
+    maxBatchSize: 6,
+    eliteEveryMs: 90_000,
+    normalEnemyCap: 240,
+    bossPhaseSpawnMultiplier: 0.4,
+    bossMinionIntervalMs: 10_000,
+    bossMinionCount: 7,
+    bossMinionRadius: 145,
+    openingSpawns: [
+      { kind: 'runner', angle: 0.2, radius: 170 },
+      { kind: 'swarm', angle: 2.4, radius: 215 },
+      { kind: 'brute', angle: 4.3, radius: 255 },
+    ],
+    pickKind: (stageTimeMs, random) => {
+      if (stageTimeMs < 60_000) {
+        return random < 0.48 ? 'swarm' : random < 0.86 ? 'runner' : 'brute';
+      }
+      if (stageTimeMs < 150_000) {
+        return random < 0.36 ? 'swarm' : random < 0.78 ? 'runner' : 'brute';
+      }
+      return random < 0.28 ? 'swarm' : random < 0.68 ? 'runner' : 'brute';
+    },
+  },
+  boss: {
+    id: 'cardiac-titan',
+    name: 'CARDIAC TITAN',
+    enemyKind: 'boss',
+    textureKey: 'cardiac-titan',
+    behavior: 'heartbeat-pulse',
+  },
+  signatureMechanic: 'heartbeat-pulse',
+  milestones: [
+    {
+      id: 'myocardium-entered',
+      atMs: 20_000,
+      title: 'МИОКАРД ДОСТИГНУТ',
+      subtitle: 'СРЕДА СОКРАЩАЕТСЯ ВМЕСТЕ С РИТМОМ',
+      color: 0xff8a65,
+    },
+    {
+      id: 'rhythm-locked',
+      atMs: 75_000,
+      title: 'СЕРДЕЧНЫЙ РИТМ СИНХРОНИЗИРОВАН',
+      subtitle: 'ИММУННЫЕ КЛЕТКИ УСКОРЯЮТСЯ В ТАКТ',
+      color: 0xffb36b,
+    },
+    {
+      id: 'cardiac-pressure',
+      atMs: 150_000,
+      title: 'ДАВЛЕНИЕ РАСТЁТ',
+      subtitle: 'СОКРАЩЕНИЯ СТАНОВЯТСЯ ЧАЩЕ',
+      color: 0xff6b4a,
+    },
+    {
+      id: 'titan-approach',
+      atMs: 210_000,
+      title: 'КАРДИАЛЬНЫЙ СТРАЖ ПРОБУЖДАЕТСЯ',
+      subtitle: 'ДО CARDIAC TITAN — 00:30',
+      color: 0xff315e,
+    },
+  ],
+};
+
+// Live campaign order. StageDirector validates contiguous order and owns all transitions.
+export const STAGES: readonly StageDefinition[] = [BLOODSTREAM_STAGE, HEART_STAGE];
 
 export function getStageById(id: StageId): StageDefinition | undefined {
   return STAGES.find((stage) => stage.id === id);

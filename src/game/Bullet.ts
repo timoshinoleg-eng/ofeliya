@@ -35,6 +35,15 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     body.setVelocity(Math.cos(angle) * WEAPON.bulletSpeed, Math.sin(angle) * WEAPON.bulletSpeed);
   }
 
+  deactivateForStageReset(): void {
+    this.lastHit = null;
+    this.lastHitAt = 0;
+    this.prism = false;
+    this.dieAt = 0;
+    this.clearTint().setAlpha(1).setScale(1);
+    this.disableBody(true, true);
+  }
+
   preUpdate(time: number, delta: number): void {
     super.preUpdate(time, delta);
     if (!this.active) return;
