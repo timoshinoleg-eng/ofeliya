@@ -151,15 +151,22 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   }
   await page.locator('#game').screenshot({ path: path.join(captureDir, '04-cardiac-titan.png') });
 
-  const killDebug = await page.evaluate(() => {
+  await page.evaluate(() => {
+    const gs = window.__game.scene.getScene('Game');
+    gs.pendingChoices = [];
+    gs.awaitingChoice = true;
+  });
+  await page.waitForFunction(() => {
+    const gs = window.__game.scene.getScene('Game');
+    const ui = window.__game.scene.getScene('UI');
+    return gs.scene.isPaused() && ui.modalOpen === true;
+  });
+
+  await page.evaluate(() => {
     const gs = window.__game.scene.getScene('Game');
     const boss = gs.wave.boss;
     boss.takeDamage(Number.MAX_SAFE_INTEGER);
-    return { phase: gs.stageDirector.phase, waveBoss: Boolean(gs.wave.boss), bossActive: boss.active, result: window.__game.registry.get('runResult') };
   });
-  console.log('killDebug', JSON.stringify(killDebug));
-  await sleep(1200);
-  console.log('postKillDebug', JSON.stringify(await page.evaluate(() => { const gs = window.__game.scene.getScene('Game'); return { phase: gs.stageDirector.phase, waveBoss: Boolean(gs.wave.boss), result: window.__game.registry.get('runResult'), bosses: gs.runState.run.bossesDefeated }; })));
   await page.waitForFunction(() => {
     const result = window.__game.registry.get('runResult');
     return Boolean(result?.win && result?.reason === 'campaign-complete');
@@ -173,11 +180,13 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       phase: gs.stageDirector.phase,
       bossesDefeated: gs.runState.run.bossesDefeated,
       heartBossClear: gs.runState.run.bossClearTimesMs['cardiac-titan'],
+      awaitingChoice: gs.awaitingChoice,
+      modalOpen: window.__game.scene.getScene('UI').modalOpen,
     };
   });
   if (result.phase !== 'RUN_ENDED' || result.bossesDefeated !== 2 ||
       !Number.isFinite(result.heartBossClear) || result.result?.stageId !== 'heart' ||
-      result.result?.stageOrder !== 2) {
+      result.result?.stageOrder !== 2 || result.awaitingChoice || result.modalOpen) {
     throw new Error(`campaign completion contract failed: ${JSON.stringify(result)}`);
   }
   await page.locator('#game').screenshot({ path: path.join(captureDir, '05-heart-result.png') });

@@ -53,6 +53,7 @@ export class UIScene extends Phaser.Scene {
   private modal: Phaser.GameObjects.Container | null = null;
   private transitionOverlay: Phaser.GameObjects.Container | null = null;
   private modalOpen = false;
+  private modalGeneration = 0;
   private overShown = false;
   private uiBlocked = false;
 
@@ -63,6 +64,7 @@ export class UIScene extends Phaser.Scene {
   create(): void {
     this.gs = this.scene.get('Game') as GameScene;
     this.modalOpen = false;
+    this.modalGeneration = 0;
     this.overShown = false;
     this.uiBlocked = false;
     this.modal = null;
@@ -288,6 +290,17 @@ export class UIScene extends Phaser.Scene {
     this.transitionOverlay.destroy(true);
     this.transitionOverlay = null;
     this.uiBlocked = false;
+  }
+
+  dismissProgressionForStageBoundary(): void {
+    this.modalGeneration += 1;
+    const modal = this.modal;
+    if (modal) {
+      this.tweens.killTweensOf(modal);
+      for (const child of modal.list) this.tweens.killTweensOf(child);
+    }
+    this.hideModal();
+    if (this.scene.isPaused('Game')) this.scene.resume('Game');
   }
 
   private layout(): void {
@@ -538,6 +551,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   private showEvolutionCeremony(id: EvolutionId, moreChoices: boolean): void {
+    const ceremonyGeneration = ++this.modalGeneration;
     const W = this.scale.width;
     const H = this.scale.height;
     const def = getEvolutionDef(id);
@@ -627,6 +641,7 @@ export class UIScene extends Phaser.Scene {
     PlatformBridge.haptic('heavy');
 
     this.time.delayedCall(1050, () => {
+      if (this.modalGeneration !== ceremonyGeneration || this.modal !== c) return;
       this.tweens.add({
         targets: c,
         alpha: 0,

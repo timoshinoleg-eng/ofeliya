@@ -81,6 +81,11 @@ export class GameScene extends Phaser.Scene {
   private introHint: Phaser.GameObjects.Container | null = null;
   private transitionGeneration = 0;
   private heartbeatPulse = new HeartbeatPulseDirector();
+  private bossDefeatCeremony: {
+    token: number;
+    stageId: string;
+    completeAt: number;
+  } | null = null;
   private stageTransition: {
     token: number;
     from: StageDefinition;
@@ -116,6 +121,7 @@ export class GameScene extends Phaser.Scene {
     this.dmgCursor = 0;
     this.introHint = null;
     this.transitionGeneration = 0;
+    this.bossDefeatCeremony = null;
     this.stageTransition = null;
     this.heartbeatPulse.reset();
     this.physics.world.resume();
@@ -232,6 +238,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number): void {
+    this.maybeCompleteBossDefeatCeremony(time);
     if (this.stageDirector.phase === 'RUN_ENDED') return;
     // A stage transition is a frozen transaction: no movement, combat, wave spawns or stage clocks.
     // The UI scene stays live and either the guarded timer or tap commits exactly one reset.
@@ -379,14 +386,18 @@ export class GameScene extends Phaser.Scene {
       this.cameras.main.shake(400, 0.01);
       const defeatedStageId = this.stageDirector.currentStage.id;
       const ceremonyToken = ++this.transitionGeneration;
+      this.awaitingChoice = false;
+      this.pendingChoices = [];
+      this.queuedLevels = 0;
+      this.pendingEvolutionCeremony = null;
+      this.getUiScene()?.dismissProgressionForStageBoundary();
       this.runState.recordBossDefeated(this.stageDirector.currentStage.boss.id);
       this.handleStageEvents(this.stageDirector.bossDefeated());
-      this.time.delayedCall(550, () => {
-        if (this.transitionGeneration !== ceremonyToken) return;
-        if (this.stageDirector.phase !== 'BOSS_DEFEATED') return;
-        if (this.stageDirector.currentStage.id !== defeatedStageId) return;
-        this.handleStageEvents(this.stageDirector.completeBossDefeat());
-      });
+      this.bossDefeatCeremony = {
+        token: ceremonyToken,
+        stageId: defeatedStageId,
+        completeAt: this.time.now + 550,
+      };
     }
   }
 
@@ -587,6 +598,16 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  private maybeCompleteBossDefeatCeremony(now: number): void {
+    const ceremony = this.bossDefeatCeremony;
+    if (!ceremony || now < ceremony.completeAt) return;
+    this.bossDefeatCeremony = null;
+    if (this.transitionGeneration !== ceremony.token) return;
+    if (this.stageDirector.phase !== 'BOSS_DEFEATED') return;
+    if (this.stageDirector.currentStage.id !== ceremony.stageId) return;
+    this.handleStageEvents(this.stageDirector.completeBossDefeat());
+  }
+
   private beginStageTransition(from: StageDefinition, to: StageDefinition): void {
     if (this.stageDirector.phase !== 'STAGE_TRANSITION' || this.stageTransition) return;
 
@@ -726,6 +747,7 @@ export class GameScene extends Phaser.Scene {
       transaction.timer = null;
     }
     this.stageTransition = null;
+    this.bossDefeatCeremony = null;
     this.transitionGeneration += 1;
     this.getUiScene()?.hideStageTransition();
     this.physics.world.resume();
