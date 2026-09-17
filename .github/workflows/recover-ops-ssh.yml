@@ -18,25 +18,41 @@ jobs:
       - name: Validate existing SSH secrets
         shell: bash
         env:
-          HOST: ${{ secrets.CLOUDRU_DEPLOY_HOST }}
-          USER: ${{ secrets.CLOUDRU_DEPLOY_USER }}
-          KEY: ${{ secrets.CLOUDRU_DEPLOY_SSH_KEY }}
-          PORT: ${{ secrets.CLOUDRU_DEPLOY_PORT }}
+          HOST_NEW: ${{ secrets.SSH_HOST }}
+          USER_NEW: ${{ secrets.SSH_USER }}
+          KEY_NEW: ${{ secrets.SSH_PRIVATE_KEY }}
+          PORT_NEW: ${{ secrets.SSH_PORT }}
+          HOST_OLD: ${{ secrets.CLOUDRU_DEPLOY_HOST }}
+          USER_OLD: ${{ secrets.CLOUDRU_DEPLOY_USER }}
+          KEY_OLD: ${{ secrets.CLOUDRU_DEPLOY_SSH_KEY }}
+          PORT_OLD: ${{ secrets.CLOUDRU_DEPLOY_PORT }}
         run: |
           set -Eeuo pipefail
+          HOST="${HOST_NEW:-$HOST_OLD}"
+          USER="${USER_NEW:-$USER_OLD}"
+          KEY="${KEY_NEW:-$KEY_OLD}"
+          PORT="${PORT_NEW:-${PORT_OLD:-22}}"
           [[ -n "$HOST" && -n "$USER" && -n "$KEY" ]]
           [[ "$HOST" == "176.108.243.20" ]]
-          [[ "${PORT:-22}" == "22" ]]
+          [[ "$PORT" == "22" ]]
 
       - name: Install permanent ops public key
         shell: bash
         env:
-          HOST: ${{ secrets.CLOUDRU_DEPLOY_HOST }}
-          USER: ${{ secrets.CLOUDRU_DEPLOY_USER }}
-          KEY: ${{ secrets.CLOUDRU_DEPLOY_SSH_KEY }}
-          PORT: ${{ secrets.CLOUDRU_DEPLOY_PORT }}
+          HOST_NEW: ${{ secrets.SSH_HOST }}
+          USER_NEW: ${{ secrets.SSH_USER }}
+          KEY_NEW: ${{ secrets.SSH_PRIVATE_KEY }}
+          PORT_NEW: ${{ secrets.SSH_PORT }}
+          HOST_OLD: ${{ secrets.CLOUDRU_DEPLOY_HOST }}
+          USER_OLD: ${{ secrets.CLOUDRU_DEPLOY_USER }}
+          KEY_OLD: ${{ secrets.CLOUDRU_DEPLOY_SSH_KEY }}
+          PORT_OLD: ${{ secrets.CLOUDRU_DEPLOY_PORT }}
         run: |
           set -Eeuo pipefail
+          HOST="${HOST_NEW:-$HOST_OLD}"
+          USER="${USER_NEW:-$USER_OLD}"
+          KEY="${KEY_NEW:-$KEY_OLD}"
+          PORT="${PORT_NEW:-${PORT_OLD:-22}}"
           install -m 700 -d ~/.ssh
           printf '%s\n' "$KEY" > ~/.ssh/legacy_key
           chmod 600 ~/.ssh/legacy_key
@@ -45,5 +61,5 @@ jobs:
           KH
           chmod 600 ~/.ssh/known_hosts
           PUB='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICnEGzp4kAb7pA+njdQiQX+hZQ4BJOjSs5+hHCaJ+YzM chatgpt-ops-1-2026-09-17'
-          ssh -i ~/.ssh/legacy_key -p "${PORT:-22}" -o BatchMode=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes "$USER@$HOST" \
+          ssh -i ~/.ssh/legacy_key -p "$PORT" -o BatchMode=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes "$USER@$HOST" \
             "umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; chmod 700 ~/.ssh; chmod 600 ~/.ssh/authorized_keys; grep -qxF '$PUB' ~/.ssh/authorized_keys || printf '%s\\n' '$PUB' >> ~/.ssh/authorized_keys"
