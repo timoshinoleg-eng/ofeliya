@@ -1,0 +1,47 @@
+name: Probe legacy deploy SSH
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/probe-deploy-ssh.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    environment: cloudru-production
+    timeout-minutes: 5
+    steps:
+      - name: Prepare SSH without exposing key
+        shell: bash
+        env:
+          KEY_OLD: ${{ secrets.CLOUDRU_DEPLOY_SSH_KEY }}
+          KEY_NEW: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          install -m 700 -d ~/.ssh
+          cat > ~/.ssh/known_hosts <<'KH'
+          176.108.243.20 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHi65chFU1p4W9meuOul55zZ/vnEDLVP/hDttoUt+AWz
+          KH
+          chmod 600 ~/.ssh/known_hosts
+          KEY="${KEY_NEW:-$KEY_OLD}"
+          eval "$(ssh-agent -s)" >/dev/null
+          if [[ -n "$KEY" ]]; then
+            printf '%s\n' "$KEY" | ssh-add - >/dev/null
+            echo "DEPLOY_KEY_PRESENT=yes"
+          else
+            echo "DEPLOY_KEY_PRESENT=no"
+          fi
+
+      - name: Exact SSH whoami probe
+        shell: bash
+        run: |
+          set +e
+          out="$(ssh -o BatchMode=yes -T ubuntu@176.108.243.20 whoami 2>&1)"
+          rc=$?
+          printf '%s\n' "$out"
+          echo "SSH_RC=$rc"
+          exit 0
