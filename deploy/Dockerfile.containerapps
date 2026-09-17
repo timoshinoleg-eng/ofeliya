@@ -1,0 +1,21 @@
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . ./
+ARG VITE_MAX_BOT_NAME=""
+ARG VITE_DEVELOPER_BRAND="ChatBot24"
+ARG VITE_SUPPORT_EMAIL="info@chatbot24.su"
+ARG VITE_SUPPORT_PHONE=""
+ENV VITE_MAX_BOT_NAME=$VITE_MAX_BOT_NAME
+ENV VITE_DEVELOPER_BRAND=$VITE_DEVELOPER_BRAND
+ENV VITE_SUPPORT_EMAIL=$VITE_SUPPORT_EMAIL
+ENV VITE_SUPPORT_PHONE=$VITE_SUPPORT_PHONE
+RUN npm run build
+
+FROM nginx:alpine
+COPY deploy/nginx.containerapps.conf /etc/nginx/nginx.conf
+COPY --from=build /app/dist/ /usr/share/nginx/html/
+USER nginx
+EXPOSE 8080
+CMD ["nginx", "-c", "/etc/nginx/nginx.conf", "-g", "daemon off;"]
