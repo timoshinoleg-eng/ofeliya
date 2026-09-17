@@ -1,0 +1,49 @@
+name: Recover ops SSH key
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/recover-ops-ssh.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    environment: cloudru-production
+    timeout-minutes: 5
+    steps:
+      - name: Validate existing SSH secrets
+        shell: bash
+        env:
+          HOST: ${{ secrets.CLOUDRU_DEPLOY_HOST }}
+          USER: ${{ secrets.CLOUDRU_DEPLOY_USER }}
+          KEY: ${{ secrets.CLOUDRU_DEPLOY_SSH_KEY }}
+          PORT: ${{ secrets.CLOUDRU_DEPLOY_PORT }}
+        run: |
+          set -Eeuo pipefail
+          [[ -n "$HOST" && -n "$USER" && -n "$KEY" ]]
+          [[ "$HOST" == "176.108.243.20" ]]
+          [[ "${PORT:-22}" == "22" ]]
+
+      - name: Install permanent ops public key
+        shell: bash
+        env:
+          HOST: ${{ secrets.CLOUDRU_DEPLOY_HOST }}
+          USER: ${{ secrets.CLOUDRU_DEPLOY_USER }}
+          KEY: ${{ secrets.CLOUDRU_DEPLOY_SSH_KEY }}
+          PORT: ${{ secrets.CLOUDRU_DEPLOY_PORT }}
+        run: |
+          set -Eeuo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/legacy_key
+          chmod 600 ~/.ssh/legacy_key
+          cat > ~/.ssh/known_hosts <<'KH'
+          176.108.243.20 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHi65chFU1p4W9meuOul55zZ/vnEDLVP/hDttoUt+AWz
+          KH
+          chmod 600 ~/.ssh/known_hosts
+          PUB='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICnEGzp4kAb7pA+njdQiQX+hZQ4BJOjSs5+hHCaJ+YzM chatgpt-ops-1-2026-09-17'
+          ssh -i ~/.ssh/legacy_key -p "${PORT:-22}" -o BatchMode=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=yes "$USER@$HOST" \
+            "umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; chmod 700 ~/.ssh; chmod 600 ~/.ssh/authorized_keys; grep -qxF '$PUB' ~/.ssh/authorized_keys || printf '%s\\n' '$PUB' >> ~/.ssh/authorized_keys"
