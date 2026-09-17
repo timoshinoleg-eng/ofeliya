@@ -1,0 +1,36 @@
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . ./
+
+ARG VITE_MAX_BOT_NAME
+ARG VITE_MAX_BOT_USERNAME
+ARG VITE_TG_BOT_USERNAME=""
+ARG VITE_DEVELOPER_BRAND="ChatBot24"
+ARG VITE_DEVELOPER_LEGAL_NAME="ChatBot24"
+ARG VITE_DEVELOPER_REGISTRATION="ИП"
+ARG VITE_DEVELOPER_ADDRESS="г. Москва"
+ARG VITE_SUPPORT_EMAIL="info@chatbot24.su"
+ARG VITE_SUPPORT_PHONE="+7 (993) 336-61-02"
+
+ENV VITE_MAX_BOT_NAME=$VITE_MAX_BOT_NAME \
+    VITE_MAX_BOT_USERNAME=$VITE_MAX_BOT_USERNAME \
+    VITE_TG_BOT_USERNAME=$VITE_TG_BOT_USERNAME \
+    VITE_DEVELOPER_BRAND=$VITE_DEVELOPER_BRAND \
+    VITE_DEVELOPER_LEGAL_NAME=$VITE_DEVELOPER_LEGAL_NAME \
+    VITE_DEVELOPER_REGISTRATION=$VITE_DEVELOPER_REGISTRATION \
+    VITE_DEVELOPER_ADDRESS=$VITE_DEVELOPER_ADDRESS \
+    VITE_SUPPORT_EMAIL=$VITE_SUPPORT_EMAIL \
+    VITE_SUPPORT_PHONE=$VITE_SUPPORT_PHONE
+
+RUN npm run build:max
+
+FROM nginx:alpine
+LABEL org.opencontainers.image.source="https://github.com/timoshinoleg-eng/ofeliya"
+LABEL org.opencontainers.image.description="Ofeliya frontend for Cloud.ru Container Apps"
+COPY --from=build /app/dist/ /usr/share/nginx/html/
+COPY deploy/nginx.containerapps.conf /etc/nginx/nginx.conf
+USER nginx
+EXPOSE 8080
+CMD ["nginx","-c","/etc/nginx/nginx.conf","-g","daemon off;"]
