@@ -1128,6 +1128,9 @@ export class UIScene extends Phaser.Scene {
       orbit: 'СПУТНИКИ',
       nova: 'ЛИЗИС',
       regen: 'РЕКОМБ.',
+      infect: 'ЗАРАЖ.',
+      lysis: 'ЦИТОЛИЗ',
+      factory: 'ФАБРИКА',
     };
     return Object.entries(stacks)
       .filter(([id, n]) => n > 0 && UPGRADES.some((u) => u.id === id))
