@@ -218,7 +218,7 @@ export class RunState {
   }
 
   addLegendary(id: LegendaryId): boolean {
-    if (this.run.legendaryIds.has(id) || this.run.legendaryIds.size >= 3) return false;
+    if (this.run.legendaryIds.has(id) || this.run.legendaryIds.size >= 2) return false;
     this.run.legendaryIds.add(id);
     return true;
   }
