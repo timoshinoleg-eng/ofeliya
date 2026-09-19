@@ -202,6 +202,7 @@ Browser gate запускает system Chrome с MAX Android mock и прове�
 - сформированный `https://max.ru/<bot>?startapp=...` передаётся в MAX share adapter;
 - Legendary runtime;
 - STRAINED runtime;
+- one-hand compatibility + реальный two-touch twin-stick multitouch;
 - High-DPI WebGL и Canvas fallback;
 - Bloodstream -> Heart campaign transition;
 - dense readability captures при 100 / 150 / 200 active enemies;
