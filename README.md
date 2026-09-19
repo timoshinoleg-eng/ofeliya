@@ -1,11 +1,15 @@
 # OFELIYA: STRAIN ZERO
 
-Мобильный roguelite-survivor для **MAX Mini Apps**. Игрок управляет синтетическим вирусом
-`STRAIN-0` внутри живого организма: двигается одним пальцем, автоматически атакует иммунные
-клетки, собирает фрагменты РНК, заражает клетки хозяина и выбирает мутации. Кампания проходит
-через `КРОВОТОК` с `IMMUNE PRIME`, затем через `СЕРДЦЕ` с финальным `CARDIAC TITAN`.
+Мобильный portrait roguelite-survivor для **MAX Mini Apps**. Игрок управляет синтетическим вирусом
+`STRAIN-0` внутри живого организма, собирает RNA, мутирует, заражает host cells и проходит
+двухактную кампанию: `КРОВОТОК -> IMMUNE PRIME -> СЕРДЦЕ -> CARDIAC TITAN`.
+
+По умолчанию играется одной рукой через существующий floating joystick. Дополнительно доступен
+двухручный twin-stick профиль: слева движение, справа — направление приоритетной автоатаки.
+Стрельба в обоих режимах остаётся автоматической.
 
 Продуктовый контракт и визуальная терминология: [`STRAIN_ZERO_PRODUCT_BIBLE.md`](./STRAIN_ZERO_PRODUCT_BIBLE.md).
+Текущая архитектура: [`ARCHITECTURE_NOTES.md`](./ARCHITECTURE_NOTES.md).
 Release-gate evidence: [`RELEASE_VALIDATION.md`](./RELEASE_VALIDATION.md).
 Third-party provenance: [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md).
 
@@ -27,13 +31,22 @@ npm run dev
 npm run test:challenge
 npm run test:save
 npm run test:stages
+npm run test:legendary
+npm run test:difficulty
 npm run test:viewport
+npm run test:startup
 npm run build
 npm run preview
 ```
 
-Управление: tap/drag — floating one-thumb joystick; на desktop также работают WASD/стрелки.
-Атака автоматическая.
+Управление:
+- **ОДНА РУКА** — исходный floating joystick без изменения поведения;
+- **ДВЕ РУКИ · TWIN-STICK** — слева движение, справа broad aim-priority sector;
+- отпускание правого stick возвращает обычный auto-targeting;
+- в обоих профилях атака автоматическая;
+- на desktop также работают WASD/стрелки.
+
+Выбор control mode сохраняется отдельно и не влияет на progression save.
 
 ## MAX viewport и safe area
 
@@ -109,13 +122,21 @@ Challenge data — только **недоверенный социальный 
 
 ## Основной игровой цикл
 
-- первые секунды: ближайшие антитела, первая РНК и ранняя мутация;
-- далее подключаются T-клетки, макрофаги и NK response;
+- первые секунды: ближайшие антитела, первая RNA и ранняя mutation;
+- `АНТИТЕЛО` перехватывает траекторию, `T-КИЛЛЕР` телеграфирует рывок, `МАКРОФАГ` — тяжёлый burst;
 - host cells заражаются proximity-механикой;
-- полный infection вызывает **lysis**: разрыв мембраны, RNA release и radial damage;
-- доступны три critical mutations: `ГИПЕРШИП`, `СВЕРХКАПСИД`, `ЛИЗИС`;
-- на 5:00 появляется `IMMUNE PRIME`; после победы начинается стадия `СЕРДЦЕ`;
-- в финале Heart появляется `CARDIAC TITAN`; победа в кампании засчитывается после его уничтожения.
+- full infection вызывает **lysis**: RNA release + radial damage;
+- infection/lysis теперь входит в buildcraft через `РЕЦЕПТОРНЫЙ ЗАХВАТ`, `ЦИТОЛИЗ`, `ВИРУСНАЯ ФАБРИКА`;
+- доступны critical mutations: `ГИПЕРШИП`, `СВЕРХКАПСИД`, `ЛИЗИС`;
+- Legendary — максимум **2 за run**; второй слот защищён для гарантированной trophy после `IMMUNE PRIME`;
+- на 5:00 появляется `IMMUNE PRIME`: telegraphed pressure-wave, затем усиленная phase 2;
+- после победы начинается `СЕРДЦЕ`; heartbeat telegraph создаёт safe pocket для positional timing;
+- успешная Heart synchronization кратко снимает pressure и открывает projectile/lysis opportunity;
+- в финале появляется `CARDIAC TITAN`, который получает дополнительную vulnerability в synchronized window;
+- перед run выбирается `STANDARD` или `STRAINED`; STRAINED усиливает pressure, elites, bosses и spawn cadence.
+
+Cinematic presentation использует лёгкие runtime-generated key-art frames для перехода в Heart,
+обоих boss reveal и победы; video payload не добавляется.
 
 ## Локальное сохранение
 
@@ -134,11 +155,18 @@ Challenge data — только **недоверенный социальный 
 `bestBoss1ClearMs` и не считается результатом полной кампании. Полный clear хранится отдельно в
 `bestCampaignClearMs`.
 
+Difficulty и control mode используют отдельные storage keys, чтобы не ломать backward compatibility
+основного progression save.
+
 ## Performance и audio lifecycle
 
-Есть два presentation tier: `full` и `reduced`. `PerformanceProfile` — единый источник решения о
-postFX/декоративной плотности. Reduced tier уменьшает только presentation cost и не меняет enemy
-density или gameplay.
+Есть два presentation tier: `full` и `reduced`. Reduced tier уменьшает только presentation cost и
+не меняет enemy density или gameplay. Visual clarity pass ослабляет чрезмерный Bloom/baked glow,
+но сохраняет antialiasing биологических силуэтов.
+
+Dense visual acceptance теперь отдельно снимает **100 / 150 / 200 active enemies** и одновременно
+проверяет player anchor, elite marker/corona, RNA, projectile, healthy host cell и partially infected
+host cell.
 
 SFX/music грузятся лениво. Асинхронная загрузка music защищена AbortController/generation guard,
 а transient WebAudio source/gain/oscillator nodes disconnect после `ended`, чтобы длинные циклы и
@@ -155,7 +183,10 @@ npm ci
 npm run test:challenge
 npm run test:save
 npm run test:stages
+npm run test:legendary
+npm run test:difficulty
 npm run test:viewport
+npm run test:startup
 npm run release:check   # CI fixture с непустыми non-placeholder release values
 npm run build
 ```
@@ -185,6 +216,9 @@ Android/iOS RC с реальными deployment values:
 - audio unlock;
 - 10 restart/menu cycles;
 - cold-start до playable;
-- dense late-run combat/FPS и финальная фаза `IMMUNE PRIME`.
+- one-hand и twin-stick ergonomics;
+- Heart safe-pocket timing;
+- обе boss phase fights;
+- dense late-run combat/FPS/thermal behavior.
 
-До закрытия `VIR-16` PR #16 остаётся draft.
+Зелёный CI не заменяет real-device acceptance в настоящем MAX client.
