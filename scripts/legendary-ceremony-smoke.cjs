@@ -162,18 +162,13 @@ function browserDriver() {
 
   await page.waitForFunction(
     () => {
-      const game = window.__game;
-      const ui = game.scene.getScene('UI');
-      return (
-        !ui.modalOpen &&
-        !ui.uiBlocked &&
-        game.scene.isActive('Game') &&
-        !game.scene.isPaused('Game')
-      );
+      const ui = window.__game.scene.getScene('UI');
+      return !ui.modalOpen && !ui.uiBlocked;
     },
     null,
     { timeout: 4_000 }
   );
+  await page.waitForTimeout(100);
 
   const resumed = await page.evaluate(() => {
     const game = window.__game;
