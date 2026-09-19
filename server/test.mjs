@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Тесты score-сервера (V3). Запуск: node server/test.mjs
+ * Тесты score-сервера (V4 / Ruleset V2). Запуск: node server/test.mjs
  *
  * Проверяют: HMAC-валидация initData TG/MAX, production BOT_TOKEN fallback,
  * дубликаты параметров, анти-чит, дедупликация/порядок топов, daily/season,
@@ -84,6 +84,18 @@ console.log('ofeliya-server tests');
 await ok('GET /health', async () => {
   const r = await j(await fetch(`${BASE}/health`));
   assert.equal(r.ok, true);
+  assert.equal(r.rulesetVersion, 2);
+  assert.equal(r.campaignVersion, 2);
+});
+
+await ok('GET /api/ruleset публикует текущий двухактный контракт', async () => {
+  const r = await j(await fetch(`${BASE}/api/ruleset`));
+  assert.equal(r.ok, true);
+  assert.equal(r.rulesetVersion, 2);
+  assert.equal(r.campaignVersion, 2);
+  assert.equal(r.rankedDifficultyId, 'standard');
+  assert.equal(r.minCampaignWinTimeMs, 540_000);
+  assert.deepEqual(r.supportedRulesets, [1, 2]);
 });
 
 await ok('TG: валидный initData принимается', async () => {
@@ -154,6 +166,168 @@ await ok('анти-чит: победа до появления босса не�
   assert.match((await j(res)).error, /win-time/);
 });
 
+await ok('ruleset v2: Standard campaign win принимается и ранжируется отдельно', async () => {
+  const dora = { id: 444, first_name: 'Dora', username: 'dora' };
+  const r = await j(await fetch(`${BASE}/api/score`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform: 'max',
+      initData: signInitData(dora, MAX_TOKEN),
+      payload: {
+        rulesetVersion: 2,
+        campaignVersion: 2,
+        difficultyId: 'standard',
+        completionStage: 'heart',
+        runSeed: 'qa-v2-standard',
+        controlMode: 'two-hand',
+        bossesDefeated: 2,
+        boss1ClearMs: 312_000,
+        hostCellsInfected: 9,
+        win: true,
+        timeMs: 560_000,
+        kills: 420,
+        level: 17,
+        daily: false,
+      },
+    }),
+  }));
+  assert.equal(r.ok, true);
+  assert.equal(r.ranked, true);
+  assert.equal(r.rank, 1);
+  assert.equal(r.rulesetVersion, 2);
+  const top = await j(await fetch(`${BASE}/api/top?period=all`));
+  assert.equal(top.rulesetVersion, 2);
+  assert.equal(top.top.length, 1);
+  assert.equal(top.top[0].difficultyId, 'standard');
+  assert.equal(top.top[0].completionStage, 'heart');
+  assert.equal(top.top[0].rulesetVersion, 2);
+});
+
+await ok('ruleset v2: победа раньше 9:00 невозможна (422)', async () => {
+  const res = await fetch(`${BASE}/api/score`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform: 'telegram',
+      initData: signInitData(ALICE, TG_TOKEN),
+      payload: {
+        rulesetVersion: 2,
+        campaignVersion: 2,
+        difficultyId: 'standard',
+        completionStage: 'heart',
+        runSeed: 'qa-v2-too-fast',
+        controlMode: 'one-hand',
+        bossesDefeated: 2,
+        boss1ClearMs: 305_000,
+        hostCellsInfected: 4,
+        win: true,
+        timeMs: 539_999,
+        kills: 250,
+        level: 15,
+      },
+    }),
+  });
+  assert.equal(res.status, 422);
+  assert.match((await j(res)).error, /win-time/);
+});
+
+await ok('ruleset v2: win обязан завершаться в Heart после двух боссов', async () => {
+  const badStage = await fetch(`${BASE}/api/score`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform: 'telegram',
+      initData: signInitData(ALICE, TG_TOKEN),
+      payload: {
+        rulesetVersion: 2,
+        campaignVersion: 2,
+        difficultyId: 'standard',
+        completionStage: 'bloodstream',
+        runSeed: 'qa-v2-bad-stage',
+        controlMode: 'one-hand',
+        bossesDefeated: 2,
+        boss1ClearMs: 305_000,
+        hostCellsInfected: 4,
+        win: true,
+        timeMs: 560_000,
+        kills: 250,
+        level: 15,
+      },
+    }),
+  });
+  assert.equal(badStage.status, 422);
+  assert.match((await j(badStage)).error, /win-stage/);
+
+  const badBosses = await fetch(`${BASE}/api/score`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform: 'telegram',
+      initData: signInitData(ALICE, TG_TOKEN),
+      payload: {
+        rulesetVersion: 2,
+        campaignVersion: 2,
+        difficultyId: 'standard',
+        completionStage: 'heart',
+        runSeed: 'qa-v2-bad-bosses',
+        controlMode: 'one-hand',
+        bossesDefeated: 1,
+        boss1ClearMs: 305_000,
+        hostCellsInfected: 4,
+        win: true,
+        timeMs: 560_000,
+        kills: 250,
+        level: 15,
+      },
+    }),
+  });
+  assert.equal(badBosses.status, 422);
+  assert.match((await j(badBosses)).error, /win-bosses/);
+});
+
+await ok('ruleset v2: Strained сохраняется, но сервер не даёт рейтинг', async () => {
+  const strained = { id: 555, first_name: 'Strain', username: 'strain' };
+  const r = await j(await fetch(`${BASE}/api/score`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform: 'max',
+      initData: signInitData(strained, MAX_TOKEN),
+      payload: {
+        rulesetVersion: 2,
+        campaignVersion: 2,
+        difficultyId: 'strained',
+        completionStage: 'heart',
+        runSeed: 'qa-v2-strained',
+        controlMode: 'two-hand',
+        bossesDefeated: 2,
+        boss1ClearMs: 320_000,
+        hostCellsInfected: 12,
+        win: true,
+        timeMs: 575_000,
+        kills: 500,
+        level: 18,
+      },
+    }),
+  }));
+  assert.equal(r.ok, true);
+  assert.equal(r.ranked, false);
+  assert.equal(r.rank, null);
+  const ranked = await j(await fetch(`${BASE}/api/top?period=all`));
+  assert.ok(!ranked.top.some((row) => row.difficultyId === 'strained'));
+  const shadow = await j(await fetch(`${BASE}/api/top?period=all&includeUnverified=1`));
+  assert.ok(shadow.top.some((row) => row.difficultyId === 'strained'));
+});
+
+await ok('ruleset filters: current, legacy и all не смешиваются молча', async () => {
+  const current = await j(await fetch(`${BASE}/api/top?period=all`));
+  const legacy = await j(await fetch(`${BASE}/api/top?period=all&ruleset=legacy`));
+  const all = await j(await fetch(`${BASE}/api/top?period=all&ruleset=all`));
+  assert.equal(current.rulesetVersion, 2);
+  assert.equal(legacy.rulesetVersion, 1);
+  assert.equal(all.rulesetVersion, null);
+  assert.ok(current.top.every((row) => row.rulesetVersion === 2));
+  assert.ok(legacy.top.every((row) => row.rulesetVersion === 1));
+  assert.ok(all.top.some((row) => row.rulesetVersion === 1));
+  assert.ok(all.top.some((row) => row.rulesetVersion === 2));
+});
+
 await ok('анти-чит: слишком много kills (422)', async () => {
   const res = await fetch(`${BASE}/api/score`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -193,7 +367,7 @@ await ok('топ: лучший результат на юзера + более �
       payload: { win: true, timeMs: 320_000, kills: 150, level: 8 },
     }),
   }));
-  const top = await j(await fetch(`${BASE}/api/top?period=all`));
+  const top = await j(await fetch(`${BASE}/api/top?period=all&ruleset=legacy`));
   assert.equal(top.top.length, 2);
   assert.equal(top.top[0].timeMs, 320_000);
   assert.equal(top.top[0].platform, 'telegram');
@@ -210,7 +384,7 @@ await ok('top daily: только daily-результаты сегодня', as
       payload: { win: false, timeMs: 120_000, kills: 60, level: 4, daily: true },
     }),
   }));
-  const daily = await j(await fetch(`${BASE}/api/top?period=daily`));
+  const daily = await j(await fetch(`${BASE}/api/top?period=daily&ruleset=legacy`));
   assert.equal(daily.top.length, 1);
   assert.equal(daily.top[0].timeMs, 120_000);
   assert.equal(daily.top[0].daily, true);
@@ -218,7 +392,7 @@ await ok('top daily: только daily-результаты сегодня', as
 });
 
 await ok('top weekly: результаты за 7 дней', async () => {
-  const weekly = await j(await fetch(`${BASE}/api/top?period=weekly`));
+  const weekly = await j(await fetch(`${BASE}/api/top?period=weekly&ruleset=legacy`));
   assert.ok(weekly.top.length >= 1);
 });
 
@@ -253,9 +427,9 @@ await ok('browser: anonId принимается, но не попадает в 
     }),
   }));
   assert.equal(r.ok, true);
-  const top = await j(await fetch(`${BASE}/api/top?period=all`));
+  const top = await j(await fetch(`${BASE}/api/top?period=all&ruleset=legacy`));
   assert.ok(!top.top.some((t) => t.platform === 'browser'));
-  const shadow = await j(await fetch(`${BASE}/api/top?period=all&includeUnverified=1`));
+  const shadow = await j(await fetch(`${BASE}/api/top?period=all&ruleset=legacy&includeUnverified=1`));
   assert.ok(shadow.top.some((t) => t.platform === 'browser'));
   assert.ok(shadow.top.every((row) => !Object.hasOwn(row, 'uid')));
 });
@@ -274,12 +448,12 @@ await ok('daily: быстрее победа получает лучший rank'
   for (const body of entries) {
     await j(await fetch(`${BASE}/api/score`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }));
   }
-  const d = await j(await fetch(`${BASE}/api/daily?user=anon-11111111&platform=browser`));
+  const d = await j(await fetch(`${BASE}/api/daily?user=anon-11111111&platform=browser&ruleset=legacy`));
   assert.equal(d.ok, true);
   assert.ok(d.total >= 3);
   assert.equal(d.rank, 1);
   assert.equal(d.dateKey, dk());
-  const none = await j(await fetch(`${BASE}/api/daily?user=anon-99999999&platform=browser`));
+  const none = await j(await fetch(`${BASE}/api/daily?user=anon-99999999&platform=browser&ruleset=legacy`));
   assert.equal(none.rank, null);
   assert.equal(none.total, 0);
 });
@@ -291,7 +465,7 @@ await ok('season: текущий сезон + сезонный топ (C5)', asy
   assert.ok(index >= 0);
   assert.equal(end - start, 14 * 86_400_000);
   assert.ok(daysLeft >= 0 && daysLeft <= 14);
-  const seasonTop = await j(await fetch(`${BASE}/api/top?period=season`));
+  const seasonTop = await j(await fetch(`${BASE}/api/top?period=season&ruleset=legacy`));
   assert.equal(seasonTop.ok, true);
   assert.ok(Array.isArray(seasonTop.top));
   assert.equal(seasonTop.season.index, index);
@@ -319,9 +493,9 @@ await ok('vk: числовой VK user id принимается (unverified)', 
     }),
   }));
   assert.equal(r.ok, true);
-  const top = await j(await fetch(`${BASE}/api/top?period=all`));
+  const top = await j(await fetch(`${BASE}/api/top?period=all&ruleset=legacy`));
   assert.ok(!top.top.some((t) => t.platform === 'vk'));
-  const shadow = await j(await fetch(`${BASE}/api/top?period=all&includeUnverified=1`));
+  const shadow = await j(await fetch(`${BASE}/api/top?period=all&ruleset=legacy&includeUnverified=1`));
   assert.ok(shadow.top.some((t) => t.platform === 'vk'));
   assert.ok(shadow.top.every((row) => !Object.hasOwn(row, 'uid')));
 });
@@ -338,7 +512,7 @@ await ok('vk: валидный web_app_t → verified (общий топ)', asyn
   }));
   assert.equal(r.ok, true);
   assert.ok(r.rank !== null);
-  const top = await j(await fetch(`${BASE}/api/top?period=all`));
+  const top = await j(await fetch(`${BASE}/api/top?period=all&ruleset=legacy`));
   assert.ok(top.top.some((t) => t.platform === 'vk'));
   assert.ok(top.top.every((row) => !Object.hasOwn(row, 'uid')));
 });
@@ -355,9 +529,9 @@ await ok('vk: подделанный web_app_t → unverified (фолбэк на
     }),
   }));
   assert.equal(r.ok, true);
-  const top = await j(await fetch(`${BASE}/api/top?period=all`));
+  const top = await j(await fetch(`${BASE}/api/top?period=all&ruleset=legacy`));
   const verifiedVk = top.top.filter((t) => t.platform === 'vk');
-  const shadow = await j(await fetch(`${BASE}/api/top?period=all&includeUnverified=1`));
+  const shadow = await j(await fetch(`${BASE}/api/top?period=all&ruleset=legacy&includeUnverified=1`));
   assert.ok(shadow.top.filter((t) => t.platform === 'vk').length > verifiedVk.length);
   assert.ok(shadow.top.every((row) => !Object.hasOwn(row, 'uid')));
 });
