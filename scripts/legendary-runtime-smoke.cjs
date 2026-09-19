@@ -57,6 +57,12 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     };
 
     setLegendary('split-geometry');
+    // The live scene may have already auto-fired during boot. Isolate this mechanic from those
+    // legitimate pooled projectiles before asserting the +2 split children.
+    gs.nextFireAt = Number.MAX_SAFE_INTEGER;
+    for (const bullet of gs.bullets.getChildren()) {
+      if (bullet.active) bullet.deactivateForStageReset();
+    }
     const source = gs.bullets.get(gs.player.x, gs.player.y);
     source.fire(gs.time.now, 0, 10, 0, true, 0);
     gs.trySplitProjectile(source, { x: 480, y: 0 });
