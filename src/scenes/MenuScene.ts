@@ -100,8 +100,7 @@ export class MenuScene extends Phaser.Scene {
     const virus = this.add
       .image(W / 2, H * 0.28, 'virus-player')
       .setScale(H < 650 ? 1.8 : 2.15)
-      .setDepth(2)
-      .setBlendMode(Phaser.BlendModes.ADD);
+      .setDepth(2);
     this.tweens.add({
       targets: virus,
       rotation: Math.PI * 2,
@@ -129,7 +128,7 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setResolution(2)
       .setDepth(5);
-    title.setShadow(0, 0, 'rgba(255,79,181,0.75)', 18, true, true);
+    title.setShadow(0, 0, 'rgba(255,79,181,0.48)', 7, true, true);
 
     this.add
       .text(W / 2, titleY + (H < 650 ? 38 : 46), 'STRAIN ZERO', {
@@ -160,8 +159,8 @@ export class MenuScene extends Phaser.Scene {
     this.add
       .text(W / 2, hookY + 46, 'Мутируй быстрее, чем иммунитет адаптируется.', {
         fontFamily: FONT,
-        fontSize: H < 650 ? '10px' : '11px',
-        color: '#d9a5b8',
+        fontSize: H < 650 ? '11px' : '12px',
+        color: '#e7c5d2',
         align: 'center',
       })
       .setOrigin(0.5)
@@ -274,8 +273,8 @@ export class MenuScene extends Phaser.Scene {
     const difficultyDesc = this.add
       .text(W / 2, difficultyY + 9, '', {
         fontFamily: FONT,
-        fontSize: '9px',
-        color: '#9fb5c4',
+        fontSize: H < 650 ? '9px' : '10px',
+        color: '#b9cbd6',
       })
       .setOrigin(0.5)
       .setResolution(2)
@@ -330,8 +329,8 @@ export class MenuScene extends Phaser.Scene {
     const controlDesc = this.add
       .text(W / 2, controlY + 8, '', {
         fontFamily: FONT,
-        fontSize: H < 650 ? '8px' : '9px',
-        color: '#9fb5c4',
+        fontSize: H < 650 ? '9px' : '10px',
+        color: '#b9cbd6',
         align: 'center',
       })
       .setOrigin(0.5)
@@ -383,8 +382,8 @@ export class MenuScene extends Phaser.Scene {
     startHint = this.add
       .text(W / 2, btnY + 18, '', {
         fontFamily: FONT,
-        fontSize: H < 650 ? '8px' : '9px',
-        color: '#ffc0dd',
+        fontSize: H < 650 ? '9px' : '10px',
+        color: '#ffd4e8',
         align: 'center',
       })
       .setOrigin(0.5)
