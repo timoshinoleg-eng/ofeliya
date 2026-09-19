@@ -9,6 +9,8 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
   lastHit: Enemy | null = null;
   lastHitAt = 0;
   prism = false;
+  generation = 0;
+  splitUsed = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'viral-particle');
@@ -17,11 +19,13 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     this.setDepth(14);
   }
 
-  fire(now: number, angle: number, damage: number, pierce: number, prism = false): void {
+  fire(now: number, angle: number, damage: number, pierce: number, prism = false, generation = 0): void {
     this.enableBody(true, this.x, this.y, true, true);
     this.damage = damage;
     this.pierceLeft = pierce;
     this.prism = prism;
+    this.generation = generation;
+    this.splitUsed = false;
     this.dieAt = now + WEAPON.bulletLifetimeMs;
     this.lastHit = null;
     this.lastHitAt = 0;
@@ -39,6 +43,8 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     this.lastHit = null;
     this.lastHitAt = 0;
     this.prism = false;
+    this.generation = 0;
+    this.splitUsed = false;
     this.dieAt = 0;
     this.clearTint().setAlpha(1).setScale(1);
     this.disableBody(true, true);
