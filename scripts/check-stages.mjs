@@ -19,6 +19,7 @@ try {
       'src/game/StageDefinitions.ts',
       'src/game/StageDirector.ts',
       'src/game/RunState.ts',
+      'src/game/HeartbeatPulseDirector.ts',
       '--target',
       'ES2020',
       '--module',
@@ -38,16 +39,24 @@ try {
   );
 
   const { RunState } = require(join(temp, 'game/RunState.js'));
+  const { HeartbeatPulseDirector } = require(join(temp, 'game/HeartbeatPulseDirector.js'));
   const { StageDirector } = require(join(temp, 'game/StageDirector.js'));
-  const { STAGES, difficultyForStage, getStageById, getStageByOrder, nextStage } = require(
-    join(temp, 'game/StageDefinitions.js')
-  );
+  const {
+    BLOODSTREAM_STAGE,
+    HEART_STAGE,
+    STAGES,
+    difficultyForStage,
+    getStageById,
+    getStageByOrder,
+    nextStage,
+  } = require(join(temp, 'game/StageDefinitions.js'));
 
-  assert(STAGES.length === 1, 'PR 1 catalog must expose only the current Bloodstream stage');
+  assert(STAGES.length === 2, 'live catalog must expose Bloodstream and Heart');
   const bloodstream = STAGES[0];
+  assert(bloodstream === BLOODSTREAM_STAGE, 'live Bloodstream export mismatch');
   assert(bloodstream.id === 'bloodstream' && bloodstream.order === 1, 'Bloodstream identity changed');
   assert(bloodstream.durationMs === 300_000, 'Bloodstream boss timing changed');
-  assert(bloodstream.bossWarningLeadMs === 0, 'PR 1 must not add a boss warning ceremony');
+  assert(bloodstream.bossWarningLeadMs === 8_000, 'Bloodstream boss warning mismatch');
   assert(bloodstream.waves.spawnIntervalStartMs === 1150, 'opening spawn interval changed');
   assert(bloodstream.waves.spawnIntervalEndMs === 330, 'late spawn interval changed');
   assert(bloodstream.waves.eliteEveryMs === 120_000, 'elite cadence changed');
@@ -56,7 +65,20 @@ try {
   assert(bloodstream.milestones.length === 6, 'Bloodstream story milestones changed');
   assert(getStageById('bloodstream') === bloodstream, 'stage lookup by id failed');
   assert(getStageByOrder(1) === bloodstream, 'stage lookup by order failed');
-  assert(nextStage(bloodstream) === undefined, 'PR 1 must keep Boss 1 as the terminal encounter');
+  assert(nextStage(bloodstream) === HEART_STAGE, 'Bloodstream must transition to Heart');
+
+  assert(HEART_STAGE.id === 'heart' && HEART_STAGE.order === 2, 'Heart identity mismatch');
+  assert(HEART_STAGE.durationMs === 240_000, 'Heart target duration mismatch');
+  assert(HEART_STAGE.bossWarningLeadMs === 8_000, 'Heart boss warning mismatch');
+  assert(HEART_STAGE.theme.ambientProfile === 'heart', 'Heart ambient profile missing');
+  assert(HEART_STAGE.theme.heartbeatMs === 900, 'Heart beat cadence mismatch');
+  assert(HEART_STAGE.signatureMechanic === 'heartbeat-pulse', 'Heart signature mechanic missing');
+  assert(HEART_STAGE.boss.id === 'cardiac-titan', 'Heart boss identity mismatch');
+  assert(HEART_STAGE.boss.behavior === 'heartbeat-pulse', 'Heart boss behavior mismatch');
+  assert(HEART_STAGE.waves.pickKind(0, 0.99) === 'brute', 'Heart opening mix lacks brute pressure');
+  // The dormant profile itself must already satisfy the same catalog invariants as a live stage.
+  new StageDirector([BLOODSTREAM_STAGE, HEART_STAGE]);
+
   let invalidCatalogRejected = false;
   try {
     new StageDirector([{ ...bloodstream, order: 2 }]);
@@ -72,7 +94,7 @@ try {
   assert(bloodstream.waves.pickKind(90_000, 0.8) === 'runner', 'T-cell boundary changed');
   assert(bloodstream.waves.pickKind(120_000, 0.95) === 'brute', 'macrophage boundary changed');
 
-  const single = new StageDirector(STAGES);
+  const single = new StageDirector([bloodstream]);
   assert(single.startRun()[0]?.type === 'stage-started', 'run did not start');
   assert(single.startRun().length === 0, 'run started twice');
   const terminalEvents = single.update(bloodstream.durationMs);
@@ -89,7 +111,7 @@ try {
   assert(defeated[0]?.type === 'boss-defeated', 'boss defeat event missing');
   assert(single.phase === 'BOSS_DEFEATED', 'boss death ceremony phase was skipped');
   const ending = single.completeBossDefeat();
-  assert(ending[0]?.type === 'run-ended', 'terminal boss did not end the campaign');
+  assert(ending[0]?.type === 'run-ended', 'terminal boss did not end the single-stage campaign');
   assert(single.phase === 'RUN_ENDED', 'terminal phase mismatch');
   assert(single.bossDefeated().length === 0, 'boss defeat handled more than once');
 
@@ -100,14 +122,12 @@ try {
     milestones: [{ id: 'test-beat', atMs: 400, title: 'TEST', subtitle: 'TEST', color: 0xffffff }],
   };
   const second = {
-    ...bloodstream,
+    ...HEART_STAGE,
     id: 'heart-test',
-    order: 2,
-    name: 'HEART TEST',
     durationMs: 2_000,
     bossWarningLeadMs: 0,
     milestones: [],
-    boss: { ...bloodstream.boss, id: 'heart-boss-test', name: 'HEART BOSS TEST' },
+    boss: { ...HEART_STAGE.boss, id: 'heart-boss-test', name: 'HEART BOSS TEST' },
   };
   const multi = new StageDirector([second, first]);
   multi.startRun();
@@ -147,6 +167,23 @@ try {
   assert(state.stage.id === second.id && state.stage.timeMs === 0, 'stage timer did not reset');
   assert(state.stage.level === 1 && state.stage.damageMul === 1, 'combat progression did not reset');
   assert(state.stage.kills === 0 && state.stage.evolutions.size === 0, 'stage counters did not reset');
+
+  const heartbeat = new HeartbeatPulseDirector();
+  assert(heartbeat.update(11_299, false).length === 0, 'heartbeat telegraphed too early');
+  const telegraph = heartbeat.update(11_300, false);
+  assert(telegraph[0]?.type === 'heartbeat-telegraph', 'heartbeat telegraph missing');
+  assert(heartbeat.pressureMultiplier === 1, 'telegraph must not apply pressure');
+  const impact = heartbeat.update(12_000, false);
+  assert(impact[0]?.type === 'heartbeat-impact', 'heartbeat impact missing');
+  assert(Math.abs(heartbeat.pressureMultiplier - 1.18) < 1e-9, 'Heart pressure multiplier mismatch');
+  heartbeat.update(13_050, false);
+  assert(heartbeat.pressureMultiplier === 1, 'Heart pressure did not end');
+
+  heartbeat.reset();
+  heartbeat.update(2_000, true);
+  assert(heartbeat.update(4_500, true)[0]?.type === 'heartbeat-telegraph', 'boss heartbeat telegraph missing');
+  assert(heartbeat.update(5_200, true)[0]?.type === 'heartbeat-impact', 'boss heartbeat impact missing');
+  assert(Math.abs(heartbeat.pressureMultiplier - 1.34) < 1e-9, 'boss pressure multiplier mismatch');
 
   console.log('stage runtime contract smoke: ok');
 } finally {

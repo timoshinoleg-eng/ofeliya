@@ -291,6 +291,11 @@ async function notifyReferrer(ref) {
   }
 }
 
+function localDateKey(ts = Date.now()) {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 // ---------- топы ----------
 /**
  * Единый порядок результатов:
@@ -339,11 +344,7 @@ function publicTop(list) {
 
 function getTop({ period = 'all', platform, includeUnverified = false } = {}) {
   const now = Date.now();
-  const dayKey = (ts) => {
-    const d = new Date(ts);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  };
-  const today = dayKey(now);
+  const today = localDateKey(now);
   const weekAgo = now - 7 * 86_400_000;
 
   let list = store.scores.filter((s) => (includeUnverified || s.verified));
@@ -469,7 +470,7 @@ const server = createServer(async (req, res) => {
       const dateKey =
         typeof payload.dateKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(payload.dateKey)
           ? payload.dateKey
-          : new Date().toISOString().slice(0, 10);
+          : localDateKey();
       const record = {
         platform,
         uid,

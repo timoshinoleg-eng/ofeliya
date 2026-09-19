@@ -552,6 +552,52 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
   });
 
   // ---------------------------------------------------------------------------
+  // HEART — denser muscle tissue and a dedicated boss silhouette.
+  // ---------------------------------------------------------------------------
+  make('cardiac-titan', 108, 108, (ctx) => {
+    const c = 54;
+    ctx.strokeStyle = '#ff6b4a';
+    ctx.lineWidth = 9;
+    ctx.beginPath(); ctx.moveTo(42, 25); ctx.bezierCurveTo(38, 16, 34, 10, 30, 3); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(65, 24); ctx.bezierCurveTo(68, 15, 74, 10, 78, 3); ctx.stroke();
+    ctx.strokeStyle = '#ffd3a8'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(42, 24); ctx.lineTo(34, 7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(65, 23); ctx.lineTo(75, 7); ctx.stroke();
+    ctx.fillStyle = radial(ctx, c, c, 49, '#ffd9ae', '#e34f3f', '#430719');
+    ctx.beginPath();
+    for (let i = 0; i <= 28; i++) {
+      const a = (i / 28) * Math.PI * 2;
+      const r = 42 + Math.sin(a * 4) * 5 + Math.sin(a * 9) * 2;
+      const x = c + Math.cos(a) * r;
+      const y = c + Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#ff9a61'; ctx.lineWidth = 5; ctx.stroke();
+    ctx.fillStyle = '#65102b';
+    ctx.beginPath(); ctx.ellipse(43, 48, 16, 23, -0.48, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(67, 51, 17, 24, 0.48, 0, Math.PI * 2); ctx.fill();
+
+    ctx.fillStyle = '#ff315e';
+    ctx.beginPath();
+    ctx.moveTo(54, 78);
+    ctx.bezierCurveTo(48, 70, 34, 61, 36, 49);
+    ctx.bezierCurveTo(38, 38, 50, 38, 54, 47);
+    ctx.bezierCurveTo(59, 38, 71, 39, 73, 50);
+    ctx.bezierCurveTo(75, 61, 62, 71, 54, 78);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#fff1c7'; ctx.lineWidth = 2.8; ctx.stroke();
+    ctx.fillStyle = '#fff6de'; ctx.beginPath(); ctx.arc(51, 53, 3.4, 0, Math.PI * 2); ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255,240,212,0.85)'; ctx.lineWidth = 2.5;
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2; ctx.beginPath();
+      ctx.moveTo(c + Math.cos(a) * 33, c + Math.sin(a) * 33);
+      ctx.lineTo(c + Math.cos(a) * 48, c + Math.sin(a) * 48); ctx.stroke();
+    }
+  });
+
+  // ---------------------------------------------------------------------------
   // PLASMA BACKDROP — baked capillary flow, no shader required.
   // ---------------------------------------------------------------------------
   const plasma = scene.textures.createCanvas('blood-plasma', 256, 256);
@@ -609,6 +655,31 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
     ctx.fillStyle = sheen;
     ctx.fillRect(0, 0, 256, 256);
     plasma.refresh();
+  }
+
+  const heartPlasma = scene.textures.createCanvas('heart-plasma', 256, 256);
+  if (heartPlasma) {
+    const ctx = heartPlasma.getContext();
+    const bg = ctx.createLinearGradient(0, 0, 256, 256);
+    bg.addColorStop(0, '#19060d'); bg.addColorStop(0.55, '#3a0d18'); bg.addColorStop(1, '#14040b');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 10; i++) {
+      const y = 8 + i * 28; ctx.strokeStyle = i % 2 ? 'rgba(255,91,72,0.09)' : 'rgba(255,179,107,0.055)';
+      ctx.lineWidth = 8 + (i % 3) * 5; ctx.beginPath(); ctx.moveTo(-30, y);
+      ctx.bezierCurveTo(55, y - 18, 180, y + 18, 286, y - 4); ctx.stroke();
+    }
+    heartPlasma.refresh();
+  }
+
+  const cardiacFiber = scene.textures.createCanvas('cardiac-fiber', 256, 256);
+  if (cardiacFiber) {
+    const ctx = cardiacFiber.getContext(); ctx.clearRect(0, 0, 256, 256);
+    for (let i = -3; i < 12; i++) {
+      const y = i * 30; ctx.strokeStyle = i % 2 ? 'rgba(255,126,92,0.16)' : 'rgba(255,195,115,0.1)';
+      ctx.lineWidth = 5 + (i % 3 + 3) % 3; ctx.beginPath(); ctx.moveTo(-30, y + 28);
+      ctx.bezierCurveTo(65, y - 8, 170, y + 52, 286, y + 12); ctx.stroke();
+    }
+    cardiacFiber.refresh();
   }
 
   // Keep a tiny colour-token side effect so TypeScript does not consider COLORS an accidental

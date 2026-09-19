@@ -4,8 +4,15 @@ export interface SaveData {
   /** Legacy compatibility alias. New code should use bestSurvivalMs. */
   bestTimeMs: number;
   bestSurvivalMs: number;
-  /** Fastest successful boss clear; 0 means no victory yet. */
+  /**
+   * Legacy compatibility alias for the original one-stage victory record.
+   * New code should use bestBoss1ClearMs.
+   */
   bestWinTimeMs: number;
+  /** Fastest IMMUNE PRIME clear across legacy and multi-stage builds. */
+  bestBoss1ClearMs: number;
+  /** Fastest complete Bloodstream -> Heart campaign clear. */
+  bestCampaignClearMs: number;
   bestKills: number;
   bestLevel: number;
   runs: number;
@@ -15,12 +22,18 @@ export interface SaveData {
   evolutionsSeen: EvolutionId[];
 }
 
+export interface RunMilestoneTimes {
+  boss1ClearMs?: number;
+}
+
 const KEY = 'ofeliya_save_v1';
 
 const DEFAULTS: SaveData = {
   bestTimeMs: 0,
   bestSurvivalMs: 0,
   bestWinTimeMs: 0,
+  bestBoss1ClearMs: 0,
+  bestCampaignClearMs: 0,
   bestKills: 0,
   bestLevel: 0,
   runs: 0,
@@ -45,10 +58,15 @@ class SaveImpl {
           // Old builds mixed all run times together. Preserve that value as survival history;
           // never guess a historical victory that the old schema could not prove.
           const survival = this.num(parsed.bestSurvivalMs) || legacyTime;
+          // Pre-Heart builds used bestWinTimeMs for the only boss/campaign clear. Preserve it
+          // specifically as the IMMUNE PRIME record; never reinterpret it as a full campaign time.
+          const boss1Clear = this.num(parsed.bestBoss1ClearMs) || this.num(parsed.bestWinTimeMs);
           this.data = {
             bestTimeMs: survival,
             bestSurvivalMs: survival,
-            bestWinTimeMs: this.num(parsed.bestWinTimeMs),
+            bestWinTimeMs: boss1Clear,
+            bestBoss1ClearMs: boss1Clear,
+            bestCampaignClearMs: this.num(parsed.bestCampaignClearMs),
             bestKills: this.num(parsed.bestKills),
             bestLevel: this.num(parsed.bestLevel),
             runs: this.num(parsed.runs),
@@ -81,8 +99,12 @@ class SaveImpl {
       achievements: patch.achievements ? [...patch.achievements] : this.data.achievements,
       evolutionsSeen: patch.evolutionsSeen ? [...patch.evolutionsSeen] : this.data.evolutionsSeen,
     };
-    // Keep the old field coherent for older clients that may read the same localStorage key.
+    // Preserve both legacy aliases for older clients that may read the same localStorage key.
     this.data.bestTimeMs = this.data.bestSurvivalMs;
+    if (patch.bestBoss1ClearMs === undefined && patch.bestWinTimeMs !== undefined) {
+      this.data.bestBoss1ClearMs = this.num(patch.bestWinTimeMs);
+    }
+    this.data.bestWinTimeMs = this.data.bestBoss1ClearMs;
     try {
       localStorage.setItem(KEY, JSON.stringify(this.data));
     } catch {
@@ -95,13 +117,20 @@ class SaveImpl {
     timeMs: number,
     kills: number,
     level: number,
-    evolutions: EvolutionId[] = []
+    evolutions: EvolutionId[] = [],
+    milestones: RunMilestoneTimes = {}
   ): { timeRecord: boolean; killsRecord: boolean; levelRecord: boolean } {
     const survivalRecord = !win && timeMs > this.data.bestSurvivalMs;
-    const victoryRecord =
-      win && timeMs > 0 && (this.data.bestWinTimeMs === 0 || timeMs < this.data.bestWinTimeMs);
+    const boss1ClearMs = this.num(milestones.boss1ClearMs);
+    const boss1Record =
+      boss1ClearMs > 0 &&
+      (this.data.bestBoss1ClearMs === 0 || boss1ClearMs < this.data.bestBoss1ClearMs);
+    const campaignRecord =
+      win &&
+      timeMs > 0 &&
+      (this.data.bestCampaignClearMs === 0 || timeMs < this.data.bestCampaignClearMs);
     const res = {
-      timeRecord: survivalRecord || victoryRecord,
+      timeRecord: survivalRecord || boss1Record || campaignRecord,
       killsRecord: kills > this.data.bestKills,
       levelRecord: level > this.data.bestLevel,
     };
@@ -109,7 +138,8 @@ class SaveImpl {
     for (const id of evolutions) seen.add(id);
     this.update({
       bestSurvivalMs: survivalRecord ? timeMs : this.data.bestSurvivalMs,
-      bestWinTimeMs: victoryRecord ? timeMs : this.data.bestWinTimeMs,
+      bestBoss1ClearMs: boss1Record ? boss1ClearMs : this.data.bestBoss1ClearMs,
+      bestCampaignClearMs: campaignRecord ? timeMs : this.data.bestCampaignClearMs,
       bestKills: Math.max(this.data.bestKills, kills),
       bestLevel: Math.max(this.data.bestLevel, level),
       runs: this.data.runs + 1,

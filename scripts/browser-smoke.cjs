@@ -54,7 +54,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       .filter(({ bounds }) => bounds.left < 2 || bounds.right > game.scale.width - 2)
       .map(({ text, bounds }) => ({ text, left: bounds.left, right: bounds.right, width: bounds.width }));
     const target = textObjects.find(
-      (obj) => obj.text.startsWith('Подави IMMUNE PRIME') || obj.text.startsWith('Продержись дольше')
+      (obj) =>
+        obj.text.startsWith('Подави IMMUNE PRIME') ||
+        obj.text.startsWith('Заверши кампанию') ||
+        obj.text.startsWith('Продержись дольше')
     );
     const accept = textObjects.find((obj) => obj.text === 'ПРИНЯТЬ ВЫЗОВ');
     const targetBounds = target?.getBounds?.();
@@ -262,7 +265,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   await page.waitForFunction(() => !!window.__shared);
 
   const shared = await page.evaluate(() => window.__shared);
-  if (!shared.text || !shared.link || !shared.link.startsWith('https://max.ru/ofeliya_ci_bot?startapp=sz1_s_')) {
+  if (!shared.text || !shared.link || !shared.link.startsWith('https://max.ru/ofeliya_ci_bot?startapp=sz2_s_')) {
     throw new Error(`MAX challenge share failed: ${JSON.stringify(shared)}`);
   }
   if (errors.length) throw new Error(`page errors: ${errors.join(' | ')}`);

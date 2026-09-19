@@ -2,8 +2,8 @@
 
 Мобильный roguelite-survivor для **MAX Mini Apps**. Игрок управляет синтетическим вирусом
 `STRAIN-0` внутри живого организма: двигается одним пальцем, автоматически атакует иммунные
-клетки, собирает фрагменты РНК, заражает клетки хозяина и выбирает мутации. На 5:00 появляется
-финальный иммунный ответ `IMMUNE PRIME`; победа засчитывается после его уничтожения.
+клетки, собирает фрагменты РНК, заражает клетки хозяина и выбирает мутации. Кампания проходит
+через `КРОВОТОК` с `IMMUNE PRIME`, затем через `СЕРДЦЕ` с финальным `CARDIAC TITAN`.
 
 Продуктовый контракт и визуальная терминология: [`STRAIN_ZERO_PRODUCT_BIBLE.md`](./STRAIN_ZERO_PRODUCT_BIBLE.md).
 Release-gate evidence: [`RELEASE_VALIDATION.md`](./RELEASE_VALIDATION.md).
@@ -25,6 +25,8 @@ Third-party provenance: [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md).
 npm install
 npm run dev
 npm run test:challenge
+npm run test:save
+npm run test:stages
 npm run test:viewport
 npm run build
 npm run preview
@@ -79,8 +81,9 @@ VITE_SUPPORT_PHONE
 
 После забега **«БРОСИТЬ ВЫЗОВ»** создаёт compact versioned payload:
 
-- победный забег → получатель должен уничтожить `IMMUNE PRIME` быстрее;
-- проигранный забег → получатель должен продержаться дольше.
+- новый победный забег (`sz2`) → получатель должен завершить всю кампанию быстрее;
+- проигранный забег → получатель должен продержаться дольше;
+- старые ссылки `sz1_c_*` сохраняют исходный смысл: уничтожить `IMMUNE PRIME` быстрее.
 
 MAX deeplink:
 
@@ -111,23 +114,25 @@ Challenge data — только **недоверенный социальный 
 - host cells заражаются proximity-механикой;
 - полный infection вызывает **lysis**: разрыв мембраны, RNA release и radial damage;
 - доступны три critical mutations: `ГИПЕРШИП`, `СВЕРХКАПСИД`, `ЛИЗИС`;
-- на 5:00 появляется `IMMUNE PRIME`.
-
-Boss/difficulty rebalance намеренно вынесен за пределы текущего redesign PR.
+- на 5:00 появляется `IMMUNE PRIME`; после победы начинается стадия `СЕРДЦЕ`;
+- в финале Heart появляется `CARDIAC TITAN`; победа в кампании засчитывается после его уничтожения.
 
 ## Локальное сохранение
 
 В `localStorage` сохраняются:
 
 - лучшее время выживания среди проигранных циклов;
-- fastest successful clear;
+- fastest `IMMUNE PRIME` clear (включая legacy one-stage saves);
+- fastest full-campaign clear;
 - лучшие kills/уровень;
 - число забегов и lifetime kills;
 - достижения;
 - история critical mutations;
 - mute state.
 
-Схема сохраняет совместимость со старым `ofeliya_save_v1`.
+Схема сохраняет ключ `ofeliya_save_v1`: старый `bestWinTimeMs` мигрирует только в
+`bestBoss1ClearMs` и не считается результатом полной кампании. Полный clear хранится отдельно в
+`bestCampaignClearMs`.
 
 ## Performance и audio lifecycle
 
@@ -148,6 +153,8 @@ Build gate:
 ```bash
 npm ci
 npm run test:challenge
+npm run test:save
+npm run test:stages
 npm run test:viewport
 npm run release:check   # CI fixture с непустыми non-placeholder release values
 npm run build
