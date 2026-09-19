@@ -117,9 +117,13 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   await page.evaluate(() => {
     const gs = window.__game.scene.getScene('Game');
+    const ui = window.__game.scene.getScene('UI');
     const first = gs.pendingChoices[0];
     if (!first) throw new Error('Legendary reward candidate missing');
-    gs.chooseUpgrade(first.id);
+    const more = gs.chooseUpgrade(first.id);
+    if (more) throw new Error('Boss1 Legendary reward unexpectedly queued another choice');
+    ui.hideModal();
+    gs.scene.resume();
   });
   await page.waitForFunction(() => {
     const gs = window.__game.scene.getScene('Game');
