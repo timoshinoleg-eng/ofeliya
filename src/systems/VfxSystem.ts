@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { COLORS } from '../game/config';
 import { PERFORMANCE } from './PerformanceProfile';
+import { VfxBudget } from './VfxBudget';
 
 type KillImportance = 'normal' | 'elite' | 'boss';
 
@@ -15,10 +16,12 @@ export class VfxSystem {
   private readonly hitEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
   private readonly pickupEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
   private readonly rewardEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
+  private readonly budget: VfxBudget;
   private lastHitAt = 0;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
+    this.budget = new VfxBudget(PERFORMANCE.combatParticleBudget, PERFORMANCE.burstParticleBudget);
 
     // bio-spark is a baked radial membrane/plasma glow from StrainZeroTextures. It gives every
     // hit a microscopic-fluid feel without adding blur filters or extra draw passes at runtime.
@@ -65,13 +68,13 @@ export class VfxSystem {
     if (now - this.lastHitAt < (PERFORMANCE.tier === 'reduced' ? 70 : 45)) return;
     this.lastHitAt = now;
     this.tint(this.hitEmitter, color);
-    this.hitEmitter.emitParticleAt(x, y, this.count(2));
+    this.emit(this.hitEmitter, x, y, 2);
   }
 
   kill(x: number, y: number, color: number, importance: KillImportance = 'normal'): void {
     this.tint(this.killEmitter, color);
     const base = importance === 'boss' ? 30 : importance === 'elite' ? 16 : 8;
-    this.killEmitter.emitParticleAt(x, y, this.count(base));
+    this.emit(this.killEmitter, x, y, base, importance !== 'normal');
     if (importance !== 'normal') {
       this.ring(
         x,
@@ -85,19 +88,19 @@ export class VfxSystem {
 
   pickup(x: number, y: number): void {
     this.tint(this.pickupEmitter, COLORS.green);
-    this.pickupEmitter.emitParticleAt(x, y, this.count(3));
+    this.emit(this.pickupEmitter, x, y, 3);
     this.ring(x, y, COLORS.green, 24, 220, 0.12);
   }
 
   nova(x: number, y: number, radius: number): void {
     this.tint(this.rewardEmitter, COLORS.cyan);
-    this.rewardEmitter.emitParticleAt(x, y, this.count(10));
+    this.emit(this.rewardEmitter, x, y, 10);
     this.ring(x, y, COLORS.cyan, radius, 360, 0.3);
   }
 
   singularity(x: number, y: number, radius: number): void {
     this.tint(this.rewardEmitter, COLORS.purple);
-    this.rewardEmitter.emitParticleAt(x, y, this.count(18));
+    this.emit(this.rewardEmitter, x, y, 18, true);
     const collapse = this.scene.add
       .circle(x, y, radius * 0.62)
       .setStrokeStyle(3, COLORS.purple, 0.9)
@@ -128,13 +131,13 @@ export class VfxSystem {
 
   levelUp(x: number, y: number): void {
     this.tint(this.rewardEmitter, COLORS.magenta);
-    this.rewardEmitter.emitParticleAt(x, y, this.count(22));
+    this.emit(this.rewardEmitter, x, y, 22, true);
     this.ring(x, y, COLORS.magenta, 96, 420, 0.24);
   }
 
   evolution(x: number, y: number, color = COLORS.gold): void {
     this.tint(this.rewardEmitter, color);
-    this.rewardEmitter.emitParticleAt(x, y, this.count(36));
+    this.emit(this.rewardEmitter, x, y, 36, true);
     this.ring(x, y, color, 150, 520, 0.34);
     // A delayed inner ring gives critical mutations a two-beat membrane pulse rather than one
     // generic explosion. Objects are short-lived and explicitly destroyed.
@@ -143,8 +146,15 @@ export class VfxSystem {
 
   milestone(x: number, y: number, color = COLORS.purple): void {
     this.tint(this.rewardEmitter, color);
-    this.rewardEmitter.emitParticleAt(x, y, this.count(14));
+    this.emit(this.rewardEmitter, x, y, 14, true);
     this.ring(x, y, color, 120, 430, 0.2);
+  }
+
+  legendary(x: number, y: number, color = COLORS.gold): void {
+    this.tint(this.rewardEmitter, color);
+    this.emit(this.rewardEmitter, x, y, 48, true);
+    this.ring(x, y, color, 170, 520, 0.38);
+    this.ring(x, y, COLORS.white, 104, 420, 0.2, 70);
   }
 
   destroy(): void {
@@ -156,6 +166,17 @@ export class VfxSystem {
 
   private count(base: number): number {
     return Math.max(1, Math.round(base * PERFORMANCE.vfxScale));
+  }
+
+  private emit(
+    emitter: Phaser.GameObjects.Particles.ParticleEmitter,
+    x: number,
+    y: number,
+    base: number,
+    burst = false
+  ): void {
+    const granted = this.budget.request(this.count(base), this.scene.time.now, burst);
+    if (granted > 0) emitter.emitParticleAt(x, y, granted);
   }
 
   private ring(
