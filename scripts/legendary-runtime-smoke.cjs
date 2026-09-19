@@ -129,24 +129,35 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     throw new Error(`Myocardial Rhythm consumption failed: ${JSON.stringify(immediate)}`);
   }
 
-  const lysisBefore = await page.evaluate(() => {
+  const lysis = await page.evaluate(() => {
     const gs = window.__game.scene.getScene('Game');
     gs.runState.run.legendaryIds.clear();
     gs.runState.run.legendaryIds.add('lysis-chain');
     const a = gs.spawnEnemy('brute', gs.player.x + 260, gs.player.y + 120, false);
     const b = gs.spawnEnemy('brute', gs.player.x - 260, gs.player.y - 120, false);
+    const beforeHp = [a.hp, b.hp];
+    const existing = new Set(gs.time.getAllEvents());
     const event = { x: gs.player.x, y: gs.player.y, radius: 24, damage: 100, rna: 0 };
-    gs.__legendarySmokeTargets = [a, b];
     gs.triggerLysisChain(event, [a, b]);
-    return [a.hp, b.hp];
+    const timers = gs.time.getAllEvents().filter((timer) => !existing.has(timer));
+    const delays = timers.map((timer) => timer.delay).sort((x, y) => x - y);
+    for (const timer of timers) {
+      timer.callback();
+      timer.remove(false);
+    }
+    return {
+      beforeHp,
+      afterHp: [a.hp, b.hp],
+      timerCount: timers.length,
+      delays,
+    };
   });
-  await sleep(420);
-  const lysisAfter = await page.evaluate(() => {
-    const gs = window.__game.scene.getScene('Game');
-    return gs.__legendarySmokeTargets.map((e) => e.hp);
-  });
-  if (!(lysisAfter[0] < lysisBefore[0] && lysisAfter[1] < lysisBefore[1])) {
-    throw new Error(`Lysis Chain runtime failed: before=${lysisBefore} after=${lysisAfter}`);
+  if (
+    lysis.timerCount !== 2 ||
+    JSON.stringify(lysis.delays) !== JSON.stringify([140, 220]) ||
+    !(lysis.afterHp[0] < lysis.beforeHp[0] && lysis.afterHp[1] < lysis.beforeHp[1])
+  ) {
+    throw new Error(`Lysis Chain runtime failed: ${JSON.stringify(lysis)}`);
   }
 
   const carrier = await page.evaluate(() => {
