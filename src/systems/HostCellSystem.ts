@@ -9,6 +9,7 @@ interface HostCellSlot {
   active: boolean;
   infection: number;
   phase: number;
+  spawnedAt: number;
 }
 
 export interface HostCellLysisEvent {
@@ -65,6 +66,7 @@ export class HostCellSystem {
         active: false,
         infection: 0,
         phase: i * 1.23,
+        spawnedAt: 0,
       });
     }
   }
@@ -162,6 +164,7 @@ export class HostCellSystem {
       this.scene.tweens.killTweensOf(cell.ring);
       cell.active = false;
       cell.infection = 0;
+      cell.spawnedAt = 0;
       cell.image.setVisible(false).setAlpha(0).clearTint().setRotation(0).setScale(0.72);
       cell.infectionOverlay.setVisible(false).setAlpha(0).setRotation(0).setScale(0.72);
       cell.ring.setVisible(false).clear();
@@ -178,9 +181,38 @@ export class HostCellSystem {
   }
 
   private spawnNearPlayer(): void {
-    const slot = this.cells.find((c) => !c.active);
-    if (!slot) return;
     const cam = this.scene.cameras.main;
+    let slot = this.cells.find((c) => !c.active);
+
+    // Signature mechanic must follow the player. If all six pooled cells are stranded far behind,
+    // recycle only a nearly untouched old/far cell rather than letting host-cell gameplay disappear.
+    if (!slot) {
+      const recycleDistance = Math.max(520, Math.max(cam.width, cam.height) * 1.15);
+      const now = this.scene.time.now;
+      slot =
+        this.cells
+          .filter((cell) => {
+            if (!cell.active || cell.infection >= 0.12) return false;
+            const distance = Math.hypot(
+              cell.image.x - this.player.x,
+              cell.image.y - this.player.y
+            );
+            const age = now - cell.spawnedAt;
+            return distance >= recycleDistance || age >= 35_000;
+          })
+          .sort((a, b) => {
+            const da = Math.hypot(a.image.x - this.player.x, a.image.y - this.player.y);
+            const db = Math.hypot(b.image.x - this.player.x, b.image.y - this.player.y);
+            return db - da;
+          })[0] ?? null;
+      if (!slot) return;
+      this.scene.tweens.killTweensOf(slot.image);
+      this.scene.tweens.killTweensOf(slot.infectionOverlay);
+      slot.image.setVisible(false).setAlpha(0).clearTint();
+      slot.infectionOverlay.setVisible(false).setAlpha(0);
+      slot.ring.setVisible(false).clear();
+    }
+
     const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
     const distance = Phaser.Math.FloatBetween(120, Math.min(220, Math.max(140, cam.width * 0.42)));
     const x = this.player.x + Math.cos(angle) * distance;
@@ -188,6 +220,7 @@ export class HostCellSystem {
 
     slot.active = true;
     slot.infection = 0;
+    slot.spawnedAt = this.scene.time.now;
     slot.image
       .setPosition(x, y)
       .setVisible(true)
@@ -217,6 +250,7 @@ export class HostCellSystem {
     const scale = cell.image.scaleX;
     cell.active = false;
     cell.infection = 0;
+    cell.spawnedAt = 0;
     cell.ring.setVisible(false).clear();
 
     // Preserve the texture's native magenta/green membrane colors. Applying a green tint here
