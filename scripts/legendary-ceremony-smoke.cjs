@@ -55,30 +55,90 @@ function browserDriver() {
     () => window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI')
   );
 
+  // Drive the exact production path: Game exposes a real Legendary choice, UIScene naturally
+  // opens showLevelUp(), and the test clicks the real interactive card.
   await page.evaluate(() => {
-    const game = window.__game;
-    const gs = game.scene.getScene('Game');
-    const ui = game.scene.getScene('UI');
-    ui.scene.pause('Game');
-    ui.showLegendaryCeremony('zero-point', false);
+    const gs = window.__game.scene.getScene('Game');
+    gs.runState.stage.hp = 1_000_000;
+    gs.runState.stage.maxHp = 1_000_000;
+    gs.nextFireAt = Number.MAX_SAFE_INTEGER;
+    gs.queuedLevels = 0;
+    gs.legendaryRewardPending = false;
+    gs.pendingChoices = [
+      {
+        id: 'smoke-zero-point',
+        shortName: 'НУЛЕВАЯ ТОЧКА',
+        name: 'Каждые 12 секунд опасная группа стягивается в сингулярность',
+        desc: 'Runtime integration smoke',
+        max: 1,
+        family: 'weapon',
+        rarity: 'legendary',
+        kind: 'legendary',
+        legendaryId: 'zero-point',
+        showProgress: false,
+        apply: (state) => state.addLegendary('zero-point'),
+      },
+    ];
+    gs.awaitingChoice = true;
   });
-  await page.waitForTimeout(60);
+
+  await page.waitForFunction(
+    () => {
+      const game = window.__game;
+      const ui = game.scene.getScene('UI');
+      return ui.modalOpen && game.scene.isPaused('Game');
+    },
+    null,
+    { timeout: 2_500 }
+  );
+
+  const clicked = await page.evaluate(() => {
+    const ui = window.__game.scene.getScene('UI');
+    const root = ui.modal;
+    if (!root) return false;
+    for (const child of root.list ?? []) {
+      if (child?.type !== 'Container') continue;
+      const hit = (child.list ?? []).find(
+        (obj) => obj?.type === 'Rectangle' && obj.input?.enabled && obj.width > 200
+      );
+      if (hit) {
+        hit.emit('pointerup');
+        return true;
+      }
+    }
+    return false;
+  });
+  if (!clicked) throw new Error('Legendary level-up card hit target not found');
+
+  await page.waitForFunction(
+    () => {
+      const ui = window.__game.scene.getScene('UI');
+      const texts = ui.modal?.list
+        ?.filter((obj) => obj?.type === 'Text')
+        .map((obj) => obj.text) ?? [];
+      return texts.includes('ЛЕГЕНДАРНАЯ МУТАЦИЯ');
+    },
+    null,
+    { timeout: 2_000 }
+  );
 
   const contract = await page.evaluate(() => {
     const game = window.__game;
     const ui = game.scene.getScene('UI');
+    const gs = game.scene.getScene('Game');
     const modal = ui.modal;
     const texts = modal?.list
       ?.filter((obj) => obj?.type === 'Text')
       .map((obj) => obj.text) ?? [];
     const graphicsCount = modal?.list?.filter((obj) => obj?.type === 'Graphics').length ?? 0;
-
     return {
       modalOpen: ui.modalOpen,
       uiBlocked: ui.uiBlocked,
       texts,
       graphicsCount,
       gamePaused: game.scene.isPaused('Game'),
+      legendaryOwned: gs.runState.hasLegendary('zero-point'),
+      awaitingChoice: gs.awaitingChoice,
     };
   });
 
@@ -86,12 +146,13 @@ function browserDriver() {
     !contract.modalOpen ||
     !contract.uiBlocked ||
     !contract.gamePaused ||
+    !contract.legendaryOwned ||
     contract.graphicsCount < 2 ||
     !contract.texts.includes('ЛЕГЕНДАРНАЯ МУТАЦИЯ') ||
     !contract.texts.includes('НУЛЕВАЯ ТОЧКА') ||
     !contract.texts.some((text) => text.includes('Каждые 12 секунд'))
   ) {
-    throw new Error('Legendary cinematic ceremony contract failed: ' + JSON.stringify(contract));
+    throw new Error('Legendary cinematic production-flow contract failed: ' + JSON.stringify(contract));
   }
 
   await page.waitForTimeout(300);
@@ -101,34 +162,46 @@ function browserDriver() {
 
   await page.waitForFunction(
     () => {
-      const ui = window.__game.scene.getScene('UI');
-      return !ui.modalOpen && !ui.uiBlocked;
+      const game = window.__game;
+      const ui = game.scene.getScene('UI');
+      return (
+        !ui.modalOpen &&
+        !ui.uiBlocked &&
+        game.scene.isActive('Game') &&
+        !game.scene.isPaused('Game')
+      );
     },
     null,
-    { timeout: 3_000 }
+    { timeout: 4_000 }
   );
-  const dismissed = await page.evaluate(() => {
+
+  const resumed = await page.evaluate(() => {
     const game = window.__game;
     const ui = game.scene.getScene('UI');
+    const gs = game.scene.getScene('Game');
     return {
       modalOpen: ui.modalOpen,
       uiBlocked: ui.uiBlocked,
       gamePaused: game.scene.isPaused('Game'),
       gameActive: game.scene.isActive('Game'),
+      legendaryOwned: gs.runState.hasLegendary('zero-point'),
+      pendingCeremony: gs.pendingLegendaryCeremony,
     };
   });
   if (
-    dismissed.modalOpen ||
-    dismissed.uiBlocked ||
-    dismissed.gamePaused ||
-    !dismissed.gameActive
+    resumed.modalOpen ||
+    resumed.uiBlocked ||
+    resumed.gamePaused ||
+    !resumed.gameActive ||
+    !resumed.legendaryOwned ||
+    resumed.pendingCeremony !== null
   ) {
-    throw new Error('Legendary ceremony did not return cleanly to gameplay: ' + JSON.stringify(dismissed));
+    throw new Error('Legendary production flow did not resume cleanly: ' + JSON.stringify(resumed));
   }
 
   if (errors.length) throw new Error('page errors: ' + errors.join(' | '));
   await browser.close();
-  console.log('Legendary cinematic ceremony browser smoke: ok');
+  console.log('Legendary cinematic production-flow browser smoke: ok');
 })().catch((error) => {
   console.error(error.stack || error);
   process.exit(1);
