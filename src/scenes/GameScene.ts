@@ -412,6 +412,7 @@ export class GameScene extends Phaser.Scene {
       Sfx.play('boss');
       this.atmosphere.pulse(stage.theme.dangerColor, 0.32);
       this.shake(320, 0.008);
+      this.getUiScene()?.showBossReveal(stage.boss.name, stage.boss.textureKey, stage.theme.accentColor);
       PlatformBridge.haptic('heavy');
     } else if (elite) {
       Sfx.play('elite');
@@ -972,7 +973,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private tryFire(time: number): void {
-    const target = this.nearestEnemy(WEAPON.range);
+    const target = this.preferredEnemy(WEAPON.range);
     if (!target) {
       this.aimMarker.setVisible(false);
       return;
@@ -993,6 +994,36 @@ export class GameScene extends Phaser.Scene {
       const b = this.bullets.get(this.player.x, this.player.y) as Bullet | null;
       if (b) b.fire(time, a, this.runState.bulletDamage, this.runState.bulletPierce, prism);
     }
+  }
+
+  private preferredEnemy(range: number): Enemy | null {
+    const aim = this.registry.get('aimJoy') as { x: number; y: number } | undefined;
+    const mag = aim ? Math.hypot(aim.x, aim.y) : 0;
+    if (!aim || mag < 0.18) return this.nearestEnemy(range);
+
+    const ax = aim.x / mag;
+    const ay = aim.y / mag;
+    let best: Enemy | null = null;
+    let bestScore = Number.NEGATIVE_INFINITY;
+
+    for (const e of this.enemies.getChildren() as Enemy[]) {
+      if (!e.active) continue;
+      const dx = e.x - this.player.x;
+      const dy = e.y - this.player.y;
+      const d = Math.hypot(dx, dy);
+      if (d <= 0 || d >= range) continue;
+      const dot = (dx / d) * ax + (dy / d) * ay;
+      // Right stick expresses a broad priority sector, not pixel-perfect manual aiming.
+      if (dot < 0.28) continue;
+      const threatBias = e.isBoss ? 0.16 : e.isElite ? 0.08 : 0;
+      const score = dot * 2.2 - (d / range) * 0.48 + threatBias;
+      if (score > bestScore) {
+        bestScore = score;
+        best = e;
+      }
+    }
+
+    return best ?? this.nearestEnemy(range);
   }
 
   private nearestEnemy(range: number): Enemy | null {

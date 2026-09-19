@@ -10,6 +10,8 @@ import { COLORS, COMBO, FONT, JUICE, fmtTime } from '../game/config';
 import { getEvolutionDef } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
 import { Joystick } from '../game/Joystick';
+import { TwinStickControls } from '../game/TwinStickControls';
+import { readControlMode, type ControlMode } from '../game/ControlMode';
 import type { RunResult, RunSnapshot } from '../game/RunContracts';
 import {
   EVOLUTION_NAMES,
@@ -44,7 +46,8 @@ export class UIScene extends Phaser.Scene {
   private killsText!: Phaser.GameObjects.Text;
   private hpText!: Phaser.GameObjects.Text;
   private muteText!: Phaser.GameObjects.Text;
-  private joystick!: Joystick;
+  private joystick: Joystick | null = null;
+  private twinStick: TwinStickControls | null = null;
   private hpWarn!: Phaser.GameObjects.Graphics;
   private fanfare!: Phaser.GameObjects.Particles.ParticleEmitter;
   private comboText!: Phaser.GameObjects.Text;
@@ -133,7 +136,17 @@ export class UIScene extends Phaser.Scene {
       .setDepth(DEPTH + 1)
       .setVisible(false);
 
-    this.joystick = new Joystick(this, () => this.uiBlocked);
+    const controlMode =
+      (this.registry.get('controlMode') as ControlMode | undefined) ?? readControlMode();
+    this.registry.set('controlMode', controlMode);
+    this.joystick = null;
+    this.twinStick = null;
+    if (controlMode === 'two-hand') {
+      this.twinStick = new TwinStickControls(this, () => this.uiBlocked);
+    } else {
+      // Preserve the established one-thumb control path exactly as-is.
+      this.joystick = new Joystick(this, () => this.uiBlocked);
+    }
 
     this.scale.on('resize', this.layout, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -242,6 +255,45 @@ export class UIScene extends Phaser.Scene {
     dim.on('pointerup', onSkip);
     c.add(dim);
 
+    // Lightweight 2.5D cinematic layer: existing procedural textures, no video payload.
+    if (this.textures.exists('heart-plasma')) {
+      const flow = this.add
+        .tileSprite(0, 0, W, H, 'heart-plasma')
+        .setOrigin(0)
+        .setAlpha(0.28)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      c.add(flow);
+      this.tweens.add({
+        targets: flow,
+        tilePositionX: 150,
+        tilePositionY: -50,
+        duration: 2600,
+        ease: 'Sine.InOut',
+      });
+    }
+    if (this.textures.exists('cardiac-fiber')) {
+      const fibers = this.add
+        .image(W / 2, H / 2, 'cardiac-fiber')
+        .setDisplaySize(W * 1.2, H * 1.05)
+        .setAlpha(0.15)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      c.add(fibers);
+      this.tweens.add({
+        targets: fibers,
+        scaleX: fibers.scaleX * 1.05,
+        scaleY: fibers.scaleY * 1.05,
+        alpha: 0.25,
+        duration: 850,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.InOut',
+      });
+    }
+    c.add([
+      this.add.rectangle(W / 2, H * 0.055, W, H * 0.11, 0x020204, 0.96),
+      this.add.rectangle(W / 2, H * 0.945, W, H * 0.11, 0x020204, 0.96),
+    ]);
+
     const outerPulse = this.add
       .circle(W / 2, H * 0.47, compact ? 38 : 46)
       .setStrokeStyle(2.4, accent, 0.72);
@@ -320,6 +372,85 @@ export class UIScene extends Phaser.Scene {
       yoyo: true,
       repeat: -1,
       ease: 'Sine.InOut',
+    });
+  }
+
+  showBossReveal(name: string, textureKey: string, accent: number): void {
+    if (this.transitionOverlay || this.modalOpen) return;
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const compact = H < 620;
+    const c = this.add.container(0, 0).setDepth(150).setAlpha(0);
+
+    const bandH = compact ? 150 : 178;
+    const band = this.add
+      .rectangle(W / 2, H / 2, W, bandH, 0x040308, 0.78)
+      .setStrokeStyle(1, accent, 0.4);
+    const lineTop = this.add.rectangle(W / 2, H / 2 - bandH / 2, W, 2, accent, 0.82);
+    const lineBottom = this.add.rectangle(W / 2, H / 2 + bandH / 2, W, 2, accent, 0.5);
+    c.add([band, lineTop, lineBottom]);
+
+    if (this.textures.exists(textureKey)) {
+      const portrait = this.add
+        .image(W * 0.28, H / 2, textureKey)
+        .setScale(compact ? 1.22 : 1.48)
+        .setAlpha(0.92)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      c.add(portrait);
+      portrait.setX(W * 0.22);
+      this.tweens.add({
+        targets: portrait,
+        x: W * 0.3,
+        scale: portrait.scaleX * 1.08,
+        duration: 760,
+        ease: 'Quad.Out',
+      });
+    }
+
+    c.add(
+      this.add
+        .text(W * 0.57, H / 2 - 30, 'ИММУННЫЙ КОНТАКТ', {
+          fontFamily: FONT,
+          fontSize: compact ? '10px' : '11px',
+          fontStyle: 'bold',
+          color: '#aab4d4',
+          letterSpacing: 2,
+        })
+        .setOrigin(0, 0.5)
+        .setResolution(2)
+    );
+    c.add(
+      this.add
+        .text(W * 0.57, H / 2 + 4, name, {
+          fontFamily: FONT,
+          fontSize: compact ? '21px' : '26px',
+          fontStyle: 'bold',
+          color: `#${accent.toString(16).padStart(6, '0')}`,
+          wordWrap: { width: W * 0.38 },
+        })
+        .setOrigin(0, 0.5)
+        .setResolution(2)
+        .setShadow(0, 0, `#${accent.toString(16).padStart(6, '0')}`, 12, true, true)
+    );
+    c.add(
+      this.add
+        .text(W * 0.57, H / 2 + 39, 'АДАПТАЦИЯ НАЧАЛАСЬ', {
+          fontFamily: FONT,
+          fontSize: compact ? '9px' : '10px',
+          color: '#fff4ec',
+        })
+        .setOrigin(0, 0.5)
+        .setResolution(2)
+    );
+
+    this.tweens.add({
+      targets: c,
+      alpha: 1,
+      duration: 120,
+      yoyo: true,
+      hold: 700,
+      ease: 'Quad.Out',
+      onComplete: () => c.destroy(true),
     });
   }
 
