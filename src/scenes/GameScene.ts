@@ -108,6 +108,13 @@ export class GameScene extends Phaser.Scene {
   private coreMarks = new WeakMap<Enemy, CoreMark>();
   private heartbeatLegendaryWindowUntil = 0;
   private heartbeatLegendarySpent = false;
+  private heartbeatSafeIndicator: Phaser.GameObjects.Arc | null = null;
+  private heartbeatSafeX = 0;
+  private heartbeatSafeY = 0;
+  private heartbeatSafeRadius = 76;
+  private heartbeatProtectedUntil = 0;
+  private heartbeatOpportunityUntil = 0;
+  private heartbeatBeatIndex = 0;
   private lastCarrierUsed = false;
   private bossDefeatCeremony: {
     token: number;
@@ -168,6 +175,13 @@ export class GameScene extends Phaser.Scene {
     this.coreMarks = new WeakMap<Enemy, CoreMark>();
     this.heartbeatLegendaryWindowUntil = 0;
     this.heartbeatLegendarySpent = false;
+    this.heartbeatSafeIndicator?.destroy();
+    this.heartbeatSafeIndicator = null;
+    this.heartbeatSafeX = 0;
+    this.heartbeatSafeY = 0;
+    this.heartbeatProtectedUntil = 0;
+    this.heartbeatOpportunityUntil = 0;
+    this.heartbeatBeatIndex = 0;
     this.lastCarrierUsed = false;
     this.physics.world.resume();
 
@@ -526,6 +540,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     const list = this.enemies.getChildren() as Enemy[];
+    const rhythmLysisMultiplier = this.time.now <= this.heartbeatOpportunityUntil ? 1.35 : 1;
     for (const e of list) {
       if (!e.active) continue;
       const dx = e.x - event.x;
@@ -534,7 +549,7 @@ export class GameScene extends Phaser.Scene {
       if (d > event.radius + e.radius) continue;
       const dd = d || 1;
       this.vfx.hit(e.x, e.y, COLORS.green);
-      e.takeDamage(event.damage, (dx / dd) * 210, (dy / dd) * 210);
+      e.takeDamage(event.damage * rhythmLysisMultiplier, (dx / dd) * 210, (dy / dd) * 210);
     }
     if (this.runState.hasLegendary('lysis-chain')) this.triggerLysisChain(event, list);
   }
@@ -673,6 +688,7 @@ export class GameScene extends Phaser.Scene {
 
   getEnemyPressureMultiplier(): number {
     if (this.stageDirector.currentStage.signatureMechanic !== 'heartbeat-pulse') return 1;
+    if (this.time.now <= this.heartbeatProtectedUntil) return 1;
     return this.heartbeatPulse.pressureMultiplier;
   }
 
@@ -691,7 +707,7 @@ export class GameScene extends Phaser.Scene {
         event.bossActive ? stage.theme.dangerColor : stage.theme.accentColor,
         event.bossActive ? 0.12 : 0.07
       );
-      this.showHeartbeatTelegraph(stage, event.bossActive);
+      this.showHeartbeatTelegraph(stage, event.bossActive, event.impactAtMs);
       return;
     }
     if (event.type !== 'heartbeat-impact') return;
@@ -701,13 +717,38 @@ export class GameScene extends Phaser.Scene {
     );
     this.shake(event.bossActive ? 150 : 100, event.bossActive ? 0.0045 : 0.0026);
     PlatformBridge.haptic(event.bossActive ? 'medium' : 'light');
-    if (this.runState.hasLegendary('myocardial-rhythm')) {
-      this.heartbeatLegendaryWindowUntil = this.time.now + 650;
+
+    const distanceToSafe = Math.hypot(
+      this.player.x - this.heartbeatSafeX,
+      this.player.y - this.heartbeatSafeY
+    );
+    const synchronized = distanceToSafe <= this.heartbeatSafeRadius;
+    this.heartbeatSafeIndicator?.destroy();
+    this.heartbeatSafeIndicator = null;
+
+    if (synchronized) {
+      this.heartbeatProtectedUntil = this.time.now + (event.bossActive ? 900 : 1_050);
+      this.heartbeatOpportunityUntil = this.time.now + (event.bossActive ? 1_350 : 1_150);
+      this.atmosphere.pulse(COLORS.green, 0.12);
+      this.vfx.legendary(this.player.x, this.player.y, COLORS.green);
+      PlatformBridge.haptic('light');
+      if (this.runState.hasLegendary('myocardial-rhythm')) {
+        this.heartbeatLegendaryWindowUntil = this.time.now + 850;
+        this.heartbeatLegendarySpent = false;
+      }
+    } else {
+      this.heartbeatProtectedUntil = 0;
+      this.heartbeatOpportunityUntil = 0;
+      this.heartbeatLegendaryWindowUntil = 0;
       this.heartbeatLegendarySpent = false;
     }
   }
 
-  private showHeartbeatTelegraph(stage: StageDefinition, bossActive: boolean): void {
+  private showHeartbeatTelegraph(
+    stage: StageDefinition,
+    bossActive: boolean,
+    impactAtMs: number
+  ): void {
     const color = bossActive ? stage.theme.dangerColor : stage.theme.accentColor;
     const rings = [
       this.add.circle(this.player.x, this.player.y, 28).setStrokeStyle(2.4, color, 0.92).setDepth(27),
@@ -724,6 +765,27 @@ export class GameScene extends Phaser.Scene {
       duration: 620,
       ease: 'Quad.In',
       onComplete: () => rings.forEach((ring) => ring.destroy()),
+    });
+
+    // The beat now asks for a positional response: move into the marked diastole pocket.
+    this.heartbeatSafeIndicator?.destroy();
+    this.heartbeatBeatIndex += 1;
+    const angle =
+      ((impactAtMs * 0.00117 + this.heartbeatBeatIndex * 1.91) % (Math.PI * 2)) - Math.PI;
+    const offset = bossActive ? 112 : 88;
+    this.heartbeatSafeRadius = bossActive ? 72 : 78;
+    this.heartbeatSafeX = this.player.x + Math.cos(angle) * offset;
+    this.heartbeatSafeY = this.player.y + Math.sin(angle) * offset;
+    this.heartbeatSafeIndicator = this.add
+      .circle(this.heartbeatSafeX, this.heartbeatSafeY, this.heartbeatSafeRadius, COLORS.green, 0.08)
+      .setStrokeStyle(3, COLORS.green, 0.9)
+      .setDepth(26);
+    this.tweens.add({
+      targets: this.heartbeatSafeIndicator,
+      scale: 0.82,
+      alpha: 0.84,
+      duration: 620,
+      ease: 'Quad.In',
     });
   }
 
@@ -853,6 +915,11 @@ export class GameScene extends Phaser.Scene {
     this.coreMarks = new WeakMap<Enemy, CoreMark>();
     this.heartbeatLegendaryWindowUntil = 0;
     this.heartbeatLegendarySpent = false;
+    this.heartbeatSafeIndicator?.destroy();
+    this.heartbeatSafeIndicator = null;
+    this.heartbeatProtectedUntil = 0;
+    this.heartbeatOpportunityUntil = 0;
+    this.heartbeatBeatIndex = 0;
     this.lastDmg = null;
     this.lastDmgAt = 0;
     this.trailCursor = 0;
@@ -1015,10 +1082,19 @@ export class GameScene extends Phaser.Scene {
     const n = this.runState.stage.projectiles;
     const spread = (WEAPON.spreadDeg * Math.PI) / 180;
     const prism = this.runState.hasEvolution('prism');
+    const rhythmDamageMultiplier = time <= this.heartbeatOpportunityUntil ? 1.18 : 1;
     for (let i = 0; i < n; i++) {
       const a = ang + (i - (n - 1) / 2) * spread;
       const b = this.bullets.get(this.player.x, this.player.y) as Bullet | null;
-      if (b) b.fire(time, a, this.runState.bulletDamage, this.runState.bulletPierce, prism);
+      if (b) {
+        b.fire(
+          time,
+          a,
+          this.runState.bulletDamage * rhythmDamageMultiplier,
+          this.runState.bulletPierce,
+          prism
+        );
+      }
     }
   }
 
