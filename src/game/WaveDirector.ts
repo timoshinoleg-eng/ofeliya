@@ -23,8 +23,8 @@ export class WaveDirector {
     enemies: Phaser.Physics.Arcade.Group,
     stage: StageDefinition,
     difficulty: DifficultyProfile,
-    randomKind: () => number = Math.random,
-    randomSpawn: () => number = Math.random
+    randomKind: () => number,
+    randomSpawn: () => number
   ) {
     this.scene = scene;
     this.enemies = enemies;
