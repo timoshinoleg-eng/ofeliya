@@ -703,7 +703,11 @@ export class GameScene extends Phaser.Scene {
     if (rewardChoice) this.legendaryRewardPending = false;
     if (this.queuedLevels > 0) {
       this.queuedLevels -= 1;
-      this.pendingChoices = rollRunChoices(this.runState);
+      this.pendingChoices = rollRunChoices(
+        this.runState,
+        3,
+        () => this.gameplayRng.next('progression')
+      );
       return true;
     }
     this.awaitingChoice = false;
