@@ -69,6 +69,8 @@ function browserDriver() {
       gs.gameplayRng = new Rng(seed);
       gs.runState.stage.timeMs = 0;
       gs.runState.run.timeMs = 0;
+      gs.runState.run.legendaryPity = 0;
+      gs.runState.run.legendaryOffersSeen = 0;
       gs.queuedLevels = 1;
       gs.awaitingChoice = false;
       gs.pendingChoices = [];
