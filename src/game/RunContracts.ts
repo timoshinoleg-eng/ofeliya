@@ -4,6 +4,7 @@ import type { StageId } from './StageDefinitions';
 import type { EvolutionId } from './UpgradeSystem';
 import type { DifficultyId } from './DifficultyProfile';
 import type { LegendaryId } from './LegendarySystem';
+import type { ControlMode } from './ControlMode';
 
 export interface RunSnapshot {
   hp: number;
@@ -40,6 +41,9 @@ export interface RunResult {
   win: boolean;
   reason: RunEndReason;
   difficultyId: DifficultyId;
+  /** Replays/challenges can reproduce gameplay-random decisions from this seed. */
+  runSeed: string;
+  controlMode: ControlMode;
   timeMs: number;
   kills: number;
   hostCellsInfected: number;
