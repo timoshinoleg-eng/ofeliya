@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { EnemyKind } from './config';
 import type { StageDefinition } from './StageDefinitions';
+import type { DifficultyProfile } from './DifficultyProfile';
 import type { GameScene } from '../scenes/GameScene';
 
 /** Owns only stage-local enemy composition; StageDirector owns lifecycle and boss timing. */
@@ -10,6 +11,7 @@ export class WaveDirector {
   private readonly scene: GameScene;
   private readonly enemies: Phaser.Physics.Arcade.Group;
   private stage: StageDefinition;
+  private readonly difficulty: DifficultyProfile;
   private spawnAcc = 0;
   private spawnedElites = 0;
   private minionAcc = 0;
@@ -17,11 +19,13 @@ export class WaveDirector {
   constructor(
     scene: GameScene,
     enemies: Phaser.Physics.Arcade.Group,
-    stage: StageDefinition
+    stage: StageDefinition,
+    difficulty: DifficultyProfile
   ) {
     this.scene = scene;
     this.enemies = enemies;
     this.stage = stage;
+    this.difficulty = difficulty;
   }
 
   startStage(stage: StageDefinition): void {
@@ -39,11 +43,14 @@ export class WaveDirector {
 
     if (this.boss) {
       this.minionAcc += delta;
-      if (this.minionAcc >= waves.bossMinionIntervalMs) {
+      const minionInterval = waves.bossMinionIntervalMs * this.difficulty.bossMinionIntervalMultiplier;
+      if (this.minionAcc >= minionInterval) {
         this.minionAcc = 0;
         const boss = this.boss;
-        for (let i = 0; i < waves.bossMinionCount; i++) {
-          const angle = (i / waves.bossMinionCount) * Math.PI * 2;
+        const count = waves.bossMinionCount + this.difficulty.bossMinionBonus;
+        for (let i = 0; i < count; i++) {
+          if (!this.canAddThreat('swarm', false, t)) break;
+          const angle = (i / count) * Math.PI * 2;
           this.scene.spawnEnemy(
             'swarm',
             boss.x + Math.cos(angle) * waves.bossMinionRadius,
@@ -54,7 +61,8 @@ export class WaveDirector {
       }
     }
 
-    const expectedElites = waves.eliteEveryMs > 0 ? Math.floor(t / waves.eliteEveryMs) : 0;
+    const eliteEveryMs = waves.eliteEveryMs * this.difficulty.eliteIntervalMultiplier;
+    const expectedElites = eliteEveryMs > 0 ? Math.floor(t / eliteEveryMs) : 0;
     if (expectedElites > this.spawnedElites) {
       this.spawnedElites = expectedElites;
       const kind: EnemyKind = Phaser.Utils.Array.GetRandom([
@@ -71,11 +79,15 @@ export class WaveDirector {
       waves.spawnIntervalEndMs,
       progress
     );
+    interval *= this.difficulty.spawnIntervalMultiplier;
     if (this.boss) interval /= waves.bossPhaseSpawnMultiplier;
     this.spawnAcc += delta;
     while (this.spawnAcc >= interval) {
       this.spawnAcc -= interval;
-      const batch = Math.min(waves.maxBatchSize, 1 + Math.floor(t / waves.batchEveryMs));
+      const batch = Math.min(
+        waves.maxBatchSize + this.difficulty.batchBonus,
+        1 + Math.floor(t / waves.batchEveryMs) + this.difficulty.batchBonus
+      );
       for (let i = 0; i < batch; i++) this.spawn(waves.pickKind(t, Math.random()), false);
     }
   }
@@ -105,9 +117,64 @@ export class WaveDirector {
   }
 
   private spawn(kind: EnemyKind, elite: boolean): void {
-    if (!elite && this.enemies.countActive(true) >= this.stage.waves.normalEnemyCap) return;
+    const cap = this.stage.waves.normalEnemyCap + this.difficulty.normalEnemyCapBonus;
+    if (!elite && this.enemies.countActive(true) >= cap) return;
+    if (!elite && !this.canAddThreat(kind, false, this.scene.runState.stage.timeMs)) {
+      const fallback: Exclude<EnemyKind, 'boss'>[] =
+        kind === 'brute' ? ['runner', 'swarm'] : kind === 'runner' ? ['swarm'] : [];
+      const next = fallback.find((candidate) =>
+        this.canAddThreat(candidate, false, this.scene.runState.stage.timeMs)
+      );
+      if (!next) return;
+      kind = next;
+    }
     const position = this.ringPos();
     this.scene.spawnEnemy(kind, position.x, position.y, elite);
+  }
+
+  private canAddThreat(kind: EnemyKind, elite: boolean, stageTimeMs: number): boolean {
+    if (this.difficulty.threatCapStart === null || this.difficulty.threatCapEnd === null) return true;
+    if (elite || kind === 'boss') return true;
+    const progress = Phaser.Math.Clamp(stageTimeMs / this.stage.durationMs, 0, 1);
+    const cap = Phaser.Math.Linear(
+      this.difficulty.threatCapStart,
+      this.difficulty.threatCapEnd,
+      progress
+    );
+    return this.activeThreat() + this.threatCost(kind, elite) <= cap;
+  }
+
+  private activeThreat(): number {
+    let total = 0;
+    for (const enemy of this.enemies.getChildren() as import('./Enemy').Enemy[]) {
+      if (!enemy.active || enemy.isBoss) continue;
+      total += this.threatCost(enemy.kind, enemy.isElite);
+    }
+    return total;
+  }
+
+  private threatCost(kind: EnemyKind, elite: boolean): number {
+    const base = kind === 'brute' ? 3 : kind === 'runner' ? 1.5 : kind === 'boss' ? 0 : 1;
+    return base + (elite ? 7 : 0);
+  }
+
+  get debugThreatState(): { active: number; cap: number | null } {
+    if (this.difficulty.threatCapStart === null || this.difficulty.threatCapEnd === null) {
+      return { active: this.activeThreat(), cap: null };
+    }
+    const progress = Phaser.Math.Clamp(
+      this.scene.runState.stage.timeMs / this.stage.durationMs,
+      0,
+      1
+    );
+    return {
+      active: this.activeThreat(),
+      cap: Phaser.Math.Linear(
+        this.difficulty.threatCapStart,
+        this.difficulty.threatCapEnd,
+        progress
+      ),
+    };
   }
 
   private ringPos(): { x: number; y: number } {

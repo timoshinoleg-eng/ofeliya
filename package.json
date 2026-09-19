@@ -10,6 +10,7 @@
     "test:save": "node scripts/check-save-migration.mjs",
     "test:stages": "node scripts/check-stages.mjs",
     "test:legendary": "node scripts/check-legendary.mjs",
+    "test:difficulty": "node scripts/check-difficulty.mjs",
     "test:viewport": "node scripts/check-viewport.mjs",
     "release:check": "node scripts/check-release-config.mjs",
     "build": "tsc --noEmit && vite build",

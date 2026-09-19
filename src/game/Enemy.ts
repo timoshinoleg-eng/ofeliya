@@ -3,6 +3,7 @@ import { COLORS, ELITE, ENEMY_DEFS, type EnemyKind } from './config';
 import type { GameScene } from '../scenes/GameScene';
 import type { Player } from './Player';
 import type { StageBossBehavior } from './StageDefinitions';
+import type { EliteModifierId } from './DifficultyProfile';
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
   kind: EnemyKind = 'swarm';
@@ -14,6 +15,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   radius = 12;
   isElite = false;
   isBoss = false;
+  eliteModifier: EliteModifierId | null = null;
   color = 0xffffff;
   flashUntil = 0;
   bladeImmuneUntil = 0;
@@ -29,6 +31,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private bossBehavior: StageBossBehavior = 'pressure-wave';
   private heartbeatMs = 0;
   private visualScale = 1;
+  private lastDamageAt = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'immune-antibody');
@@ -42,7 +45,17 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     kind: EnemyKind,
     x: number,
     y: number,
-    opts: { elite: boolean; hpScale: number; dmgScale: number; textureKey?: string; color?: number; bossBehavior?: StageBossBehavior; heartbeatMs?: number }
+    opts: {
+      elite: boolean;
+      hpScale: number;
+      dmgScale: number;
+      speedScale?: number;
+      eliteModifier?: EliteModifierId | null;
+      textureKey?: string;
+      color?: number;
+      bossBehavior?: StageBossBehavior;
+      heartbeatMs?: number;
+    }
   ): void {
     this.gs = gs;
     this.target = gs.player;
@@ -56,17 +69,26 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.setTexture(opts.textureKey ?? def.tex).setScale(scale);
     this.isElite = opts.elite;
     this.isBoss = kind === 'boss';
+    this.eliteModifier = opts.elite ? (opts.eliteModifier ?? null) : null;
     this.bossBehavior = opts.bossBehavior ?? 'pressure-wave';
     this.heartbeatMs = Math.max(0, opts.heartbeatMs ?? 0);
 
     this.maxHp = def.hp * opts.hpScale * (opts.elite ? ELITE.hpMul : 1);
     this.hp = this.maxHp;
-    this.dmg = def.dmg * opts.dmgScale * (opts.elite ? ELITE.dmgMul : 1);
+    this.dmg =
+      def.dmg *
+      opts.dmgScale *
+      (opts.elite ? ELITE.dmgMul : 1) *
+      (this.eliteModifier === 'frenzied' ? 1.15 : 1);
     this.xpValue = def.xp * (opts.elite ? ELITE.xpMul : 1);
-    this.speed = def.speed * (opts.elite ? 0.92 : 1);
+    this.speed =
+      def.speed *
+      (opts.elite ? 0.92 : 1) *
+      (opts.speedScale ?? 1) *
+      (this.eliteModifier === 'frenzied' ? 1.22 : 1);
     this.radius = def.radius * scale;
     this.color = opts.elite
-      ? COLORS.gold
+      ? this.eliteModifierColor()
       : kind === 'boss'
         ? (opts.color ?? COLORS.cyan)
         : kind === 'swarm'
@@ -77,6 +99,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     this.flashUntil = 0;
     this.bladeImmuneUntil = 0;
+    this.lastDamageAt = this.scene.time.now;
     this.knockX = 0;
     this.knockY = 0;
     this.setAlpha(1);
@@ -95,9 +118,15 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
           .setStrokeStyle(1, COLORS.white, 0.78)
           .setDepth(12);
       }
-      this.drawEliteCorona(this.eliteRing, Math.max(24, def.radius * scale + 12));
+      const modifierColor = this.eliteModifierColor();
+      this.drawEliteCorona(this.eliteRing, Math.max(24, def.radius * scale + 12), modifierColor);
       this.eliteRing.setVisible(true).setPosition(x, y).setRotation(0).setAlpha(0.78);
-      this.eliteMarker.setVisible(true).setPosition(x, y - this.radius - 10).setScale(1);
+      this.eliteMarker
+        .setFillStyle(modifierColor, 0.96)
+        .setStrokeStyle(1, COLORS.white, 0.78)
+        .setVisible(true)
+        .setPosition(x, y - this.radius - 10)
+        .setScale(1);
     } else {
       this.eliteRing?.setVisible(false);
       this.eliteMarker?.setVisible(false);
@@ -127,6 +156,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     if (time < this.flashUntil) this.setTintFill(0xffffff);
     else if (this.tintFill) this.clearTint();
+
+    if (
+      this.isElite &&
+      this.eliteModifier === 'regenerator' &&
+      this.hp > 0 &&
+      this.hp < this.maxHp &&
+      time - this.lastDamageAt >= 900
+    ) {
+      this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.025 * (Math.min(delta, 50) / 1000));
+    }
 
     const p = this.target;
     const dx = p.x - this.x;
@@ -208,6 +247,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.gs = null;
     this.knockX = 0;
     this.knockY = 0;
+    this.eliteModifier = null;
+    this.lastDamageAt = 0;
     this.clearTint();
     this.disableBody(true, true);
   }
@@ -221,6 +262,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   takeDamage(amount: number, kx = 0, ky = 0): void {
     if (!this.active) return;
     this.hp -= amount;
+    if (amount > 0) this.lastDamageAt = this.scene.time.now;
     this.flashUntil = this.scene.time.now + 70;
     this.knockX += kx;
     this.knockY += ky;
@@ -260,9 +302,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   /** Cytokine/receptor corona: organic radial rhythm instead of the old cyber-tech segmented ring. */
-  private drawEliteCorona(g: Phaser.GameObjects.Graphics, radius: number): void {
+  private eliteModifierColor(): number {
+    if (this.eliteModifier === 'regenerator') return COLORS.green;
+    if (this.eliteModifier === 'frenzied') return COLORS.orange;
+    if (this.eliteModifier === 'volatile') return COLORS.red;
+    return COLORS.gold;
+  }
+
+  private drawEliteCorona(g: Phaser.GameObjects.Graphics, radius: number, color = COLORS.gold): void {
     g.clear();
-    g.lineStyle(1.4, COLORS.gold, 0.55);
+    g.lineStyle(1.4, color, 0.62);
     g.strokeCircle(0, 0, radius);
     g.lineStyle(1, COLORS.white, 0.22);
     g.strokeCircle(0, 0, radius + 4);
@@ -271,7 +320,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       const a = (i / 12) * Math.PI * 2;
       const inner = radius - 2;
       const outer = radius + (i % 2 === 0 ? 8 : 5);
-      g.lineStyle(i % 3 === 0 ? 2 : 1.2, i % 3 === 0 ? COLORS.green : COLORS.gold, 0.7);
+      g.lineStyle(i % 3 === 0 ? 2 : 1.2, i % 3 === 0 ? COLORS.white : color, 0.72);
       g.beginPath();
       g.moveTo(Math.cos(a) * inner, Math.sin(a) * inner);
       g.lineTo(Math.cos(a) * outer, Math.sin(a) * outer);
