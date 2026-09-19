@@ -198,7 +198,18 @@ export class GameScene extends Phaser.Scene {
     this.enemies = this.physics.add.group({ classType: Enemy, maxSize: 260 });
     this.gems = this.physics.add.group({ classType: Gem, maxSize: 220 });
     this.vfx = new VfxSystem(this);
-    this.hostCells = new HostCellSystem(this, this.player, (event) => this.onHostCellLysis(event));
+    this.hostCells = new HostCellSystem(
+      this,
+      this.player,
+      (event) => this.onHostCellLysis(event),
+      () => ({
+        infectionRadius: this.runState.infectionRadius,
+        infectionMs: this.runState.infectionDurationMs,
+        rna: this.runState.hostLysisRna,
+        lysisRadius: this.runState.hostLysisRadius,
+        lysisDamage: this.runState.hostLysisDamage,
+      })
+    );
 
     this.dmgTexts = [];
     for (let i = 0; i < JUICE.dmgTextPool; i++) {

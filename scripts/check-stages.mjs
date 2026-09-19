@@ -19,6 +19,7 @@ try {
       'src/game/StageDefinitions.ts',
       'src/game/StageDirector.ts',
       'src/game/RunState.ts',
+      'src/game/UpgradeSystem.ts',
       'src/game/HeartbeatPulseDirector.ts',
       '--target',
       'ES2020',
@@ -39,6 +40,7 @@ try {
   );
 
   const { RunState } = require(join(temp, 'game/RunState.js'));
+  const { UPGRADES } = require(join(temp, 'game/UpgradeSystem.js'));
   const { HeartbeatPulseDirector } = require(join(temp, 'game/HeartbeatPulseDirector.js'));
   const { StageDirector } = require(join(temp, 'game/StageDirector.js'));
   const {
@@ -167,6 +169,20 @@ try {
   assert(state.stage.id === second.id && state.stage.timeMs === 0, 'stage timer did not reset');
   assert(state.stage.level === 1 && state.stage.damageMul === 1, 'combat progression did not reset');
   assert(state.stage.kills === 0 && state.stage.evolutions.size === 0, 'stage counters did not reset');
+
+  const infectionBuild = new RunState(first);
+  const infect = UPGRADES.find((upgrade) => upgrade.id === 'infect');
+  const lysis = UPGRADES.find((upgrade) => upgrade.id === 'lysis');
+  const factory = UPGRADES.find((upgrade) => upgrade.id === 'factory');
+  assert(infect && lysis && factory, 'infection build family is incomplete');
+  infect.apply(infectionBuild);
+  lysis.apply(infectionBuild);
+  factory.apply(infectionBuild);
+  assert(infectionBuild.infectionDurationMs < 1250, 'infection speed upgrade did not affect host cells');
+  assert(infectionBuild.infectionRadius > 58, 'infection radius upgrade did not affect host cells');
+  assert(infectionBuild.hostLysisDamage > 26, 'lysis damage upgrade did not scale host-cell burst');
+  assert(infectionBuild.hostLysisRadius > 150, 'lysis radius upgrade did not scale host-cell burst');
+  assert(infectionBuild.hostLysisRna === 5, 'viral factory did not increase RNA yield');
 
   const heartbeat = new HeartbeatPulseDirector();
   assert(heartbeat.update(11_299, false).length === 0, 'heartbeat telegraphed too early');

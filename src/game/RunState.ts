@@ -57,6 +57,11 @@ export interface StageProgressState {
   orbitBlades: number;
   novaLevel: number;
   regen: number;
+  infectionSpeedMul: number;
+  infectionRadiusMul: number;
+  lysisDamageMul: number;
+  lysisRadiusMul: number;
+  lysisRnaBonus: number;
   stacks: Record<string, number>;
   evolutions: Set<EvolutionId>;
 }
@@ -85,6 +90,11 @@ function createStageProgress(stage: Pick<StageDefinition, 'id' | 'order'>): Stag
     orbitBlades: 0,
     novaLevel: 0,
     regen: 0,
+    infectionSpeedMul: 1,
+    infectionRadiusMul: 1,
+    lysisDamageMul: 1,
+    lysisRadiusMul: 1,
+    lysisRnaBonus: 0,
     stacks: {},
     evolutions: new Set<EvolutionId>(),
   };
@@ -146,6 +156,26 @@ export class RunState {
 
   get novaInterval(): number {
     return NOVA.intervalMs * Math.max(0.55, 1 - 0.1 * (this.stage.novaLevel - 1));
+  }
+
+  get infectionRadius(): number {
+    return 58 * this.stage.infectionRadiusMul;
+  }
+
+  get infectionDurationMs(): number {
+    return 1250 / this.stage.infectionSpeedMul;
+  }
+
+  get hostLysisDamage(): number {
+    return 26 * this.stage.lysisDamageMul;
+  }
+
+  get hostLysisRadius(): number {
+    return 150 * this.stage.lysisRadiusMul;
+  }
+
+  get hostLysisRna(): number {
+    return 4 + this.stage.lysisRnaBonus;
   }
 
   tick(delta: number): void {
