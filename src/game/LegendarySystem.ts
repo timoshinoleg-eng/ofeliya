@@ -31,7 +31,7 @@ export interface LegendaryDefinition {
   family: UpgradeFamily;
 }
 
-export const MAX_LEGENDARIES_PER_RUN = 3;
+export const MAX_LEGENDARIES_PER_RUN = 2;
 export const LEGENDARY_PITY_OFFERS = 8;
 export const LEGENDARY_BASE_CHANCE = 0.1;
 
@@ -164,6 +164,25 @@ function weightedPick(
     if (cursor <= 0) return def;
   }
   return pool[pool.length - 1];
+}
+
+export function guaranteedLegendaryChoices(
+  state: RunState,
+  count = 2,
+  rng: () => number = Math.random
+): UpgradeDef[] {
+  const pool = [...eligibleLegendaries(state)];
+  const picks: UpgradeDef[] = [];
+  const limit = Math.max(0, Math.min(count, pool.length));
+
+  while (picks.length < limit && pool.length > 0) {
+    const picked = weightedPick(pool, rng);
+    picks.push(toChoice(picked));
+    pool.splice(pool.indexOf(picked), 1);
+  }
+
+  if (picks.length > 0) state.noteLegendaryOffer(true);
+  return picks;
 }
 
 export function rollLegendaryChoice(
