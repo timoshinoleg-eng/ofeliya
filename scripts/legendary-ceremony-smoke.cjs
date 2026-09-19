@@ -55,13 +55,18 @@ function browserDriver() {
     () => window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI')
   );
 
-  const contract = await page.evaluate(() => {
+  await page.evaluate(() => {
     const game = window.__game;
     const gs = game.scene.getScene('Game');
     const ui = game.scene.getScene('UI');
     gs.scene.pause();
     ui.showLegendaryCeremony('zero-point', false);
+  });
+  await page.waitForTimeout(60);
 
+  const contract = await page.evaluate(() => {
+    const game = window.__game;
+    const ui = game.scene.getScene('UI');
     const modal = ui.modal;
     const texts = modal?.list
       ?.filter((obj) => obj?.type === 'Text')
