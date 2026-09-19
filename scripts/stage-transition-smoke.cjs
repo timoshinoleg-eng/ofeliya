@@ -84,6 +84,48 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const gs = window.__game.scene.getScene('Game');
     return gs.stageDirector.currentStage.id === 'heart' && gs.stageDirector.phase === 'PLAYING';
   });
+  await page.waitForFunction(() => {
+    const gs = window.__game.scene.getScene('Game');
+    const ui = window.__game.scene.getScene('UI');
+    return gs.legendaryRewardPending === true && gs.awaitingChoice === true && ui.modalOpen === true;
+  });
+
+  const legendaryReward = await page.evaluate(() => {
+    const gs = window.__game.scene.getScene('Game');
+    return {
+      stage: gs.runState.stage.id,
+      paused: gs.scene.isPaused(),
+      rewardPending: gs.legendaryRewardPending,
+      awaitingChoice: gs.awaitingChoice,
+      choices: gs.pendingChoices.map((choice) => ({
+        id: choice.id,
+        kind: choice.kind,
+        rarity: choice.rarity,
+        legendaryId: choice.legendaryId,
+      })),
+    };
+  });
+  if (
+    legendaryReward.stage !== 'heart' || !legendaryReward.paused ||
+    !legendaryReward.rewardPending || !legendaryReward.awaitingChoice ||
+    legendaryReward.choices.length !== 2 ||
+    legendaryReward.choices.some((choice) => choice.kind !== 'legendary' || choice.rarity !== 'legendary')
+  ) {
+    throw new Error('Boss1 Legendary reward contract failed: ' + JSON.stringify(legendaryReward));
+  }
+  await page.locator('#game').screenshot({ path: path.join(captureDir, '03a-heart-legendary-reward.png') });
+
+  await page.evaluate(() => {
+    const gs = window.__game.scene.getScene('Game');
+    const first = gs.pendingChoices[0];
+    if (!first) throw new Error('Legendary reward candidate missing');
+    gs.chooseUpgrade(first.id);
+  });
+  await page.waitForFunction(() => {
+    const gs = window.__game.scene.getScene('Game');
+    const ui = window.__game.scene.getScene('UI');
+    return gs.legendaryRewardPending === false && gs.awaitingChoice === false && ui.modalOpen === false;
+  });
 
   const heartStart = await page.evaluate(() => {
     const gs = window.__game.scene.getScene('Game');
