@@ -200,9 +200,16 @@ Browser gate запускает system Chrome с MAX Android mock и прове�
 - challenge result verdict и mobile bounds;
 - реальный интерактивный share control;
 - сформированный `https://max.ru/<bot>?startapp=...` передаётся в MAX share adapter;
+- Legendary runtime;
+- STRAINED runtime;
+- High-DPI WebGL и Canvas fallback;
+- Bloodstream -> Heart campaign transition;
+- dense readability captures при 100 / 150 / 200 active enemies;
 - отсутствие page runtime errors.
 
-Browser smoke сохраняет текущие menu/result PNG как Actions artifact для визуальной приёмки.
+Dense capture одновременно держит player anchor, elite marker/corona, RNA, projectile, healthy
+host cell и partially infected host cell. Browser smoke сохраняет PNG как Actions artifact для
+визуальной приёмки.
 
 ## Что ещё обязательно перед публичным релизом
 
