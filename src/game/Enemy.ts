@@ -17,6 +17,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   color = 0xffffff;
   flashUntil = 0;
   bladeImmuneUntil = 0;
+  spawnSerial = 0;
 
   private gs: GameScene | null = null;
   private target: Player | null = null;
@@ -48,6 +49,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const def = ENEMY_DEFS[kind];
     const scale = def.scale * (opts.elite ? ELITE.scale : 1);
     this.visualScale = scale;
+    this.spawnSerial += 1;
 
     this.enableBody(true, x, y, true, true);
     this.setTexture(opts.textureKey ?? def.tex).setScale(scale);
@@ -191,6 +193,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.knockY = 0;
     this.clearTint();
     this.disableBody(true, true);
+  }
+
+  applyKnock(kx: number, ky: number): void {
+    if (!this.active) return;
+    this.knockX += kx;
+    this.knockY += ky;
   }
 
   takeDamage(amount: number, kx = 0, ky = 0): void {

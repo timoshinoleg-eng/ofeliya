@@ -1,4 +1,5 @@
 import type { RunState } from './RunState';
+import { rollLegendaryChoice } from './LegendarySystem';
 import {
   EVOLUTION_NAMES,
   rollChoices,
@@ -76,8 +77,16 @@ function toChoice(def: EvolutionDef): UpgradeDef {
  * резервируют слоты, а оставшиеся места заполняются обычными мутациями. Невыбранная
  * готовая критическая мутация снова появится при следующем level-up.
  */
-export function rollRunChoices(s: RunState, n = 3): UpgradeDef[] {
+export function rollRunChoices(
+  s: RunState,
+  n = 3,
+  rng: () => number = Math.random
+): UpgradeDef[] {
   const ready = readyEvolutions(s).slice(0, n).map(toChoice);
   if (ready.length >= n) return ready;
-  return [...ready, ...rollChoices(s, n - ready.length)];
+
+  const legendary = rollLegendaryChoice(s, rng);
+  const reserved = legendary ? [legendary] : [];
+  const remaining = Math.max(0, n - ready.length - reserved.length);
+  return [...ready, ...reserved, ...rollChoices(s, remaining, rng)];
 }

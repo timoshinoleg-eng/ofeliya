@@ -1,6 +1,7 @@
 import { GEM, NOVA, ORBIT, PLAYER, WEAPON } from './config';
 import type { StageDefinition, StageId } from './StageDefinitions';
 import type { EvolutionId } from './UpgradeSystem';
+import type { LegendaryId } from './LegendarySystem';
 
 export function xpForLevel(level: number): number {
   // Strain Zero must reward the player almost immediately: the opening mutation is intentionally
@@ -20,6 +21,9 @@ export interface RunProgressState {
   highestStageOrder: number;
   bossClearTimesMs: Record<string, number>;
   evolutionsSeen: Set<EvolutionId>;
+  legendaryIds: Set<LegendaryId>;
+  legendaryPity: number;
+  legendaryOffersSeen: number;
 }
 
 export interface StageProgressState {
@@ -95,6 +99,9 @@ export class RunState {
       highestStageOrder: initialStage.order,
       bossClearTimesMs: {},
       evolutionsSeen: new Set<EvolutionId>(),
+      legendaryIds: new Set<LegendaryId>(),
+      legendaryPity: 0,
+      legendaryOffersSeen: 0,
     };
     this.stage = createStageProgress(initialStage);
   }
@@ -204,5 +211,20 @@ export class RunState {
     this.stage.evolutions.add(id);
     this.run.evolutionsSeen.add(id);
     return true;
+  }
+
+  hasLegendary(id: LegendaryId): boolean {
+    return this.run.legendaryIds.has(id);
+  }
+
+  addLegendary(id: LegendaryId): boolean {
+    if (this.run.legendaryIds.has(id) || this.run.legendaryIds.size >= 2) return false;
+    this.run.legendaryIds.add(id);
+    return true;
+  }
+
+  noteLegendaryOffer(shown: boolean): void {
+    this.run.legendaryOffersSeen += 1;
+    this.run.legendaryPity = shown ? 0 : this.run.legendaryPity + 1;
   }
 }

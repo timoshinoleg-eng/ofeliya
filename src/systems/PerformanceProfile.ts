@@ -7,6 +7,8 @@ export interface PerformanceProfile {
   ambientHostCells: number;
   ambientParticles: number;
   vfxScale: number;
+  combatParticleBudget: number;
+  burstParticleBudget: number;
 }
 
 function readOverride(): PerformanceTier | null {
@@ -45,6 +47,8 @@ export const PERFORMANCE: PerformanceProfile =
         ambientHostCells: 2,
         ambientParticles: 12,
         vfxScale: 0.58,
+        combatParticleBudget: 150,
+        burstParticleBudget: 220,
       }
     : {
         tier,
@@ -53,4 +57,6 @@ export const PERFORMANCE: PerformanceProfile =
         ambientHostCells: 4,
         ambientParticles: 24,
         vfxScale: 1,
+        combatParticleBudget: 250,
+        burstParticleBudget: 350,
       };

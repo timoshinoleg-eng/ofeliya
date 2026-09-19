@@ -1,9 +1,10 @@
 import type { RunState } from './RunState';
+import type { LegendaryId } from './LegendarySystem';
 
 export type UpgradeFamily = 'weapon' | 'core' | 'defense' | 'utility';
-export type UpgradeRarity = 'common' | 'rare';
+export type UpgradeRarity = 'common' | 'rare' | 'legendary';
 export type EvolutionId = 'prism' | 'halo' | 'singularity';
-export type ChoiceKind = 'upgrade' | 'evolution';
+export type ChoiceKind = 'upgrade' | 'evolution' | 'legendary';
 
 export const UPGRADE_FAMILY_LABELS: Record<UpgradeFamily, string> = {
   weapon: 'АГРЕССИЯ',
@@ -31,6 +32,7 @@ export interface UpgradeDef {
   kind?: ChoiceKind;
   evolutionHint?: EvolutionId;
   evolutionId?: EvolutionId;
+  legendaryId?: LegendaryId;
   showProgress?: boolean;
   apply: (s: RunState) => void;
 }
@@ -199,10 +201,10 @@ const HEAL: UpgradeDef = {
 };
 
 /** n случайных доступных улучшений (без повторов). */
-export function rollChoices(s: RunState, n = 3): UpgradeDef[] {
+export function rollChoices(s: RunState, n = 3, rng: () => number = Math.random): UpgradeDef[] {
   const pool = UPGRADES.filter((u) => s.stackOf(u.id) < u.max);
   for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(rng() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
   const picks = pool.slice(0, n);

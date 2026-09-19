@@ -32,6 +32,9 @@ jobs:
       - name: Stage runtime contract smoke
         run: npm run test:stages
 
+      - name: Legendary system deterministic smoke
+        run: npm run test:legendary
+
       - name: Viewport math smoke
         run: npm run test:viewport
 
@@ -91,6 +94,9 @@ jobs:
 
       - name: High-DPI WebGL and Canvas fallback smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/renderer-smoke.cjs
+
+      - name: Legendary runtime browser smoke
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/legendary-runtime-smoke.cjs
 
       - name: Bloodstream to Heart campaign browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/stage-transition-smoke.cjs
