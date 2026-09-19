@@ -155,6 +155,47 @@ function browserDriver() {
   }
 
   if (errors.length) throw new Error('page errors: ' + errors.join(' | '));
+
+  const challengeCtx = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 1,
+  });
+  await challengeCtx.route('https://st.max.ru/**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/javascript', body: '' })
+  );
+  await challengeCtx.addInitScript(() => {
+    localStorage.setItem('ofeliya_save_v1', JSON.stringify({ muted: true, runs: 1 }));
+    localStorage.setItem('ofeliya_difficulty_v1', 'strained');
+    window.WebApp = {
+      platform: 'android',
+      version: '26.20.0',
+      initData: 'signed-challenge-difficulty-smoke',
+      initDataUnsafe: {
+        user: { id: 78, first_name: 'Challenge', last_name: 'QA' },
+        start_param: 'sz2_c_9q0_1_1_1_1',
+      },
+      getViewportSize: async () => ({ width: '390', height: '844' }),
+      BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} },
+      HapticFeedback: { impactOccurred() {}, notificationOccurred() {} },
+    };
+  });
+  const challengePage = await challengeCtx.newPage();
+  await challengePage.goto('http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
+  await challengePage.waitForFunction(() => window.__game?.scene.isActive('Menu'));
+  const challengeMode = await challengePage.evaluate(() => ({
+    difficultyId: window.__game.registry.get('difficultyId'),
+    stored: localStorage.getItem('ofeliya_difficulty_v1'),
+    hasTarget: Boolean(window.__game.registry.get('challengeTarget')),
+  }));
+  if (
+    challengeMode.difficultyId !== 'standard' ||
+    challengeMode.stored !== 'strained' ||
+    !challengeMode.hasTarget
+  ) {
+    throw new Error('Incoming challenge did not force Standard safely: ' + JSON.stringify(challengeMode));
+  }
+  await challengeCtx.close();
+
   await browser.close();
   console.log('strained difficulty runtime browser smoke: ok');
 })().catch((error) => {
