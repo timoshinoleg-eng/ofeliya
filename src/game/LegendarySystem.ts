@@ -34,6 +34,7 @@ export interface LegendaryDefinition {
 export const MAX_LEGENDARIES_PER_RUN = 2;
 export const LEGENDARY_PITY_OFFERS = 8;
 export const LEGENDARY_BASE_CHANCE = 0.1;
+export const MAX_RANDOM_LEGENDARIES_BEFORE_FIRST_BOSS = 1;
 
 export const LEGENDARIES: readonly LegendaryDefinition[] = [
   {
@@ -189,6 +190,15 @@ export function rollLegendaryChoice(
   state: RunState,
   rng: () => number = Math.random
 ): UpgradeDef | null {
+  // Reserve the second run-wide Legendary slot for the IMMUNE PRIME trophy contract.
+  // Random level-ups before the first boss may grant at most one Legendary.
+  if (
+    state.run.bossesDefeated === 0 &&
+    state.run.legendaryIds.size >= MAX_RANDOM_LEGENDARIES_BEFORE_FIRST_BOSS
+  ) {
+    return null;
+  }
+
   const eligible = eligibleLegendaries(state);
   if (eligible.length === 0) return null;
 
