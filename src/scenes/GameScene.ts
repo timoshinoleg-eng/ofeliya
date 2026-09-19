@@ -16,6 +16,7 @@ import {
   type AchievementId,
 } from '../game/AchievementSystem';
 import { rollRunChoices } from '../game/EvolutionSystem';
+import { guaranteedLegendaryChoices } from '../game/LegendarySystem';
 import { HeartbeatPulseDirector, type HeartbeatPulseEvent } from '../game/HeartbeatPulseDirector';
 import { IDENTITY } from '../game/identity';
 import { ImpactDirector } from '../game/ImpactDirector';
@@ -73,6 +74,7 @@ export class GameScene extends Phaser.Scene {
   private queuedLevels = 0;
   awaitingChoice = false;
   pendingChoices: UpgradeDef[] = [];
+  legendaryRewardPending = false;
   private pendingEvolutionCeremony: EvolutionId | null = null;
   private newAchievements: AchievementId[] = [];
   private achievementCheckAcc = 0;
@@ -124,6 +126,7 @@ export class GameScene extends Phaser.Scene {
     this.queuedLevels = 0;
     this.awaitingChoice = false;
     this.pendingChoices = [];
+    this.legendaryRewardPending = false;
     this.pendingEvolutionCeremony = null;
     this.newAchievements = [];
     this.achievementCheckAcc = 0;
@@ -541,6 +544,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   chooseUpgrade(id: string): boolean {
+    const rewardChoice = this.legendaryRewardPending;
     const def = this.pendingChoices.find((c) => c.id === id);
     if (def) {
       def.apply(this.runState);
@@ -561,6 +565,7 @@ export class GameScene extends Phaser.Scene {
       Sfx.play('click');
       PlatformBridge.notify('success');
     }
+    if (rewardChoice) this.legendaryRewardPending = false;
     if (this.queuedLevels > 0) {
       this.queuedLevels -= 1;
       this.pendingChoices = rollRunChoices(this.runState);
@@ -709,6 +714,14 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.resetStageWorld(transaction.to);
+    if (transaction.from.id === 'bloodstream' && transaction.to.id === 'heart') {
+      const rewardChoices = guaranteedLegendaryChoices(this.runState, 2);
+      if (rewardChoices.length > 0) {
+        this.pendingChoices = rewardChoices;
+        this.awaitingChoice = true;
+        this.legendaryRewardPending = true;
+      }
+    }
     this.stageTransition = null;
     this.getUiScene()?.hideStageTransition();
     const stageStartEvents = this.stageDirector.startStage();
@@ -742,6 +755,7 @@ export class GameScene extends Phaser.Scene {
     this.queuedLevels = 0;
     this.awaitingChoice = false;
     this.pendingChoices = [];
+    this.legendaryRewardPending = false;
     this.pendingEvolutionCeremony = null;
     this.novaAcc = 0;
     this.nextFireAt = this.time.now + 250;
