@@ -27,6 +27,8 @@ import {
   type DifficultyProfile,
 } from '../game/DifficultyProfile';
 import { IDENTITY } from '../game/identity';
+import { readControlMode, type ControlMode } from '../game/ControlMode';
+import { generateRunSeed, RunRng } from '../game/RunRng';
 import { ImpactDirector } from '../game/ImpactDirector';
 import { Player } from '../game/Player';
 import { Enemy } from '../game/Enemy';
@@ -100,6 +102,9 @@ export class GameScene extends Phaser.Scene {
   private introHint: Phaser.GameObjects.Container | null = null;
   private transitionGeneration = 0;
   difficulty!: DifficultyProfile;
+  runSeed = '';
+  controlMode!: ControlMode;
+  private gameplayRng!: RunRng;
   private heartbeatPulse!: HeartbeatPulseDirector;
   private impact = new ImpactDirector();
   private zeroPointNextAt = 0;
@@ -141,6 +146,17 @@ export class GameScene extends Phaser.Scene {
       (this.registry.get('difficultyId') as DifficultyId | undefined) ?? readDifficultySelection();
     this.difficulty = getDifficultyProfile(selectedDifficulty);
     this.registry.set('difficultyId', this.difficulty.id);
+
+    const requestedSeed = this.registry.get('runSeedOverride') as string | number | undefined;
+    this.gameplayRng = new RunRng(requestedSeed ?? generateRunSeed());
+    this.runSeed = this.gameplayRng.seed;
+    this.registry.set('runSeed', this.runSeed);
+    this.registry.remove('runSeedOverride');
+
+    this.controlMode =
+      (this.registry.get('controlMode') as ControlMode | undefined) ?? readControlMode();
+    this.registry.set('controlMode', this.controlMode);
+
     this.heartbeatPulse = new HeartbeatPulseDirector(
       heartbeatProfileForDifficulty(this.difficulty)
     );
@@ -224,7 +240,8 @@ export class GameScene extends Phaser.Scene {
         rna: this.runState.hostLysisRna,
         lysisRadius: this.runState.hostLysisRadius,
         lysisDamage: this.runState.hostLysisDamage,
-      })
+      }),
+      () => this.gameplayRng.next('host-cell')
     );
 
     this.dmgTexts = [];
@@ -263,7 +280,14 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.enemies, this.onPlayerHit, undefined, this);
     this.physics.add.overlap(this.player, this.gems, this.onGemTouch, undefined, this);
 
-    this.wave = new WaveDirector(this, this.enemies, this.stageDirector.currentStage, this.difficulty);
+    this.wave = new WaveDirector(
+      this,
+      this.enemies,
+      this.stageDirector.currentStage,
+      this.difficulty,
+      () => this.gameplayRng.next('enemy-kind'),
+      () => this.gameplayRng.next('enemy-spawn')
+    );
     this.milestones = new RunMilestones(this);
     this.handleStageEvents(this.stageDirector.startRun());
     this.cameras.main.startFollow(this.player, true, 0.14, 0.14);
@@ -405,7 +429,11 @@ export class GameScene extends Phaser.Scene {
     if (this.queuedLevels > 0 && !this.awaitingChoice) {
       // Progression supersedes onboarding; never render tutorial copy beneath a mutation modal.
       this.dismissIntroHint(true);
-      this.pendingChoices = rollRunChoices(this.runState);
+      this.pendingChoices = rollRunChoices(
+        this.runState,
+        3,
+        () => this.gameplayRng.next('progression')
+      );
       this.awaitingChoice = true;
       this.queuedLevels -= 1;
     }
@@ -417,7 +445,9 @@ export class GameScene extends Phaser.Scene {
     const isBoss = kind === 'boss';
     const stage = this.stageDirector.currentStage;
     const { hpScale, dmgScale } = difficultyForStage(stage, this.runState.stage.timeMs);
-    const eliteModifier = elite ? pickEliteModifier(this.difficulty) : null;
+    const eliteModifier = elite
+      ? pickEliteModifier(this.difficulty, () => this.gameplayRng.next('elite'))
+      : null;
     e.activate(this, kind, x, y, {
       elite,
       hpScale: isBoss
@@ -537,8 +567,9 @@ export class GameScene extends Phaser.Scene {
     PlatformBridge.haptic('medium');
 
     for (let i = 0; i < event.rna; i++) {
-      const a = (i / event.rna) * Math.PI * 2 + Math.random() * 0.35;
-      const r = 18 + Math.random() * 24;
+      const a =
+        (i / event.rna) * Math.PI * 2 + this.gameplayRng.next('loot') * 0.35;
+      const r = 18 + this.gameplayRng.next('loot') * 24;
       this.spawnGem(event.x + Math.cos(a) * r, event.y + Math.sin(a) * r, 1);
     }
 
@@ -672,7 +703,11 @@ export class GameScene extends Phaser.Scene {
     if (rewardChoice) this.legendaryRewardPending = false;
     if (this.queuedLevels > 0) {
       this.queuedLevels -= 1;
-      this.pendingChoices = rollRunChoices(this.runState);
+      this.pendingChoices = rollRunChoices(
+        this.runState,
+        3,
+        () => this.gameplayRng.next('progression')
+      );
       return true;
     }
     this.awaitingChoice = false;
@@ -948,7 +983,11 @@ export class GameScene extends Phaser.Scene {
 
     this.resetStageWorld(transaction.to);
     if (transaction.from.id === 'bloodstream' && transaction.to.id === 'heart') {
-      const rewardChoices = guaranteedLegendaryChoices(this.runState, 2);
+      const rewardChoices = guaranteedLegendaryChoices(
+        this.runState,
+        2,
+        () => this.gameplayRng.next('progression')
+      );
       if (rewardChoices.length > 0) {
         this.pendingChoices = rewardChoices;
         this.awaitingChoice = true;
@@ -1118,6 +1157,8 @@ export class GameScene extends Phaser.Scene {
       win,
       reason,
       difficultyId: this.difficulty.id,
+      runSeed: this.runSeed,
+      controlMode: this.controlMode,
       timeMs: run.timeMs,
       kills: run.kills,
       hostCellsInfected: run.hostCellsInfected,

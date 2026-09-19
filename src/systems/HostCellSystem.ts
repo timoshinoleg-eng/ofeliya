@@ -39,6 +39,7 @@ export class HostCellSystem {
   private readonly player: Player;
   private readonly onLysis: (event: HostCellLysisEvent) => void;
   private readonly tuningFn: () => HostCellTuning;
+  private readonly gameplayRandom: () => number;
   private readonly cells: HostCellSlot[] = [];
   private spawnAcc = 0;
   private firstSpawned = false;
@@ -52,12 +53,16 @@ export class HostCellSystem {
       rna: 4,
       lysisRadius: 150,
       lysisDamage: 26,
-    })
+    }),
+    gameplayRandom: () => number = () => {
+      throw new Error('HostCellSystem gameplay RNG is not configured');
+    }
   ) {
     this.scene = scene;
     this.player = player;
     this.onLysis = onLysis;
     this.tuningFn = tuningFn;
+    this.gameplayRandom = gameplayRandom;
 
     for (let i = 0; i < 6; i++) {
       const image = scene.add
@@ -264,8 +269,11 @@ export class HostCellSystem {
       slot.ring.setVisible(false).clear();
     }
 
-    const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
-    const distance = Phaser.Math.FloatBetween(120, Math.min(220, Math.max(140, cam.width * 0.42)));
+    const angle = this.gameplayRandom() * Math.PI * 2;
+    const distance =
+      120 +
+      this.gameplayRandom() *
+        (Math.min(220, Math.max(140, cam.width * 0.42)) - 120);
     const x = this.player.x + Math.cos(angle) * distance;
     const y = this.player.y + Math.sin(angle) * distance;
 

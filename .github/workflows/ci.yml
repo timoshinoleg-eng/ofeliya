@@ -38,6 +38,9 @@ jobs:
       - name: Difficulty deterministic smoke
         run: npm run test:difficulty
 
+      - name: Gameplay RNG deterministic smoke
+        run: npm run test:rng
+
       - name: Viewport math smoke
         run: npm run test:viewport
 
@@ -103,6 +106,9 @@ jobs:
 
       - name: Legendary cinematic ceremony browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/legendary-ceremony-smoke.cjs
+
+      - name: Seeded gameplay runtime browser smoke
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/rng-runtime-smoke.cjs
 
       - name: IMMUNE PRIME vulnerability runtime browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/prime-vulnerability-smoke.cjs

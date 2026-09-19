@@ -15,17 +15,23 @@ export class WaveDirector {
   private spawnAcc = 0;
   private spawnedElites = 0;
   private minionAcc = 0;
+  private readonly randomKind: () => number;
+  private readonly randomSpawn: () => number;
 
   constructor(
     scene: GameScene,
     enemies: Phaser.Physics.Arcade.Group,
     stage: StageDefinition,
-    difficulty: DifficultyProfile
+    difficulty: DifficultyProfile,
+    randomKind: () => number,
+    randomSpawn: () => number
   ) {
     this.scene = scene;
     this.enemies = enemies;
     this.stage = stage;
     this.difficulty = difficulty;
+    this.randomKind = randomKind;
+    this.randomSpawn = randomSpawn;
   }
 
   startStage(stage: StageDefinition): void {
@@ -65,11 +71,8 @@ export class WaveDirector {
     const expectedElites = eliteEveryMs > 0 ? Math.floor(t / eliteEveryMs) : 0;
     if (expectedElites > this.spawnedElites) {
       this.spawnedElites = expectedElites;
-      const kind: EnemyKind = Phaser.Utils.Array.GetRandom([
-        'swarm',
-        'runner',
-        'brute',
-      ] as EnemyKind[]);
+      const eliteKinds: EnemyKind[] = ['swarm', 'runner', 'brute'];
+      const kind = eliteKinds[Math.floor(this.randomKind() * eliteKinds.length)] ?? 'swarm';
       this.spawn(kind, true);
     }
 
@@ -88,7 +91,7 @@ export class WaveDirector {
         waves.maxBatchSize + this.difficulty.batchBonus,
         1 + Math.floor(t / waves.batchEveryMs) + this.difficulty.batchBonus
       );
-      for (let i = 0; i < batch; i++) this.spawn(waves.pickKind(t, Math.random()), false);
+      for (let i = 0; i < batch; i++) this.spawn(waves.pickKind(t, this.randomKind()), false);
     }
   }
 
@@ -179,8 +182,9 @@ export class WaveDirector {
 
   private ringPos(): { x: number; y: number } {
     const camera = this.scene.cameras.main;
-    const angle = Math.random() * Math.PI * 2;
-    const radius = Math.max(camera.width, camera.height) / 2 + 90 + Math.random() * 60;
+    const angle = this.randomSpawn() * Math.PI * 2;
+    const radius =
+      Math.max(camera.width, camera.height) / 2 + 90 + this.randomSpawn() * 60;
     return {
       x: camera.midPoint.x + Math.cos(angle) * radius,
       y: camera.midPoint.y + Math.sin(angle) * radius,
