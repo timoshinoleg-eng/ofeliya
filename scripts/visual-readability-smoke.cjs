@@ -70,19 +70,25 @@ function browserDriver() {
     }
 
     const kinds = ['swarm', 'runner', 'brute'];
-    let elite = null;
-    for (let i = 0; i < 44; i++) {
-      const a = (i / 44) * Math.PI * 2;
-      const ring = 105 + (i % 5) * 24;
-      const x = gs.player.x + Math.cos(a) * ring;
-      const y = gs.player.y + Math.sin(a) * ring;
-      const e = gs.spawnEnemy(kinds[i % kinds.length], x, y, i === 7);
-      if (i === 7) elite = e;
-    }
+    const spawnTo = (target) => {
+      const active = gs.enemies.getChildren().filter((e) => e.active).length;
+      let elite = gs.enemies.getChildren().find((e) => e.active && e.isElite) ?? null;
+      for (let i = active; i < target; i++) {
+        const a = (i / target) * Math.PI * 2 + (i % 7) * 0.037;
+        const ring = 86 + (i % 8) * 27;
+        const x = gs.player.x + Math.cos(a) * ring;
+        const y = gs.player.y + Math.sin(a) * ring;
+        const e = gs.spawnEnemy(kinds[i % kinds.length], x, y, i === 7);
+        if (i === 7) elite = e;
+      }
+      return elite;
+    };
 
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2 + 0.17;
-      const pickupRadius = 155 + (i % 3) * 14;
+    const elite = spawnTo(100);
+
+    for (let i = 0; i < 18; i++) {
+      const a = (i / 18) * Math.PI * 2 + 0.17;
+      const pickupRadius = 142 + (i % 4) * 17;
       gs.spawnGem(
         gs.player.x + Math.cos(a) * pickupRadius,
         gs.player.y + Math.sin(a) * pickupRadius,
@@ -90,12 +96,32 @@ function browserDriver() {
       );
     }
 
+    // Force the signature mechanic into the visual contract: one healthy and one partially
+    // infected host cell must remain readable inside the enemy/RNA/projectile stack.
+    gs.hostCells.resetStage();
+    gs.hostCells.spawnNearPlayer();
+    gs.hostCells.spawnNearPlayer();
+    const activeCells = gs.hostCells.cells.filter((cell) => cell.active);
+    if (activeCells[0]) activeCells[0].infection = 0;
+    if (activeCells[1]) {
+      activeCells[1].infection = 0.68;
+      activeCells[1].infectionOverlay
+        .setVisible(true)
+        .setAlpha(0.82)
+        .setPosition(activeCells[1].image.x, activeCells[1].image.y);
+    }
+
     const source = gs.bullets.get(gs.player.x, gs.player.y);
     source.fire(gs.time.now, -0.15, 10, 0, false, 0);
+    gs.physics.world.pause();
+
+    window.__visualReadabilitySpawnTo = spawnTo;
 
     return {
       activeEnemies: gs.enemies.getChildren().filter((e) => e.active).length,
       activeGems: gs.gems.getChildren().filter((g) => g.active).length,
+      activeHostCells: activeCells.length,
+      infectedHostCellVisible: Boolean(activeCells[1]?.infectionOverlay?.visible),
       playerAnchorVisible: Boolean(gs.player.focusAnchor?.visible),
       playerDepth: gs.player.depth,
       anchorDepth: gs.player.focusAnchor?.depth ?? null,
@@ -107,8 +133,10 @@ function browserDriver() {
   });
 
   if (
-    contract.activeEnemies < 40 ||
-    contract.activeGems < 10 ||
+    contract.activeEnemies < 100 ||
+    contract.activeGems < 16 ||
+    contract.activeHostCells < 2 ||
+    !contract.infectedHostCellVisible ||
     !contract.playerAnchorVisible ||
     !(contract.anchorDepth < contract.playerDepth) ||
     !contract.eliteMarkerVisible ||
@@ -120,8 +148,23 @@ function browserDriver() {
 
   await page.waitForTimeout(180);
   await page.locator('#game').screenshot({
-    path: path.join(captureDir, '06-readability-stress.png'),
+    path: path.join(captureDir, '06-readability-stress-100.png'),
   });
+
+  for (const density of [150, 200]) {
+    const actual = await page.evaluate((target) => {
+      const gs = window.__game.scene.getScene('Game');
+      window.__visualReadabilitySpawnTo(target);
+      return gs.enemies.getChildren().filter((e) => e.active).length;
+    }, density);
+    if (actual < density) {
+      throw new Error(`Visual readability density ${density} could not be reached: ${actual}`);
+    }
+    await page.waitForTimeout(100);
+    await page.locator('#game').screenshot({
+      path: path.join(captureDir, `06-readability-stress-${density}.png`),
+    });
+  }
 
   if (errors.length) throw new Error('page errors: ' + errors.join(' | '));
   await browser.close();
