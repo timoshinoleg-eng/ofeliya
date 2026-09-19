@@ -117,8 +117,8 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
     // RNA coil: deliberately bright green as the product's reward/replication colour.
     ctx.strokeStyle = '#8dffad';
     ctx.lineWidth = 2.1;
-    ctx.shadowColor = 'rgba(125,255,160,0.45)';
-    ctx.shadowBlur = 4;
+    ctx.shadowColor = 'rgba(125,255,160,0.28)';
+    ctx.shadowBlur = 1.5;
     ctx.beginPath();
     ctx.moveTo(19, 29);
     ctx.bezierCurveTo(21, 18, 25, 18, 27, 28);
@@ -188,8 +188,8 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
   // IMMUNE CAST — every role owns a different silhouette.
   // ---------------------------------------------------------------------------
   make('immune-antibody', 38, 38, (ctx) => {
-    ctx.shadowColor = 'rgba(143,232,255,0.45)';
-    ctx.shadowBlur = 4;
+    ctx.shadowColor = 'rgba(143,232,255,0.28)';
+    ctx.shadowBlur = 1.5;
     ctx.strokeStyle = '#f4fdff';
     ctx.lineWidth = 5.4;
     ctx.beginPath();
