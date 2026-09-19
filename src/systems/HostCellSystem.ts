@@ -192,6 +192,20 @@ export class HostCellSystem {
   }
 
   /** Reset pooled gameplay cells between stages without reallocating scene objects. */
+  ensureOpportunityNearPlayer(maxDistance = 280): boolean {
+    const hasNearby = () =>
+      this.cells.some((cell) => {
+        if (!cell.active || cell.infection >= 0.98) return false;
+        return (
+          Math.hypot(cell.image.x - this.player.x, cell.image.y - this.player.y) <= maxDistance
+        );
+      });
+
+    if (hasNearby()) return true;
+    this.spawnNearPlayer();
+    return hasNearby();
+  }
+
   resetStage(): void {
     this.spawnAcc = 0;
     this.firstSpawned = false;
