@@ -173,6 +173,48 @@ export const UPGRADES: UpgradeDef[] = [
     },
   },
   {
+    id: 'infect',
+    shortName: 'РЕЦЕПТОРНЫЙ ЗАХВАТ',
+    name: 'Заражение +22% · радиус +8%',
+    desc: 'OFELIYA быстрее захватывает host cells и удерживает безопасную дистанцию заражения',
+    max: 4,
+    family: 'core',
+    rarity: 'common',
+    evolutionHint: 'singularity',
+    apply: (s) => {
+      s.stage.infectionSpeedMul *= 1.22;
+      s.stage.infectionRadiusMul *= 1.08;
+    },
+  },
+  {
+    id: 'lysis',
+    shortName: 'ЦИТОЛИЗ',
+    name: 'Лизис +30% · радиус +8%',
+    desc: 'Разрыв заражённой клетки остаётся значимым против поздних иммунных целей',
+    max: 4,
+    family: 'weapon',
+    rarity: 'rare',
+    evolutionHint: 'singularity',
+    apply: (s) => {
+      s.stage.lysisDamageMul *= 1.3;
+      s.stage.lysisRadiusMul *= 1.08;
+    },
+  },
+  {
+    id: 'factory',
+    shortName: 'ВИРУСНАЯ ФАБРИКА',
+    name: 'RNA из клетки +1 · лизис +10%',
+    desc: 'Каждая успешно заражённая host cell становится сильнее как источник прогрессии',
+    max: 3,
+    family: 'utility',
+    rarity: 'rare',
+    evolutionHint: 'singularity',
+    apply: (s) => {
+      s.stage.lysisRnaBonus += 1;
+      s.stage.lysisDamageMul *= 1.1;
+    },
+  },
+  {
     id: 'regen',
     shortName: 'РЕКОМБИНАЦИЯ',
     name: 'Регенерация +0.6/с',
