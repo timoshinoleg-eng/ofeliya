@@ -549,12 +549,11 @@ export class GameScene extends Phaser.Scene {
       if (d > event.radius + e.radius) continue;
       const dd = d || 1;
       this.vfx.hit(e.x, e.y, COLORS.green);
-      const bossLysisMultiplier =
-        e.isBoss && this.stageDirector.currentStage.id === 'bloodstream' ? 1.5 : 1;
       e.takeDamage(
-        event.damage * rhythmLysisMultiplier * bossLysisMultiplier,
+        event.damage * rhythmLysisMultiplier,
         (dx / dd) * 210,
-        (dy / dd) * 210
+        (dy / dd) * 210,
+        'lysis'
       );
     }
     if (this.runState.hasLegendary('lysis-chain')) this.triggerLysisChain(event, list);
@@ -690,6 +689,20 @@ export class GameScene extends Phaser.Scene {
     const id = this.pendingEvolutionCeremony;
     this.pendingEvolutionCeremony = null;
     return id;
+  }
+
+  onPrimeMembraneBreak(boss: Enemy): void {
+    if (
+      !boss.active ||
+      !boss.isBoss ||
+      this.stageDirector.currentStage.id !== 'bloodstream'
+    ) {
+      return;
+    }
+    this.vfx.legendary(boss.x, boss.y, COLORS.green);
+    this.atmosphere.pulse(COLORS.green, 0.2);
+    this.shake(150, 0.005);
+    PlatformBridge.haptic('heavy');
   }
 
   onBossPhaseChanged(boss: Enemy): void {
@@ -1049,6 +1062,9 @@ export class GameScene extends Phaser.Scene {
           this.milestones.show(event.milestone);
           break;
         case 'boss-spawn-requested':
+          if (event.stage.id === 'bloodstream') {
+            this.hostCells.ensureOpportunityNearPlayer();
+          }
           this.wave.spawnBoss();
           break;
         case 'run-ended':
@@ -1312,11 +1328,11 @@ export class GameScene extends Phaser.Scene {
     }
     const rhythmBurst = this.consumeMyocardialRhythm();
     this.vfx.hit(e.x, e.y, b.prism ? COLORS.gold : e.color);
-    e.takeDamage(damage, (bv.x / vm) * 130, (bv.y / vm) * 130);
+    const dealtDamage = e.takeDamage(damage, (bv.x / vm) * 130, (bv.y / vm) * 130);
     Sfx.play('hit');
-    this.showDamage(e.x, e.y, damage);
+    this.showDamage(e.x, e.y, dealtDamage);
     this.trySplitProjectile(b, bv);
-    if (rhythmBurst) this.triggerRhythmBurst(e, damage);
+    if (rhythmBurst) this.triggerRhythmBurst(e, dealtDamage);
     if (b.pierceLeft > 0) b.pierceLeft -= 1;
     else b.disableBody(true, true);
   };
