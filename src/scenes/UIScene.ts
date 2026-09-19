@@ -256,6 +256,23 @@ export class UIScene extends Phaser.Scene {
     dim.on('pointerup', onSkip);
     c.add(dim);
 
+    if (this.textures.exists('cinematic-heart')) {
+      const keyArt = this.add
+        .image(W / 2, H * 0.47, 'cinematic-heart')
+        .setDisplaySize(Math.min(W * 1.04, 520), Math.min(H * 0.38, 260))
+        .setAlpha(0.58);
+      c.add(keyArt);
+      keyArt.setScale(keyArt.scaleX * 1.04, keyArt.scaleY * 1.04);
+      this.tweens.add({
+        targets: keyArt,
+        scaleX: keyArt.scaleX * 0.97,
+        scaleY: keyArt.scaleY * 0.97,
+        alpha: 0.72,
+        duration: 1800,
+        ease: 'Sine.InOut',
+      });
+    }
+
     // Lightweight 2.5D cinematic layer: existing procedural textures, no video payload.
     if (this.textures.exists('heart-plasma')) {
       const flow = this.add
@@ -390,6 +407,29 @@ export class UIScene extends Phaser.Scene {
     const lineTop = this.add.rectangle(W / 2, H / 2 - bandH / 2, W, 2, accent, 0.82);
     const lineBottom = this.add.rectangle(W / 2, H / 2 + bandH / 2, W, 2, accent, 0.5);
     c.add([band, lineTop, lineBottom]);
+
+    const cinematicKey =
+      textureKey === 'immune-prime'
+        ? 'cinematic-immune-prime'
+        : textureKey === 'cardiac-titan'
+          ? 'cinematic-cardiac-titan'
+          : null;
+    if (cinematicKey && this.textures.exists(cinematicKey)) {
+      const art = this.add
+        .image(W / 2, H / 2, cinematicKey)
+        .setDisplaySize(W, bandH)
+        .setAlpha(0.5);
+      c.add(art);
+      art.setScale(1.04, 1.04);
+      this.tweens.add({
+        targets: art,
+        scaleX: 1,
+        scaleY: 1,
+        alpha: 0.64,
+        duration: 760,
+        ease: 'Quad.Out',
+      });
+    }
 
     if (this.textures.exists(textureKey)) {
       const portrait = this.add
@@ -882,6 +922,14 @@ export class UIScene extends Phaser.Scene {
     const c = this.add.container(0, 0).setDepth(110);
 
     c.add(this.add.rectangle(W / 2, H / 2, W, H, 0x05070f, 0.84).setInteractive());
+    if (res.win && this.textures.exists('cinematic-victory')) {
+      c.add(
+        this.add
+          .image(W / 2, H * 0.25, 'cinematic-victory')
+          .setDisplaySize(Math.min(W * 0.96, 440), Math.min(H * 0.3, 230))
+          .setAlpha(0.3)
+      );
+    }
 
     const titleY = compact ? H * 0.1 : H * 0.13;
     c.add(
