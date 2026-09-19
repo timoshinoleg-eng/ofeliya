@@ -59,7 +59,7 @@ function browserDriver() {
     const game = window.__game;
     const gs = game.scene.getScene('Game');
     const ui = game.scene.getScene('UI');
-    gs.scene.pause();
+    ui.scene.pause('Game');
     ui.showLegendaryCeremony('zero-point', false);
   });
   await page.waitForTimeout(60);
