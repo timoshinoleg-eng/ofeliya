@@ -4,6 +4,14 @@ import type { GameScene } from '../scenes/GameScene';
 import type { Player } from './Player';
 import type { StageBossBehavior } from './StageDefinitions';
 import type { EliteModifierId } from './DifficultyProfile';
+import {
+  canPrimeLysisBreak,
+  primeDamageMultiplier,
+  primeMembraneBreakDurationMs,
+  type PrimeAttackState,
+} from './BossVulnerability';
+
+export type EnemyDamageSource = 'standard' | 'lysis';
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
   kind: EnemyKind = 'swarm';
@@ -39,11 +47,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private lockedDirX = 0;
   private lockedDirY = 0;
   private roleTelegraph: Phaser.GameObjects.Graphics | null = null;
-  private bossAttackState: 'pursuit' | 'telegraph' | 'recovery' = 'pursuit';
+  private bossAttackState: PrimeAttackState = 'pursuit';
   private bossAttackStartedAt = 0;
   private bossAttackUntil = 0;
   private nextBossAttackAt = 0;
   private bossTelegraph: Phaser.GameObjects.Graphics | null = null;
+  private primeBrokenUntil = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'immune-antibody');
@@ -126,6 +135,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.bossAttackUntil = 0;
     this.nextBossAttackAt = this.isBoss ? this.scene.time.now + 1_900 : 0;
     this.bossTelegraph?.setVisible(false).clear();
+    this.primeBrokenUntil = 0;
     this.setAlpha(1);
     this.clearTint();
     this.setRotation(0);
@@ -156,14 +166,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.eliteMarker?.setVisible(false);
     }
 
-    if (this.isBoss && this.bossBehavior === 'heartbeat-pulse') {
+    if (this.isBoss) {
       if (!this.bossAura) this.bossAura = this.scene.add.graphics().setDepth(9);
-      this.drawCardiacAura(this.bossAura, Math.max(68, this.radius + 42), this.color);
-      this.bossAura
-        .setVisible(true)
-        .setPosition(x, y)
-        .setAlpha(0.88)
-        .setBlendMode(Phaser.BlendModes.ADD);
+      if (this.bossBehavior === 'heartbeat-pulse') {
+        this.drawCardiacAura(this.bossAura, Math.max(68, this.radius + 42), this.color);
+        this.bossAura.setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.88);
+      } else {
+        this.drawPrimeAura(this.bossAura, Math.max(62, this.radius + 36), 'armored');
+        this.bossAura.setBlendMode(Phaser.BlendModes.NORMAL).setAlpha(0.72);
+      }
+      this.bossAura.setVisible(true).setPosition(x, y);
     } else {
       this.bossAura?.setVisible(false);
     }
@@ -326,7 +338,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         .setAlpha(0.78 + Math.sin(time / 130) * 0.18);
     }
 
-    if (this.isBoss && this.bossBehavior === 'heartbeat-pulse' && this.bossAura) {
+    if (this.isBoss && this.bossBehavior === 'pressure-wave' && this.bossAura) {
+      this.updatePrimeAura(time);
+    } else if (this.isBoss && this.bossBehavior === 'heartbeat-pulse' && this.bossAura) {
       const phase = this.heartbeatMs > 0 ? (time % this.heartbeatMs) / this.heartbeatMs : 0;
       const secondBeat = phase >= 0.22 ? Math.exp(-(phase - 0.22) * 20) * 0.55 : 0;
       const beat = Math.max(Math.exp(-phase * 15), secondBeat);
@@ -474,6 +488,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.bossAura?.setVisible(false);
     this.roleTelegraph?.setVisible(false).clear();
     this.bossTelegraph?.setVisible(false).clear();
+    this.primeBrokenUntil = 0;
     this.target = null;
     this.gs = null;
     this.knockX = 0;
@@ -490,11 +505,34 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.knockY += ky;
   }
 
-  takeDamage(amount: number, kx = 0, ky = 0): void {
-    if (!this.active) return;
-    this.hp -= amount;
-    if (amount > 0) this.lastDamageAt = this.scene.time.now;
-    this.flashUntil = this.scene.time.now + 70;
+  takeDamage(
+    amount: number,
+    kx = 0,
+    ky = 0,
+    source: EnemyDamageSource = 'standard'
+  ): number {
+    if (!this.active) return 0;
+    const now = this.scene.time.now;
+    let actualDamage = Math.max(0, amount);
+
+    if (this.isBoss && this.bossBehavior === 'pressure-wave') {
+      if (source === 'lysis' && canPrimeLysisBreak(this.bossAttackState)) {
+        const wasBroken = now <= this.primeBrokenUntil;
+        this.primeBrokenUntil = Math.max(
+          this.primeBrokenUntil,
+          now + primeMembraneBreakDurationMs(this.bossPhase)
+        );
+        if (!wasBroken) this.gs?.onPrimeMembraneBreak(this);
+      }
+      actualDamage *= primeDamageMultiplier(
+        this.bossAttackState,
+        now <= this.primeBrokenUntil
+      );
+    }
+
+    this.hp -= actualDamage;
+    if (actualDamage > 0) this.lastDamageAt = now;
+    this.flashUntil = now + 70;
     this.knockX += kx;
     this.knockY += ky;
     if (this.hp <= 0) {
@@ -506,6 +544,62 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.disableBody(true, true);
       this.gs?.onEnemyDied(this);
     }
+    return actualDamage;
+  }
+
+  private drawPrimeAura(
+    g: Phaser.GameObjects.Graphics,
+    radius: number,
+    mode: 'armored' | 'recovery' | 'broken'
+  ): void {
+    g.clear();
+    const color =
+      mode === 'broken' ? COLORS.green : mode === 'recovery' ? COLORS.gold : COLORS.cyan;
+
+    if (mode === 'armored') {
+      g.lineStyle(3.2, color, 0.72);
+      g.strokeCircle(0, 0, radius);
+      g.lineStyle(1.4, COLORS.white, 0.34);
+      g.strokeCircle(0, 0, radius + 8);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        g.lineStyle(2.2, color, 0.62);
+        g.beginPath();
+        g.moveTo(Math.cos(a) * (radius - 7), Math.sin(a) * (radius - 7));
+        g.lineTo(Math.cos(a) * (radius + 7), Math.sin(a) * (radius + 7));
+        g.strokePath();
+      }
+      return;
+    }
+
+    const gap = mode === 'broken' ? 0.72 : 0.5;
+    g.lineStyle(mode === 'broken' ? 4 : 3, color, mode === 'broken' ? 0.92 : 0.78);
+    for (const offset of [0, Math.PI]) {
+      g.beginPath();
+      g.arc(0, 0, radius, offset + gap, offset + Math.PI - gap, false);
+      g.strokePath();
+    }
+    g.lineStyle(1.5, COLORS.white, mode === 'broken' ? 0.62 : 0.42);
+    g.strokeCircle(0, 0, radius + 10);
+  }
+
+  private updatePrimeAura(time: number): void {
+    if (!this.bossAura) return;
+    const broken = time <= this.primeBrokenUntil;
+    const mode = broken
+      ? 'broken'
+      : this.bossAttackState === 'recovery'
+        ? 'recovery'
+        : 'armored';
+    const radius = Math.max(62, this.radius + 36);
+    this.drawPrimeAura(this.bossAura, radius, mode);
+    const pulse = 1 + Math.sin(time * (broken ? 0.012 : 0.005)) * (broken ? 0.065 : 0.025);
+    this.bossAura
+      .setVisible(true)
+      .setPosition(this.x, this.y)
+      .setRotation(mode === 'armored' ? -time * 0.00045 : time * 0.00085)
+      .setScale(pulse)
+      .setAlpha(broken ? 0.94 : mode === 'recovery' ? 0.82 : 0.62);
   }
 
   private drawCardiacAura(g: Phaser.GameObjects.Graphics, radius: number, color: number): void {
