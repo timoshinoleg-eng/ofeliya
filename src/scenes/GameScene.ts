@@ -897,7 +897,8 @@ export class GameScene extends Phaser.Scene {
         .setVisible(true)
         .setPosition(this.player.x, this.player.y)
         .setAlpha(0.42 + Math.sin(now / 110) * 0.15);
-    } else {      this.haloRing?.setVisible(false);
+    } else {
+      this.haloRing?.setVisible(false);
     }
 
     if (want === 0) {
