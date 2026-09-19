@@ -22,6 +22,7 @@ try {
       'src/game/UpgradeSystem.ts',
       'src/game/HeartbeatPulseDirector.ts',
       'src/game/BossVulnerability.ts',
+      'src/systems/HostCellRecycling.ts',
       '--target',
       'ES2020',
       '--module',
@@ -49,6 +50,7 @@ try {
     primeDamageMultiplier,
     primeMembraneBreakDurationMs,
   } = require(join(temp, 'game/BossVulnerability.js'));
+  const { selectHostCellRecycleIndex } = require(join(temp, 'systems/HostCellRecycling.js'));
   const { ENEMY_DEFS } = require(join(temp, 'game/config.js'));
   const { StageDirector } = require(join(temp, 'game/StageDirector.js'));
   const {
@@ -255,6 +257,52 @@ try {
   assert(
     titanRhythmHit / titanHp < 0.05,
     'one synchronized max-build lysis burst removes too much CARDIAC TITAN HP'
+  );
+
+  // Host-cell recycling is a pure deterministic contract: meaningful infection is protected,
+  // while long one-direction movement keeps returning a stale cell from behind the player.
+  const recycleCells = [
+    { active: true, infection: 0.62, x: 0, y: 0, spawnedAt: 0 },
+    { active: true, infection: 0.02, x: 120, y: 0, spawnedAt: 0 },
+    { active: true, infection: 0, x: 300, y: 0, spawnedAt: 10_000 },
+    { active: true, infection: 0.08, x: 520, y: 0, spawnedAt: 20_000 },
+    { active: true, infection: 0, x: 760, y: 0, spawnedAt: 30_000 },
+    { active: true, infection: 0, x: 980, y: 0, spawnedAt: 40_000 },
+  ];
+  const protectedIndex = 0;
+  let playerX = 2_000;
+  let now = 180_000;
+  for (let step = 0; step < 5; step++) {
+    const index = selectHostCellRecycleIndex(recycleCells, {
+      playerX,
+      playerY: 0,
+      now,
+      recycleDistance: 620,
+    });
+    assert(index !== null, 'straight-line movement exhausted the host-cell recycle pool');
+    assert(index !== protectedIndex, 'meaningfully infected host cell was recycled');
+    assert(recycleCells[index].infection < 0.12, 'recycle selector chose protected infection progress');
+    recycleCells[index] = {
+      active: true,
+      infection: 0,
+      x: playerX + 180,
+      y: 0,
+      spawnedAt: now,
+    };
+    playerX += 360;
+    now += 22_000;
+  }
+  const nearbyOld = [
+    { active: true, infection: 0, x: 100, y: 0, spawnedAt: 0 },
+  ];
+  assert(
+    selectHostCellRecycleIndex(nearbyOld, {
+      playerX: 0,
+      playerY: 0,
+      now: 60_000,
+      recycleDistance: 620,
+    }) === null,
+    'old host cell was recycled while still locally relevant'
   );
 
   const heartbeat = new HeartbeatPulseDirector();
