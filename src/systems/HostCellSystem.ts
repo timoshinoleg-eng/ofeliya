@@ -12,6 +12,14 @@ interface HostCellSlot {
   spawnedAt: number;
 }
 
+export interface HostCellTuning {
+  infectionRadius: number;
+  infectionMs: number;
+  rna: number;
+  lysisRadius: number;
+  lysisDamage: number;
+}
+
 export interface HostCellLysisEvent {
   x: number;
   y: number;
@@ -29,20 +37,26 @@ export class HostCellSystem {
   private readonly scene: Phaser.Scene;
   private readonly player: Player;
   private readonly onLysis: (event: HostCellLysisEvent) => void;
+  private readonly tuningFn: () => HostCellTuning;
   private readonly cells: HostCellSlot[] = [];
   private spawnAcc = 0;
   private firstSpawned = false;
-  private readonly infectionRadius = 58;
-  private readonly infectionMs = 1250;
-
   constructor(
     scene: Phaser.Scene,
     player: Player,
-    onLysis: (event: HostCellLysisEvent) => void
+    onLysis: (event: HostCellLysisEvent) => void,
+    tuningFn: () => HostCellTuning = () => ({
+      infectionRadius: 58,
+      infectionMs: 1250,
+      rna: 4,
+      lysisRadius: 150,
+      lysisDamage: 26,
+    })
   ) {
     this.scene = scene;
     this.player = player;
     this.onLysis = onLysis;
+    this.tuningFn = tuningFn;
 
     for (let i = 0; i < 6; i++) {
       const image = scene.add
@@ -84,15 +98,16 @@ export class HostCellSystem {
       this.spawnNearPlayer();
     }
 
+    const tuning = this.tuningFn();
     for (const cell of this.cells) {
       if (!cell.active) continue;
       const dx = this.player.x - cell.image.x;
       const dy = this.player.y - cell.image.y;
       const distance = Math.hypot(dx, dy);
-      const inside = distance <= this.infectionRadius;
+      const inside = distance <= tuning.infectionRadius;
 
       if (inside) {
-        cell.infection = Math.min(1, cell.infection + delta / this.infectionMs);
+        cell.infection = Math.min(1, cell.infection + delta / Math.max(250, tuning.infectionMs));
       } else {
         // Progress decays gently, so a brief dodge does not erase the interaction.
         cell.infection = Math.max(0, cell.infection - delta / 5000);
@@ -135,7 +150,7 @@ export class HostCellSystem {
 
       if (inside && infected > 0 && infected < 1) {
         cell.ring.lineStyle(1, COLORS.white, 0.09 + infected * 0.08);
-        cell.ring.strokeCircle(cell.image.x, cell.image.y, this.infectionRadius);
+        cell.ring.strokeCircle(cell.image.x, cell.image.y, tuning.infectionRadius);
       }
 
       // Membrane warning arcs appear only near rupture, replacing a generic progress-circle feel.
@@ -347,6 +362,13 @@ export class HostCellSystem {
 
     cell.image.setVisible(false).setAlpha(0).clearTint();
     cell.infectionOverlay.setVisible(false).setAlpha(0);
-    this.onLysis({ x, y, rna: 4, radius: 150, damage: 26 });
+    const tuning = this.tuningFn();
+    this.onLysis({
+      x,
+      y,
+      rna: Math.max(1, Math.round(tuning.rna)),
+      radius: Math.max(60, tuning.lysisRadius),
+      damage: Math.max(1, tuning.lysisDamage),
+    });
   }
 }
