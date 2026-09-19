@@ -326,6 +326,7 @@ export class UIScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
     const compact = H < 620;
+    const legendaryReward = gs.legendaryRewardPending;
     const c = this.add.container(0, 0).setDepth(100);
     this.modal = c;
 
@@ -334,7 +335,7 @@ export class UIScene extends Phaser.Scene {
 
     const ring = this.add
       .circle(W / 2, H / 2, 20)
-      .setStrokeStyle(3, COLORS.magenta, 0.92)
+      .setStrokeStyle(3, legendaryReward ? COLORS.gold : COLORS.magenta, 0.92)
       .setDepth(101);
     this.tweens.add({
       targets: ring,
@@ -348,26 +349,40 @@ export class UIScene extends Phaser.Scene {
 
     const titleY = compact ? H * 0.1 : H * 0.13;
     const titleT = this.add
-      .text(W / 2, titleY, IDENTITY.levelUp, {
+      .text(W / 2, titleY, legendaryReward ? 'ЛЕГЕНДАРНЫЙ ТРОФЕЙ' : IDENTITY.levelUp, {
         fontFamily: FONT,
         fontSize: compact ? '23px' : '27px',
         fontStyle: 'bold',
-        color: '#ff78c8',
+        color: legendaryReward ? '#ffe066' : '#ff78c8',
         align: 'center',
       })
       .setOrigin(0.5)
       .setResolution(2)
-      .setShadow(0, 0, 'rgba(255,79,181,0.72)', 16, true, true);
+      .setShadow(
+        0,
+        0,
+        legendaryReward ? 'rgba(255,224,102,0.82)' : 'rgba(255,79,181,0.72)',
+        16,
+        true,
+        true
+      );
     c.add(titleT);
     titleT.setScale(0.7);
     this.tweens.add({ targets: titleT, scale: 1, duration: 260, ease: 'Back.Out' });
     c.add(
       this.add
-        .text(W / 2, titleY + (compact ? 31 : 38), `стадия ${gs.runState.stage.level} · выбери мутацию`, {
+        .text(
+          W / 2,
+          titleY + (compact ? 31 : 38),
+          legendaryReward
+            ? 'IMMUNE PRIME подавлен · выбери мутацию для СЕРДЦА'
+            : 'стадия ' + gs.runState.stage.level + ' · выбери мутацию',
+          {
           fontFamily: FONT,
           fontSize: compact ? '12px' : '14px',
           color: '#aab4d4',
-        })
+          }
+        )
         .setOrigin(0.5)
         .setResolution(2)
     );
