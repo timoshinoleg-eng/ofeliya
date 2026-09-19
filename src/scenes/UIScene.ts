@@ -238,37 +238,58 @@ export class UIScene extends Phaser.Scene {
     const c = this.add.container(0, 0).setDepth(160);
     this.transitionOverlay = c;
 
-    const dim = this.add.rectangle(W / 2, H / 2, W, H, 0x070308, 0.94).setInteractive();
+    const dim = this.add.rectangle(W / 2, H / 2, W, H, 0x050308, 0.96).setInteractive();
     dim.on('pointerup', onSkip);
     c.add(dim);
 
+    const outerPulse = this.add
+      .circle(W / 2, H * 0.47, compact ? 38 : 46)
+      .setStrokeStyle(2.4, accent, 0.72);
+    const innerPulse = this.add
+      .circle(W / 2, H * 0.47, compact ? 18 : 22, accent, 0.055)
+      .setStrokeStyle(1.4, COLORS.white, 0.48);
+    c.add([outerPulse, innerPulse]);
+
     c.add(
       this.add
-        .text(W / 2, H * 0.39, 'HOST COMPARTMENT BREACHED', {
+        .text(W / 2, H * 0.34, 'ОРГАН ДОСТИГНУТ', {
           fontFamily: FONT,
-          fontSize: compact ? '20px' : '25px',
+          fontSize: compact ? '13px' : '15px',
           fontStyle: 'bold',
-          color: '#fff4ec',
+          color: '#aab4d4',
+          letterSpacing: 2,
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+    c.add(
+      this.add
+        .text(W / 2, H * 0.45, toName.toUpperCase(), {
+          fontFamily: FONT,
+          fontSize: compact ? '32px' : '40px',
+          fontStyle: 'bold',
+          color: `#${accent.toString(16).padStart(6, '0')}`,
           align: 'center',
         })
         .setOrigin(0.5)
         .setResolution(2)
+        .setShadow(0, 0, `#${accent.toString(16).padStart(6, '0')}`, 16, true, true)
     );
     c.add(
       this.add
-        .text(W / 2, H * 0.48, `${fromName}  →  ${toName}`, {
+        .text(W / 2, H * 0.56, `${fromName}  →  ${toName}`, {
           fontFamily: FONT,
-          fontSize: compact ? '14px' : '17px',
-          color: `#${accent.toString(16).padStart(6, '0')}`,
+          fontSize: compact ? '12px' : '14px',
+          color: '#fff4ec',
         })
         .setOrigin(0.5)
         .setResolution(2)
     );
     c.add(
       this.add
-        .text(W / 2, H * 0.56, 'REASSEMBLING STRAIN\nнажми, чтобы ускорить', {
+        .text(W / 2, H * 0.64, 'ШТАММ ПЕРЕСТРАИВАЕТСЯ\nнажми, чтобы ускорить', {
           fontFamily: FONT,
-          fontSize: compact ? '11px' : '13px',
+          fontSize: compact ? '10px' : '12px',
           color: '#aab4d4',
           align: 'center',
           lineSpacing: 5,
@@ -277,11 +298,29 @@ export class UIScene extends Phaser.Scene {
         .setResolution(2)
     );
 
-    const line = this.add.rectangle(W / 2, H * 0.52, Math.min(W - 72, 260), 3, accent, 0.85);
+    const line = this.add.rectangle(W / 2, H * 0.515, Math.min(W - 72, 250), 3, accent, 0.9);
     c.add(line);
     c.setAlpha(0);
     this.tweens.add({ targets: c, alpha: 1, duration: 180, ease: 'Quad.Out' });
-    this.tweens.add({ targets: line, scaleX: 0.35, alpha: 0.35, yoyo: true, repeat: -1, duration: 420 });
+    this.tweens.add({ targets: line, scaleX: 0.38, alpha: 0.38, yoyo: true, repeat: -1, duration: 420 });
+    this.tweens.add({
+      targets: outerPulse,
+      scale: 1.55,
+      alpha: 0.12,
+      duration: 760,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.InOut',
+    });
+    this.tweens.add({
+      targets: innerPulse,
+      scale: 0.78,
+      alpha: 0.72,
+      duration: 360,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.InOut',
+    });
   }
 
   hideStageTransition(): void {
