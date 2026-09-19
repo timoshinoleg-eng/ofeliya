@@ -91,6 +91,22 @@ try {
   );
   assert(transitionReward.run.legendaryPity === 0, 'guaranteed reward did not reset pity');
 
+  const reservedBossTrophy = new RunState({ id: 'bloodstream', order: 1 });
+  assert(reservedBossTrophy.addLegendary('zero-point'), 'pre-boss Legendary setup failed');
+  assert(
+    rollLegendaryChoice(reservedBossTrophy, () => 0) === null,
+    'second random pre-boss Legendary consumed the reserved trophy slot'
+  );
+  reservedBossTrophy.recordBossDefeated('immune-prime');
+  reservedBossTrophy.resetStageProgression({ id: 'heart', order: 2 });
+  const bossTrophy = guaranteedLegendaryChoices(reservedBossTrophy, 2, () => 0);
+  assert(bossTrophy.length > 0, 'IMMUNE PRIME trophy disappeared after a pre-boss Legendary');
+  bossTrophy[0].apply(reservedBossTrophy);
+  assert(
+    reservedBossTrophy.run.legendaryIds.size === MAX_LEGENDARIES_PER_RUN,
+    'IMMUNE PRIME trophy did not fill the reserved second Legendary slot'
+  );
+
   assert(state.addLegendary('zero-point'), 'first Legendary was rejected');
   assert(!state.addLegendary('zero-point'), 'duplicate Legendary was accepted');
   assert(state.addLegendary('core-predator'), 'second Legendary was rejected');
