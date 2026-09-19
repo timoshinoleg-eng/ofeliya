@@ -101,6 +101,9 @@ jobs:
       - name: Legendary runtime browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/legendary-runtime-smoke.cjs
 
+      - name: Legendary cinematic ceremony browser smoke
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/legendary-ceremony-smoke.cjs
+
       - name: IMMUNE PRIME vulnerability runtime browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/prime-vulnerability-smoke.cjs
 
