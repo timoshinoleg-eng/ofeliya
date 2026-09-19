@@ -802,7 +802,15 @@ export class GameScene extends Phaser.Scene {
     const run = this.runState.run;
     const stage = this.runState.stage;
     const evolutions = [...run.evolutionsSeen];
-    const records = SaveSystem.recordRun(win, run.timeMs, run.kills, stage.level, evolutions);
+    const boss1ClearMs = run.bossClearTimesMs['immune-prime'] ?? 0;
+    const records = SaveSystem.recordRun(
+      win,
+      run.timeMs,
+      run.kills,
+      stage.level,
+      evolutions,
+      { boss1ClearMs }
+    );
     this.captureAchievements(true, false);
     this.milestones.reset();
     this.registry.set('run', this.snapshot());
@@ -817,6 +825,7 @@ export class GameScene extends Phaser.Scene {
       stageId: stage.id,
       stageOrder: stage.order,
       bossesDefeated: run.bossesDefeated,
+      boss1ClearMs,
       stacks: { ...stage.stacks },
       evolutions,
       newAchievements: [...this.newAchievements],
@@ -888,8 +897,7 @@ export class GameScene extends Phaser.Scene {
         .setVisible(true)
         .setPosition(this.player.x, this.player.y)
         .setAlpha(0.42 + Math.sin(now / 110) * 0.15);
-    } else {
-      this.haloRing?.setVisible(false);
+    } else {      this.haloRing?.setVisible(false);
     }
 
     if (want === 0) {

@@ -23,8 +23,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Challenge contract smoke
+      - name: Challenge v1/v2 compatibility smoke
         run: npm run test:challenge
+
+      - name: Save migration compatibility smoke
+        run: npm run test:save
 
       - name: Stage runtime contract smoke
         run: npm run test:stages

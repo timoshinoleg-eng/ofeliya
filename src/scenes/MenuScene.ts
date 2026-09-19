@@ -182,9 +182,11 @@ export class MenuScene extends Phaser.Scene {
         .setResolution(2)
         .setDepth(5);
       const target =
-        incomingChallenge.objective === 'clear'
+        incomingChallenge.objective === 'boss1-clear'
           ? `Подави IMMUNE PRIME быстрее ${fmtTime(incomingChallenge.timeMs)}`
-          : `Продержись дольше ${fmtTime(incomingChallenge.timeMs)}`;
+          : incomingChallenge.objective === 'campaign-clear'
+            ? `Заверши кампанию быстрее ${fmtTime(incomingChallenge.timeMs)}`
+            : `Продержись дольше ${fmtTime(incomingChallenge.timeMs)}`;
       this.add
         .text(W / 2, challengeY + 2, target, {
           fontFamily: FONT,
@@ -214,10 +216,11 @@ export class MenuScene extends Phaser.Scene {
     } else {
       const save = SaveSystem.get();
       const survival = save.bestSurvivalMs > 0 ? fmtTime(save.bestSurvivalMs) : '—';
-      const victory = save.bestWinTimeMs > 0 ? fmtTime(save.bestWinTimeMs) : '—';
+      const boss1 = save.bestBoss1ClearMs > 0 ? fmtTime(save.bestBoss1ClearMs) : '—';
+      const campaign = save.bestCampaignClearMs > 0 ? fmtTime(save.bestCampaignClearMs) : '—';
       const records =
         save.runs > 0
-          ? `Лучшее выживание ${survival}   ·   подавление иммунитета ${victory}\nИммунных клеток ${save.bestKills}   ·   стадия мутации ${save.bestLevel}`
+          ? `Выживание ${survival}   ·   IMMUNE PRIME ${boss1}\nКампания ${campaign}   ·   иммунных клеток ${save.bestKills}`
           : 'STRAIN-0 · ПЕРВЫЙ ЦИКЛ ЗАРАЖЕНИЯ';
       this.add
         .text(W / 2, H * 0.57, records, {

@@ -1,26 +1,40 @@
-export type ChallengeObjective = 'clear' | 'survive';
+export type ChallengeObjective = 'boss1-clear' | 'campaign-clear' | 'survive';
 
-export interface ChallengePayloadV1 {
-  version: 1;
-  objective: ChallengeObjective;
-  /** Millisecond target. Clear challenges must be beaten faster; survival challenges longer. */
+interface ChallengeStats {
   timeMs: number;
   kills: number;
   hostCellsInfected: number;
   level: number;
   comboBest: number;
 }
+
+export interface ChallengePayloadV1 extends ChallengeStats {
+  version: 1;
+  /** Legacy sz1 clear challenges mean the original one-stage IMMUNE PRIME clear. */
+  objective: 'boss1-clear' | 'survive';
+}
+
+export interface ChallengePayloadV2 extends ChallengeStats {
+  version: 2;
+  /** New clear challenges target the complete Bloodstream -> Heart campaign. */
+  objective: 'campaign-clear' | 'survive';
+}
+
+export type ChallengePayload = ChallengePayloadV1 | ChallengePayloadV2;
 
 export interface ChallengeRunResult {
   win: boolean;
   timeMs: number;
+  /** Run-wide time when IMMUNE PRIME was defeated; 0/undefined means not defeated. */
+  boss1ClearMs?: number;
   kills: number;
   hostCellsInfected: number;
   level: number;
   comboBest: number;
 }
 
-const PREFIX = 'sz1';
+const PREFIX_V1 = 'sz1';
+const PREFIX_V2 = 'sz2';
 const MAX_START_PAYLOAD_LENGTH = 512;
 const START_PAYLOAD_RE = /^[A-Za-z0-9_-]+$/;
 const BASE36_RE = /^[0-9a-z]+$/;
@@ -51,11 +65,11 @@ function parseInt36(token: string, max: number): number | null {
   return value;
 }
 
-/** Creates a compact, non-sensitive social target from a completed run. */
-export function createChallengePayload(run: ChallengeRunResult): ChallengePayloadV1 {
+/** Creates the current compact, non-sensitive social target from a completed run. */
+export function createChallengePayload(run: ChallengeRunResult): ChallengePayloadV2 {
   return {
-    version: 1,
-    objective: run.win ? 'clear' : 'survive',
+    version: 2,
+    objective: run.win ? 'campaign-clear' : 'survive',
     timeMs: boundedInt(run.timeMs, LIMITS.timeMs),
     kills: boundedInt(run.kills, LIMITS.kills),
     hostCellsInfected: boundedInt(run.hostCellsInfected, LIMITS.hostCellsInfected),
@@ -65,17 +79,19 @@ export function createChallengePayload(run: ChallengeRunResult): ChallengePayloa
 }
 
 /**
- * MAX startapp-safe wire format. Example:
- * sz1_c_6fhc_2s_3_7_k
- *
- * Only documented MAX payload characters are emitted and the payload stays far below 512 chars.
+ * MAX startapp-safe wire format.
+ * - sz1_c_* remains the legacy IMMUNE PRIME clear contract.
+ * - sz2_c_* is the complete multi-stage campaign clear contract.
  */
-export function encodeChallengePayload(challenge: ChallengePayloadV1): string | null {
-  if (challenge.version !== 1) return null;
-  const mode = challenge.objective === 'clear' ? 'c' : challenge.objective === 'survive' ? 's' : null;
+export function encodeChallengePayload(challenge: ChallengePayload): string | null {
+  const prefix = challenge.version === 1 ? PREFIX_V1 : challenge.version === 2 ? PREFIX_V2 : null;
+  if (!prefix) return null;
+  const clearObjective = challenge.version === 1 ? 'boss1-clear' : 'campaign-clear';
+  const mode =
+    challenge.objective === clearObjective ? 'c' : challenge.objective === 'survive' ? 's' : null;
   if (!mode) return null;
   const payload = [
-    PREFIX,
+    prefix,
     mode,
     encodeInt(challenge.timeMs, LIMITS.timeMs),
     encodeInt(challenge.kills, LIMITS.kills),
@@ -88,11 +104,20 @@ export function encodeChallengePayload(challenge: ChallengePayloadV1): string | 
 }
 
 /** Strict parser for untrusted start_param. Unknown versions/formats are ignored safely. */
-export function parseChallengePayload(raw: string | null | undefined): ChallengePayloadV1 | null {
+export function parseChallengePayload(raw: string | null | undefined): ChallengePayload | null {
   if (!raw || raw.length > MAX_START_PAYLOAD_LENGTH || !START_PAYLOAD_RE.test(raw)) return null;
   const parts = raw.split('_');
-  if (parts.length !== 7 || parts[0] !== PREFIX) return null;
-  const objective: ChallengeObjective | null = parts[1] === 'c' ? 'clear' : parts[1] === 's' ? 'survive' : null;
+  if (parts.length !== 7) return null;
+  const version = parts[0] === PREFIX_V1 ? 1 : parts[0] === PREFIX_V2 ? 2 : null;
+  if (version === null) return null;
+  const objective: ChallengeObjective | null =
+    parts[1] === 's'
+      ? 'survive'
+      : parts[1] === 'c'
+        ? version === 1
+          ? 'boss1-clear'
+          : 'campaign-clear'
+        : null;
   if (!objective) return null;
 
   const timeMs = parseInt36(parts[2], LIMITS.timeMs);
@@ -111,19 +136,25 @@ export function parseChallengePayload(raw: string | null | undefined): Challenge
   }
 
   return {
-    version: 1,
+    version,
     objective,
     timeMs,
     kills,
     hostCellsInfected,
     level,
     comboBest,
-  };
+  } as ChallengePayload;
 }
 
 /** Client-side social verdict only. It does not grant rewards or validate competitive results. */
-export function isChallengeBeaten(target: ChallengePayloadV1, run: ChallengeRunResult): boolean {
+export function isChallengeBeaten(target: ChallengePayload, run: ChallengeRunResult): boolean {
+  if (target.objective === 'boss1-clear') {
+    const boss1ClearMs = boundedInt(run.boss1ClearMs ?? 0, LIMITS.timeMs);
+    return boss1ClearMs > 0 && boss1ClearMs < target.timeMs;
+  }
   const timeMs = boundedInt(run.timeMs, LIMITS.timeMs);
-  if (target.objective === 'clear') return run.win && timeMs > 0 && timeMs < target.timeMs;
+  if (target.objective === 'campaign-clear') {
+    return run.win && timeMs > 0 && timeMs < target.timeMs;
+  }
   return timeMs > target.timeMs;
 }

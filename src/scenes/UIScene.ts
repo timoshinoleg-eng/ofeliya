@@ -4,7 +4,7 @@ import {
   createChallengePayload,
   encodeChallengePayload,
   isChallengeBeaten,
-  type ChallengePayloadV1,
+  type ChallengePayload,
 } from '../game/Challenge';
 import { COLORS, COMBO, FONT, JUICE, fmtTime } from '../game/config';
 import { getEvolutionDef } from '../game/EvolutionSystem';
@@ -790,14 +790,16 @@ export class UIScene extends Phaser.Scene {
       );
     }
 
-    const challengeTarget = this.registry.get('challengeTarget') as ChallengePayloadV1 | null | undefined;
+    const challengeTarget = this.registry.get('challengeTarget') as ChallengePayload | null | undefined;
     if (challengeTarget) {
       detailY += compact ? 24 : 29;
       const beaten = isChallengeBeaten(challengeTarget, res);
       const target =
-        challengeTarget.objective === 'clear'
-          ? `быстрее ${fmtTime(challengeTarget.timeMs)}`
-          : `дольше ${fmtTime(challengeTarget.timeMs)}`;
+        challengeTarget.objective === 'boss1-clear'
+          ? `IMMUNE PRIME быстрее ${fmtTime(challengeTarget.timeMs)}`
+          : challengeTarget.objective === 'campaign-clear'
+            ? `кампания быстрее ${fmtTime(challengeTarget.timeMs)}`
+            : `дольше ${fmtTime(challengeTarget.timeMs)}`;
       c.add(
         this.add
           .text(W / 2, detailY, `ВЫЗОВ ${beaten ? 'ПРЕВЗОЙДЁН' : 'НЕ ПРЕВЗОЙДЁН'} · цель ${target}`, {
@@ -830,7 +832,7 @@ export class UIScene extends Phaser.Scene {
       const mins = fmtTime(res.timeMs);
       const evoShare = res.evolutions.length > 0 ? ` Критические мутации: ${res.evolutions.map((id) => EVOLUTION_NAMES[id]).join(', ')}.` : '';
       const shareText = res.win
-        ? `OFELIYA / STRAIN-0 подавила иммунитет за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${evoShare} Сможешь быстрее?`
+        ? `OFELIYA / STRAIN-0 завершила кампанию за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${evoShare} Сможешь быстрее?`
         : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${evoShare} Сможешь дольше?`;
       const payload = encodeChallengePayload(createChallengePayload(res));
       const link = payload ? PlatformBridge.buildStartLink(payload) : null;

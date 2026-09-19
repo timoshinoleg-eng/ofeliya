@@ -33,6 +33,8 @@ Build job:
 ```bash
 npm ci
 npm run test:challenge
+npm run test:save
+npm run test:stages
 npm run test:viewport
 npm run release:check
 npm run build
@@ -40,9 +42,10 @@ npm run build
 
 Checks cover:
 
-- challenge payload encode/decode;
+- challenge payload v1/v2 encode/decode;
 - invalid/oversized payload rejection;
-- clear-faster / survive-longer challenge semantics;
+- legacy `sz1_c_*` IMMUNE PRIME semantics and new `sz2_c_*` full-campaign semantics;
+- legacy `bestWinTimeMs` -> Boss 1 migration without contaminating full-campaign records;
 - deterministic MAX viewport + safe-area frame math;
 - mandatory release config presence and format;
 - TypeScript production typecheck;

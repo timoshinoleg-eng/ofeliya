@@ -66,7 +66,10 @@ function guardMenu(scene: Phaser.Scene): void {
   if (challengeMeta) fitToWidth(challengeMeta, Math.min(W - 64, 286), 0.64);
 
   const challengeTarget = texts.find(
-    (text) => text.text.startsWith('Подави IMMUNE PRIME') || text.text.startsWith('Продержись дольше')
+    (text) =>
+      text.text.startsWith('Подави IMMUNE PRIME') ||
+      text.text.startsWith('Заверши кампанию') ||
+      text.text.startsWith('Продержись дольше')
   );
   if (challengeTarget) fitToWidth(challengeTarget, Math.min(W - 64, 286), 0.64);
 

@@ -39,6 +39,8 @@ export interface RunResult {
   stageId: StageId;
   stageOrder: number;
   bossesDefeated: number;
+  /** Run-wide time when IMMUNE PRIME was defeated; 0 means it was not defeated. */
+  boss1ClearMs: number;
   stacks: Record<string, number>;
   evolutions: EvolutionId[];
   newAchievements: AchievementId[];
