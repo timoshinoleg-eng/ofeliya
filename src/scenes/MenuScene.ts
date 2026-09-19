@@ -3,6 +3,14 @@ import { parseChallengePayload } from '../game/Challenge';
 import { COLORS, FONT, fmtTime } from '../game/config';
 import { IDENTITY } from '../game/identity';
 import {
+  controlModeDescription,
+  controlModeLabel,
+  nextControlMode,
+  readControlMode,
+  writeControlMode,
+  type ControlMode,
+} from '../game/ControlMode';
+import {
   getDifficultyProfile,
   nextDifficultyId,
   readDifficultySelection,
@@ -29,7 +37,9 @@ export class MenuScene extends Phaser.Scene {
 
     const incomingChallenge = parseChallengePayload(PlatformBridge.getStartParam());
     let selectedDifficulty = incomingChallenge ? 'standard' : readDifficultySelection();
+    let selectedControlMode: ControlMode = readControlMode();
     this.registry.set('difficultyId', selectedDifficulty);
+    this.registry.set('controlMode', selectedControlMode);
     // Registry keeps the social target across Menu -> Game -> UI and fast restarts. It is display
     // context only: gameplay/rewards never consume it.
     this.registry.set('challengeTarget', incomingChallenge);
@@ -299,7 +309,62 @@ export class MenuScene extends Phaser.Scene {
     difficultyBg.on('pointerover', () => difficultyBg.setFillStyle(0x2a1425, 1));
     difficultyBg.on('pointerout', () => difficultyBg.setFillStyle(0x21101d, 0.94));
 
-    const btnY = H * 0.73;
+    const controlY = H * 0.715;
+    const controlW = Math.min(W - 52, 286);
+    const controlH = H < 650 ? 38 : 42;
+    const controlBg = this.add
+      .rectangle(W / 2, controlY, controlW, controlH, 0x141d2a, 0.94)
+      .setStrokeStyle(1.4, COLORS.magenta, 0.7)
+      .setDepth(5)
+      .setInteractive({ useHandCursor: true });
+    const controlText = this.add
+      .text(W / 2, controlY - 7, '', {
+        fontFamily: FONT,
+        fontSize: H < 650 ? '10px' : '11px',
+        fontStyle: 'bold',
+        color: '#fff4ec',
+      })
+      .setOrigin(0.5)
+      .setResolution(2)
+      .setDepth(6);
+    const controlDesc = this.add
+      .text(W / 2, controlY + 8, '', {
+        fontFamily: FONT,
+        fontSize: H < 650 ? '8px' : '9px',
+        color: '#9fb5c4',
+        align: 'center',
+      })
+      .setOrigin(0.5)
+      .setResolution(2)
+      .setDepth(6);
+    let startHint: Phaser.GameObjects.Text | null = null;
+    const renderControlMode = () => {
+      controlText.setText(`УПРАВЛЕНИЕ: ${controlModeLabel(selectedControlMode)}  ›`);
+      controlDesc.setText(controlModeDescription(selectedControlMode));
+      controlBg.setStrokeStyle(
+        selectedControlMode === 'two-hand' ? 1.8 : 1.4,
+        selectedControlMode === 'two-hand' ? COLORS.cyan : COLORS.magenta,
+        0.82
+      );
+      startHint?.setText(
+        selectedControlMode === 'one-hand'
+          ? 'атака автоматическая · движение одним пальцем'
+          : 'атака автоматическая · слева движение · справа приоритет'
+      );
+    };
+    renderControlMode();
+    controlBg.on('pointerup', () => {
+      Sfx.play('click');
+      PlatformBridge.haptic('light');
+      selectedControlMode = nextControlMode(selectedControlMode);
+      writeControlMode(selectedControlMode);
+      this.registry.set('controlMode', selectedControlMode);
+      renderControlMode();
+    });
+    controlBg.on('pointerover', () => controlBg.setFillStyle(0x1b2939, 1));
+    controlBg.on('pointerout', () => controlBg.setFillStyle(0x141d2a, 0.94));
+
+    const btnY = H * 0.805;
     const btnW = Math.min(W - 44, 300);
     const btnBg = this.add
       .rectangle(W / 2, btnY, btnW, 66, 0x5c143e, 0.92)
@@ -315,15 +380,17 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setResolution(2)
       .setDepth(6);
-    this.add
-      .text(W / 2, btnY + 18, 'атака автоматическая · движение одним пальцем', {
+    startHint = this.add
+      .text(W / 2, btnY + 18, '', {
         fontFamily: FONT,
-        fontSize: '9px',
+        fontSize: H < 650 ? '8px' : '9px',
         color: '#ffc0dd',
+        align: 'center',
       })
       .setOrigin(0.5)
       .setResolution(2)
       .setDepth(6);
+    renderControlMode();
 
     btnBg.setInteractive({ useHandCursor: true }).on('pointerup', () => {
       Sfx.play('click');
@@ -334,7 +401,7 @@ export class MenuScene extends Phaser.Scene {
     btnBg.on('pointerout', () => btnBg.setFillStyle(0x5c143e, 0.92));
 
     const soundText = this.add
-      .text(W / 2, btnY + 55, `звук: ${Sfx.muted ? 'выкл' : 'вкл'}`, {
+      .text(W / 2, btnY + (H < 650 ? 48 : 55), `звук: ${Sfx.muted ? 'выкл' : 'вкл'}`, {
         fontFamily: FONT,
         fontSize: '11px',
         color: Sfx.muted ? '#755266' : '#c89aaf',
