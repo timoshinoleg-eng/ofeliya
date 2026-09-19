@@ -17,6 +17,7 @@ import {
   writeDifficultySelection,
 } from '../game/DifficultyProfile';
 import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
+import { ensureCinematicTextures } from '../game/CinematicTextures';
 import { showLegalOverlay } from '../legal/LegalOverlay';
 import { PlatformBridge } from '../platform';
 import { SaveSystem } from '../systems/SaveSystem';
@@ -28,6 +29,7 @@ export class MenuScene extends Phaser.Scene {
   }
 
   create(): void {
+    ensureCinematicTextures(this);
     ensureStrainZeroTextures(this);
     const W = this.scale.width;
     const H = this.scale.height;
