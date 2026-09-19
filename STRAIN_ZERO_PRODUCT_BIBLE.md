@@ -1,4 +1,4 @@
-# OFELIYA: STRAIN ZERO — Product Bible v1
+# OFELIYA: STRAIN ZERO — Product Bible v2
 
 ## One-line hook
 
@@ -6,18 +6,43 @@
 
 ## Product promise
 
-A five-minute one-thumb survivor run set inside a living organism. The player is OFELIYA / STRAIN-0, a synthetic virus that starts almost unnoticed and becomes visibly more dangerous as the host escalates its immune response.
+A portrait mobile survivor campaign inside a living organism. The player is OFELIYA / STRAIN-0, a synthetic virus that starts almost unnoticed and becomes visibly more dangerous while the host escalates its immune response.
 
-The redesign is not a cosmetic reskin. Every system must reinforce the same fantasy:
+The current live campaign is two acts:
 
-`infiltration -> detection -> mutation -> immune escalation -> critical mutation -> IMMUNE PRIME`
+`КРОВОТОК -> IMMUNE PRIME -> СЕРДЦЕ -> CARDIAC TITAN`
+
+The design is not a cosmetic reskin. Every major system should reinforce:
+
+`infiltration -> detection -> mutation -> infection -> immune escalation -> critical mutation -> boss adaptation -> organ transition`
 
 ## Audience and release order
 
 1. MAX Mini App first.
-2. Telegram Mini App second through a platform adapter, not a gameplay fork.
+2. Telegram Mini App second through the platform adapter, not a gameplay fork.
 3. Primary device: smartphone portrait orientation.
-4. Core interaction: one thumb; automatic attack; no second virtual stick.
+4. Default interaction: one-hand floating joystick + automatic attack.
+5. Optional interaction: two-hand twin-stick, with left movement and right aim-priority. Automatic attack remains mandatory.
+
+The one-hand profile is the accessibility/default contract and must remain fully playable by itself.
+
+## Campaign structure
+
+### Act I — КРОВОТОК
+
+- target timeline: 5:00 before boss;
+- immune escalation through antibodies, T-killers, macrophages and elite/NK response;
+- signature systemic objective: infect host cells and trigger lysis;
+- boss: `IMMUNE PRIME`.
+
+### Act II — СЕРДЦЕ
+
+- target timeline: 4:00 before boss;
+- stronger enemy mix;
+- heartbeat telegraphs and positional timing windows;
+- boss: `CARDIAC TITAN`.
+
+Run-wide identity survives the organ transition, while stage-local combat progression resets. The final result must show the actual two-stage build history, not only Heart state.
 
 ## First-session engagement targets
 
@@ -26,20 +51,18 @@ The redesign is not a cosmetic reskin. Every system must reinforce the same fant
 - first RNA pickup: <= 6 seconds;
 - first mutation choice: around <= 12 seconds;
 - first visible immune escalation: <= 20 seconds;
-- no dead period longer than ~20–30 seconds without a new enemy type, mutation, infected-cell opportunity, milestone or strong presentation beat.
+- no dead period longer than ~20–30 seconds without a new enemy behavior, mutation, infected-cell opportunity, milestone or presentation beat.
 
-These are product targets, not guarantees that justify hidden cheating. If telemetry later shows they are missed, tune spawn/XP/onboarding deliberately.
+These are product targets, not hidden guarantees.
 
 ## Core fantasy
-
-The host initially does not understand what entered its bloodstream. As the virus replicates and mutates, the immune system progressively identifies it and deploys stronger responses.
 
 The player should feel two simultaneous curves:
 
 1. **I am becoming a monster.**
-2. **The organism is waking up because of me.**
+2. **The organism is learning how to stop me.**
 
-The visual state at 4:30 must be obviously different from 0:05 even in a silent screen recording.
+The visual/gameplay state in late Bloodstream and late Heart must be recognizably different from the first seconds even in a silent recording.
 
 ## Vocabulary
 
@@ -55,72 +78,156 @@ The visual state at 4:30 must be obviously different from 0:05 even in a silent 
 - run: `ЦИКЛ ЗАРАЖЕНИЯ`
 - upgrades: `МУТАЦИИ`
 - evolutions: `КРИТИЧЕСКИЕ МУТАЦИИ`
+- highest rarity: `ЛЕГЕНДАРНЫЕ`
 
 ### Hostile roles
 
-Internal gameplay IDs stay stable for now.
+Internal gameplay IDs stay stable.
 
-| Internal id | Player-facing identity |
-|---|---|
-| `swarm` | `АНТИТЕЛО` |
-| `runner` | `T-КИЛЛЕР` |
-| `brute` | `МАКРОФАГ` |
-| elite modifier | `NK-КЛЕТКА` |
-| `boss` | `IMMUNE PRIME` |
+| Internal id | Player-facing identity | Behavior contract |
+|---|---|---|
+| `swarm` | `АНТИТЕЛО` | predictive interception |
+| `runner` | `T-КИЛЛЕР` | wind-up -> locked charge -> recovery |
+| `brute` | `МАКРОФАГ` | close wind-up -> heavy burst -> recovery |
+| elite modifier | `NK-КЛЕТКА` | adaptive modifier |
+| Bloodstream boss | `IMMUNE PRIME` | pressure-wave phases |
+| Heart boss | `CARDIAC TITAN` | heartbeat phases |
 
-### Existing evolutions -> critical mutations
+### Critical mutations
 
-| Internal id | New identity |
+| Internal id | Identity |
 |---|---|
 | `prism` | `ГИПЕРШИП` |
 | `halo` | `СВЕРХКАПСИД` |
 | `singularity` | `ЛИЗИС` |
 
-Internal IDs remain unchanged until there is a compelling migration reason.
-
 ## Mutation families
 
 ### АГРЕССИЯ
-Damage, attack rate, penetration, multiple projectiles.
+
+Damage, attack rate, penetration, multiple projectiles, lysis damage.
 
 ### ЗАЩИТА
+
 Capsid strength, regeneration, survivability.
 
 ### РАСПРОСТРАНЕНИЕ
-Movement and reach through the organism.
+
+Movement, infection reach and movement through the organism.
 
 ### АДАПТАЦИЯ
-Collection range and host-interaction utility.
+
+Collection, host-cell economy and interaction utility.
 
 ## Signature mechanic: host-cell infection
 
-This is the main gameplay feature that should make Strain Zero more than a survivor skin.
-
-Neutral host cells periodically appear in the arena.
+Host-cell infection is a buildable combat/economy system, not decorative scenery.
 
 1. The player approaches a host cell.
-2. Contact/proximity fills an infection meter.
-3. The cell visibly changes from healthy -> compromised -> infected.
-4. At full infection it undergoes **lysis**.
-5. Lysis releases RNA and a radial viral burst that damages nearby immune cells.
-6. Later mutations can alter infection speed, burst radius, replication count or rewards.
+2. Proximity fills infection.
+3. The cell changes healthy -> compromised -> infected.
+4. Full infection triggers **lysis**.
+5. Lysis releases RNA and damages nearby immune cells.
+6. The build can modify infection speed/radius, lysis damage/radius and RNA yield.
 
-The mechanic must remain one-thumb friendly. No extra attack/interact button.
+Live mutation line:
 
-## Five-minute immune escalation
+- `РЕЦЕПТОРНЫЙ ЗАХВАТ` — faster/wider infection;
+- `ЦИТОЛИЗ` — stronger/wider lysis;
+- `ВИРУСНАЯ ФАБРИКА` — higher RNA yield plus lysis scaling.
 
-Presentation and enemy composition must tell a story.
+The bounded cell pool may recycle only old/far, nearly untouched cells so the mechanic follows the player without deleting meaningful infection progress.
+
+Against `IMMUNE PRIME`, host-cell lysis is intentionally a stronger answer, making the Bloodstream boss test the stage’s signature mechanic.
+
+## Bloodstream immune escalation
 
 - `0:00` — `НЕ ОБНАРУЖЕН`
 - `~0:15` — `ЧУЖЕРОДНАЯ РНК ОБНАРУЖЕНА`
 - `~0:45` — `ИММУННЫЙ ОТВЕТ АКТИВИРОВАН`
 - `~1:30` — `T-КЛЕТКИ ПОДКЛЮЧЕНЫ`
 - `2:00` — `АДАПТИВНЫЙ ИММУНИТЕТ`
-- `3:00` — stronger NK response / vascular agitation
+- `3:00` — systemic response
 - `4:00` — `КРИТИЧЕСКАЯ ИММУННАЯ РЕАКЦИЯ`
 - `5:00` — `IMMUNE PRIME`
 
-Do not make every beat a blocking banner. Use background, audio, enemy silhouettes, lighting and short copy together.
+Do not make every beat a blocking banner. Use background, audio, silhouettes, lighting, haptics and short copy together.
+
+## Heart signature: synchronization
+
+Heart must not feel like “Bloodstream with a red background.”
+
+Heartbeat telegraphs create a nearby diastole safe pocket. If the player reaches it before impact:
+
+- temporary pressure is neutralized;
+- a short projectile/lysis opportunity window opens;
+- `РИТМ МИОКАРДА` can trigger if owned;
+- `CARDIAC TITAN` becomes more vulnerable during that opportunity.
+
+Missing the pocket preserves the normal pressure consequence.
+
+The mechanic must work identically with one-hand and two-hand controls.
+
+## Boss principles
+
+Bosses are mechanic exams, not HP walls.
+
+### IMMUNE PRIME
+
+- telegraphed radial pressure attack;
+- second phase around half HP;
+- faster/larger pressure pattern in phase 2;
+- lysis is a meaningful counterplay path.
+
+### CARDIAC TITAN
+
+- uses Heart rhythm language;
+- stronger movement/body pulse in phase 2;
+- successful heartbeat synchronization creates explicit vulnerability.
+
+## Legendary contract
+
+Legendary is the top rarity inside the existing progression flow.
+
+- maximum **2 per run**;
+- no duplicates;
+- stage/prerequisite gating;
+- pity after 8 eligible missed offers;
+- at most one random Legendary before the first boss;
+- the second slot is protected for the `IMMUNE PRIME` trophy so RNG cannot erase the reward.
+
+Live Legendary mechanics:
+
+- `ГЕОМЕТРИЯ РАСКОЛА`;
+- `ЦЕПЬ ЛИЗИСА`;
+- `НУЛЕВАЯ ТОЧКА`;
+- `ХИЩНИК ЯДРА`;
+- `РИТМ МИОКАРДА`;
+- `ПОСЛЕДНИЙ НОСИТЕЛЬ`.
+
+Legendary effects should change decisions or screen behavior, not only add a percentage.
+
+## Difficulty
+
+Two live profiles:
+
+### STANDARD
+
+Baseline campaign.
+
+### STRAINED
+
+A real gameplay variant:
+
+- stronger/faster enemies;
+- tighter spawn cadence and larger batches;
+- higher enemy cap;
+- more frequent elites;
+- elite modifiers: regenerator / frenzied / volatile;
+- stronger bosses and denser boss minions;
+- accelerated/stronger Heart pressure.
+
+Difficulty is selected before the run and persisted independently.
 
 ## Visual direction
 
@@ -132,117 +239,136 @@ Avoid:
 
 - gore realism;
 - cartoon smiling cells;
-- flat neon geometry that looks like a generic cyber arena;
-- shader-heavy effects that break mid-range Android performance;
+- generic cyber-arena neon geometry;
+- full-screen blur that destroys silhouettes;
+- shader-heavy effects that break mid-range Android;
 - visual noise that hides hitboxes.
 
 ### World layers
 
 1. Deep tissue / vessel background.
-2. Slow large erythrocytes and membrane forms.
+2. Large erythrocytes, fibres and membrane structures.
 3. Gameplay plane: virus, immune cells, host cells, RNA.
-4. Sparse foreground cells/particles with soft blur/parallax.
+4. Sparse foreground/parallax elements.
+5. Event-only cinematic key art for major beats.
 
 ### Color language
 
 - host environment: burgundy, crimson, amber, warm plasma;
 - immune system: ivory, pale cyan, cold white/blue;
-- OFELIYA: toxic violet, magenta, controlled acid accents;
-- rewards/RNA: bright readable accent distinct from hostile white/cyan.
+- OFELIYA: violet/magenta with controlled toxic accents;
+- rewards/RNA: bright accent clearly separated from hostile cyan/white.
 
 ### Readability rule
 
-At phone size and 150 active enemies, the player, hostile classes, neutral host cells and collectible RNA must be distinguishable by silhouette before color.
+At phone size under **100 / 150 / 200 active-enemy QA scenes**, the following must still be distinguishable:
+
+- player;
+- hostile classes;
+- elite marker/corona;
+- healthy host cell;
+- infected host cell;
+- RNA pickup;
+- projectile.
+
+Silhouette and motion should carry identification before color.
 
 ## Player visual evolution
 
-OFELIYA cannot remain the same sprite for the full run.
+OFELIYA should not remain visually static for the campaign.
 
-Base form:
+Critical mutations materially alter silhouette:
 
-- central RNA core;
-- semi-transparent capsid;
-- protein spikes;
-- subtle breathing/pulsing and rotation.
+- `ГИПЕРШИП`: aggressive spikes and piercing trail;
+- `СВЕРХКАПСИД`: layered protective shell;
+- `ЛИЗИС`: implosion cue + expanding membrane shockwave.
 
-Mutation states add visible structure without changing the collision contract silently.
+Collision contracts must not silently change with cosmetic form.
 
-Critical mutations must materially alter silhouette:
+## Cinematic presentation
 
-- `ГИПЕРШИП`: longer/aggressive protein spikes and piercing trail;
-- `СВЕРХКАПСИД`: layered rotating protective shell;
-- `ЛИЗИС`: implosion cue + membrane-like expanding shockwave.
+Major beats can temporarily become more illustrative without turning the game into video.
 
-## Mobile control principles
+Current key-art beats:
 
-- floating joystick appears under the thumb;
-- automatic attack remains mandatory for v1;
-- no permanent fixed left joystick unless testing proves floating input inferior;
-- ignore touches in HUD/modal safe areas;
-- clamp joystick origin away from physical screen edges;
-- dynamic joystick radius for narrow/short devices;
-- no browser scroll/zoom during gameplay;
-- mutation cards and result CTA must be thumb-sized and readable without precise tapping.
+- Bloodstream -> Heart transition;
+- `IMMUNE PRIME` reveal;
+- `CARDIAC TITAN` reveal;
+- victory.
+
+The art is generated once as lightweight textures and animated with restrained zoom/parallax. Transition presentation remains skippable; boss reveals remain non-blocking.
+
+## Mobile controls
+
+### One hand — default
+
+- preserve the established floating joystick behavior;
+- joystick appears under the active thumb;
+- safe areas prevent HUD/modal touches from driving movement;
+- automatic attack.
+
+### Two hands — optional
+
+- separate profile chosen before the run;
+- left thumb: movement;
+- right thumb: broad aim-priority sector;
+- no manual fire button;
+- releasing right aim returns to normal auto-targeting.
+
+No mutation, boss or Heart mechanic may require two-hand mode.
 
 ## Platform architecture
 
-Gameplay must depend on `PlatformBridge`, not directly on MAX or Telegram globals.
+Gameplay depends on `PlatformBridge`, not directly on MAX or Telegram globals.
 
-Required common capabilities:
+Common capabilities:
 
 - host kind;
 - user context;
-- signed `initData` string;
+- signed `initData`;
 - start payload;
 - viewport;
 - native back button;
 - haptics;
 - share/challenge surface.
 
-Security rule: parsed init data is convenience context only. Identity and competitive server actions require validation of the signed payload on a trusted backend.
+Parsed init data is convenience context only. Identity and competitive server actions require trusted backend validation.
 
 ## Result screen
 
-The result should summarize the strain, not only generic stats.
+The result summarizes the full strain identity:
 
-Example:
-
-- `ШТАММ X-17`
-- survived / boss-clear time;
+- survival / campaign clear time;
 - immune cells destroyed;
 - host cells infected;
+- run-wide highest mutation level;
 - critical mutations;
+- acquired Legendary names;
+- Bloodstream build;
+- Heart build;
 - best combo;
-- newly discovered mutations;
-- primary CTA: `ЕЩЁ ОДИН ЦИКЛ`;
-- secondary CTA: `БРОСИТЬ ВЫЗОВ` once challenge payload plumbing exists.
+- achievements;
+- challenge verdict when relevant.
+
+Primary replay CTA remains `ЕЩЁ ОДИН ЦИКЛ`.
 
 ## Performance contract
 
-The professional look must come from art direction, layering, animation and bounded effects, not expensive brute-force rendering.
+Professional presentation must come from art direction, layering, bounded effects and readable motion.
 
 - preserve object pools;
 - keep ambient particle counts bounded;
-- avoid per-enemy heavy postFX;
-- maintain reduced-effects path for weaker devices;
-- profile dense combat at 50 / 150 / late-run enemy counts;
-- treat UI responsiveness and touch latency as release blockers.
+- no per-enemy heavy postFX;
+- reduced-effects path must not change gameplay;
+- dense visual QA at 100 / 150 / 200 active enemies;
+- test WebGL High-DPI and Canvas fallback;
+- touch latency and mobile bounds are release blockers.
 
-## P0 implementation order
+## Current implementation priorities after this contract
 
-1. VIR-01 product bible / vocabulary.
-2. VIR-02 first 15 seconds.
-3. VIR-03 platform bridge.
-4. VIR-04 virus visual states.
-5. VIR-05 bloodstream environment.
-6. VIR-06 immune silhouettes.
-7. VIR-07 mutation presentation.
-8. VIR-08 critical mutation presentation.
-9. VIR-09 host-cell infection + lysis.
-10. VIR-10 immune response timeline.
-11. VIR-11 joystick v2 / safe areas.
-12. VIR-12 biological soundscape/haptics.
-13. VIR-13 result/challenge shell.
-14. VIR-15 performance tiers.
-15. VIR-16 MAX release QA.
-16. VIR-17 Telegram adapter QA after MAX release candidate is stable.
+1. tune balance from actual full-run playtests;
+2. verify one-hand and twin-stick ergonomics on real MAX Android/iOS clients;
+3. inspect 100/150/200 density captures for readability regressions;
+4. validate boss phase pacing and Heart safe-pocket timing by playtest, not only CI;
+5. keep documentation and deterministic contracts updated with every systemic change;
+6. add further organs/meta-progression only as separate design migrations.
