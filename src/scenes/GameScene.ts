@@ -18,6 +18,14 @@ import {
 import { rollRunChoices } from '../game/EvolutionSystem';
 import { guaranteedLegendaryChoices } from '../game/LegendarySystem';
 import { HeartbeatPulseDirector, type HeartbeatPulseEvent } from '../game/HeartbeatPulseDirector';
+import {
+  getDifficultyProfile,
+  heartbeatProfileForDifficulty,
+  pickEliteModifier,
+  readDifficultySelection,
+  type DifficultyId,
+  type DifficultyProfile,
+} from '../game/DifficultyProfile';
 import { IDENTITY } from '../game/identity';
 import { ImpactDirector } from '../game/ImpactDirector';
 import { Player } from '../game/Player';
@@ -90,7 +98,8 @@ export class GameScene extends Phaser.Scene {
   private keys: Record<string, Phaser.Input.Keyboard.Key> = {};
   private introHint: Phaser.GameObjects.Container | null = null;
   private transitionGeneration = 0;
-  private heartbeatPulse = new HeartbeatPulseDirector();
+  difficulty!: DifficultyProfile;
+  private heartbeatPulse!: HeartbeatPulseDirector;
   private impact = new ImpactDirector();
   private zeroPointNextAt = 0;
   private zeroPointUntil = 0;
@@ -120,6 +129,13 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.stageDirector = new StageDirector(STAGES);
+    const selectedDifficulty =
+      (this.registry.get('difficultyId') as DifficultyId | undefined) ?? readDifficultySelection();
+    this.difficulty = getDifficultyProfile(selectedDifficulty);
+    this.registry.set('difficultyId', this.difficulty.id);
+    this.heartbeatPulse = new HeartbeatPulseDirector(
+      heartbeatProfileForDifficulty(this.difficulty)
+    );
     this.runState = new RunState(this.stageDirector.currentStage);
     Sfx.startMusic();
     PlatformBridge.setBackHandler(() => this.exitToMenu());
@@ -220,7 +236,7 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.enemies, this.onPlayerHit, undefined, this);
     this.physics.add.overlap(this.player, this.gems, this.onGemTouch, undefined, this);
 
-    this.wave = new WaveDirector(this, this.enemies, this.stageDirector.currentStage);
+    this.wave = new WaveDirector(this, this.enemies, this.stageDirector.currentStage, this.difficulty);
     this.milestones = new RunMilestones(this);
     this.handleStageEvents(this.stageDirector.startRun());
     this.cameras.main.startFollow(this.player, true, 0.14, 0.14);
@@ -374,10 +390,19 @@ export class GameScene extends Phaser.Scene {
     const isBoss = kind === 'boss';
     const stage = this.stageDirector.currentStage;
     const { hpScale, dmgScale } = difficultyForStage(stage, this.runState.stage.timeMs);
+    const eliteModifier = elite ? pickEliteModifier(this.difficulty) : null;
     e.activate(this, kind, x, y, {
       elite,
-      hpScale: isBoss ? stage.difficulty.bossHpScale : hpScale,
-      dmgScale: isBoss ? stage.difficulty.bossDamageScale : dmgScale,
+      hpScale: isBoss
+        ? stage.difficulty.bossHpScale * this.difficulty.bossHpMultiplier
+        : hpScale * this.difficulty.enemyHpMultiplier,
+      dmgScale: isBoss
+        ? stage.difficulty.bossDamageScale * this.difficulty.bossDamageMultiplier
+        : dmgScale * this.difficulty.enemyDamageMultiplier,
+      speedScale: isBoss
+        ? this.difficulty.bossSpeedMultiplier
+        : this.difficulty.enemySpeedMultiplier,
+      eliteModifier,
       textureKey: isBoss ? stage.boss.textureKey : undefined,
       color: isBoss ? stage.theme.accentColor : undefined,
       bossBehavior: isBoss ? stage.boss.behavior : undefined,
@@ -400,6 +425,7 @@ export class GameScene extends Phaser.Scene {
     this.runState.recordKill(COMBO.windowMs);
     this.captureAchievements(false, true);
     this.vfx.kill(e.x, e.y, e.color, e.isBoss ? 'boss' : e.isElite ? 'elite' : 'normal');
+    if (e.isElite && e.eliteModifier === 'volatile') this.triggerVolatileElite(e);
     if (e.isElite || e.isBoss) {
       this.hitStop(this.impact.hitStopMs(e.isBoss ? 'boss_phase' : 'elite_death'));
       const s = JUICE.shakeEliteKill;
@@ -429,6 +455,48 @@ export class GameScene extends Phaser.Scene {
         completeAt: this.time.now + 550,
       };
     }
+  }
+
+  private triggerVolatileElite(enemy: Enemy): void {
+    const radius = 88;
+    const x = enemy.x;
+    const y = enemy.y;
+    const blast = this.add
+      .circle(x, y, 16, COLORS.red, 0.12)
+      .setStrokeStyle(2.4, COLORS.red, 0.88)
+      .setDepth(24)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    this.tweens.add({
+      targets: blast,
+      scale: radius / 16,
+      alpha: 0,
+      duration: 320,
+      ease: 'Quad.Out',
+      onComplete: () => blast.destroy(),
+    });
+    this.atmosphere.pulse(COLORS.red, 0.1);
+
+    const distance = Math.hypot(this.player.x - x, this.player.y - y);
+    const now = this.time.now;
+    if (distance > radius || now < this.player.hurtUntil) return;
+
+    this.runState.stage.hp -= Math.max(6, enemy.dmg * 0.55);
+    this.runState.resetNoDamage();
+    this.player.markHurt(now);
+    Sfx.play('hurt');
+    PlatformBridge.haptic('medium');
+    this.cameras.main.flash(110, 255, 60, 90);
+    this.shake(120, 0.0045);
+
+    if (
+      this.runState.stage.hp <= 0 &&
+      this.runState.hasLegendary('last-carrier') &&
+      !this.lastCarrierUsed
+    ) {
+      this.activateLastCarrier();
+      return;
+    }
+    if (this.runState.stage.hp <= 0) this.finish(false);
   }
 
   private onHostCellLysis(event: HostCellLysisEvent): void {
