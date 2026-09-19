@@ -152,10 +152,8 @@ function browserDriver() {
     throw new Error('twin-stick vectors did not reset on release: ' + JSON.stringify(released));
   }
 
-  await page.evaluate(() => {
-    localStorage.setItem('ofeliya_control_mode_v1', 'one-hand');
-    window.location.reload();
-  });
+  await page.evaluate(() => localStorage.setItem('ofeliya_control_mode_v1', 'one-hand'));
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
   await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
   await page.waitForFunction(
