@@ -157,12 +157,30 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
     ctx.beginPath();
     ctx.roundRect(2, 3, 17, 8, 4);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,209,232,0.85)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255,236,247,0.96)';
+    ctx.lineWidth = 1.25;
     ctx.stroke();
+
+    // Bright leading tip + dark tail notch keep projectile direction legible in grayscale and
+    // against both Bloodstream and Heart palettes without changing the physics frame.
+    ctx.fillStyle = '#fff8fc';
+    ctx.beginPath();
+    ctx.moveTo(20, 7);
+    ctx.lineTo(16.4, 4.6);
+    ctx.lineTo(16.4, 9.4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(35,8,30,0.82)';
+    ctx.beginPath();
+    ctx.moveTo(3, 7);
+    ctx.lineTo(6.2, 5);
+    ctx.lineTo(6.2, 9);
+    ctx.closePath();
+    ctx.fill();
+
     ctx.fillStyle = '#8dffad';
     ctx.beginPath();
-    ctx.arc(14.5, 7, 2, 0, Math.PI * 2);
+    ctx.arc(13.8, 7, 1.75, 0, Math.PI * 2);
     ctx.fill();
   });
 

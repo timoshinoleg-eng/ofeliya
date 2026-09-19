@@ -24,6 +24,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private knockX = 0;
   private knockY = 0;
   private eliteRing: Phaser.GameObjects.Graphics | null = null;
+  private eliteMarker: Phaser.GameObjects.Triangle | null = null;
   private bossAura: Phaser.GameObjects.Graphics | null = null;
   private bossBehavior: StageBossBehavior = 'pressure-wave';
   private heartbeatMs = 0;
@@ -87,10 +88,19 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     if (opts.elite) {
       if (!this.eliteRing) this.eliteRing = this.scene.add.graphics().setDepth(9);
+      if (!this.eliteMarker) {
+        this.eliteMarker = this.scene.add
+          .triangle(0, 0, 0, 8, 6, 0, 12, 8, COLORS.gold, 0.96)
+          .setOrigin(0.5, 1)
+          .setStrokeStyle(1, COLORS.white, 0.78)
+          .setDepth(12);
+      }
       this.drawEliteCorona(this.eliteRing, Math.max(24, def.radius * scale + 12));
       this.eliteRing.setVisible(true).setPosition(x, y).setRotation(0).setAlpha(0.78);
+      this.eliteMarker.setVisible(true).setPosition(x, y - this.radius - 10).setScale(1);
     } else {
       this.eliteRing?.setVisible(false);
+      this.eliteMarker?.setVisible(false);
     }
 
     if (this.isBoss && this.bossBehavior === 'heartbeat-pulse') {
@@ -110,6 +120,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     super.preUpdate(time, delta);
     if (!this.active || !this.target) {
       this.eliteRing?.setVisible(false);
+      this.eliteMarker?.setVisible(false);
       this.bossAura?.setVisible(false);
       return;
     }
@@ -168,6 +179,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         .setRotation(-time * 0.00105)
         .setScale(0.96 + Math.sin(time / 180) * 0.055)
         .setAlpha(0.58 + Math.sin(time / 180) * 0.15);
+      this.eliteMarker
+        ?.setVisible(true)
+        .setPosition(this.x, this.y - this.radius - 10)
+        .setScale(0.92 + Math.sin(time / 130) * 0.12)
+        .setAlpha(0.78 + Math.sin(time / 130) * 0.18);
     }
 
     if (this.isBoss && this.bossBehavior === 'heartbeat-pulse' && this.bossAura) {
@@ -186,6 +202,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   /** Hide pooled enemy presentation before the object is reused by another stage. */
   deactivateForStageReset(): void {
     this.eliteRing?.setVisible(false);
+    this.eliteMarker?.setVisible(false);
     this.bossAura?.setVisible(false);
     this.target = null;
     this.gs = null;
@@ -209,6 +226,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.knockY += ky;
     if (this.hp <= 0) {
       this.eliteRing?.setVisible(false);
+      this.eliteMarker?.setVisible(false);
       this.bossAura?.setVisible(false);
       this.disableBody(true, true);
       this.gs?.onEnemyDied(this);

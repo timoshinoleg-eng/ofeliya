@@ -70,7 +70,7 @@ export class AtmosphereSystem {
     for (let i = 0; i < PERFORMANCE.ambientErythrocytes; i++) {
       const x = Phaser.Math.FloatBetween(-40, this.width + 40);
       const y = Phaser.Math.FloatBetween(-40, this.height + 40);
-      const alpha = Phaser.Math.FloatBetween(0.16, 0.42);
+      const alpha = Phaser.Math.FloatBetween(0.12, 0.31);
       const scale = Phaser.Math.FloatBetween(0.58, 1.38);
       const image = scene.add
         .image(x, y, 'erythrocyte')
@@ -96,7 +96,7 @@ export class AtmosphereSystem {
     for (let i = 0; i < PERFORMANCE.ambientHostCells; i++) {
       const x = Phaser.Math.FloatBetween(-80, this.width + 80);
       const y = Phaser.Math.FloatBetween(-80, this.height + 80);
-      const alpha = Phaser.Math.FloatBetween(0.07, 0.15);
+      const alpha = Phaser.Math.FloatBetween(0.045, 0.105);
       const image = scene.add
         .image(x, y, 'host-cell-shadow')
         .setScrollFactor(0)
@@ -121,7 +121,7 @@ export class AtmosphereSystem {
     for (let i = 0; i < PERFORMANCE.ambientParticles; i++) {
       const x = Phaser.Math.FloatBetween(0, this.width);
       const y = Phaser.Math.FloatBetween(0, this.height);
-      const alpha = Phaser.Math.FloatBetween(0.035, 0.12);
+      const alpha = Phaser.Math.FloatBetween(0.025, 0.085);
       const image = scene.add
         .image(x, y, 'spark')
         .setScrollFactor(0)
@@ -149,7 +149,7 @@ export class AtmosphereSystem {
     this.stage = stage;
     this.plasma.setTexture(stage.theme.plasmaTexture).clearTint();
     const heart = stage.theme.ambientProfile === 'heart';
-    this.structure.setVisible(heart).setAlpha(heart ? 0.34 : 0);
+    this.structure.setVisible(heart).setAlpha(heart ? 0.24 : 0);
     if (heart && stage.theme.structureTexture) this.structure.setTexture(stage.theme.structureTexture);
     this.erythrocytes.forEach((cell, index) => cell.image.setVisible(!heart || index % 3 === 0));
     this.hostCells.forEach((cell, index) => cell.image.setVisible(!heart || index % 2 === 0));
@@ -181,7 +181,7 @@ export class AtmosphereSystem {
     this.plasma.setTint(heart ? 0xffe3d1 : progress > 0.72 ? 0xffd6df : 0xffffff);
     this.structure.tilePositionX = cam.scrollX * 0.52 + time * 0.003;
     this.structure.tilePositionY = cam.scrollY * 0.52 - time * 0.0015;
-    if (heart) this.structure.setAlpha(0.22 + beat * 0.22 + progress * 0.05);
+    if (heart) this.structure.setAlpha(0.16 + beat * 0.15 + progress * 0.04);
 
     for (const cell of this.erythrocytes) {
       cell.x += cell.vx * flow * dt - camDx * cell.parallax;
@@ -191,7 +191,7 @@ export class AtmosphereSystem {
       cell.image
         .setPosition(cell.x, cell.y)
         .setRotation(cell.image.rotation + cell.rotationSpeed * dt)
-        .setAlpha(cell.alpha * (0.93 + response * 0.12));
+        .setAlpha(cell.alpha * (0.88 + response * 0.07));
     }
 
     for (const cell of this.hostCells) {
@@ -202,7 +202,7 @@ export class AtmosphereSystem {
       cell.image
         .setPosition(cell.x, cell.y)
         .setRotation(cell.image.rotation + cell.rotationSpeed * dt)
-        .setAlpha(cell.alpha * (0.9 + response * 0.18));
+        .setAlpha(cell.alpha * (0.86 + response * 0.1));
     }
 
     for (const p of this.particles) {

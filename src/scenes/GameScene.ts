@@ -516,7 +516,7 @@ export class GameScene extends Phaser.Scene {
     this.tweens.killTweensOf(t);
     t.setPosition(this.player.x, this.player.y)
       .setVisible(true)
-      .setAlpha(this.runState.hasEvolution('halo') ? 0.42 : 0.32)
+      .setAlpha(this.runState.hasEvolution('halo') ? 0.34 : 0.23)
       .setTint(this.runState.hasEvolution('halo') ? COLORS.gold : COLORS.white)
       .setScale(1)
       .setRotation(0);
@@ -607,6 +607,10 @@ export class GameScene extends Phaser.Scene {
 
   private handleHeartbeatPulseEvent(stage: StageDefinition, event: HeartbeatPulseEvent): void {
     if (event.type === 'heartbeat-telegraph') {
+      this.atmosphere.pulse(
+        event.bossActive ? stage.theme.dangerColor : stage.theme.accentColor,
+        event.bossActive ? 0.12 : 0.07
+      );
       this.showHeartbeatTelegraph(stage, event.bossActive);
       return;
     }
@@ -626,11 +630,13 @@ export class GameScene extends Phaser.Scene {
   private showHeartbeatTelegraph(stage: StageDefinition, bossActive: boolean): void {
     const color = bossActive ? stage.theme.dangerColor : stage.theme.accentColor;
     const rings = [
-      this.add.circle(this.player.x, this.player.y, 28).setStrokeStyle(2, color, 0.82).setDepth(27),
-      this.add.circle(this.player.x, this.player.y, 44).setStrokeStyle(1.5, color, 0.58).setDepth(27),
+      this.add.circle(this.player.x, this.player.y, 28).setStrokeStyle(2.4, color, 0.92).setDepth(27),
+      this.add.circle(this.player.x, this.player.y, 44).setStrokeStyle(1.8, COLORS.white, 0.68).setDepth(27),
+      this.add.circle(this.player.x, this.player.y, 62).setStrokeStyle(1.2, color, 0.46).setDepth(27),
     ];
-    rings[0].setScale(2.15).setAlpha(0.24);
-    rings[1].setScale(1.75).setAlpha(0.18);
+    rings[0].setScale(2.15).setAlpha(0.28);
+    rings[1].setScale(1.75).setAlpha(0.22);
+    rings[2].setScale(1.48).setAlpha(0.14);
     this.tweens.add({
       targets: rings,
       scale: 0.92,
