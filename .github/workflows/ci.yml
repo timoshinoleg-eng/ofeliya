@@ -107,6 +107,9 @@ jobs:
       - name: Strained difficulty runtime browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/difficulty-runtime-smoke.cjs
 
+      - name: Elite modifier identity runtime browser smoke
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/elite-readability-smoke.cjs
+
       - name: One-hand and twin-stick multitouch browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/control-mode-smoke.cjs
 
