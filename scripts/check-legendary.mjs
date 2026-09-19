@@ -46,6 +46,7 @@ try {
     LEGENDARY_PITY_OFFERS,
     MAX_LEGENDARIES_PER_RUN,
     eligibleLegendaries,
+    guaranteedLegendaryChoices,
     rollLegendaryChoice,
   } = require(join(temp, 'game/LegendarySystem.js'));
 
@@ -74,11 +75,27 @@ try {
     'Heart Legendary gating failed'
   );
 
+  const transitionReward = new RunState({ id: 'bloodstream', order: 1 });
+  transitionReward.resetStageProgression({ id: 'heart', order: 2 });
+  const rewardRng = [0.65, 0];
+  const guaranteed = guaranteedLegendaryChoices(
+    transitionReward,
+    2,
+    () => rewardRng.shift() ?? 0
+  );
+  assert(guaranteed.length === 2, 'Boss1 reward did not produce two Legendary candidates');
+  assert(guaranteed.every((x) => x.kind === 'legendary'), 'Boss1 reward leaked a non-Legendary');
+  assert(
+    guaranteed.some((x) => x.legendaryId === 'myocardial-rhythm'),
+    'Heart reward did not draw from the Heart-gated pool'
+  );
+  assert(transitionReward.run.legendaryPity === 0, 'guaranteed reward did not reset pity');
+
   assert(state.addLegendary('zero-point'), 'first Legendary was rejected');
   assert(!state.addLegendary('zero-point'), 'duplicate Legendary was accepted');
   assert(state.addLegendary('core-predator'), 'second Legendary was rejected');
-  assert(state.addLegendary('last-carrier'), 'third Legendary was rejected');
   assert(state.run.legendaryIds.size === MAX_LEGENDARIES_PER_RUN, 'max Legendary invariant drifted');
+  assert(!state.addLegendary('last-carrier'), 'third Legendary exceeded max-per-run');
   assert(!state.addLegendary('myocardial-rhythm'), 'fourth Legendary exceeded max-per-run');
   assert(eligibleLegendaries(state).length === 0, 'offers remained after max Legendary cap');
 
