@@ -21,6 +21,7 @@ try {
       'src/game/RunState.ts',
       'src/game/UpgradeSystem.ts',
       'src/game/HeartbeatPulseDirector.ts',
+      'src/game/BossVulnerability.ts',
       '--target',
       'ES2020',
       '--module',
@@ -42,6 +43,13 @@ try {
   const { RunState } = require(join(temp, 'game/RunState.js'));
   const { UPGRADES } = require(join(temp, 'game/UpgradeSystem.js'));
   const { HeartbeatPulseDirector } = require(join(temp, 'game/HeartbeatPulseDirector.js'));
+  const {
+    PRIME_VULNERABILITY,
+    canPrimeLysisBreak,
+    primeDamageMultiplier,
+    primeMembraneBreakDurationMs,
+  } = require(join(temp, 'game/BossVulnerability.js'));
+  const { ENEMY_DEFS } = require(join(temp, 'game/config.js'));
   const { StageDirector } = require(join(temp, 'game/StageDirector.js'));
   const {
     BLOODSTREAM_STAGE,
@@ -183,6 +191,71 @@ try {
   assert(infectionBuild.hostLysisDamage > 26, 'lysis damage upgrade did not scale host-cell burst');
   assert(infectionBuild.hostLysisRadius > 150, 'lysis radius upgrade did not scale host-cell burst');
   assert(infectionBuild.hostLysisRna === 5, 'viral factory did not increase RNA yield');
+
+  // Lysis calibration harness: keep the signature mechanic meaningful without silently turning it
+  // into boss-percent damage. These numbers intentionally describe the current build curve.
+  const makeLysisBuild = (lysisStacks, factoryStacks) => {
+    const s = new RunState(first);
+    for (let i = 0; i < lysisStacks; i++) lysis.apply(s);
+    for (let i = 0; i < factoryStacks; i++) factory.apply(s);
+    return s;
+  };
+  const baseLysis = makeLysisBuild(0, 0).hostLysisDamage;
+  const mediumLysis = makeLysisBuild(2, 1).hostLysisDamage;
+  const maxLysis = makeLysisBuild(4, 3).hostLysisDamage;
+  assert(Math.abs(baseLysis - 26) < 1e-9, 'base lysis damage changed');
+  assert(
+    baseLysis < mediumLysis && mediumLysis < maxLysis,
+    'lysis build no longer scales monotonically'
+  );
+  assert(maxLysis > 95 && maxLysis < 105, 'max lysis build left the calibrated damage band');
+
+  const lateBloodstreamScale = difficultyForStage(bloodstream, bloodstream.durationMs).hpScale;
+  const lateRunnerHp = ENEMY_DEFS.runner.hp * lateBloodstreamScale;
+  const lateSwarmHp = ENEMY_DEFS.swarm.hp * lateBloodstreamScale;
+  const lateBruteHp = ENEMY_DEFS.brute.hp * lateBloodstreamScale;
+  assert(maxLysis > lateRunnerHp, 'max lysis should delete a late T-killer');
+  assert(maxLysis > lateSwarmHp, 'max lysis should delete a late antibody');
+  assert(maxLysis < lateBruteHp * 0.5, 'max lysis should not trivialize a late macrophage');
+
+  assert(canPrimeLysisBreak('telegraph'), 'Prime lysis break must work during telegraph');
+  assert(canPrimeLysisBreak('recovery'), 'Prime lysis break must work during recovery');
+  assert(!canPrimeLysisBreak('pursuit'), 'Prime lysis break must require a readable timing window');
+  assert(
+    primeDamageMultiplier('pursuit', false) === PRIME_VULNERABILITY.armoredMultiplier,
+    'Prime armored multiplier mismatch'
+  );
+  assert(
+    primeDamageMultiplier('recovery', false) === PRIME_VULNERABILITY.recoveryMultiplier,
+    'Prime recovery multiplier mismatch'
+  );
+  assert(
+    primeDamageMultiplier('pursuit', true) === PRIME_VULNERABILITY.membraneBreakMultiplier,
+    'Prime membrane-break multiplier mismatch'
+  );
+  assert(
+    primeMembraneBreakDurationMs(1) > primeMembraneBreakDurationMs(2),
+    'Prime phase 2 must shorten the extended punish window'
+  );
+
+  const primeHp = ENEMY_DEFS.boss.hp * BLOODSTREAM_STAGE.difficulty.bossHpScale;
+  const titanHp = ENEMY_DEFS.boss.hp * HEART_STAGE.difficulty.bossHpScale;
+  const primeArmoredHit = maxLysis * primeDamageMultiplier('pursuit', false);
+  const primeRecoveryHit = maxLysis * primeDamageMultiplier('recovery', false);
+  const primeBrokenHit = maxLysis * primeDamageMultiplier('recovery', true);
+  const titanRhythmHit = maxLysis * 1.35;
+  assert(
+    primeArmoredHit < primeRecoveryHit && primeRecoveryHit < primeBrokenHit,
+    'Prime vulnerability cycle does not create a meaningful punish hierarchy'
+  );
+  assert(
+    primeBrokenHit / primeHp < 0.08,
+    'one max-build lysis burst removes too much Standard IMMUNE PRIME HP'
+  );
+  assert(
+    titanRhythmHit / titanHp < 0.05,
+    'one synchronized max-build lysis burst removes too much CARDIAC TITAN HP'
+  );
 
   const heartbeat = new HeartbeatPulseDirector();
   assert(heartbeat.update(11_299, false).length === 0, 'heartbeat telegraphed too early');
