@@ -2,6 +2,7 @@ import type { AchievementId } from './AchievementSystem';
 import type { RunEndReason, StagePhase } from './StageDirector';
 import type { StageId } from './StageDefinitions';
 import type { EvolutionId } from './UpgradeSystem';
+import type { DifficultyId } from './DifficultyProfile';
 
 export interface RunSnapshot {
   hp: number;
@@ -31,6 +32,7 @@ export interface RunRecordFlags {
 export interface RunResult {
   win: boolean;
   reason: RunEndReason;
+  difficultyId: DifficultyId;
   timeMs: number;
   kills: number;
   hostCellsInfected: number;
