@@ -18,6 +18,7 @@ import {
 import { rollRunChoices } from '../game/EvolutionSystem';
 import { HeartbeatPulseDirector, type HeartbeatPulseEvent } from '../game/HeartbeatPulseDirector';
 import { IDENTITY } from '../game/identity';
+import { ImpactDirector } from '../game/ImpactDirector';
 import { Player } from '../game/Player';
 import { Enemy } from '../game/Enemy';
 import { Bullet } from '../game/Bullet';
@@ -40,6 +41,13 @@ import { Sfx } from '../systems/Sfx';
 import { VfxSystem } from '../systems/VfxSystem';
 import { HostCellSystem, type HostCellLysisEvent } from '../systems/HostCellSystem';
 import type { UIScene } from './UIScene';
+
+interface CoreMark {
+  serial: number;
+  hits: number;
+  lastHitAt: number;
+  windowUntil: number;
+}
 
 export class GameScene extends Phaser.Scene {
   player!: Player;
@@ -81,6 +89,15 @@ export class GameScene extends Phaser.Scene {
   private introHint: Phaser.GameObjects.Container | null = null;
   private transitionGeneration = 0;
   private heartbeatPulse = new HeartbeatPulseDirector();
+  private impact = new ImpactDirector();
+  private zeroPointNextAt = 0;
+  private zeroPointUntil = 0;
+  private zeroPointX = 0;
+  private zeroPointY = 0;
+  private coreMarks = new WeakMap<Enemy, CoreMark>();
+  private heartbeatLegendaryWindowUntil = 0;
+  private heartbeatLegendarySpent = false;
+  private lastCarrierUsed = false;
   private bossDefeatCeremony: {
     token: number;
     stageId: string;
@@ -116,6 +133,11 @@ export class GameScene extends Phaser.Scene {
     this.haloRing = null;
     this.hitStopUntil = 0;
     this.hitStopped = false;
+    this.zeroPointUntil = 0;
+    this.zeroPointNextAt = this.runState.hasLegendary('zero-point') ? this.time.now + 12_000 : 0;
+    this.coreMarks = new WeakMap<Enemy, CoreMark>();
+    this.heartbeatLegendaryWindowUntil = 0;
+    this.heartbeatLegendarySpent = false;
     this.lastDmg = null;
     this.lastDmgAt = 0;
     this.dmgCursor = 0;
@@ -124,6 +146,15 @@ export class GameScene extends Phaser.Scene {
     this.bossDefeatCeremony = null;
     this.stageTransition = null;
     this.heartbeatPulse.reset();
+    this.impact.reset();
+    this.zeroPointNextAt = 0;
+    this.zeroPointUntil = 0;
+    this.zeroPointX = 0;
+    this.zeroPointY = 0;
+    this.coreMarks = new WeakMap<Enemy, CoreMark>();
+    this.heartbeatLegendaryWindowUntil = 0;
+    this.heartbeatLegendarySpent = false;
+    this.lastCarrierUsed = false;
     this.physics.world.resume();
 
     const W = this.scale.width;
@@ -296,6 +327,7 @@ export class GameScene extends Phaser.Scene {
 
     this.tryFire(time);
     this.syncBlades(time);
+    this.updateLegendarySystems(time, delta);
 
     if (st.novaLevel > 0) {
       this.novaAcc += delta;
@@ -356,7 +388,7 @@ export class GameScene extends Phaser.Scene {
     if (kind === 'boss') {
       Sfx.play('boss');
       this.atmosphere.pulse(stage.theme.dangerColor, 0.32);
-      this.cameras.main.shake(320, 0.008);
+      this.shake(320, 0.008);
       PlatformBridge.haptic('heavy');
     } else if (elite) {
       Sfx.play('elite');
@@ -371,9 +403,9 @@ export class GameScene extends Phaser.Scene {
     this.captureAchievements(false, true);
     this.vfx.kill(e.x, e.y, e.color, e.isBoss ? 'boss' : e.isElite ? 'elite' : 'normal');
     if (e.isElite || e.isBoss) {
-      this.hitStop(e.isBoss ? JUICE.hitStopBossMs : JUICE.hitStopMs);
+      this.hitStop(this.impact.hitStopMs(e.isBoss ? 'boss_phase' : 'elite_death'));
       const s = JUICE.shakeEliteKill;
-      this.cameras.main.shake(s.duration, s.intensity);
+      this.shake(s.duration, s.intensity);
     }
     if (e.xpValue > 0) {
       // The first readable pickup teaches the mutation loop immediately instead of requiring
@@ -383,7 +415,7 @@ export class GameScene extends Phaser.Scene {
     }
     if (e.isBoss && this.wave.boss === e) {
       this.wave.boss = null;
-      this.cameras.main.shake(400, 0.01);
+      this.shake(400, 0.01);
       const defeatedStageId = this.stageDirector.currentStage.id;
       const ceremonyToken = ++this.transitionGeneration;
       this.awaitingChoice = false;
@@ -426,10 +458,11 @@ export class GameScene extends Phaser.Scene {
       this.vfx.hit(e.x, e.y, COLORS.green);
       e.takeDamage(event.damage, (dx / dd) * 210, (dy / dd) * 210);
     }
+    if (this.runState.hasLegendary('lysis-chain')) this.triggerLysisChain(event, list);
   }
 
   private hitStop(ms: number): void {
-    if (this.stageDirector.phase === 'RUN_ENDED') return;
+    if (ms <= 0 || this.stageDirector.phase === 'RUN_ENDED') return;
     const now = this.time.now;
     if (now < this.hitStopUntil + JUICE.hitStopMinGapMs) return;
     this.hitStopUntil = now + ms;
@@ -520,6 +553,11 @@ export class GameScene extends Phaser.Scene {
         this.pendingEvolutionCeremony = def.evolutionId;
         this.syncPlayerMutationSilhouette();
         this.atmosphere.pulse(COLORS.gold, 0.3);
+      } else if (def.kind === 'legendary' && def.legendaryId) {
+        this.vfx.legendary(this.player.x, this.player.y, COLORS.gold);
+        this.atmosphere.pulse(COLORS.gold, 0.34);
+        this.shake(180, 0.004);
+        if (def.legendaryId === 'zero-point') this.zeroPointNextAt = this.time.now + 12_000;
       } else {
         this.runState.bump(id);
       }
@@ -576,8 +614,12 @@ export class GameScene extends Phaser.Scene {
       event.bossActive ? stage.theme.dangerColor : stage.theme.accentColor,
       event.bossActive ? 0.4 : 0.3
     );
-    this.cameras.main.shake(event.bossActive ? 150 : 100, event.bossActive ? 0.0045 : 0.0026);
+    this.shake(event.bossActive ? 150 : 100, event.bossActive ? 0.0045 : 0.0026);
     PlatformBridge.haptic(event.bossActive ? 'medium' : 'light');
+    if (this.runState.hasLegendary('myocardial-rhythm')) {
+      this.heartbeatLegendaryWindowUntil = this.time.now + 650;
+      this.heartbeatLegendarySpent = false;
+    }
   }
 
   private showHeartbeatTelegraph(stage: StageDefinition, bossActive: boolean): void {
@@ -974,10 +1016,14 @@ export class GameScene extends Phaser.Scene {
     b.lastHitAt = this.time.now;
     const bv = (b.body as Phaser.Physics.Arcade.Body).velocity;
     const vm = Math.hypot(bv.x, bv.y) || 1;
+    const damage = this.applyCorePredator(e, b.damage);
+    const rhythmBurst = this.consumeMyocardialRhythm();
     this.vfx.hit(e.x, e.y, b.prism ? COLORS.gold : e.color);
-    e.takeDamage(b.damage, (bv.x / vm) * 130, (bv.y / vm) * 130);
+    e.takeDamage(damage, (bv.x / vm) * 130, (bv.y / vm) * 130);
     Sfx.play('hit');
-    this.showDamage(e.x, e.y, b.damage);
+    this.showDamage(e.x, e.y, damage);
+    this.trySplitProjectile(b, bv);
+    if (rhythmBurst) this.triggerRhythmBurst(e, damage);
     if (b.pierceLeft > 0) b.pierceLeft -= 1;
     else b.disableBody(true, true);
   };
@@ -994,14 +1040,189 @@ export class GameScene extends Phaser.Scene {
     PlatformBridge.haptic('medium');
     this.cameras.main.flash(140, 255, 60, 100);
     const s = JUICE.shakeHurt;
-    this.cameras.main.shake(s.duration, s.intensity);
-    this.hitStop(JUICE.hitStopMs);
+    this.shake(s.duration, s.intensity);
+    this.hitStop(this.impact.hitStopMs('critical_hit'));
     const dx = e.x - this.player.x;
     const dy = e.y - this.player.y;
     const d = Math.hypot(dx, dy) || 1;
     e.takeDamage(0, (dx / d) * 240, (dy / d) * 240);
+    if (
+      this.runState.stage.hp <= 0 &&
+      this.runState.hasLegendary('last-carrier') &&
+      !this.lastCarrierUsed
+    ) {
+      this.activateLastCarrier();
+      return;
+    }
     if (this.runState.stage.hp <= 0) this.finish(false);
   };
+
+  private updateLegendarySystems(time: number, delta: number): void {
+    if (!this.runState.hasLegendary('zero-point')) {
+      this.zeroPointUntil = 0;
+      return;
+    }
+    if (this.zeroPointNextAt <= 0) this.zeroPointNextAt = time + 12_000;
+    if (time >= this.zeroPointNextAt && time >= this.zeroPointUntil) {
+      if (this.beginZeroPoint(time)) this.zeroPointNextAt = time + 12_000;
+      else this.zeroPointNextAt = time + 1_000;
+    }
+    if (time < this.zeroPointUntil) this.applyZeroPointPull(delta);
+  }
+
+  private beginZeroPoint(time: number): boolean {
+    let target: Enemy | null = null;
+    let best = Number.POSITIVE_INFINITY;
+    for (const e of this.enemies.getChildren() as Enemy[]) {
+      if (!e.active || e.isBoss) continue;
+      const d = Math.hypot(e.x - this.player.x, e.y - this.player.y);
+      if (d < best) {
+        best = d;
+        target = e;
+      }
+    }
+    if (!target) return false;
+    this.zeroPointX = target.x;
+    this.zeroPointY = target.y;
+    this.zeroPointUntil = time + 2_500;
+    this.vfx.singularity(this.zeroPointX, this.zeroPointY, 170);
+    this.atmosphere.pulse(COLORS.purple, 0.18);
+    return true;
+  }
+
+  private applyZeroPointPull(delta: number): void {
+    const force = Math.min(26, Math.max(3, delta * 0.7));
+    for (const e of this.enemies.getChildren() as Enemy[]) {
+      if (!e.active || e.isBoss) continue;
+      const dx = this.zeroPointX - e.x;
+      const dy = this.zeroPointY - e.y;
+      const d = Math.hypot(dx, dy);
+      if (d <= 1 || d > 190) continue;
+      e.applyKnock((dx / d) * force, (dy / d) * force);
+    }
+  }
+
+  private trySplitProjectile(source: Bullet, velocity: { x: number; y: number }): void {
+    if (
+      !this.runState.hasLegendary('split-geometry') ||
+      source.splitUsed ||
+      source.generation >= 2
+    ) {
+      return;
+    }
+    source.splitUsed = true;
+    const angle = Math.atan2(velocity.y, velocity.x);
+    const offset = (32 * Math.PI) / 180;
+    for (const delta of [-offset, offset]) {
+      const child = this.bullets.get(source.x, source.y) as Bullet | null;
+      if (!child) break;
+      child.fire(
+        this.time.now,
+        angle + delta,
+        source.damage * 0.45,
+        0,
+        true,
+        source.generation + 1
+      );
+    }
+  }
+
+  private applyCorePredator(target: Enemy, baseDamage: number): number {
+    if (!this.runState.hasLegendary('core-predator') || (!target.isElite && !target.isBoss)) {
+      return baseDamage;
+    }
+    const now = this.time.now;
+    let mark = this.coreMarks.get(target);
+    if (!mark || mark.serial !== target.spawnSerial || now - mark.lastHitAt > 1_600) {
+      mark = { serial: target.spawnSerial, hits: 0, lastHitAt: now, windowUntil: 0 };
+    }
+    mark.lastHitAt = now;
+    if (now < mark.windowUntil) {
+      this.coreMarks.set(target, mark);
+      return baseDamage * 1.75;
+    }
+    mark.hits += 1;
+    if (mark.hits >= 4) {
+      mark.hits = 0;
+      mark.windowUntil = now + 1_500;
+      this.vfx.legendary(target.x, target.y, COLORS.red);
+      this.atmosphere.pulse(COLORS.red, 0.08);
+    }
+    this.coreMarks.set(target, mark);
+    return baseDamage;
+  }
+
+  private consumeMyocardialRhythm(): boolean {
+    if (
+      !this.runState.hasLegendary('myocardial-rhythm') ||
+      this.runState.stage.id !== 'heart' ||
+      this.heartbeatLegendarySpent ||
+      this.time.now > this.heartbeatLegendaryWindowUntil
+    ) {
+      return false;
+    }
+    this.heartbeatLegendarySpent = true;
+    return true;
+  }
+
+  private triggerRhythmBurst(target: Enemy, damage: number): void {
+    const x = target.x;
+    const y = target.y;
+    const radius = 92;
+    this.vfx.legendary(x, y, this.stageDirector.currentStage.theme.accentColor);
+    for (const e of this.enemies.getChildren() as Enemy[]) {
+      if (!e.active || e === target) continue;
+      const dx = e.x - x;
+      const dy = e.y - y;
+      const d = Math.hypot(dx, dy);
+      if (d > radius + e.radius) continue;
+      const dd = d || 1;
+      e.takeDamage(damage, (dx / dd) * 110, (dy / dd) * 110);
+    }
+  }
+
+  private triggerLysisChain(event: HostCellLysisEvent, list: Enemy[]): void {
+    const candidates = list
+      .filter((e) => e.active && Math.hypot(e.x - event.x, e.y - event.y) > event.radius + e.radius)
+      .sort(
+        (a, b) =>
+          Math.hypot(a.x - event.x, a.y - event.y) - Math.hypot(b.x - event.x, b.y - event.y)
+      )
+      .slice(0, 2);
+    candidates.forEach((target, index) => {
+      const serial = target.spawnSerial;
+      this.time.delayedCall(140 + index * 80, () => {
+        if (!target.active || target.spawnSerial !== serial) return;
+        this.vfx.hit(target.x, target.y, COLORS.green);
+        target.takeDamage(event.damage * 0.3);
+      });
+    });
+  }
+
+  private activateLastCarrier(): void {
+    this.lastCarrierUsed = true;
+    const st = this.runState.stage;
+    st.hp = 1;
+    st.xp = Math.floor(st.xp * 0.75);
+    for (const enemy of this.enemies.getChildren() as Enemy[]) {
+      if (enemy.active && !enemy.isBoss) enemy.deactivateForStageReset();
+    }
+    this.vfx.legendary(this.player.x, this.player.y, COLORS.green);
+    this.atmosphere.pulse(COLORS.green, 0.4);
+    this.cameras.main.flash(180, 120, 255, 160);
+    this.shake(260, 0.009);
+    this.player.setMutationState(true, true, true);
+    this.time.delayedCall(8_000, () => {
+      if (!this.player.active) return;
+      this.syncPlayerMutationSilhouette();
+    });
+  }
+
+  private shake(duration: number, intensity: number): void {
+    if (this.impact.allowCameraShake(this.time.now)) {
+      this.cameras.main.shake(duration, intensity);
+    }
+  }
 
   private onGemTouch = (obj1: unknown, obj2: unknown): void => {
     (obj2 as Gem).collect();
