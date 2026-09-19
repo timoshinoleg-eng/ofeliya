@@ -383,18 +383,29 @@ export class UIScene extends Phaser.Scene {
     cards.forEach((def: UpgradeDef, cardIndex: number) => {
       const card = this.add.container(W / 2, y);
       const evolution = def.kind === 'evolution';
-      const accent = evolution ? COLORS.gold : def.rarity === 'rare' ? COLORS.purple : COLORS.cyan;
+      const legendary = def.kind === 'legendary';
+      const accent = legendary
+        ? COLORS.gold
+        : evolution
+          ? COLORS.gold
+          : def.rarity === 'rare'
+            ? COLORS.purple
+            : COLORS.cyan;
       const progress = getUpgradeProgress(gs.runState, def);
       const bg = this.add
         .rectangle(0, 0, cw, ch, COLORS.panel, 0.985)
-        .setStrokeStyle(evolution ? 3 : def.rarity === 'rare' ? 2.5 : 2, accent, evolution ? 1 : 0.85);
+        .setStrokeStyle(
+          legendary ? 3.5 : evolution ? 3 : def.rarity === 'rare' ? 2.5 : 2,
+          accent,
+          legendary || evolution ? 1 : 0.85
+        );
       card.add(bg);
 
-      if (evolution) {
+      if (evolution || legendary) {
         card.add(
           this.add
-            .rectangle(0, 0, cw - 6, ch - 6, COLORS.gold, 0.035)
-            .setStrokeStyle(1, COLORS.gold, 0.28)
+            .rectangle(0, 0, cw - 6, ch - 6, COLORS.gold, legendary ? 0.07 : 0.035)
+            .setStrokeStyle(1, COLORS.gold, legendary ? 0.52 : 0.28)
         );
       }
 
@@ -411,16 +422,18 @@ export class UIScene extends Phaser.Scene {
 
       const tx = -cw / 2 + (hasIcon ? 68 : 16);
       const right = cw / 2 - 12;
-      const family = evolution
-        ? 'КРИТИЧЕСКАЯ МУТАЦИЯ'
-        : `${UPGRADE_FAMILY_LABELS[def.family]} · ${def.rarity === 'rare' ? 'РЕДКИЙ' : 'СТАНДАРТ'}`;
+      const family = legendary
+        ? 'ЛЕГЕНДАРНАЯ МУТАЦИЯ'
+        : evolution
+          ? 'КРИТИЧЕСКАЯ МУТАЦИЯ'
+          : `${UPGRADE_FAMILY_LABELS[def.family]} · ${def.rarity === 'rare' ? 'РЕДКИЙ' : 'СТАНДАРТ'}`;
       card.add(
         this.add
           .text(tx, -ch / 2 + 8, family, {
             fontFamily: FONT,
             fontSize: compact ? '9px' : '10px',
             fontStyle: 'bold',
-            color: evolution ? '#ffe066' : def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
+            color: legendary || evolution ? '#ffe066' : def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
           })
           .setResolution(2)
       );
@@ -429,9 +442,9 @@ export class UIScene extends Phaser.Scene {
         this.add
           .text(tx, -ch / 2 + (compact ? 22 : 24), def.shortName, {
             fontFamily: FONT,
-            fontSize: evolution ? (compact ? '16px' : '18px') : compact ? '14px' : '15px',
+            fontSize: legendary || evolution ? (compact ? '16px' : '18px') : compact ? '14px' : '15px',
             fontStyle: 'bold',
-            color: evolution ? '#ffe066' : '#e8f4ff',
+            color: legendary || evolution ? '#ffe066' : '#e8f4ff',
           })
           .setResolution(2)
       );
@@ -442,13 +455,13 @@ export class UIScene extends Phaser.Scene {
             fontFamily: FONT,
             fontSize: compact ? '10px' : '11px',
             fontStyle: 'bold',
-            color: evolution ? '#fff1ac' : def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
+            color: legendary || evolution ? '#fff1ac' : def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
             wordWrap: { width: Math.max(100, right - tx) },
           })
           .setResolution(2)
       );
 
-      if (!compact && !evolution) {
+      if (!compact && !evolution && !legendary) {
         card.add(
           this.add
             .text(tx, -ch / 2 + 64, def.desc, {
@@ -503,11 +516,19 @@ export class UIScene extends Phaser.Scene {
       } else {
         card.add(
           this.add
-            .text(right, ch / 2 - 19, evolution ? 'ЗАКРЕПИТЬ МУТАЦИЮ' : 'РАЗОВАЯ АДАПТАЦИЯ', {
+            .text(
+              right,
+              ch / 2 - 19,
+              legendary
+                ? 'ИЗМЕНИТЬ ПРАВИЛА ЗАБЕГА'
+                : evolution
+                  ? 'ЗАКРЕПИТЬ МУТАЦИЮ'
+                  : 'РАЗОВАЯ АДАПТАЦИЯ',
+              {
               fontFamily: FONT,
               fontSize: '9px',
-              fontStyle: evolution ? 'bold' : 'normal',
-              color: evolution ? '#ffe066' : '#7dff6e',
+              fontStyle: legendary || evolution ? 'bold' : 'normal',
+              color: legendary || evolution ? '#ffe066' : '#7dff6e',
             })
             .setOrigin(1, 0)
             .setResolution(2)
@@ -532,7 +553,7 @@ export class UIScene extends Phaser.Scene {
           this.scene.resume('Game');
         }
       });
-      bg.on('pointerover', () => bg.setFillStyle(evolution ? 0x332d18 : COLORS.panelHover, 1));
+      bg.on('pointerover', () => bg.setFillStyle(legendary || evolution ? 0x332d18 : COLORS.panelHover, 1));
       bg.on('pointerout', () => bg.setFillStyle(COLORS.panel, 0.985));
 
       c.add(card);
