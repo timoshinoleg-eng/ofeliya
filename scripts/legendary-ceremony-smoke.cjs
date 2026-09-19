@@ -59,7 +59,7 @@ function browserDriver() {
     const game = window.__game;
     const gs = game.scene.getScene('Game');
     const ui = game.scene.getScene('UI');
-    ui.scene.pause('Game');
+    gs.scene.pause();
     ui.showLegendaryCeremony('zero-point', false);
 
     const modal = ui.modal;
