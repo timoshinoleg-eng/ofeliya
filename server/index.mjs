@@ -56,15 +56,111 @@ function currentSeason(now = Date.now()) {
   };
 }
 
-// ---------- анти-чит пороги ----------
+// ---------- score ruleset / anti-cheat ----------
+export const CURRENT_RULESET_VERSION = 2;
+export const CURRENT_CAMPAIGN_VERSION = 2;
+
 const ANTI_CHEAT = {
-  // Босс появляется ровно на 5:00 игрового времени. Победа раньше физически
-  // невозможна, даже если initData пользователя криптографически валиден.
-  minWinTimeMs: 300_000,
-  maxTimeMs: 3_600_000, // 1 час (обычный забег 5 мин, long-run 15)
-  maxKillsPerSec: 30, // пик реального лейта ~15-20/с с нова
+  // Legacy v1 represented the historical single-act Bloodstream clear.
+  legacyMinWinTimeMs: 300_000,
+  // Ruleset v2 is the two-act Bloodstream (5:00) + Heart (4:00) campaign.
+  // Boss fights only add time, so a campaign win below 9:00 is impossible.
+  campaignMinWinTimeMs: 540_000,
+  maxTimeMs: 3_600_000,
+  maxKillsPerSec: 30,
   maxLevel: 100,
+  maxHostCellsInfected: 100_000,
 };
+
+const RUN_SEED_RE = /^[A-Za-z0-9_-]{1,32}$/;
+const DIFFICULTY_IDS = new Set(['standard', 'strained']);
+const CONTROL_MODES = new Set(['one-hand', 'two-hand']);
+const COMPLETION_STAGES = new Set(['bloodstream', 'heart']);
+
+function storedRulesetVersion(score) {
+  return Number.isInteger(score?.rulesetVersion) ? score.rulesetVersion : 1;
+}
+
+function parseRulesetFilter(raw, fallback = CURRENT_RULESET_VERSION) {
+  if (raw == null || raw === '') return fallback;
+  if (raw === 'all') return null;
+  if (raw === 'legacy') return 1;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 && n <= CURRENT_RULESET_VERSION ? n : fallback;
+}
+
+function parseScoreContract(payload) {
+  if (payload.rulesetVersion == null) {
+    return {
+      ok: true,
+      contract: {
+        rulesetVersion: 1,
+        campaignVersion: 1,
+        difficultyId: 'standard',
+        completionStage: payload.win === true ? 'bloodstream' : null,
+        runSeed: null,
+        controlMode: null,
+        bossesDefeated: payload.win === true ? 1 : 0,
+        boss1ClearMs: payload.win === true ? Math.round(payload.timeMs) : null,
+        hostCellsInfected: null,
+        rankedEligible: true,
+        legacy: true,
+      },
+    };
+  }
+
+  if (payload.rulesetVersion !== CURRENT_RULESET_VERSION) {
+    return { ok: false, error: 'ruleset' };
+  }
+  if (payload.campaignVersion !== CURRENT_CAMPAIGN_VERSION) {
+    return { ok: false, error: 'campaign' };
+  }
+  if (!DIFFICULTY_IDS.has(payload.difficultyId)) {
+    return { ok: false, error: 'difficulty' };
+  }
+  if (!COMPLETION_STAGES.has(payload.completionStage)) {
+    return { ok: false, error: 'completion-stage' };
+  }
+  if (typeof payload.runSeed !== 'string' || !RUN_SEED_RE.test(payload.runSeed)) {
+    return { ok: false, error: 'seed' };
+  }
+  if (!CONTROL_MODES.has(payload.controlMode)) {
+    return { ok: false, error: 'control-mode' };
+  }
+  if (!Number.isInteger(payload.bossesDefeated) || payload.bossesDefeated < 0 || payload.bossesDefeated > 2) {
+    return { ok: false, error: 'bosses-defeated' };
+  }
+  if (
+    payload.boss1ClearMs != null &&
+    (!Number.isFinite(payload.boss1ClearMs) || payload.boss1ClearMs < 300_000 || payload.boss1ClearMs > payload.timeMs)
+  ) {
+    return { ok: false, error: 'boss1-clear' };
+  }
+  if (
+    !Number.isInteger(payload.hostCellsInfected) ||
+    payload.hostCellsInfected < 0 ||
+    payload.hostCellsInfected > ANTI_CHEAT.maxHostCellsInfected
+  ) {
+    return { ok: false, error: 'host-cells' };
+  }
+
+  return {
+    ok: true,
+    contract: {
+      rulesetVersion: CURRENT_RULESET_VERSION,
+      campaignVersion: CURRENT_CAMPAIGN_VERSION,
+      difficultyId: payload.difficultyId,
+      completionStage: payload.completionStage,
+      runSeed: payload.runSeed,
+      controlMode: payload.controlMode,
+      bossesDefeated: payload.bossesDefeated,
+      boss1ClearMs: payload.boss1ClearMs == null ? null : Math.round(payload.boss1ClearMs),
+      hostCellsInfected: payload.hostCellsInfected,
+      rankedEligible: payload.difficultyId === 'standard',
+      legacy: false,
+    },
+  };
+}
 
 // ---------- store ----------
 mkdirSync(DATA_DIR, { recursive: true });
@@ -226,9 +322,17 @@ export function verifyVkWebAppT(webAppT, secretKey, now = Date.now()) {
   return { uid: String(id), user };
 }
 
-function antiCheatCheck(p) {
+function antiCheatCheck(p, contract) {
   if (!Number.isFinite(p.timeMs) || p.timeMs < 1000 || p.timeMs > ANTI_CHEAT.maxTimeMs) return 'time';
-  if (p.win === true && p.timeMs < ANTI_CHEAT.minWinTimeMs) return 'win-time';
+  const minWinTimeMs = contract.legacy
+    ? ANTI_CHEAT.legacyMinWinTimeMs
+    : ANTI_CHEAT.campaignMinWinTimeMs;
+  if (p.win === true && p.timeMs < minWinTimeMs) return 'win-time';
+  if (!contract.legacy && p.win === true) {
+    if (contract.completionStage !== 'heart') return 'win-stage';
+    if (contract.bossesDefeated !== 2) return 'win-bosses';
+    if (contract.boss1ClearMs == null) return 'win-boss1-clear';
+  }
   if (!Number.isFinite(p.kills) || p.kills < 0 || p.kills > ANTI_CHEAT.maxKillsPerSec * (p.timeMs / 1000)) return 'kills';
   if (!Number.isFinite(p.level) || p.level < 1 || p.level > ANTI_CHEAT.maxLevel) return 'level';
   return null;
@@ -342,12 +446,20 @@ function publicTop(list) {
   return list.map(({ uid, ...row }) => row);
 }
 
-function getTop({ period = 'all', platform, includeUnverified = false } = {}) {
+function getTop({
+  period = 'all',
+  platform,
+  includeUnverified = false,
+  rulesetVersion = CURRENT_RULESET_VERSION,
+} = {}) {
   const now = Date.now();
   const today = localDateKey(now);
   const weekAgo = now - 7 * 86_400_000;
 
-  let list = store.scores.filter((s) => (includeUnverified || s.verified));
+  let list = store.scores.filter((s) => (includeUnverified || (s.ranked ?? s.verified)));
+  if (rulesetVersion != null) {
+    list = list.filter((s) => storedRulesetVersion(s) === rulesetVersion);
+  }
   if (platform) list = list.filter((s) => s.platform === platform);
   if (period === 'daily') list = list.filter((s) => s.dateKey === today && s.daily);
   if (period === 'weekly') list = list.filter((s) => s.ts >= weekAgo);
@@ -359,13 +471,15 @@ function getTop({ period = 'all', platform, includeUnverified = false } = {}) {
 // «Сегодня» = dateKey собственного daily-скор игрока (его локальный день).
 // Считаем по ВСЕМ daily-сорам за этот день (verified + unverified) — это
 // социальное сравнение за день, а не постоянный лидерборд (сбросится завтра).
-function dailyStats(user, platform) {
+function dailyStats(user, platform, rulesetVersion = CURRENT_RULESET_VERSION) {
+  const scoped = (s) =>
+    (rulesetVersion == null || storedRulesetVersion(s) === rulesetVersion);
   const mine = bestByUser(
-    store.scores.filter((s) => s.platform === platform && s.uid === user && s.daily)
+    store.scores.filter((s) => scoped(s) && s.platform === platform && s.uid === user && s.daily)
   );
   if (mine.length === 0) return { dateKey: null, total: 0, rank: null, you: null };
   const today = mine[0].dateKey;
-  const daily = store.scores.filter((s) => s.daily && s.dateKey === today);
+  const daily = store.scores.filter((s) => scoped(s) && s.daily && s.dateKey === today);
   const byUser = bestByUser(daily);
   const total = byUser.length;
   const sorted = [...byUser].sort(compareScores);
@@ -374,7 +488,12 @@ function dailyStats(user, platform) {
     dateKey: today,
     total,
     rank: idx >= 0 ? idx + 1 : null,
-    you: { win: mine[0].win, timeMs: mine[0].timeMs, kills: mine[0].kills },
+    you: {
+      win: mine[0].win,
+      timeMs: mine[0].timeMs,
+      kills: mine[0].kills,
+      rulesetVersion: storedRulesetVersion(mine[0]),
+    },
   };
 }
 
