@@ -549,7 +549,13 @@ export class GameScene extends Phaser.Scene {
       if (d > event.radius + e.radius) continue;
       const dd = d || 1;
       this.vfx.hit(e.x, e.y, COLORS.green);
-      e.takeDamage(event.damage * rhythmLysisMultiplier, (dx / dd) * 210, (dy / dd) * 210);
+      const bossLysisMultiplier =
+        e.isBoss && this.stageDirector.currentStage.id === 'bloodstream' ? 1.5 : 1;
+      e.takeDamage(
+        event.damage * rhythmLysisMultiplier * bossLysisMultiplier,
+        (dx / dd) * 210,
+        (dy / dd) * 210
+      );
     }
     if (this.runState.hasLegendary('lysis-chain')) this.triggerLysisChain(event, list);
   }
@@ -684,6 +690,62 @@ export class GameScene extends Phaser.Scene {
     const id = this.pendingEvolutionCeremony;
     this.pendingEvolutionCeremony = null;
     return id;
+  }
+
+  onBossPhaseChanged(boss: Enemy): void {
+    if (!boss.active || !boss.isBoss) return;
+    const stage = this.stageDirector.currentStage;
+    this.atmosphere.pulse(stage.theme.dangerColor, 0.22);
+    this.vfx.legendary(boss.x, boss.y, stage.theme.dangerColor);
+    this.shake(220, 0.006);
+    PlatformBridge.haptic('heavy');
+  }
+
+  triggerBossPressureWave(boss: Enemy, radius: number, damage: number): void {
+    if (
+      !boss.active ||
+      !boss.isBoss ||
+      this.stageDirector.phase !== 'BOSS_ACTIVE' ||
+      this.stageDirector.currentStage.boss.behavior !== 'pressure-wave'
+    ) {
+      return;
+    }
+
+    const wave = this.add
+      .circle(boss.x, boss.y, 24, COLORS.red, 0.035)
+      .setStrokeStyle(boss.bossPhase === 2 ? 4 : 3, COLORS.red, 0.94)
+      .setDepth(25)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    this.tweens.add({
+      targets: wave,
+      scale: radius / 24,
+      alpha: 0,
+      duration: boss.bossPhase === 2 ? 360 : 430,
+      ease: 'Quad.Out',
+      onComplete: () => wave.destroy(),
+    });
+    this.atmosphere.pulse(COLORS.red, boss.bossPhase === 2 ? 0.24 : 0.16);
+    this.shake(boss.bossPhase === 2 ? 180 : 130, boss.bossPhase === 2 ? 0.006 : 0.004);
+
+    const distance = Math.hypot(this.player.x - boss.x, this.player.y - boss.y);
+    const now = this.time.now;
+    if (distance > radius || now < this.player.hurtUntil) return;
+
+    this.runState.stage.hp -= Math.max(8, damage);
+    this.runState.resetNoDamage();
+    this.player.markHurt(now);
+    Sfx.play('hurt');
+    PlatformBridge.haptic('medium');
+    this.cameras.main.flash(110, 255, 64, 92);
+    if (
+      this.runState.stage.hp <= 0 &&
+      this.runState.hasLegendary('last-carrier') &&
+      !this.lastCarrierUsed
+    ) {
+      this.activateLastCarrier();
+      return;
+    }
+    if (this.runState.stage.hp <= 0) this.finish(false);
   }
 
   getEnemyPressureMultiplier(): number {
@@ -1240,7 +1302,14 @@ export class GameScene extends Phaser.Scene {
     b.lastHitAt = this.time.now;
     const bv = (b.body as Phaser.Physics.Arcade.Body).velocity;
     const vm = Math.hypot(bv.x, bv.y) || 1;
-    const damage = this.applyCorePredator(e, b.damage);
+    let damage = this.applyCorePredator(e, b.damage);
+    if (
+      e.isBoss &&
+      this.stageDirector.currentStage.id === 'heart' &&
+      this.time.now <= this.heartbeatOpportunityUntil
+    ) {
+      damage *= 1.35;
+    }
     const rhythmBurst = this.consumeMyocardialRhythm();
     this.vfx.hit(e.x, e.y, b.prism ? COLORS.gold : e.color);
     e.takeDamage(damage, (bv.x / vm) * 130, (bv.y / vm) * 130);
