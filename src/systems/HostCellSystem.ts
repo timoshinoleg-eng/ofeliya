@@ -255,7 +255,7 @@ export class HostCellSystem {
           recycleDistance,
         }
       );
-      slot = recycleIndex === null ? null : this.cells[recycleIndex];
+      slot = recycleIndex === null ? undefined : this.cells[recycleIndex];
       if (!slot) return;
       this.scene.tweens.killTweensOf(slot.image);
       this.scene.tweens.killTweensOf(slot.infectionOverlay);
