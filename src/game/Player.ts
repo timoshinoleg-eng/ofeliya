@@ -4,6 +4,7 @@ import { COLORS, PLAYER } from './config';
 export class Player extends Phaser.Physics.Arcade.Sprite {
   hurtUntil = 0;
 
+  private readonly focusAnchor: Phaser.GameObjects.Arc;
   private readonly spikeCrown: Phaser.GameObjects.Graphics;
   private readonly capsidShell: Phaser.GameObjects.Graphics;
   private readonly lysisCore: Phaser.GameObjects.Graphics;
@@ -18,6 +19,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // stable across every art/mutation state so polish never changes difficulty by accident.
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setCircle(13, this.width / 2 - 13, this.height / 2 - 13);
+
+    // One Canvas-safe contrast anchor keeps the player readable over plasma, cells and VFX
+    // without a per-frame shader or permanent bloom pass.
+    this.focusAnchor = scene.add
+      .circle(x, y, 23, 0x05070f, 0.34)
+      .setStrokeStyle(1.5, COLORS.white, 0.32)
+      .setDepth(13);
 
     // Critical mutations allocate their silhouette overlays once. Mutating only toggles them.
     this.spikeCrown = scene.add
@@ -60,6 +68,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.setRotation(baseRotation);
     this.setScale(breathe);
 
+    this.focusAnchor
+      .setPosition(this.x, this.y)
+      .setScale(0.96 + Math.sin(time * 0.0036) * 0.025)
+      .setAlpha(0.28 + Math.sin(time * 0.0036) * 0.045);
+
     this.spikeCrown
       .setPosition(this.x, this.y)
       .setRotation(-time * 0.00062)
@@ -85,6 +98,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   destroy(fromScene?: boolean): void {
+    this.focusAnchor.destroy();
     this.spikeCrown.destroy();
     this.capsidShell.destroy();
     this.lysisCore.destroy();
