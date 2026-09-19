@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { COLORS } from '../game/config';
 import type { Player } from '../game/Player';
+import { selectHostCellRecycleIndex } from './HostCellRecycling';
 
 interface HostCellSlot {
   image: Phaser.GameObjects.Image;
@@ -225,23 +226,22 @@ export class HostCellSystem {
     // recycle only a nearly untouched old/far cell rather than letting host-cell gameplay disappear.
     if (!slot) {
       const recycleDistance = Math.max(520, Math.max(cam.width, cam.height) * 1.15);
-      const now = this.scene.time.now;
-      slot =
-        this.cells
-          .filter((cell) => {
-            if (!cell.active || cell.infection >= 0.12) return false;
-            const distance = Math.hypot(
-              cell.image.x - this.player.x,
-              cell.image.y - this.player.y
-            );
-            const age = now - cell.spawnedAt;
-            return distance >= recycleDistance || age >= 35_000;
-          })
-          .sort((a, b) => {
-            const da = Math.hypot(a.image.x - this.player.x, a.image.y - this.player.y);
-            const db = Math.hypot(b.image.x - this.player.x, b.image.y - this.player.y);
-            return db - da;
-          })[0] ?? null;
+      const recycleIndex = selectHostCellRecycleIndex(
+        this.cells.map((cell) => ({
+          active: cell.active,
+          infection: cell.infection,
+          x: cell.image.x,
+          y: cell.image.y,
+          spawnedAt: cell.spawnedAt,
+        })),
+        {
+          playerX: this.player.x,
+          playerY: this.player.y,
+          now: this.scene.time.now,
+          recycleDistance,
+        }
+      );
+      slot = recycleIndex === null ? null : this.cells[recycleIndex];
       if (!slot) return;
       this.scene.tweens.killTweensOf(slot.image);
       this.scene.tweens.killTweensOf(slot.infectionOverlay);
