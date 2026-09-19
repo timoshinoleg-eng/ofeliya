@@ -95,6 +95,9 @@ jobs:
       - name: High-DPI WebGL and Canvas fallback smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/renderer-smoke.cjs
 
+      - name: Legendary runtime browser smoke
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/legendary-runtime-smoke.cjs
+
       - name: Bloodstream to Heart campaign browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/stage-transition-smoke.cjs
 
