@@ -99,7 +99,14 @@ function browserDriver() {
     path: path.join(captureDir, '08-legendary-cinematic-reveal.png'),
   });
 
-  await page.waitForTimeout(1_350);
+  await page.waitForFunction(
+    () => {
+      const ui = window.__game.scene.getScene('UI');
+      return !ui.modalOpen && !ui.uiBlocked;
+    },
+    null,
+    { timeout: 3_000 }
+  );
   const dismissed = await page.evaluate(() => {
     const game = window.__game;
     const ui = game.scene.getScene('UI');
