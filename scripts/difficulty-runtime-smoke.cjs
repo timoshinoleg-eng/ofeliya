@@ -85,11 +85,12 @@ function browserDriver() {
       if (enemy.active) enemy.deactivateForStageReset();
     }
 
-    const originalRandom = Math.random;
+    const originalNext = gs.gameplayRng.next.bind(gs.gameplayRng);
     const spawnElite = (randomValue, x, y) => {
-      Math.random = () => randomValue;
+      gs.gameplayRng.next = (stream) =>
+        stream === 'elite' ? randomValue : originalNext(stream);
       const elite = gs.spawnEnemy('swarm', x, y, true);
-      Math.random = originalRandom;
+      gs.gameplayRng.next = originalNext;
       if (!elite) throw new Error('elite pool exhausted');
       return elite;
     };
