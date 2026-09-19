@@ -16,7 +16,7 @@ import {
   type AchievementId,
 } from '../game/AchievementSystem';
 import { rollRunChoices } from '../game/EvolutionSystem';
-import { guaranteedLegendaryChoices } from '../game/LegendarySystem';
+import { guaranteedLegendaryChoices, type LegendaryId } from '../game/LegendarySystem';
 import { HeartbeatPulseDirector, type HeartbeatPulseEvent } from '../game/HeartbeatPulseDirector';
 import {
   getDifficultyProfile,
@@ -84,6 +84,7 @@ export class GameScene extends Phaser.Scene {
   pendingChoices: UpgradeDef[] = [];
   legendaryRewardPending = false;
   private pendingEvolutionCeremony: EvolutionId | null = null;
+  private pendingLegendaryCeremony: LegendaryId | null = null;
   private newAchievements: AchievementId[] = [];
   private achievementCheckAcc = 0;
   private hitStopUntil = 0;
@@ -151,6 +152,7 @@ export class GameScene extends Phaser.Scene {
     this.pendingChoices = [];
     this.legendaryRewardPending = false;
     this.pendingEvolutionCeremony = null;
+    this.pendingLegendaryCeremony = null;
     this.newAchievements = [];
     this.achievementCheckAcc = 0;
     this.nextFireAt = 0;
@@ -472,6 +474,7 @@ export class GameScene extends Phaser.Scene {
       this.pendingChoices = [];
       this.queuedLevels = 0;
       this.pendingEvolutionCeremony = null;
+      this.pendingLegendaryCeremony = null;
       this.getUiScene()?.dismissProgressionForStageBoundary();
       this.runState.recordBossDefeated(this.stageDirector.currentStage.boss.id);
       this.handleStageEvents(this.stageDirector.bossDefeated());
@@ -653,6 +656,7 @@ export class GameScene extends Phaser.Scene {
         this.syncPlayerMutationSilhouette();
         this.atmosphere.pulse(COLORS.gold, 0.3);
       } else if (def.kind === 'legendary' && def.legendaryId) {
+        this.pendingLegendaryCeremony = def.legendaryId;
         this.vfx.legendary(this.player.x, this.player.y, COLORS.gold);
         this.atmosphere.pulse(COLORS.gold, 0.34);
         this.shake(180, 0.004);
@@ -688,6 +692,12 @@ export class GameScene extends Phaser.Scene {
   consumeEvolutionCeremony(): EvolutionId | null {
     const id = this.pendingEvolutionCeremony;
     this.pendingEvolutionCeremony = null;
+    return id;
+  }
+
+  consumeLegendaryCeremony(): LegendaryId | null {
+    const id = this.pendingLegendaryCeremony;
+    this.pendingLegendaryCeremony = null;
     return id;
   }
 
