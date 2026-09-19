@@ -35,6 +35,9 @@ jobs:
       - name: Legendary system deterministic smoke
         run: npm run test:legendary
 
+      - name: Difficulty deterministic smoke
+        run: npm run test:difficulty
+
       - name: Viewport math smoke
         run: npm run test:viewport
 
@@ -97,6 +100,9 @@ jobs:
 
       - name: Legendary runtime browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/legendary-runtime-smoke.cjs
+
+      - name: Strained difficulty runtime browser smoke
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/difficulty-runtime-smoke.cjs
 
       - name: Dense visual readability browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/visual-readability-smoke.cjs
