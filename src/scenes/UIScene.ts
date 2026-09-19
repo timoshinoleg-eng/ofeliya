@@ -10,6 +10,7 @@ import { COLORS, COMBO, FONT, JUICE, fmtTime } from '../game/config';
 import { getEvolutionDef } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
 import { Joystick } from '../game/Joystick';
+import { getLegendaryDefinition } from '../game/LegendarySystem';
 import { TwinStickControls } from '../game/TwinStickControls';
 import { readControlMode, type ControlMode } from '../game/ControlMode';
 import type { RunResult, RunSnapshot } from '../game/RunContracts';
@@ -915,7 +916,7 @@ export class UIScene extends Phaser.Scene {
         .text(
           W / 2,
           statY,
-          `${IDENTITY.kills}: ${res.kills}   ·   Клеток: ${res.hostCellsInfected}   ·   Мутация: ${res.level}   ·   ×${res.comboBest}`,
+          `${IDENTITY.kills}: ${res.kills}   ·   Клеток: ${res.hostCellsInfected}   ·   Пик мутации: ${res.highestLevel}   ·   ×${res.comboBest}`,
           {
             fontFamily: FONT,
             fontSize: compact ? '11px' : '13px',
@@ -944,11 +945,39 @@ export class UIScene extends Phaser.Scene {
         .setResolution(2)
     );
 
-    detailY += compact ? 25 : 29;
-    const build = this.buildSummary(res.stacks);
+    detailY += compact ? 24 : 28;
+    const legendaryText =
+      res.legendaryIds.length > 0
+        ? res.legendaryIds.map((id) => getLegendaryDefinition(id).title).join(' · ')
+        : 'нет';
     c.add(
       this.add
-        .text(W / 2, detailY, `ШТАММ: ${build || 'базовый штамм'}`, {
+        .text(W / 2, detailY, `ЛЕГЕНДАРНЫЕ: ${legendaryText}`, {
+          fontFamily: FONT,
+          fontSize: compact ? '9px' : '10px',
+          fontStyle: 'bold',
+          color: res.legendaryIds.length > 0 ? '#ffe066' : '#5a6480',
+          align: 'center',
+          wordWrap: { width: W - 42 },
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+
+    detailY += compact ? 23 : 27;
+    const bloodstreamBuild = res.stageBuilds.bloodstream
+      ? this.buildSummary(res.stageBuilds.bloodstream.stacks)
+      : '';
+    const heartBuild = res.stageBuilds.heart ? this.buildSummary(res.stageBuilds.heart.stacks) : '';
+    const stageBuildText = [
+      bloodstreamBuild ? `КРОВОТОК: ${bloodstreamBuild}` : '',
+      heartBuild ? `СЕРДЦЕ: ${heartBuild}` : '',
+    ]
+      .filter(Boolean)
+      .join('  →  ');
+    c.add(
+      this.add
+        .text(W / 2, detailY, `ШТАММ: ${stageBuildText || this.buildSummary(res.stacks) || 'базовый штамм'}`, {
           fontFamily: FONT,
           fontSize: compact ? '9px' : '10px',
           color: '#8f9ab7',
@@ -1059,10 +1088,14 @@ export class UIScene extends Phaser.Scene {
     this.button(c, ranked ? 'БРОСИТЬ ВЫЗОВ' : 'ПОДЕЛИТЬСЯ РЕЗУЛЬТАТОМ', W / 2, y, false, () => {
       const mins = fmtTime(res.timeMs);
       const evoShare = res.evolutions.length > 0 ? ` Критические мутации: ${res.evolutions.map((id) => EVOLUTION_NAMES[id]).join(', ')}.` : '';
+      const legendaryShare =
+        res.legendaryIds.length > 0
+          ? ` Legendary: ${res.legendaryIds.map((id) => getLegendaryDefinition(id).title).join(', ')}.`
+          : '';
       const modeShare = ranked ? '' : ' Режим: STRAINED.';
       const shareText = res.win
-        ? `OFELIYA / STRAIN-0 завершила кампанию за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare} ${ranked ? 'Сможешь быстрее?' : ''}`.trim()
-        : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare} ${ranked ? 'Сможешь дольше?' : ''}`.trim();
+        ? `OFELIYA / STRAIN-0 завершила кампанию за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare}${legendaryShare} ${ranked ? 'Сможешь быстрее?' : ''}`.trim()
+        : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare}${legendaryShare} ${ranked ? 'Сможешь дольше?' : ''}`.trim();
       const payload = ranked ? encodeChallengePayload(createChallengePayload(res)) : null;
       const link = payload ? PlatformBridge.buildStartLink(payload) : null;
       void PlatformBridge.shareResult(shareText, link ?? undefined).then((ok) => {

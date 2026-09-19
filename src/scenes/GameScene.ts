@@ -931,6 +931,7 @@ export class GameScene extends Phaser.Scene {
   finish(win: boolean, reason: RunEndReason = win ? 'campaign-complete' : 'defeat'): void {
     if (this.registry.get('runResult')) return;
     if (this.stageDirector.phase !== 'RUN_ENDED') this.stageDirector.endRun(reason);
+    this.runState.captureStageBuild();
     const run = this.runState.run;
     const stage = this.runState.stage;
     const evolutions = [...run.evolutionsSeen];
@@ -939,7 +940,7 @@ export class GameScene extends Phaser.Scene {
       win,
       run.timeMs,
       run.kills,
-      stage.level,
+      run.highestLevel,
       evolutions,
       { boss1ClearMs },
       this.difficulty.id === 'standard'
@@ -955,6 +956,7 @@ export class GameScene extends Phaser.Scene {
       kills: run.kills,
       hostCellsInfected: run.hostCellsInfected,
       level: stage.level,
+      highestLevel: run.highestLevel,
       comboBest: run.comboBest,
       stageId: stage.id,
       stageOrder: stage.order,
@@ -962,6 +964,19 @@ export class GameScene extends Phaser.Scene {
       boss1ClearMs,
       stacks: { ...stage.stacks },
       evolutions,
+      legendaryIds: [...run.legendaryIds],
+      stageBuilds: Object.fromEntries(
+        Object.entries(run.stageBuilds).map(([id, build]) => [
+          id,
+          build
+            ? {
+                level: build.level,
+                stacks: { ...build.stacks },
+                evolutions: [...build.evolutions],
+              }
+            : build,
+        ])
+      ),
       newAchievements: [...this.newAchievements],
       records,
     };

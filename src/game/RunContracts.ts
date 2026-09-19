@@ -3,6 +3,7 @@ import type { RunEndReason, StagePhase } from './StageDirector';
 import type { StageId } from './StageDefinitions';
 import type { EvolutionId } from './UpgradeSystem';
 import type { DifficultyId } from './DifficultyProfile';
+import type { LegendaryId } from './LegendarySystem';
 
 export interface RunSnapshot {
   hp: number;
@@ -23,6 +24,12 @@ export interface RunSnapshot {
   phase: StagePhase;
 }
 
+export interface StageBuildResult {
+  level: number;
+  stacks: Record<string, number>;
+  evolutions: EvolutionId[];
+}
+
 export interface RunRecordFlags {
   timeRecord: boolean;
   killsRecord: boolean;
@@ -37,6 +44,7 @@ export interface RunResult {
   kills: number;
   hostCellsInfected: number;
   level: number;
+  highestLevel: number;
   comboBest: number;
   stageId: StageId;
   stageOrder: number;
@@ -45,6 +53,8 @@ export interface RunResult {
   boss1ClearMs: number;
   stacks: Record<string, number>;
   evolutions: EvolutionId[];
+  legendaryIds: LegendaryId[];
+  stageBuilds: Partial<Record<StageId, StageBuildResult>>;
   newAchievements: AchievementId[];
   records: RunRecordFlags;
 }

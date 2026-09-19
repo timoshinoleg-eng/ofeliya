@@ -10,6 +10,12 @@ export function xpForLevel(level: number): number {
   return Math.floor(6 + level * 4 + level * level * 0.35);
 }
 
+export interface StageBuildSnapshot {
+  level: number;
+  stacks: Record<string, number>;
+  evolutions: EvolutionId[];
+}
+
 export interface RunProgressState {
   timeMs: number;
   kills: number;
@@ -24,6 +30,8 @@ export interface RunProgressState {
   legendaryIds: Set<LegendaryId>;
   legendaryPity: number;
   legendaryOffersSeen: number;
+  highestLevel: number;
+  stageBuilds: Partial<Record<StageId, StageBuildSnapshot>>;
 }
 
 export interface StageProgressState {
@@ -102,6 +110,8 @@ export class RunState {
       legendaryIds: new Set<LegendaryId>(),
       legendaryPity: 0,
       legendaryOffersSeen: 0,
+      highestLevel: 1,
+      stageBuilds: {},
     };
     this.stage = createStageProgress(initialStage);
   }
@@ -173,6 +183,7 @@ export class RunState {
   }
 
   resetStageProgression(stage: Pick<StageDefinition, 'id' | 'order'>): void {
+    this.captureStageBuild();
     this.stage = createStageProgress(stage);
     this.run.currentStageOrder = stage.order;
     this.run.highestStageOrder = Math.max(this.run.highestStageOrder, stage.order);
@@ -184,10 +195,19 @@ export class RunState {
     while (this.stage.xp >= this.stage.xpNext) {
       this.stage.xp -= this.stage.xpNext;
       this.stage.level += 1;
+      this.run.highestLevel = Math.max(this.run.highestLevel, this.stage.level);
       this.stage.xpNext = xpForLevel(this.stage.level);
       levels += 1;
     }
     return levels;
+  }
+
+  captureStageBuild(): void {
+    this.run.stageBuilds[this.stage.id] = {
+      level: this.stage.level,
+      stacks: { ...this.stage.stacks },
+      evolutions: [...this.stage.evolutions],
+    };
   }
 
   resetNoDamage(): void {
