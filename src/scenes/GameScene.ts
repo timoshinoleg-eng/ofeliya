@@ -1114,12 +1114,12 @@ export class GameScene extends Phaser.Scene {
     source.splitUsed = true;
     const angle = Math.atan2(velocity.y, velocity.x);
     const offset = (32 * Math.PI) / 180;
-    for (const delta of [-offset, offset]) {
+    for (let i = 0; i < 2; i++) {
       const child = this.bullets.get(source.x, source.y) as Bullet | null;
       if (!child) break;
       child.fire(
         this.time.now,
-        angle + delta,
+        angle + (i === 0 ? -offset : offset),
         source.damage * 0.45,
         0,
         true,
