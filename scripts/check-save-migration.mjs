@@ -81,6 +81,36 @@ try {
   save = SaveSystem.get();
   assert(save.bestCampaignClearMs === 560_000, 'slower campaign replaced fastest clear');
 
+  const rankedBeforeStrained = SaveSystem.get();
+  const strainedRun = SaveSystem.recordRun(
+    true,
+    500_000,
+    999,
+    99,
+    ['prism'],
+    { boss1ClearMs: 250_000 },
+    false
+  );
+  assert(!strainedRun.timeRecord, 'unranked Strained run created a time record');
+  assert(!strainedRun.killsRecord, 'unranked Strained run created a kill record');
+  assert(!strainedRun.levelRecord, 'unranked Strained run created a level record');
+  save = SaveSystem.get();
+  assert(
+    save.bestBoss1ClearMs === rankedBeforeStrained.bestBoss1ClearMs,
+    'Strained run replaced canonical Boss 1 record'
+  );
+  assert(
+    save.bestCampaignClearMs === rankedBeforeStrained.bestCampaignClearMs,
+    'Strained run replaced canonical campaign record'
+  );
+  assert(save.bestKills === rankedBeforeStrained.bestKills, 'Strained run replaced canonical kill record');
+  assert(save.bestLevel === rankedBeforeStrained.bestLevel, 'Strained run replaced canonical level record');
+  assert(save.runs === rankedBeforeStrained.runs + 1, 'Strained run was not counted in total runs');
+  assert(
+    save.totalKills === rankedBeforeStrained.totalKills + 999,
+    'Strained kills were not counted in lifetime stats'
+  );
+
   const persisted = JSON.parse(storage.get('ofeliya_save_v1'));
   assert(persisted.bestWinTimeMs === 305_000, 'persisted legacy win alias drifted from Boss 1 record');
   assert(persisted.bestBoss1ClearMs === 305_000, 'persisted Boss 1 record missing');
