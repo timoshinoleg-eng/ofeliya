@@ -552,6 +552,7 @@ export class GameScene extends Phaser.Scene {
         this.vfx.legendary(this.player.x, this.player.y, COLORS.gold);
         this.atmosphere.pulse(COLORS.gold, 0.34);
         this.shake(180, 0.004);
+        this.hitStop(this.impact.hitStopMs('legendary_pick'));
         if (def.legendaryId === 'zero-point') this.zeroPointNextAt = this.time.now + 12_000;
       } else {
         this.runState.bump(id);
