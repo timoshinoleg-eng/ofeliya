@@ -32,6 +32,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private heartbeatMs = 0;
   private visualScale = 1;
   private lastDamageAt = 0;
+  private rolePhase: 'pursuit' | 'windup' | 'burst' | 'recovery' = 'pursuit';
+  private rolePhaseUntil = 0;
+  private nextRoleActionAt = 0;
+  private lockedDirX = 0;
+  private lockedDirY = 0;
+  private roleTelegraph: Phaser.GameObjects.Graphics | null = null;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'immune-antibody');
@@ -102,6 +108,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.lastDamageAt = this.scene.time.now;
     this.knockX = 0;
     this.knockY = 0;
+    this.rolePhase = 'pursuit';
+    this.rolePhaseUntil = 0;
+    this.nextRoleActionAt = this.scene.time.now + 700 + (this.spawnSerial % 5) * 170;
+    this.lockedDirX = 0;
+    this.lockedDirY = 0;
+    this.roleTelegraph?.setVisible(false).clear();
     this.setAlpha(1);
     this.clearTint();
     this.setRotation(0);
@@ -173,8 +185,49 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const d = Math.hypot(dx, dy) || 1;
     const pressure = this.gs?.getEnemyPressureMultiplier() ?? 1;
     const forwardSpeed = this.speed * pressure;
-    let velocityX = (dx / d) * forwardSpeed + this.knockX;
-    let velocityY = (dy / d) * forwardSpeed + this.knockY;
+
+    // Antibodies predict the player's near-future path instead of joining the same pursuit line.
+    let pursuitDx = dx;
+    let pursuitDy = dy;
+    if (!this.isBoss && this.kind === 'swarm') {
+      const playerBody = p.body as Phaser.Physics.Arcade.Body;
+      const leadSeconds = Phaser.Math.Clamp(d / Math.max(1, forwardSpeed) * 0.18, 0.16, 0.42);
+      pursuitDx = p.x + playerBody.velocity.x * leadSeconds - this.x;
+      pursuitDy = p.y + playerBody.velocity.y * leadSeconds - this.y;
+    }
+    const pursuitD = Math.hypot(pursuitDx, pursuitDy) || 1;
+
+    if (!this.isBoss && (this.kind === 'runner' || this.kind === 'brute')) {
+      this.updateRolePhase(time, d, dx / d, dy / d);
+    }
+
+    let velocityX = (pursuitDx / pursuitD) * forwardSpeed + this.knockX;
+    let velocityY = (pursuitDy / pursuitD) * forwardSpeed + this.knockY;
+
+    if (!this.isBoss && this.kind === 'runner') {
+      if (this.rolePhase === 'windup') {
+        velocityX = this.knockX;
+        velocityY = this.knockY;
+      } else if (this.rolePhase === 'burst') {
+        velocityX = this.lockedDirX * forwardSpeed * 2.65 + this.knockX;
+        velocityY = this.lockedDirY * forwardSpeed * 2.65 + this.knockY;
+      } else if (this.rolePhase === 'recovery') {
+        velocityX = (dx / d) * forwardSpeed * 0.36 + this.knockX;
+        velocityY = (dy / d) * forwardSpeed * 0.36 + this.knockY;
+      }
+    } else if (!this.isBoss && this.kind === 'brute') {
+      if (this.rolePhase === 'windup') {
+        velocityX = this.knockX;
+        velocityY = this.knockY;
+      } else if (this.rolePhase === 'burst') {
+        velocityX = this.lockedDirX * forwardSpeed * 1.7 + this.knockX;
+        velocityY = this.lockedDirY * forwardSpeed * 1.7 + this.knockY;
+      } else if (this.rolePhase === 'recovery') {
+        velocityX = (dx / d) * forwardSpeed * 0.28 + this.knockX;
+        velocityY = (dy / d) * forwardSpeed * 0.28 + this.knockY;
+      }
+    }
+
     if (this.isBoss && this.bossBehavior === 'heartbeat-pulse') {
       const lateral = Math.sin(time * 0.0026) * this.speed * 0.34;
       velocityX = (dx / d) * forwardSpeed * 0.9 + (-dy / d) * lateral + this.knockX;
@@ -187,12 +240,22 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // Role motion is a second readability channel after silhouette:
     // antibody = drifting Y, T-killer = locked charge, macrophage = heavy membrane wobble.
     if (this.kind === 'runner') {
-      this.setRotation(Math.atan2(dy, dx));
-      const charge = 1 + Math.sin(time * 0.012 + this.y * 0.01) * 0.035;
+      this.setRotation(
+        this.rolePhase === 'burst'
+          ? Math.atan2(this.lockedDirY, this.lockedDirX)
+          : Math.atan2(dy, dx)
+      );
+      const charge =
+        this.rolePhase === 'windup'
+          ? 0.9 + Math.sin(time * 0.028) * 0.06
+          : this.rolePhase === 'burst'
+            ? 1.12
+            : 1 + Math.sin(time * 0.012 + this.y * 0.01) * 0.035;
       this.setScale(this.visualScale * charge, this.visualScale * (2 - charge));
     } else if (this.kind === 'brute') {
       this.setRotation(Math.sin(time * 0.0012 + this.x * 0.01) * 0.1);
-      const wobble = 1 + Math.sin(time * 0.003 + this.x * 0.008) * 0.025;
+      const windupPulse = this.rolePhase === 'windup' ? Math.sin(time * 0.022) * 0.055 : 0;
+      const wobble = 1 + Math.sin(time * 0.003 + this.x * 0.008) * 0.025 + windupPulse;
       this.setScale(this.visualScale * wobble, this.visualScale / wobble);
     } else if (this.kind === 'swarm') {
       this.setRotation(Math.atan2(dy, dx) + Math.PI / 2 + Math.sin(time * 0.003 + this.x) * 0.06);
@@ -238,11 +301,88 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
+  private updateRolePhase(
+    time: number,
+    distance: number,
+    dirX: number,
+    dirY: number
+  ): void {
+    if (this.rolePhase === 'pursuit') {
+      const canStart =
+        time >= this.nextRoleActionAt &&
+        (this.kind === 'runner'
+          ? distance >= 90 && distance <= 350
+          : distance <= 165);
+      if (!canStart) {
+        this.roleTelegraph?.setVisible(false);
+        return;
+      }
+
+      this.rolePhase = 'windup';
+      this.rolePhaseUntil = time + (this.kind === 'runner' ? 480 : 680);
+      this.lockedDirX = dirX;
+      this.lockedDirY = dirY;
+      this.drawRoleTelegraph();
+      return;
+    }
+
+    if (this.rolePhase === 'windup') {
+      this.updateRoleTelegraph(time);
+      if (time < this.rolePhaseUntil) return;
+      this.roleTelegraph?.setVisible(false);
+      this.rolePhase = 'burst';
+      this.rolePhaseUntil = time + (this.kind === 'runner' ? 430 : 360);
+      return;
+    }
+
+    if (this.rolePhase === 'burst') {
+      if (time < this.rolePhaseUntil) return;
+      this.rolePhase = 'recovery';
+      this.rolePhaseUntil = time + (this.kind === 'runner' ? 520 : 720);
+      return;
+    }
+
+    if (time < this.rolePhaseUntil) return;
+    this.rolePhase = 'pursuit';
+    this.nextRoleActionAt = time + (this.kind === 'runner' ? 1450 : 1900);
+  }
+
+  private drawRoleTelegraph(): void {
+    if (!this.roleTelegraph) this.roleTelegraph = this.scene.add.graphics().setDepth(8);
+    this.roleTelegraph.clear().setVisible(true).setPosition(this.x, this.y);
+
+    if (this.kind === 'runner') {
+      this.roleTelegraph.lineStyle(3, COLORS.cyan, 0.8);
+      this.roleTelegraph.beginPath();
+      this.roleTelegraph.moveTo(this.lockedDirX * 18, this.lockedDirY * 18);
+      this.roleTelegraph.lineTo(this.lockedDirX * 92, this.lockedDirY * 92);
+      this.roleTelegraph.strokePath();
+      this.roleTelegraph.lineStyle(1.5, COLORS.white, 0.55);
+      this.roleTelegraph.strokeCircle(0, 0, Math.max(18, this.radius + 7));
+    } else {
+      this.roleTelegraph.lineStyle(3, COLORS.orange, 0.72);
+      this.roleTelegraph.strokeCircle(0, 0, Math.max(58, this.radius + 38));
+      this.roleTelegraph.lineStyle(1.5, COLORS.white, 0.42);
+      this.roleTelegraph.strokeCircle(0, 0, Math.max(42, this.radius + 22));
+    }
+  }
+
+  private updateRoleTelegraph(time: number): void {
+    if (!this.roleTelegraph) return;
+    const pulse = 0.72 + Math.sin(time * 0.025) * 0.2;
+    this.roleTelegraph
+      .setVisible(true)
+      .setPosition(this.x, this.y)
+      .setAlpha(pulse)
+      .setScale(0.94 + (1 - pulse) * 0.16);
+  }
+
   /** Hide pooled enemy presentation before the object is reused by another stage. */
   deactivateForStageReset(): void {
     this.eliteRing?.setVisible(false);
     this.eliteMarker?.setVisible(false);
     this.bossAura?.setVisible(false);
+    this.roleTelegraph?.setVisible(false).clear();
     this.target = null;
     this.gs = null;
     this.knockX = 0;
@@ -270,6 +410,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.eliteRing?.setVisible(false);
       this.eliteMarker?.setVisible(false);
       this.bossAura?.setVisible(false);
+      this.roleTelegraph?.setVisible(false).clear();
       this.disableBody(true, true);
       this.gs?.onEnemyDied(this);
     }
