@@ -20,7 +20,7 @@ const HIT_STOP_MS: Record<ImpactType, number> = {
   elite_death: 20,
   level_up: 0,
   rare_pick: 0,
-  legendary_pick: 0,
+  legendary_pick: 220,
   lysis: 0,
   heartbeat_warning: 0,
   heartbeat_impact: 0,
