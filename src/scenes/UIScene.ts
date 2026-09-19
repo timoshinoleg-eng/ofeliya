@@ -987,7 +987,8 @@ export class UIScene extends Phaser.Scene {
     PlatformBridge.haptic('heavy');
 
     let finished = false;
-    const canSkipAt = this.time.now + 260;
+    let autoDismissTimer: number | null = null;
+    const canSkipAt = performance.now() + 260;
     const finish = () => {
       if (
         finished ||
@@ -997,6 +998,10 @@ export class UIScene extends Phaser.Scene {
         return;
       }
       finished = true;
+      if (autoDismissTimer !== null) {
+        window.clearTimeout(autoDismissTimer);
+        autoDismissTimer = null;
+      }
       this.tweens.killTweensOf(c);
       this.tweens.add({
         targets: c,
@@ -1015,9 +1020,9 @@ export class UIScene extends Phaser.Scene {
     };
 
     dim.on('pointerup', () => {
-      if (this.time.now >= canSkipAt) finish();
+      if (performance.now() >= canSkipAt) finish();
     });
-    this.time.delayedCall(1_350, finish);
+    autoDismissTimer = window.setTimeout(finish, 1_350);
   }
 
   private showEvolutionCeremony(id: EvolutionId, moreChoices: boolean): void {
