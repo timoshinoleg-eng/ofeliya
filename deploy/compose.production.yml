@@ -1,4 +1,4 @@
-﻿services:
+services:
   bot:
     profiles: ["dedicated-bot"]
     build:
@@ -8,7 +8,6 @@
     image: ofeliya-runtime:${OFELIYA_RELEASE:?OFELIYA_RELEASE is required}
     command: ["node", "bot/index.mjs"]
     env_file:
-      - ${OFELIYA_BOT_ENV_FILE:-/opt/hub/.env}
       - ${OFELIYA_ENV_FILE:-/opt/ofeliya/.env}
     environment:
       NODE_ENV: production
@@ -17,7 +16,7 @@
       - ${OFELIYA_EXTRA_CA_CERT:?OFELIYA_EXTRA_CA_CERT is required}:/app/certs/extra-ca.crt:ro
     restart: unless-stopped
     networks:
-      quiz-battle:
+      ofeliya:
         aliases: [ofeliya-bot]
 
   static:
@@ -43,7 +42,7 @@
       score:
         condition: service_healthy
     networks:
-      quiz-battle:
+      ofeliya:
         aliases: [ofeliya-static]
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/"]
@@ -66,13 +65,12 @@
       NODE_ENV: production
       PORT: 8787
     env_file:
-      - ${OFELIYA_BOT_ENV_FILE:-/opt/hub/.env}
       - ${OFELIYA_ENV_FILE:-/opt/ofeliya/.env}
     volumes:
       - ofeliya-score-data:/app/server/data
     restart: unless-stopped
     networks:
-      quiz-battle:
+      ofeliya:
         aliases: [ofeliya-score]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
@@ -82,9 +80,7 @@
       start_period: 5s
 
 networks:
-  quiz-battle:
-    external: true
-    name: ${OFELIYA_SHARED_NETWORK:-quiz-battle_default}
+  ofeliya:
 
 volumes:
   ofeliya-score-data:
