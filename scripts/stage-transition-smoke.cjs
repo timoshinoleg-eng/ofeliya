@@ -75,6 +75,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     return gs.stageDirector.phase === 'STAGE_TRANSITION';
   });
   await sleep(420);
+  await page.locator('#game').screenshot({ path: path.join(captureDir, '02b-heart-transition.png') });
   await page.evaluate(() => {
     const gs = window.__game.scene.getScene('Game');
     if (!gs.stageTransition) throw new Error('transition transaction missing');
