@@ -118,21 +118,26 @@ class SaveImpl {
     kills: number,
     level: number,
     evolutions: EvolutionId[] = [],
-    milestones: RunMilestoneTimes = {}
+    milestones: RunMilestoneTimes = {},
+    ranked = true
   ): { timeRecord: boolean; killsRecord: boolean; levelRecord: boolean } {
-    const survivalRecord = !win && timeMs > this.data.bestSurvivalMs;
+    const survivalRecord = ranked && !win && timeMs > this.data.bestSurvivalMs;
     const boss1ClearMs = this.num(milestones.boss1ClearMs);
     const boss1Record =
+      ranked &&
       boss1ClearMs > 0 &&
       (this.data.bestBoss1ClearMs === 0 || boss1ClearMs < this.data.bestBoss1ClearMs);
     const campaignRecord =
+      ranked &&
       win &&
       timeMs > 0 &&
       (this.data.bestCampaignClearMs === 0 || timeMs < this.data.bestCampaignClearMs);
+    const killsRecord = ranked && kills > this.data.bestKills;
+    const levelRecord = ranked && level > this.data.bestLevel;
     const res = {
       timeRecord: survivalRecord || boss1Record || campaignRecord,
-      killsRecord: kills > this.data.bestKills,
-      levelRecord: level > this.data.bestLevel,
+      killsRecord,
+      levelRecord,
     };
     const seen = new Set<EvolutionId>(this.data.evolutionsSeen);
     for (const id of evolutions) seen.add(id);
@@ -140,8 +145,8 @@ class SaveImpl {
       bestSurvivalMs: survivalRecord ? timeMs : this.data.bestSurvivalMs,
       bestBoss1ClearMs: boss1Record ? boss1ClearMs : this.data.bestBoss1ClearMs,
       bestCampaignClearMs: campaignRecord ? timeMs : this.data.bestCampaignClearMs,
-      bestKills: Math.max(this.data.bestKills, kills),
-      bestLevel: Math.max(this.data.bestLevel, level),
+      bestKills: killsRecord ? kills : this.data.bestKills,
+      bestLevel: levelRecord ? level : this.data.bestLevel,
       runs: this.data.runs + 1,
       totalKills: this.data.totalKills + Math.max(0, Math.floor(kills)),
       evolutionsSeen: [...seen],
