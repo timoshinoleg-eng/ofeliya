@@ -27,7 +27,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private knockX = 0;
   private knockY = 0;
   private eliteRing: Phaser.GameObjects.Graphics | null = null;
-  private eliteMarker: Phaser.GameObjects.Triangle | null = null;
+  private eliteMarker: Phaser.GameObjects.Graphics | null = null;
+  eliteVisualSignature: 'none' | 'regen-orbit' | 'frenzy-spikes' | 'volatile-diamond' = 'none';
   private bossAura: Phaser.GameObjects.Graphics | null = null;
   private bossBehavior: StageBossBehavior = 'pressure-wave';
   private heartbeatMs = 0;
@@ -82,6 +83,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.isElite = opts.elite;
     this.isBoss = kind === 'boss';
     this.eliteModifier = opts.elite ? (opts.eliteModifier ?? null) : null;
+    this.eliteVisualSignature =
+      this.eliteModifier === 'regenerator'
+        ? 'regen-orbit'
+        : this.eliteModifier === 'frenzied'
+          ? 'frenzy-spikes'
+          : this.eliteModifier === 'volatile'
+            ? 'volatile-diamond'
+            : 'none';
     this.bossBehavior = opts.bossBehavior ?? 'pressure-wave';
     this.heartbeatMs = Math.max(0, opts.heartbeatMs ?? 0);
 
@@ -135,23 +144,23 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     if (opts.elite) {
       if (!this.eliteRing) this.eliteRing = this.scene.add.graphics().setDepth(9);
-      if (!this.eliteMarker) {
-        this.eliteMarker = this.scene.add
-          .triangle(0, 0, 0, 8, 6, 0, 12, 8, COLORS.gold, 0.96)
-          .setOrigin(0.5, 1)
-          .setStrokeStyle(1, COLORS.white, 0.78)
-          .setDepth(12);
-      }
+      if (!this.eliteMarker) this.eliteMarker = this.scene.add.graphics().setDepth(12);
       const modifierColor = this.eliteModifierColor();
-      this.drawEliteCorona(this.eliteRing, Math.max(24, def.radius * scale + 12), modifierColor);
+      this.drawEliteCorona(
+        this.eliteRing,
+        Math.max(24, def.radius * scale + 12),
+        this.eliteModifier,
+        modifierColor
+      );
+      this.drawEliteMarker(this.eliteMarker, this.eliteModifier, modifierColor);
       this.eliteRing.setVisible(true).setPosition(x, y).setRotation(0).setAlpha(0.78);
       this.eliteMarker
-        .setFillStyle(modifierColor, 0.96)
-        .setStrokeStyle(1, COLORS.white, 0.78)
         .setVisible(true)
-        .setPosition(x, y - this.radius - 10)
-        .setScale(1);
+        .setPosition(x, y - this.radius - 12)
+        .setScale(1)
+        .setRotation(0);
     } else {
+      this.eliteVisualSignature = 'none';
       this.eliteRing?.setVisible(false);
       this.eliteMarker?.setVisible(false);
     }
@@ -479,6 +488,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.knockX = 0;
     this.knockY = 0;
     this.eliteModifier = null;
+    this.eliteVisualSignature = 'none';
     this.lastDamageAt = 0;
     this.clearTint();
     this.disableBody(true, true);
@@ -542,26 +552,124 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     return COLORS.gold;
   }
 
-  private drawEliteCorona(g: Phaser.GameObjects.Graphics, radius: number, color = COLORS.gold): void {
+  private drawEliteMarker(
+    g: Phaser.GameObjects.Graphics,
+    modifier: EliteModifierId | null,
+    color: number
+  ): void {
     g.clear();
+    if (modifier === 'regenerator') {
+      g.lineStyle(2, color, 0.95);
+      g.strokeCircle(0, 0, 6.5);
+      g.lineStyle(1.4, COLORS.white, 0.72);
+      g.strokeCircle(0, 0, 2.6);
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        g.beginPath();
+        g.moveTo(Math.cos(a) * 10, Math.sin(a) * 10);
+        g.lineTo(Math.cos(a) * 6.5, Math.sin(a) * 6.5);
+        g.strokePath();
+      }
+      return;
+    }
+
+    if (modifier === 'frenzied') {
+      g.lineStyle(2.4, color, 0.96);
+      for (const offset of [-5, 5]) {
+        g.beginPath();
+        g.moveTo(-7, offset + 4);
+        g.lineTo(0, offset - 3);
+        g.lineTo(7, offset + 4);
+        g.strokePath();
+      }
+      g.lineStyle(1.2, COLORS.white, 0.7);
+      g.beginPath();
+      g.moveTo(-4, 0);
+      g.lineTo(4, 0);
+      g.strokePath();
+      return;
+    }
+
+    if (modifier === 'volatile') {
+      g.fillStyle(color, 0.18);
+      g.lineStyle(2.3, color, 0.96);
+      g.beginPath();
+      g.moveTo(0, -8);
+      g.lineTo(8, 0);
+      g.lineTo(0, 8);
+      g.lineTo(-8, 0);
+      g.closePath();
+      g.fillPath();
+      g.strokePath();
+      g.fillStyle(COLORS.white, 0.88);
+      g.fillCircle(0, 0, 2.2);
+      return;
+    }
+
+    g.lineStyle(2, COLORS.gold, 0.9);
+    g.strokeTriangle(-6, 6, 0, -6, 6, 6);
+  }
+
+  private drawEliteCorona(
+    g: Phaser.GameObjects.Graphics,
+    radius: number,
+    modifier: EliteModifierId | null,
+    color = COLORS.gold
+  ): void {
+    g.clear();
+
+    if (modifier === 'regenerator') {
+      g.lineStyle(1.8, color, 0.66);
+      g.strokeCircle(0, 0, radius);
+      g.lineStyle(1.1, COLORS.white, 0.28);
+      g.strokeCircle(0, 0, radius + 5);
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const outer = radius + 7;
+        const inner = radius - 5;
+        g.lineStyle(i % 2 === 0 ? 2 : 1.2, color, 0.72);
+        g.beginPath();
+        g.moveTo(Math.cos(a) * outer, Math.sin(a) * outer);
+        g.lineTo(Math.cos(a) * inner, Math.sin(a) * inner);
+        g.strokePath();
+      }
+      return;
+    }
+
+    if (modifier === 'frenzied') {
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2;
+        const inner = radius - 3;
+        const outer = radius + (i % 2 === 0 ? 13 : 8);
+        g.lineStyle(i % 2 === 0 ? 2.8 : 1.5, i % 2 === 0 ? color : COLORS.white, 0.82);
+        g.beginPath();
+        g.moveTo(Math.cos(a) * inner, Math.sin(a) * inner);
+        g.lineTo(Math.cos(a) * outer, Math.sin(a) * outer);
+        g.strokePath();
+      }
+      return;
+    }
+
+    if (modifier === 'volatile') {
+      g.lineStyle(2.4, color, 0.78);
+      for (let i = 0; i < 4; i++) {
+        const a = Math.PI / 4 + (i / 4) * Math.PI * 2;
+        const tangent = a + Math.PI / 2;
+        const cx = Math.cos(a) * radius;
+        const cy = Math.sin(a) * radius;
+        const half = 6;
+        g.beginPath();
+        g.moveTo(cx + Math.cos(tangent) * half, cy + Math.sin(tangent) * half);
+        g.lineTo(Math.cos(a) * (radius + 9), Math.sin(a) * (radius + 9));
+        g.lineTo(cx - Math.cos(tangent) * half, cy - Math.sin(tangent) * half);
+        g.strokePath();
+      }
+      g.lineStyle(1, COLORS.white, 0.34);
+      g.strokeCircle(0, 0, radius - 5);
+      return;
+    }
+
     g.lineStyle(1.4, color, 0.62);
     g.strokeCircle(0, 0, radius);
-    g.lineStyle(1, COLORS.white, 0.22);
-    g.strokeCircle(0, 0, radius + 4);
-
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2;
-      const inner = radius - 2;
-      const outer = radius + (i % 2 === 0 ? 8 : 5);
-      g.lineStyle(i % 3 === 0 ? 2 : 1.2, i % 3 === 0 ? COLORS.white : color, 0.72);
-      g.beginPath();
-      g.moveTo(Math.cos(a) * inner, Math.sin(a) * inner);
-      g.lineTo(Math.cos(a) * outer, Math.sin(a) * outer);
-      g.strokePath();
-      if (i % 3 === 0) {
-        g.fillStyle(COLORS.white, 0.72);
-        g.fillCircle(Math.cos(a) * outer, Math.sin(a) * outer, 1.6);
-      }
-    }
   }
 }
