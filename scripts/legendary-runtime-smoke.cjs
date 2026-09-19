@@ -136,19 +136,28 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const a = gs.spawnEnemy('brute', gs.player.x + 260, gs.player.y + 120, false);
     const b = gs.spawnEnemy('brute', gs.player.x - 260, gs.player.y - 120, false);
     const beforeHp = [a.hp, b.hp];
-    const existing = new Set(gs.time.getAllEvents());
+    const captured = [];
+    const originalDelayedCall = gs.time.delayedCall;
+    gs.time.delayedCall = function (delay, callback, args, callbackScope) {
+      const timer = originalDelayedCall.call(this, delay, callback, args, callbackScope);
+      captured.push({ delay, callback, timer });
+      return timer;
+    };
     const event = { x: gs.player.x, y: gs.player.y, radius: 24, damage: 100, rna: 0 };
-    gs.triggerLysisChain(event, [a, b]);
-    const timers = gs.time.getAllEvents().filter((timer) => !existing.has(timer));
-    const delays = timers.map((timer) => timer.delay).sort((x, y) => x - y);
-    for (const timer of timers) {
-      timer.callback();
-      timer.remove(false);
+    try {
+      gs.triggerLysisChain(event, [a, b]);
+    } finally {
+      gs.time.delayedCall = originalDelayedCall;
+    }
+    const delays = captured.map((entry) => entry.delay).sort((x, y) => x - y);
+    for (const entry of captured) {
+      entry.callback();
+      entry.timer.remove(false);
     }
     return {
       beforeHp,
       afterHp: [a.hp, b.hp],
-      timerCount: timers.length,
+      timerCount: captured.length,
       delays,
     };
   });
