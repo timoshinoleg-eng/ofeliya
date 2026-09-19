@@ -121,6 +121,7 @@ function browserDriver() {
       activeEnemies: gs.enemies.getChildren().filter((e) => e.active).length,
       activeGems: gs.gems.getChildren().filter((g) => g.active).length,
       activeHostCells: activeCells.length,
+      hostCellDepth: activeCells[0]?.image?.depth ?? null,
       infectedHostCellVisible: Boolean(activeCells[1]?.infectionOverlay?.visible),
       playerAnchorVisible: Boolean(gs.player.focusAnchor?.visible),
       playerDepth: gs.player.depth,
@@ -136,6 +137,7 @@ function browserDriver() {
     contract.activeEnemies < 100 ||
     contract.activeGems < 16 ||
     contract.activeHostCells < 2 ||
+    !(contract.hostCellDepth > 10) ||
     !contract.infectedHostCellVisible ||
     !contract.playerAnchorVisible ||
     !(contract.anchorDepth < contract.playerDepth) ||
