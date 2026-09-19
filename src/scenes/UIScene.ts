@@ -743,6 +743,7 @@ export class UIScene extends Phaser.Scene {
 
   private showGameOver(res: RunResult): void {
     this.uiBlocked = true;
+    const ranked = res.difficultyId === 'standard';
     const W = this.scale.width;
     const H = this.scale.height;
     const compact = H < 650;
@@ -827,6 +828,24 @@ export class UIScene extends Phaser.Scene {
         .setResolution(2)
     );
 
+    detailY += compact ? 22 : 25;
+    c.add(
+      this.add
+        .text(
+          W / 2,
+          detailY,
+          ranked ? 'РЕЖИМ: STANDARD · рейтинговый' : 'РЕЖИМ: STRAINED · вне рейтинга',
+          {
+            fontFamily: FONT,
+            fontSize: compact ? '9px' : '10px',
+            fontStyle: 'bold',
+            color: ranked ? '#8fe8ff' : '#ffe066',
+          }
+        )
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+
     const rec: string[] = [];
     if (res.records.timeRecord && res.timeMs > 0) rec.push(res.win ? 'победа' : 'выживание');
     if (res.records.killsRecord) rec.push('иммунитет');
@@ -868,20 +887,23 @@ export class UIScene extends Phaser.Scene {
     const challengeTarget = this.registry.get('challengeTarget') as ChallengePayload | null | undefined;
     if (challengeTarget) {
       detailY += compact ? 24 : 29;
-      const beaten = isChallengeBeaten(challengeTarget, res);
       const target =
         challengeTarget.objective === 'boss1-clear'
           ? `IMMUNE PRIME быстрее ${fmtTime(challengeTarget.timeMs)}`
           : challengeTarget.objective === 'campaign-clear'
             ? `кампания быстрее ${fmtTime(challengeTarget.timeMs)}`
             : `дольше ${fmtTime(challengeTarget.timeMs)}`;
+      const beaten = ranked && isChallengeBeaten(challengeTarget, res);
+      const label = ranked
+        ? `ВЫЗОВ ${beaten ? 'ПРЕВЗОЙДЁН' : 'НЕ ПРЕВЗОЙДЁН'} · цель ${target}`
+        : 'ВЫЗОВ НЕ ЗАСЧИТАН · требуется STANDARD';
       c.add(
         this.add
-          .text(W / 2, detailY, `ВЫЗОВ ${beaten ? 'ПРЕВЗОЙДЁН' : 'НЕ ПРЕВЗОЙДЁН'} · цель ${target}`, {
+          .text(W / 2, detailY, label, {
             fontFamily: FONT,
             fontSize: compact ? '10px' : '11px',
             fontStyle: 'bold',
-            color: beaten ? '#7fffa1' : '#ff9b66',
+            color: ranked ? (beaten ? '#7fffa1' : '#ff9b66') : '#ffe066',
             align: 'center',
             wordWrap: { width: W - 42 },
           })
@@ -903,13 +925,14 @@ export class UIScene extends Phaser.Scene {
       }
     });
     y += gap;
-    this.button(c, 'БРОСИТЬ ВЫЗОВ', W / 2, y, false, () => {
+    this.button(c, ranked ? 'БРОСИТЬ ВЫЗОВ' : 'ПОДЕЛИТЬСЯ РЕЗУЛЬТАТОМ', W / 2, y, false, () => {
       const mins = fmtTime(res.timeMs);
       const evoShare = res.evolutions.length > 0 ? ` Критические мутации: ${res.evolutions.map((id) => EVOLUTION_NAMES[id]).join(', ')}.` : '';
+      const modeShare = ranked ? '' : ' Режим: STRAINED.';
       const shareText = res.win
-        ? `OFELIYA / STRAIN-0 завершила кампанию за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${evoShare} Сможешь быстрее?`
-        : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${evoShare} Сможешь дольше?`;
-      const payload = encodeChallengePayload(createChallengePayload(res));
+        ? `OFELIYA / STRAIN-0 завершила кампанию за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare} ${ranked ? 'Сможешь быстрее?' : ''}`.trim()
+        : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare} ${ranked ? 'Сможешь дольше?' : ''}`.trim();
+      const payload = ranked ? encodeChallengePayload(createChallengePayload(res)) : null;
       const link = payload ? PlatformBridge.buildStartLink(payload) : null;
       void PlatformBridge.shareResult(shareText, link ?? undefined).then((ok) => {
         if (!ok) {
