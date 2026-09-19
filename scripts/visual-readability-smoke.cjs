@@ -82,9 +82,10 @@ function browserDriver() {
 
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2 + 0.17;
+      const pickupRadius = 155 + (i % 3) * 14;
       gs.spawnGem(
-        gs.player.x + Math.cos(a) * (68 + (i % 3) * 16),
-        gs.player.y + Math.sin(a) * (68 + (i % 3) * 16),
+        gs.player.x + Math.cos(a) * pickupRadius,
+        gs.player.y + Math.sin(a) * pickupRadius,
         1
       );
     }
