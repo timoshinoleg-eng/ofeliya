@@ -52,6 +52,12 @@ function browserDriver() {
 
   const contract = await page.evaluate(() => {
     const gs = window.__game.scene.getScene('Game');
+    const ui = window.__game.scene.getScene('UI');
+    gs.awaitingChoice = false;
+    gs.pendingChoices = [];
+    gs.queuedLevels = 0;
+    ui.dismissProgressionForStageBoundary();
+
     gs.runState.stage.hp = 1_000_000;
     gs.runState.stage.maxHp = 1_000_000;
     gs.nextFireAt = Number.MAX_SAFE_INTEGER;
