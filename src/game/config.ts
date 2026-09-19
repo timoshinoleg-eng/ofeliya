@@ -26,7 +26,7 @@ export const FONT = "'Chakra Petch', Arial, sans-serif";
 /** Visual parameters. PerformanceProfile is the single authority for whether postFX are enabled. */
 export const POSTFX = {
   enabled: PERFORMANCE.postFx,
-  bloom: { strength: 0.46, blurStrength: 0.52, steps: 3 },
+  bloom: { strength: 0.3, blurStrength: 0.34, steps: 3 },
   vignette: { radius: 0.72, strength: 0.6 },
 };
 
