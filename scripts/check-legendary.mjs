@@ -19,6 +19,8 @@ try {
       'src/game/LegendarySystem.ts',
       'src/game/RunState.ts',
       'src/game/UpgradeSystem.ts',
+      'src/game/ImpactDirector.ts',
+      'src/systems/VfxBudget.ts',
       '--target',
       'ES2020',
       '--module',
@@ -38,6 +40,8 @@ try {
   );
 
   const { RunState } = require(join(temp, 'game/RunState.js'));
+  const { ImpactDirector } = require(join(temp, 'game/ImpactDirector.js'));
+  const { VfxBudget } = require(join(temp, 'systems/VfxBudget.js'));
   const {
     LEGENDARY_PITY_OFFERS,
     MAX_LEGENDARIES_PER_RUN,
@@ -78,7 +82,25 @@ try {
   assert(!state.addLegendary('myocardial-rhythm'), 'fourth Legendary exceeded max-per-run');
   assert(eligibleLegendaries(state).length === 0, 'offers remained after max Legendary cap');
 
-  console.log('legendary deterministic smoke: ok');
+  const impact = new ImpactDirector();
+  assert(impact.hitStopMs('critical_hit') === 12, 'critical hit-stop budget drifted');
+  assert(impact.hitStopMs('elite_death') === 20, 'elite hit-stop budget drifted');
+  assert(impact.hitStopMs('legendary_pick') === 220, 'Legendary presentation budget drifted');
+  assert(impact.hitStopMs('boss_phase') === 28, 'boss hit-stop budget drifted');
+  assert(impact.allowCameraShake(1_000), 'first camera shake should be allowed');
+  assert(!impact.allowCameraShake(1_050), 'camera-shake cooldown was bypassed');
+  assert(impact.allowCameraShake(1_100), 'camera shake did not recover after cooldown');
+  assert(impact.acquireFullscreen(2_000, 300), 'fullscreen slot did not acquire');
+  assert(!impact.acquireFullscreen(2_100, 100), 'fullscreen overlap was allowed');
+  assert(impact.acquireFullscreen(2_300, 100), 'fullscreen slot did not release');
+
+  const budget = new VfxBudget(10, 20);
+  assert(budget.request(15, 0, true) === 15, 'burst reservoir grant mismatch');
+  assert(budget.request(10, 0, false) === 5, 'budget allowed particles beyond remaining tokens');
+  assert(budget.request(10, 1_000, false) === 10, 'sustained VFX budget did not regenerate');
+  assert(budget.request(100, 1_000, true) === 0, 'empty reservoir emitted particles');
+
+  console.log('legendary/impact/vfx deterministic smoke: ok');
 } finally {
   rmSync(temp, { recursive: true, force: true });
 }
