@@ -940,7 +940,8 @@ export class GameScene extends Phaser.Scene {
       run.kills,
       stage.level,
       evolutions,
-      { boss1ClearMs }
+      { boss1ClearMs },
+      this.difficulty.id === 'standard'
     );
     this.captureAchievements(true, false);
     this.milestones.reset();
@@ -948,6 +949,7 @@ export class GameScene extends Phaser.Scene {
     const result: RunResult = {
       win,
       reason,
+      difficultyId: this.difficulty.id,
       timeMs: run.timeMs,
       kills: run.kills,
       hostCellsInfected: run.hostCellsInfected,

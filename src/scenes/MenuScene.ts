@@ -28,7 +28,7 @@ export class MenuScene extends Phaser.Scene {
     PlatformBridge.setBackHandler(null);
 
     const incomingChallenge = parseChallengePayload(PlatformBridge.getStartParam());
-    let selectedDifficulty = readDifficultySelection();
+    let selectedDifficulty = incomingChallenge ? 'standard' : readDifficultySelection();
     this.registry.set('difficultyId', selectedDifficulty);
     // Registry keeps the social target across Menu -> Game -> UI and fast restarts. It is display
     // context only: gameplay/rewards never consume it.
@@ -273,19 +273,24 @@ export class MenuScene extends Phaser.Scene {
 
     const renderDifficulty = () => {
       const profile = getDifficultyProfile(selectedDifficulty);
-      difficultyText.setText(`СЛОЖНОСТЬ: ${profile.label}  ›`);
+      difficultyText.setText(
+        incomingChallenge ? 'СЛОЖНОСТЬ: СТАНДАРТ · ВЫЗОВ' : `СЛОЖНОСТЬ: ${profile.label}  ›`
+      );
       difficultyText.setColor(profile.id === 'strained' ? '#ffe066' : '#fff4ec');
-      difficultyDesc.setText(profile.description);
+      difficultyDesc.setText(
+        incomingChallenge ? 'соревновательные вызовы фиксируют Standard' : profile.description
+      );
       difficultyBg.setStrokeStyle(
         profile.id === 'strained' ? 1.8 : 1.4,
-        profile.id === 'strained' ? COLORS.gold : COLORS.cyan,
-        profile.id === 'strained' ? 0.9 : 0.68
+        incomingChallenge ? COLORS.gold : profile.id === 'strained' ? COLORS.gold : COLORS.cyan,
+        incomingChallenge ? 0.9 : profile.id === 'strained' ? 0.9 : 0.68
       );
     };
     renderDifficulty();
     difficultyBg.on('pointerup', () => {
       Sfx.play('click');
       PlatformBridge.haptic('light');
+      if (incomingChallenge) return;
       selectedDifficulty = nextDifficultyId(selectedDifficulty);
       writeDifficultySelection(selectedDifficulty);
       this.registry.set('difficultyId', selectedDifficulty);
