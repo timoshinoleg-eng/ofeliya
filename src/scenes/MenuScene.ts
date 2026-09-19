@@ -2,6 +2,12 @@ import Phaser from 'phaser';
 import { parseChallengePayload } from '../game/Challenge';
 import { COLORS, FONT, fmtTime } from '../game/config';
 import { IDENTITY } from '../game/identity';
+import {
+  getDifficultyProfile,
+  nextDifficultyId,
+  readDifficultySelection,
+  writeDifficultySelection,
+} from '../game/DifficultyProfile';
 import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
 import { showLegalOverlay } from '../legal/LegalOverlay';
 import { PlatformBridge } from '../platform';
@@ -22,6 +28,8 @@ export class MenuScene extends Phaser.Scene {
     PlatformBridge.setBackHandler(null);
 
     const incomingChallenge = parseChallengePayload(PlatformBridge.getStartParam());
+    let selectedDifficulty = readDifficultySelection();
+    this.registry.set('difficultyId', selectedDifficulty);
     // Registry keeps the social target across Menu -> Game -> UI and fast restarts. It is display
     // context only: gameplay/rewards never consume it.
     this.registry.set('challengeTarget', incomingChallenge);
@@ -236,7 +244,57 @@ export class MenuScene extends Phaser.Scene {
         .setDepth(5);
     }
 
-    const btnY = H * 0.7;
+    const difficultyY = H * 0.635;
+    const difficultyW = Math.min(W - 52, 286);
+    const difficultyBg = this.add
+      .rectangle(W / 2, difficultyY, difficultyW, 46, 0x21101d, 0.94)
+      .setStrokeStyle(1.4, COLORS.cyan, 0.68)
+      .setDepth(5)
+      .setInteractive({ useHandCursor: true });
+    const difficultyText = this.add
+      .text(W / 2, difficultyY - 8, '', {
+        fontFamily: FONT,
+        fontSize: H < 650 ? '11px' : '12px',
+        fontStyle: 'bold',
+        color: '#fff4ec',
+      })
+      .setOrigin(0.5)
+      .setResolution(2)
+      .setDepth(6);
+    const difficultyDesc = this.add
+      .text(W / 2, difficultyY + 9, '', {
+        fontFamily: FONT,
+        fontSize: '9px',
+        color: '#9fb5c4',
+      })
+      .setOrigin(0.5)
+      .setResolution(2)
+      .setDepth(6);
+
+    const renderDifficulty = () => {
+      const profile = getDifficultyProfile(selectedDifficulty);
+      difficultyText.setText(`СЛОЖНОСТЬ: ${profile.label}  ›`);
+      difficultyText.setColor(profile.id === 'strained' ? '#ffe066' : '#fff4ec');
+      difficultyDesc.setText(profile.description);
+      difficultyBg.setStrokeStyle(
+        profile.id === 'strained' ? 1.8 : 1.4,
+        profile.id === 'strained' ? COLORS.gold : COLORS.cyan,
+        profile.id === 'strained' ? 0.9 : 0.68
+      );
+    };
+    renderDifficulty();
+    difficultyBg.on('pointerup', () => {
+      Sfx.play('click');
+      PlatformBridge.haptic('light');
+      selectedDifficulty = nextDifficultyId(selectedDifficulty);
+      writeDifficultySelection(selectedDifficulty);
+      this.registry.set('difficultyId', selectedDifficulty);
+      renderDifficulty();
+    });
+    difficultyBg.on('pointerover', () => difficultyBg.setFillStyle(0x2a1425, 1));
+    difficultyBg.on('pointerout', () => difficultyBg.setFillStyle(0x21101d, 0.94));
+
+    const btnY = H * 0.73;
     const btnW = Math.min(W - 44, 300);
     const btnBg = this.add
       .rectangle(W / 2, btnY, btnW, 66, 0x5c143e, 0.92)
