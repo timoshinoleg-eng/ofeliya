@@ -1,53 +1,115 @@
-# OFELIYA: STRAIN ZERO — architecture notes for Legendary/Impact V1
+# OFELIYA: STRAIN ZERO — current architecture notes
 
-Base inspected: `main@f0d5295a4c210507cac0f0a8ef0a5fee2f2daed8` after PR #37.
+Current contract: post control-mode, Legendary, difficulty, Heart timing, infection-build and boss-phase passes.
 
 ## Ownership
 
-- `GameScene` owns live combat orchestration, Phaser pools, collision hooks, level-up queue, hit-stop and stage-world reset.
-- `RunState` owns run-wide records plus resettable stage combat progression.
-- `StageDirector` is the pure lifecycle authority for Bloodstream → Heart → boss/run-end transitions.
-- `WaveDirector` owns stage-local spawn composition and boss/minion cadence.
-- `UpgradeSystem` owns ordinary upgrade definitions; `EvolutionSystem` reserves critical-mutation offer slots.
-- `HeartbeatPulseDirector` is deterministic and owns Heart telegraph/impact/pressure timing.
-- `HostCellSystem` owns the bounded interactive host-cell pool and emits lysis events back to `GameScene`.
-- `VfxSystem` owns bounded combat particle emitters; `AtmosphereSystem` owns preallocated ambient presentation.
-- `SaveSystem` owns the backward-compatible `ofeliya_save_v1` schema. This V1 Legendary slice intentionally does not alter persisted save/challenge semantics.
+- `GameScene` owns live combat orchestration, Phaser pools, collision hooks, level-up queue, stage transitions, Heart timing opportunities and boss attack callbacks.
+- `RunState` owns run-wide records plus resettable stage combat progression, infection/lysis tuning, Legendary ownership and per-stage build snapshots.
+- `StageDirector` is the pure lifecycle authority for `Bloodstream -> Heart -> run-end`.
+- `WaveDirector` owns stage-local spawn composition, normal caps and boss/minion cadence.
+- `DifficultyProfile` owns `STANDARD` / `STRAINED` multipliers, elite modifiers and accelerated Heart timing.
+- `UpgradeSystem` owns ordinary mutations, including the infection archetype.
+- `EvolutionSystem` owns critical-mutation offer priority.
+- `LegendarySystem` owns Legendary eligibility, pity, weighted selection and the first-boss trophy reservation.
+- `HeartbeatPulseDirector` remains deterministic and owns Heart telegraph/impact/pressure timing. Positional safe-pocket resolution is scene-level gameplay.
+- `HostCellSystem` owns the bounded host-cell pool and reads live infection/lysis tuning through a callback.
+- `Joystick` is the established one-hand implementation and must remain behaviorally stable.
+- `TwinStickControls` is a separate optional two-hand profile: left movement, right aim-priority, automatic fire.
+- `ControlMode` persists control selection independently of save progression.
+- `VfxSystem` owns bounded combat emitters; `AtmosphereSystem` owns preallocated ambient presentation.
+- `CinematicTextures` creates lightweight runtime key art used by stage/boss/victory presentation.
+- `SaveSystem` owns the backward-compatible `ofeliya_save_v1` schema.
 
-## Hot loops
+## Campaign contract
 
-- `GameScene.update`: movement, fire, orbit, nova, stage events, wave, host cells, atmosphere.
-- `Enemy.preUpdate`: pursuit/role motion and pooled elite/boss presentation.
-- `AtmosphereSystem.update`: preallocated ambient cells/particles.
-- `HostCellSystem.update`: bounded pooled cells.
+Live order:
 
-Legendary runtime hooks are query-based (`RunState.hasLegendary`) and do not register persistent listeners. Restart/stage reset cannot leave event subscriptions behind.
+1. `КРОВОТОК` — 5:00 until `IMMUNE PRIME`.
+2. `СЕРДЦЕ` — 4:00 until `CARDIAC TITAN`.
 
-## Existing pools / caps
+Stage transitions preserve run-wide records while resetting stage-local combat progression. The result contract archives Bloodstream and Heart builds separately and keeps run-wide highest level plus acquired Legendary IDs.
 
-- Bullets: 160.
-- Enemies: 260.
-- Gems: 220.
-- Damage text and trails are fixed pools.
-- Ambient particles are preallocated.
-- Combat VFX uses four pre-created Phaser emitters.
+## Controls
 
-V1 adds a global token-bucket `VfxBudget` so multiple systems cannot independently exhaust presentation headroom.
+### One hand
 
-## Legendary V1 integration
+Default profile. Uses the original floating `Joystick.ts` path unchanged. Automatic attack remains mandatory.
 
-Legendary is a third rarity layered into the existing upgrade/evolution offer flow instead of a parallel modal/registry.
+### Two hands / twin-stick
+
+Optional profile selected in the menu and persisted in local storage.
+
+- left half: floating movement stick;
+- right half: aim-priority stick;
+- right stick biases auto-target selection inside a broad sector;
+- releasing it returns to ordinary nearest-enemy targeting;
+- attack remains automatic.
+
+No gameplay system may require the two-hand profile.
+
+## Combat readability and roles
+
+Existing enemy IDs stay stable, but movement roles are behaviorally distinct:
+
+- `swarm`: predictive interception;
+- `runner`: pursuit -> telegraphed wind-up -> locked charge -> recovery;
+- `brute`: close-range wind-up -> heavy burst -> long recovery.
+
+Bosses are no longer oversized pursuers:
+
+- `IMMUNE PRIME`: two pressure-wave phases; stronger/faster below ~52% HP. Host-cell lysis is intentionally effective against it.
+- `CARDIAC TITAN`: two Heart-pressure phases; successful Heart synchronization creates a vulnerability window.
+
+## Host-cell infection build
+
+Base behavior is unchanged at zero stacks, but the signature mechanic is now part of buildcraft.
+
+Stage-local stats:
+
+- infection speed;
+- infection radius;
+- lysis damage;
+- lysis radius;
+- RNA yield.
+
+Mutations:
+
+- `РЕЦЕПТОРНЫЙ ЗАХВАТ`;
+- `ЦИТОЛИЗ`;
+- `ВИРУСНАЯ ФАБРИКА`.
+
+The host-cell pool may recycle only old/far, nearly untouched cells so the mechanic follows the player without deleting actively infected cells.
+
+## Heart timing loop
+
+Heartbeat pressure is not only a passive speed multiplier.
+
+A telegraph creates a nearby diastole safe pocket. Reaching it before impact:
+
+- neutralizes temporary pressure during the synchronized window;
+- opens a short projectile/lysis opportunity window;
+- enables `РИТМ МИОКАРДА` if owned;
+- makes `CARDIAC TITAN` explicitly more vulnerable.
+
+Missing the pocket preserves the existing pressure consequence.
+
+## Legendary contract
+
+Legendary remains a rarity layer in the normal progression flow, not a parallel inventory system.
 
 Rules:
-- max 3 per run;
-- duplicates rejected by `RunState`;
-- Heart-only gating;
-- prerequisite gating for build-linked Legendaries;
-- pity after 8 eligible offers without a Legendary;
-- injected RNG for deterministic contract tests;
-- runtime effects use existing object pools and scene-owned timers.
 
-Implemented vertical-slice mechanics:
+- maximum **2 per run**;
+- duplicates rejected;
+- stage/prerequisite gating;
+- pity after 8 eligible missed offers;
+- maximum one random Legendary before the first boss;
+- the second run-wide slot is reserved so the `IMMUNE PRIME` trophy cannot disappear because of pre-boss RNG;
+- injected RNG is used by deterministic tests.
+
+Implemented mechanics:
+
 - Geometry Split;
 - Lysis Chain;
 - Zero Point;
@@ -55,12 +117,61 @@ Implemented vertical-slice mechanics:
 - Myocardial Rhythm;
 - Last Carrier.
 
-## Impact/VFX
+## Difficulty
 
-`ImpactDirector` centralizes hit-stop durations and camera-shake cooldown.
-`VfxBudget` centralizes sustained/burst particle emission budget.
-No GSAP, Matter.js, tsParticles or second renderer is introduced.
+`STANDARD` preserves the baseline campaign.
 
-## Deferred intentionally
+`STRAINED` is live and selectable before the run. It changes gameplay, not just score labels:
 
-Threat-based difficulty, elite affixes, mutators, Codex persistence and difficulty UI are separate balance migrations. They should follow only after this slice is green in CI and visually validated on a 360×760/800 mobile viewport.
+- stronger/faster enemies;
+- shorter spawn intervals and larger batches;
+- higher normal-enemy cap;
+- more frequent elites;
+- elite modifiers: regenerator / frenzied / volatile;
+- stronger bosses and more boss minions;
+- accelerated/stronger Heart pressure.
+
+Difficulty selection is persisted separately from the main save.
+
+## Presentation
+
+The renderer remains Phaser-only. No GSAP, Matter.js, tsParticles or second renderer is introduced.
+
+Clarity rules now deliberately reduce excessive Bloom and baked glow while retaining antialiasing and curved biological silhouettes.
+
+Cinematic presentation uses small generated `CanvasTexture` key-art frames for:
+
+- Bloodstream -> Heart;
+- `IMMUNE PRIME`;
+- `CARDIAC TITAN`;
+- campaign victory.
+
+They are reused with lightweight zoom/parallax and do not add video payload.
+
+## Pools / caps
+
+- Bullets: 160.
+- Enemies: 260.
+- Gems: 220.
+- Bloodstream/Heart normal enemy cap: 240 before difficulty modifiers.
+- Damage text and trails are fixed pools.
+- Ambient particles are preallocated.
+- Combat VFX uses pre-created emitters and a global budget.
+
+## Quality gates
+
+Deterministic checks cover challenge compatibility, save migration, stage lifecycle, Legendary rules, difficulty, viewport math and startup renderer behavior.
+
+Browser smoke covers MAX mobile viewport, compact layouts, WebGL/Canvas fallback, Legendary runtime, STRAINED, campaign transition and dense readability.
+
+Dense readability contract now produces captures at **100 / 150 / 200 active enemies** while also keeping player anchor, elite marker, RNA, projectile, healthy host cell and partially infected host cell in the same scene.
+
+## Still deferred
+
+The next major additions should be treated as separate migrations rather than silently folded into hot loops:
+
+- persistent Codex/meta-progression beyond current save history;
+- additional campaign organs/stages;
+- telemetry-driven balance tuning;
+- public competitive leaderboard with trusted backend score validation;
+- broader external art/audio pipeline only if it preserves current mobile performance and provenance rules.
