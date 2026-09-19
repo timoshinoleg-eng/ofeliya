@@ -61,18 +61,18 @@ export class HostCellSystem {
     for (let i = 0; i < 6; i++) {
       const image = scene.add
         .image(0, 0, 'host-cell-shadow')
-        .setDepth(7)
-        .setScale(0.72)
+        .setDepth(12)
+        .setScale(0.78)
         .setAlpha(0)
         .setVisible(false);
       const infectionOverlay = scene.add
         .image(0, 0, 'host-cell-infection')
-        .setDepth(8)
-        .setScale(0.72)
+        .setDepth(13)
+        .setScale(0.78)
         .setAlpha(0)
         .setVisible(false)
         .setBlendMode(Phaser.BlendModes.ADD);
-      const ring = scene.add.graphics().setDepth(9).setVisible(false);
+      const ring = scene.add.graphics().setDepth(14).setVisible(false);
       this.cells.push({
         image,
         infectionOverlay,
@@ -115,12 +115,12 @@ export class HostCellSystem {
 
       const infected = cell.infection;
       const pulse = 1 + Math.sin(time * 0.003 + cell.phase) * 0.025;
-      const scale = (0.72 + infected * 0.1) * pulse;
+      const scale = (0.78 + infected * 0.1) * pulse;
       const rotation = Math.sin(time * 0.00032 + cell.phase) * 0.025;
 
       cell.image
         .setScale(scale)
-        .setAlpha(0.62 + infected * 0.18)
+        .setAlpha(0.78 + infected * 0.16)
         .setRotation(rotation)
         .setTint(infected > 0.82 ? 0xffd7eb : 0xffffff);
 
@@ -135,13 +135,35 @@ export class HostCellSystem {
         .setAlpha(infected * (infected > 0.7 ? infectionPulse : 0.82));
 
       cell.ring.clear();
+
+      // Host cells are the signature objective, so they keep a persistent membrane locator even
+      // before infection starts. This must survive a 200-enemy screen without becoming HUD-like.
+      const locatorRadius = 47 + Math.sin(time * 0.0035 + cell.phase) * 1.2;
+      cell.ring.lineStyle(1.8, COLORS.green, 0.34 + infected * 0.18);
+      cell.ring.strokeCircle(cell.image.x, cell.image.y, locatorRadius);
+      cell.ring.lineStyle(1, COLORS.white, 0.18 + infected * 0.12);
+      cell.ring.strokeCircle(cell.image.x, cell.image.y, locatorRadius - 3);
+
+      for (let i = 0; i < 4; i++) {
+        const a = cell.phase * 0.2 + (i / 4) * Math.PI * 2;
+        const x0 = cell.image.x + Math.cos(a) * (locatorRadius + 1);
+        const y0 = cell.image.y + Math.sin(a) * (locatorRadius + 1);
+        const x1 = cell.image.x + Math.cos(a) * (locatorRadius + 7);
+        const y1 = cell.image.y + Math.sin(a) * (locatorRadius + 7);
+        cell.ring.lineStyle(2, COLORS.green, 0.42 + infected * 0.28);
+        cell.ring.beginPath();
+        cell.ring.moveTo(x0, y0);
+        cell.ring.lineTo(x1, y1);
+        cell.ring.strokePath();
+      }
+
       const ringColor = infected > 0.66 ? COLORS.green : COLORS.magenta;
-      cell.ring.lineStyle(3, ringColor, 0.18 + infected * 0.72);
+      cell.ring.lineStyle(3.4, ringColor, 0.28 + infected * 0.72);
       cell.ring.beginPath();
       cell.ring.arc(
         cell.image.x,
         cell.image.y,
-        43 + Math.sin(time * 0.005 + cell.phase) * infected * 2,
+        42 + Math.sin(time * 0.005 + cell.phase) * infected * 2,
         -Math.PI / 2,
         -Math.PI / 2 + Math.PI * 2 * Math.max(0.025, infected),
         false
@@ -180,8 +202,8 @@ export class HostCellSystem {
       cell.active = false;
       cell.infection = 0;
       cell.spawnedAt = 0;
-      cell.image.setVisible(false).setAlpha(0).clearTint().setRotation(0).setScale(0.72);
-      cell.infectionOverlay.setVisible(false).setAlpha(0).setRotation(0).setScale(0.72);
+      cell.image.setVisible(false).setAlpha(0).clearTint().setRotation(0).setScale(0.78);
+      cell.infectionOverlay.setVisible(false).setAlpha(0).setRotation(0).setScale(0.78);
       cell.ring.setVisible(false).clear();
     }
   }
@@ -242,18 +264,18 @@ export class HostCellSystem {
       .setAlpha(0)
       .clearTint()
       .setRotation(0)
-      .setScale(0.62);
+      .setScale(0.68);
     slot.infectionOverlay
       .setPosition(x, y)
       .setVisible(false)
       .setAlpha(0)
       .setRotation(0)
-      .setScale(0.62);
+      .setScale(0.68);
     slot.ring.setVisible(true).clear();
     this.scene.tweens.add({
       targets: slot.image,
-      alpha: 0.62,
-      scale: 0.72,
+      alpha: 0.78,
+      scale: 0.78,
       duration: 280,
       ease: 'Back.Out',
     });
