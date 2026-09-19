@@ -98,6 +98,9 @@ jobs:
       - name: Legendary runtime browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/legendary-runtime-smoke.cjs
 
+      - name: Dense visual readability browser smoke
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/visual-readability-smoke.cjs
+
       - name: Bloodstream to Heart campaign browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/stage-transition-smoke.cjs
 
