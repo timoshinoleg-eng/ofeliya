@@ -20,6 +20,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   flashUntil = 0;
   bladeImmuneUntil = 0;
   spawnSerial = 0;
+  bossPhase = 1;
 
   private gs: GameScene | null = null;
   private target: Player | null = null;
@@ -38,6 +39,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private lockedDirX = 0;
   private lockedDirY = 0;
   private roleTelegraph: Phaser.GameObjects.Graphics | null = null;
+  private bossAttackState: 'pursuit' | 'telegraph' | 'recovery' = 'pursuit';
+  private bossAttackStartedAt = 0;
+  private bossAttackUntil = 0;
+  private nextBossAttackAt = 0;
+  private bossTelegraph: Phaser.GameObjects.Graphics | null = null;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'immune-antibody');
@@ -114,6 +120,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.lockedDirX = 0;
     this.lockedDirY = 0;
     this.roleTelegraph?.setVisible(false).clear();
+    this.bossPhase = 1;
+    this.bossAttackState = 'pursuit';
+    this.bossAttackStartedAt = 0;
+    this.bossAttackUntil = 0;
+    this.nextBossAttackAt = this.isBoss ? this.scene.time.now + 1_900 : 0;
+    this.bossTelegraph?.setVisible(false).clear();
     this.setAlpha(1);
     this.clearTint();
     this.setRotation(0);
@@ -197,6 +209,15 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
     const pursuitD = Math.hypot(pursuitDx, pursuitDy) || 1;
 
+    if (this.isBoss) {
+      const nextPhase = this.hp / Math.max(1, this.maxHp) <= 0.52 ? 2 : 1;
+      if (nextPhase !== this.bossPhase) {
+        this.bossPhase = nextPhase;
+        this.gs?.onBossPhaseChanged(this);
+      }
+      if (this.bossBehavior === 'pressure-wave') this.updateBossPressureAttack(time);
+    }
+
     if (!this.isBoss && (this.kind === 'runner' || this.kind === 'brute')) {
       this.updateRolePhase(time, d, dx / d, dy / d);
     }
@@ -228,10 +249,23 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       }
     }
 
-    if (this.isBoss && this.bossBehavior === 'heartbeat-pulse') {
-      const lateral = Math.sin(time * 0.0026) * this.speed * 0.34;
-      velocityX = (dx / d) * forwardSpeed * 0.9 + (-dy / d) * lateral + this.knockX;
-      velocityY = (dy / d) * forwardSpeed * 0.9 + (dx / d) * lateral + this.knockY;
+    if (this.isBoss && this.bossBehavior === 'pressure-wave') {
+      const moveMul =
+        this.bossAttackState === 'telegraph'
+          ? 0.12
+          : this.bossAttackState === 'recovery'
+            ? 0.55
+            : this.bossPhase === 2
+              ? 1.08
+              : 0.92;
+      velocityX = (dx / d) * forwardSpeed * moveMul + this.knockX;
+      velocityY = (dy / d) * forwardSpeed * moveMul + this.knockY;
+    } else if (this.isBoss && this.bossBehavior === 'heartbeat-pulse') {
+      const lateralMul = this.bossPhase === 2 ? 0.5 : 0.34;
+      const pursuitMul = this.bossPhase === 2 ? 1.02 : 0.9;
+      const lateral = Math.sin(time * 0.0026) * this.speed * lateralMul;
+      velocityX = (dx / d) * forwardSpeed * pursuitMul + (-dy / d) * lateral + this.knockX;
+      velocityY = (dy / d) * forwardSpeed * pursuitMul + (dx / d) * lateral + this.knockY;
     }
     (this.body as Phaser.Physics.Arcade.Body).setVelocity(velocityX, velocityY);
     this.knockX *= 0.82;
@@ -265,8 +299,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         const phase = (time % this.heartbeatMs) / this.heartbeatMs;
         const secondBeat = phase >= 0.22 ? Math.exp(-(phase - 0.22) * 20) * 0.55 : 0;
         const doubleBeat = Math.max(Math.exp(-phase * 15), secondBeat);
-        this.setRotation(Math.sin(time * 0.0012) * 0.11);
-        this.setScale(this.visualScale * (1 + doubleBeat * 0.085));
+        this.setRotation(Math.sin(time * 0.0012) * (this.bossPhase === 2 ? 0.16 : 0.11));
+        this.setScale(
+          this.visualScale *
+            (this.bossPhase === 2 ? 1.045 : 1) *
+            (1 + doubleBeat * (this.bossPhase === 2 ? 0.12 : 0.085))
+        );
       } else {
         this.setRotation(Math.sin(time * 0.0007) * 0.06);
         const bossPulse = 1 + Math.sin(time * 0.0032) * 0.018;
@@ -296,9 +334,61 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         .setVisible(true)
         .setPosition(this.x, this.y)
         .setRotation(time * 0.0008)
-        .setScale(0.98 + beat * 0.16)
-        .setAlpha(0.62 + beat * 0.28);
+        .setScale((this.bossPhase === 2 ? 1.08 : 0.98) + beat * (this.bossPhase === 2 ? 0.2 : 0.16))
+        .setAlpha((this.bossPhase === 2 ? 0.72 : 0.62) + beat * 0.28);
     }
+  }
+
+  private updateBossPressureAttack(time: number): void {
+    if (this.bossAttackState === 'pursuit') {
+      if (time < this.nextBossAttackAt) {
+        this.bossTelegraph?.setVisible(false);
+        return;
+      }
+      this.bossAttackState = 'telegraph';
+      this.bossAttackStartedAt = time;
+      this.bossAttackUntil = time + (this.bossPhase === 2 ? 560 : 720);
+      this.drawBossPressureTelegraph();
+      return;
+    }
+
+    if (this.bossAttackState === 'telegraph') {
+      this.updateBossPressureTelegraph(time);
+      if (time < this.bossAttackUntil) return;
+      this.bossTelegraph?.setVisible(false);
+      const radius = this.bossPhase === 2 ? 225 : 180;
+      this.gs?.triggerBossPressureWave(this, radius, this.dmg * (this.bossPhase === 2 ? 0.78 : 0.62));
+      this.bossAttackState = 'recovery';
+      this.bossAttackUntil = time + (this.bossPhase === 2 ? 480 : 650);
+      return;
+    }
+
+    if (time < this.bossAttackUntil) return;
+    this.bossAttackState = 'pursuit';
+    this.nextBossAttackAt = time + (this.bossPhase === 2 ? 1_850 : 2_800);
+  }
+
+  private drawBossPressureTelegraph(): void {
+    if (!this.bossTelegraph) this.bossTelegraph = this.scene.add.graphics().setDepth(8);
+    const radius = this.bossPhase === 2 ? 225 : 180;
+    this.bossTelegraph.clear().setVisible(true).setPosition(this.x, this.y);
+    this.bossTelegraph.lineStyle(this.bossPhase === 2 ? 4 : 3, COLORS.red, 0.8);
+    this.bossTelegraph.strokeCircle(0, 0, radius);
+    this.bossTelegraph.lineStyle(1.5, COLORS.white, 0.5);
+    this.bossTelegraph.strokeCircle(0, 0, radius * 0.72);
+    this.bossTelegraph.fillStyle(COLORS.red, 0.055);
+    this.bossTelegraph.fillCircle(0, 0, radius);
+  }
+
+  private updateBossPressureTelegraph(time: number): void {
+    if (!this.bossTelegraph) return;
+    const duration = Math.max(1, this.bossAttackUntil - this.bossAttackStartedAt);
+    const progress = Phaser.Math.Clamp((time - this.bossAttackStartedAt) / duration, 0, 1);
+    this.bossTelegraph
+      .setVisible(true)
+      .setPosition(this.x, this.y)
+      .setScale(1.08 - progress * 0.08)
+      .setAlpha(0.42 + progress * 0.5);
   }
 
   private updateRolePhase(
@@ -383,6 +473,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.eliteMarker?.setVisible(false);
     this.bossAura?.setVisible(false);
     this.roleTelegraph?.setVisible(false).clear();
+    this.bossTelegraph?.setVisible(false).clear();
     this.target = null;
     this.gs = null;
     this.knockX = 0;
@@ -411,6 +502,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.eliteMarker?.setVisible(false);
       this.bossAura?.setVisible(false);
       this.roleTelegraph?.setVisible(false).clear();
+      this.bossTelegraph?.setVisible(false).clear();
       this.disableBody(true, true);
       this.gs?.onEnemyDied(this);
     }
