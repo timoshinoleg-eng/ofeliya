@@ -10,7 +10,7 @@ import { COLORS, COMBO, FONT, JUICE, fmtTime } from '../game/config';
 import { getEvolutionDef } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
 import { Joystick } from '../game/Joystick';
-import { getLegendaryDefinition } from '../game/LegendarySystem';
+import { getLegendaryDefinition, type LegendaryId } from '../game/LegendarySystem';
 import { TwinStickControls } from '../game/TwinStickControls';
 import { readControlMode, type ControlMode } from '../game/ControlMode';
 import type { RunResult, RunSnapshot } from '../game/RunContracts';
@@ -764,8 +764,13 @@ export class UIScene extends Phaser.Scene {
       bg.setInteractive({ useHandCursor: true }).on('pointerup', () => {
         Sfx.play('click');
         const more = gs.chooseUpgrade(def.id);
+        const legendaryId = gs.consumeLegendaryCeremony();
         const evolutionId = gs.consumeEvolutionCeremony();
-        if (evolutionId) {
+        if (legendaryId) {
+          c.destroy();
+          if (this.modal === c) this.modal = null;
+          this.showLegendaryCeremony(legendaryId, more);
+        } else if (evolutionId) {
           c.destroy();
           if (this.modal === c) this.modal = null;
           this.showEvolutionCeremony(evolutionId, more);
@@ -795,6 +800,224 @@ export class UIScene extends Phaser.Scene {
 
       y += ch + gap;
     });
+  }
+
+  private showLegendaryCeremony(id: LegendaryId, moreChoices: boolean): void {
+    const ceremonyGeneration = ++this.modalGeneration;
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const compact = H < 650;
+    const def = getLegendaryDefinition(id);
+    this.modalOpen = true;
+    this.uiBlocked = true;
+
+    const c = this.add.container(0, 0).setDepth(108);
+    this.modal = c;
+    const dim = this.add
+      .rectangle(W / 2, H / 2, W, H, 0x030208, 0.94)
+      .setInteractive({ useHandCursor: true });
+    c.add(dim);
+
+    const bandH = compact ? 250 : 292;
+    const band = this.add
+      .rectangle(W / 2, H / 2, W, bandH, 0x171008, 0.86)
+      .setStrokeStyle(1, COLORS.gold, 0.36);
+    const topLine = this.add.rectangle(W / 2, H / 2 - bandH / 2, W, 2, COLORS.gold, 0.78);
+    const bottomLine = this.add.rectangle(W / 2, H / 2 + bandH / 2, W, 2, COLORS.gold, 0.48);
+    c.add([band, topLine, bottomLine]);
+
+    const halo = this.add.graphics();
+    halo.lineStyle(2.4, COLORS.gold, 0.72);
+    halo.strokeCircle(0, 0, compact ? 52 : 62);
+    halo.lineStyle(1.2, COLORS.white, 0.38);
+    halo.strokeCircle(0, 0, compact ? 68 : 80);
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      const inner = compact ? 58 : 69;
+      const outer = i % 2 === 0 ? (compact ? 79 : 93) : (compact ? 72 : 85);
+      halo.lineStyle(i % 2 === 0 ? 2.4 : 1.2, i % 2 === 0 ? COLORS.gold : COLORS.white, 0.68);
+      halo.beginPath();
+      halo.moveTo(Math.cos(a) * inner, Math.sin(a) * inner);
+      halo.lineTo(Math.cos(a) * outer, Math.sin(a) * outer);
+      halo.strokePath();
+    }
+    halo.setPosition(W / 2, H * 0.43).setAlpha(0);
+    c.add(halo);
+
+    const emblem = this.add.graphics().setPosition(W / 2, H * 0.43);
+    const drawEmblem = () => {
+      emblem.clear();
+      emblem.lineStyle(3, COLORS.gold, 0.96);
+      emblem.fillStyle(COLORS.gold, 0.08);
+      if (def.archetype === 'projectile') {
+        emblem.beginPath();
+        emblem.moveTo(-28, 18);
+        emblem.lineTo(0, -28);
+        emblem.lineTo(28, 18);
+        emblem.moveTo(0, -20);
+        emblem.lineTo(-18, 27);
+        emblem.moveTo(0, -20);
+        emblem.lineTo(18, 27);
+        emblem.strokePath();
+      } else if (def.archetype === 'lysis') {
+        emblem.strokeCircle(0, 0, 28);
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          emblem.beginPath();
+          emblem.moveTo(Math.cos(a) * 18, Math.sin(a) * 18);
+          emblem.lineTo(Math.cos(a) * 39, Math.sin(a) * 39);
+          emblem.strokePath();
+        }
+      } else if (def.archetype === 'control') {
+        emblem.strokeCircle(0, 0, 30);
+        emblem.strokeCircle(0, 0, 13);
+        emblem.fillStyle(COLORS.white, 0.9);
+        emblem.fillCircle(0, 0, 4);
+      } else if (def.archetype === 'boss') {
+        emblem.beginPath();
+        emblem.moveTo(0, -32);
+        emblem.lineTo(29, 0);
+        emblem.lineTo(0, 32);
+        emblem.lineTo(-29, 0);
+        emblem.closePath();
+        emblem.fillPath();
+        emblem.strokePath();
+        emblem.fillStyle(COLORS.white, 0.88);
+        emblem.fillCircle(0, 0, 5);
+      } else if (def.archetype === 'heartbeat') {
+        emblem.beginPath();
+        emblem.moveTo(-36, 4);
+        emblem.lineTo(-18, 4);
+        emblem.lineTo(-10, -16);
+        emblem.lineTo(0, 24);
+        emblem.lineTo(11, -26);
+        emblem.lineTo(20, 4);
+        emblem.lineTo(36, 4);
+        emblem.strokePath();
+      } else {
+        emblem.beginPath();
+        emblem.moveTo(0, -32);
+        emblem.lineTo(28, -12);
+        emblem.lineTo(22, 24);
+        emblem.lineTo(0, 34);
+        emblem.lineTo(-22, 24);
+        emblem.lineTo(-28, -12);
+        emblem.closePath();
+        emblem.fillPath();
+        emblem.strokePath();
+      }
+    };
+    drawEmblem();
+    emblem.setScale(0.52).setAlpha(0);
+    c.add(emblem);
+
+    const label = this.add
+      .text(W / 2, H * 0.2, 'ЛЕГЕНДАРНАЯ МУТАЦИЯ', {
+        fontFamily: FONT,
+        fontSize: compact ? '15px' : '18px',
+        fontStyle: 'bold',
+        color: '#fff1ac',
+        letterSpacing: 2,
+      })
+      .setOrigin(0.5)
+      .setResolution(2);
+    const name = this.add
+      .text(W / 2, H * 0.29, def.title, {
+        fontFamily: FONT,
+        fontSize: compact ? '27px' : '34px',
+        fontStyle: 'bold',
+        color: '#ffe066',
+        align: 'center',
+        wordWrap: { width: W - 40 },
+      })
+      .setOrigin(0.5)
+      .setResolution(2)
+      .setShadow(0, 0, 'rgba(255,224,102,0.58)', 10, true, true);
+    const effect = this.add
+      .text(W / 2, H * 0.63, def.effect, {
+        fontFamily: FONT,
+        fontSize: compact ? '12px' : '14px',
+        fontStyle: 'bold',
+        color: '#fff4ec',
+        align: 'center',
+        wordWrap: { width: Math.min(W - 48, 360) },
+      })
+      .setOrigin(0.5)
+      .setResolution(2);
+    const footer = this.add
+      .text(W / 2, H * 0.74, 'ПРАВИЛА ЗАБЕГА ИЗМЕНЕНЫ · НАЖМИ, ЧТОБЫ ПРОДОЛЖИТЬ', {
+        fontFamily: FONT,
+        fontSize: compact ? '8px' : '9px',
+        fontStyle: 'bold',
+        color: '#b9a56a',
+        align: 'center',
+        wordWrap: { width: W - 44 },
+      })
+      .setOrigin(0.5)
+      .setResolution(2);
+    c.add([label, name, effect, footer]);
+
+    c.setAlpha(0);
+    name.setScale(0.72);
+    this.tweens.add({ targets: c, alpha: 1, duration: 140, ease: 'Quad.Out' });
+    this.tweens.add({ targets: name, scale: 1, duration: 360, ease: 'Back.Out' });
+    this.tweens.add({ targets: emblem, scale: 1, alpha: 1, duration: 430, ease: 'Back.Out' });
+    this.tweens.add({
+      targets: halo,
+      alpha: 0.86,
+      rotation: Math.PI * 0.16,
+      scale: 1.08,
+      duration: 560,
+      ease: 'Sine.Out',
+    });
+    this.tweens.add({
+      targets: [topLine, bottomLine],
+      scaleX: 0.54,
+      alpha: 0.42,
+      duration: 520,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.InOut',
+    });
+
+    (this.fanfare as TintableEmitter).setParticleTint?.(COLORS.gold);
+    this.fanfare.emitParticleAt(W / 2, H * 0.43, 46);
+    Sfx.play('levelup');
+    this.time.delayedCall(120, () => Sfx.play('elite'));
+    PlatformBridge.haptic('heavy');
+
+    let finished = false;
+    const canSkipAt = this.time.now + 260;
+    const finish = () => {
+      if (
+        finished ||
+        this.modalGeneration !== ceremonyGeneration ||
+        this.modal !== c
+      ) {
+        return;
+      }
+      finished = true;
+      this.tweens.killTweensOf(c);
+      this.tweens.add({
+        targets: c,
+        alpha: 0,
+        duration: 190,
+        onComplete: () => {
+          c.destroy();
+          if (this.modal === c) this.modal = null;
+          this.modalOpen = false;
+          this.uiBlocked = false;
+          (this.fanfare as TintableEmitter).setParticleTint?.(COLORS.cyan);
+          if (moreChoices) this.showLevelUp();
+          else this.scene.resume('Game');
+        },
+      });
+    };
+
+    dim.on('pointerup', () => {
+      if (this.time.now >= canSkipAt) finish();
+    });
+    this.time.delayedCall(1_350, finish);
   }
 
   private showEvolutionCeremony(id: EvolutionId, moreChoices: boolean): void {
