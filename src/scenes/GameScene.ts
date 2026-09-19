@@ -133,11 +133,6 @@ export class GameScene extends Phaser.Scene {
     this.haloRing = null;
     this.hitStopUntil = 0;
     this.hitStopped = false;
-    this.zeroPointUntil = 0;
-    this.zeroPointNextAt = this.runState.hasLegendary('zero-point') ? this.time.now + 12_000 : 0;
-    this.coreMarks = new WeakMap<Enemy, CoreMark>();
-    this.heartbeatLegendaryWindowUntil = 0;
-    this.heartbeatLegendarySpent = false;
     this.lastDmg = null;
     this.lastDmgAt = 0;
     this.dmgCursor = 0;
@@ -752,6 +747,11 @@ export class GameScene extends Phaser.Scene {
     this.achievementCheckAcc = 0;
     this.hitStopUntil = 0;
     this.hitStopped = false;
+    this.zeroPointUntil = 0;
+    this.zeroPointNextAt = this.runState.hasLegendary('zero-point') ? this.time.now + 12_000 : 0;
+    this.coreMarks = new WeakMap<Enemy, CoreMark>();
+    this.heartbeatLegendaryWindowUntil = 0;
+    this.heartbeatLegendarySpent = false;
     this.lastDmg = null;
     this.lastDmgAt = 0;
     this.trailCursor = 0;
