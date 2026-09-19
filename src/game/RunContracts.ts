@@ -28,8 +28,6 @@ export interface StageBuildResult {
   level: number;
   stacks: Record<string, number>;
   evolutions: EvolutionId[];
-  legendaryIds: LegendaryId[];
-  stageBuilds: Partial<Record<StageId, StageBuildResult>>;
 }
 
 export interface RunRecordFlags {
@@ -55,6 +53,8 @@ export interface RunResult {
   boss1ClearMs: number;
   stacks: Record<string, number>;
   evolutions: EvolutionId[];
+  legendaryIds: LegendaryId[];
+  stageBuilds: Partial<Record<StageId, StageBuildResult>>;
   newAchievements: AchievementId[];
   records: RunRecordFlags;
 }
