@@ -54,7 +54,9 @@ export class HostCellSystem {
       lysisRadius: 150,
       lysisDamage: 26,
     }),
-    gameplayRandom: () => number = Math.random
+    gameplayRandom: () => number = () => {
+      throw new Error('HostCellSystem gameplay RNG is not configured');
+    }
   ) {
     this.scene = scene;
     this.player = player;
