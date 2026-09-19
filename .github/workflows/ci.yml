@@ -38,6 +38,9 @@ jobs:
       - name: Difficulty deterministic smoke
         run: npm run test:difficulty
 
+      - name: Gameplay RNG deterministic smoke
+        run: npm run test:rng
+
       - name: Viewport math smoke
         run: npm run test:viewport
 
