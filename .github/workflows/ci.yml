@@ -32,6 +32,9 @@ jobs:
       - name: Stage runtime contract smoke
         run: npm run test:stages
 
+      - name: Legendary system deterministic smoke
+        run: npm run test:legendary
+
       - name: Viewport math smoke
         run: npm run test:viewport
 
