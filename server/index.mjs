@@ -439,6 +439,10 @@ function sortTop(list) {
       kills: s.kills,
       level: s.level,
       dateKey: s.dateKey,
+      rulesetVersion: storedRulesetVersion(s),
+      campaignVersion: s.campaignVersion ?? 1,
+      difficultyId: s.difficultyId ?? 'standard',
+      completionStage: s.completionStage ?? (s.win ? 'bloodstream' : null),
     }));
 }
 
@@ -543,7 +547,24 @@ const server = createServer(async (req, res) => {
 
   try {
     if (req.method === 'GET' && url.pathname === '/health') {
-      return send(res, 200, { ok: true, app: 'ofeliya-server', scores: store.scores.length });
+      return send(res, 200, {
+        ok: true,
+        app: 'ofeliya-server',
+        scores: store.scores.length,
+        rulesetVersion: CURRENT_RULESET_VERSION,
+        campaignVersion: CURRENT_CAMPAIGN_VERSION,
+      });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/ruleset') {
+      return send(res, 200, {
+        ok: true,
+        rulesetVersion: CURRENT_RULESET_VERSION,
+        campaignVersion: CURRENT_CAMPAIGN_VERSION,
+        rankedDifficultyId: 'standard',
+        minCampaignWinTimeMs: ANTI_CHEAT.campaignMinWinTimeMs,
+        supportedRulesets: [1, CURRENT_RULESET_VERSION],
+      });
     }
 
     if (req.method === 'POST' && url.pathname === '/api/score') {
@@ -583,7 +604,12 @@ const server = createServer(async (req, res) => {
         verified = true;
       }
 
-      const cheat = antiCheatCheck(payload);
+      const parsedContract = parseScoreContract(payload);
+      if (!parsedContract.ok) {
+        return send(res, 422, { ok: false, error: `score-contract: ${parsedContract.error}` });
+      }
+      const contract = parsedContract.contract;
+      const cheat = antiCheatCheck(payload, contract);
       if (cheat) return send(res, 422, { ok: false, error: `anti-cheat: ${cheat}` });
 
       const dateKey =
@@ -601,6 +627,16 @@ const server = createServer(async (req, res) => {
         level: Math.round(payload.level),
         ref: parseReferralRef(payload.ref)?.token ?? null,
         verified,
+        ranked: verified && contract.rankedEligible,
+        rulesetVersion: contract.rulesetVersion,
+        campaignVersion: contract.campaignVersion,
+        difficultyId: contract.difficultyId,
+        completionStage: contract.completionStage,
+        runSeed: contract.runSeed,
+        controlMode: contract.controlMode,
+        bossesDefeated: contract.bossesDefeated,
+        boss1ClearMs: contract.boss1ClearMs,
+        hostCellsInfected: contract.hostCellsInfected,
         ts: Date.now(),
       };
 
@@ -629,20 +665,40 @@ const server = createServer(async (req, res) => {
       }
 
       saveStore();
-      const top = getTop({ period: record.daily ? 'daily' : 'all' });
+      const top = getTop({
+        period: record.daily ? 'daily' : 'all',
+        rulesetVersion: record.rulesetVersion,
+      });
       const rank = top.find((t) => t.uid === uid && t.platform === platform)?.rank ?? null;
-      return send(res, 200, { ok: true, rank, top: publicTop(top), refReward });
+      return send(res, 200, {
+        ok: true,
+        rank,
+        ranked: record.ranked,
+        rulesetVersion: record.rulesetVersion,
+        campaignVersion: record.campaignVersion,
+        top: publicTop(top),
+        refReward,
+      });
     }
 
     if (req.method === 'GET' && url.pathname === '/api/top') {
       const rawPeriod = url.searchParams.get('period') ?? 'all';
       const period = ['all', 'daily', 'weekly', 'season'].includes(rawPeriod) ? rawPeriod : 'all';
+      const rulesetVersion = parseRulesetFilter(url.searchParams.get('ruleset'));
       const top = getTop({
         period,
         platform: url.searchParams.get('platform') ?? undefined,
         includeUnverified: url.searchParams.get('includeUnverified') === '1',
+        rulesetVersion,
       });
-      return send(res, 200, { ok: true, top: publicTop(top), period, season: currentSeason() });
+      return send(res, 200, {
+        ok: true,
+        top: publicTop(top),
+        period,
+        rulesetVersion,
+        currentRulesetVersion: CURRENT_RULESET_VERSION,
+        season: currentSeason(),
+      });
     }
 
     // C5: текущий сезон (индекс, окно, дней до конца).
@@ -657,7 +713,12 @@ const server = createServer(async (req, res) => {
       if (!user || !['telegram', 'max', 'browser', 'vk'].includes(platform)) {
         return send(res, 400, { ok: false, error: 'bad request' });
       }
-      return send(res, 200, { ok: true, ...dailyStats(user, platform) });
+      const rulesetVersion = parseRulesetFilter(url.searchParams.get('ruleset'));
+      return send(res, 200, {
+        ok: true,
+        rulesetVersion,
+        ...dailyStats(user, platform, rulesetVersion),
+      });
     }
 
     // Legacy endpoint: текущий клиент пишет ref вместе с аутентифицированным
