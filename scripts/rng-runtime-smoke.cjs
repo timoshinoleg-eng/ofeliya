@@ -29,6 +29,7 @@ function browserDriver() {
   await ctx.addInitScript(() => {
     localStorage.setItem('ofeliya_save_v1', JSON.stringify({ muted: true, runs: 1 }));
     localStorage.setItem('ofeliya_control_mode_v1', 'two-hand');
+    localStorage.setItem('ofeliya_difficulty_v1', 'strained');
     window.WebApp = {
       platform: 'android',
       version: '26.20.0',
