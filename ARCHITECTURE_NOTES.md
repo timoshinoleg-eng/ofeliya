@@ -162,7 +162,7 @@ They are reused with lightweight zoom/parallax and do not add video payload.
 
 Deterministic checks cover challenge compatibility, save migration, stage lifecycle, Legendary rules, difficulty, viewport math and startup renderer behavior.
 
-Browser smoke covers MAX mobile viewport, compact layouts, WebGL/Canvas fallback, Legendary runtime, STRAINED, campaign transition and dense readability.
+Browser smoke covers MAX mobile viewport, compact layouts, WebGL/Canvas fallback, Legendary runtime, STRAINED, campaign transition and dense readability. A dedicated control-mode smoke locks the legacy one-hand `Joystick` path and dispatches two simultaneous Chromium touch points to verify independent twin-stick movement/aim vectors and clean release reset.
 
 Dense readability contract now produces captures at **100 / 150 / 200 active enemies** while also keeping player anchor, elite marker, RNA, projectile, healthy host cell and partially infected host cell in the same scene.
 
