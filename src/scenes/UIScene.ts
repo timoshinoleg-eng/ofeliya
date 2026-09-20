@@ -702,9 +702,9 @@ export class UIScene extends Phaser.Scene {
             : 'стадия ' + gs.runState.stage.level + ' · выбери мутацию',
           {
           fontFamily: UI_FONT,
-          fontSize: compact ? '12px' : '14px',
-          fontStyle: '600',
-          color: UI_TEXT.secondary,
+          fontSize: compact ? '13px' : '15px',
+          fontStyle: '650',
+          color: UI_TEXT.primary,
           }
         )
         .setOrigin(0.5)
@@ -712,9 +712,9 @@ export class UIScene extends Phaser.Scene {
     );
 
     const cards = gs.pendingChoices;
-    const cw = Math.min(W - 28, 360);
-    const ch = compact ? 100 : 118;
-    const gap = compact ? 8 : 10;
+    const cw = Math.min(W - 16, 374);
+    const ch = compact ? 112 : 136;
+    const gap = compact ? 9 : 11;
     const totalH = cards.length * ch + (cards.length - 1) * gap;
     const blockCenter = compact ? H * 0.56 : H * 0.55;
     let y = blockCenter - totalH / 2 + ch / 2;
@@ -770,7 +770,7 @@ export class UIScene extends Phaser.Scene {
         this.add
           .text(tx, -ch / 2 + 8, family, {
             fontFamily: FONT,
-            fontSize: compact ? '10px' : '11px',
+            fontSize: compact ? '11px' : '12px',
             fontStyle: 'bold',
             color: legendary || evolution ? '#ffe066' : def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
           })
@@ -781,18 +781,21 @@ export class UIScene extends Phaser.Scene {
         this.add
           .text(tx, -ch / 2 + (compact ? 22 : 24), def.shortName, {
             fontFamily: FONT,
-            fontSize: legendary || evolution ? (compact ? '16px' : '19px') : compact ? '15px' : '17px',
+            fontSize: legendary || evolution ? (compact ? '17px' : '20px') : compact ? '16px' : '19px',
             fontStyle: 'bold',
             color: legendary || evolution ? '#ffe066' : UI_TEXT.primary,
+            lineSpacing: -2,
+            maxLines: 2,
+            wordWrap: { width: Math.max(112, right - tx - 4), useAdvancedWrap: true },
           })
           .setResolution(2)
       );
 
       card.add(
         this.add
-          .text(tx, -ch / 2 + (compact ? 45 : 51), def.name, {
+          .text(tx, -ch / 2 + (compact ? 60 : 68), def.name, {
             fontFamily: UI_FONT,
-            fontSize: compact ? '11px' : '13px',
+            fontSize: compact ? '12px' : '14px',
             fontStyle: '700',
             color: legendary || evolution ? '#fff1ac' : def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
             wordWrap: { width: Math.max(100, right - tx) },
@@ -803,11 +806,11 @@ export class UIScene extends Phaser.Scene {
       if (!compact && !evolution && !legendary) {
         card.add(
           this.add
-            .text(tx, -ch / 2 + 72, def.desc, {
+            .text(tx, -ch / 2 + 91, def.desc, {
               fontFamily: UI_FONT,
-              fontSize: '12px',
-              fontStyle: '500',
-              color: UI_TEXT.secondary,
+              fontSize: '13px',
+              fontStyle: '600',
+              color: '#eee8f5',
               lineSpacing: 1,
               wordWrap: { width: Math.max(100, right - tx - 4) },
             })
@@ -820,9 +823,9 @@ export class UIScene extends Phaser.Scene {
           this.add
             .text(right, -ch / 2 + 9, `→ ${EVOLUTION_NAMES[def.evolutionHint]}`, {
               fontFamily: FONT,
-              fontSize: compact ? '10px' : '11px',
+              fontSize: compact ? '11px' : '12px',
               fontStyle: 'bold',
-              color: '#ffe066',
+              color: '#ffe88a',
             })
             .setOrigin(1, 0)
             .setResolution(2)
@@ -832,7 +835,7 @@ export class UIScene extends Phaser.Scene {
       if (def.showProgress !== false && def.max <= 8) {
         const pg = this.add.graphics();
         const barX = tx;
-        const barY = ch / 2 - 14;
+        const barY = ch / 2 - 16;
         const available = Math.min(118, Math.max(72, right - tx - 64));
         const segGap = 3;
         const segW = (available - segGap * (def.max - 1)) / def.max;
@@ -841,16 +844,16 @@ export class UIScene extends Phaser.Scene {
           const completed = i < progress.current;
           const next = i === progress.current;
           pg.fillStyle(accent, completed ? 0.95 : next ? 0.42 : 0.1);
-          pg.fillRoundedRect(x, barY, segW, 6, 2);
+          pg.fillRoundedRect(x, barY, segW, 7, 2);
         }
         card.add(pg);
         card.add(
           this.add
             .text(right, barY - 5, `${progress.current} → ${progress.next} / ${progress.max}`, {
               fontFamily: UI_FONT,
-              fontSize: compact ? '10px' : '11px',
-              fontStyle: '600',
-              color: UI_TEXT.muted,
+              fontSize: compact ? '11px' : '12px',
+              fontStyle: '700',
+              color: UI_TEXT.secondary,
             })
             .setOrigin(1, 0)
             .setResolution(2)
@@ -868,8 +871,8 @@ export class UIScene extends Phaser.Scene {
                   : 'РАЗОВАЯ АДАПТАЦИЯ',
               {
               fontFamily: UI_FONT,
-              fontSize: compact ? '10px' : '11px',
-              fontStyle: legendary || evolution ? '700' : '600',
+              fontSize: compact ? '11px' : '12px',
+              fontStyle: legendary || evolution ? '700' : '650',
               color: legendary || evolution ? '#ffe066' : '#98ff8f',
             })
             .setOrigin(1, 0)

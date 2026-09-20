@@ -127,7 +127,7 @@ function assertMenu(contract, compact) {
   if (contract.overflow.length) {
     throw new Error('readability menu overflow: ' + JSON.stringify(contract.overflow));
   }
-  const min = compact ? 10 : 11;
+  const min = compact ? 11 : 12;
   const undersized = contract.rows.filter((row) => row.size < min);
   if (undersized.length) {
     throw new Error('readability menu undersized: ' + JSON.stringify(undersized));
@@ -145,6 +145,23 @@ function assertMenu(contract, compact) {
   const wrongFamily = bodyRows.filter((row) => !/system-ui/i.test(row.family));
   if (wrongFamily.length) {
     throw new Error('readability menu body font regression: ' + JSON.stringify(wrongFamily));
+  }
+
+  if (!compact) {
+    const required = [
+      [(row) => row.text.startsWith('Мутируй'), 15, 'menu hook body'],
+      [(row) => row.text.startsWith('Носитель:'), 14, 'carrier'],
+      [(row) => row.text.startsWith('Выживание'), 14, 'records'],
+      [(row) => row.text === 'Базовый ритм кампании', 13, 'difficulty description'],
+      [(row) => row.text.includes('оба стика'), 13, 'control description'],
+      [(row) => row.text.startsWith('автоатака ·'), 13, 'start hint'],
+    ];
+    for (const [predicate, minSize, label] of required) {
+      const row = contract.rows.find(predicate);
+      if (!row || row.size < minSize) {
+        throw new Error(`readability ${label} must be >= ${minSize}px: ${JSON.stringify(row)}`);
+      }
+    }
   }
 }
 
@@ -187,13 +204,13 @@ async function inspectCodex(page, size) {
     const important = rows.filter((row) =>
       row.text !== '×' &&
       row.text !== 'КОДЕКС · STRAIN-0' &&
-      !row.text.startsWith('Codex фиксирует открытия')
+      !row.text.startsWith('Codex хранит открытия')
     );
     const overflow = rows.filter(({ bounds }) =>
       bounds.left < 2 || bounds.right > width - 2 || bounds.top < 2 || bounds.bottom > height - 2
     );
     const activeLines = flat.filter(
-      (obj) => obj?.type === 'Rectangle' && obj.visible && obj.height === 2 && (obj.alpha ?? 1) > 0.2
+      (obj) => obj?.type === 'Rectangle' && obj.visible && obj.height === 3 && (obj.alpha ?? 1) > 0.2
     ).length;
     return { rows, important, overflow, activeLines };
   }, size);
@@ -206,7 +223,7 @@ function assertCodex(contract, compact, pageName) {
   if (contract.activeLines < 1) {
     throw new Error(`readability Codex ${pageName} active-tab underline missing`);
   }
-  const min = compact ? 10 : 11;
+  const min = compact ? 11 : 12;
   const undersized = contract.important.filter((row) => row.size < min);
   if (undersized.length) {
     throw new Error(`readability Codex ${pageName} undersized: ${JSON.stringify(undersized)}`);
@@ -219,13 +236,25 @@ function assertCodex(contract, compact, pageName) {
   }
   const body = contract.rows.filter((row) =>
     row.text.includes('Продолжай развивать') ||
-    row.text.includes('прохождений') ||
+    row.text.includes('пройдено') ||
     row.text.startsWith('◆ ') ||
     row.text.startsWith('◇ ')
   );
   const wrongFamily = body.filter((row) => !/system-ui/i.test(row.family));
   if (wrongFamily.length) {
     throw new Error(`readability Codex ${pageName} body font regression: ${JSON.stringify(wrongFamily)}`);
+  }
+  if (!compact) {
+    const tinyImportant = contract.important.filter((row) => row.size < 12);
+    if (tinyImportant.length) {
+      throw new Error(`readability Codex ${pageName} still has sub-12px important text: ${JSON.stringify(tinyImportant)}`);
+    }
+    const section = contract.rows.find((row) =>
+      row.text === 'КРИТИЧЕСКИЕ МУТАЦИИ' || row.text === 'МАСТЕРСТВО КАМПАНИИ'
+    );
+    if (section && section.size < 15) {
+      throw new Error(`readability Codex ${pageName} section heading too small: ${JSON.stringify(section)}`);
+    }
   }
 }
 
@@ -322,12 +351,16 @@ function assertMutation(contract, compact) {
   if (contract.cards.length !== 3) {
     throw new Error('readability mutation card count: ' + JSON.stringify(contract.cards));
   }
-  const expectedHeight = compact ? 100 : 118;
-  if (contract.cards.some((card) => card.height < expectedHeight || card.minTextSize < (compact ? 10 : 11))) {
+  const expectedHeight = compact ? 112 : 136;
+  if (contract.cards.some((card) => card.height < expectedHeight || card.minTextSize < (compact ? 11 : 12))) {
     throw new Error('readability mutation card typography: ' + JSON.stringify(contract.cards));
   }
   if (!compact && contract.cards.some((card) => card.bodySystemCount < 2)) {
     throw new Error('readability mutation body font missing: ' + JSON.stringify(contract.cards));
+  }
+  const longTitle = contract.rows.find((row) => row.text === 'МНОЖЕСТВЕННАЯ РЕПЛИКАЦИЯ');
+  if (longTitle && (longTitle.bounds.left < 2 || longTitle.bounds.right > (compact ? 358 : 388))) {
+    throw new Error('long mutation title must wrap inside the mobile viewport: ' + JSON.stringify(longTitle));
   }
 }
 
