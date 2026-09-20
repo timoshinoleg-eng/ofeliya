@@ -1,5 +1,3 @@
-[Reading 350 lines from start (total: 350 lines, 0 remaining)]
-
 import { GEM, NOVA, ORBIT, PLAYER, WEAPON } from './config';
 import type { StageDefinition, StageId } from './StageDefinitions';
 import type { EvolutionId } from './UpgradeSystem';
@@ -350,5 +348,3 @@ export class RunState {
     };
   }
 }
-
-[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
