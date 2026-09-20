@@ -1,3 +1,5 @@
+[Reading 1613 lines from start (total: 1613 lines, 0 remaining)]
+
 import Phaser from 'phaser';
 import { getAchievementDef } from '../game/AchievementSystem';
 import {
@@ -607,6 +609,7 @@ export class UIScene extends Phaser.Scene {
     this.button(c, 'ПРОДОЛЖИТЬ', W / 2, H * 0.53, true, () => this.closePauseMenu(true));
     this.button(c, 'В МЕНЮ', W / 2, H * 0.63, false, () => {
       this.closePauseMenu(false);
+      this.gs?.saveCheckpointNow();
       Sfx.stopMusic();
       if (this.scene.isActive('Game') || this.scene.isPaused('Game')) this.scene.stop('Game');
       this.scene.start('Menu');
@@ -1242,7 +1245,7 @@ export class UIScene extends Phaser.Scene {
 
   private showGameOver(res: RunResult): void {
     this.uiBlocked = true;
-    const ranked = res.difficultyId === 'standard';
+    const ranked = res.difficultyId === 'standard' && !res.resumed;
     const W = this.scale.width;
     const H = this.scale.height;
     const compact = H < 650;
@@ -1369,7 +1372,11 @@ export class UIScene extends Phaser.Scene {
         .text(
           W / 2,
           detailY,
-          ranked ? 'РЕЖИМ: STANDARD · рейтинговый' : 'РЕЖИМ: STRAINED · вне рейтинга',
+          res.resumed
+            ? `РЕЖИМ: ${res.difficultyId === 'standard' ? 'STANDARD' : 'STRAINED'} · ВОЗОБНОВЛЁН · ВНЕ РЕЙТИНГА`
+            : ranked
+              ? 'РЕЖИМ: STANDARD · рейтинговый'
+              : 'РЕЖИМ: STRAINED · вне рейтинга',
           {
             fontFamily: FONT,
             fontSize: compact ? '9px' : '10px',
@@ -1394,22 +1401,26 @@ export class UIScene extends Phaser.Scene {
       .setResolution(2);
     c.add(scoreStatus);
 
-    void submitRunScore(res, PlatformBridge).then((score) => {
-      if (!scoreStatus.active) return;
-      if (!score) {
-        scoreStatus.setVisible(false);
-        return;
-      }
-      if (score.ranked) {
-        scoreStatus
-          .setText(score.rank ? `РЕЙТИНГ · RULESET ${score.rulesetVersion} · #${score.rank}` : 'РЕЙТИНГ · РЕЗУЛЬТАТ СОХРАНЁН')
-          .setColor('#8fe8ff');
-      } else if (PlatformBridge.kind === 'browser') {
-        scoreStatus.setText('ТЕСТОВЫЙ РЕЗУЛЬТАТ · ВНЕ РЕЙТИНГА').setColor('#8f9ab7');
-      } else {
-        scoreStatus.setText('РЕЗУЛЬТАТ СОХРАНЁН · ВНЕ РЕЙТИНГА').setColor('#ffe066');
-      }
-    });
+    if (res.resumed) {
+      scoreStatus.setText('CHECKPOINT RESUME · ВНЕ РЕЙТИНГА').setColor('#ffe066');
+    } else {
+      void submitRunScore(res, PlatformBridge).then((score) => {
+        if (!scoreStatus.active) return;
+        if (!score) {
+          scoreStatus.setVisible(false);
+          return;
+        }
+        if (score.ranked) {
+          scoreStatus
+            .setText(score.rank ? `РЕЙТИНГ · RULESET ${score.rulesetVersion} · #${score.rank}` : 'РЕЙТИНГ · РЕЗУЛЬТАТ СОХРАНЁН')
+            .setColor('#8fe8ff');
+        } else if (PlatformBridge.kind === 'browser') {
+          scoreStatus.setText('ТЕСТОВЫЙ РЕЗУЛЬТАТ · ВНЕ РЕЙТИНГА').setColor('#8f9ab7');
+        } else {
+          scoreStatus.setText('РЕЗУЛЬТАТ СОХРАНЁН · ВНЕ РЕЙТИНГА').setColor('#ffe066');
+        }
+      });
+    }
 
     const rec: string[] = [];
     if (res.records.timeRecord && res.timeMs > 0) rec.push(res.win ? 'победа' : 'выживание');
@@ -1502,7 +1513,7 @@ export class UIScene extends Phaser.Scene {
         res.legendaryIds.length > 0
           ? ` Legendary: ${res.legendaryIds.map((id) => getLegendaryDefinition(id).title).join(', ')}.`
           : '';
-      const modeShare = ranked ? '' : ' Режим: STRAINED.';
+      const modeShare = ranked ? '' : res.resumed ? ' Возобновлённый забег · вне рейтинга.' : ' Режим: STRAINED.';
       const shareText = res.win
         ? `OFELIYA / STRAIN-0 завершила кампанию за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare}${legendaryShare} ${ranked ? 'Сможешь быстрее?' : ''}`.trim()
         : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare}${legendaryShare} ${ranked ? 'Сможешь дольше?' : ''}`.trim();
@@ -1602,3 +1613,5 @@ export class UIScene extends Phaser.Scene {
     });
   }
 }
+
+[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
