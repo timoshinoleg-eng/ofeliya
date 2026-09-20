@@ -1,160 +1,176 @@
 # OFELIYA: STRAIN ZERO — Release Validation
 
-Validation scope: PR #16, branch `feat/strain-zero-redesign`.
+Updated: 2026-09-20
 
-This document separates **automated/browser evidence** from the remaining **real MAX client gate**.
-A green GitHub Action is not treated as proof that native MAX Android/iOS behavior is correct.
+This document separates automated evidence from the remaining real-device MAX gate. A green GitHub Action is not treated as proof that native MAX Android/iOS behavior, network conditions or device performance are correct.
 
-## 1. Product / art gate
+## 1. Current release contract
 
-Accepted visual direction: microscopic biopunk **STRAIN ZERO**.
+Live campaign:
 
-Final full visual art capture before release-hardening remediation:
+`КРОВОТОК -> IMMUNE PRIME -> СЕРДЦЕ -> CARDIAC TITAN`
 
-- GitHub Actions run `34323874307`;
-- artifact `strain-zero-art-qa-v6`;
-- mobile viewport `390 × 844`;
-- captured menu, opening combat, first mutation, immune cast, infected host cell, lysis and
-  critical-mutation ceremony.
+Live product systems include:
 
-Validated visually:
+- one-hand floating joystick and optional twin-stick aim-priority;
+- host-cell infection/lysis buildcraft;
+- 3 Critical Mutations;
+- 6 Legendary mutations, maximum 2 per run;
+- Standard and Strained difficulty;
+- Heart synchronization timing;
+- two boss phase fights;
+- versioned seeded challenge/score contract;
+- trusted MAX score backend;
+- Codex discovery and non-power Standard/Strained mastery;
+- WebGL/Canvas fallback and full/reduced presentation tiers.
 
-- first-run tutorial is removed before mutation modal;
-- enemies/virus/host cell remain readable on mobile;
-- host-cell infection -> rupture -> RNA release is visually causal;
-- no generic cyber-art rollback is required.
+The canonical gameplay/design contract is `STRAIN_ZERO_PRODUCT_BIBLE.md`.
 
-## 2. Canonical automated gate
+## 2. Canonical automated build gate
 
-Node.js 22.
-
-Build job:
+Node.js 22 application contract:
 
 ```bash
 npm ci
 npm run test:challenge
 npm run test:save
 npm run test:stages
+npm run test:legendary
+npm run test:difficulty
+npm run test:rng
 npm run test:viewport
 npm run release:check
 npm run build
 ```
 
-Checks cover:
+These checks cover:
 
-- challenge payload v1/v2 encode/decode;
-- invalid/oversized payload rejection;
-- legacy `sz1_c_*` IMMUNE PRIME semantics and new `sz2_c_*` full-campaign semantics;
-- legacy `bestWinTimeMs` -> Boss 1 migration without contaminating full-campaign records;
-- deterministic MAX viewport + safe-area frame math;
-- mandatory release config presence and format;
-- TypeScript production typecheck;
-- Vite production bundle.
+- challenge payload compatibility and validation;
+- backward-compatible save migration;
+- stage lifecycle and two-act campaign state;
+- Legendary eligibility/pity/trophy reservation;
+- Standard/Strained deterministic rules;
+- seeded gameplay RNG;
+- viewport math;
+- startup renderer contract;
+- mandatory MAX/legal release configuration;
+- TypeScript typecheck and Vite production build.
 
-`npm run build:max` is the publication command. It runs the release-config guard first and refuses
-incomplete/placeholder MAX bot or legal/support values.
+## 3. Browser / MAX-mock gate
 
-## 3. Permanent Chrome MAX-mock gate
+The permanent Chrome browser job uses a mocked MAX Android bridge and exercises the actual Phaser runtime.
 
-CI contains a second `browser-smoke` job using system Chrome plus a mocked MAX Android bridge.
-The host browser viewport is `390 × 844`; MAX returns an available viewport of `360 × 760`.
+Current coverage includes:
 
-The smoke verifies:
+- MAX viewport and safe-area behavior;
+- incoming challenge menu and result verdict;
+- legal/privacy/support surface;
+- Codex and mastery tabs;
+- compact 320×568 layouts;
+- WebGL High-DPI and Canvas fallback;
+- Legendary runtime and reveal ceremony;
+- seeded gameplay runtime;
+- trusted score client flow;
+- IMMUNE PRIME vulnerability behavior;
+- Strained runtime;
+- elite modifier identity;
+- one-hand and twin-stick multitouch behavior;
+- dense readability;
+- Bloodstream -> Heart transition and campaign lifecycle.
 
-- platform facade resolves MAX rather than browser fallback;
-- `getViewportSize()` is applied to the `#game` host and Phaser scale;
-- MAX display name from `first_name` + `last_name`;
-- incoming `start_param` challenge;
-- `ВЫЗОВ ПОЛУЧЕН` and `ПРИНЯТЬ ВЫЗОВ` menu UI;
-- in-app `О приложении / Политика / Поддержка` surface using configured release values;
-- challenge result verdict;
-- result stats stay within the mobile viewport bounds;
-- `БРОСИТЬ ВЫЗОВ` is backed by a real interactive Phaser control;
-- MAX share receives a generated `https://max.ru/<bot>?startapp=...` deeplink;
-- captured browser page errors fail the job.
+The job uploads screenshots as the `max-browser-smoke` artifact for visual inspection.
 
-The job uploads current menu/result screenshots as `max-browser-smoke` for visual review.
+## 4. Dense visual quality gate
 
-## 4. MAX viewport / lifecycle hardening
+A separate release visual matrix runs the same seeded dense-combat contract at:
 
-`ViewportManager`:
+- 100 / 150 / 200 active enemies;
+- WebGL / Canvas;
+- full / reduced presentation tier.
 
-- calls `PlatformBridge.getViewportSize()`;
-- falls back to window dimensions only when the host cannot provide a viewport;
-- applies CSS `safe-area-inset-*`;
-- resizes the Phaser scale to the final safe frame;
-- re-syncs on resize, orientation change and `visibilitychange -> visible`;
-- retries after boot to cover a late MAX CDN bridge.
+Total: 12 production-style captures.
 
-Platform selection is call-time/late-safe, so a slow `max-web-app.js` cannot permanently select the
-browser adapter during early module evaluation.
+The matrix verifies structural parity and also measures image luminance and edge energy. This gate exists because a previous full-WebGL camera postFX path could pass structural tests while making dense combat visibly darker and softer.
 
-Existing Game/UI lifecycle cleanup remains in place for resize listeners, BackButton handler,
-postFX and bounded VFX/gameplay systems.
+Gameplay camera postFX is therefore not the mechanism that differentiates presentation tiers. Full mode remains richer through bounded ambient/VFX density while keeping the gameplay plane sharp.
 
-## 5. Audio lifecycle
+## 5. Trusted competitive score contract
 
-- music fetch is abortable and generation-guarded;
-- `stopMusic()` cannot be followed by a stale async load starting playback;
-- muted runs avoid unnecessary music startup;
-- failed SFX loads can retry;
-- transient `AudioBufferSourceNode`/GainNode and procedural oscillator/GainNode pairs disconnect on
-  `ended` rather than accumulating for the life of the AudioContext.
+`window.WebApp.initDataUnsafe` is never trusted as authentication.
 
-## 6. Legal/privacy/support gate
+For competitive score submission:
 
-Menu contains a user-facing legal/support entry. The overlay contains:
+- the client sends signed `window.WebApp.initData`;
+- the backend validates MAX identity;
+- the backend validates score bounds and deduplication;
+- current score records carry explicit ruleset/campaign/difficulty/completion/seed fields;
+- canonical ranked eligibility is Standard;
+- Strained mastery remains separate from the ranked Standard record.
 
-- app identity/version;
-- developer/operator legal fields;
-- registration/address/support contact fields;
-- privacy notice reflecting the current no-backend/local-storage architecture;
-- challenge-data explanation;
-- terms of use;
-- support instructions/contact.
+Challenge payloads remain untrusted social context and do not prove a result.
 
-Actual legal values are **not guessed or committed**. They must be injected from the verified MAX
-developer profile during the release build. `.env.example` documents the required keys.
+## 6. Save / meta-progression contract
 
-## 7. Third-party provenance
+`ofeliya_save_v1` remains backward compatible.
 
-See `THIRD_PARTY_NOTICES.md`.
+Current persistent local history includes:
 
-Known repository provenance is recorded for Kenney CC0 SFX, OpenGameArt CC0 music imports and
-Chakra Petch OFL font files. The early music import did not preserve a per-file upstream item mapping;
-recovering that mapping, if available from the original download notes, remains a documentation
-hardening item and individual authors/titles must not be invented.
+- survival / Boss 1 / full campaign records;
+- kills, runs and highest level;
+- achievements;
+- discovered Critical Mutations;
+- discovered Legendary mutations;
+- Standard campaign clear count;
+- Strained campaign clear count and personal Strained record.
 
-## 8. Known non-blocking build/performance notes
+Codex/mastery is informational/collectible progression. It does not add permanent damage, HP, movement, RNG or other run-start power.
 
-The Phaser-heavy main bundle remains relatively large and Vite can emit a chunk-size warning.
-Music is external and lazy-loaded, but individual tracks are still materially larger than SFX.
-Neither fact is treated as a build failure; **cold-start and dense-combat performance must be measured
-on target MAX devices before public release**.
+## 7. Production contract
 
-PerformanceProfile is the single authority for full/reduced presentation tier. Reduced mode removes
-presentation cost without changing enemy density/gameplay.
+The `production-contract` CI job validates:
 
-## 9. Remaining external gate — VIR-16
+- score server tests;
+- MAX bot smoke;
+- Strain Zero release contract;
+- Cloud.ru deployment script syntax;
+- production compose configuration;
+- production bot image;
+- production score image;
+- production static image;
+- nginx configuration.
 
-PR #16 must remain draft until a release-candidate build with real deployment values passes in the
-actual MAX clients.
+A green production-contract job proves repository/deployment consistency, not that a specific external production VM is currently serving that exact commit.
 
-Required pass/fail matrix:
+## 8. Remaining external gate
 
-1. Android MAX: cold launch -> playable, portrait viewport/safe area.
-2. iOS MAX: cold launch -> playable, notch/home-indicator safe area.
+Before a public release candidate is considered fully validated, test the real MAX clients.
+
+Required manual matrix:
+
+1. Android MAX cold launch -> playable portrait viewport/safe area.
+2. iOS MAX cold launch -> playable portrait viewport/safe area.
 3. Background -> foreground resume without blank/stretched canvas or duplicated audio.
-4. Orientation/viewport transition does not lose controls/HUD.
-5. Native BackButton returns from active run without stale listeners/music/postFX.
-6. Haptics fire only on supported clients and never throw on unsupported clients.
-7. Share opens native MAX flow and contains the real `VITE_MAX_BOT_NAME` challenge deeplink.
-8. Opening the shared deeplink restores the expected `start_param` challenge.
+4. Orientation/viewport transitions do not lose controls or HUD.
+5. Native BackButton closes overlays and exits active-run states without stale listeners.
+6. Haptics fire only when supported and never throw otherwise.
+7. Native share contains the correct challenge deeplink.
+8. Opening the shared deeplink restores the expected challenge context.
 9. Audio unlock works after the first permitted user interaction.
-10. Ten run/restart/menu cycles show no visible lifecycle degradation.
-11. Late-run dense combat and `IMMUNE PRIME` phase remain playable on the target mid-range Android.
-12. Real developer/legal/support values displayed in the legal overlay match the verified MAX profile.
+10. Repeated menu/run/restart cycles show no lifecycle degradation.
+11. Dense late Bloodstream and Heart combat remain playable on a representative mid-range Android.
+12. IMMUNE PRIME and CARDIAC TITAN phase pacing feels readable, not only technically valid.
+13. Heart safe-pocket timing is understandable and reachable with one-hand controls.
+14. Twin-stick aim-priority is usable without accidental movement/aim cross-talk.
+15. Real developer/legal/support values match the verified MAX profile.
+16. Trusted score submission succeeds with real signed MAX initData.
 
-Only after this matrix passes should PR #16 move from Draft to Ready for review / merge.
+## 9. Current product risks that CI cannot settle
 
-Boss/difficulty tuning remains explicitly outside this release-hardening scope.
+- final balance of complete 9+ minute runs;
+- real-device input ergonomics;
+- network latency/failure behavior in actual MAX sessions;
+- boss pacing and Heart timing feel;
+- thermal/performance behavior on target phones;
+- whether current meta goals create repeat play without becoming grind.
+
+Those require playtest/device evidence rather than more deterministic code assertions.

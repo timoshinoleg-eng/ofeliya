@@ -1,101 +1,97 @@
-# План проекта «Ofeliya» — мини-игра для мессенджера MAX
+# OFELIYA: STRAIN ZERO — Current Plan
 
-Дата создания: 2026-09-06 · Статус: план на согласование
+Updated: 2026-09-20
 
-## 1. Концепция
+This file is the short execution plan for the current product. It replaces the original September 6 prototype plan.
 
-Рогалик-выживание в стиле Vampire Survivors, адаптированный под мессенджер:
+Canonical references:
 
-- Персонаж **автоматически атакует** ближайших врагов; игрок управляет только движением.
-- Враги идут волнами, из них выпадают **кристаллы опыта**; на новом уровне — выбор 1 из 3 апгрейдов.
-- Сессия **3–5 минут** до босса/смерти; цель — рекорд по времени и убийствам.
-- Управление **одним пальцем** (виртуальный джойстик / следование за касанием), портретно-адаптивный канвас — под открытие из чата на телефоне.
-- Рабочее название «Ofeliya» (по имени папки проекта) — финальное название выбирается до этапа 4.
+- product/gameplay: `STRAIN_ZERO_PRODUCT_BIBLE.md`;
+- runtime architecture: `ARCHITECTURE_NOTES.md`;
+- release evidence and external device gate: `RELEASE_VALIDATION.md`;
+- provenance: `THIRD_PARTY_NOTICES.md`.
 
-## 2. Технологический стек
+## Current product
 
-| Слой | Решение | Комментарий |
-|---|---|---|
-| Игра | **Phaser 3 + TypeScript + Vite** | WebGL/Canvas, зрелый движок для 2D-игр |
-| Интеграция MAX | **MAX Bridge** — CDN-скрипт `https://st.max.ru/js/max-web-app.js`, глобальный `window.WebApp` | Не npm-пакет; методы возвращают Promise |
-| Бот-обёртка | **`@maxhub/max-bot-api`** (npm, v0.3.x) | Привязка мини-приложения к боту, кнопка «Играть» |
-| Хостинг | Любой HTTPS: VK Cloud (спецхостинг под MAX), Yandex Cloud, GitHub Pages (для тестов) | HTTPS обязателен по требованиям MAX |
-| Сохранения | `localStorage` (+ `DeviceStorage`/`SecureStorage` через bridge как опция) | Сервер появится, только если делаем лидерборд |
-| Авторизация | `WebApp.initData` / `initDataUnsafe` (id, имя, аватар, `hash`) | Валидация `hash` на бэкенде — на этапе лидерборда |
+OFELIYA is a portrait roguelite-survivor for MAX Mini Apps about a synthetic virus inside a living organism.
 
-## 3. Базовый код: форк или с нуля?
+Live campaign:
 
-**Решение: пишем с нуля на Phaser 3.**
+`КРОВОТОК -> IMMUNE PRIME -> СЕРДЦЕ -> CARDIAC TITAN`
 
-Репозиторий [Kooshaba/mini-survivor](https://github.com/Kooshaba/mini-survivor) проверен: существует, TypeScript + Vite, лицензия MIT. Но: 0 звёзд, хобби-проект, использование Phaser не подтверждено, мобильное (тач) управление не подтверждено. Время на вычитку и переделку чужого кода под мессенджер превысит время написания своего: ядро survivors-механики (движение + автоатака + волны + XP + левелапы) на Phaser 3 — это 2–3 дня. Свой код также снимает все лицензионные вопросы и даёт полный контроль под мобильный формат.
+Target campaign length is roughly 9+ minutes before boss fight duration is added:
 
-## 4. Архитектура (черновик)
+- Bloodstream: 5:00 before `IMMUNE PRIME`;
+- Heart: 4:00 before `CARDIAC TITAN`.
 
-```
-src/
-  main.ts                 — запуск Phaser, инициализация bridge
-  scenes/                 — Boot, Preload, Menu, Game, GameOver
-  game/                   — Player, Enemy, Bullet, Gem, Pickup,
-                            WaveDirector (спавн волн), UpgradeSystem
-  systems/                — SaveSystem (localStorage, рекорды)
-                            MaxBridge (типизированная обёртка над window.WebApp
-                            с fallback-заглушкой для обычного браузера)
-                            Sfx (звук)
-  ui/                     — HUD, LevelUpModal, TouchJoystick
-public/assets/            — спрайты/аудио (генерируем — см. §7)
-```
+The old 3–5 minute single-stage/cyber-arena concept is historical and must not be used as a current design contract.
 
-Правила, которые защищают от рисков платформы:
+## Live systems
 
-- Вся работа с MAX — только через `MaxBridge` (единый интерфейс). Игра не знает о мессенджере; в десктоп-браузере bridge подменяется заглушкой — так игра тестируется где угодно.
-- Хардлимит сущностей и пулы объектов с первого дня (проще держать 60 FPS на слабых Android).
+Already implemented in `main`:
 
-## 5. Этапы и вехи
+- one-hand floating joystick and optional two-hand twin-stick aim-priority;
+- stage-local build reset with run-wide history preservation;
+- host-cell infection/lysis build family;
+- distinct swarm / runner / brute behaviors;
+- two boss fights with phase mechanics;
+- Heart synchronization safe-pocket loop;
+- 3 Critical Mutations;
+- 6 Legendary mutations, max 2 per run;
+- Standard and Strained difficulty;
+- deterministic run seed and versioned challenge/score contracts;
+- trusted MAX score backend and leaderboard paths;
+- result screen with two-stage build history;
+- Codex for Critical Mutations / Legendary discovery / achievements;
+- Standard and Strained completion mastery without permanent stat power;
+- WebGL/Canvas fallback and full/reduced presentation tiers;
+- 100/150/200-enemy release visual matrix with luminance/edge-readability gate.
 
-| # | Этап | Содержание | Оценка | Результат |
-|---|---|---|---|---|
-| 0 | Каркас | Vite + TS + Phaser, ESLint, мобильный viewport, сборка, деплой на тестовый HTTPS | 0.5–1 д | «Hello game» открывается по HTTPS |
-| 1 | Прототип боя | Движение за пальцем, автоатака, спавн волн, XP-гемы, экран левелапа (3 апгрейда), HP/смерть/рестарт | 2–3 д | Играбельное ядро в браузере |
-| 2 | Контент и мета | 4–6 оружий, 6+ пассивок, 4 типа врагов + 2 босса, баланс на 5 минут, меню, рекорды, localStorage | 2–3 д | Полная сессия «меню → бой → рекорд» |
-| 3 | Интеграция MAX | MaxBridge: initData (игрок), шаринг результата (`shareContent`), хаптика при левелапе/уроне, кнопка «Играть» у бота | 1–2 д | Игра открывается из MAX |
-| 4 | Полировка | Звук/музыка, партиклы, профилирование до 60 FPS на бюджетных Android, адаптив разрешений | 1–2 д | Релиз-кандидат |
-| 5 | Релиз | Prod-сборка, деплой, привязка URL к боту в [business.max.ru/self](https://business.max.ru/self), модерация, чеклист-тесты | 0.5–1 д | Игра доступна в MAX |
+## Current priorities
 
-Итого: ~8–12 рабочих дней до публикации.
+1. Balance from complete real runs rather than isolated unit tuning.
+2. Validate Heart safe-pocket timing and both boss phases through playtest.
+3. Validate one-hand and twin-stick ergonomics on real MAX Android/iOS clients.
+4. Keep 100/150/200-enemy captures readable when visual changes land.
+5. Keep score/ruleset/campaign versions explicit for competitive changes.
+6. Keep Codex/meta progression cosmetic/informational unless a separate design migration explicitly changes that rule.
 
-## 6. Распределение работы по субагентам (на этапе реализации)
+## Deferred product expansion
 
-| Субагент | Зона ответственности |
-|---|---|
-| `game-core` | Геймплейные системы: игрок, волны, оружие, апгрейды, баланс |
-| `max-integration` | MaxBridge-обёртка, initData, шаринг, бот (`@maxhub/max-bot-api`) |
-| `assets` | Генерация спрайтов/тайлсетов/звука (без внешних лицензий) |
-| `qa` | Прогон в браузере (GUI-тестирование), чеклист на мобильном вьюпорте |
+Do not add these opportunistically inside unrelated PRs:
 
-> Примечание: при подготовке этого плана запуск субагентов дважды блокировался платформой («unusual activity»), поэтому исследование выполнил основной агент. При старте реализации запуск повторю; если блокировка сохранится — работаю последовательно сам.
+- third organ / additional campaign act;
+- additional difficulty above Strained;
+- large Legendary/content expansion;
+- permanent stat-grind meta progression;
+- broader external art/audio pipeline;
+- major architecture rewrite or renderer migration.
 
-## 7. Арт и звук
+Each requires its own design migration and acceptance criteria.
 
-Внешние ассеты не покупаем и не тянем из чужих репозиториев: спрайты генерируем процедурно (простые формы/палитра в стиле «неон на тёмном» — читается на маленьком экране), звук — через синтез (как альтернатива — CC0-паки). Это исключает лицензионные риски и вес билда.
+## Release gates
 
-## 8. Риски и как их закрываем
+Automated:
 
-| Риск | Митигирование |
-|---|---|
-| Публикация в MAX открыта только юрлицам, ИП и самозанятым РФ (верифицированным) | Решить статус до этапа 5; разработка и внутренний тест не требуют этого — мини-приложение привязывается к своему боту |
-| MAX Bridge — CDN-скрипт без официальных TS-типов, платформа молодая, API меняется | Типизированная обёртка + fallback; bridge изолирован за интерфейсом |
-| Слабые Android-телефоны (основная аудитория мессенджера) | Пулы объектов, лимит врагов, минималистичный арт, профилирование на этапе 4 |
-| Модерация MAX | Заложен буфер на этапе 5; правила размещения изучить до подачи |
+- deterministic compatibility/unit smokes;
+- TypeScript/Vite production build;
+- MAX viewport/browser suite;
+- WebGL High-DPI and Canvas fallback;
+- Legendary, difficulty, boss, Heart, control-mode and campaign smokes;
+- trusted score/backend production contract;
+- release visual matrix: 100/150/200 × WebGL/Canvas × full/reduced.
 
-## 9. Открытые вопросы (нужны решения до соответствующих этапов)
+External/manual before public release:
 
-1. **Статус регистрации** (к этапу 5): юрлицо, ИП или самозанятый?
-2. **Название и стиль** (к этапу 4): оставить «Ofeliya» / предложить варианты.
-3. **Лидерборд** (к этапу 3, опционально): потребует бэкенд для серверной валидации `initData.hash`. MVP может обойтись локальными рекордами.
+- real MAX Android;
+- real MAX iOS;
+- cold start and resume;
+- native BackButton;
+- native share/deeplink;
+- haptics/audio unlock;
+- repeated run/restart lifecycle;
+- dense late-run performance and boss pacing.
 
-## 10. Источники
+## Implementation rule
 
-- [MAX для разработчиков](https://dev.max.ru/) · [Подключение мини-приложения](https://dev.max.ru/docs/webapps/introduction) · [MAX Bridge](https://dev.max.ru/docs/webapps/bridge) · [Диплинки](https://dev.max.ru/help/deeplinks)
-- npm: [@maxhub/max-bot-api](https://www.npmjs.com/package/@maxhub/max-bot-api) · [@maxhub/max-ui](https://www.npmjs.com/package/@maxhub/max-ui) · GitHub: [max-messenger](https://github.com/max-messenger)
-- Habr: [публикация ботов/мини-приложений только для верифицированных юрлиц РФ](https://habr.com/ru/articles/951326/)
-- Базовый кандидат (не используем, но проверен): [Kooshaba/mini-survivor](https://github.com/Kooshaba/mini-survivor) (MIT, TS+Vite)
+Do not treat historical sprint documents as current source of truth. If a document conflicts with `STRAIN_ZERO_PRODUCT_BIBLE.md` or `ARCHITECTURE_NOTES.md`, update the stale document before using it to drive new systemic work.

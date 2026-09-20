@@ -9,6 +9,7 @@
 Стрельба в обоих режимах остаётся автоматической.
 
 Продуктовый контракт и визуальная терминология: [`STRAIN_ZERO_PRODUCT_BIBLE.md`](./STRAIN_ZERO_PRODUCT_BIBLE.md).
+Текущий execution plan: [`PLAN.md`](./PLAN.md).
 Текущая архитектура: [`ARCHITECTURE_NOTES.md`](./ARCHITECTURE_NOTES.md).
 Release-gate evidence: [`RELEASE_VALIDATION.md`](./RELEASE_VALIDATION.md).
 Third-party provenance: [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md).
@@ -116,9 +117,13 @@ Challenge data — только **недоверенный социальный 
 `window.WebApp.initDataUnsafe` используется только для клиентского UI-контекста — имени,
 `start_param` и capability data. Он **не является доверенной авторизацией**.
 
-Если позже появятся leaderboard, аккаунтные данные или competitive score, сервер должен получать
-подписанную строку `window.WebApp.initData`, валидировать её на доверенном backend и отдельно
-проверять score contract. Challenge payload эту проверку не заменяет.
+Competitive score уже идёт через доверенный backend: клиент передаёт подписанную строку
+`window.WebApp.initData`, сервер валидирует MAX identity и отдельно проверяет versioned score
+contract (`rulesetVersion`, `campaignVersion`, `difficultyId`, completion stage и run seed).
+Ranked contract относится к Standard; Strained mastery остаётся локальной/неранговой историей.
+
+Challenge payload остаётся только недоверенным социальным контекстом и не заменяет серверную
+валидацию результата.
 
 ## Основной игровой цикл
 
