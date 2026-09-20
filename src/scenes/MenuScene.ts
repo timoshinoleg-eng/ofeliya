@@ -730,7 +730,18 @@ export class MenuScene extends Phaser.Scene {
         const evolutionIds: EvolutionId[] = ['prism', 'halo', 'singularity'];
         evolutionIds.forEach((id, index) => {
           const found = save.evolutionsSeen.includes(id);
-          const y = bodyTop + 38 + index * (compact ? 66 : 72);
+          const y = bodyTop + 38 + index * (compact ? 70 : 76);
+          const row = this.add
+            .rectangle(
+              W / 2,
+              y + (compact ? 22 : 24),
+              panelW - 38,
+              compact ? 56 : 62,
+              0x19151f,
+              0.78
+            )
+            .setStrokeStyle(1, found ? COLORS.gold : COLORS.stroke, found ? 0.4 : 0.55);
+          body.add(row);
           addText(
             left + 28,
             y,
@@ -778,6 +789,13 @@ export class MenuScene extends Phaser.Scene {
         const strainedBest =
           save.bestStrainedCampaignClearMs > 0 ? fmtTime(save.bestStrainedCampaignClearMs) : '—';
         addText(W / 2, bodyTop, 'МАСТЕРСТВО КАМПАНИИ', compact ? 12 : 13, '#ffe066', panelW - 42, 'center');
+        const standardRow = this.add
+          .rectangle(W / 2, bodyTop + 48, panelW - 38, 34, 0x151b24, 0.72)
+          .setStrokeStyle(1, save.standardCampaignClears > 0 ? COLORS.cyan : COLORS.stroke, 0.5);
+        const strainedRow = this.add
+          .rectangle(W / 2, bodyTop + 82, panelW - 38, 34, 0x1f1714, 0.72)
+          .setStrokeStyle(1, save.strainedCampaignClears > 0 ? COLORS.gold : COLORS.stroke, 0.5);
+        body.add([standardRow, strainedRow]);
         addText(
           left + 28,
           bodyTop + 38,
