@@ -800,14 +800,14 @@ export class MenuScene extends Phaser.Scene {
         addText(
           left + 28,
           bodyTop + 39,
-          `${save.standardCampaignClears > 0 ? '◆' : '◇'} STANDARD · ${save.standardCampaignClears} проходов · рекорд ${standardBest}`,
+          `${save.standardCampaignClears > 0 ? '◆' : '◇'} STANDARD · пройдено ${save.standardCampaignClears} · рекорд ${standardBest}`,
           compact ? 12 : 13,
           save.standardCampaignClears > 0 ? '#8fe8ff' : '#c7bfd0'
         );
         addText(
           left + 28,
           bodyTop + 81,
-          `${save.strainedCampaignClears > 0 ? '◆' : '◇'} STRAINED · ${save.strainedCampaignClears} проходов · рекорд ${strainedBest}`,
+          `${save.strainedCampaignClears > 0 ? '◆' : '◇'} STRAINED · пройдено ${save.strainedCampaignClears} · рекорд ${strainedBest}`,
           compact ? 12 : 13,
           save.strainedCampaignClears > 0 ? '#ffe066' : '#c7bfd0'
         );
