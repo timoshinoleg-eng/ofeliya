@@ -1,5 +1,3 @@
-[Reading 822 lines from start (total: 822 lines, 0 remaining)]
-
 import Phaser from 'phaser';
 import { parseChallengePayload } from '../game/Challenge';
 import { ACHIEVEMENTS } from '../game/AchievementSystem';
@@ -822,5 +820,3 @@ export class MenuScene extends Phaser.Scene {
     this.scene.restart();
   }
 }
-
-[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
