@@ -35,8 +35,8 @@ const SAVE = {
     'epidemic',
     'cleanup-500',
   ],
-  evolutionsSeen: ['prism', 'halo', 'singularity'],
-  legendarySeen: [],
+  evolutionsSeen: [],
+  legendarySeen: ['zero-point', 'core-predator', 'last-carrier'],
   standardCampaignClears: 0,
   strainedCampaignClears: 0,
   bestStrainedCampaignClearMs: 0,
@@ -107,7 +107,7 @@ async function inspectMenu(page, size) {
       pick((t) => t.startsWith('Носитель:')),
       pick((t) => t.startsWith('Выживание ')),
       pick((t) => t === 'Базовый ритм кампании'),
-      pick((t) => t.includes('оба нижних стика')),
+      pick((t) => t.includes('оба стика')),
       pick((t) => t.startsWith('автоатака ·')),
       pick((t) => t.startsWith('звук:')),
       pick((t) => t.startsWith('КОДЕКС ')),
@@ -137,7 +137,7 @@ function assertMenu(contract, compact) {
     row.text.startsWith('Носитель:') ||
     row.text.startsWith('Выживание') ||
     row.text === 'Базовый ритм кампании' ||
-    row.text.includes('оба нижних стика') ||
+    row.text.includes('оба стика') ||
     row.text.startsWith('автоатака ·') ||
     row.text.startsWith('звук:') ||
     row.text.startsWith('Двигай штамм')
