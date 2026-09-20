@@ -210,7 +210,7 @@ async function inspectCodex(page, size) {
       bounds.left < 2 || bounds.right > width - 2 || bounds.top < 2 || bounds.bottom > height - 2
     );
     const activeLines = flat.filter(
-      (obj) => obj?.type === 'Rectangle' && obj.visible && obj.height === 2 && (obj.alpha ?? 1) > 0.2
+      (obj) => obj?.type === 'Rectangle' && obj.visible && obj.height === 3 && (obj.alpha ?? 1) > 0.2
     ).length;
     return { rows, important, overflow, activeLines };
   }, size);
