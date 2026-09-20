@@ -1,4 +1,6 @@
 import type { EvolutionId } from '../game/UpgradeSystem';
+import type { LegendaryId } from '../game/LegendarySystem';
+import type { DifficultyId } from '../game/DifficultyProfile';
 
 export interface SaveData {
   /** Legacy compatibility alias. New code should use bestSurvivalMs. */
@@ -20,10 +22,17 @@ export interface SaveData {
   totalKills: number;
   achievements: string[];
   evolutionsSeen: EvolutionId[];
+  legendarySeen: LegendaryId[];
+  standardCampaignClears: number;
+  strainedCampaignClears: number;
+  /** Personal Strained mastery record; never participates in the ranked Standard board. */
+  bestStrainedCampaignClearMs: number;
 }
 
 export interface RunMilestoneTimes {
   boss1ClearMs?: number;
+  legendaryIds?: LegendaryId[];
+  difficultyId?: DifficultyId;
 }
 
 const KEY = 'ofeliya_save_v1';
@@ -41,9 +50,21 @@ const DEFAULTS: SaveData = {
   totalKills: 0,
   achievements: [],
   evolutionsSeen: [],
+  legendarySeen: [],
+  standardCampaignClears: 0,
+  strainedCampaignClears: 0,
+  bestStrainedCampaignClearMs: 0,
 };
 
 const VALID_EVOLUTIONS = new Set<EvolutionId>(['prism', 'halo', 'singularity']);
+const VALID_LEGENDARIES = new Set<LegendaryId>([
+  'split-geometry',
+  'lysis-chain',
+  'zero-point',
+  'core-predator',
+  'myocardial-rhythm',
+  'last-carrier',
+]);
 
 class SaveImpl {
   private data: SaveData = { ...DEFAULTS };
@@ -76,6 +97,12 @@ class SaveImpl {
             evolutionsSeen: this.stringArray(parsed.evolutionsSeen).filter((v): v is EvolutionId =>
               VALID_EVOLUTIONS.has(v as EvolutionId)
             ),
+            legendarySeen: this.stringArray(parsed.legendarySeen).filter((v): v is LegendaryId =>
+              VALID_LEGENDARIES.has(v as LegendaryId)
+            ),
+            standardCampaignClears: this.num(parsed.standardCampaignClears),
+            strainedCampaignClears: this.num(parsed.strainedCampaignClears),
+            bestStrainedCampaignClearMs: this.num(parsed.bestStrainedCampaignClearMs),
           };
         }
       }
@@ -89,6 +116,7 @@ class SaveImpl {
       ...this.data,
       achievements: [...this.data.achievements],
       evolutionsSeen: [...this.data.evolutionsSeen],
+      legendarySeen: [...this.data.legendarySeen],
     };
   }
 
@@ -98,6 +126,7 @@ class SaveImpl {
       ...patch,
       achievements: patch.achievements ? [...patch.achievements] : this.data.achievements,
       evolutionsSeen: patch.evolutionsSeen ? [...patch.evolutionsSeen] : this.data.evolutionsSeen,
+      legendarySeen: patch.legendarySeen ? [...patch.legendarySeen] : this.data.legendarySeen,
     };
     // Preserve both legacy aliases for older clients that may read the same localStorage key.
     this.data.bestTimeMs = this.data.bestSurvivalMs;
@@ -141,6 +170,27 @@ class SaveImpl {
     };
     const seen = new Set<EvolutionId>(this.data.evolutionsSeen);
     for (const id of evolutions) seen.add(id);
+
+    const legendarySeen = new Set<LegendaryId>(this.data.legendarySeen);
+    for (const id of milestones.legendaryIds ?? []) {
+      if (VALID_LEGENDARIES.has(id)) legendarySeen.add(id);
+    }
+
+    const standardClear =
+      win && milestones.difficultyId === 'standard'
+        ? this.data.standardCampaignClears + 1
+        : this.data.standardCampaignClears;
+    const strainedClear =
+      win && milestones.difficultyId === 'strained'
+        ? this.data.strainedCampaignClears + 1
+        : this.data.strainedCampaignClears;
+    const strainedBest =
+      win && milestones.difficultyId === 'strained' && timeMs > 0
+        ? this.data.bestStrainedCampaignClearMs === 0
+          ? timeMs
+          : Math.min(this.data.bestStrainedCampaignClearMs, timeMs)
+        : this.data.bestStrainedCampaignClearMs;
+
     this.update({
       bestSurvivalMs: survivalRecord ? timeMs : this.data.bestSurvivalMs,
       bestBoss1ClearMs: boss1Record ? boss1ClearMs : this.data.bestBoss1ClearMs,
@@ -150,6 +200,10 @@ class SaveImpl {
       runs: this.data.runs + 1,
       totalKills: this.data.totalKills + Math.max(0, Math.floor(kills)),
       evolutionsSeen: [...seen],
+      legendarySeen: [...legendarySeen],
+      standardCampaignClears: standardClear,
+      strainedCampaignClears: strainedClear,
+      bestStrainedCampaignClearMs: strainedBest,
     });
     return res;
   }

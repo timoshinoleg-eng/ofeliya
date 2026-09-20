@@ -1150,7 +1150,11 @@ export class GameScene extends Phaser.Scene {
       run.kills,
       run.highestLevel,
       evolutions,
-      { boss1ClearMs },
+      {
+        boss1ClearMs,
+        legendaryIds: [...run.legendaryIds],
+        difficultyId: this.difficulty.id,
+      },
       this.difficulty.id === 'standard'
     );
     this.captureAchievements(true, false);
