@@ -351,12 +351,16 @@ function assertMutation(contract, compact) {
   if (contract.cards.length !== 3) {
     throw new Error('readability mutation card count: ' + JSON.stringify(contract.cards));
   }
-  const expectedHeight = compact ? 108 : 128;
+  const expectedHeight = compact ? 112 : 136;
   if (contract.cards.some((card) => card.height < expectedHeight || card.minTextSize < (compact ? 11 : 12))) {
     throw new Error('readability mutation card typography: ' + JSON.stringify(contract.cards));
   }
   if (!compact && contract.cards.some((card) => card.bodySystemCount < 2)) {
     throw new Error('readability mutation body font missing: ' + JSON.stringify(contract.cards));
+  }
+  const longTitle = contract.rows.find((row) => row.text === 'МНОЖЕСТВЕННАЯ РЕПЛИКАЦИЯ');
+  if (longTitle && (longTitle.bounds.left < 2 || longTitle.bounds.right > (compact ? 358 : 388))) {
+    throw new Error('long mutation title must wrap inside the mobile viewport: ' + JSON.stringify(longTitle));
   }
 }
 
