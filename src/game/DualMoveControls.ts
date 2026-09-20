@@ -137,7 +137,13 @@ export class DualMoveControls {
 
     const side: Side = p.x < this.scene.scale.width / 2 ? 'left' : 'right';
     const stick = side === 'left' ? this.left : this.right;
-    if (stick.active) return;
+    const other = side === 'left' ? this.right : this.left;
+
+    // Mobile WebViews may recycle Phaser pointer ids between sequential touch gestures.
+    // Never let a missed/late pointer-up from the previous gesture poison the next pad.
+    if (other.active && other.pointerId === p.id) this.releaseImmediately(other);
+    if (stick.active && stick.pointerId === p.id) this.releaseImmediately(stick);
+    else if (stick.active) return;
 
     stick.active = true;
     stick.pointerId = p.id;
