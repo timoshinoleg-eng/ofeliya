@@ -1,9 +1,12 @@
+[Reading 822 lines from start (total: 822 lines, 0 remaining)]
+
 import Phaser from 'phaser';
 import { parseChallengePayload } from '../game/Challenge';
 import { ACHIEVEMENTS } from '../game/AchievementSystem';
 import { COLORS, FONT, fmtTime } from '../game/config';
 import { IDENTITY } from '../game/identity';
 import { LEGENDARIES } from '../game/LegendarySystem';
+import { STAGES } from '../game/StageDefinitions';
 import { EVOLUTION_NAMES, type EvolutionId } from '../game/UpgradeSystem';
 import {
   controlModeDescription,
@@ -24,6 +27,7 @@ import { ensureCinematicTextures } from '../game/CinematicTextures';
 import { showLegalOverlay } from '../legal/LegalOverlay';
 import { PlatformBridge } from '../platform';
 import { SaveSystem } from '../systems/SaveSystem';
+import { RunCheckpoint } from '../systems/RunCheckpoint';
 import { Sfx } from '../systems/Sfx';
 
 export class MenuScene extends Phaser.Scene {
@@ -44,6 +48,7 @@ export class MenuScene extends Phaser.Scene {
     PlatformBridge.setBackHandler(null);
 
     const incomingChallenge = parseChallengePayload(PlatformBridge.getStartParam());
+    const resumeCheckpoint = incomingChallenge ? null : RunCheckpoint.load();
     let selectedDifficulty = incomingChallenge ? 'standard' : readDifficultySelection();
     let selectedControlMode: ControlMode = readControlMode();
     this.registry.set('difficultyId', selectedDifficulty);
@@ -238,6 +243,28 @@ export class MenuScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setResolution(2)
         .setDepth(5);
+    } else if (resumeCheckpoint) {
+      const resumeStage =
+        STAGES.find((stage) => stage.id === resumeCheckpoint.director.stageId) ?? STAGES[0];
+      const resumeDifficulty = getDifficultyProfile(resumeCheckpoint.difficultyId);
+      this.add
+        .text(
+          W / 2,
+          H * 0.57,
+          `НЕЗАВЕРШЁННЫЙ ЗАБЕГ\n${resumeStage.name} · ${fmtTime(resumeCheckpoint.runState.run.timeMs)} · МУТАЦИЯ ${resumeCheckpoint.runState.stage.level} · ${resumeDifficulty.shortLabel}`,
+          {
+            fontFamily: FONT,
+            fontSize: H < 650 ? '10px' : '11px',
+            fontStyle: 'bold',
+            color: '#ffe066',
+            align: 'center',
+            lineSpacing: 4,
+            wordWrap: { width: W - 42 },
+          }
+        )
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setDepth(5);
     } else {
       const save = SaveSystem.get();
       const survival = save.bestSurvivalMs > 0 ? fmtTime(save.bestSurvivalMs) : '—';
@@ -353,11 +380,19 @@ export class MenuScene extends Phaser.Scene {
         selectedControlMode === 'two-hand' ? COLORS.cyan : COLORS.magenta,
         0.82
       );
-      startHint?.setText(
-        selectedControlMode === 'one-hand'
-          ? 'атака автоматическая · движение одним пальцем'
-          : 'атака автоматическая · слева движение · справа приоритет'
-      );
+      if (resumeCheckpoint) {
+        const resumeStage =
+          STAGES.find((stage) => stage.id === resumeCheckpoint.director.stageId) ?? STAGES[0];
+        startHint?.setText(
+          `${resumeStage.name} · ${fmtTime(resumeCheckpoint.runState.run.timeMs)} · МУТАЦИЯ ${resumeCheckpoint.runState.stage.level}`
+        );
+      } else {
+        startHint?.setText(
+          selectedControlMode === 'one-hand'
+            ? 'атака автоматическая · движение одним пальцем'
+            : 'атака автоматическая · слева движение · справа приоритет'
+        );
+      }
     };
     renderControlMode();
     controlBg.on('pointerup', () => {
@@ -371,19 +406,28 @@ export class MenuScene extends Phaser.Scene {
     controlBg.on('pointerover', () => controlBg.setFillStyle(0x1b2939, 1));
     controlBg.on('pointerout', () => controlBg.setFillStyle(0x141d2a, 0.94));
 
-    const btnY = H * 0.805;
+    const btnY = H * (resumeCheckpoint ? 0.785 : 0.805);
     const btnW = Math.min(W - 44, 300);
     const btnBg = this.add
-      .rectangle(W / 2, btnY, btnW, 66, 0x5c143e, 0.92)
+      .rectangle(W / 2, btnY, btnW, resumeCheckpoint ? 58 : 66, 0x5c143e, 0.92)
       .setStrokeStyle(2, incomingChallenge ? COLORS.gold : COLORS.magenta, 1)
       .setDepth(5);
     this.add
-      .text(W / 2, btnY - 5, incomingChallenge ? 'ПРИНЯТЬ ВЫЗОВ' : 'НАЧАТЬ ЗАРАЖЕНИЕ', {
+      .text(
+        W / 2,
+        btnY - 5,
+        incomingChallenge
+          ? 'ПРИНЯТЬ ВЫЗОВ'
+          : resumeCheckpoint
+            ? 'ПРОДОЛЖИТЬ ЗАБЕГ'
+            : 'НАЧАТЬ ЗАРАЖЕНИЕ',
+        {
         fontFamily: FONT,
         fontSize: H < 650 ? '17px' : '19px',
         fontStyle: 'bold',
         color: '#fff4ec',
-      })
+        }
+      )
       .setOrigin(0.5)
       .setResolution(2)
       .setDepth(6);
@@ -399,15 +443,56 @@ export class MenuScene extends Phaser.Scene {
       .setDepth(6);
     renderControlMode();
 
+    const startFreshRun = () => {
+      RunCheckpoint.clear();
+      this.registry.remove('runCheckpointResume');
+      this.registry.set('difficultyId', selectedDifficulty);
+      this.registry.set('controlMode', selectedControlMode);
+      this.scene.start('Game');
+    };
+
     btnBg.setInteractive({ useHandCursor: true }).on('pointerup', () => {
       Sfx.play('click');
       PlatformBridge.haptic('medium');
-      this.scene.start('Game');
+      if (resumeCheckpoint) {
+        this.registry.set('difficultyId', resumeCheckpoint.difficultyId);
+        this.registry.set('controlMode', resumeCheckpoint.controlMode);
+        this.registry.set('runCheckpointResume', resumeCheckpoint);
+        this.scene.start('Game');
+        return;
+      }
+      startFreshRun();
     });
     btnBg.on('pointerover', () => btnBg.setFillStyle(0x7a1a52, 1));
     btnBg.on('pointerout', () => btnBg.setFillStyle(0x5c143e, 0.92));
 
-    const utilityY = btnY + (H < 650 ? 48 : 55);
+    if (resumeCheckpoint) {
+      const newRunY = btnY + 42;
+      const newRunHit = this.add
+        .rectangle(W / 2, newRunY, Math.min(btnW, 190), 22, 0x14101a, 0.78)
+        .setStrokeStyle(1, COLORS.cyan, 0.45)
+        .setDepth(7)
+        .setInteractive({ useHandCursor: true });
+      this.add
+        .text(W / 2, newRunY, 'НАЧАТЬ НОВЫЙ', {
+          fontFamily: FONT,
+          fontSize: H < 650 ? '10px' : '11px',
+          fontStyle: 'bold',
+          color: '#8fe8ff',
+          letterSpacing: 1,
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setDepth(8);
+      newRunHit.on('pointerup', () => {
+        Sfx.play('click');
+        PlatformBridge.haptic('medium');
+        startFreshRun();
+      });
+    }
+
+    const utilityY =
+      btnY + (resumeCheckpoint ? (H < 650 ? 60 : 72) : H < 650 ? 48 : 55);
     const soundText = this.add
       .text(W / 2 - 72, utilityY, `звук: ${Sfx.muted ? 'выкл' : 'вкл'}`, {
         fontFamily: FONT,
@@ -737,3 +822,5 @@ export class MenuScene extends Phaser.Scene {
     this.scene.restart();
   }
 }
+
+[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
