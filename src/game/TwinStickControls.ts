@@ -136,6 +136,20 @@ export class TwinStickControls {
     else this.publish(match.role, nx, ny);
   }
 
+  reset(): void {
+    this.releaseImmediately('move', this.move);
+    this.releaseImmediately('aim', this.aim);
+  }
+
+  private releaseImmediately(role: StickRole, stick: StickState): void {
+    stick.active = false;
+    stick.pointerId = -1;
+    this.publish(role, 0, 0);
+    this.scene.tweens.killTweensOf([stick.base, stick.knob]);
+    stick.base.setVisible(false).setAlpha(0);
+    stick.knob.setVisible(false).setAlpha(0);
+  }
+
   private onUp(p: Phaser.Input.Pointer): void {
     if (this.move.active && p.id === this.move.pointerId) {
       this.release('move', this.move);
