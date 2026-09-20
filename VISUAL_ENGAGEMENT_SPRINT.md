@@ -1,5 +1,11 @@
 # OFELIYA — Visual & Engagement Sprint v1
 
+> **Historical sprint document.** This file records the early visual-engagement pass and is not the current product contract.
+> For current gameplay, visual direction, campaign length, difficulty, bosses, Codex and release priorities use
+> `STRAIN_ZERO_PRODUCT_BIBLE.md`, `ARCHITECTURE_NOTES.md` and `PLAN.md`.
+>
+> The old five-minute cyber-occult framing below is preserved only as implementation history.
+
 Working branch: `feat/visual-engagement-sprint-v1`
 
 Base snapshot at sprint creation: `main` @ `53ff9979b1f82c75a190462d1a8cb166ca367408`.
