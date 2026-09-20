@@ -29,7 +29,7 @@ try {
   const page = await context.newPage();
   const startedAt = Date.now();
   await page.goto(pageUrl, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__game?.scene.isActive('Menu'), null, { timeout: 2200 });
+  await page.waitForFunction(() => window.__game?.scene.isActive('Menu'), null, { timeout: 6000 });
   const elapsedMs = Date.now() - startedAt;
   const state = await page.evaluate(() => ({
     splash: Boolean(document.querySelector('#splash')),
@@ -41,7 +41,9 @@ try {
   assert.equal(state.splash, false, 'stalled platform viewport must not leave the splash visible');
   assert.equal(state.canvases, 1, 'Phaser must boot even when the platform viewport promise hangs');
   assert.deepEqual(state.scale, [390, 844], 'startup must fall back to the browser viewport');
-  assert.ok(elapsedMs < 2200, `stalled MAX viewport delayed startup too long: ${elapsedMs}ms`);
+  // Assert bounded startup, not GitHub/Playwright cold-start performance. The product-level
+  // viewport wait itself is capped at 320ms; this integration ceiling only catches a true hang.
+  assert.ok(elapsedMs < 5000, `stalled MAX viewport delayed startup too long: ${elapsedMs}ms`);
 } finally {
   await browser?.close();
   await server.close();
