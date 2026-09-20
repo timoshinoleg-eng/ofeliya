@@ -23,6 +23,24 @@ export const COLORS = {
 
 export const FONT = "'Chakra Petch', Arial, sans-serif";
 
+export const UI_FONT = "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif";
+
+/**
+ * Mobile readability tokens.
+ *
+ * Chakra Petch remains the display/game-identity face. Long Russian body copy uses the native
+ * system UI stack: it stays sharper at 11-14 logical pixels in Android/MAX WebViews and adds no
+ * network/font-startup dependency.
+ */
+export const UI_TEXT = {
+  primary: '#f7f4ff',
+  secondary: '#d8d1e2',
+  muted: '#aaa1b7',
+  disabled: '#8f879c',
+  coolSecondary: '#b9cbd6',
+} as const;
+
+
 /** Visual parameters. PerformanceProfile is the single authority for whether postFX are enabled. */
 export const POSTFX = {
   enabled: PERFORMANCE.postFx,

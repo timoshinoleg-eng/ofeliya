@@ -6,7 +6,7 @@ import {
   isChallengeBeaten,
   type ChallengePayload,
 } from '../game/Challenge';
-import { COLORS, COMBO, FONT, JUICE, fmtTime } from '../game/config';
+import { COLORS, COMBO, FONT, JUICE, UI_FONT, UI_TEXT, fmtTime } from '../game/config';
 import { getEvolutionDef } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
 import { Joystick } from '../game/Joystick';
@@ -701,9 +701,10 @@ export class UIScene extends Phaser.Scene {
             ? 'IMMUNE PRIME подавлен · выбери мутацию для СЕРДЦА'
             : 'стадия ' + gs.runState.stage.level + ' · выбери мутацию',
           {
-          fontFamily: FONT,
+          fontFamily: UI_FONT,
           fontSize: compact ? '12px' : '14px',
-          color: '#aab4d4',
+          fontStyle: '600',
+          color: UI_TEXT.secondary,
           }
         )
         .setOrigin(0.5)
@@ -712,7 +713,7 @@ export class UIScene extends Phaser.Scene {
 
     const cards = gs.pendingChoices;
     const cw = Math.min(W - 28, 360);
-    const ch = compact ? 94 : 106;
+    const ch = compact ? 100 : 118;
     const gap = compact ? 8 : 10;
     const totalH = cards.length * ch + (cards.length - 1) * gap;
     const blockCenter = compact ? H * 0.56 : H * 0.55;
@@ -769,7 +770,7 @@ export class UIScene extends Phaser.Scene {
         this.add
           .text(tx, -ch / 2 + 8, family, {
             fontFamily: FONT,
-            fontSize: compact ? '9px' : '10px',
+            fontSize: compact ? '10px' : '11px',
             fontStyle: 'bold',
             color: legendary || evolution ? '#ffe066' : def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
           })
@@ -780,19 +781,19 @@ export class UIScene extends Phaser.Scene {
         this.add
           .text(tx, -ch / 2 + (compact ? 22 : 24), def.shortName, {
             fontFamily: FONT,
-            fontSize: legendary || evolution ? (compact ? '16px' : '18px') : compact ? '14px' : '15px',
+            fontSize: legendary || evolution ? (compact ? '16px' : '19px') : compact ? '15px' : '17px',
             fontStyle: 'bold',
-            color: legendary || evolution ? '#ffe066' : '#e8f4ff',
+            color: legendary || evolution ? '#ffe066' : UI_TEXT.primary,
           })
           .setResolution(2)
       );
 
       card.add(
         this.add
-          .text(tx, -ch / 2 + (compact ? 43 : 47), def.name, {
-            fontFamily: FONT,
-            fontSize: compact ? '10px' : '11px',
-            fontStyle: 'bold',
+          .text(tx, -ch / 2 + (compact ? 45 : 51), def.name, {
+            fontFamily: UI_FONT,
+            fontSize: compact ? '11px' : '13px',
+            fontStyle: '700',
             color: legendary || evolution ? '#fff1ac' : def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
             wordWrap: { width: Math.max(100, right - tx) },
           })
@@ -802,10 +803,12 @@ export class UIScene extends Phaser.Scene {
       if (!compact && !evolution && !legendary) {
         card.add(
           this.add
-            .text(tx, -ch / 2 + 64, def.desc, {
-              fontFamily: FONT,
-              fontSize: '10px',
-              color: '#8f9ab7',
+            .text(tx, -ch / 2 + 72, def.desc, {
+              fontFamily: UI_FONT,
+              fontSize: '12px',
+              fontStyle: '500',
+              color: UI_TEXT.secondary,
+              lineSpacing: 1,
               wordWrap: { width: Math.max(100, right - tx - 4) },
             })
             .setResolution(2)
@@ -817,7 +820,7 @@ export class UIScene extends Phaser.Scene {
           this.add
             .text(right, -ch / 2 + 9, `→ ${EVOLUTION_NAMES[def.evolutionHint]}`, {
               fontFamily: FONT,
-              fontSize: compact ? '9px' : '10px',
+              fontSize: compact ? '10px' : '11px',
               fontStyle: 'bold',
               color: '#ffe066',
             })
@@ -829,7 +832,7 @@ export class UIScene extends Phaser.Scene {
       if (def.showProgress !== false && def.max <= 8) {
         const pg = this.add.graphics();
         const barX = tx;
-        const barY = ch / 2 - 13;
+        const barY = ch / 2 - 14;
         const available = Math.min(118, Math.max(72, right - tx - 64));
         const segGap = 3;
         const segW = (available - segGap * (def.max - 1)) / def.max;
@@ -838,15 +841,16 @@ export class UIScene extends Phaser.Scene {
           const completed = i < progress.current;
           const next = i === progress.current;
           pg.fillStyle(accent, completed ? 0.95 : next ? 0.42 : 0.1);
-          pg.fillRoundedRect(x, barY, segW, 5, 2);
+          pg.fillRoundedRect(x, barY, segW, 6, 2);
         }
         card.add(pg);
         card.add(
           this.add
             .text(right, barY - 5, `${progress.current} → ${progress.next} / ${progress.max}`, {
-              fontFamily: FONT,
-              fontSize: '9px',
-              color: '#7f8aa7',
+              fontFamily: UI_FONT,
+              fontSize: compact ? '10px' : '11px',
+              fontStyle: '600',
+              color: UI_TEXT.muted,
             })
             .setOrigin(1, 0)
             .setResolution(2)
@@ -863,10 +867,10 @@ export class UIScene extends Phaser.Scene {
                   ? 'ЗАКРЕПИТЬ МУТАЦИЮ'
                   : 'РАЗОВАЯ АДАПТАЦИЯ',
               {
-              fontFamily: FONT,
-              fontSize: '9px',
-              fontStyle: legendary || evolution ? 'bold' : 'normal',
-              color: legendary || evolution ? '#ffe066' : '#7dff6e',
+              fontFamily: UI_FONT,
+              fontSize: compact ? '10px' : '11px',
+              fontStyle: legendary || evolution ? '700' : '600',
+              color: legendary || evolution ? '#ffe066' : '#98ff8f',
             })
             .setOrigin(1, 0)
             .setResolution(2)

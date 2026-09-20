@@ -35,5 +35,5 @@ export function controlModeLabel(mode: ControlMode): string {
 export function controlModeDescription(mode: ControlMode): string {
   if (mode === 'one-hand') return 'текущее управление · касание в любом месте · автоатака';
   if (mode === 'two-hand') return 'слева движение · справа приоритет атаки · автоатака';
-  return 'оба нижних стика — движение · автоатака';
+  return 'оба стика двигают · автоатака';
 }

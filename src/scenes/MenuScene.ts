@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { parseChallengePayload } from '../game/Challenge';
 import { ACHIEVEMENTS } from '../game/AchievementSystem';
-import { COLORS, FONT, fmtTime } from '../game/config';
+import { COLORS, FONT, UI_FONT, UI_TEXT, fmtTime } from '../game/config';
 import { IDENTITY } from '../game/identity';
 import { LEGENDARIES } from '../game/LegendarySystem';
 import { STAGES } from '../game/StageDefinitions';
@@ -175,9 +175,9 @@ export class MenuScene extends Phaser.Scene {
 
     this.add
       .text(W / 2, hookY + 46, 'Мутируй быстрее, чем иммунитет адаптируется.', {
-        fontFamily: FONT,
-        fontSize: H < 650 ? '11px' : '12px',
-        color: '#e7c5d2',
+        fontFamily: UI_FONT,
+        fontSize: H < 650 ? '11px' : '13px',
+        color: UI_TEXT.secondary,
         align: 'center',
       })
       .setOrigin(0.5)
@@ -188,8 +188,9 @@ export class MenuScene extends Phaser.Scene {
     if (PlatformBridge.available && displayName) {
       this.add
         .text(W / 2, hookY + 70, `Носитель: ${displayName}`, {
-          fontFamily: FONT,
-          fontSize: '10px',
+          fontFamily: UI_FONT,
+          fontSize: H < 650 ? '11px' : '12px',
+          fontStyle: '600',
           color: '#8fe8ff',
         })
         .setOrigin(0.5)
@@ -238,9 +239,10 @@ export class MenuScene extends Phaser.Scene {
           challengeY + 18,
           `${incomingChallenge.kills} иммун. · ${incomingChallenge.hostCellsInfected} клеток · мутация ${incomingChallenge.level}`,
           {
-            fontFamily: FONT,
-            fontSize: '9px',
-            color: '#c89aaf',
+            fontFamily: UI_FONT,
+            fontSize: H < 650 ? '10px' : '11px',
+            fontStyle: '600',
+            color: UI_TEXT.secondary,
             align: 'center',
           }
         )
@@ -257,9 +259,9 @@ export class MenuScene extends Phaser.Scene {
           H * 0.57,
           `НЕЗАВЕРШЁННЫЙ ЗАБЕГ\n${resumeStage.name} · ${fmtTime(resumeCheckpoint.runState.run.timeMs)} · МУТАЦИЯ ${resumeCheckpoint.runState.stage.level} · ${resumeDifficulty.shortLabel}`,
           {
-            fontFamily: FONT,
-            fontSize: H < 650 ? '10px' : '11px',
-            fontStyle: 'bold',
+            fontFamily: UI_FONT,
+            fontSize: H < 650 ? '11px' : '12px',
+            fontStyle: '700',
             color: '#ffe066',
             align: 'center',
             lineSpacing: 4,
@@ -280,9 +282,10 @@ export class MenuScene extends Phaser.Scene {
           : 'STRAIN-0 · ПЕРВЫЙ ЦИКЛ ЗАРАЖЕНИЯ';
       this.add
         .text(W / 2, H * 0.57, records, {
-          fontFamily: FONT,
-          fontSize: H < 650 ? '10px' : '11px',
-          color: '#e8c9d4',
+          fontFamily: UI_FONT,
+          fontSize: H < 650 ? '11px' : '12px',
+          fontStyle: '600',
+          color: UI_TEXT.secondary,
           align: 'center',
           lineSpacing: 4,
           wordWrap: { width: W - 42 },
@@ -302,18 +305,19 @@ export class MenuScene extends Phaser.Scene {
     const difficultyText = this.add
       .text(W / 2, difficultyY - 8, '', {
         fontFamily: FONT,
-        fontSize: H < 650 ? '11px' : '12px',
+        fontSize: H < 650 ? '11px' : '13px',
         fontStyle: 'bold',
-        color: '#fff4ec',
+        color: UI_TEXT.primary,
       })
       .setOrigin(0.5)
       .setResolution(2)
       .setDepth(6);
     const difficultyDesc = this.add
       .text(W / 2, difficultyY + 9, '', {
-        fontFamily: FONT,
-        fontSize: H < 650 ? '9px' : '10px',
-        color: '#b9cbd6',
+        fontFamily: UI_FONT,
+        fontSize: H < 650 ? '10px' : '12px',
+        fontStyle: '600',
+        color: UI_TEXT.coolSecondary,
       })
       .setOrigin(0.5)
       .setResolution(2)
@@ -358,18 +362,19 @@ export class MenuScene extends Phaser.Scene {
     const controlText = this.add
       .text(W / 2, controlY - 7, '', {
         fontFamily: FONT,
-        fontSize: H < 650 ? '10px' : '11px',
+        fontSize: H < 650 ? '11px' : '12px',
         fontStyle: 'bold',
-        color: '#fff4ec',
+        color: UI_TEXT.primary,
       })
       .setOrigin(0.5)
       .setResolution(2)
       .setDepth(6);
     const controlDesc = this.add
       .text(W / 2, controlY + 8, '', {
-        fontFamily: FONT,
-        fontSize: H < 650 ? '9px' : '10px',
-        color: '#b9cbd6',
+        fontFamily: UI_FONT,
+        fontSize: H < 650 ? '10px' : '12px',
+        fontStyle: '600',
+        color: UI_TEXT.coolSecondary,
         align: 'center',
       })
       .setOrigin(0.5)
@@ -393,13 +398,7 @@ export class MenuScene extends Phaser.Scene {
           `${resumeStage.name} · ${fmtTime(resumeCheckpoint.runState.run.timeMs)} · МУТАЦИЯ ${resumeCheckpoint.runState.stage.level}`
         );
       } else {
-        startHint?.setText(
-          selectedControlMode === 'one-hand'
-            ? 'атака автоматическая · движение одним пальцем'
-            : selectedControlMode === 'two-hand'
-              ? 'атака автоматическая · слева движение · справа приоритет'
-              : 'атака автоматическая · оба нижних стика двигают'
-        );
+        startHint?.setText('автоатака · заражай клетки · собирай РНК');
       }
     };
     renderControlMode();
@@ -441,9 +440,10 @@ export class MenuScene extends Phaser.Scene {
       .setDepth(6);
     startHint = this.add
       .text(W / 2, btnY + 18, '', {
-        fontFamily: FONT,
-        fontSize: H < 650 ? '9px' : '10px',
-        color: '#ffd4e8',
+        fontFamily: UI_FONT,
+        fontSize: H < 650 ? '10px' : '11px',
+        fontStyle: '600',
+        color: '#f2cfe1',
         align: 'center',
       })
       .setOrigin(0.5)
@@ -503,9 +503,10 @@ export class MenuScene extends Phaser.Scene {
       btnY + (resumeCheckpoint ? (H < 650 ? 60 : 72) : H < 650 ? 48 : 55);
     const soundText = this.add
       .text(W / 2 - 72, utilityY, `звук: ${Sfx.muted ? 'выкл' : 'вкл'}`, {
-        fontFamily: FONT,
-        fontSize: '11px',
-        color: Sfx.muted ? '#755266' : '#c89aaf',
+        fontFamily: UI_FONT,
+        fontSize: '12px',
+        fontStyle: '600',
+        color: Sfx.muted ? UI_TEXT.muted : '#d7b5c4',
       })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
@@ -538,9 +539,10 @@ export class MenuScene extends Phaser.Scene {
 
     this.add
       .text(W / 2, H - 54, 'Двигай штамм · собирай РНК · выбирай мутации', {
-        fontFamily: FONT,
-        fontSize: '10px',
-        color: '#8d6678',
+        fontFamily: UI_FONT,
+        fontSize: H < 650 ? '10px' : '11px',
+        fontStyle: '600',
+        color: UI_TEXT.muted,
         align: 'center',
         wordWrap: { width: W - 36 },
       })
@@ -550,10 +552,10 @@ export class MenuScene extends Phaser.Scene {
 
     this.add
       .text(W / 2, H - 31, 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА', {
-        fontFamily: FONT,
-        fontSize: '9px',
-        fontStyle: 'bold',
-        color: '#8fe8ff',
+        fontFamily: UI_FONT,
+        fontSize: H < 650 ? '9px' : '10px',
+        fontStyle: '700',
+        color: '#9deeff',
       })
       .setOrigin(0.5)
       .setResolution(2)
@@ -650,10 +652,10 @@ export class MenuScene extends Phaser.Scene {
     overlay.add(
       this.add
         .text(W / 2, top + 50, `ОТКРЫТО ${discovered}/9 · ДОСТИЖЕНИЯ ${save.achievements.length}/${ACHIEVEMENTS.length}`, {
-          fontFamily: FONT,
-          fontSize: '9px',
-          fontStyle: 'bold',
-          color: '#8fe8ff',
+          fontFamily: UI_FONT,
+          fontSize: compact ? '10px' : '11px',
+          fontStyle: '700',
+          color: '#9deeff',
         })
         .setOrigin(0.5)
         .setResolution(2)
@@ -675,7 +677,13 @@ export class MenuScene extends Phaser.Scene {
 
     type CodexPage = 'mutations' | 'legendary' | 'mastery';
     let page: CodexPage = 'mutations';
-    const tabs: Array<{ id: CodexPage; label: string; x: number; text: Phaser.GameObjects.Text }> = [];
+    const tabs: Array<{
+      id: CodexPage;
+      label: string;
+      x: number;
+      text: Phaser.GameObjects.Text;
+      underline: Phaser.GameObjects.Rectangle;
+    }> = [];
     const tabY = top + 82;
     const tabDefs: Array<[CodexPage, string, number]> = [
       ['mutations', 'МУТАЦИИ', W / 2 - 104],
@@ -686,7 +694,10 @@ export class MenuScene extends Phaser.Scene {
     const render = () => {
       body.removeAll(true);
       for (const tab of tabs) {
-        tab.text.setColor(tab.id === page ? '#ffe066' : '#7f8da8');
+        const active = tab.id === page;
+        tab.text.setColor(active ? '#ffe066' : UI_TEXT.muted);
+        tab.text.setAlpha(active ? 1 : 0.86);
+        tab.underline.setVisible(active);
       }
 
       const bodyTop = top + 116;
@@ -694,18 +705,18 @@ export class MenuScene extends Phaser.Scene {
         x: number,
         y: number,
         value: string,
-        size = compact ? 10 : 11,
-        color = '#e8f4ff',
-        width = panelW - 42,
+        size: number = compact ? 11 : 12,
+        color: string = UI_TEXT.primary,
+        width: number = panelW - 42,
         align: 'left' | 'center' = 'left'
       ) => {
         const text = this.add
           .text(x, y, value, {
-            fontFamily: FONT,
+            fontFamily: UI_FONT,
             fontSize: `${size}px`,
             color,
             align,
-            lineSpacing: 3,
+            lineSpacing: 4,
             wordWrap: { width },
           })
           .setOrigin(align === 'center' ? 0.5 : 0, 0)
@@ -715,17 +726,28 @@ export class MenuScene extends Phaser.Scene {
       };
 
       if (page === 'mutations') {
-        addText(W / 2, bodyTop, 'КРИТИЧЕСКИЕ МУТАЦИИ', 11, '#ffe066', panelW - 42, 'center');
+        addText(W / 2, bodyTop, 'КРИТИЧЕСКИЕ МУТАЦИИ', compact ? 12 : 13, '#ffe066', panelW - 42, 'center');
         const evolutionIds: EvolutionId[] = ['prism', 'halo', 'singularity'];
         evolutionIds.forEach((id, index) => {
           const found = save.evolutionsSeen.includes(id);
-          const y = bodyTop + 38 + index * (compact ? 66 : 72);
+          const y = bodyTop + 38 + index * (compact ? 70 : 76);
+          const row = this.add
+            .rectangle(
+              W / 2,
+              y + (compact ? 22 : 24),
+              panelW - 38,
+              compact ? 56 : 62,
+              0x19151f,
+              0.78
+            )
+            .setStrokeStyle(1, found ? COLORS.gold : COLORS.stroke, found ? 0.4 : 0.55);
+          body.add(row);
           addText(
             left + 28,
             y,
             `${found ? '◆' : '◇'}  ${found ? EVOLUTION_NAMES[id] : 'НЕ ОТКРЫТО'}`,
-            compact ? 11 : 12,
-            found ? '#ffe066' : '#65718b'
+            compact ? 12 : 13,
+            found ? '#ffe066' : UI_TEXT.muted
           );
           addText(
             left + 49,
@@ -733,13 +755,13 @@ export class MenuScene extends Phaser.Scene {
             found
               ? 'Критическая форма зарегистрирована в Codex.'
               : 'Продолжай развивать совместимые ветви мутаций.',
-            compact ? 9 : 10,
-            found ? '#c9d6e8' : '#59647c',
+            compact ? 11 : 12,
+            found ? UI_TEXT.secondary : '#b7afc2',
             panelW - 76
           );
         });
       } else if (page === 'legendary') {
-        addText(W / 2, bodyTop, 'ЛЕГЕНДАРНЫЕ ИЗМЕНЕНИЯ ПРАВИЛ', 11, '#ffe066', panelW - 42, 'center');
+        addText(W / 2, bodyTop, 'ЛЕГЕНДАРНЫЕ ИЗМЕНЕНИЯ ПРАВИЛ', compact ? 11 : 12, '#ffe066', panelW - 42, 'center');
         LEGENDARIES.forEach((def, index) => {
           const found = save.legendarySeen.includes(def.id);
           const y = bodyTop + 30 + index * (compact ? 43 : 47);
@@ -747,8 +769,8 @@ export class MenuScene extends Phaser.Scene {
             left + 28,
             y,
             `${found ? '◆' : '◇'}  ${found ? def.title : '???'}`,
-            compact ? 10 : 11,
-            found ? '#fff1ac' : '#59647c',
+            compact ? 11 : 12,
+            found ? '#fff1ac' : UI_TEXT.muted,
             panelW - 54
           );
           if (found) {
@@ -756,8 +778,8 @@ export class MenuScene extends Phaser.Scene {
               left + 49,
               y + 18,
               def.effect,
-              compact ? 8 : 9,
-              '#aab4d4',
+              compact ? 10 : 11,
+              UI_TEXT.secondary,
               panelW - 78
             );
           }
@@ -766,27 +788,34 @@ export class MenuScene extends Phaser.Scene {
         const standardBest = save.bestCampaignClearMs > 0 ? fmtTime(save.bestCampaignClearMs) : '—';
         const strainedBest =
           save.bestStrainedCampaignClearMs > 0 ? fmtTime(save.bestStrainedCampaignClearMs) : '—';
-        addText(W / 2, bodyTop, 'МАСТЕРСТВО КАМПАНИИ', 11, '#ffe066', panelW - 42, 'center');
+        addText(W / 2, bodyTop, 'МАСТЕРСТВО КАМПАНИИ', compact ? 12 : 13, '#ffe066', panelW - 42, 'center');
+        const standardRow = this.add
+          .rectangle(W / 2, bodyTop + 48, panelW - 38, 34, 0x151b24, 0.72)
+          .setStrokeStyle(1, save.standardCampaignClears > 0 ? COLORS.cyan : COLORS.stroke, 0.5);
+        const strainedRow = this.add
+          .rectangle(W / 2, bodyTop + 82, panelW - 38, 34, 0x1f1714, 0.72)
+          .setStrokeStyle(1, save.strainedCampaignClears > 0 ? COLORS.gold : COLORS.stroke, 0.5);
+        body.add([standardRow, strainedRow]);
         addText(
           left + 28,
           bodyTop + 38,
           `${save.standardCampaignClears > 0 ? '◆' : '◇'} STANDARD · прохождений ${save.standardCampaignClears} · рекорд ${standardBest}`,
-          compact ? 10 : 11,
-          save.standardCampaignClears > 0 ? '#8fe8ff' : '#65718b'
+          compact ? 11 : 12,
+          save.standardCampaignClears > 0 ? '#8fe8ff' : UI_TEXT.muted
         );
         addText(
           left + 28,
           bodyTop + 70,
           `${save.strainedCampaignClears > 0 ? '◆' : '◇'} STRAINED · прохождений ${save.strainedCampaignClears} · личный рекорд ${strainedBest}`,
-          compact ? 10 : 11,
-          save.strainedCampaignClears > 0 ? '#ffe066' : '#65718b'
+          compact ? 11 : 12,
+          save.strainedCampaignClears > 0 ? '#ffe066' : UI_TEXT.muted
         );
         addText(
           left + 28,
           bodyTop + 116,
           `ДОСТИЖЕНИЯ · ${save.achievements.length}/${ACHIEVEMENTS.length}`,
-          11,
-          '#fff4ec'
+          compact ? 12 : 13,
+          UI_TEXT.primary
         );
         const unlocked = ACHIEVEMENTS.filter((achievement) => save.achievements.includes(achievement.id));
         addText(
@@ -795,16 +824,16 @@ export class MenuScene extends Phaser.Scene {
           unlocked.length
             ? unlocked.map((achievement) => `◆ ${achievement.name}`).join('\n')
             : '◇ Пока нет открытых достижений',
-          compact ? 9 : 10,
-          unlocked.length ? '#c9d6e8' : '#65718b',
+          compact ? 11 : 12,
+          unlocked.length ? UI_TEXT.secondary : UI_TEXT.muted,
           panelW - 56
         );
         addText(
           left + 28,
           top + panelH - 106,
           `ЦИКЛОВ: ${save.runs}   ·   ИММУННЫХ КЛЕТОК: ${save.totalKills}`,
-          9,
-          '#8f9ab7'
+          compact ? 10 : 11,
+          UI_TEXT.muted
         );
       }
     };
@@ -813,9 +842,9 @@ export class MenuScene extends Phaser.Scene {
       const tabText = this.add
         .text(x, tabY, label, {
           fontFamily: FONT,
-          fontSize: compact ? '9px' : '10px',
+          fontSize: compact ? '10px' : '11px',
           fontStyle: 'bold',
-          color: '#7f8da8',
+          color: UI_TEXT.muted,
         })
         .setOrigin(0.5)
         .setResolution(2)
@@ -825,16 +854,20 @@ export class MenuScene extends Phaser.Scene {
           Sfx.play('click');
           render();
         });
-      tabs.push({ id, label, x, text: tabText });
-      overlay.add(tabText);
+      const underline = this.add
+        .rectangle(x, tabY + (compact ? 13 : 14), Math.min(76, Math.max(46, tabText.width + 10)), 2, COLORS.gold, 0.95)
+        .setVisible(false);
+      tabs.push({ id, label, x, text: tabText, underline });
+      overlay.add([tabText, underline]);
     }
 
     overlay.add(
       this.add
         .text(W / 2, top + panelH - 34, 'Codex фиксирует открытия · постоянного усиления характеристик нет', {
-          fontFamily: FONT,
-          fontSize: compact ? '8px' : '9px',
-          color: '#6f7c92',
+          fontFamily: UI_FONT,
+          fontSize: compact ? '9px' : '10px',
+          fontStyle: '600',
+          color: UI_TEXT.muted,
           align: 'center',
           wordWrap: { width: panelW - 46 },
         })
