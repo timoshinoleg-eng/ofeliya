@@ -163,7 +163,10 @@ async function buttonCenter(page, label) {
       !restartState.uiActive ||
       restartState.runResult !== 'null'
     ) {
-      throw new Error('restart touch lifecycle failed: ' + JSON.stringify(restartState));
+      throw new Error(
+        'restart touch lifecycle failed: ' +
+          JSON.stringify({ restartState, pageErrors: errors })
+      );
     }
     if (errors.length) throw new Error('page errors after restart: ' + errors.join(' | '));
     await ctx.close();
