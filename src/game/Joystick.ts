@@ -86,6 +86,15 @@ export class Joystick {
     else this.publish(nx, ny);
   }
 
+  reset(): void {
+    this.active = false;
+    this.pointerId = -1;
+    this.publish(0, 0);
+    this.scene.tweens.killTweensOf([this.base, this.knob]);
+    this.base.setVisible(false).setAlpha(0);
+    this.knob.setVisible(false).setAlpha(0);
+  }
+
   private onUp(p: Phaser.Input.Pointer): void {
     if (!this.active || p.id !== this.pointerId) return;
     this.active = false;
