@@ -95,8 +95,14 @@ jobs:
           cat /tmp/vite.log
           exit 1
 
+      - name: Stalled MAX viewport startup smoke
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/startup-viewport-smoke.cjs
+
       - name: MAX viewport challenge and legal browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/browser-smoke.cjs
+
+      - name: Real-touch result actions smoke
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/result-actions-smoke.cjs
 
       - name: Codex and mastery browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/codex-smoke.cjs
