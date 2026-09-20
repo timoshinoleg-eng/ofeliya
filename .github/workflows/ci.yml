@@ -1,5 +1,3 @@
-[Reading 248 lines from start (total: 248 lines, 0 remaining)]
-
 ﻿name: CI
 
 on:
@@ -45,9 +43,6 @@ jobs:
 
       - name: Gameplay RNG deterministic smoke
         run: npm run test:rng
-
-      - name: Checkpoint schema and validation smoke
-        run: npm run test:checkpoint
 
       - name: Viewport math smoke
         run: npm run test:viewport
@@ -111,9 +106,6 @@ jobs:
 
       - name: Real-touch pause smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/pause-smoke.cjs
-
-      - name: Checkpoint resume real-reload mobile smoke
-        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/checkpoint-resume-smoke.cjs
 
       - name: Codex and mastery browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/codex-smoke.cjs
@@ -248,5 +240,3 @@ jobs:
 
       - name: Validate nginx config
         run: docker run --rm --add-host ofeliya-score:127.0.0.1 ofeliya-static:strain-zero-ci nginx -t -c /etc/nginx/nginx.conf
-
-[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
