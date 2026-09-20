@@ -204,7 +204,7 @@ async function inspectCodex(page, size) {
     const important = rows.filter((row) =>
       row.text !== '×' &&
       row.text !== 'КОДЕКС · STRAIN-0' &&
-      !row.text.startsWith('Codex фиксирует открытия')
+      !row.text.startsWith('Codex хранит открытия')
     );
     const overflow = rows.filter(({ bounds }) =>
       bounds.left < 2 || bounds.right > width - 2 || bounds.top < 2 || bounds.bottom > height - 2
@@ -236,7 +236,7 @@ function assertCodex(contract, compact, pageName) {
   }
   const body = contract.rows.filter((row) =>
     row.text.includes('Продолжай развивать') ||
-    row.text.includes('прохождений') ||
+    row.text.includes('пройдено') ||
     row.text.startsWith('◆ ') ||
     row.text.startsWith('◇ ')
   );
