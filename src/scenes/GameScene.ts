@@ -158,6 +158,7 @@ export class GameScene extends Phaser.Scene {
       (this.registry.get('controlMode') as ControlMode | undefined) ?? readControlMode();
     this.registry.set('controlMode', this.controlMode);
     this.registry.set('performanceTier', PERFORMANCE.tier);
+    this.registry.set('performancePostFx', PERFORMANCE.postFx);
 
     this.heartbeatPulse = new HeartbeatPulseDirector(
       heartbeatProfileForDifficulty(this.difficulty)

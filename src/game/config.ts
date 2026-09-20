@@ -26,8 +26,11 @@ export const FONT = "'Chakra Petch', Arial, sans-serif";
 /** Visual parameters. PerformanceProfile is the single authority for whether postFX are enabled. */
 export const POSTFX = {
   enabled: PERFORMANCE.postFx,
-  bloom: { strength: 0.3, blurStrength: 0.34, steps: 3 },
-  vignette: { radius: 0.72, strength: 0.6 },
+  // Full tier keeps richer ambient/VFX density, but broad Bloom is disabled because even a
+  // weak pass materially softened 200-enemy combat. A very light vignette preserves depth without
+  // moving the gameplay plane away from the reduced/Canvas readability baseline.
+  bloom: { strength: 0, blurStrength: 0, steps: 1 },
+  vignette: { radius: 1.08, strength: 0.08 },
 };
 
 export const JUICE = {
