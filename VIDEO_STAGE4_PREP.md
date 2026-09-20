@@ -35,10 +35,10 @@ Destination: public/video/. All prepared files are 720x1280 vertical 9:16, H.264
 
 | File | Duration | Approx size | SHA-256 |
 | --- | ---: | ---: | --- |
-| 06_victory_canonical.mp4 | 7.58 s | 1.7 MB | bdf48ec908936a346eaf720e9b84ac1cfa415f25c95c898672b93662d62d31fc |
-| 07_immune_prime_intro.mp4 | 8.50 s | 1.3 MB | 6c2ba27d3e329aaa0c0f95fde25b6935f7600bd4146ee6bbc2b519f9c857d846 |
-| 08_cardiac_titan_intro.mp4 | 8.50 s | 1.3 MB | febab9d81b6397c9acc7afc8511382f7eb168edc0a2797888e24e1d5133c1113 |
-| 09_cardiac_titan_intro_alt.mp4 | 8.50 s | 1.5 MB | 0b154cc21cec66630970514d584d3811c2e345b9e826224531ef0cc17eb7354d |
+| 06_victory_canonical.mp4 | 7.58 s | 1.7 MB | 4a2ce19083e468e32a71f4a96e4b5f17fc873b043839483dcd3c130f9bace57d |
+| 07_immune_prime_intro.mp4 | 8.50 s | 1.3 MB | ed19ca326c3e387463aa15f5c8edcb275fdd8d56c23eb0d9ddd3ac3ed6e537d8 |
+| 08_cardiac_titan_intro.mp4 | 8.50 s | 1.3 MB | 3098aa548b22a184f40bdb0dc7f430fd0d067c8921a580bf1076649f25ac1011 |
+| 09_cardiac_titan_intro_alt.mp4 | 8.50 s | 1.5 MB | 420dd55a8b41bdb791e38fb0549ba1878ac9c7cad8c8087a1dffa6b263a94755 |
 
 ## Runtime contract
 
