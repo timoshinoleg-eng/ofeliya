@@ -1,5 +1,3 @@
-[Reading 215 lines from start (total: 215 lines, 0 remaining)]
-
 import Phaser from 'phaser';
 import type { EnemyKind } from './config';
 import type { StageDefinition } from './StageDefinitions';
@@ -215,5 +213,3 @@ export class WaveDirector {
     };
   }
 }
-
-[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
