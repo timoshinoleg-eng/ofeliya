@@ -1,5 +1,3 @@
-[Reading 160 lines from start (total: 160 lines, 0 remaining)]
-
 import type { RunResult } from '../game/RunContracts';
 import type { PlatformAdapter } from '../platform/PlatformBridge';
 import { SCORE_CAMPAIGN_VERSION, SCORE_RULESET_VERSION } from '../game/RunVersions';
@@ -160,5 +158,3 @@ export async function submitRunScore(
     globalThis.clearTimeout(timer);
   }
 }
-
-[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
