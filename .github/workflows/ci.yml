@@ -104,6 +104,9 @@ jobs:
       - name: Real-touch result actions smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/result-actions-smoke.cjs
 
+      - name: Real-touch pause smoke
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/pause-smoke.cjs
+
       - name: Codex and mastery browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/codex-smoke.cjs
 
