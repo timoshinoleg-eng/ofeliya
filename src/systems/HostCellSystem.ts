@@ -1,5 +1,3 @@
-[Reading 477 lines from start (total: 477 lines, 0 remaining)]
-
 import Phaser from 'phaser';
 import { COLORS } from '../game/config';
 import type { Player } from '../game/Player';
@@ -477,5 +475,3 @@ export class HostCellSystem {
     });
   }
 }
-
-[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
