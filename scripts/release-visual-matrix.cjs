@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright-core');
+const { PNG } = require('pngjs');
 
 const chrome = ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(fs.existsSync);
 if (!chrome) throw new Error('Chrome not found');
@@ -17,6 +18,88 @@ const CASES = [
 ];
 
 fs.mkdirSync(CAPTURE_DIR, { recursive: true });
+
+function imageMetrics(file) {
+  const png = PNG.sync.read(fs.readFileSync(file));
+  const { width, height, data } = png;
+  const y0 = Math.floor(height * 0.1);
+  const y1 = Math.floor(height * 0.92);
+  let luminanceSum = 0;
+  let pixels = 0;
+  let edgeSum = 0;
+  let edgeSamples = 0;
+
+  const lumaAt = (x, y) => {
+    const i = (y * width + x) * 4;
+    return data[i] * 0.2126 + data[i + 1] * 0.7152 + data[i + 2] * 0.0722;
+  };
+
+  for (let y = y0; y < y1; y++) {
+    for (let x = 0; x < width; x++) {
+      const l = lumaAt(x, y);
+      luminanceSum += l;
+      pixels++;
+      if (x + 1 < width) {
+        edgeSum += Math.abs(l - lumaAt(x + 1, y));
+        edgeSamples++;
+      }
+      if (y + 1 < y1) {
+        edgeSum += Math.abs(l - lumaAt(x, y + 1));
+        edgeSamples++;
+      }
+    }
+  }
+  return {
+    meanLuminance: luminanceSum / Math.max(1, pixels),
+    edgeEnergy: edgeSum / Math.max(1, edgeSamples),
+  };
+}
+
+function assertVisualParity(results) {
+  const byCase = new Map(
+    results.map((result) => [`${result.renderer}:${result.tier}`, result])
+  );
+  const metricRows = [];
+
+  const metricsFor = (renderer, tier, density) => {
+    const result = byCase.get(`${renderer}:${tier}`);
+    const row = result?.rows.find((candidate) => candidate.density === density);
+    if (!row) throw new Error(`missing visual matrix row ${renderer}/${tier}/${density}`);
+    const metrics = imageMetrics(path.join(CAPTURE_DIR, row.file));
+    metricRows.push({ renderer, tier, density, ...metrics });
+    return metrics;
+  };
+
+  for (const density of DENSITIES) {
+    const webglFull = metricsFor('webgl', 'full', density);
+    const webglReduced = metricsFor('webgl', 'reduced', density);
+    const canvasFull = metricsFor('canvas', 'full', density);
+    const canvasReduced = metricsFor('canvas', 'reduced', density);
+
+    const assertPair = (label, a, b) => {
+      const brightnessRatio = a.meanLuminance / Math.max(1, b.meanLuminance);
+      const edgeRatio = a.edgeEnergy / Math.max(0.01, b.edgeEnergy);
+      // Broad enough for harmless ambient randomness, strict enough to catch the historical
+      // full-WebGL regression (brightness ~0.47x, edge energy ~0.40x).
+      if (brightnessRatio < 0.8 || brightnessRatio > 1.25) {
+        throw new Error(
+          `${label} luminance parity failed @ ${density}: ${brightnessRatio.toFixed(3)}`
+        );
+      }
+      if (edgeRatio < 0.7 || edgeRatio > 1.35) {
+        throw new Error(
+          `${label} edge-energy parity failed @ ${density}: ${edgeRatio.toFixed(3)}`
+        );
+      }
+    };
+
+    assertPair('WebGL full/reduced', webglFull, webglReduced);
+    assertPair('Canvas full/reduced', canvasFull, canvasReduced);
+    assertPair('Reduced WebGL/Canvas', webglReduced, canvasReduced);
+  }
+
+  return metricRows;
+}
 
 async function openCase(browser, spec) {
   const ctx = await browser.newContext({
@@ -303,11 +386,14 @@ async function openCase(browser, spec) {
     }
   }
 
+  const visualMetrics = assertVisualParity(results);
   fs.writeFileSync(
     path.join(CAPTURE_DIR, 'matrix.json'),
-    JSON.stringify({ generatedAt: new Date().toISOString(), results }, null, 2)
+    JSON.stringify({ generatedAt: new Date().toISOString(), results, visualMetrics }, null, 2)
   );
-  console.log(`release visual matrix: ok; captures=${CASES.length * DENSITIES.length}`);
+  console.log(
+    `release visual matrix: ok; captures=${CASES.length * DENSITIES.length}; visual-parity=ok`
+  );
 })().catch((error) => {
   console.error(error.stack || error);
   process.exit(1);
