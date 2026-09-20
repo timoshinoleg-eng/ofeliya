@@ -560,7 +560,9 @@ export class MenuScene extends Phaser.Scene {
         showLegalOverlay();
       });
 
-    this.add
+    let diagnosticTapCount = 0;
+    let diagnosticTapTimer: number | null = null;
+    const versionText = this.add
       .text(W / 2, H - 9, `mini-app · ${PlatformBridge.platform} · v0.1.0`, {
         fontFamily: FONT,
         fontSize: '9px',
@@ -568,11 +570,31 @@ export class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 1)
       .setResolution(2)
-      .setDepth(5);
+      .setDepth(5)
+      .setInteractive({ useHandCursor: true });
+
+    versionText.on('pointerup', () => {
+      diagnosticTapCount += 1;
+      if (diagnosticTapTimer !== null) window.clearTimeout(diagnosticTapTimer);
+      diagnosticTapTimer = window.setTimeout(() => {
+        diagnosticTapCount = 0;
+        diagnosticTapTimer = null;
+      }, 2400);
+
+      if (diagnosticTapCount < 5) return;
+
+      diagnosticTapCount = 0;
+      if (diagnosticTapTimer !== null) {
+        window.clearTimeout(diagnosticTapTimer);
+        diagnosticTapTimer = null;
+      }
+      if (StartupTrace.showDebugOverlay()) PlatformBridge.haptic('light');
+    });
 
     this.scale.on('resize', this.onResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.onResize, this);
+      if (diagnosticTapTimer !== null) window.clearTimeout(diagnosticTapTimer);
     });
 
     StartupTrace.setMeta('platformFinal', PlatformBridge.kind);
