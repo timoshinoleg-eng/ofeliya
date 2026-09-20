@@ -1,11 +1,12 @@
-export type ControlMode = 'one-hand' | 'two-hand';
+export type ControlMode = 'one-hand' | 'two-hand' | 'dual-move';
 
 const KEY = 'ofeliya_control_mode_v1';
 
 export function readControlMode(): ControlMode {
   try {
     const raw = localStorage.getItem(KEY);
-    return raw === 'two-hand' ? 'two-hand' : 'one-hand';
+    if (raw === 'two-hand' || raw === 'dual-move') return raw;
+    return 'one-hand';
   } catch {
     return 'one-hand';
   }
@@ -20,15 +21,19 @@ export function writeControlMode(mode: ControlMode): void {
 }
 
 export function nextControlMode(mode: ControlMode): ControlMode {
-  return mode === 'one-hand' ? 'two-hand' : 'one-hand';
+  if (mode === 'one-hand') return 'two-hand';
+  if (mode === 'two-hand') return 'dual-move';
+  return 'one-hand';
 }
 
 export function controlModeLabel(mode: ControlMode): string {
-  return mode === 'one-hand' ? 'ОДНА РУКА' : 'ДВЕ РУКИ · TWIN-STICK';
+  if (mode === 'one-hand') return 'ОДНА РУКА';
+  if (mode === 'two-hand') return 'ДВЕ РУКИ · TWIN-STICK';
+  return 'ДВЕ РУКИ · ДВИЖЕНИЕ';
 }
 
 export function controlModeDescription(mode: ControlMode): string {
-  return mode === 'one-hand'
-    ? 'текущее управление · касание в любом месте · автоатака'
-    : 'слева движение · справа приоритет атаки · автоатака';
+  if (mode === 'one-hand') return 'текущее управление · касание в любом месте · автоатака';
+  if (mode === 'two-hand') return 'слева движение · справа приоритет атаки · автоатака';
+  return 'оба нижних стика — движение · автоатака';
 }

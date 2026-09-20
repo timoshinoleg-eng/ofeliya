@@ -10,6 +10,7 @@ import { COLORS, COMBO, FONT, JUICE, fmtTime } from '../game/config';
 import { getEvolutionDef } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
 import { Joystick } from '../game/Joystick';
+import { DualMoveControls } from '../game/DualMoveControls';
 import { getLegendaryDefinition, type LegendaryId } from '../game/LegendarySystem';
 import { TwinStickControls } from '../game/TwinStickControls';
 import { readControlMode, type ControlMode } from '../game/ControlMode';
@@ -52,6 +53,7 @@ export class UIScene extends Phaser.Scene {
   private pauseText!: Phaser.GameObjects.Text;
   private joystick: Joystick | null = null;
   private twinStick: TwinStickControls | null = null;
+  private dualMove: DualMoveControls | null = null;
   private hpWarn!: Phaser.GameObjects.Graphics;
   private fanfare!: Phaser.GameObjects.Particles.ParticleEmitter;
   private comboText!: Phaser.GameObjects.Text;
@@ -166,8 +168,11 @@ export class UIScene extends Phaser.Scene {
     this.registry.set('controlMode', controlMode);
     this.joystick = null;
     this.twinStick = null;
+    this.dualMove = null;
     if (controlMode === 'two-hand') {
       this.twinStick = new TwinStickControls(this, () => this.uiBlocked);
+    } else if (controlMode === 'dual-move') {
+      this.dualMove = new DualMoveControls(this, () => this.uiBlocked);
     } else {
       // Preserve the established one-thumb control path exactly as-is.
       this.joystick = new Joystick(this, () => this.uiBlocked);
@@ -271,6 +276,7 @@ export class UIScene extends Phaser.Scene {
     this.hideModal();
     this.hideStageTransition();
     this.uiBlocked = true;
+    this.resetControls();
 
     const W = this.scale.width;
     const H = this.scale.height;
@@ -552,6 +558,15 @@ export class UIScene extends Phaser.Scene {
     this.pauseText.setX(W - 52);
   }
 
+  private resetControls(): void {
+    this.joystick?.reset();
+    this.twinStick?.reset();
+    this.dualMove?.reset();
+    this.registry.set('joy', { x: 0, y: 0 });
+    if (this.twinStick) this.registry.set('aimJoy', { x: 0, y: 0 });
+    else this.registry.remove('aimJoy');
+  }
+
   private showPauseMenu(): void {
     if (
       this.manualPaused ||
@@ -566,10 +581,7 @@ export class UIScene extends Phaser.Scene {
 
     this.manualPaused = true;
     this.uiBlocked = true;
-    this.joystick?.reset();
-    this.twinStick?.reset();
-    this.registry.set('joy', { x: 0, y: 0 });
-    this.registry.set('aimJoy', { x: 0, y: 0 });
+    this.resetControls();
     this.scene.pause('Game');
     PlatformBridge.haptic('light');
 
@@ -619,8 +631,7 @@ export class UIScene extends Phaser.Scene {
     this.pauseOverlay = null;
     this.manualPaused = false;
     this.uiBlocked = false;
-    this.registry.set('joy', { x: 0, y: 0 });
-    this.registry.set('aimJoy', { x: 0, y: 0 });
+    this.resetControls();
     if (resumeGame && this.scene.isPaused('Game')) this.scene.resume('Game');
   }
 
@@ -629,6 +640,7 @@ export class UIScene extends Phaser.Scene {
     if (!gs) return;
     this.modalOpen = true;
     this.uiBlocked = true;
+    this.resetControls();
     this.scene.pause('Game');
     Sfx.play('levelup');
     PlatformBridge.notify('success');

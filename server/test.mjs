@@ -179,7 +179,7 @@ await ok('ruleset v2: Standard campaign win принимается и ранжи
         difficultyId: 'standard',
         completionStage: 'heart',
         runSeed: 'qa-v2-standard',
-        controlMode: 'two-hand',
+        controlMode: 'dual-move',
         bossesDefeated: 2,
         boss1ClearMs: 312_000,
         hostCellsInfected: 9,

@@ -297,7 +297,7 @@ export function validateRunCheckpoint(raw: unknown): RunCheckpointData | null {
     typeof value.runSeed !== 'string' ||
     !/^[A-Za-z0-9_-]{1,32}$/.test(value.runSeed) ||
     (value.difficultyId !== 'standard' && value.difficultyId !== 'strained') ||
-    (value.controlMode !== 'one-hand' && value.controlMode !== 'two-hand') ||
+    (value.controlMode !== 'one-hand' && value.controlMode !== 'two-hand' && value.controlMode !== 'dual-move') ||
     typeof value.resumed !== 'boolean' ||
     !validDirector(value.director) ||
     !validRunState(value.runState, value.director) ||
