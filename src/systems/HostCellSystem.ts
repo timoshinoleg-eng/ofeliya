@@ -1,3 +1,5 @@
+[Reading 477 lines from start (total: 477 lines, 0 remaining)]
+
 import Phaser from 'phaser';
 import { COLORS } from '../game/config';
 import type { Player } from '../game/Player';
@@ -27,6 +29,20 @@ export interface HostCellLysisEvent {
   rna: number;
   radius: number;
   damage: number;
+}
+
+export interface HostCellCheckpointSlot {
+  active: boolean;
+  infection: number;
+  x: number;
+  y: number;
+  spawnedAgoMs: number;
+}
+
+export interface HostCellSystemSnapshot {
+  spawnAcc: number;
+  firstSpawned: boolean;
+  cells: HostCellCheckpointSlot[];
 }
 
 /**
@@ -194,6 +210,51 @@ export class HostCellSystem {
       }
 
       if (infected >= 1) this.lyse(cell);
+    }
+  }
+
+  snapshot(): HostCellSystemSnapshot {
+    const now = this.scene.time.now;
+    return {
+      spawnAcc: this.spawnAcc,
+      firstSpawned: this.firstSpawned,
+      cells: this.cells.map((cell) => ({
+        active: cell.active,
+        infection: cell.infection,
+        x: cell.image.x,
+        y: cell.image.y,
+        spawnedAgoMs: cell.active ? Math.max(0, now - cell.spawnedAt) : 0,
+      })),
+    };
+  }
+
+  restore(snapshot: HostCellSystemSnapshot): void {
+    this.resetStage();
+    this.spawnAcc = snapshot.spawnAcc;
+    this.firstSpawned = snapshot.firstSpawned;
+    const now = this.scene.time.now;
+
+    for (let i = 0; i < this.cells.length; i++) {
+      const cell = this.cells[i];
+      const saved = snapshot.cells[i];
+      if (!saved?.active) continue;
+      cell.active = true;
+      cell.infection = saved.infection;
+      cell.spawnedAt = now - saved.spawnedAgoMs;
+      cell.image
+        .setPosition(saved.x, saved.y)
+        .setVisible(true)
+        .setAlpha(0.78 + saved.infection * 0.16)
+        .clearTint()
+        .setRotation(0)
+        .setScale(0.78 + saved.infection * 0.1);
+      cell.infectionOverlay
+        .setPosition(saved.x, saved.y)
+        .setVisible(saved.infection > 0.015)
+        .setAlpha(saved.infection * 0.82)
+        .setRotation(0)
+        .setScale(0.78 + saved.infection * 0.1);
+      cell.ring.setVisible(true).clear();
     }
   }
 
@@ -416,3 +477,5 @@ export class HostCellSystem {
     });
   }
 }
+
+[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
