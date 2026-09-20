@@ -1379,17 +1379,22 @@ export class UIScene extends Phaser.Scene {
       );
     }
 
-    const gs = this.gs;
     const gap = compact ? 50 : 56;
     const desiredY = Math.max(H * (compact ? 0.66 : 0.68), detailY + (compact ? 54 : 62));
     const maxFirstY = H - 24 - gap * 2;
     let y = Math.min(desiredY, maxFirstY);
     this.button(c, 'ЕЩЁ ОДИН ЦИКЛ', W / 2, y, true, () => {
-      this.scene.stop();
-      if (gs) {
-        gs.scene.resume();
-        gs.scene.restart();
-      }
+      const gameScene = this.gs;
+      if (!gameScene) return;
+      // Result Game is paused. Treat shutdown as a barrier: only start the fresh run after Phaser
+      // has fully completed the old Game teardown. UI stays alive until that point, so the
+      // SceneManager always has an active owner for the queued transition.
+      gameScene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+        this.registry.set('runResult', null);
+        this.scene.launch('Game');
+        this.scene.restart();
+      });
+      this.scene.stop('Game');
     });
     y += gap;
     this.button(c, ranked ? 'БРОСИТЬ ВЫЗОВ' : 'ПОДЕЛИТЬСЯ РЕЗУЛЬТАТОМ', W / 2, y, false, () => {
@@ -1415,11 +1420,8 @@ export class UIScene extends Phaser.Scene {
     });
     y += gap;
     this.button(c, 'В МЕНЮ', W / 2, y, false, () => {
-      this.scene.stop();
-      if (gs) {
-        gs.scene.stop();
-        gs.scene.start('Menu');
-      }
+      this.gs?.scene.stop();
+      this.scene.start('Menu');
     });
   }
 

@@ -320,16 +320,19 @@ export class GameScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.onResize, this);
       PlatformBridge.setBackHandler(null);
-      this.cancelStageTransition();
-      this.dismissIntroHint(true);
-      this.cameras.main.resetFX();
-      this.atmosphere.destroy();
-      this.vfx.destroy();
-      this.hostCells.destroy();
-      this.milestones.reset();
+
+      // Phaser has already begun shutting down scene plugins before user SHUTDOWN listeners run.
+      // Do not call cameras / physics / tweens / scene-object teardown here: those systems own
+      // their cleanup and may already be unavailable. Clear only our plain references and
+      // cross-scene registry state; create() rebuilds every gameplay subsystem on the next run.
+      this.stageTransition = null;
+      this.bossDefeatCeremony = null;
+      this.introHint = null;
+      this.transitionGeneration += 1;
       this.registry.remove('run');
       this.registry.remove('runResult');
       this.registry.remove('joy');
+      this.registry.remove('aimJoy');
     });
   }
 
@@ -1085,7 +1088,7 @@ export class GameScene extends Phaser.Scene {
     this.registry.set('joy', { x: 0, y: 0 });
   }
 
-  private cancelStageTransition(): void {
+  private cancelStageTransition(resumePhysics = true): void {
     const transaction = this.stageTransition;
     if (transaction) {
       transaction.timer?.remove(false);
@@ -1095,7 +1098,9 @@ export class GameScene extends Phaser.Scene {
     this.bossDefeatCeremony = null;
     this.transitionGeneration += 1;
     this.getUiScene()?.hideStageTransition();
-    this.physics.world.resume();
+    // During Scene shutdown the Arcade Physics plugin may already have released its world.
+    // Resuming is only needed for live gameplay cancellation, never during teardown.
+    if (resumePhysics) this.physics.world.resume();
   }
 
   private getUiScene(): UIScene | null {

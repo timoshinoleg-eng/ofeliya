@@ -20,12 +20,13 @@
     "preview": "vite preview",
     "bot:max": "node bot/index.mjs",
     "smoke:bot": "node bot/smoke.mjs",
-    "test:startup": "node tests/startup-font-timeout.mjs && node tests/startup-renderer-contract.mjs",
+    "test:startup": "node tests/startup-font-timeout.mjs && node tests/startup-viewport-timeout.mjs && node tests/startup-renderer-contract.mjs",
     "icons": "node scripts/gen-icons.mjs",
     "server": "node server/index.mjs",
     "server:test": "node server/test.mjs",
     "bot": "node server/bot.mjs",
-    "test:pacing": "node scripts/check-pacing.mjs"
+    "test:pacing": "node scripts/check-pacing.mjs",
+    "test:result-actions": "node scripts/result-actions-smoke.cjs"
   },
   "dependencies": {
     "@maxhub/max-bot-api": "^0.3.1",

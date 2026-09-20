@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 
-const RESULT_BUTTONS = new Set(['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В МЕНЮ']);
+const RESULT_BUTTONS = new Set(['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'ПОДЕЛИТЬСЯ РЕЗУЛЬТАТОМ', 'В МЕНЮ']);
 const RESULT_TITLES = new Set(['ШТАММ УНИЧТОЖЕН', 'ИММУНИТЕТ ПОДАВЛЕН']);
 
 const menuSignatures = new WeakMap<Phaser.Scene, string>();
@@ -121,7 +121,7 @@ function guardGameOver(scene: Phaser.Scene): void {
   );
   const title = texts.find((text) => RESULT_TITLES.has(text.text.replace(/\n/g, ' ')));
   const time = texts.find((text) => /^\d{2}:\d{2}$/.test(text.text));
-  const stats = texts.find((text) => text.text.includes('Клеток:') && text.text.includes('Мутация:'));
+  const stats = texts.find((text) => text.text.includes('Клеток:') && /мутац/i.test(text.text));
   const buttonLabels = texts.filter((text) => RESULT_BUTTONS.has(text.text));
 
   if (!title || !time || !stats || buttonLabels.length !== 3) return;
@@ -180,7 +180,10 @@ function guardGameOver(scene: Phaser.Scene): void {
   }
 
   const buttonYs = [H - 166, H - 112, H - 58];
-  const orderedButtons = ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В МЕНЮ'];
+  const shareLabel = buttonLabels.some((item) => item.text === 'БРОСИТЬ ВЫЗОВ')
+    ? 'БРОСИТЬ ВЫЗОВ'
+    : 'ПОДЕЛИТЬСЯ РЕЗУЛЬТАТОМ';
+  const orderedButtons = ['ЕЩЁ ОДИН ЦИКЛ', shareLabel, 'В МЕНЮ'];
   orderedButtons.forEach((label, index) => {
     const text = buttonLabels.find((item) => item.text === label);
     if (!text) return;
