@@ -1,5 +1,3 @@
-[Reading 134 lines from start (total: 134 lines, 0 remaining)]
-
 export type HeartbeatPulseEvent =
   | { type: 'heartbeat-telegraph'; bossActive: boolean; impactAtMs: number }
   | { type: 'heartbeat-impact'; bossActive: boolean; pressureUntilMs: number }
@@ -134,5 +132,3 @@ export class HeartbeatPulseDirector {
   }
 }
 
-
-[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
