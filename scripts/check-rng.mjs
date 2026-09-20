@@ -1,3 +1,5 @@
+[Reading 142 lines from start (total: 142 lines, 0 remaining)]
+
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -109,6 +111,30 @@ try {
     'same seed produced different elite modifier trace'
   );
 
+  const resumable = new RunRng(seed);
+  GAMEPLAY_RNG_STREAMS.forEach((stream, index) => {
+    for (let i = 0; i <= index; i++) resumable.next(stream);
+  });
+  const rngSnapshot = resumable.snapshot();
+  const expectedContinuation = Object.fromEntries(
+    GAMEPLAY_RNG_STREAMS.map((stream) => [
+      stream,
+      Array.from({ length: 6 }, () => resumable.next(stream)),
+    ])
+  );
+  const restoredRng = new RunRng(seed);
+  restoredRng.restore(rngSnapshot);
+  const restoredContinuation = Object.fromEntries(
+    GAMEPLAY_RNG_STREAMS.map((stream) => [
+      stream,
+      Array.from({ length: 6 }, () => restoredRng.next(stream)),
+    ])
+  );
+  assert(
+    JSON.stringify(restoredContinuation) === JSON.stringify(expectedContinuation),
+    'RNG snapshot/restore changed deterministic continuation'
+  );
+
   const generated = generateRunSeed();
   assert(/^[A-Za-z0-9_-]{1,32}$/.test(generated), 'generated run seed is not transport-safe');
 
@@ -116,3 +142,5 @@ try {
 } finally {
   rmSync(temp, { recursive: true, force: true });
 }
+
+[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
