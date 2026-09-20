@@ -379,11 +379,13 @@ export class MenuScene extends Phaser.Scene {
     const renderControlMode = () => {
       controlText.setText(`УПРАВЛЕНИЕ: ${controlModeLabel(selectedControlMode)}  ›`);
       controlDesc.setText(controlModeDescription(selectedControlMode));
-      controlBg.setStrokeStyle(
-        selectedControlMode === 'two-hand' ? 1.8 : 1.4,
-        selectedControlMode === 'two-hand' ? COLORS.cyan : COLORS.magenta,
-        0.82
-      );
+      const controlAccent =
+        selectedControlMode === 'two-hand'
+          ? COLORS.cyan
+          : selectedControlMode === 'dual-move'
+            ? COLORS.purple
+            : COLORS.magenta;
+      controlBg.setStrokeStyle(selectedControlMode === 'one-hand' ? 1.4 : 1.8, controlAccent, 0.82);
       if (resumeCheckpoint) {
         const resumeStage =
           STAGES.find((stage) => stage.id === resumeCheckpoint.director.stageId) ?? STAGES[0];
@@ -394,7 +396,9 @@ export class MenuScene extends Phaser.Scene {
         startHint?.setText(
           selectedControlMode === 'one-hand'
             ? 'атака автоматическая · движение одним пальцем'
-            : 'атака автоматическая · слева движение · справа приоритет'
+            : selectedControlMode === 'two-hand'
+              ? 'атака автоматическая · слева движение · справа приоритет'
+              : 'атака автоматическая · оба нижних стика двигают'
         );
       }
     };
