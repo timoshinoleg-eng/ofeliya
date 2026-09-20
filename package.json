@@ -13,7 +13,7 @@
     "test:stages": "node scripts/check-stages.mjs",
     "test:legendary": "node scripts/check-legendary.mjs",
     "test:difficulty": "node scripts/check-difficulty.mjs",
-    "test:rng": "node scripts/check-rng.mjs",
+    "test:rng": "node scripts/check-rng.mjs && node scripts/check-checkpoint.mjs",
     "test:checkpoint": "node scripts/check-checkpoint.mjs",
     "test:viewport": "node scripts/check-viewport.mjs",
     "test:visual-matrix": "node scripts/release-visual-matrix.cjs",
