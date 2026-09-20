@@ -74,7 +74,7 @@ const ANTI_CHEAT = {
 
 const RUN_SEED_RE = /^[A-Za-z0-9_-]{1,32}$/;
 const DIFFICULTY_IDS = new Set(['standard', 'strained']);
-const CONTROL_MODES = new Set(['one-hand', 'two-hand']);
+const CONTROL_MODES = new Set(['one-hand', 'two-hand', 'dual-move']);
 const COMPLETION_STAGES = new Set(['bloodstream', 'heart']);
 
 function storedRulesetVersion(score) {
