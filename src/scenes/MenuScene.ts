@@ -176,8 +176,9 @@ export class MenuScene extends Phaser.Scene {
     this.add
       .text(W / 2, hookY + 46, 'Мутируй быстрее, чем иммунитет адаптируется.', {
         fontFamily: UI_FONT,
-        fontSize: H < 650 ? '11px' : '13px',
-        color: UI_TEXT.secondary,
+        fontSize: H < 650 ? '12px' : '15px',
+        fontStyle: '600',
+        color: UI_TEXT.primary,
         align: 'center',
       })
       .setOrigin(0.5)
@@ -189,9 +190,9 @@ export class MenuScene extends Phaser.Scene {
       this.add
         .text(W / 2, hookY + 70, `Носитель: ${displayName}`, {
           fontFamily: UI_FONT,
-          fontSize: H < 650 ? '11px' : '12px',
-          fontStyle: '600',
-          color: '#8fe8ff',
+          fontSize: H < 650 ? '12px' : '14px',
+          fontStyle: '700',
+          color: '#9deeff',
         })
         .setOrigin(0.5)
         .setResolution(2)
@@ -283,11 +284,11 @@ export class MenuScene extends Phaser.Scene {
       this.add
         .text(W / 2, H * 0.57, records, {
           fontFamily: UI_FONT,
-          fontSize: H < 650 ? '11px' : '12px',
-          fontStyle: '600',
-          color: UI_TEXT.secondary,
+          fontSize: H < 650 ? '12px' : '14px',
+          fontStyle: '650',
+          color: UI_TEXT.primary,
           align: 'center',
-          lineSpacing: 4,
+          lineSpacing: 5,
           wordWrap: { width: W - 42 },
         })
         .setOrigin(0.5)
@@ -296,16 +297,16 @@ export class MenuScene extends Phaser.Scene {
     }
 
     const difficultyY = H * 0.635;
-    const difficultyW = Math.min(W - 52, 286);
+    const difficultyW = Math.min(W - 34, 330);
     const difficultyBg = this.add
-      .rectangle(W / 2, difficultyY, difficultyW, 46, 0x21101d, 0.94)
+      .rectangle(W / 2, difficultyY, difficultyW, H < 650 ? 46 : 54, 0x21101d, 0.97)
       .setStrokeStyle(1.4, COLORS.cyan, 0.68)
       .setDepth(5)
       .setInteractive({ useHandCursor: true });
     const difficultyText = this.add
       .text(W / 2, difficultyY - 8, '', {
         fontFamily: FONT,
-        fontSize: H < 650 ? '11px' : '13px',
+        fontSize: H < 650 ? '12px' : '15px',
         fontStyle: 'bold',
         color: UI_TEXT.primary,
       })
@@ -315,9 +316,9 @@ export class MenuScene extends Phaser.Scene {
     const difficultyDesc = this.add
       .text(W / 2, difficultyY + 9, '', {
         fontFamily: UI_FONT,
-        fontSize: H < 650 ? '10px' : '12px',
-        fontStyle: '600',
-        color: UI_TEXT.coolSecondary,
+        fontSize: H < 650 ? '11px' : '13px',
+        fontStyle: '650',
+        color: UI_TEXT.secondary,
       })
       .setOrigin(0.5)
       .setResolution(2)
@@ -352,8 +353,8 @@ export class MenuScene extends Phaser.Scene {
     difficultyBg.on('pointerout', () => difficultyBg.setFillStyle(0x21101d, 0.94));
 
     const controlY = H * 0.715;
-    const controlW = Math.min(W - 52, 286);
-    const controlH = H < 650 ? 38 : 42;
+    const controlW = Math.min(W - 34, 330);
+    const controlH = H < 650 ? 44 : 52;
     const controlBg = this.add
       .rectangle(W / 2, controlY, controlW, controlH, 0x141d2a, 0.94)
       .setStrokeStyle(1.4, COLORS.magenta, 0.7)
@@ -362,7 +363,7 @@ export class MenuScene extends Phaser.Scene {
     const controlText = this.add
       .text(W / 2, controlY - 7, '', {
         fontFamily: FONT,
-        fontSize: H < 650 ? '11px' : '12px',
+        fontSize: H < 650 ? '12px' : '14px',
         fontStyle: 'bold',
         color: UI_TEXT.primary,
       })
@@ -372,9 +373,9 @@ export class MenuScene extends Phaser.Scene {
     const controlDesc = this.add
       .text(W / 2, controlY + 8, '', {
         fontFamily: UI_FONT,
-        fontSize: H < 650 ? '10px' : '12px',
-        fontStyle: '600',
-        color: UI_TEXT.coolSecondary,
+        fontSize: H < 650 ? '11px' : '13px',
+        fontStyle: '650',
+        color: UI_TEXT.secondary,
         align: 'center',
       })
       .setOrigin(0.5)
@@ -414,7 +415,7 @@ export class MenuScene extends Phaser.Scene {
     controlBg.on('pointerout', () => controlBg.setFillStyle(0x141d2a, 0.94));
 
     const btnY = H * (resumeCheckpoint ? 0.785 : 0.805);
-    const btnW = Math.min(W - 44, 300);
+    const btnW = Math.min(W - 30, 338);
     const btnBg = this.add
       .rectangle(W / 2, btnY, btnW, resumeCheckpoint ? 58 : 66, 0x5c143e, 0.92)
       .setStrokeStyle(2, incomingChallenge ? COLORS.gold : COLORS.magenta, 1)
@@ -430,7 +431,7 @@ export class MenuScene extends Phaser.Scene {
             : 'НАЧАТЬ ЗАРАЖЕНИЕ',
         {
         fontFamily: FONT,
-        fontSize: H < 650 ? '17px' : '19px',
+        fontSize: H < 650 ? '18px' : '22px',
         fontStyle: 'bold',
         color: '#fff4ec',
         }
@@ -441,9 +442,9 @@ export class MenuScene extends Phaser.Scene {
     startHint = this.add
       .text(W / 2, btnY + 18, '', {
         fontFamily: UI_FONT,
-        fontSize: H < 650 ? '10px' : '11px',
-        fontStyle: '600',
-        color: '#f2cfe1',
+        fontSize: H < 650 ? '11px' : '13px',
+        fontStyle: '650',
+        color: '#ffe3f0',
         align: 'center',
       })
       .setOrigin(0.5)
@@ -504,9 +505,9 @@ export class MenuScene extends Phaser.Scene {
     const soundText = this.add
       .text(W / 2 - 72, utilityY, `звук: ${Sfx.muted ? 'выкл' : 'вкл'}`, {
         fontFamily: UI_FONT,
-        fontSize: '12px',
-        fontStyle: '600',
-        color: Sfx.muted ? UI_TEXT.muted : '#d7b5c4',
+        fontSize: H < 650 ? '11px' : '13px',
+        fontStyle: '650',
+        color: Sfx.muted ? UI_TEXT.secondary : '#efcddd',
       })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
@@ -523,9 +524,9 @@ export class MenuScene extends Phaser.Scene {
     this.add
       .text(W / 2 + 72, utilityY, `КОДЕКС ${codexFound}/9`, {
         fontFamily: FONT,
-        fontSize: '11px',
+        fontSize: H < 650 ? '12px' : '13px',
         fontStyle: 'bold',
-        color: '#8fe8ff',
+        color: '#9deeff',
       })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
@@ -540,9 +541,9 @@ export class MenuScene extends Phaser.Scene {
     this.add
       .text(W / 2, H - 54, 'Двигай штамм · собирай РНК · выбирай мутации', {
         fontFamily: UI_FONT,
-        fontSize: H < 650 ? '10px' : '11px',
+        fontSize: H < 650 ? '11px' : '12px',
         fontStyle: '600',
-        color: UI_TEXT.muted,
+        color: UI_TEXT.secondary,
         align: 'center',
         wordWrap: { width: W - 36 },
       })
@@ -553,9 +554,9 @@ export class MenuScene extends Phaser.Scene {
     this.add
       .text(W / 2, H - 31, 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА', {
         fontFamily: UI_FONT,
-        fontSize: H < 650 ? '9px' : '10px',
+        fontSize: H < 650 ? '10px' : '11px',
         fontStyle: '700',
-        color: '#9deeff',
+        color: '#b8f3ff',
       })
       .setOrigin(0.5)
       .setResolution(2)
