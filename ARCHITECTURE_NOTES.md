@@ -1,6 +1,6 @@
 # OFELIYA: STRAIN ZERO — current architecture notes
 
-Current contract: post control-mode, Legendary, difficulty, Heart timing, infection-build and boss-phase passes.
+Current contract: post control-mode, Legendary, difficulty, Heart timing, infection-build, boss-phase, trusted-score, renderer-clarity and Codex/mastery passes.
 
 ## Ownership
 
@@ -19,7 +19,8 @@ Current contract: post control-mode, Legendary, difficulty, Heart timing, infect
 - `ControlMode` persists control selection independently of save progression.
 - `VfxSystem` owns bounded combat emitters; `AtmosphereSystem` owns preallocated ambient presentation.
 - `CinematicTextures` creates lightweight runtime key art used by stage/boss/victory presentation.
-- `SaveSystem` owns the backward-compatible `ofeliya_save_v1` schema.
+- `SaveSystem` owns the backward-compatible `ofeliya_save_v1` schema, including discovery history and non-power Standard/Strained mastery.
+- `server/index.mjs` owns trusted MAX score validation, ruleset/campaign-version checks and ranked leaderboard/daily-stat endpoints.
 
 ## Campaign contract
 
@@ -162,16 +163,18 @@ They are reused with lightweight zoom/parallax and do not add video payload.
 
 Deterministic checks cover challenge compatibility, save migration, stage lifecycle, Legendary rules, difficulty, viewport math and startup renderer behavior.
 
-Browser smoke covers MAX mobile viewport, compact layouts, WebGL/Canvas fallback, Legendary runtime, STRAINED, campaign transition and dense readability. A dedicated control-mode smoke locks the legacy one-hand `Joystick` path and dispatches two simultaneous Chromium touch points to verify independent twin-stick movement/aim vectors and clean release reset.
+Browser smoke covers MAX mobile viewport, Codex/mastery, compact layouts, WebGL/Canvas fallback, Legendary runtime, STRAINED, campaign transition and dense readability. A dedicated control-mode smoke locks the legacy one-hand `Joystick` path and dispatches two simultaneous Chromium touch points to verify independent twin-stick movement/aim vectors and clean release reset.
 
-Dense readability contract now produces captures at **100 / 150 / 200 active enemies** while also keeping player anchor, elite marker, RNA, projectile, healthy host cell and partially infected host cell in the same scene.
+Dense readability contract produces captures at **100 / 150 / 200 active enemies** while also keeping player anchor, elite marker, RNA, projectile, healthy host cell and partially infected host cell in the same scene.
+
+A dedicated release visual matrix runs **100 / 150 / 200 × WebGL/Canvas × full/reduced** and compares luminance plus edge energy so renderer/tier regressions cannot silently make dense combat darker or softer.
 
 ## Still deferred
 
 The next major additions should be treated as separate migrations rather than silently folded into hot loops:
 
-- persistent Codex/meta-progression beyond current save history;
 - additional campaign organs/stages;
-- telemetry-driven balance tuning;
-- public competitive leaderboard with trusted backend score validation;
+- telemetry-driven balance tuning and real-device balance calibration;
+- additional competitive modes beyond the current trusted score/ruleset contract;
+- permanent stat-power meta progression;
 - broader external art/audio pipeline only if it preserves current mobile performance and provenance rules.
