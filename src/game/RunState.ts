@@ -1,3 +1,5 @@
+[Reading 350 lines from start (total: 350 lines, 0 remaining)]
+
 import { GEM, NOVA, ORBIT, PLAYER, WEAPON } from './config';
 import type { StageDefinition, StageId } from './StageDefinitions';
 import type { EvolutionId } from './UpgradeSystem';
@@ -64,6 +66,22 @@ export interface StageProgressState {
   lysisRnaBonus: number;
   stacks: Record<string, number>;
   evolutions: Set<EvolutionId>;
+}
+
+export interface RunProgressCheckpoint
+  extends Omit<RunProgressState, 'evolutionsSeen' | 'legendaryIds' | 'stageBuilds'> {
+  evolutionsSeen: EvolutionId[];
+  legendaryIds: LegendaryId[];
+  stageBuilds: Partial<Record<StageId, StageBuildSnapshot>>;
+}
+
+export interface StageProgressCheckpoint extends Omit<StageProgressState, 'evolutions'> {
+  evolutions: EvolutionId[];
+}
+
+export interface RunStateCheckpoint {
+  run: RunProgressCheckpoint;
+  stage: StageProgressCheckpoint;
 }
 
 function createStageProgress(stage: Pick<StageDefinition, 'id' | 'order'>): StageProgressState {
@@ -277,4 +295,60 @@ export class RunState {
     this.run.legendaryOffersSeen += 1;
     this.run.legendaryPity = shown ? 0 : this.run.legendaryPity + 1;
   }
+
+  snapshotForCheckpoint(): RunStateCheckpoint {
+    return {
+      run: {
+        ...this.run,
+        bossClearTimesMs: { ...this.run.bossClearTimesMs },
+        evolutionsSeen: [...this.run.evolutionsSeen],
+        legendaryIds: [...this.run.legendaryIds],
+        stageBuilds: Object.fromEntries(
+          Object.entries(this.run.stageBuilds).map(([id, build]) => [
+            id,
+            build
+              ? {
+                  level: build.level,
+                  stacks: { ...build.stacks },
+                  evolutions: [...build.evolutions],
+                }
+              : build,
+          ])
+        ),
+      },
+      stage: {
+        ...this.stage,
+        stacks: { ...this.stage.stacks },
+        evolutions: [...this.stage.evolutions],
+      },
+    };
+  }
+
+  restoreFromCheckpoint(snapshot: RunStateCheckpoint): void {
+    Object.assign(this.run, {
+      ...snapshot.run,
+      bossClearTimesMs: { ...snapshot.run.bossClearTimesMs },
+      evolutionsSeen: new Set(snapshot.run.evolutionsSeen),
+      legendaryIds: new Set(snapshot.run.legendaryIds),
+      stageBuilds: Object.fromEntries(
+        Object.entries(snapshot.run.stageBuilds).map(([id, build]) => [
+          id,
+          build
+            ? {
+                level: build.level,
+                stacks: { ...build.stacks },
+                evolutions: [...build.evolutions],
+              }
+            : build,
+        ])
+      ),
+    });
+    this.stage = {
+      ...snapshot.stage,
+      stacks: { ...snapshot.stage.stacks },
+      evolutions: new Set(snapshot.stage.evolutions),
+    };
+  }
 }
+
+[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
