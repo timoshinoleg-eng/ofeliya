@@ -70,7 +70,18 @@ async function textCenter(page, label) {
     () => window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI')
   );
 
-  await page.evaluate(() => window.__game.registry.set('joy', { x: 1, y: 0 }));
+  // Keep this test about manual pause only. The real opening loop can legitimately earn the first
+  // mutation within a few hundred milliseconds, which pauses Game through the progression modal.
+  await page.evaluate(() => {
+    const gs = window.__game.scene.getScene('Game');
+    gs.wave.update = () => {};
+    gs.enemies.getChildren().forEach((enemy) => enemy.disableBody?.(true, true));
+    gs.runState.stage.xp = 0;
+    gs.runState.stage.xpNext = 1_000_000;
+    gs.queuedLevels = 0;
+    gs.awaitingChoice = false;
+    window.__game.registry.set('joy', { x: 1, y: 0 });
+  });
   await sleep(260);
   const before = await page.evaluate(() => {
     const gs = window.__game.scene.getScene('Game');
