@@ -60,6 +60,14 @@ Destination: public/video/. All prepared files are 720x1280 vertical 9:16, H.264
 - IMMUNE PRIME: late Bloodstream, P2.
 - CARDIAC TITAN: late Heart, P2.
 
+## Code hook map
+
+- Bloodstream -> Heart: UIScene.showStageTransition(...) is the presentation boundary; GameScene.beginStageTransition/commitStageTransition owns the 2.4 s transactional lifecycle. Video must not own state mutation. It should call the same existing skip/commit callback used by the procedural overlay.
+- Boss intros: UIScene.showBossReveal(...) is the procedural fallback for IMMUNE PRIME and CARDIAC TITAN. P2 video replacement belongs here behind a small optional video presenter, with the current tween reveal unchanged as fallback.
+- Victory/Defeat: GameScene.finish(...) must continue to create runResult, save records/checkpoints, play SFX and pause Game. UIScene.showGameOver(...) should decide whether to show a video interstitial before revealing the existing result UI. Result persistence must never wait on video.
+- Start intro: MenuScene start intent is the earliest allowed trigger. Do not touch index.html/BootScene/startup diagnostics.
+- Recommended abstraction: one VideoInterstitial helper/service that accepts src, maxStartWaitMs, maxDurationMs and onComplete, guards completion idempotently, and falls back without throwing into scene code.
+
 ## Acceptance for the integration PR
 
 1. Cold boot reaches Menu with video requests blocked.
