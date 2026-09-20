@@ -726,8 +726,8 @@ export class MenuScene extends Phaser.Scene {
     };
     PlatformBridge.setBackHandler(dismiss);
     close.on('pointerup', dismiss);
-    dim.on('pointerup', (_pointer, localX, localY, event) => {
-      event?.stopPropagation?.();
+    dim.on('pointerup', () => {
+      // The full-screen interactive dimmer owns the pointer event and blocks menu controls below.
     });
 
     render();
