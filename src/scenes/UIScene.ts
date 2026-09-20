@@ -1,5 +1,3 @@
-[Reading 1613 lines from start (total: 1613 lines, 0 remaining)]
-
 import Phaser from 'phaser';
 import { getAchievementDef } from '../game/AchievementSystem';
 import {
@@ -1613,5 +1611,3 @@ export class UIScene extends Phaser.Scene {
     });
   }
 }
-
-[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
