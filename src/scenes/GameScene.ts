@@ -333,20 +333,26 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  private leaveResultFor(target: 'Game' | 'Menu'): void {
+    const manager = this.game.scene;
+    // Phaser treats start('Game') as a no-op while the same scene is still paused/active.
+    // Process shutdown first, then start the target on the next JS turn so stop/start cannot
+    // collapse into a permanent SHUTDOWN state.
+    manager.stop('UI');
+    manager.stop('Game');
+    window.setTimeout(() => manager.start(target), 0);
+  }
+
   restartRun(): void {
     this.cancelStageTransition();
-    if (this.scene.isActive('UI') || this.scene.isPaused('UI')) this.scene.stop('UI');
-    // ScenePlugin.restart() can shut down a paused scene without bringing it back. start() owns
-    // the full shutdown -> start transition and is stable from the result-screen paused state.
-    this.scene.start('Game');
+    this.registry.set('runResult', null);
+    this.leaveResultFor('Game');
   }
 
   exitToMenu(): void {
     this.cancelStageTransition();
     Sfx.stopMusic();
-    if (this.scene.isActive('UI') || this.scene.isPaused('UI')) this.scene.stop('UI');
-    this.scene.stop();
-    this.scene.start('Menu');
+    this.leaveResultFor('Menu');
   }
 
   update(time: number, delta: number): void {
