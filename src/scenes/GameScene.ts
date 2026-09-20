@@ -7,6 +7,7 @@ import {
   ORBIT,
   PLAYER,
   POSTFX,
+  PROGRESSION,
   WEAPON,
   type EnemyKind,
 } from '../game/config';
@@ -18,6 +19,10 @@ import {
 import { rollRunChoices } from '../game/EvolutionSystem';
 import { guaranteedLegendaryChoices, type LegendaryId } from '../game/LegendarySystem';
 import { HeartbeatPulseDirector, type HeartbeatPulseEvent } from '../game/HeartbeatPulseDirector';
+import {
+  HEART_SAFE_POCKET,
+  heartSafePocketProfile,
+} from '../game/HeartPacing';
 import {
   getDifficultyProfile,
   heartbeatProfileForDifficulty,
@@ -118,7 +123,7 @@ export class GameScene extends Phaser.Scene {
   private heartbeatSafeIndicator: Phaser.GameObjects.Arc | null = null;
   private heartbeatSafeX = 0;
   private heartbeatSafeY = 0;
-  private heartbeatSafeRadius = 76;
+  private heartbeatSafeRadius: number = HEART_SAFE_POCKET.normal.radius;
   private heartbeatProtectedUntil = 0;
   private heartbeatOpportunityUntil = 0;
   private heartbeatBeatIndex = 0;
@@ -495,7 +500,8 @@ export class GameScene extends Phaser.Scene {
     if (e.xpValue > 0) {
       // The first readable pickup teaches the mutation loop immediately instead of requiring
       // five scattered one-XP drops before the player sees the first choice.
-      const value = st.kills === 1 ? Math.max(5, e.xpValue) : e.xpValue;
+      const value =
+        st.kills === 1 ? Math.max(PROGRESSION.firstKillXpFloor, e.xpValue) : e.xpValue;
       this.spawnGem(e.x, e.y, value);
     }
     if (e.isBoss && this.wave.boss === e) {
@@ -846,17 +852,19 @@ export class GameScene extends Phaser.Scene {
       this.player.y - this.heartbeatSafeY
     );
     const synchronized = distanceToSafe <= this.heartbeatSafeRadius;
+    const pocket = heartSafePocketProfile(event.bossActive);
     this.heartbeatSafeIndicator?.destroy();
     this.heartbeatSafeIndicator = null;
 
     if (synchronized) {
-      this.heartbeatProtectedUntil = this.time.now + (event.bossActive ? 900 : 1_050);
-      this.heartbeatOpportunityUntil = this.time.now + (event.bossActive ? 1_350 : 1_150);
+      this.heartbeatProtectedUntil = this.time.now + pocket.protectedMs;
+      this.heartbeatOpportunityUntil = this.time.now + pocket.opportunityMs;
       this.atmosphere.pulse(COLORS.green, 0.12);
       this.vfx.legendary(this.player.x, this.player.y, COLORS.green);
       PlatformBridge.haptic('light');
       if (this.runState.hasLegendary('myocardial-rhythm')) {
-        this.heartbeatLegendaryWindowUntil = this.time.now + 850;
+        this.heartbeatLegendaryWindowUntil =
+          this.time.now + HEART_SAFE_POCKET.legendaryWindowMs;
         this.heartbeatLegendarySpent = false;
       }
     } else {
@@ -895,10 +903,10 @@ export class GameScene extends Phaser.Scene {
     this.heartbeatBeatIndex += 1;
     const angle =
       ((impactAtMs * 0.00117 + this.heartbeatBeatIndex * 1.91) % (Math.PI * 2)) - Math.PI;
-    const offset = bossActive ? 112 : 88;
-    this.heartbeatSafeRadius = bossActive ? 72 : 78;
-    this.heartbeatSafeX = this.player.x + Math.cos(angle) * offset;
-    this.heartbeatSafeY = this.player.y + Math.sin(angle) * offset;
+    const pocket = heartSafePocketProfile(bossActive);
+    this.heartbeatSafeRadius = pocket.radius;
+    this.heartbeatSafeX = this.player.x + Math.cos(angle) * pocket.offset;
+    this.heartbeatSafeY = this.player.y + Math.sin(angle) * pocket.offset;
     this.heartbeatSafeIndicator = this.add
       .circle(this.heartbeatSafeX, this.heartbeatSafeY, this.heartbeatSafeRadius, COLORS.green, 0.08)
       .setStrokeStyle(3, COLORS.green, 0.9)

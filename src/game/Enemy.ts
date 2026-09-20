@@ -10,6 +10,11 @@ import {
   primeMembraneBreakDurationMs,
   type PrimeAttackState,
 } from './BossVulnerability';
+import {
+  BOSS_PHASE_TWO_HP_FRACTION,
+  PRIME_ATTACK_PACING,
+  primeAttackPhasePacing,
+} from './BossPacing';
 
 export type EnemyDamageSource = 'standard' | 'lysis';
 
@@ -142,7 +147,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.bossAttackState = 'pursuit';
     this.bossAttackStartedAt = 0;
     this.bossAttackUntil = 0;
-    this.nextBossAttackAt = this.isBoss ? this.scene.time.now + 1_900 : 0;
+    this.nextBossAttackAt = this.isBoss
+      ? this.scene.time.now + PRIME_ATTACK_PACING.initialDelayMs
+      : 0;
     this.bossTelegraph?.setVisible(false).clear();
     this.primeBrokenUntil = 0;
     this.setAlpha(1);
@@ -231,7 +238,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const pursuitD = Math.hypot(pursuitDx, pursuitDy) || 1;
 
     if (this.isBoss) {
-      const nextPhase = this.hp / Math.max(1, this.maxHp) <= 0.52 ? 2 : 1;
+      const nextPhase =
+        this.hp / Math.max(1, this.maxHp) <= BOSS_PHASE_TWO_HP_FRACTION ? 2 : 1;
       if (nextPhase !== this.bossPhase) {
         this.bossPhase = nextPhase;
         this.gs?.onBossPhaseChanged(this);
@@ -363,6 +371,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   private updateBossPressureAttack(time: number): void {
+    const pacing = primeAttackPhasePacing(this.bossPhase);
     if (this.bossAttackState === 'pursuit') {
       if (time < this.nextBossAttackAt) {
         this.bossTelegraph?.setVisible(false);
@@ -370,7 +379,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       }
       this.bossAttackState = 'telegraph';
       this.bossAttackStartedAt = time;
-      this.bossAttackUntil = time + (this.bossPhase === 2 ? 560 : 720);
+      this.bossAttackUntil = time + pacing.telegraphMs;
       this.drawBossPressureTelegraph();
       return;
     }
@@ -379,21 +388,24 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.updateBossPressureTelegraph(time);
       if (time < this.bossAttackUntil) return;
       this.bossTelegraph?.setVisible(false);
-      const radius = this.bossPhase === 2 ? 225 : 180;
-      this.gs?.triggerBossPressureWave(this, radius, this.dmg * (this.bossPhase === 2 ? 0.78 : 0.62));
+      this.gs?.triggerBossPressureWave(
+        this,
+        pacing.radius,
+        this.dmg * pacing.damageMultiplier
+      );
       this.bossAttackState = 'recovery';
-      this.bossAttackUntil = time + (this.bossPhase === 2 ? 480 : 650);
+      this.bossAttackUntil = time + pacing.recoveryMs;
       return;
     }
 
     if (time < this.bossAttackUntil) return;
     this.bossAttackState = 'pursuit';
-    this.nextBossAttackAt = time + (this.bossPhase === 2 ? 1_850 : 2_800);
+    this.nextBossAttackAt = time + pacing.cooldownMs;
   }
 
   private drawBossPressureTelegraph(): void {
     if (!this.bossTelegraph) this.bossTelegraph = this.scene.add.graphics().setDepth(8);
-    const radius = this.bossPhase === 2 ? 225 : 180;
+    const radius = primeAttackPhasePacing(this.bossPhase).radius;
     this.bossTelegraph.clear().setVisible(true).setPosition(this.x, this.y);
     this.bossTelegraph.lineStyle(this.bossPhase === 2 ? 4 : 3, COLORS.red, 0.8);
     this.bossTelegraph.strokeCircle(0, 0, radius);

@@ -34,6 +34,7 @@ npm run test:save
 npm run test:stages
 npm run test:legendary
 npm run test:difficulty
+npm run test:pacing
 npm run test:viewport
 npm run test:startup
 npm run build

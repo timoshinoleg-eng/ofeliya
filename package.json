@@ -24,7 +24,8 @@
     "icons": "node scripts/gen-icons.mjs",
     "server": "node server/index.mjs",
     "server:test": "node server/test.mjs",
-    "bot": "node server/bot.mjs"
+    "bot": "node server/bot.mjs",
+    "test:pacing": "node scripts/check-pacing.mjs"
   },
   "dependencies": {
     "@maxhub/max-bot-api": "^0.3.1",
