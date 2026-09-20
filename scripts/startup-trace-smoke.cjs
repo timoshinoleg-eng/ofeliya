@@ -172,6 +172,27 @@ async function waitForTrace(page) {
     throw new Error('five-tap trace overlay lacks network diagnostics');
   }
 
+  // Old MAX/WebView sessions may still carry the historical ?app= cache-bust parameter.
+  // It must be canonicalized in-place without creating another document request.
+  const navigationCountBeforeLegacy = navigations.length;
+  const legacyUrl = new URL(page.url());
+  legacyUrl.searchParams.set('app', 'legacy-cache-bust');
+  await page.goto(legacyUrl.toString(), { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
+  const legacy = await waitForTrace(page);
+  if (legacy.href.includes('app=')) {
+    throw new Error('legacy app parameter was not removed in-place');
+  }
+  if ((legacy.history[0]?.meta?.redirectCount ?? -1) !== 0) {
+    throw new Error('legacy app cleanup incorrectly reported a redirect');
+  }
+  if (navigations.length !== navigationCountBeforeLegacy + 1) {
+    throw new Error(
+      'legacy app cleanup triggered an extra document navigation: ' +
+        JSON.stringify(navigations.slice(navigationCountBeforeLegacy))
+    );
+  }
+
   if (errors.length) throw new Error('page errors: ' + errors.join(' | '));
 
   await ctx.close();
