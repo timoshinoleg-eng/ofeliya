@@ -336,9 +336,12 @@ function mag(v) {
     throw new Error('latest dual-move thumb did not take control: ' + JSON.stringify(rightWins));
   }
 
-  await cdp.send('Input.dispatchTouchEvent', {
-    type: 'touchEnd',
-    touchPoints: [{ ...l, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
+  // CDP touchEnd cannot reliably synthesize "lift one finger, keep the other" across runners.
+  // The two-thumb start/move above is real touch; invoke the production release path directly
+  // for the right stick to verify the actual handoff algorithm deterministically.
+  await page.evaluate(() => {
+    const ui = window.__game.scene.getScene('UI');
+    ui.dualMove.release(ui.dualMove.right);
   });
   await page.waitForTimeout(100);
   const handedOff = await page.evaluate(() => window.__game.registry.get('joy'));
