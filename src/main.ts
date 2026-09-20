@@ -177,7 +177,10 @@ async function boot(): Promise<void> {
   viewport.attachGame(game);
   await viewport.sync();
 
-  if (import.meta.env.DEV) {
+  // Production builds stay opaque. The release visual-matrix workflow enables this hook
+  // only in its dedicated QA bundle so Playwright can inspect real production rendering.
+  const releaseMatrixQa = import.meta.env.VITE_RELEASE_MATRIX_QA === '1';
+  if (import.meta.env.DEV || releaseMatrixQa) {
     window.__game = game;
     window.__viewportManager = viewport;
   }
