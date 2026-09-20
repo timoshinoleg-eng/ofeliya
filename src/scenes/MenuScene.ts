@@ -27,6 +27,7 @@ import { PlatformBridge } from '../platform';
 import { SaveSystem } from '../systems/SaveSystem';
 import { RunCheckpoint } from '../systems/RunCheckpoint';
 import { Sfx } from '../systems/Sfx';
+import { StartupTrace } from '../systems/StartupTrace';
 
 export class MenuScene extends Phaser.Scene {
   private codexOverlay: Phaser.GameObjects.Container | null = null;
@@ -36,8 +37,13 @@ export class MenuScene extends Phaser.Scene {
   }
 
   create(): void {
+    StartupTrace.mark('menu.create.start');
+    StartupTrace.mark('menu.cinematicTextures.start');
     ensureCinematicTextures(this);
+    StartupTrace.mark('menu.cinematicTextures.end');
+    StartupTrace.mark('menu.strainTextures.start');
     ensureStrainZeroTextures(this);
+    StartupTrace.mark('menu.strainTextures.end');
     const W = this.scale.width;
     const H = this.scale.height;
     this.codexOverlay = null;
@@ -567,6 +573,15 @@ export class MenuScene extends Phaser.Scene {
     this.scale.on('resize', this.onResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.onResize, this);
+    });
+
+    StartupTrace.setMeta('platformFinal', PlatformBridge.kind);
+    StartupTrace.setMeta('platformVersionFinal', PlatformBridge.version || '');
+    StartupTrace.mark('menu.create.end');
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        StartupTrace.finish('menu.visible');
+      });
     });
   }
 

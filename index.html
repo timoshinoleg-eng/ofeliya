@@ -26,7 +26,12 @@
     <!-- Must run before MAX Bridge/app boot so each release gets a distinct WebView URL. -->
     <script src="./runtime-config.js"></script>
     <!-- MAX Bridge. Platform detection is late-safe, so a slow CDN cannot permanently demote MAX to browser mode. -->
-    <script src="https://st.max.ru/js/max-web-app.js" defer></script>
+    <script
+      src="https://st.max.ru/js/max-web-app.js"
+      defer
+      onload="window.__ofeliyaEarlyMarks?.push(['max.bridge.loaded', performance.now()])"
+      onerror="window.__ofeliyaEarlyMarks?.push(['max.bridge.error', performance.now()])"
+    ></script>
     <style>
       @font-face {
         font-family: 'Chakra Petch';
