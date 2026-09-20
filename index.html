@@ -23,7 +23,7 @@
         window.location.replace(target.toString());
       }
     </script>
-    <!-- Must run before MAX Bridge/app boot so each release gets a distinct WebView URL. -->
+    <!-- Startup diagnostics/config must run before MAX Bridge/app boot; it must not navigate. -->
     <script src="./runtime-config.js"></script>
     <!--
       MAX Bridge must never block the app module. The platform facade resolves MAX lazily, so
