@@ -1,5 +1,3 @@
-[Reading 177 lines from start (total: 177 lines, 0 remaining)]
-
 import type { StageDefinition, StageMilestoneDefinition } from './StageDefinitions';
 
 export type StagePhase =
@@ -177,5 +175,3 @@ export class StageDirector {
     this.runStarted = snapshot.runStarted;
   }
 }
-
-[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
