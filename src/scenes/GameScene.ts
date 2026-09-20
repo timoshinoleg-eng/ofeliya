@@ -1,3 +1,5 @@
+[Reading 1872 lines from start (total: 1872 lines, 0 remaining)]
+
 import Phaser from 'phaser';
 import {
   COLORS,
@@ -53,6 +55,14 @@ import { WaveDirector } from '../game/WaveDirector';
 import { AtmosphereSystem } from '../systems/AtmosphereSystem';
 import { PlatformBridge } from '../platform';
 import { SaveSystem } from '../systems/SaveSystem';
+import {
+  isCheckpointSafePhase,
+  RUN_CHECKPOINT_SCHEMA_VERSION,
+  RunCheckpoint,
+  validateRunCheckpoint,
+  type RunCheckpointData,
+} from '../systems/RunCheckpoint';
+import { SCORE_CAMPAIGN_VERSION, SCORE_RULESET_VERSION } from '../game/RunVersions';
 import { Sfx } from '../systems/Sfx';
 import { VfxSystem } from '../systems/VfxSystem';
 import { PERFORMANCE } from '../systems/PerformanceProfile';
@@ -110,6 +120,8 @@ export class GameScene extends Phaser.Scene {
   difficulty!: DifficultyProfile;
   runSeed = '';
   controlMode!: ControlMode;
+  resumed = false;
+  private checkpointAccMs = 0;
   private gameplayRng!: RunRng;
   private heartbeatPulse!: HeartbeatPulseDirector;
   private impact = new ImpactDirector();
@@ -147,20 +159,32 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    const requestedResume = this.registry.get('runCheckpointResume') as
+      | RunCheckpointData
+      | undefined;
+    this.registry.remove('runCheckpointResume');
+    const resume = requestedResume ? validateRunCheckpoint(requestedResume) : null;
+    if (requestedResume && !resume) RunCheckpoint.clear();
+
     this.stageDirector = new StageDirector(STAGES);
+    if (resume) this.stageDirector.restore(resume.director);
+
     const selectedDifficulty =
-      (this.registry.get('difficultyId') as DifficultyId | undefined) ?? readDifficultySelection();
+      resume?.difficultyId ??
+      ((this.registry.get('difficultyId') as DifficultyId | undefined) ?? readDifficultySelection());
     this.difficulty = getDifficultyProfile(selectedDifficulty);
     this.registry.set('difficultyId', this.difficulty.id);
 
     const requestedSeed = this.registry.get('runSeedOverride') as string | number | undefined;
-    this.gameplayRng = new RunRng(requestedSeed ?? generateRunSeed());
+    this.gameplayRng = new RunRng(resume?.runSeed ?? requestedSeed ?? generateRunSeed());
+    if (resume) this.gameplayRng.restore(resume.rng);
     this.runSeed = this.gameplayRng.seed;
     this.registry.set('runSeed', this.runSeed);
     this.registry.remove('runSeedOverride');
 
     this.controlMode =
-      (this.registry.get('controlMode') as ControlMode | undefined) ?? readControlMode();
+      resume?.controlMode ??
+      ((this.registry.get('controlMode') as ControlMode | undefined) ?? readControlMode());
     this.registry.set('controlMode', this.controlMode);
     this.registry.set('performanceTier', PERFORMANCE.tier);
     this.registry.set('performancePostFx', PERFORMANCE.postFx);
@@ -168,7 +192,11 @@ export class GameScene extends Phaser.Scene {
     this.heartbeatPulse = new HeartbeatPulseDirector(
       heartbeatProfileForDifficulty(this.difficulty)
     );
+    if (resume) this.heartbeatPulse.restore(resume.heartbeat);
     this.runState = new RunState(this.stageDirector.currentStage);
+    if (resume) this.runState.restoreFromCheckpoint(resume.runState);
+    this.resumed = resume !== null;
+    this.checkpointAccMs = 0;
     Sfx.startMusic();
     PlatformBridge.setBackHandler(() => this.exitToMenu());
     this.queuedLevels = 0;
@@ -192,7 +220,7 @@ export class GameScene extends Phaser.Scene {
     this.transitionGeneration = 0;
     this.bossDefeatCeremony = null;
     this.stageTransition = null;
-    this.heartbeatPulse.reset();
+    if (!resume) this.heartbeatPulse.reset();
     this.impact.reset();
     this.zeroPointNextAt = 0;
     this.zeroPointUntil = 0;
@@ -297,7 +325,8 @@ export class GameScene extends Phaser.Scene {
       () => this.gameplayRng.next('enemy-spawn')
     );
     this.milestones = new RunMilestones(this);
-    this.handleStageEvents(this.stageDirector.startRun());
+    if (resume) this.restoreCheckpointRuntime(resume);
+    else this.handleStageEvents(this.stageDirector.startRun());
     this.cameras.main.startFollow(this.player, true, 0.14, 0.14);
 
     const kb = this.input.keyboard;
@@ -313,8 +342,9 @@ export class GameScene extends Phaser.Scene {
     this.registry.set('joy', { x: 0, y: 0 });
     this.registry.set('runResult', null);
     this.registry.set('run', this.snapshot());
+    this.saveCheckpointNow();
 
-    if (SaveSystem.get().runs === 0) this.showIntroHint();
+    if (!resume && SaveSystem.get().runs === 0) this.showIntroHint();
 
     this.scale.on('resize', this.onResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -337,6 +367,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private exitToMenu(): void {
+    this.saveCheckpointNow();
     this.cancelStageTransition();
     Sfx.stopMusic();
     if (this.scene.isActive('UI') || this.scene.isPaused('UI')) this.scene.stop('UI');
@@ -447,6 +478,11 @@ export class GameScene extends Phaser.Scene {
       );
       this.awaitingChoice = true;
       this.queuedLevels -= 1;
+    }
+
+    this.checkpointAccMs = Math.min(2500, this.checkpointAccMs + delta);
+    if (this.checkpointAccMs >= 2500 && this.saveCheckpointNow()) {
+      this.checkpointAccMs = 0;
     }
   }
 
@@ -1088,6 +1124,79 @@ export class GameScene extends Phaser.Scene {
     this.registry.set('joy', { x: 0, y: 0 });
   }
 
+  private restoreCheckpointRuntime(checkpoint: RunCheckpointData): void {
+    const stage = this.stageDirector.currentStage;
+    this.cameras.main.setBackgroundColor(stage.theme.backgroundColor);
+    this.atmosphere.setStage(stage);
+    this.wave.restore(stage, checkpoint.wave);
+    this.hostCells.restore(checkpoint.hostCells);
+    this.milestones.setIntensity(this.runState.stage.timeMs / stage.durationMs);
+
+    const { playerX, playerY } = checkpoint.runtime;
+    this.player.setMutationState(false, false, false);
+    this.player.setPosition(playerX, playerY).clearTint().setAlpha(1);
+    this.player.hurtUntil = 0;
+    (this.player.body as Phaser.Physics.Arcade.Body).reset(playerX, playerY);
+    this.syncPlayerMutationSilhouette();
+
+    this.lastCarrierUsed = checkpoint.runtime.lastCarrierUsed;
+    this.heartbeatBeatIndex = checkpoint.runtime.heartbeatBeatIndex;
+    this.zeroPointNextAt = this.runState.hasLegendary('zero-point')
+      ? this.time.now + Math.max(250, checkpoint.runtime.zeroPointNextInMs)
+      : 0;
+  }
+
+  saveCheckpointNow(): boolean {
+    if (
+      !isCheckpointSafePhase(this.stageDirector.phase) ||
+      this.awaitingChoice ||
+      this.legendaryRewardPending ||
+      this.pendingEvolutionCeremony !== null ||
+      this.pendingLegendaryCeremony !== null ||
+      this.stageTransition !== null ||
+      this.bossDefeatCeremony !== null ||
+      this.hitStopped ||
+      this.time.now < this.zeroPointUntil
+    ) {
+      return false;
+    }
+
+    const heartbeat = this.heartbeatPulse.snapshot();
+    if (
+      heartbeat.telegraphedImpactAtMs !== null ||
+      heartbeat.pressureUntilMs !== null ||
+      heartbeat.bossWasActive
+    ) {
+      return false;
+    }
+
+    const checkpoint: RunCheckpointData = {
+      schemaVersion: RUN_CHECKPOINT_SCHEMA_VERSION,
+      rulesetVersion: SCORE_RULESET_VERSION,
+      campaignVersion: SCORE_CAMPAIGN_VERSION,
+      savedAtEpochMs: Date.now(),
+      runSeed: this.runSeed,
+      difficultyId: this.difficulty.id,
+      controlMode: this.controlMode,
+      resumed: this.resumed,
+      director: this.stageDirector.snapshot(),
+      runState: this.runState.snapshotForCheckpoint(),
+      rng: this.gameplayRng.snapshot(),
+      wave: this.wave.snapshot(),
+      heartbeat,
+      hostCells: this.hostCells.snapshot(),
+      runtime: {
+        playerX: this.player.x,
+        playerY: this.player.y,
+        lastCarrierUsed: this.lastCarrierUsed,
+        heartbeatBeatIndex: this.heartbeatBeatIndex,
+        zeroPointNextInMs:
+          this.zeroPointNextAt > this.time.now ? this.zeroPointNextAt - this.time.now : 0,
+      },
+    };
+    return RunCheckpoint.save(checkpoint);
+  }
+
   private cancelStageTransition(resumePhysics = true): void {
     const transaction = this.stageTransition;
     if (transaction) {
@@ -1152,6 +1261,7 @@ export class GameScene extends Phaser.Scene {
   finish(win: boolean, reason: RunEndReason = win ? 'campaign-complete' : 'defeat'): void {
     if (this.registry.get('runResult')) return;
     if (this.stageDirector.phase !== 'RUN_ENDED') this.stageDirector.endRun(reason);
+    RunCheckpoint.clear();
     this.runState.captureStageBuild();
     const run = this.runState.run;
     const stage = this.runState.stage;
@@ -1168,7 +1278,7 @@ export class GameScene extends Phaser.Scene {
         legendaryIds: [...run.legendaryIds],
         difficultyId: this.difficulty.id,
       },
-      this.difficulty.id === 'standard'
+      this.difficulty.id === 'standard' && !this.resumed
     );
     this.captureAchievements(true, false);
     this.milestones.reset();
@@ -1179,6 +1289,7 @@ export class GameScene extends Phaser.Scene {
       difficultyId: this.difficulty.id,
       runSeed: this.runSeed,
       controlMode: this.controlMode,
+      resumed: this.resumed,
       timeMs: run.timeMs,
       kills: run.kills,
       hostCellsInfected: run.hostCellsInfected,
@@ -1761,3 +1872,5 @@ export class GameScene extends Phaser.Scene {
     this.vignette.setPosition(W / 2, H / 2).setDisplaySize(W * 1.25, H * 1.25);
   }
 }
+
+[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
