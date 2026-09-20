@@ -188,6 +188,13 @@ async function buttonCenter(page, label) {
 
   await browser.close();
   console.log('real-touch result actions smoke: ok');
+
+  const { execFileSync } = require('child_process');
+  execFileSync(process.execPath, ['scripts/checkpoint-resume-smoke.cjs'], {
+    cwd: process.cwd(),
+    env: process.env,
+    stdio: 'inherit',
+  });
 })().catch((error) => {
   console.error(error.stack || error);
   process.exit(1);
