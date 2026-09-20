@@ -562,6 +562,8 @@ export class UIScene extends Phaser.Scene {
 
     this.manualPaused = true;
     this.uiBlocked = true;
+    this.joystick?.reset();
+    this.twinStick?.reset();
     this.registry.set('joy', { x: 0, y: 0 });
     this.registry.set('aimJoy', { x: 0, y: 0 });
     this.scene.pause('Game');
