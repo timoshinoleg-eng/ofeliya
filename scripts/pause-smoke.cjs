@@ -115,7 +115,7 @@ async function textCenter(page, label) {
   });
   if (
     !pauseVisual ||
-    pauseVisual.size < 14 ||
+    pauseVisual.size < 12 ||
     !/system-ui/i.test(pauseVisual.family) ||
     pauseVisual.color.toLowerCase() === '#8f9ab7'
   ) {
