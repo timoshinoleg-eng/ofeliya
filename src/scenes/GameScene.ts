@@ -333,7 +333,15 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private exitToMenu(): void {
+  restartRun(): void {
+    this.cancelStageTransition();
+    if (this.scene.isActive('UI') || this.scene.isPaused('UI')) this.scene.stop('UI');
+    // Let the owning Game scene restart itself. Cross-scene stop/start sequences from UIScene can
+    // be dropped while Game is paused on a result screen in mobile WebViews.
+    this.scene.restart();
+  }
+
+  exitToMenu(): void {
     this.cancelStageTransition();
     Sfx.stopMusic();
     if (this.scene.isActive('UI') || this.scene.isPaused('UI')) this.scene.stop('UI');
