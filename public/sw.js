@@ -7,7 +7,7 @@
  * - audio: network only;
  * - cache cleanup is scoped to OFELIYA only.
  */
-const VERSION = 'ofeliya-strain-zero-rc3-utf8';
+const VERSION = 'ofeliya-20260921-direct-nav-v1';
 const CACHE_PREFIX = 'ofeliya-';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
