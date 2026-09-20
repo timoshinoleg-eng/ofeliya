@@ -1,0 +1,72 @@
+# Stage 4 video interstitial preparation
+
+Prepared after real-device readability V3 at f450183b7b4cc0885b1a45876b8685c217c53336.
+
+## Integration priority
+
+1. Existing 02_bloodstream_to_heart.mp4 — first.
+2. Existing 01_start_intro.mp4 — only after Menu is interactive; never part of boot.
+3. Existing 04_defeat.mp4.
+4. New 06_victory_canonical.mp4.
+5. Boss intros are P2 and must not delay the first four integrations.
+
+03_victory_candidate.mp4 remains non-canonical because of foreign blue/jellyfish-like organisms. 05_atmospheric_background_candidate.mp4 remains optional.
+
+## Newly reviewed Gemini sources
+
+All four supplied sources are H.264, 720x1280, 24 fps, yuv420p, about 10 seconds, with AAC audio.
+
+| Production filename | Source | Use |
+| --- | --- | --- |
+| 06_victory_canonical.mp4 | gemini_generated_video_3d08aab9.mp4 | canonical campaign Victory |
+| 07_immune_prime_intro.mp4 | gemini_generated_video_9ed430bf.mp4 | IMMUNE PRIME intro, P2 |
+| 08_cardiac_titan_intro.mp4 | gemini_generated_video_a9a54fc9.mp4 | CARDIAC TITAN intro, P2 |
+| 09_cardiac_titan_intro_alt.mp4 | gemini_generated_video_de35cf48.mp4 | backup/reference only |
+
+### Visual decisions
+
+The 3d08aab9 source reads as victory: the central virus survives pale immune fragments and expands into a connected biological network. The original begins generating fake mobile UI controls near the frame edges after roughly 7.5 s; those frames must never ship. The prepared production cut ends before those artifacts and fades out cleanly.
+
+9ed430bf is the cleaner/slimmer pale sentinel and is the preferred IMMUNE PRIME identity. a9a54fc9 is the preferred CARDIAC TITAN take: heavier, more organic-armored. de35cf48 is a near-duplicate but more overtly mechanical, so it is backup only.
+
+## Prepared production encodes
+
+Destination: public/video/. All prepared files are 720x1280 vertical 9:16, H.264 Main profile level 3.1, yuv420p, 24 fps, no audio, faststart MP4, CRF 23, with clean fade-out.
+
+| File | Duration | Approx size | SHA-256 |
+| --- | ---: | ---: | --- |
+| 06_victory_canonical.mp4 | 7.58 s | 1.7 MB | bdf48ec908936a346eaf720e9b84ac1cfa415f25c95c898672b93662d62d31fc |
+| 07_immune_prime_intro.mp4 | 8.50 s | 1.3 MB | 6c2ba27d3e329aaa0c0f95fde25b6935f7600bd4146ee6bbc2b519f9c857d846 |
+| 08_cardiac_titan_intro.mp4 | 8.50 s | 1.3 MB | febab9d81b6397c9acc7afc8511382f7eb168edc0a2797888e24e1d5133c1113 |
+| 09_cardiac_titan_intro_alt.mp4 | 8.50 s | 1.5 MB | 0b154cc21cec66630970514d584d3811c2e345b9e826224531ef0cc17eb7354d |
+
+## Runtime contract
+
+- Video is an enhancement, never a prerequisite.
+- Do not create/load video before Menu is interactive.
+- Use muted and playsInline; audio is not required for understanding.
+- Default to preload=metadata; promote to auto only in the relevant active gameplay stage.
+- Any fetch/decode/autoplay/stall/abort error must immediately use the existing procedural cinematic.
+- No waiting spinner. Keep procedural/Canvas fallback permanently.
+- Suggested playback-start watchdog: 900 ms.
+- Tap-to-skip must remain available.
+- Video completion must call the same transition-completion path as the procedural fallback.
+
+## Suggested preload points
+
+- Bloodstream -> Heart: during Bloodstream after the run is interactive.
+- Start Intro: only after Menu/new-run intent.
+- Defeat/Victory: during active run; Victory specifically during Heart.
+- IMMUNE PRIME: late Bloodstream, P2.
+- CARDIAC TITAN: late Heart, P2.
+
+## Acceptance for the integration PR
+
+1. Cold boot reaches Menu with video requests blocked.
+2. Each video path may 404 and procedural flow still completes.
+3. video.play() rejection falls back immediately.
+4. A deliberately stalled video triggers fallback inside the watchdog.
+5. Skip cannot double-complete a transition.
+6. Gameplay cannot resume early behind an active interstitial.
+7. Startup trace, pause, checkpoint resume, controls and full-campaign smokes remain green.
+8. Public video assets are cacheable while HTML/runtime-config keep current freshness behavior.
