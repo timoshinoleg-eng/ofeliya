@@ -712,8 +712,8 @@ export class UIScene extends Phaser.Scene {
     );
 
     const cards = gs.pendingChoices;
-    const cw = Math.min(W - 28, 360);
-    const ch = compact ? 108 : 128;
+    const cw = Math.min(W - 16, 374);
+    const ch = compact ? 112 : 136;
     const gap = compact ? 9 : 11;
     const totalH = cards.length * ch + (cards.length - 1) * gap;
     const blockCenter = compact ? H * 0.56 : H * 0.55;
@@ -784,13 +784,16 @@ export class UIScene extends Phaser.Scene {
             fontSize: legendary || evolution ? (compact ? '17px' : '20px') : compact ? '16px' : '19px',
             fontStyle: 'bold',
             color: legendary || evolution ? '#ffe066' : UI_TEXT.primary,
+            lineSpacing: -2,
+            maxLines: 2,
+            wordWrap: { width: Math.max(112, right - tx - 4), useAdvancedWrap: true },
           })
           .setResolution(2)
       );
 
       card.add(
         this.add
-          .text(tx, -ch / 2 + (compact ? 48 : 55), def.name, {
+          .text(tx, -ch / 2 + (compact ? 60 : 68), def.name, {
             fontFamily: UI_FONT,
             fontSize: compact ? '12px' : '14px',
             fontStyle: '700',
@@ -803,7 +806,7 @@ export class UIScene extends Phaser.Scene {
       if (!compact && !evolution && !legendary) {
         card.add(
           this.add
-            .text(tx, -ch / 2 + 79, def.desc, {
+            .text(tx, -ch / 2 + 91, def.desc, {
               fontFamily: UI_FONT,
               fontSize: '13px',
               fontStyle: '600',
