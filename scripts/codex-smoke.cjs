@@ -186,6 +186,13 @@ function browserDriver() {
   if (errors.length) throw new Error('page errors: ' + errors.join(' | '));
   await browser.close();
   console.log('Codex + mastery browser smoke: ok');
+
+  const { execFileSync } = require('child_process');
+  execFileSync(process.execPath, ['scripts/ui-readability-smoke.cjs'], {
+    cwd: process.cwd(),
+    env: process.env,
+    stdio: 'inherit',
+  });
 })().catch((error) => {
   console.error(error.stack || error);
   process.exit(1);
