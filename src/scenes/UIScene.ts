@@ -608,9 +608,10 @@ export class UIScene extends Phaser.Scene {
     c.add(
       this.add
         .text(W / 2, H * 0.41, 'забег остановлен', {
-          fontFamily: FONT,
-          fontSize: compact ? '11px' : '13px',
-          color: '#8f9ab7',
+          fontFamily: UI_FONT,
+          fontSize: compact ? '12px' : '14px',
+          fontStyle: '650',
+          color: '#c7d3ec',
         })
         .setOrigin(0.5)
         .setResolution(2)
@@ -844,16 +845,16 @@ export class UIScene extends Phaser.Scene {
           const completed = i < progress.current;
           const next = i === progress.current;
           pg.fillStyle(accent, completed ? 0.95 : next ? 0.42 : 0.1);
-          pg.fillRoundedRect(x, barY, segW, 7, 2);
+          pg.fillRoundedRect(x, barY, segW, 8, 2);
         }
         card.add(pg);
         card.add(
           this.add
             .text(right, barY - 5, `${progress.current} → ${progress.next} / ${progress.max}`, {
               fontFamily: UI_FONT,
-              fontSize: compact ? '11px' : '12px',
+              fontSize: compact ? '11px' : '13px',
               fontStyle: '700',
-              color: UI_TEXT.secondary,
+              color: '#d8d1e2',
             })
             .setOrigin(1, 0)
             .setResolution(2)
