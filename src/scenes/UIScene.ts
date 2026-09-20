@@ -1384,7 +1384,10 @@ export class UIScene extends Phaser.Scene {
     const maxFirstY = H - 24 - gap * 2;
     let y = Math.min(desiredY, maxFirstY);
     this.button(c, 'ЕЩЁ ОДИН ЦИКЛ', W / 2, y, true, () => {
-      this.gs?.restartRun();
+      // Phaser ScenePlugin.start() shuts down this UI scene and restarts a paused target scene.
+      // Do not queue an explicit Game stop before this call: stop+start in one manager turn can
+      // leave both scenes shut down on mobile WebViews.
+      this.scene.start('Game');
     });
     y += gap;
     this.button(c, ranked ? 'БРОСИТЬ ВЫЗОВ' : 'ПОДЕЛИТЬСЯ РЕЗУЛЬТАТОМ', W / 2, y, false, () => {
@@ -1410,7 +1413,8 @@ export class UIScene extends Phaser.Scene {
     });
     y += gap;
     this.button(c, 'В МЕНЮ', W / 2, y, false, () => {
-      this.gs?.exitToMenu();
+      this.scene.stop('Game');
+      this.scene.start('Menu');
     });
   }
 
