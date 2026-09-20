@@ -1384,10 +1384,17 @@ export class UIScene extends Phaser.Scene {
     const maxFirstY = H - 24 - gap * 2;
     let y = Math.min(desiredY, maxFirstY);
     this.button(c, 'ЕЩЁ ОДИН ЦИКЛ', W / 2, y, true, () => {
-      // Keep both existing scenes alive until their own restart operations are queued. Stopping
-      // UI first can cancel the paired Game lifecycle transition on mobile WebViews.
-      this.gs?.scene.restart();
-      this.scene.restart();
+      const gameScene = this.gs;
+      if (!gameScene) return;
+      // Result Game is paused. Treat shutdown as a barrier: only start the fresh run after Phaser
+      // has fully completed the old Game teardown. UI stays alive until that point, so the
+      // SceneManager always has an active owner for the queued transition.
+      gameScene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+        this.registry.set('runResult', null);
+        this.scene.launch('Game');
+        this.scene.restart();
+      });
+      this.scene.stop('Game');
     });
     y += gap;
     this.button(c, ranked ? 'БРОСИТЬ ВЫЗОВ' : 'ПОДЕЛИТЬСЯ РЕЗУЛЬТАТОМ', W / 2, y, false, () => {
