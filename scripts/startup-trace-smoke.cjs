@@ -34,6 +34,18 @@ const REQUIRED_MARKS = [
   'menu.visible',
 ];
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function touchAt(ctx, page, point) {
+  const cdp = await ctx.newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: point.x, y: point.y, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
+  });
+  await sleep(35);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+}
+
 async function waitForTrace(page) {
   await page.waitForFunction(() => {
     const raw = localStorage.getItem('ofeliya_startup_trace_history_v1');
@@ -104,6 +116,8 @@ async function waitForTrace(page) {
   }
   if (!(firstTrace.totalMs > 0)) throw new Error('invalid startup total');
   if (!first.overlay.includes('OFELIYA STARTUP TRACE')) throw new Error('debug overlay missing');
+  if (!first.overlay.includes('TTFB=')) throw new Error('debug overlay missing navigation timing');
+  if (!first.overlay.includes('bundle=')) throw new Error('debug overlay missing bundle timing');
   if (!first.href.includes('app=')) throw new Error('release URL redirect did not complete');
 
   const serialized = JSON.stringify(first.history);
@@ -120,6 +134,35 @@ async function waitForTrace(page) {
     throw new Error('already-versioned reload should not report release redirect: ' + secondTrace.meta?.redirectCount);
   }
   if (second.history.length > 6) throw new Error('startup trace history exceeded retention limit');
+
+  // The production MAX launcher cannot conveniently append ?startupTrace=1. Verify that the
+  // hidden five-tap menu gesture can reveal the already-saved history without a debug URL.
+  const noDebugUrl = new URL(page.url());
+  noDebugUrl.searchParams.delete('startupTrace');
+  await page.goto(noDebugUrl.toString(), { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
+  await waitForTrace(page);
+  if (await page.$('#ofeliya-startup-trace')) throw new Error('trace overlay should stay hidden by default');
+
+  const versionPoint = await page.evaluate(() => {
+    const menu = window.__game.scene.getScene('Menu');
+    const version = menu.children.list.find(
+      (obj) => typeof obj?.text === 'string' && obj.text.startsWith('mini-app ·')
+    );
+    const bounds = version?.getBounds?.();
+    return bounds ? { x: Math.round(bounds.centerX), y: Math.round(bounds.centerY) } : null;
+  });
+  if (!versionPoint) throw new Error('hidden diagnostics version hit target missing');
+  for (let i = 0; i < 5; i += 1) await touchAt(ctx, page, versionPoint);
+  await page.waitForSelector('#ofeliya-startup-trace');
+  const hiddenOverlay = await page.textContent('#ofeliya-startup-trace');
+  if (!hiddenOverlay?.includes('OFELIYA STARTUP TRACE')) {
+    throw new Error('five-tap diagnostics gesture did not reveal trace history');
+  }
+  if (!hiddenOverlay.includes('TTFB=') || !hiddenOverlay.includes('bundle=')) {
+    throw new Error('five-tap trace overlay lacks network diagnostics');
+  }
+
   if (errors.length) throw new Error('page errors: ' + errors.join(' | '));
 
   await ctx.close();

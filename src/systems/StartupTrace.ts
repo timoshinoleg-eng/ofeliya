@@ -187,6 +187,14 @@ class StartupTraceImpl {
     return safeReadHistory();
   }
 
+  showDebugOverlay(): boolean {
+    const history = safeReadHistory();
+    if (history.length === 0) return false;
+    window.__startupTrace = history[0];
+    this.renderDebugOverlay(history);
+    return true;
+  }
+
   private markAtPerformance(name: string, perfMs: number): void {
     const elapsed = performance.timeOrigin + perfMs - this.startedAtWallMs;
     this.pushMark(name, elapsed);
@@ -258,7 +266,9 @@ class StartupTraceImpl {
         (trace, index) =>
           `prev ${index + 1}: ${trace.totalMs.toFixed(1)} ms · redirects=${String(
             trace.meta.redirectCount ?? 0
-          )} · renderer=${String(trace.meta.rendererActual ?? 'n/a')}`
+          )} · renderer=${String(trace.meta.rendererActual ?? 'n/a')} · TTFB=${String(
+            trace.meta.navTtfbMs ?? 'n/a'
+          )}ms · bundle=${String(trace.meta.bundleFetchMs ?? 'n/a')}ms`
       )
       .join('\n');
 
@@ -270,6 +280,17 @@ class StartupTraceImpl {
       `SW=${String(current.meta.swControlledAtMenu ?? false)} · nav=${String(
         current.meta.navigationType ?? 'unknown'
       )} · DPR=${String(current.meta.devicePixelRatio ?? 1)}`,
+      `TTFB=${String(current.meta.navTtfbMs ?? 'n/a')}ms · responseEnd=${String(
+        current.meta.navResponseEndMs ?? 'n/a'
+      )}ms · DOMContentLoaded=${String(current.meta.navDomContentLoadedMs ?? 'n/a')}ms`,
+      `bundle=${String(current.meta.bundleFetchMs ?? 'n/a')}ms / ${String(
+        current.meta.bundleTransferBytes ?? 'n/a'
+      )}B · fonts=${String(current.meta.fontsOutcome ?? 'n/a')}`,
+      `viewport=${String(current.meta.viewportSourceFirst ?? 'n/a')} ${String(
+        current.meta.viewportWidthFirst ?? '?'
+      )}×${String(current.meta.viewportHeightFirst ?? '?')} → ${String(
+        current.meta.viewportSourceSecond ?? 'n/a'
+      )}`,
       '',
       marks,
       previous ? `\n${previous}` : '',
