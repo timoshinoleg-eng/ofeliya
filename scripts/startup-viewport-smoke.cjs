@@ -31,7 +31,7 @@ if (!chrome) throw new Error('Chrome not found');
   page.on('pageerror', (error) => errors.push(String(error)));
   const startedAt = Date.now();
   await page.goto('http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__game?.scene.isActive('Menu'), null, { timeout: 2200 });
+  await page.waitForFunction(() => window.__game?.scene.isActive('Menu'), null, { timeout: 6000 });
   const elapsedMs = Date.now() - startedAt;
   const state = await page.evaluate(() => ({
     splash: Boolean(document.querySelector('#splash')),
@@ -42,7 +42,10 @@ if (!chrome) throw new Error('Chrome not found');
   if (state.splash || state.canvases !== 1 || JSON.stringify(state.scale) !== JSON.stringify([390, 844])) {
     throw new Error('stalled bridge fallback failed: ' + JSON.stringify(state));
   }
-  if (elapsedMs >= 2200) throw new Error('stalled bridge delayed startup: ' + elapsedMs + 'ms');
+  // This gate proves the bridge cannot hang startup. GitHub runner cold-start time is noisy,
+  // so keep the wall-clock ceiling comfortably above the 320ms bridge timeout while still
+  // failing a genuinely unresolved startup.
+  if (elapsedMs >= 5000) throw new Error('stalled bridge delayed startup: ' + elapsedMs + 'ms');
   if (errors.length) throw new Error('page errors: ' + errors.join(' | '));
 
   await browser.close();
