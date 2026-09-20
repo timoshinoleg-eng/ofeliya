@@ -1,7 +1,10 @@
 import Phaser from 'phaser';
 import { parseChallengePayload } from '../game/Challenge';
+import { ACHIEVEMENTS } from '../game/AchievementSystem';
 import { COLORS, FONT, fmtTime } from '../game/config';
 import { IDENTITY } from '../game/identity';
+import { LEGENDARIES } from '../game/LegendarySystem';
+import { EVOLUTION_NAMES, type EvolutionId } from '../game/UpgradeSystem';
 import {
   controlModeDescription,
   controlModeLabel,
@@ -24,6 +27,8 @@ import { SaveSystem } from '../systems/SaveSystem';
 import { Sfx } from '../systems/Sfx';
 
 export class MenuScene extends Phaser.Scene {
+  private codexOverlay: Phaser.GameObjects.Container | null = null;
+
   constructor() {
     super('Menu');
   }
@@ -33,6 +38,7 @@ export class MenuScene extends Phaser.Scene {
     ensureStrainZeroTextures(this);
     const W = this.scale.width;
     const H = this.scale.height;
+    this.codexOverlay = null;
     this.cameras.main.setBackgroundColor(COLORS.bg);
     Sfx.stopMusic();
     PlatformBridge.setBackHandler(null);
@@ -401,8 +407,9 @@ export class MenuScene extends Phaser.Scene {
     btnBg.on('pointerover', () => btnBg.setFillStyle(0x7a1a52, 1));
     btnBg.on('pointerout', () => btnBg.setFillStyle(0x5c143e, 0.92));
 
+    const utilityY = btnY + (H < 650 ? 48 : 55);
     const soundText = this.add
-      .text(W / 2, btnY + (H < 650 ? 48 : 55), `звук: ${Sfx.muted ? 'выкл' : 'вкл'}`, {
+      .text(W / 2 - 72, utilityY, `звук: ${Sfx.muted ? 'выкл' : 'вкл'}`, {
         fontFamily: FONT,
         fontSize: '11px',
         color: Sfx.muted ? '#755266' : '#c89aaf',
@@ -415,6 +422,25 @@ export class MenuScene extends Phaser.Scene {
         const muted = Sfx.toggle();
         soundText.setText(`звук: ${muted ? 'выкл' : 'вкл'}`).setColor(muted ? '#755266' : '#c89aaf');
         if (!muted) Sfx.play('click');
+      });
+
+    const codexSave = SaveSystem.get();
+    const codexFound = codexSave.evolutionsSeen.length + codexSave.legendarySeen.length;
+    this.add
+      .text(W / 2 + 72, utilityY, `КОДЕКС ${codexFound}/9`, {
+        fontFamily: FONT,
+        fontSize: '11px',
+        fontStyle: 'bold',
+        color: '#8fe8ff',
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .setResolution(2)
+      .setDepth(5)
+      .on('pointerup', () => {
+        Sfx.play('click');
+        PlatformBridge.haptic('light');
+        this.showCodex();
       });
 
     this.add
@@ -459,6 +485,250 @@ export class MenuScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.onResize, this);
     });
+  }
+
+  private showCodex(): void {
+    if (this.codexOverlay) return;
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const compact = H < 650;
+    const save = SaveSystem.get();
+    const overlay = this.add.container(0, 0).setDepth(40);
+    this.codexOverlay = overlay;
+
+    const dim = this.add
+      .rectangle(W / 2, H / 2, W, H, 0x03040a, 0.95)
+      .setInteractive();
+    const panelW = Math.min(W - 22, 370);
+    const panelH = Math.min(H - 34, 650);
+    const panel = this.add
+      .rectangle(W / 2, H / 2, panelW, panelH, 0x120f19, 0.98)
+      .setStrokeStyle(1.5, COLORS.cyan, 0.55);
+    overlay.add([dim, panel]);
+
+    const top = H / 2 - panelH / 2;
+    const left = W / 2 - panelW / 2;
+    overlay.add(
+      this.add
+        .text(W / 2, top + 26, 'КОДЕКС · STRAIN-0', {
+          fontFamily: FONT,
+          fontSize: compact ? '17px' : '20px',
+          fontStyle: 'bold',
+          color: '#fff4ec',
+          letterSpacing: 1,
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+
+    const discovered = save.evolutionsSeen.length + save.legendarySeen.length;
+    overlay.add(
+      this.add
+        .text(W / 2, top + 50, `ОТКРЫТО ${discovered}/9 · ДОСТИЖЕНИЯ ${save.achievements.length}/${ACHIEVEMENTS.length}`, {
+          fontFamily: FONT,
+          fontSize: '9px',
+          fontStyle: 'bold',
+          color: '#8fe8ff',
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+
+    const close = this.add
+      .text(left + panelW - 18, top + 14, '×', {
+        fontFamily: FONT,
+        fontSize: '26px',
+        color: '#c89aaf',
+      })
+      .setOrigin(0.5)
+      .setResolution(2)
+      .setInteractive({ useHandCursor: true });
+    overlay.add(close);
+
+    const body = this.add.container(0, 0);
+    overlay.add(body);
+
+    type CodexPage = 'mutations' | 'legendary' | 'mastery';
+    let page: CodexPage = 'mutations';
+    const tabs: Array<{ id: CodexPage; label: string; x: number; text: Phaser.GameObjects.Text }> = [];
+    const tabY = top + 82;
+    const tabDefs: Array<[CodexPage, string, number]> = [
+      ['mutations', 'МУТАЦИИ', W / 2 - 104],
+      ['legendary', 'LEGENDARY', W / 2],
+      ['mastery', 'МАСТЕРСТВО', W / 2 + 104],
+    ];
+
+    const render = () => {
+      body.removeAll(true);
+      for (const tab of tabs) {
+        tab.text.setColor(tab.id === page ? '#ffe066' : '#7f8da8');
+      }
+
+      const bodyTop = top + 116;
+      const addText = (
+        x: number,
+        y: number,
+        value: string,
+        size = compact ? 10 : 11,
+        color = '#e8f4ff',
+        width = panelW - 42,
+        align: 'left' | 'center' = 'left'
+      ) => {
+        const text = this.add
+          .text(x, y, value, {
+            fontFamily: FONT,
+            fontSize: `${size}px`,
+            color,
+            align,
+            lineSpacing: 3,
+            wordWrap: { width },
+          })
+          .setOrigin(align === 'center' ? 0.5 : 0, 0)
+          .setResolution(2);
+        body.add(text);
+        return text;
+      };
+
+      if (page === 'mutations') {
+        addText(W / 2, bodyTop, 'КРИТИЧЕСКИЕ МУТАЦИИ', 11, '#ffe066', panelW - 42, 'center');
+        const evolutionIds: EvolutionId[] = ['prism', 'halo', 'singularity'];
+        evolutionIds.forEach((id, index) => {
+          const found = save.evolutionsSeen.includes(id);
+          const y = bodyTop + 38 + index * (compact ? 66 : 72);
+          addText(
+            left + 28,
+            y,
+            `${found ? '◆' : '◇'}  ${found ? EVOLUTION_NAMES[id] : 'НЕ ОТКРЫТО'}`,
+            compact ? 11 : 12,
+            found ? '#ffe066' : '#65718b'
+          );
+          addText(
+            left + 49,
+            y + 22,
+            found
+              ? 'Критическая форма зарегистрирована в Codex.'
+              : 'Продолжай развивать совместимые ветви мутаций.',
+            compact ? 9 : 10,
+            found ? '#c9d6e8' : '#59647c',
+            panelW - 76
+          );
+        });
+      } else if (page === 'legendary') {
+        addText(W / 2, bodyTop, 'ЛЕГЕНДАРНЫЕ ИЗМЕНЕНИЯ ПРАВИЛ', 11, '#ffe066', panelW - 42, 'center');
+        LEGENDARIES.forEach((def, index) => {
+          const found = save.legendarySeen.includes(def.id);
+          const y = bodyTop + 30 + index * (compact ? 43 : 47);
+          addText(
+            left + 28,
+            y,
+            `${found ? '◆' : '◇'}  ${found ? def.title : '???'}`,
+            compact ? 10 : 11,
+            found ? '#fff1ac' : '#59647c',
+            panelW - 54
+          );
+          if (found) {
+            addText(
+              left + 49,
+              y + 18,
+              def.effect,
+              compact ? 8 : 9,
+              '#aab4d4',
+              panelW - 78
+            );
+          }
+        });
+      } else {
+        const standardBest = save.bestCampaignClearMs > 0 ? fmtTime(save.bestCampaignClearMs) : '—';
+        const strainedBest =
+          save.bestStrainedCampaignClearMs > 0 ? fmtTime(save.bestStrainedCampaignClearMs) : '—';
+        addText(W / 2, bodyTop, 'МАСТЕРСТВО КАМПАНИИ', 11, '#ffe066', panelW - 42, 'center');
+        addText(
+          left + 28,
+          bodyTop + 38,
+          `${save.standardCampaignClears > 0 ? '◆' : '◇'} STANDARD · прохождений ${save.standardCampaignClears} · рекорд ${standardBest}`,
+          compact ? 10 : 11,
+          save.standardCampaignClears > 0 ? '#8fe8ff' : '#65718b'
+        );
+        addText(
+          left + 28,
+          bodyTop + 70,
+          `${save.strainedCampaignClears > 0 ? '◆' : '◇'} STRAINED · прохождений ${save.strainedCampaignClears} · личный рекорд ${strainedBest}`,
+          compact ? 10 : 11,
+          save.strainedCampaignClears > 0 ? '#ffe066' : '#65718b'
+        );
+        addText(
+          left + 28,
+          bodyTop + 116,
+          `ДОСТИЖЕНИЯ · ${save.achievements.length}/${ACHIEVEMENTS.length}`,
+          11,
+          '#fff4ec'
+        );
+        const unlocked = ACHIEVEMENTS.filter((achievement) => save.achievements.includes(achievement.id));
+        addText(
+          left + 28,
+          bodyTop + 142,
+          unlocked.length
+            ? unlocked.map((achievement) => `◆ ${achievement.name}`).join('\n')
+            : '◇ Пока нет открытых достижений',
+          compact ? 9 : 10,
+          unlocked.length ? '#c9d6e8' : '#65718b',
+          panelW - 56
+        );
+        addText(
+          left + 28,
+          top + panelH - 106,
+          `ЦИКЛОВ: ${save.runs}   ·   ИММУННЫХ КЛЕТОК: ${save.totalKills}`,
+          9,
+          '#8f9ab7'
+        );
+      }
+    };
+
+    for (const [id, label, x] of tabDefs) {
+      const tabText = this.add
+        .text(x, tabY, label, {
+          fontFamily: FONT,
+          fontSize: compact ? '9px' : '10px',
+          fontStyle: 'bold',
+          color: '#7f8da8',
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerup', () => {
+          page = id;
+          Sfx.play('click');
+          render();
+        });
+      tabs.push({ id, label, x, text: tabText });
+      overlay.add(tabText);
+    }
+
+    overlay.add(
+      this.add
+        .text(W / 2, top + panelH - 34, 'Codex фиксирует открытия · постоянного усиления характеристик нет', {
+          fontFamily: FONT,
+          fontSize: compact ? '8px' : '9px',
+          color: '#6f7c92',
+          align: 'center',
+          wordWrap: { width: panelW - 46 },
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+
+    const dismiss = () => {
+      if (this.codexOverlay !== overlay) return;
+      overlay.destroy();
+      this.codexOverlay = null;
+    };
+    close.on('pointerup', dismiss);
+    dim.on('pointerup', (_pointer, localX, localY, event) => {
+      event?.stopPropagation?.();
+    });
+
+    render();
   }
 
   private onResize(): void {
