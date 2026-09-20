@@ -1379,17 +1379,16 @@ export class UIScene extends Phaser.Scene {
       );
     }
 
-    const gs = this.gs;
     const gap = compact ? 50 : 56;
     const desiredY = Math.max(H * (compact ? 0.66 : 0.68), detailY + (compact ? 54 : 62));
     const maxFirstY = H - 24 - gap * 2;
     let y = Math.min(desiredY, maxFirstY);
     this.button(c, 'ЕЩЁ ОДИН ЦИКЛ', W / 2, y, true, () => {
-      this.scene.stop();
-      if (gs) {
-        gs.scene.resume();
-        gs.scene.restart();
-      }
+      // Drive the transition from the still-active UI scene. Stopping UI first and then
+      // resuming/restarting the paused Game through a stale scene reference can leave Phaser
+      // between lifecycle states on mobile WebViews.
+      this.scene.stop('Game');
+      this.scene.start('Game');
     });
     y += gap;
     this.button(c, ranked ? 'БРОСИТЬ ВЫЗОВ' : 'ПОДЕЛИТЬСЯ РЕЗУЛЬТАТОМ', W / 2, y, false, () => {
@@ -1415,11 +1414,8 @@ export class UIScene extends Phaser.Scene {
     });
     y += gap;
     this.button(c, 'В МЕНЮ', W / 2, y, false, () => {
-      this.scene.stop();
-      if (gs) {
-        gs.scene.stop();
-        gs.scene.start('Menu');
-      }
+      this.scene.stop('Game');
+      this.scene.start('Menu');
     });
   }
 
