@@ -269,10 +269,29 @@ function mag(v) {
     ],
   });
   await page.waitForTimeout(80);
-  const rightOnly = await page.evaluate(() => ({
-    joy: window.__game.registry.get('joy'),
-    aimJoy: window.__game.registry.get('aimJoy'),
-  }));
+  const rightOnly = await page.evaluate(() => {
+    const ui = window.__game.scene.getScene('UI');
+    return {
+      joy: window.__game.registry.get('joy'),
+      aimJoy: window.__game.registry.get('aimJoy'),
+      left: ui.dualMove
+        ? {
+            active: ui.dualMove.left.active,
+            pointerId: ui.dualMove.left.pointerId,
+            vectorX: ui.dualMove.left.vectorX,
+            vectorY: ui.dualMove.left.vectorY,
+          }
+        : null,
+      right: ui.dualMove
+        ? {
+            active: ui.dualMove.right.active,
+            pointerId: ui.dualMove.right.pointerId,
+            vectorX: ui.dualMove.right.vectorX,
+            vectorY: ui.dualMove.right.vectorY,
+          }
+        : null,
+    };
+  });
   if (mag(rightOnly.joy) < 0.35 || (rightOnly.joy?.x ?? 0) >= -0.2 || rightOnly.aimJoy !== undefined) {
     throw new Error('right dual-move thumb failed: ' + JSON.stringify(rightOnly));
   }
