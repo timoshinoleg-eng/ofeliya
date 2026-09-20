@@ -57,6 +57,11 @@ if (!chrome) throw new Error('Chrome not found');
     env: process.env,
     stdio: 'inherit',
   });
+  execFileSync(process.execPath, ['scripts/max-bridge-nonblocking-smoke.cjs'], {
+    cwd: process.cwd(),
+    env: process.env,
+    stdio: 'inherit',
+  });
 })().catch((error) => {
   console.error(error.stack || error);
   process.exit(1);

@@ -58,3 +58,15 @@ for (const forbidden of ['initData', 'getUser', 'username', 'first_name', 'last_
     `Startup trace must not collect personal identity field: ${forbidden}`
   );
 }
+
+const indexSource = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+assert.match(
+  indexSource,
+  /document\.createElement\('script'\)[\s\S]*bridge\.async\s*=\s*true/,
+  'MAX Bridge must be inserted asynchronously so its CDN cannot block the app module'
+);
+assert.doesNotMatch(
+  indexSource,
+  /<script[^>]+src=["']https:\/\/st\.max\.ru\/js\/max-web-app\.js["'][^>]*defer/i,
+  'MAX Bridge must not be a blocking/defer script before the app module'
+);
