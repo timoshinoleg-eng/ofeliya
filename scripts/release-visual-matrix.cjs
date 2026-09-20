@@ -203,6 +203,15 @@ async function openCase(browser, spec) {
     const state = await page.evaluate((target) => {
       const gs = window.__game.scene.getScene('Game');
       const activeEnemies = window.__releaseMatrixSpawnTo(target);
+
+      // Physics pause does not stop Sprite.preUpdate, so a projectile can expire between dense
+      // captures. Refresh exactly one projectile for every matrix cell.
+      for (const item of gs.bullets.getChildren()) {
+        if (item.active) item.deactivateForStageReset();
+      }
+      const bullet = gs.bullets.get(gs.player.x, gs.player.y);
+      bullet.fire(gs.time.now, -0.15, 10, 0, false, 0);
+
       return {
         activeEnemies,
         activeGems: gs.gems.getChildren().filter((gem) => gem.active).length,
