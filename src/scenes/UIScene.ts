@@ -48,6 +48,8 @@ export class UIScene extends Phaser.Scene {
   private killsText!: Phaser.GameObjects.Text;
   private hpText!: Phaser.GameObjects.Text;
   private muteText!: Phaser.GameObjects.Text;
+  private pauseHit!: Phaser.GameObjects.Rectangle;
+  private pauseText!: Phaser.GameObjects.Text;
   private joystick: Joystick | null = null;
   private twinStick: TwinStickControls | null = null;
   private hpWarn!: Phaser.GameObjects.Graphics;
@@ -57,6 +59,8 @@ export class UIScene extends Phaser.Scene {
 
   private modal: Phaser.GameObjects.Container | null = null;
   private transitionOverlay: Phaser.GameObjects.Container | null = null;
+  private pauseOverlay: Phaser.GameObjects.Container | null = null;
+  private manualPaused = false;
   private modalOpen = false;
   private modalGeneration = 0;
   private overShown = false;
@@ -74,6 +78,8 @@ export class UIScene extends Phaser.Scene {
     this.uiBlocked = false;
     this.modal = null;
     this.transitionOverlay = null;
+    this.pauseOverlay = null;
+    this.manualPaused = false;
 
     const W = this.scale.width;
 
@@ -114,6 +120,23 @@ export class UIScene extends Phaser.Scene {
         this.muteText.setText('♪').setColor(muted ? '#5a6480' : '#35e0ff');
       });
 
+    this.pauseHit = this.add
+      .rectangle(W - 52, 65, 34, 30, 0x141a2e, 0.92)
+      .setStrokeStyle(1, COLORS.cyan, 0.72)
+      .setDepth(DEPTH + 2)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerup', () => this.showPauseMenu());
+    this.pauseText = this.add
+      .text(W - 52, 65, 'II', {
+        fontFamily: FONT,
+        fontSize: '13px',
+        fontStyle: 'bold',
+        color: '#35e0ff',
+      })
+      .setOrigin(0.5)
+      .setResolution(2)
+      .setDepth(DEPTH + 3);
+
     this.hpWarn = this.add.graphics().setDepth(DEPTH - 1);
     this.fanfare = this.add
       .particles(0, 0, 'spark', {
@@ -153,6 +176,8 @@ export class UIScene extends Phaser.Scene {
     this.scale.on('resize', this.layout, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.layout, this);
+      this.pauseOverlay = null;
+      this.manualPaused = false;
     });
     this.layout();
   }
@@ -523,6 +548,79 @@ export class UIScene extends Phaser.Scene {
     this.hpText.setX(W / 2);
     this.bossLabel.setX(W / 2);
     this.muteText.setX(W - 16);
+    this.pauseHit.setX(W - 52);
+    this.pauseText.setX(W - 52);
+  }
+
+  private showPauseMenu(): void {
+    if (
+      this.manualPaused ||
+      this.modalOpen ||
+      this.transitionOverlay ||
+      this.overShown ||
+      this.uiBlocked ||
+      !this.scene.isActive('Game')
+    ) {
+      return;
+    }
+
+    this.manualPaused = true;
+    this.uiBlocked = true;
+    this.joystick?.reset();
+    this.twinStick?.reset();
+    this.registry.set('joy', { x: 0, y: 0 });
+    this.registry.set('aimJoy', { x: 0, y: 0 });
+    this.scene.pause('Game');
+    PlatformBridge.haptic('light');
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const compact = H < 650;
+    const c = this.add.container(0, 0).setDepth(220);
+    this.pauseOverlay = c;
+
+    c.add(this.add.rectangle(W / 2, H / 2, W, H, 0x05070f, 0.9).setInteractive());
+    c.add(
+      this.add
+        .text(W / 2, H * 0.34, 'ПАУЗА', {
+          fontFamily: FONT,
+          fontSize: compact ? '32px' : '38px',
+          fontStyle: 'bold',
+          color: '#e8f4ff',
+          letterSpacing: 3,
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setShadow(0, 0, 'rgba(53,224,255,0.45)', 12, true, true)
+    );
+    c.add(
+      this.add
+        .text(W / 2, H * 0.41, 'забег остановлен', {
+          fontFamily: FONT,
+          fontSize: compact ? '11px' : '13px',
+          color: '#8f9ab7',
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+    );
+
+    this.button(c, 'ПРОДОЛЖИТЬ', W / 2, H * 0.53, true, () => this.closePauseMenu(true));
+    this.button(c, 'В МЕНЮ', W / 2, H * 0.63, false, () => {
+      this.closePauseMenu(false);
+      Sfx.stopMusic();
+      if (this.scene.isActive('Game') || this.scene.isPaused('Game')) this.scene.stop('Game');
+      this.scene.start('Menu');
+    });
+  }
+
+  private closePauseMenu(resumeGame: boolean): void {
+    this.pauseOverlay?.destroy(true);
+    this.pauseOverlay = null;
+    this.manualPaused = false;
+    this.uiBlocked = false;
+    this.registry.set('joy', { x: 0, y: 0 });
+    this.registry.set('aimJoy', { x: 0, y: 0 });
+    if (resumeGame && this.scene.isPaused('Game')) this.scene.resume('Game');
   }
 
   private showLevelUp(): void {
