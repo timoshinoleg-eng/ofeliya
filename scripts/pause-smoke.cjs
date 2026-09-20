@@ -105,7 +105,7 @@ async function textCenter(page, label) {
     throw new Error('player moved while paused');
   }
   if ((paused.joy?.x ?? 1) !== 0 || (paused.joy?.y ?? 1) !== 0) {
-    throw new Error('movement input not cleared on pause');
+    throw new Error('movement input not cleared on pause: ' + JSON.stringify({ paused, stillPaused }));
   }
 
   const continuePoint = await textCenter(page, 'ПРОДОЛЖИТЬ');
