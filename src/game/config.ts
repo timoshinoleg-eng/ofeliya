@@ -64,6 +64,7 @@ export const WEAPON = {
 export const ORBIT = { damage: 11, radius: 82, speedDeg: 260, hitCooldownMs: 340 };
 export const NOVA = { damage: 15, radius: 140, intervalMs: 2500 };
 export const GEM = { magnetRadius: 90, attractSpeed: 460 };
+export const PROGRESSION = { firstKillXpFloor: 5 };
 
 /** Момент появления финального иммунного ответа — победа, если уничтожить его. */
 export const RUN = { bossTimeMs: 5 * 60 * 1000, bossPhaseSpawnMul: 0.35 };
