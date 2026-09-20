@@ -1,8 +1,16 @@
+[Reading 215 lines from start (total: 215 lines, 0 remaining)]
+
 import Phaser from 'phaser';
 import type { EnemyKind } from './config';
 import type { StageDefinition } from './StageDefinitions';
 import type { DifficultyProfile } from './DifficultyProfile';
 import type { GameScene } from '../scenes/GameScene';
+
+export interface WaveDirectorSnapshot {
+  spawnAcc: number;
+  spawnedElites: number;
+  minionAcc: number;
+}
 
 /** Owns only stage-local enemy composition; StageDirector owns lifecycle and boss timing. */
 export class WaveDirector {
@@ -93,6 +101,22 @@ export class WaveDirector {
       );
       for (let i = 0; i < batch; i++) this.spawn(waves.pickKind(t, this.randomKind()), false);
     }
+  }
+
+  snapshot(): WaveDirectorSnapshot {
+    return {
+      spawnAcc: this.spawnAcc,
+      spawnedElites: this.spawnedElites,
+      minionAcc: this.minionAcc,
+    };
+  }
+
+  restore(stage: StageDefinition, snapshot: WaveDirectorSnapshot): void {
+    this.stage = stage;
+    this.spawnAcc = snapshot.spawnAcc;
+    this.spawnedElites = snapshot.spawnedElites;
+    this.minionAcc = snapshot.minionAcc;
+    this.boss = null;
   }
 
   spawnBoss(): import('./Enemy').Enemy | null {
@@ -191,3 +215,5 @@ export class WaveDirector {
     };
   }
 }
+
+[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
