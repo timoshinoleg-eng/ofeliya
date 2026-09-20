@@ -1,5 +1,3 @@
-[Reading 66 lines from start (total: 66 lines, 0 remaining)]
-
 import type { AchievementId } from './AchievementSystem';
 import type { RunEndReason, StagePhase } from './StageDirector';
 import type { StageId } from './StageDefinitions';
@@ -66,5 +64,3 @@ export interface RunResult {
   newAchievements: AchievementId[];
   records: RunRecordFlags;
 }
-
-[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
