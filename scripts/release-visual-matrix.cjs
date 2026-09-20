@@ -160,7 +160,13 @@ async function openCase(browser, spec) {
       renderer: gs.game.renderer?.constructor?.name ?? '',
       rendererType: gs.game.renderer?.type ?? null,
       tier: gs.registry.get('performanceTier'),
+      postFxEnabled: Boolean(gs.registry.get('performancePostFx')),
       vignetteVisible: Boolean(gs.vignette?.visible),
+      ambientCounts: {
+        erythrocytes: gs.atmosphere?.erythrocytes?.length ?? null,
+        hostCells: gs.atmosphere?.hostCells?.length ?? null,
+        particles: gs.atmosphere?.particles?.length ?? null,
+      },
       runSeed: gs.runSeed,
       activeGems: gs.gems.getChildren().filter((gem) => gem.active).length,
       activeHostCells: cells.length,
@@ -181,11 +187,22 @@ async function openCase(browser, spec) {
   if (spec.renderer === 'canvas' && baseContract.rendererType !== 1) {
     throw new Error(`Canvas release case did not use Canvas: ${JSON.stringify(baseContract)}`);
   }
-  if (spec.renderer === 'webgl' && spec.tier === 'full' && baseContract.vignetteVisible) {
-    throw new Error(`full WebGL case did not activate postFX path: ${JSON.stringify(baseContract)}`);
+  if (baseContract.postFxEnabled) {
+    throw new Error(`camera postFX must stay disabled for sharp dense gameplay: ${JSON.stringify(baseContract)}`);
   }
-  if (spec.tier === 'reduced' && !baseContract.vignetteVisible) {
-    throw new Error(`reduced tier unexpectedly hid fallback vignette: ${JSON.stringify(baseContract)}`);
+  if (!baseContract.vignetteVisible) {
+    throw new Error(`sharp vignette overlay unexpectedly hidden: ${JSON.stringify(baseContract)}`);
+  }
+  const expectedAmbient =
+    spec.tier === 'full'
+      ? { erythrocytes: 14, hostCells: 4, particles: 24 }
+      : { erythrocytes: 8, hostCells: 2, particles: 12 };
+  if (
+    baseContract.ambientCounts.erythrocytes !== expectedAmbient.erythrocytes ||
+    baseContract.ambientCounts.hostCells !== expectedAmbient.hostCells ||
+    baseContract.ambientCounts.particles !== expectedAmbient.particles
+  ) {
+    throw new Error(`presentation tier lost its ambient density identity: ${JSON.stringify(baseContract)}`);
   }
   if (
     baseContract.runSeed !== 'release-matrix-seed' ||
