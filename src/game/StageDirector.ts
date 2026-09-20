@@ -11,6 +11,13 @@ export type StagePhase =
 
 export type RunEndReason = 'defeat' | 'campaign-complete' | 'abandoned';
 
+export interface StageDirectorSnapshot {
+  stageId: string;
+  phase: StagePhase;
+  milestoneIndex: number;
+  runStarted: boolean;
+}
+
 export type StageDirectorEvent =
   | { type: 'stage-started'; stage: StageDefinition }
   | { type: 'milestone'; stage: StageDefinition; milestone: StageMilestoneDefinition }
@@ -140,5 +147,31 @@ export class StageDirector {
     if (this.phase === 'RUN_ENDED') return [];
     this.phase = 'RUN_ENDED';
     return [{ type: 'run-ended', stage: this.currentStage, reason }];
+  }
+
+  snapshot(): StageDirectorSnapshot {
+    return {
+      stageId: this.currentStage.id,
+      phase: this.phase,
+      milestoneIndex: this.milestoneIndex,
+      runStarted: this.runStarted,
+    };
+  }
+
+  restore(snapshot: StageDirectorSnapshot): void {
+    const index = this.stages.findIndex((stage) => stage.id === snapshot.stageId);
+    if (index < 0) throw new Error('Unknown checkpoint stage');
+    const stage = this.stages[index];
+    if (
+      !Number.isInteger(snapshot.milestoneIndex) ||
+      snapshot.milestoneIndex < 0 ||
+      snapshot.milestoneIndex > stage.milestones.length
+    ) {
+      throw new Error('Invalid checkpoint milestone index');
+    }
+    this.stageIndex = index;
+    this.milestoneIndex = snapshot.milestoneIndex;
+    this.phase = snapshot.phase;
+    this.runStarted = snapshot.runStarted;
   }
 }

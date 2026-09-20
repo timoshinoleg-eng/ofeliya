@@ -44,6 +44,8 @@ export interface RunResult {
   /** Replays/challenges can reproduce gameplay-random decisions from this seed. */
   runSeed: string;
   controlMode: ControlMode;
+  /** Local checkpoint resume is intentionally non-canonical for ranked Standard results. */
+  resumed: boolean;
   timeMs: number;
   kills: number;
   hostCellsInfected: number;

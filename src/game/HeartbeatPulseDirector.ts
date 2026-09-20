@@ -3,6 +3,14 @@ export type HeartbeatPulseEvent =
   | { type: 'heartbeat-impact'; bossActive: boolean; pressureUntilMs: number }
   | { type: 'heartbeat-pressure-ended' };
 
+export interface HeartbeatPulseSnapshot {
+  nextImpactAtMs: number;
+  telegraphedImpactAtMs: number | null;
+  pressureUntilMs: number | null;
+  pressureBoss: boolean;
+  bossWasActive: boolean;
+}
+
 export interface HeartbeatPulseProfile {
   firstImpactAtMs: number;
   intervalMs: number;
@@ -86,6 +94,24 @@ export class HeartbeatPulseDirector {
 
     return events;
   }
+  snapshot(): HeartbeatPulseSnapshot {
+    return {
+      nextImpactAtMs: this.nextImpactAtMs,
+      telegraphedImpactAtMs: this.telegraphedImpactAtMs,
+      pressureUntilMs: this.pressureUntilMs,
+      pressureBoss: this.pressureBoss,
+      bossWasActive: this.bossWasActive,
+    };
+  }
+
+  restore(snapshot: HeartbeatPulseSnapshot): void {
+    this.nextImpactAtMs = snapshot.nextImpactAtMs;
+    this.telegraphedImpactAtMs = snapshot.telegraphedImpactAtMs;
+    this.pressureUntilMs = snapshot.pressureUntilMs;
+    this.pressureBoss = snapshot.pressureBoss;
+    this.bossWasActive = snapshot.bossWasActive;
+  }
+
   get pressureMultiplier(): number {
     if (this.pressureUntilMs === null) return 1;
     return this.pressureBoss

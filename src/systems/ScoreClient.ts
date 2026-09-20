@@ -1,8 +1,8 @@
 import type { RunResult } from '../game/RunContracts';
 import type { PlatformAdapter } from '../platform/PlatformBridge';
+import { SCORE_CAMPAIGN_VERSION, SCORE_RULESET_VERSION } from '../game/RunVersions';
 
-export const SCORE_RULESET_VERSION = 2;
-export const SCORE_CAMPAIGN_VERSION = 2;
+export { SCORE_CAMPAIGN_VERSION, SCORE_RULESET_VERSION } from '../game/RunVersions';
 
 const ANON_KEY = 'ofeliya_anon_score_id_v1';
 const SCORE_TIMEOUT_MS = 2500;
@@ -118,6 +118,9 @@ export async function submitRunScore(
   result: RunResult,
   platform: PlatformAdapter
 ): Promise<ScoreSubmitResponse | null> {
+  // Local checkpoint state is not server-authoritative. Never let a resumed Standard run
+  // enter the canonical score submission path.
+  if (result.resumed) return null;
   const submission = buildScoreSubmission(result, platform);
   // A messenger result without signed initData must never be downgraded to an anonymous trusted score.
   if (submission.platform !== 'browser' && !submission.initData) return null;

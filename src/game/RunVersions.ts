@@ -1,0 +1,2 @@
+export const SCORE_RULESET_VERSION = 2;
+export const SCORE_CAMPAIGN_VERSION = 2;

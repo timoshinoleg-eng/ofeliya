@@ -9,6 +9,11 @@ export const GAMEPLAY_RNG_STREAMS = [
 
 export type GameplayRngStream = (typeof GAMEPLAY_RNG_STREAMS)[number];
 
+export interface RunRngSnapshot {
+  seed: string;
+  states: Record<GameplayRngStream, number>;
+}
+
 function hash32(input: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < input.length; i++) {
@@ -75,5 +80,23 @@ export class RunRng {
 
   range(stream: GameplayRngStream, min: number, max: number): number {
     return min + (max - min) * this.next(stream);
+  }
+
+  snapshot(): RunRngSnapshot {
+    return {
+      seed: this.seed,
+      states: { ...this.states },
+    };
+  }
+
+  restore(snapshot: RunRngSnapshot): void {
+    if (snapshot.seed !== this.seed) throw new Error('RunRng snapshot seed mismatch');
+    for (const stream of GAMEPLAY_RNG_STREAMS) {
+      const state = snapshot.states[stream];
+      if (!Number.isInteger(state) || state < 0 || state > 0xffffffff) {
+        throw new Error('Invalid RunRng stream state');
+      }
+      this.states[stream] = state >>> 0;
+    }
   }
 }
