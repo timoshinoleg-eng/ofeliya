@@ -25,13 +25,26 @@
     </script>
     <!-- Must run before MAX Bridge/app boot so each release gets a distinct WebView URL. -->
     <script src="./runtime-config.js"></script>
-    <!-- MAX Bridge. Platform detection is late-safe, so a slow CDN cannot permanently demote MAX to browser mode. -->
-    <script
-      src="https://st.max.ru/js/max-web-app.js"
-      defer
-      onload="window.__ofeliyaEarlyMarks?.push(['max.bridge.loaded', performance.now()])"
-      onerror="window.__ofeliyaEarlyMarks?.push(['max.bridge.error', performance.now()])"
-    ></script>
+    <!--
+      MAX Bridge must never block the app module. The platform facade resolves MAX lazily, so
+      a slow/unreachable CDN is allowed to arrive later while the game boots on browser fallbacks.
+    -->
+    <script>
+      (() => {
+        const bridge = document.createElement('script');
+        bridge.src = 'https://st.max.ru/js/max-web-app.js';
+        bridge.async = true;
+        bridge.onload = () => {
+          window.__ofeliyaEarlyMarks?.push(['max.bridge.loaded', performance.now()]);
+          window.dispatchEvent(new Event('ofeliya:max-bridge-ready'));
+        };
+        bridge.onerror = () => {
+          window.__ofeliyaEarlyMarks?.push(['max.bridge.error', performance.now()]);
+          window.dispatchEvent(new Event('ofeliya:max-bridge-error'));
+        };
+        document.head.appendChild(bridge);
+      })();
+    </script>
     <style>
       @font-face {
         font-family: 'Chakra Petch';
