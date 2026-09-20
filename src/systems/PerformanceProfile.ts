@@ -52,7 +52,9 @@ export const PERFORMANCE: PerformanceProfile =
       }
     : {
         tier,
-        postFx: true,
+        // Camera postFX materially softens/darkens dense WebGL combat in MAX/SwiftShader paths.
+        // Full presentation stays richer through ambient/VFX density, not a full-screen blur pass.
+        postFx: false,
         ambientErythrocytes: 14,
         ambientHostCells: 4,
         ambientParticles: 24,
