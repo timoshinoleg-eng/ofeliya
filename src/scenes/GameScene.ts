@@ -123,7 +123,7 @@ export class GameScene extends Phaser.Scene {
   private heartbeatSafeIndicator: Phaser.GameObjects.Arc | null = null;
   private heartbeatSafeX = 0;
   private heartbeatSafeY = 0;
-  private heartbeatSafeRadius = HEART_SAFE_POCKET.normal.radius;
+  private heartbeatSafeRadius: number = HEART_SAFE_POCKET.normal.radius;
   private heartbeatProtectedUntil = 0;
   private heartbeatOpportunityUntil = 0;
   private heartbeatBeatIndex = 0;
