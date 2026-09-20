@@ -73,6 +73,7 @@ export class ViewportManager {
   start(): void {
     window.addEventListener('resize', this.onViewportSignal, { passive: true });
     window.addEventListener('orientationchange', this.onViewportSignal, { passive: true });
+    window.addEventListener('ofeliya:max-bridge-ready', this.onViewportSignal as EventListener);
     document.addEventListener('visibilitychange', this.onVisibility);
 
     // Covers the rare case where the MAX CDN bridge becomes available after the module bundle.
@@ -82,6 +83,7 @@ export class ViewportManager {
   destroy(): void {
     window.removeEventListener('resize', this.onViewportSignal);
     window.removeEventListener('orientationchange', this.onViewportSignal);
+    window.removeEventListener('ofeliya:max-bridge-ready', this.onViewportSignal as EventListener);
     document.removeEventListener('visibilitychange', this.onVisibility);
     if (this.retryTimer !== null) window.clearTimeout(this.retryTimer);
     this.retryTimer = null;
