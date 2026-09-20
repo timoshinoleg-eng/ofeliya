@@ -111,6 +111,9 @@ async function openCase(browser, spec) {
     for (const gem of gs.gems.getChildren()) {
       if (gem.active) gem.deactivateForStageReset();
     }
+    for (const bullet of gs.bullets.getChildren()) {
+      if (bullet.active) bullet.deactivateForStageReset();
+    }
     gs.hostCells.resetStage();
 
     const kinds = ['swarm', 'runner', 'brute'];
@@ -170,10 +173,12 @@ async function openCase(browser, spec) {
   if (baseContract.tier !== spec.tier) {
     throw new Error(`performance tier mismatch for ${JSON.stringify(spec)}: ${JSON.stringify(baseContract)}`);
   }
-  if (spec.renderer === 'webgl' && !baseContract.renderer.startsWith('WebGLRenderer')) {
+  // Constructor names are minified in production builds; Phaser's stable renderer type is the
+  // release-safe assertion (CANVAS=1, WEBGL=2).
+  if (spec.renderer === 'webgl' && baseContract.rendererType !== 2) {
     throw new Error(`WebGL release case fell back unexpectedly: ${JSON.stringify(baseContract)}`);
   }
-  if (spec.renderer === 'canvas' && !baseContract.renderer.startsWith('CanvasRenderer')) {
+  if (spec.renderer === 'canvas' && baseContract.rendererType !== 1) {
     throw new Error(`Canvas release case did not use Canvas: ${JSON.stringify(baseContract)}`);
   }
   if (spec.renderer === 'webgl' && spec.tier === 'full' && baseContract.vignetteVisible) {
