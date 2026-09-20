@@ -1,3 +1,5 @@
+[Reading 66 lines from start (total: 66 lines, 0 remaining)]
+
 import type { AchievementId } from './AchievementSystem';
 import type { RunEndReason, StagePhase } from './StageDirector';
 import type { StageId } from './StageDefinitions';
@@ -44,6 +46,8 @@ export interface RunResult {
   /** Replays/challenges can reproduce gameplay-random decisions from this seed. */
   runSeed: string;
   controlMode: ControlMode;
+  /** Local checkpoint resume is intentionally non-canonical for ranked Standard results. */
+  resumed: boolean;
   timeMs: number;
   kills: number;
   hostCellsInfected: number;
@@ -62,3 +66,5 @@ export interface RunResult {
   newAchievements: AchievementId[];
   records: RunRecordFlags;
 }
+
+[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
