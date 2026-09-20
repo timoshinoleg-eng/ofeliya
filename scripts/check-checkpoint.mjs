@@ -68,7 +68,7 @@ try {
     savedAtEpochMs: Date.now(),
     runSeed: rng.seed,
     difficultyId: 'standard',
-    controlMode: 'one-hand',
+    controlMode: 'dual-move',
     resumed: false,
     director: director.snapshot(),
     runState: state.snapshotForCheckpoint(),
