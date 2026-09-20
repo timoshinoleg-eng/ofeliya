@@ -24,6 +24,7 @@ import {
 } from '../game/UpgradeSystem';
 import { PlatformBridge } from '../platform';
 import { Sfx } from '../systems/Sfx';
+import { submitRunScore } from '../systems/ScoreClient';
 import type { GameScene } from './GameScene';
 
 const DEPTH = 50;
@@ -1281,6 +1282,36 @@ export class UIScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setResolution(2)
     );
+
+    detailY += compact ? 20 : 23;
+    const scoreStatus = this.add
+      .text(W / 2, detailY, 'СЧЁТ: синхронизация…', {
+        fontFamily: FONT,
+        fontSize: compact ? '9px' : '10px',
+        fontStyle: 'bold',
+        color: '#8f9ab7',
+        align: 'center',
+      })
+      .setOrigin(0.5)
+      .setResolution(2);
+    c.add(scoreStatus);
+
+    void submitRunScore(res, PlatformBridge).then((score) => {
+      if (!scoreStatus.active) return;
+      if (!score) {
+        scoreStatus.setVisible(false);
+        return;
+      }
+      if (score.ranked) {
+        scoreStatus
+          .setText(score.rank ? `РЕЙТИНГ · RULESET ${score.rulesetVersion} · #${score.rank}` : 'РЕЙТИНГ · РЕЗУЛЬТАТ СОХРАНЁН')
+          .setColor('#8fe8ff');
+      } else if (PlatformBridge.kind === 'browser') {
+        scoreStatus.setText('ТЕСТОВЫЙ РЕЗУЛЬТАТ · ВНЕ РЕЙТИНГА').setColor('#8f9ab7');
+      } else {
+        scoreStatus.setText('РЕЗУЛЬТАТ СОХРАНЁН · ВНЕ РЕЙТИНГА').setColor('#ffe066');
+      }
+    });
 
     const rec: string[] = [];
     if (res.records.timeRecord && res.timeMs > 0) rec.push(res.win ? 'победа' : 'выживание');
