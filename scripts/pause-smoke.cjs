@@ -100,6 +100,28 @@ async function textCenter(page, label) {
     return ui?.manualPaused === true && game.scene.isPaused('Game');
   });
 
+  const pauseVisual = await page.evaluate(() => {
+    const ui = window.__game.scene.getScene('UI');
+    const subtitle = ui.pauseOverlay?.list?.find(
+      (obj) => obj?.type === 'Text' && obj.text === 'забег остановлен'
+    );
+    return subtitle
+      ? {
+          size: Number.parseFloat(String(subtitle.style?.fontSize ?? '0')) || 0,
+          family: String(subtitle.style?.fontFamily ?? ''),
+          color: String(subtitle.style?.color ?? ''),
+        }
+      : null;
+  });
+  if (
+    !pauseVisual ||
+    pauseVisual.size < 14 ||
+    !/system-ui/i.test(pauseVisual.family) ||
+    pauseVisual.color.toLowerCase() === '#8f9ab7'
+  ) {
+    throw new Error('pause subtitle readability regression: ' + JSON.stringify(pauseVisual));
+  }
+
   const paused = await page.evaluate(() => {
     const gs = window.__game.scene.getScene('Game');
     return {
