@@ -720,9 +720,11 @@ export class MenuScene extends Phaser.Scene {
 
     const dismiss = () => {
       if (this.codexOverlay !== overlay) return;
+      PlatformBridge.setBackHandler(null);
       overlay.destroy();
       this.codexOverlay = null;
     };
+    PlatformBridge.setBackHandler(dismiss);
     close.on('pointerup', dismiss);
     dim.on('pointerup', (_pointer, localX, localY, event) => {
       event?.stopPropagation?.();
