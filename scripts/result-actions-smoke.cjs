@@ -139,15 +139,32 @@ async function buttonCenter(page, label) {
     const point = await buttonCenter(page, 'ЕЩЁ ОДИН ЦИКЛ');
     if (!point) throw new Error('restart button hit target missing');
     await touchAt(ctx, page, point);
-    await page.waitForFunction(() => {
+    await sleep(650);
+    const restartState = await page.evaluate(() => {
       const game = window.__game;
-      return (
-        game.scene.isActive('Game') &&
-        !game.scene.isPaused('Game') &&
-        game.scene.isActive('UI') &&
-        game.registry.get('runResult') === null
-      );
+      const gs = game.scene.getScene('Game');
+      const ui = game.scene.getScene('UI');
+      return {
+        gameActive: game.scene.isActive('Game'),
+        gamePaused: game.scene.isPaused('Game'),
+        gameStatus: gs?.sys?.settings?.status ?? null,
+        uiActive: game.scene.isActive('UI'),
+        uiPaused: game.scene.isPaused('UI'),
+        uiStatus: ui?.sys?.settings?.status ?? null,
+        menuActive: game.scene.isActive('Menu'),
+        runResult: game.registry.get('runResult') ? 'present' : 'null',
+        sameGameRef: ui?.gs === gs,
+        restartMethod: typeof gs?.restartRun,
+      };
     });
+    if (
+      !restartState.gameActive ||
+      restartState.gamePaused ||
+      !restartState.uiActive ||
+      restartState.runResult !== 'null'
+    ) {
+      throw new Error('restart touch lifecycle failed: ' + JSON.stringify(restartState));
+    }
     if (errors.length) throw new Error('page errors after restart: ' + errors.join(' | '));
     await ctx.close();
   }
