@@ -1,5 +1,3 @@
-[Reading 102 lines from start (total: 102 lines, 0 remaining)]
-
 export const GAMEPLAY_RNG_STREAMS = [
   'progression',
   'enemy-kind',
@@ -102,5 +100,3 @@ export class RunRng {
     }
   }
 }
-
-[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
