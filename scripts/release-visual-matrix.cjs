@@ -7,6 +7,7 @@ if (!chrome) throw new Error('Chrome not found');
 
 const BASE = process.env.OFELIYA_BASE_URL || 'http://127.0.0.1:4173/';
 const CAPTURE_DIR = process.env.OFELIYA_MATRIX_DIR || '/tmp/release-visual-matrix';
+const APP_RELEASE_MARKER = 'ofeliya-20260912-strain-zero-rc3-utf8';
 const DENSITIES = [100, 150, 200];
 const CASES = [
   { renderer: 'webgl', tier: 'full' },
@@ -45,13 +46,45 @@ async function openCase(browser, spec) {
 
   const page = await ctx.newPage();
   const errors = [];
+  const consoleErrors = [];
   page.on('pageerror', (error) => errors.push(String(error)));
+  page.on('console', (msg) => {
+    if (msg.type() === 'error' || msg.type() === 'warning') {
+      consoleErrors.push(`${msg.type()}: ${msg.text()}`);
+    }
+  });
 
   const url = new URL(BASE);
   url.searchParams.set('renderer', spec.renderer);
   url.searchParams.set('matrix', spec.tier);
+  // Production runtime-config performs a one-time cache-busting redirect unless this marker is
+  // already present. Supplying it up-front removes a navigation race from the release gate.
+  url.searchParams.set('app', APP_RELEASE_MARKER);
   await page.goto(url.toString(), { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
+  try {
+    await page.waitForFunction(() => window.__game?.scene.isActive('Menu'), null, {
+      timeout: 15_000,
+    });
+  } catch (error) {
+    const boot = await page.evaluate(() => ({
+      href: window.location.href,
+      gamePresent: Boolean(window.__game),
+      activeScenes:
+        window.__game?.scene
+          ?.getScenes(true)
+          ?.map((scene) => scene.scene?.key ?? 'unknown') ?? [],
+      splash: document.getElementById('splash')?.textContent ?? null,
+      canvasPresent: Boolean(document.querySelector('#game canvas')),
+    }));
+    throw new Error(
+      `matrix boot failed for ${JSON.stringify(spec)}: ${JSON.stringify({
+        boot,
+        pageErrors: errors,
+        consoleErrors,
+        cause: String(error),
+      })}`
+    );
+  }
   await page.evaluate(() => {
     window.__game.registry.set('runSeedOverride', 'release-matrix-seed');
     window.__game.scene.getScene('Menu').scene.start('Game');
