@@ -1,7 +1,17 @@
+[Reading 134 lines from start (total: 134 lines, 0 remaining)]
+
 export type HeartbeatPulseEvent =
   | { type: 'heartbeat-telegraph'; bossActive: boolean; impactAtMs: number }
   | { type: 'heartbeat-impact'; bossActive: boolean; pressureUntilMs: number }
   | { type: 'heartbeat-pressure-ended' };
+
+export interface HeartbeatPulseSnapshot {
+  nextImpactAtMs: number;
+  telegraphedImpactAtMs: number | null;
+  pressureUntilMs: number | null;
+  pressureBoss: boolean;
+  bossWasActive: boolean;
+}
 
 export interface HeartbeatPulseProfile {
   firstImpactAtMs: number;
@@ -86,6 +96,24 @@ export class HeartbeatPulseDirector {
 
     return events;
   }
+  snapshot(): HeartbeatPulseSnapshot {
+    return {
+      nextImpactAtMs: this.nextImpactAtMs,
+      telegraphedImpactAtMs: this.telegraphedImpactAtMs,
+      pressureUntilMs: this.pressureUntilMs,
+      pressureBoss: this.pressureBoss,
+      bossWasActive: this.bossWasActive,
+    };
+  }
+
+  restore(snapshot: HeartbeatPulseSnapshot): void {
+    this.nextImpactAtMs = snapshot.nextImpactAtMs;
+    this.telegraphedImpactAtMs = snapshot.telegraphedImpactAtMs;
+    this.pressureUntilMs = snapshot.pressureUntilMs;
+    this.pressureBoss = snapshot.pressureBoss;
+    this.bossWasActive = snapshot.bossWasActive;
+  }
+
   get pressureMultiplier(): number {
     if (this.pressureUntilMs === null) return 1;
     return this.pressureBoss
@@ -106,3 +134,5 @@ export class HeartbeatPulseDirector {
   }
 }
 
+
+[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
