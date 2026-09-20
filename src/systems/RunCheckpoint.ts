@@ -1,5 +1,3 @@
-[Reading 363 lines from start (total: 363 lines, 0 remaining)]
-
 import { STAGES } from '../game/StageDefinitions';
 import { xpForLevel, type RunStateCheckpoint, type StageBuildSnapshot } from '../game/RunState';
 import {
@@ -363,5 +361,3 @@ export const RunCheckpoint = {
     removeStoredCheckpoint();
   },
 };
-
-[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
