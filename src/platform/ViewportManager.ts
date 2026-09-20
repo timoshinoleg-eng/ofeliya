@@ -2,6 +2,8 @@ import type Phaser from 'phaser';
 import { PlatformBridge } from './index';
 import { computeViewportFrame, type SafeAreaInsets, type ViewportSize } from './ViewportMath';
 
+const BRIDGE_VIEWPORT_TIMEOUT_MS = 320;
+
 function px(value: string): number {
   const n = Number.parseFloat(value);
   return Number.isFinite(n) && n > 0 ? n : 0;
@@ -39,6 +41,20 @@ function windowViewport(): ViewportSize {
   };
 }
 
+async function bridgeViewportWithin(timeoutMs = BRIDGE_VIEWPORT_TIMEOUT_MS): Promise<ViewportSize | null> {
+  let timer: number | null = null;
+  try {
+    return await Promise.race([
+      PlatformBridge.getViewportSize(),
+      new Promise<null>((resolve) => {
+        timer = window.setTimeout(() => resolve(null), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== null) window.clearTimeout(timer);
+  }
+}
+
 /** Keeps Phaser inside MAX's documented available viewport and the OS CSS safe area. */
 export class ViewportManager {
   private readonly host: HTMLElement;
@@ -58,7 +74,6 @@ export class ViewportManager {
     window.addEventListener('resize', this.onViewportSignal, { passive: true });
     window.addEventListener('orientationchange', this.onViewportSignal, { passive: true });
     document.addEventListener('visibilitychange', this.onVisibility);
-    void this.sync();
 
     // Covers the rare case where the MAX CDN bridge becomes available after the module bundle.
     this.retryTimer = window.setTimeout(() => void this.sync(), 350);
@@ -78,7 +93,10 @@ export class ViewportManager {
     const fallback = windowViewport();
     let viewport = fallback;
     try {
-      const bridgeViewport = await PlatformBridge.getViewportSize();
+      // MAX/WebView bridges are external code. A slow or wedged bridge must never keep the
+      // splash screen up indefinitely; boot on the browser viewport and let the retry/resize
+      // signals apply the authoritative viewport later.
+      const bridgeViewport = await bridgeViewportWithin();
       if (bridgeViewport) viewport = bridgeViewport;
     } catch {
       viewport = fallback;
