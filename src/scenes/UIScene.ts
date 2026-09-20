@@ -48,6 +48,7 @@ export class UIScene extends Phaser.Scene {
   private killsText!: Phaser.GameObjects.Text;
   private hpText!: Phaser.GameObjects.Text;
   private muteText!: Phaser.GameObjects.Text;
+  private pauseHit!: Phaser.GameObjects.Rectangle;
   private pauseText!: Phaser.GameObjects.Text;
   private joystick: Joystick | null = null;
   private twinStick: TwinStickControls | null = null;
@@ -119,20 +120,22 @@ export class UIScene extends Phaser.Scene {
         this.muteText.setText('♪').setColor(muted ? '#5a6480' : '#35e0ff');
       });
 
-    this.pauseText = this.add
-      .text(W - 44, 52, 'Ⅱ', {
-        fontFamily: FONT,
-        fontSize: '14px',
-        fontStyle: 'bold',
-        color: '#35e0ff',
-        backgroundColor: '#141a2e',
-        padding: { x: 7, y: 4 },
-      })
-      .setOrigin(1, 0)
-      .setResolution(2)
+    this.pauseHit = this.add
+      .rectangle(W - 52, 65, 34, 30, 0x141a2e, 0.92)
+      .setStrokeStyle(1, COLORS.cyan, 0.72)
       .setDepth(DEPTH + 2)
       .setInteractive({ useHandCursor: true })
       .on('pointerup', () => this.showPauseMenu());
+    this.pauseText = this.add
+      .text(W - 52, 65, 'II', {
+        fontFamily: FONT,
+        fontSize: '13px',
+        fontStyle: 'bold',
+        color: '#35e0ff',
+      })
+      .setOrigin(0.5)
+      .setResolution(2)
+      .setDepth(DEPTH + 3);
 
     this.hpWarn = this.add.graphics().setDepth(DEPTH - 1);
     this.fanfare = this.add
@@ -545,7 +548,8 @@ export class UIScene extends Phaser.Scene {
     this.hpText.setX(W / 2);
     this.bossLabel.setX(W / 2);
     this.muteText.setX(W - 16);
-    this.pauseText.setX(W - 44);
+    this.pauseHit.setX(W - 52);
+    this.pauseText.setX(W - 52);
   }
 
   private showPauseMenu(): void {
