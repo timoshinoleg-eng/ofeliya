@@ -6,7 +6,7 @@ if (!chrome) throw new Error('Chrome not found');
 
 const REQUIRED_MARKS = [
   'runtime-config',
-  'runtime-config.release-match',
+  'runtime-config.ready',
   'max.bridge.loaded',
   'main.module',
   'boot.start',
@@ -99,7 +99,13 @@ async function waitForTrace(page) {
 
   const page = await ctx.newPage();
   const errors = [];
+  const navigations = [];
   page.on('pageerror', (error) => errors.push(String(error)));
+  page.on('request', (request) => {
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
+      navigations.push(request.url());
+    }
+  });
 
   await page.goto('http://127.0.0.1:5173/?startupTrace=1', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
@@ -111,14 +117,17 @@ async function waitForTrace(page) {
   for (const required of REQUIRED_MARKS) {
     if (!names.has(required)) throw new Error('startup trace missing mark: ' + required);
   }
-  if ((firstTrace.meta?.redirectCount ?? 0) < 1) {
-    throw new Error('clean launch did not capture runtime-config redirect');
+  if ((firstTrace.meta?.redirectCount ?? -1) !== 0) {
+    throw new Error('direct startup unexpectedly reported a redirect: ' + firstTrace.meta?.redirectCount);
   }
   if (!(firstTrace.totalMs > 0)) throw new Error('invalid startup total');
   if (!first.overlay.includes('OFELIYA STARTUP TRACE')) throw new Error('debug overlay missing');
   if (!first.overlay.includes('TTFB=')) throw new Error('debug overlay missing navigation timing');
   if (!first.overlay.includes('bundle=')) throw new Error('debug overlay missing bundle timing');
-  if (!first.href.includes('app=')) throw new Error('release URL redirect did not complete');
+  if (first.href.includes('app=')) throw new Error('legacy app cache-bust parameter survived direct startup');
+  if (navigations.length !== 1) {
+    throw new Error('clean launch performed more than one document navigation: ' + JSON.stringify(navigations));
+  }
 
   const serialized = JSON.stringify(first.history);
   for (const forbidden of ['startup-trace-secret-token', 'TraceSecret', 'must-not-be-stored', '987654321']) {
@@ -131,7 +140,7 @@ async function waitForTrace(page) {
   if (second.history.length < 2) throw new Error('startup trace history did not retain previous launch');
   const secondTrace = second.history[0];
   if ((secondTrace.meta?.redirectCount ?? -1) !== 0) {
-    throw new Error('already-versioned reload should not report release redirect: ' + secondTrace.meta?.redirectCount);
+    throw new Error('reload should remain redirect-free: ' + secondTrace.meta?.redirectCount);
   }
   if (second.history.length > 6) throw new Error('startup trace history exceeded retention limit');
 
