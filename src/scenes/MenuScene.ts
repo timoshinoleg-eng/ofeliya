@@ -539,11 +539,11 @@ export class MenuScene extends Phaser.Scene {
       });
 
     this.add
-      .text(W / 2, H - 54, 'Двигай штамм · собирай РНК · выбирай мутации', {
+      .text(W / 2, H - 66, 'Двигай штамм · собирай РНК · выбирай мутации', {
         fontFamily: UI_FONT,
-        fontSize: H < 650 ? '11px' : '12px',
+        fontSize: H < 650 ? '12px' : '13px',
         fontStyle: '600',
-        color: UI_TEXT.secondary,
+        color: '#d8d1e2',
         align: 'center',
         wordWrap: { width: W - 36 },
       })
@@ -552,11 +552,11 @@ export class MenuScene extends Phaser.Scene {
       .setDepth(5);
 
     this.add
-      .text(W / 2, H - 31, 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА', {
+      .text(W / 2, H - 43, 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА', {
         fontFamily: UI_FONT,
-        fontSize: H < 650 ? '10px' : '11px',
+        fontSize: H < 650 ? '11px' : '12px',
         fontStyle: '700',
-        color: '#b8f3ff',
+        color: '#c9f6ff',
       })
       .setOrigin(0.5)
       .setResolution(2)
@@ -696,8 +696,8 @@ export class MenuScene extends Phaser.Scene {
       body.removeAll(true);
       for (const tab of tabs) {
         const active = tab.id === page;
-        tab.text.setColor(active ? '#ffe066' : UI_TEXT.muted);
-        tab.text.setAlpha(active ? 1 : 0.86);
+        tab.text.setColor(active ? '#ffe066' : '#c9c1d3');
+        tab.text.setAlpha(active ? 1 : 0.95);
         tab.underline.setVisible(active);
       }
 
@@ -762,7 +762,7 @@ export class MenuScene extends Phaser.Scene {
           );
         });
       } else if (page === 'legendary') {
-        addText(W / 2, bodyTop, 'ЛЕГЕНДАРНЫЕ ИЗМЕНЕНИЯ ПРАВИЛ', compact ? 12 : 14, '#ffe066', panelW - 42, 'center');
+        addText(W / 2, bodyTop, 'ЛЕГЕНДАРНЫЕ ИЗМЕНЕНИЯ ПРАВИЛ', compact ? 12 : 15, '#ffe066', panelW - 42, 'center');
         LEGENDARIES.forEach((def, index) => {
           const found = save.legendarySeen.includes(def.id);
           const y = bodyTop + 32 + index * (compact ? 46 : 51);
@@ -770,8 +770,8 @@ export class MenuScene extends Phaser.Scene {
             left + 28,
             y,
             `${found ? '◆' : '◇'}  ${found ? def.title : '???'}`,
-            compact ? 12 : 13,
-            found ? '#fff1ac' : '#bdb4c8',
+            compact ? 12 : 14,
+            found ? '#fff1ac' : '#c9c1d3',
             panelW - 54
           );
           if (found) {
@@ -779,10 +779,10 @@ export class MenuScene extends Phaser.Scene {
               left + 49,
               y + 18,
               def.effect,
-              compact ? 11 : 12,
-              UI_TEXT.secondary,
+              compact ? 11 : 13,
+              '#d8d1e2',
               panelW - 78
-            );
+            ).setFontStyle('600');
           }
         });
       } else {
@@ -833,8 +833,8 @@ export class MenuScene extends Phaser.Scene {
           left + 28,
           top + panelH - 106,
           `ЦИКЛОВ: ${save.runs}   ·   ИММУННЫХ КЛЕТОК: ${save.totalKills}`,
-          compact ? 11 : 12,
-          UI_TEXT.secondary
+          compact ? 11 : 13,
+          '#d8d1e2'
         );
       }
     };
@@ -845,7 +845,7 @@ export class MenuScene extends Phaser.Scene {
           fontFamily: FONT,
           fontSize: compact ? '11px' : '13px',
           fontStyle: 'bold',
-          color: '#bdb4c8',
+          color: '#c9c1d3',
         })
         .setOrigin(0.5)
         .setResolution(2)
@@ -864,11 +864,11 @@ export class MenuScene extends Phaser.Scene {
 
     overlay.add(
       this.add
-        .text(W / 2, top + panelH - 34, 'Codex хранит открытия · без постоянных бонусов', {
+        .text(W / 2, top + panelH - 40, 'Codex хранит открытия · без постоянных бонусов', {
           fontFamily: UI_FONT,
-          fontSize: compact ? '10px' : '11px',
-          fontStyle: '600',
-          color: UI_TEXT.secondary,
+          fontSize: compact ? '11px' : '12px',
+          fontStyle: '650',
+          color: '#d8d1e2',
           align: 'center',
           wordWrap: { width: panelW - 46 },
         })
