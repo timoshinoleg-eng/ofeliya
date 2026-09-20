@@ -77,10 +77,17 @@ async function textCenter(page, label) {
     return { timeMs: gs.runState.run.timeMs, x: gs.player.x, y: gs.player.y };
   });
 
-  const pausePoint = await textCenter(page, 'Ⅱ');
+  const alreadyPaused = await page.evaluate(() => window.__game.scene.isPaused('Game'));
+  if (alreadyPaused) throw new Error('Game was already paused before pause control touch');
+
+  const pausePoint = await textCenter(page, 'II');
   if (!pausePoint) throw new Error('pause hit target missing');
   await touchAt(ctx, page, pausePoint);
-  await page.waitForFunction(() => window.__game.scene.isPaused('Game'));
+  await page.waitForFunction(() => {
+    const game = window.__game;
+    const ui = game.scene.getScene('UI');
+    return ui?.manualPaused === true && game.scene.isPaused('Game');
+  });
 
   const paused = await page.evaluate(() => {
     const gs = window.__game.scene.getScene('Game');
@@ -116,7 +123,7 @@ async function textCenter(page, label) {
   const resumedTime = await page.evaluate(() => window.__game.scene.getScene('Game').runState.run.timeMs);
   if (resumedTime <= paused.timeMs + 100) throw new Error('run clock did not resume');
 
-  const pauseAgain = await textCenter(page, 'Ⅱ');
+  const pauseAgain = await textCenter(page, 'II');
   if (!pauseAgain) throw new Error('pause hit target missing after resume');
   await touchAt(ctx, page, pauseAgain);
   await page.waitForFunction(() => window.__game.scene.isPaused('Game'));
