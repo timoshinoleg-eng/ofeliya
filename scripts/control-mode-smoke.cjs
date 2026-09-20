@@ -65,8 +65,11 @@ function mag(v) {
     route.fulfill({ status: 200, contentType: 'application/javascript', body: '' })
   );
   await ctx.addInitScript(() => {
-    localStorage.removeItem('ofeliya_control_mode_v1');
-    localStorage.setItem('ofeliya_save_v1', JSON.stringify({ muted: true, runs: 1 }));
+    if (!sessionStorage.getItem('ofeliya_control_smoke_initialized')) {
+      localStorage.removeItem('ofeliya_control_mode_v1');
+      localStorage.setItem('ofeliya_save_v1', JSON.stringify({ muted: true, runs: 1 }));
+      sessionStorage.setItem('ofeliya_control_smoke_initialized', '1');
+    }
     window.WebApp = {
       platform: 'android',
       version: '26.20.0',
