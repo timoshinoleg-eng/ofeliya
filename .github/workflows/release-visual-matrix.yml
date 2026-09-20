@@ -6,6 +6,8 @@ on:
     paths:
       - 'scripts/release-visual-matrix.cjs'
       - '.github/workflows/release-visual-matrix.yml'
+      - 'src/game/config.ts'
+      - 'src/systems/PerformanceProfile.ts'
   push:
     tags:
       - 'v*'
