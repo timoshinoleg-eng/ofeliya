@@ -705,9 +705,9 @@ export class MenuScene extends Phaser.Scene {
         x: number,
         y: number,
         value: string,
-        size = compact ? 11 : 12,
-        color = UI_TEXT.primary,
-        width = panelW - 42,
+        size: number = compact ? 11 : 12,
+        color: string = UI_TEXT.primary,
+        width: number = panelW - 42,
         align: 'left' | 'center' = 'left'
       ) => {
         const text = this.add
