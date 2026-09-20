@@ -112,6 +112,7 @@ async function inspectMenu(page, size) {
       pick((t) => t.startsWith('звук:')),
       pick((t) => t.startsWith('КОДЕКС ')),
       pick((t) => t.startsWith('Двигай штамм')),
+      pick((t) => t.startsWith('О ПРИЛОЖЕНИИ')),
     ].filter(Boolean);
     const overflow = rows.filter(({ bounds }) =>
       bounds.left < 2 || bounds.right > width - 2 || bounds.top < 2 || bounds.bottom > height - 2
@@ -140,7 +141,8 @@ function assertMenu(contract, compact) {
     row.text.includes('оба стика') ||
     row.text.startsWith('автоатака ·') ||
     row.text.startsWith('звук:') ||
-    row.text.startsWith('Двигай штамм')
+    row.text.startsWith('Двигай штамм') ||
+    row.text.startsWith('О ПРИЛОЖЕНИИ')
   );
   const wrongFamily = bodyRows.filter((row) => !/system-ui/i.test(row.family));
   if (wrongFamily.length) {
@@ -155,6 +157,8 @@ function assertMenu(contract, compact) {
       [(row) => row.text === 'Базовый ритм кампании', 13, 'difficulty description'],
       [(row) => row.text.includes('оба стика'), 13, 'control description'],
       [(row) => row.text.startsWith('автоатака ·'), 13, 'start hint'],
+      [(row) => row.text.startsWith('Двигай штамм'), 13, 'menu footer hint'],
+      [(row) => row.text.startsWith('О ПРИЛОЖЕНИИ'), 12, 'menu legal footer'],
     ];
     for (const [predicate, minSize, label] of required) {
       const row = contract.rows.find(predicate);
@@ -206,13 +210,14 @@ async function inspectCodex(page, size) {
       row.text !== 'КОДЕКС · STRAIN-0' &&
       !row.text.startsWith('Codex хранит открытия')
     );
+    const footer = rows.find((row) => row.text.startsWith('Codex хранит открытия')) ?? null;
     const overflow = rows.filter(({ bounds }) =>
       bounds.left < 2 || bounds.right > width - 2 || bounds.top < 2 || bounds.bottom > height - 2
     );
     const activeLines = flat.filter(
       (obj) => obj?.type === 'Rectangle' && obj.visible && obj.height === 3 && (obj.alpha ?? 1) > 0.2
     ).length;
-    return { rows, important, overflow, activeLines };
+    return { rows, important, overflow, activeLines, footer };
   }, size);
 }
 
@@ -223,10 +228,13 @@ function assertCodex(contract, compact, pageName) {
   if (contract.activeLines < 1) {
     throw new Error(`readability Codex ${pageName} active-tab underline missing`);
   }
-  const min = compact ? 11 : 12;
+  const min = compact ? 11 : 13;
   const undersized = contract.important.filter((row) => row.size < min);
   if (undersized.length) {
     throw new Error(`readability Codex ${pageName} undersized: ${JSON.stringify(undersized)}`);
+  }
+  if (!compact && (!contract.footer || contract.footer.size < 12 || contract.footer.bounds.bottom > 715)) {
+    throw new Error(`readability Codex footer regression: ${JSON.stringify(contract.footer)}`);
   }
   const forbidden = contract.rows.filter((row) =>
     ['#59647c', '#65718b'].includes(row.color.toLowerCase())
@@ -245,9 +253,9 @@ function assertCodex(contract, compact, pageName) {
     throw new Error(`readability Codex ${pageName} body font regression: ${JSON.stringify(wrongFamily)}`);
   }
   if (!compact) {
-    const tinyImportant = contract.important.filter((row) => row.size < 12);
+    const tinyImportant = contract.important.filter((row) => row.size < 13);
     if (tinyImportant.length) {
-      throw new Error(`readability Codex ${pageName} still has sub-12px important text: ${JSON.stringify(tinyImportant)}`);
+      throw new Error(`readability Codex ${pageName} still has sub-13px important text: ${JSON.stringify(tinyImportant)}`);
     }
     const section = contract.rows.find((row) =>
       row.text === 'КРИТИЧЕСКИЕ МУТАЦИИ' || row.text === 'МАСТЕРСТВО КАМПАНИИ'
@@ -357,6 +365,10 @@ function assertMutation(contract, compact) {
   }
   if (!compact && contract.cards.some((card) => card.bodySystemCount < 2)) {
     throw new Error('readability mutation body font missing: ' + JSON.stringify(contract.cards));
+  }
+  const progressRows = contract.rows.filter((row) => /^\d+\s*→\s*\d+\s*\/\s*\d+$/.test(row.text));
+  if (!compact && progressRows.some((row) => row.size < 13)) {
+    throw new Error('readability mutation progress must be >= 13px: ' + JSON.stringify(progressRows));
   }
   const longTitle = contract.rows.find((row) => row.text === 'МНОЖЕСТВЕННАЯ РЕПЛИКАЦИЯ');
   if (longTitle && (longTitle.bounds.left < 2 || longTitle.bounds.right > (compact ? 358 : 388))) {
