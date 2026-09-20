@@ -34,8 +34,8 @@ jobs:
           VITE_RELEASE_MATRIX_QA: '1'
         run: npm run build
 
-      - name: Install browser driver
-        run: npm install --no-save --package-lock=false playwright-core@1.55.0
+      - name: Install browser driver and image metrics
+        run: npm install --no-save --package-lock=false playwright-core@1.55.0 pngjs@7.0.0
 
       - name: Start production preview
         run: |
