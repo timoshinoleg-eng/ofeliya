@@ -50,6 +50,13 @@ if (!chrome) throw new Error('Chrome not found');
 
   await browser.close();
   console.log('stalled MAX viewport startup smoke: ok (' + elapsedMs + 'ms)');
+
+  const { execFileSync } = require('child_process');
+  execFileSync(process.execPath, ['scripts/startup-trace-smoke.cjs'], {
+    cwd: process.cwd(),
+    env: process.env,
+    stdio: 'inherit',
+  });
 })().catch((error) => {
   console.error(error.stack || error);
   process.exit(1);
