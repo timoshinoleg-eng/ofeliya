@@ -1,5 +1,3 @@
-[Reading 1872 lines from start (total: 1872 lines, 0 remaining)]
-
 import Phaser from 'phaser';
 import {
   COLORS,
@@ -1872,5 +1870,3 @@ export class GameScene extends Phaser.Scene {
     this.vignette.setPosition(W / 2, H / 2).setDisplaySize(W * 1.25, H * 1.25);
   }
 }
-
-[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
