@@ -235,15 +235,18 @@ function mag(v) {
   const leftCenter = { x: Math.round(dual.left.x), y: Math.round(dual.left.y) };
   const rightCenter = { x: Math.round(dual.right.x), y: Math.round(dual.right.y) };
 
+  // Freeze combat randomness while testing the pure input router. UI remains active.
+  await page.evaluate(() => window.__game.scene.pause('Game'));
+
   // Left thumb alone moves.
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchStart',
-    touchPoints: [{ ...leftCenter, radiusX: 8, radiusY: 8, force: 1, id: 11 }],
+    touchPoints: [{ ...leftCenter, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
   });
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchMove',
     touchPoints: [
-      { x: leftCenter.x + 36, y: leftCenter.y - 30, radiusX: 8, radiusY: 8, force: 1, id: 11 },
+      { x: leftCenter.x + 36, y: leftCenter.y - 30, radiusX: 8, radiusY: 8, force: 1, id: 1 },
     ],
   });
   await page.waitForTimeout(80);
@@ -260,12 +263,12 @@ function mag(v) {
   // Right thumb alone moves using the same joy channel.
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchStart',
-    touchPoints: [{ ...rightCenter, radiusX: 8, radiusY: 8, force: 1, id: 12 }],
+    touchPoints: [{ ...rightCenter, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
   });
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchMove',
     touchPoints: [
-      { x: rightCenter.x - 38, y: rightCenter.y - 28, radiusX: 8, radiusY: 8, force: 1, id: 12 },
+      { x: rightCenter.x - 38, y: rightCenter.y - 28, radiusX: 8, radiusY: 8, force: 1, id: 1 },
     ],
   });
   await page.waitForTimeout(80);
@@ -290,6 +293,9 @@ function mag(v) {
             vectorY: ui.dualMove.right.vectorY,
           }
         : null,
+      uiBlocked: ui.uiBlocked,
+      modalOpen: ui.modalOpen,
+      gamePaused: window.__game.scene.isPaused('Game'),
     };
   });
   if (mag(rightOnly.joy) < 0.35 || (rightOnly.joy?.x ?? 0) >= -0.2 || rightOnly.aimJoy !== undefined) {
@@ -304,23 +310,23 @@ function mag(v) {
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchStart',
     touchPoints: [
-      { ...leftCenter, radiusX: 8, radiusY: 8, force: 1, id: 21 },
-      { ...rightCenter, radiusX: 8, radiusY: 8, force: 1, id: 22 },
+      { ...leftCenter, radiusX: 8, radiusY: 8, force: 1, id: 1 },
+      { ...rightCenter, radiusX: 8, radiusY: 8, force: 1, id: 2 },
     ],
   });
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchMove',
     touchPoints: [
-      { ...l, radiusX: 8, radiusY: 8, force: 1, id: 21 },
-      { ...rightCenter, radiusX: 8, radiusY: 8, force: 1, id: 22 },
+      { ...l, radiusX: 8, radiusY: 8, force: 1, id: 1 },
+      { ...rightCenter, radiusX: 8, radiusY: 8, force: 1, id: 2 },
     ],
   });
   await page.waitForTimeout(40);
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchMove',
     touchPoints: [
-      { ...l, radiusX: 8, radiusY: 8, force: 1, id: 21 },
-      { ...r, radiusX: 8, radiusY: 8, force: 1, id: 22 },
+      { ...l, radiusX: 8, radiusY: 8, force: 1, id: 1 },
+      { ...r, radiusX: 8, radiusY: 8, force: 1, id: 2 },
     ],
   });
   await page.waitForTimeout(80);
@@ -332,7 +338,7 @@ function mag(v) {
 
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchEnd',
-    touchPoints: [{ ...l, radiusX: 8, radiusY: 8, force: 1, id: 21 }],
+    touchPoints: [{ ...l, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
   });
   await page.waitForTimeout(100);
   const handedOff = await page.evaluate(() => window.__game.registry.get('joy'));
@@ -341,16 +347,18 @@ function mag(v) {
   }
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await page.waitForTimeout(70);
+  await page.evaluate(() => window.__game.scene.resume('Game'));
+  await page.waitForFunction(() => window.__game.scene.isActive('Game') && !window.__game.scene.isPaused('Game'));
 
   // Active movement must be cleared by Pause and stay cleared while Game is paused.
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchStart',
-    touchPoints: [{ ...leftCenter, radiusX: 8, radiusY: 8, force: 1, id: 31 }],
+    touchPoints: [{ ...leftCenter, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
   });
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchMove',
     touchPoints: [
-      { x: leftCenter.x + 34, y: leftCenter.y - 24, radiusX: 8, radiusY: 8, force: 1, id: 31 },
+      { x: leftCenter.x + 34, y: leftCenter.y - 24, radiusX: 8, radiusY: 8, force: 1, id: 1 },
     ],
   });
   await page.waitForTimeout(60);
@@ -378,12 +386,12 @@ function mag(v) {
   });
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchStart',
-    touchPoints: [{ ...rightCenter, radiusX: 8, radiusY: 8, force: 1, id: 41 }],
+    touchPoints: [{ ...rightCenter, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
   });
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchMove',
     touchPoints: [
-      { x: rightCenter.x - 34, y: rightCenter.y - 24, radiusX: 8, radiusY: 8, force: 1, id: 41 },
+      { x: rightCenter.x - 34, y: rightCenter.y - 24, radiusX: 8, radiusY: 8, force: 1, id: 1 },
     ],
   });
   await page.waitForTimeout(70);
@@ -399,12 +407,12 @@ function mag(v) {
   await page.waitForFunction(() => window.__game.scene.isPaused('Game'));
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchStart',
-    touchPoints: [{ ...leftCenter, radiusX: 8, radiusY: 8, force: 1, id: 51 }],
+    touchPoints: [{ ...leftCenter, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
   });
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchMove',
     touchPoints: [
-      { x: leftCenter.x + 34, y: leftCenter.y - 24, radiusX: 8, radiusY: 8, force: 1, id: 51 },
+      { x: leftCenter.x + 34, y: leftCenter.y - 24, radiusX: 8, radiusY: 8, force: 1, id: 1 },
     ],
   });
   await page.waitForTimeout(70);
