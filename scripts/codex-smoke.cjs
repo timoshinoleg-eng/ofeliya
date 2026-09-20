@@ -115,8 +115,8 @@ function browserDriver() {
     snapshot.gameActive ||
     !snapshot.texts.includes('КОДЕКС · STRAIN-0') ||
     !snapshot.texts.includes('ОТКРЫТО 4/9 · ДОСТИЖЕНИЯ 2/9') ||
-    !snapshot.texts.some((text) => text.includes('ПРИЗМАТИЧЕСКИЙ РАСКОЛ')) ||
-    !snapshot.texts.some((text) => text.includes('ГАЛО-ОРБИТА')) ||
+    !snapshot.texts.some((text) => text.includes('ГИПЕРШИП')) ||
+    !snapshot.texts.some((text) => text.includes('СВЕРХКАПСИД')) ||
     !snapshot.texts.some((text) => text.includes('НЕ ОТКРЫТО'))
   ) {
     throw new Error('Codex mutation page failed: ' + JSON.stringify(snapshot));
