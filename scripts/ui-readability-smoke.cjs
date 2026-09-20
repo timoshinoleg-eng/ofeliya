@@ -127,7 +127,7 @@ function assertMenu(contract, compact) {
   if (contract.overflow.length) {
     throw new Error('readability menu overflow: ' + JSON.stringify(contract.overflow));
   }
-  const min = compact ? 10 : 11;
+  const min = compact ? 11 : 12;
   const undersized = contract.rows.filter((row) => row.size < min);
   if (undersized.length) {
     throw new Error('readability menu undersized: ' + JSON.stringify(undersized));
@@ -145,6 +145,23 @@ function assertMenu(contract, compact) {
   const wrongFamily = bodyRows.filter((row) => !/system-ui/i.test(row.family));
   if (wrongFamily.length) {
     throw new Error('readability menu body font regression: ' + JSON.stringify(wrongFamily));
+  }
+
+  if (!compact) {
+    const required = [
+      [(row) => row.text.startsWith('Мутируй'), 15, 'menu hook body'],
+      [(row) => row.text.startsWith('Носитель:'), 14, 'carrier'],
+      [(row) => row.text.startsWith('Выживание'), 14, 'records'],
+      [(row) => row.text === 'Базовый ритм кампании', 13, 'difficulty description'],
+      [(row) => row.text.includes('оба стика'), 13, 'control description'],
+      [(row) => row.text.startsWith('автоатака ·'), 13, 'start hint'],
+    ];
+    for (const [predicate, minSize, label] of required) {
+      const row = contract.rows.find(predicate);
+      if (!row || row.size < minSize) {
+        throw new Error(`readability ${label} must be >= ${minSize}px: ${JSON.stringify(row)}`);
+      }
+    }
   }
 }
 
@@ -206,7 +223,7 @@ function assertCodex(contract, compact, pageName) {
   if (contract.activeLines < 1) {
     throw new Error(`readability Codex ${pageName} active-tab underline missing`);
   }
-  const min = compact ? 10 : 11;
+  const min = compact ? 11 : 12;
   const undersized = contract.important.filter((row) => row.size < min);
   if (undersized.length) {
     throw new Error(`readability Codex ${pageName} undersized: ${JSON.stringify(undersized)}`);
@@ -226,6 +243,18 @@ function assertCodex(contract, compact, pageName) {
   const wrongFamily = body.filter((row) => !/system-ui/i.test(row.family));
   if (wrongFamily.length) {
     throw new Error(`readability Codex ${pageName} body font regression: ${JSON.stringify(wrongFamily)}`);
+  }
+  if (!compact) {
+    const tinyImportant = contract.important.filter((row) => row.size < 12);
+    if (tinyImportant.length) {
+      throw new Error(`readability Codex ${pageName} still has sub-12px important text: ${JSON.stringify(tinyImportant)}`);
+    }
+    const section = contract.rows.find((row) =>
+      row.text === 'КРИТИЧЕСКИЕ МУТАЦИИ' || row.text === 'МАСТЕРСТВО КАМПАНИИ'
+    );
+    if (section && section.size < 15) {
+      throw new Error(`readability Codex ${pageName} section heading too small: ${JSON.stringify(section)}`);
+    }
   }
 }
 
@@ -322,8 +351,8 @@ function assertMutation(contract, compact) {
   if (contract.cards.length !== 3) {
     throw new Error('readability mutation card count: ' + JSON.stringify(contract.cards));
   }
-  const expectedHeight = compact ? 100 : 118;
-  if (contract.cards.some((card) => card.height < expectedHeight || card.minTextSize < (compact ? 10 : 11))) {
+  const expectedHeight = compact ? 108 : 128;
+  if (contract.cards.some((card) => card.height < expectedHeight || card.minTextSize < (compact ? 11 : 12))) {
     throw new Error('readability mutation card typography: ' + JSON.stringify(contract.cards));
   }
   if (!compact && contract.cards.some((card) => card.bodySystemCount < 2)) {
