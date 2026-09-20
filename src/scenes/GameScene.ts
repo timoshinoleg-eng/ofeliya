@@ -7,6 +7,7 @@ import {
   ORBIT,
   PLAYER,
   POSTFX,
+  PROGRESSION,
   WEAPON,
   type EnemyKind,
 } from '../game/config';
@@ -499,7 +500,8 @@ export class GameScene extends Phaser.Scene {
     if (e.xpValue > 0) {
       // The first readable pickup teaches the mutation loop immediately instead of requiring
       // five scattered one-XP drops before the player sees the first choice.
-      const value = st.kills === 1 ? Math.max(5, e.xpValue) : e.xpValue;
+      const value =
+        st.kills === 1 ? Math.max(PROGRESSION.firstKillXpFloor, e.xpValue) : e.xpValue;
       this.spawnGem(e.x, e.y, value);
     }
     if (e.isBoss && this.wave.boss === e) {
