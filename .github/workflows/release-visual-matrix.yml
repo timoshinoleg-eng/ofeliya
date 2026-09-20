@@ -27,7 +27,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build production bundle
+      - name: Build production QA bundle
+        env:
+          VITE_RELEASE_MATRIX_QA: '1'
         run: npm run build
 
       - name: Install browser driver
