@@ -1,3 +1,5 @@
+[Reading 102 lines from start (total: 102 lines, 0 remaining)]
+
 export const GAMEPLAY_RNG_STREAMS = [
   'progression',
   'enemy-kind',
@@ -8,6 +10,11 @@ export const GAMEPLAY_RNG_STREAMS = [
 ] as const;
 
 export type GameplayRngStream = (typeof GAMEPLAY_RNG_STREAMS)[number];
+
+export interface RunRngSnapshot {
+  seed: string;
+  states: Record<GameplayRngStream, number>;
+}
 
 function hash32(input: string): number {
   let h = 0x811c9dc5;
@@ -76,4 +83,24 @@ export class RunRng {
   range(stream: GameplayRngStream, min: number, max: number): number {
     return min + (max - min) * this.next(stream);
   }
+
+  snapshot(): RunRngSnapshot {
+    return {
+      seed: this.seed,
+      states: { ...this.states },
+    };
+  }
+
+  restore(snapshot: RunRngSnapshot): void {
+    if (snapshot.seed !== this.seed) throw new Error('RunRng snapshot seed mismatch');
+    for (const stream of GAMEPLAY_RNG_STREAMS) {
+      const state = snapshot.states[stream];
+      if (!Number.isInteger(state) || state < 0 || state > 0xffffffff) {
+        throw new Error('Invalid RunRng stream state');
+      }
+      this.states[stream] = state >>> 0;
+    }
+  }
 }
+
+[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
