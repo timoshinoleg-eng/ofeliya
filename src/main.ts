@@ -5,6 +5,8 @@ import { MenuScene } from './scenes/MenuScene';
 import { GameScene } from './scenes/GameScene';
 import { UIScene } from './scenes/UIScene';
 import { installMobileLayoutGuard } from './ui/MobileLayoutGuard';
+import { PlatformBridge } from './platform';
+import { StartupTrace } from './systems/StartupTrace';
 
 declare global {
   interface Window {
@@ -18,20 +20,32 @@ const CANVAS_FALLBACK_KEY = 'ofeliya_canvas_fallback_v2';
 const RELEASE_MARKER = 'ofeliya-20260912-utf8-cachefix';
 
 function waitForFonts(): Promise<void> {
+  StartupTrace.mark('fonts.start');
   const fonts = document.fonts;
-  if (!fonts) return Promise.resolve();
+  if (!fonts) {
+    StartupTrace.setMeta('fontsOutcome', 'unavailable');
+    StartupTrace.mark('fonts.end');
+    return Promise.resolve();
+  }
+
   return new Promise((resolve) => {
-    const timeout = window.setTimeout(resolve, FONT_READY_TIMEOUT_MS);
+    let done = false;
+    const finish = (outcome: 'loaded' | 'timeout'): void => {
+      if (done) return;
+      done = true;
+      window.clearTimeout(timeout);
+      StartupTrace.setMeta('fontsOutcome', outcome);
+      StartupTrace.mark('fonts.end');
+      resolve();
+    };
+    const timeout = window.setTimeout(() => finish('timeout'), FONT_READY_TIMEOUT_MS);
     void Promise.all([
       fonts.load('400 16px "Chakra Petch"'),
       fonts.load('700 16px "Chakra Petch"'),
     ])
       .then(() => fonts.ready)
-      .catch(() => undefined)
-      .finally(() => {
-        window.clearTimeout(timeout);
-        resolve();
-      });
+      .then(() => finish('loaded'))
+      .catch(() => finish('loaded'));
   });
 }
 
@@ -117,6 +131,9 @@ function installWebGLRecovery(game: Phaser.Game): void {
 }
 
 async function boot(): Promise<void> {
+  StartupTrace.mark('boot.start');
+  StartupTrace.setMeta('platformInitial', PlatformBridge.kind);
+  StartupTrace.setMeta('platformVersion', PlatformBridge.version || '');
   const host = document.getElementById('game');
   if (!host) throw new Error('Missing #game host');
   document.documentElement.dataset.ofeliyaRelease = RELEASE_MARKER;
@@ -124,15 +141,26 @@ async function boot(): Promise<void> {
   const viewport = new ViewportManager(host);
   viewport.start();
   // Let MAX Bridge answer before Phaser reads the parent size. Browser fallback resolves immediately.
+  StartupTrace.mark('viewport.first.start');
   await viewport.sync();
+  StartupTrace.mark('viewport.first.end');
+  StartupTrace.setMeta('viewportSourceFirst', host.dataset.viewportSource ?? 'unknown');
+  StartupTrace.setMeta('viewportWidthFirst', host.clientWidth);
+  StartupTrace.setMeta('viewportHeightFirst', host.clientHeight);
+
   await waitForFonts();
 
   const rendererOverride = explicitRenderer();
+  StartupTrace.setMeta('rendererOverride', rendererOverride ?? 'auto');
+  StartupTrace.mark('renderer.select.start');
   const rendererType = chooseRenderer();
+  StartupTrace.mark('renderer.select.end');
+  StartupTrace.setMeta('rendererRequested', rendererType === Phaser.WEBGL ? 'webgl' : 'canvas');
   if (rendererType === Phaser.CANVAS) installCanvasTextResolutionGuard();
 
   let game: Phaser.Game;
   try {
+    StartupTrace.mark('phaser.construct.start');
     game = new Phaser.Game({
       // Prefer WebGL for sharp High-DPI text and effects. If WebGL is unavailable or loses its
       // context in a problematic MAX Android WebView, reload once into the proven Canvas fallback.
@@ -164,6 +192,8 @@ async function boot(): Promise<void> {
       },
       scene: [BootScene, MenuScene, GameScene, UIScene],
     });
+    StartupTrace.mark('phaser.construct.end');
+    StartupTrace.setMeta('rendererActual', game.renderer.type === Phaser.WEBGL ? 'webgl' : 'canvas');
   } catch (error) {
     if (rendererType === Phaser.WEBGL && rememberCanvasFallback()) {
       window.location.reload();
@@ -175,7 +205,10 @@ async function boot(): Promise<void> {
   installWebGLRecovery(game);
   installMobileLayoutGuard(game);
   viewport.attachGame(game);
+  StartupTrace.mark('viewport.second.start');
   await viewport.sync();
+  StartupTrace.mark('viewport.second.end');
+  StartupTrace.setMeta('viewportSourceSecond', host.dataset.viewportSource ?? 'unknown');
 
   // Production builds stay opaque. The release visual-matrix workflow enables this hook
   // only in its dedicated QA bundle so Playwright can inspect real production rendering.
