@@ -320,16 +320,19 @@ export class GameScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.onResize, this);
       PlatformBridge.setBackHandler(null);
-      this.cancelStageTransition(false);
-      this.dismissIntroHint(true);
-      this.cameras.main.resetFX();
-      this.atmosphere.destroy();
-      this.vfx.destroy();
-      this.hostCells.destroy();
-      this.milestones.reset();
+
+      // Phaser has already begun shutting down scene plugins before user SHUTDOWN listeners run.
+      // Do not call cameras / physics / tweens / scene-object teardown here: those systems own
+      // their cleanup and may already be unavailable. Clear only our plain references and
+      // cross-scene registry state; create() rebuilds every gameplay subsystem on the next run.
+      this.stageTransition = null;
+      this.bossDefeatCeremony = null;
+      this.introHint = null;
+      this.transitionGeneration += 1;
       this.registry.remove('run');
       this.registry.remove('runResult');
       this.registry.remove('joy');
+      this.registry.remove('aimJoy');
     });
   }
 
