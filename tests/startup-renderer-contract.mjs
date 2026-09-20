@@ -39,7 +39,17 @@ assert.match(
 assert.match(
   runtimeConfig,
   /ofeliya_startup_nav_v1/,
-  'Pre-module runtime config must preserve cross-navigation startup timing'
+  'Pre-module runtime config must preserve startup timing'
+);
+assert.doesNotMatch(
+  runtimeConfig,
+  /location\.replace|location\.assign|location\.reload/,
+  'Pre-module runtime config must never trigger a second document navigation'
+);
+assert.match(
+  runtimeConfig,
+  /history\.replaceState/,
+  'Legacy app query cleanup must be in-place and network-free'
 );
 assert.match(
   traceSource,
@@ -58,6 +68,18 @@ for (const forbidden of ['initData', 'getUser', 'username', 'first_name', 'last_
     `Startup trace must not collect personal identity field: ${forbidden}`
   );
 }
+
+const swSource = await readFile(new URL('../public/sw.js', import.meta.url), 'utf8');
+assert.match(
+  swSource,
+  /ofeliya-20260921-direct-nav-v1/,
+  'Service-worker cache namespace must rotate with the direct-navigation startup fix'
+);
+assert.match(
+  swSource,
+  /req\.mode === 'navigate'[\s\S]*fetch\(req\)/,
+  'Navigation must remain network-first so no query redirect is needed for freshness'
+);
 
 const indexSource = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 assert.match(

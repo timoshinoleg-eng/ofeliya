@@ -6,7 +6,7 @@ if (!chrome) throw new Error('Chrome not found');
 
 const REQUIRED_MARKS = [
   'runtime-config',
-  'runtime-config.release-match',
+  'runtime-config.ready',
   'max.bridge.loaded',
   'main.module',
   'boot.start',
@@ -99,7 +99,13 @@ async function waitForTrace(page) {
 
   const page = await ctx.newPage();
   const errors = [];
+  const navigations = [];
   page.on('pageerror', (error) => errors.push(String(error)));
+  page.on('request', (request) => {
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
+      navigations.push(request.url());
+    }
+  });
 
   await page.goto('http://127.0.0.1:5173/?startupTrace=1', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
@@ -111,14 +117,17 @@ async function waitForTrace(page) {
   for (const required of REQUIRED_MARKS) {
     if (!names.has(required)) throw new Error('startup trace missing mark: ' + required);
   }
-  if ((firstTrace.meta?.redirectCount ?? 0) < 1) {
-    throw new Error('clean launch did not capture runtime-config redirect');
+  if ((firstTrace.meta?.redirectCount ?? -1) !== 0) {
+    throw new Error('direct startup unexpectedly reported a redirect: ' + firstTrace.meta?.redirectCount);
   }
   if (!(firstTrace.totalMs > 0)) throw new Error('invalid startup total');
   if (!first.overlay.includes('OFELIYA STARTUP TRACE')) throw new Error('debug overlay missing');
   if (!first.overlay.includes('TTFB=')) throw new Error('debug overlay missing navigation timing');
   if (!first.overlay.includes('bundle=')) throw new Error('debug overlay missing bundle timing');
-  if (!first.href.includes('app=')) throw new Error('release URL redirect did not complete');
+  if (first.href.includes('app=')) throw new Error('legacy app cache-bust parameter survived direct startup');
+  if (navigations.length !== 1) {
+    throw new Error('clean launch performed more than one document navigation: ' + JSON.stringify(navigations));
+  }
 
   const serialized = JSON.stringify(first.history);
   for (const forbidden of ['startup-trace-secret-token', 'TraceSecret', 'must-not-be-stored', '987654321']) {
@@ -131,7 +140,7 @@ async function waitForTrace(page) {
   if (second.history.length < 2) throw new Error('startup trace history did not retain previous launch');
   const secondTrace = second.history[0];
   if ((secondTrace.meta?.redirectCount ?? -1) !== 0) {
-    throw new Error('already-versioned reload should not report release redirect: ' + secondTrace.meta?.redirectCount);
+    throw new Error('reload should remain redirect-free: ' + secondTrace.meta?.redirectCount);
   }
   if (second.history.length > 6) throw new Error('startup trace history exceeded retention limit');
 
@@ -161,6 +170,27 @@ async function waitForTrace(page) {
   }
   if (!hiddenOverlay.includes('TTFB=') || !hiddenOverlay.includes('bundle=')) {
     throw new Error('five-tap trace overlay lacks network diagnostics');
+  }
+
+  // Old MAX/WebView sessions may still carry the historical ?app= cache-bust parameter.
+  // It must be canonicalized in-place without creating another document request.
+  const navigationCountBeforeLegacy = navigations.length;
+  const legacyUrl = new URL(page.url());
+  legacyUrl.searchParams.set('app', 'legacy-cache-bust');
+  await page.goto(legacyUrl.toString(), { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
+  const legacy = await waitForTrace(page);
+  if (legacy.href.includes('app=')) {
+    throw new Error('legacy app parameter was not removed in-place');
+  }
+  if ((legacy.history[0]?.meta?.redirectCount ?? -1) !== 0) {
+    throw new Error('legacy app cleanup incorrectly reported a redirect');
+  }
+  if (navigations.length !== navigationCountBeforeLegacy + 1) {
+    throw new Error(
+      'legacy app cleanup triggered an extra document navigation: ' +
+        JSON.stringify(navigations.slice(navigationCountBeforeLegacy))
+    );
   }
 
   if (errors.length) throw new Error('page errors: ' + errors.join(' | '));

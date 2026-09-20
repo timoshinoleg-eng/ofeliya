@@ -19,7 +19,7 @@ const serviceWorker = read('public/sw.js');
 const runtimePos = index.indexOf('./runtime-config.js');
 const maxBridgePos = index.indexOf('https://st.max.ru/js/max-web-app.js');
 assert.ok(runtimePos >= 0, 'index must load runtime-config.js');
-assert.ok(maxBridgePos > runtimePos, 'cache-buster must run before MAX Bridge');
+assert.ok(maxBridgePos > runtimePos, 'runtime config must run before MAX Bridge');
 assert.match(index, /OFELIYA: STRAIN ZERO/, 'release document must identify Strain Zero');
 assert.match(index, /ofeliya-strain-zero-main-qa[.]onrender[.]com/, 'legacy Render host must be detected');
 assert.match(index, /https:\/\/quiz[.]chatbot24[.]su\/ofeliya\//, 'legacy Render launch must move to Cloud.ru');
@@ -36,7 +36,7 @@ assert.match(
   'Canvas text workaround must be scoped to the fallback path only'
 );
 assert.match(main, /FONT_READY_TIMEOUT_MS\s*=\s*700/, 'font loading must not block MAX startup indefinitely');
-assert.match(main, /ofeliya-20260912-utf8-cachefix/, 'bundle must carry a new release marker after UTF-8 cache repair');
+assert.match(main, /ofeliya-20260921-direct-nav-v1/, 'bundle must carry the direct-navigation release marker');
 assert.match(caddy, /handle_path \/ofeliya\/\*/, 'Ofeliya must own /ofeliya/ namespace');
 assert.doesNotMatch(caddy, /handle_path \/hub\/\*/, 'Ofeliya must not claim Hub routes');
 assert.match(botConfig, /shared \? value\('HUB_BOT_USERNAME'\)/, 'shared mode may explicitly reuse the Hub bot username');
@@ -71,8 +71,9 @@ assert.ok(
   'runtime/score targets must precede the frontend build stage for legacy Docker builders'
 );
 assert.match(nginx, /location = \/runtime-config\.js[\s\S]*no-store/, 'runtime config must be no-store');
-assert.match(runtimeConfig, /ofeliya-20260912-strain-zero-rc3-utf8/, 'MAX WebView URL key must identify RC3 UTF-8 cache bust');
-assert.match(serviceWorker, /ofeliya-strain-zero-rc3-utf8/, 'service worker cache must identify RC3 UTF-8 cache bust');
+assert.match(runtimeConfig, /ofeliya-20260921-direct-nav-v1/, 'runtime config must identify the direct-navigation startup release');
+assert.doesNotMatch(runtimeConfig, /location\\.(?:replace|assign|reload)/, 'runtime config must not trigger a second document navigation');
+assert.match(serviceWorker, /ofeliya-20260921-direct-nav-v1/, 'service worker cache must rotate for the direct-navigation release');
 assert.match(serviceWorker, /key\.startsWith\(CACHE_PREFIX\)/, 'cache cleanup must be scoped to Ofeliya');
 
 console.log('Strain Zero production release contract: ok');
