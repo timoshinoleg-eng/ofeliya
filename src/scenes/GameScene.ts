@@ -50,6 +50,7 @@ import { PlatformBridge } from '../platform';
 import { SaveSystem } from '../systems/SaveSystem';
 import { Sfx } from '../systems/Sfx';
 import { VfxSystem } from '../systems/VfxSystem';
+import { PERFORMANCE } from '../systems/PerformanceProfile';
 import { HostCellSystem, type HostCellLysisEvent } from '../systems/HostCellSystem';
 import type { UIScene } from './UIScene';
 
@@ -156,6 +157,7 @@ export class GameScene extends Phaser.Scene {
     this.controlMode =
       (this.registry.get('controlMode') as ControlMode | undefined) ?? readControlMode();
     this.registry.set('controlMode', this.controlMode);
+    this.registry.set('performanceTier', PERFORMANCE.tier);
 
     this.heartbeatPulse = new HeartbeatPulseDirector(
       heartbeatProfileForDifficulty(this.difficulty)
