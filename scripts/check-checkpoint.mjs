@@ -1,5 +1,3 @@
-[Reading 132 lines from start (total: 132 lines, 0 remaining)]
-
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -132,5 +130,3 @@ try {
   delete global.localStorage;
   rmSync(temp, { recursive: true, force: true });
 }
-
-[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
