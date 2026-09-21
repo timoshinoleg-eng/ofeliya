@@ -18,6 +18,10 @@ Current contract: post control-mode, Legendary, difficulty, Heart timing, infect
 - `TwinStickControls` is a separate optional two-hand profile: left movement, right aim-priority, automatic fire.
 - `ControlMode` persists control selection independently of save progression.
 - `VfxSystem` owns bounded combat emitters; `AtmosphereSystem` owns preallocated ambient presentation.
+- `Sfx` owns the single game `AudioContext`, mute state, user-gesture unlock and the whole audio graph (`master`, SFX bus, music bed, music tension filter, procedural layer bus).
+- `AdaptiveAudioDirector` is an audio **observer**: it consumes `StageDirector`/`HeartbeatPulseDirector` events plus a throttled danger snapshot and decides *when* the mix changes. It never owns lifecycle state, gameplay values or the audio graph.
+- `adaptiveAudioMath` is the pure, Phaser-free/WebAudio-free mood model (danger blend, asymmetric smoothing, hysteresis, deterministic bed choice). It is unit-tested in plain Node by `npm run test:audio`.
+- `SfxAdaptiveSink` is the only bridge between the director and `Sfx`, which keeps the director testable with a fake sink.
 - `CinematicTextures` creates lightweight runtime key art used by stage/boss/victory presentation.
 - `SaveSystem` owns the backward-compatible `ofeliya_save_v1` schema, including discovery history and non-power Standard/Strained mastery.
 - `server/index.mjs` owns trusted MAX score validation, ruleset/campaign-version checks and ranked leaderboard/daily-stat endpoints.
@@ -149,6 +153,20 @@ Cinematic presentation uses small generated `CanvasTexture` key-art frames for:
 
 They are reused with lightweight zoom/parallax and do not add video payload.
 
+## Adaptive audio contract
+
+V1 replaces "one random licensed loop per lifecycle plus a bio pulse driven by stage elapsed time" with a deterministic, event-aware foundation:
+
+- **one bed per run**, chosen by hashing the run seed (never `RunRng`, so the gameplay RNG consumption order is untouched);
+- **danger** = weighted nearby hostile pressure (distance-decayed, elite-weighted, bosses excluded) + HP loss + boss pressure + a small stage-order bias. No stage-elapsed-time term;
+- **hysteresis**: asymmetric attack/release smoothing (350 ms up / 2200 ms down), separate enter/exit bounds per band, 1500 ms minimum dwell on downgrades only;
+- **moods**: `calm -> pressure -> danger -> critical`, with `boss` taken whenever a boss is active and `transition`/`ended` held by lifecycle events;
+- **tension** is expressed on the existing bed through a lowpass opening with danger plus gain ducking, and through procedural stingers/heartbeat layers — the seven CC0 loops have no proven musical compatibility, so arbitrary mid-run crossfades are explicitly out of scope for V1;
+- **Heart** locks the bio pulse to `theme.heartbeatMs` (900 ms) and fires the heartbeat layer from the real `heartbeat-telegraph` / `heartbeat-impact` events;
+- **lifecycle**: mute, `visibilitychange` suspend/resume, and a full release on run teardown (scene shutdown, run restart, menu exit).
+
+The run's danger snapshot is published to `registry['adaptiveAudio']` for on-device debugging.
+
 ## Pools / caps
 
 - Bullets: 160.
@@ -158,10 +176,11 @@ They are reused with lightweight zoom/parallax and do not add video payload.
 - Damage text and trails are fixed pools.
 - Ambient particles are preallocated.
 - Combat VFX uses pre-created emitters and a global budget.
+- Long-lived audio nodes are bounded: one `AudioContext`, one music filter, one layer bus, one bio oscillator. Stingers/heartbeat are transient oscillators disconnected on `ended`.
 
 ## Quality gates
 
-Deterministic checks cover challenge compatibility, save migration, stage lifecycle, Legendary rules, difficulty, viewport math and startup renderer behavior.
+Deterministic checks cover challenge compatibility, save migration, stage lifecycle, Legendary rules, difficulty, viewport math, adaptive-audio mood/lifecycle behaviour and startup renderer behavior.
 
 Browser smoke covers MAX mobile viewport, Codex/mastery, compact layouts, WebGL/Canvas fallback, Legendary runtime, STRAINED, campaign transition and dense readability. A dedicated control-mode smoke locks the legacy one-hand `Joystick` path and dispatches two simultaneous Chromium touch points to verify independent twin-stick movement/aim vectors and clean release reset.
 

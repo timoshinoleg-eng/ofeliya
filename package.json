@@ -27,6 +27,7 @@
     "server:test": "node server/test.mjs",
     "bot": "node server/bot.mjs",
     "test:pacing": "node scripts/check-pacing.mjs",
+    "test:audio": "node scripts/check-adaptive-audio.mjs",
     "test:result-actions": "node scripts/result-actions-smoke.cjs",
     "test:video": "node scripts/video-interstitial-smoke.cjs",
     "test:duel": "node scripts/check-duel.mjs"
