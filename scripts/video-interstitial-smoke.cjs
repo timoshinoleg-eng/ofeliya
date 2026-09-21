@@ -244,14 +244,20 @@ async function visibleUiText(page, wanted) {
     if (!requests.some((url) => url.includes('02_bloodstream_to_heart.mp4'))) {
       throw new Error('Bloodstream -> Heart video path was never requested');
     }
+    if (errors.length) throw new Error('transition 404 fallback page errors: ' + errors.join(' | '));
+    await ctx.close();
+  }
 
+  {
+    const requests = [];
+    const ctx = await makeContext(browser);
+    await ctx.route('**/video/**', (route) => route.fulfill({ status: 404, body: '' }));
+    const { page, errors } = await bootMenu(ctx, requests);
+    await startGameDirect(page);
     await page.evaluate(() => {
       const gs = window.__game.scene.getScene('Game');
-      const ui = window.__game.scene.getScene('UI');
-      ui.dismissProgressionForStageBoundary();
-      if (gs.scene.isPaused()) gs.scene.resume();
       gs.finish(false);
-      ui.update();
+      window.__game.scene.getScene('UI').update();
     });
     await page.waitForFunction(
       () => {
@@ -270,7 +276,7 @@ async function visibleUiText(page, wanted) {
     if (!requests.some((url) => url.includes('04_defeat.mp4'))) {
       throw new Error('defeat video path was never requested');
     }
-    if (errors.length) throw new Error('404 fallback page errors: ' + errors.join(' | '));
+    if (errors.length) throw new Error('defeat 404 fallback page errors: ' + errors.join(' | '));
     await ctx.close();
   }
 
