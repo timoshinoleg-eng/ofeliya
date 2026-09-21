@@ -452,9 +452,7 @@ export class UIScene extends Phaser.Scene {
     name: string,
     textureKey: string,
     accent: number,
-    videoId?: VideoInterstitialId,
-    onVideoVisible?: () => void,
-    onVideoDone?: () => void
+    videoId?: VideoInterstitialId
   ): boolean {
     if (this.transitionOverlay || this.modalOpen) return false;
     const W = this.scale.width;
@@ -557,11 +555,21 @@ export class UIScene extends Phaser.Scene {
     });
 
     if (!videoId) return false;
-    const finishVideo = () => onVideoDone?.();
+    let videoPausedGame = false;
+    const resumeBossFight = () => {
+      if (!videoPausedGame) return;
+      videoPausedGame = false;
+      if (this.scene.isPaused('Game')) this.scene.resume('Game');
+    };
     return VideoInterstitial.play(videoId, {
-      onVisible: onVideoVisible,
-      onComplete: finishVideo,
-      onFail: finishVideo,
+      onVisible: () => {
+        if (!this.scene.isActive('Game') || this.scene.isPaused('Game')) return;
+        videoPausedGame = true;
+        this.resetControls();
+        this.scene.pause('Game');
+      },
+      onComplete: resumeBossFight,
+      onFail: resumeBossFight,
       maxDurationMs: 5000,
       ariaLabel: 'Пропустить появление босса',
     });
