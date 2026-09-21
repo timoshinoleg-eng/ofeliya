@@ -108,6 +108,26 @@ async function makeContext(browser, mediaMode = 'native') {
         }, 850);
         return Promise.resolve();
       };
+    } else if (mediaMode === 'cap') {
+      window.__mediaPlayCalls = 0;
+      HTMLMediaElement.prototype.load = function () {};
+      HTMLMediaElement.prototype.play = function () {
+        window.__mediaPlayCalls += 1;
+        const media = this;
+        try {
+          Object.defineProperty(media, 'currentTime', {
+            configurable: true,
+            writable: true,
+            value: 0,
+          });
+        } catch {}
+        queueMicrotask(() => media.dispatchEvent(new Event('playing')));
+        window.setTimeout(() => {
+          media.currentTime = 0.08;
+          media.dispatchEvent(new Event('timeupdate'));
+        }, 60);
+        return Promise.resolve();
+      };
     } else if (mediaMode === 'success') {
       window.__mediaPlayCalls = 0;
       HTMLMediaElement.prototype.load = function () {};
@@ -253,6 +273,25 @@ async function visibleUiText(page, wanted) {
     });
     await page.waitForFunction(() => window.__game.scene.isActive('Game'));
     if (errors.length) throw new Error('transient buffering caused page errors: ' + errors.join(' | '));
+    await ctx.close();
+  }
+
+  // maxDurationMs is an actual upper bound after playback becomes visible.
+  // A progressed video that never ends and never emits buffering events must still release the run.
+  {
+    const requests = [];
+    const ctx = await makeContext(browser, 'cap');
+    const { page, errors } = await bootMenu(ctx, requests);
+    const point = await startButtonCenter(page);
+    if (!point) throw new Error('duration-cap start button hit target missing');
+    const startedAt = Date.now();
+    await touchAt(ctx, page, point);
+    await page.waitForFunction(() => window.__game.scene.isActive('Game'), null, { timeout: 4300 });
+    const elapsed = Date.now() - startedAt;
+    if (elapsed > 3900) {
+      throw new Error('maxDurationMs was not honored as an upper bound: ' + elapsed);
+    }
+    if (errors.length) throw new Error('duration-cap path caused page errors: ' + errors.join(' | '));
     await ctx.close();
   }
 

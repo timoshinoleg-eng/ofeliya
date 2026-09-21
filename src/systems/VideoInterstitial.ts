@@ -187,10 +187,14 @@ export class VideoInterstitial {
       stallTimer = 0;
     };
 
-    const hardLimit = Math.max(
-      options.maxDurationMs ?? 0,
-      VIDEO_ASSETS[id].durationMs + STALL_WATCHDOG_MS + 800
-    );
+    const fallbackHardLimit = VIDEO_ASSETS[id].durationMs + STALL_WATCHDOG_MS + 800;
+    const requestedHardLimit = options.maxDurationMs;
+    const hardLimit =
+      typeof requestedHardLimit === 'number' &&
+      Number.isFinite(requestedHardLimit) &&
+      requestedHardLimit > 0
+        ? Math.min(requestedHardLimit, fallbackHardLimit)
+        : fallbackHardLimit;
 
     const armHardLimit = (): void => {
       if (settled || maxTimer) return;
