@@ -20,9 +20,9 @@ type PlayOptions = {
 };
 
 const VIDEO_ASSETS: Record<VideoInterstitialId, VideoAsset> = {
-  startIntro: { file: '01_start_intro.mp4', durationMs: 2250 },
+  startIntro: { file: '01_start_intro_v2.mp4', durationMs: 4042 },
   bloodstreamToHeart: { file: '02_bloodstream_to_heart.mp4', durationMs: 7417 },
-  defeat: { file: '04_defeat.mp4', durationMs: 2250 },
+  defeat: { file: '04_defeat_v2.mp4', durationMs: 4042 },
   victory: { file: '06_victory_canonical.mp4', durationMs: 7584 },
   immunePrimeIntro: { file: '07_immune_prime_intro.mp4', durationMs: 8500 },
   cardiacTitanIntro: { file: '08_cardiac_titan_intro.mp4', durationMs: 8500 },
