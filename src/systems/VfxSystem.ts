@@ -18,6 +18,7 @@ export class VfxSystem {
   private readonly rewardEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
   private readonly budget: VfxBudget;
   private lastHitAt = 0;
+  private combatDensity = 0;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -28,7 +29,7 @@ export class VfxSystem {
     this.killEmitter = scene.add
       .particles(0, 0, 'bio-spark', {
         speed: { min: 60, max: 190 },
-        lifespan: { min: 200, max: 420 },
+        lifespan: { min: 170, max: 330 },
         scale: { start: 0.82, end: 0 },
         blendMode: 'ADD',
         emitting: false,
@@ -37,7 +38,7 @@ export class VfxSystem {
     this.hitEmitter = scene.add
       .particles(0, 0, 'bio-spark', {
         speed: { min: 35, max: 95 },
-        lifespan: { min: 110, max: 190 },
+        lifespan: { min: 90, max: 155 },
         scale: { start: 0.46, end: 0 },
         blendMode: 'ADD',
         emitting: false,
@@ -46,7 +47,7 @@ export class VfxSystem {
     this.pickupEmitter = scene.add
       .particles(0, 0, 'bio-spark', {
         speed: { min: 40, max: 110 },
-        lifespan: 280,
+        lifespan: 220,
         scale: { start: 0.72, end: 0 },
         blendMode: 'ADD',
         emitting: false,
@@ -65,15 +66,18 @@ export class VfxSystem {
 
   hit(x: number, y: number, color = COLORS.white): void {
     const now = this.scene.time.now;
-    if (now - this.lastHitAt < (PERFORMANCE.tier === 'reduced' ? 70 : 45)) return;
+    const denseInterval = this.combatDensity >= 180 ? 90 : this.combatDensity >= 140 ? 65 : 45;
+    const minInterval = PERFORMANCE.tier === 'reduced' ? Math.max(80, denseInterval) : denseInterval;
+    if (now - this.lastHitAt < minInterval) return;
     this.lastHitAt = now;
     this.tint(this.hitEmitter, color);
-    this.emit(this.hitEmitter, x, y, 2);
+    this.emit(this.hitEmitter, x, y, this.combatDensity >= 160 ? 1 : 2);
   }
 
   kill(x: number, y: number, color: number, importance: KillImportance = 'normal'): void {
     this.tint(this.killEmitter, color);
-    const base = importance === 'boss' ? 30 : importance === 'elite' ? 16 : 8;
+    const normalBase = this.combatDensity >= 180 ? 3 : this.combatDensity >= 140 ? 5 : 8;
+    const base = importance === 'boss' ? 30 : importance === 'elite' ? 16 : normalBase;
     this.emit(this.killEmitter, x, y, base, importance !== 'normal');
     if (importance !== 'normal') {
       this.ring(
@@ -88,8 +92,12 @@ export class VfxSystem {
 
   pickup(x: number, y: number): void {
     this.tint(this.pickupEmitter, COLORS.green);
-    this.emit(this.pickupEmitter, x, y, 3);
-    this.ring(x, y, COLORS.green, 24, 220, 0.12);
+    this.emit(this.pickupEmitter, x, y, this.combatDensity >= 170 ? 1 : this.combatDensity >= 130 ? 2 : 3);
+    if (this.combatDensity < 180) this.ring(x, y, COLORS.green, 24, 200, 0.1);
+  }
+
+  setCombatDensity(density: number): void {
+    this.combatDensity = Math.max(0, Math.floor(density));
   }
 
   nova(x: number, y: number, radius: number): void {
