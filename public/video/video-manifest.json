@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "basePath": "/video/",
+  "generatedFromPack": "OFELIYA_stage4_video_ready_pack.zip",
+  "assets": {
+    "victory": {
+      "file": "06_victory_canonical.mp4",
+      "durationSec": 7.583333,
+      "bytes": 1704293,
+      "sha256": "bdf48ec908936a346eaf720e9b84ac1cfa415f25c95c898672b93662d62d31fc",
+      "canonical": true,
+      "preloadPhase": "heart-active",
+      "fallback": "procedural-victory"
+    },
+    "immunePrimeIntro": {
+      "file": "07_immune_prime_intro.mp4",
+      "durationSec": 8.5,
+      "bytes": 1339746,
+      "sha256": "6c2ba27d3e329aaa0c0f95fde25b6935f7600bd4146ee6bbc2b519f9c857d846",
+      "canonical": true,
+      "priority": "P2",
+      "preloadPhase": "bloodstream-late",
+      "fallback": "procedural-boss-intro"
+    },
+    "cardiacTitanIntro": {
+      "file": "08_cardiac_titan_intro.mp4",
+      "durationSec": 8.5,
+      "bytes": 1315261,
+      "sha256": "febab9d81b6397c9acc7afc8511382f7eb168edc0a2797888e24e1d5133c1113",
+      "canonical": true,
+      "priority": "P2",
+      "preloadPhase": "heart-late",
+      "fallback": "procedural-boss-intro"
+    },
+    "cardiacTitanIntroAlt": {
+      "file": "09_cardiac_titan_intro_alt.mp4",
+      "durationSec": 8.5,
+      "bytes": 1505842,
+      "sha256": "0b154cc21cec66630970514d584d3811c2e345b9e826224531ef0cc17eb7354d",
+      "canonical": false,
+      "priority": "backup-only"
+    }
+  },
+  "playback": {
+    "muted": true,
+    "playsInline": true,
+    "preloadDefault": "metadata",
+    "startupCritical": false,
+    "startWatchdogMs": 900,
+    "spinnerAllowed": false
+  }
+}
