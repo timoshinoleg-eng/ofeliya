@@ -13,6 +13,9 @@ interface TelegramBackButton {
   offClick?: (callback: () => void) => void;
 }
 
+const TELEGRAM_BOT_NAME_RE = /^[A-Za-z0-9_]{1,64}$/;
+const TELEGRAM_APP_SHORT_NAME_RE = /^[A-Za-z0-9_]{1,64}$/;
+
 interface TelegramWebApp {
   initData?: string;
   initDataUnsafe?: {
@@ -30,6 +33,7 @@ interface TelegramWebApp {
   };
   ready?: () => void;
   expand?: () => void;
+  shareMessage?: (messageId: string, callback?: (success: boolean) => void) => void;
 }
 
 declare global {
@@ -83,10 +87,17 @@ export class TelegramPlatform implements PlatformAdapter {
     return this.wa?.initDataUnsafe?.start_param ?? null;
   }
 
-  buildStartLink(_payload: string): string | null {
-    // Telegram Mini App link format needs both the bot and Mini App short name. VIR-17 owns that
-    // configuration; keeping this null avoids inventing a broken cross-platform link in MAX v1.
-    return null;
+  buildStartLink(payload: string): string | null {
+    const bot = String(import.meta.env.VITE_TELEGRAM_BOT_NAME ?? '').trim().replace(/^@/, '');
+    if (!TELEGRAM_BOT_NAME_RE.test(bot)) return null;
+
+    const encoded = encodeURIComponent(payload);
+    const shortName = String(import.meta.env.VITE_TELEGRAM_APP_SHORT_NAME ?? '').trim();
+    if (shortName && TELEGRAM_APP_SHORT_NAME_RE.test(shortName)) {
+      return `https://t.me/${bot}/${shortName}?startapp=${encoded}`;
+    }
+    // Main Mini Apps do not require a short name: t.me/<bot>?startapp=<payload>.
+    return `https://t.me/${bot}?startapp=${encoded}`;
   }
 
   async getViewportSize(): Promise<{ width: number; height: number } | null> {
@@ -120,7 +131,56 @@ export class TelegramPlatform implements PlatformAdapter {
     }
   }
 
+  private async prepareNativeShare(text: string, link?: string): Promise<string | null> {
+    if (typeof window === 'undefined' || typeof fetch === 'undefined' || !this.initData) return null;
+    const controller = new AbortController();
+    const timer = globalThis.setTimeout(() => controller.abort(), 3500);
+    try {
+      const endpoint = new URL('api/telegram/share', window.location.href).toString();
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: this.initData, text, link }),
+        signal: controller.signal,
+        credentials: 'same-origin',
+      });
+      if (!response.ok) return null;
+      const body = (await response.json()) as { ok?: boolean; messageId?: unknown };
+      return body.ok === true && typeof body.messageId === 'string' && body.messageId
+        ? body.messageId
+        : null;
+    } catch {
+      return null;
+    } finally {
+      globalThis.clearTimeout(timer);
+    }
+  }
+
   async shareResult(text: string, link?: string): Promise<boolean> {
+    const shareMessage = this.wa?.shareMessage;
+    if (shareMessage) {
+      const messageId = await this.prepareNativeShare(text, link);
+      if (messageId) {
+        try {
+          return await new Promise<boolean>((resolve) => {
+            let settled = false;
+            const finish = (value: boolean) => {
+              if (settled) return;
+              settled = true;
+              resolve(value);
+            };
+            const timer = globalThis.setTimeout(() => finish(false), 60_000);
+            shareMessage(messageId, (success) => {
+              globalThis.clearTimeout(timer);
+              finish(success === true);
+            });
+          });
+        } catch {
+          // Fall through to the browser share sheet when Telegram native sharing fails.
+        }
+      }
+    }
+
     if (typeof navigator === 'undefined' || !navigator.share) return false;
     try {
       await navigator.share(link ? { text, url: link } : { text });
