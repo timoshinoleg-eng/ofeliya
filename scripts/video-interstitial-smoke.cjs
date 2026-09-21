@@ -467,15 +467,20 @@ async function visibleUiText(page, wanted) {
     await sleep(2400);
     const fallbackState = await page.evaluate(() => {
       const gs = window.__game.scene.getScene('Game');
+      const ui = window.__game.scene.getScene('UI');
       return {
         paused: window.__game.scene.isPaused('Game'),
+        modalOpen: Boolean(ui.modalOpen),
+        manualPaused: Boolean(ui.manualPaused),
         phase: gs.stageDirector.phase,
         bossActive: Boolean(gs.wave.boss?.active),
         videoOverlays: document.querySelectorAll('[data-ofeliya-video]').length,
       };
     });
+    const unexplainedPause =
+      fallbackState.paused && !fallbackState.modalOpen && !fallbackState.manualPaused;
     if (
-      fallbackState.paused ||
+      unexplainedPause ||
       fallbackState.phase !== 'BOSS_ACTIVE' ||
       !fallbackState.bossActive ||
       fallbackState.videoOverlays !== 0
