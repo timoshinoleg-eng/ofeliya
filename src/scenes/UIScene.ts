@@ -1703,7 +1703,8 @@ export class UIScene extends Phaser.Scene {
       this.scene.stop('Game');
     });
     y += gap;
-    const shareButtonLabel = challengeTarget
+    const legacyChallengeCreatable = ranked && !res.win;
+    const shareButtonLabel = challengeTarget || legacyChallengeCreatable
       ? 'БРОСИТЬ ВЫЗОВ'
       : duelCreatable
         ? 'БРОСИТЬ ДУЭЛЬ'
@@ -1726,7 +1727,7 @@ export class UIScene extends Phaser.Scene {
         ? `OFELIYA / STRAIN-0 завершила кампанию за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare}${legendaryShare}`.trim()
         : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare}${legendaryShare}`.trim();
 
-      if (challengeTarget) {
+      if (challengeTarget || legacyChallengeCreatable) {
         const payload = ranked ? encodeChallengePayload(createChallengePayload(res)) : null;
         const link = payload ? PlatformBridge.buildStartLink(payload) : null;
         const legacyText = res.win
