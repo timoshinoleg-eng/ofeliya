@@ -113,6 +113,8 @@ export class GameScene extends Phaser.Scene {
   private trail: Phaser.GameObjects.Image[] = [];
   private trailCursor = 0;
   private trailAcc = 0;
+  private visualEnemyDensity = 0;
+  private visualDensityRefreshAt = 0;
   private keys: Record<string, Phaser.Input.Keyboard.Key> = {};
   private introHint: Phaser.GameObjects.Container | null = null;
   private transitionGeneration = 0;
@@ -394,6 +396,11 @@ export class GameScene extends Phaser.Scene {
       this.physics.world.resume();
     }
     this.runState.tick(delta);
+    if (time >= this.visualDensityRefreshAt) {
+      this.visualDensityRefreshAt = time + 90;
+      this.visualEnemyDensity = this.enemies.countActive(true);
+      this.vfx.setCombatDensity(this.visualEnemyDensity);
+    }
     const st = this.runState.stage;
     const stage = this.stageDirector.currentStage;
     this.achievementCheckAcc += delta;
@@ -876,6 +883,10 @@ export class GameScene extends Phaser.Scene {
     if (this.stageDirector.currentStage.signatureMechanic !== 'heartbeat-pulse') return 1;
     if (this.time.now <= this.heartbeatProtectedUntil) return 1;
     return this.heartbeatPulse.pressureMultiplier;
+  }
+
+  getCombatVisualDensity(): number {
+    return this.visualEnemyDensity;
   }
 
   private updateHeartbeatSignature(stage: StageDefinition, stageTimeMs: number): void {
