@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { parseChallengePayload } from '../game/Challenge';
+import { parseDuelStartPayload, type DuelChallengeSnapshot } from '../game/Duel';
 import { ACHIEVEMENTS } from '../game/AchievementSystem';
 import { COLORS, FONT, UI_FONT, UI_TEXT, fmtTime } from '../game/config';
 import { IDENTITY } from '../game/identity';
@@ -29,6 +30,7 @@ import { RunCheckpoint } from '../systems/RunCheckpoint';
 import { Sfx } from '../systems/Sfx';
 import { StartupTrace } from '../systems/StartupTrace';
 import { VideoInterstitial } from '../systems/VideoInterstitial';
+import { loadDuelChallenge, trackDuelEvent } from '../systems/DuelClient';
 
 export class MenuScene extends Phaser.Scene {
   private codexOverlay: Phaser.GameObjects.Container | null = null;
@@ -52,15 +54,21 @@ export class MenuScene extends Phaser.Scene {
     Sfx.stopMusic();
     PlatformBridge.setBackHandler(null);
 
-    const incomingChallenge = parseChallengePayload(PlatformBridge.getStartParam());
-    const resumeCheckpoint = incomingChallenge ? null : RunCheckpoint.load();
-    let selectedDifficulty = incomingChallenge ? 'standard' : readDifficultySelection();
+    const startParam = PlatformBridge.getStartParam();
+    const incomingDuelId = parseDuelStartPayload(startParam);
+    const incomingChallenge = incomingDuelId ? null : parseChallengePayload(startParam);
+    const resumeCheckpoint = incomingDuelId || incomingChallenge ? null : RunCheckpoint.load();
+    let incomingDuel: DuelChallengeSnapshot | null = null;
+    let duelLoading = incomingDuelId !== null;
+    let duelUnavailable = false;
+    let selectedDifficulty = incomingDuelId || incomingChallenge ? 'standard' : readDifficultySelection();
     let selectedControlMode: ControlMode = readControlMode();
     this.registry.set('difficultyId', selectedDifficulty);
     this.registry.set('controlMode', selectedControlMode);
-    // Registry keeps the social target across Menu -> Game -> UI and fast restarts. It is display
-    // context only: gameplay/rewards never consume it.
+    // Legacy social targets remain display-only. Verified fixed-seed duels use a separate
+    // immutable server snapshot and explicitly set runSeed/controlMode before Game starts.
     this.registry.set('challengeTarget', incomingChallenge);
+    this.registry.set('duelChallenge', null);
 
     const plasma = this.add
       .tileSprite(0, 0, W, H, 'blood-plasma')
@@ -200,15 +208,18 @@ export class MenuScene extends Phaser.Scene {
         .setDepth(5);
     }
 
-    if (incomingChallenge) {
+    let challengeHeadline: Phaser.GameObjects.Text | null = null;
+    let challengeTargetText: Phaser.GameObjects.Text | null = null;
+    let challengeDetailText: Phaser.GameObjects.Text | null = null;
+    if (incomingChallenge || incomingDuelId) {
       const challengeY = H * 0.57;
       const panelW = Math.min(W - 42, 330);
       this.add
         .rectangle(W / 2, challengeY, panelW, 58, 0x251020, 0.9)
         .setStrokeStyle(1.5, COLORS.gold, 0.78)
         .setDepth(4);
-      this.add
-        .text(W / 2, challengeY - 15, 'ВЫЗОВ ПОЛУЧЕН', {
+      challengeHeadline = this.add
+        .text(W / 2, challengeY - 15, incomingDuelId ? 'ДУЭЛЬ · ЗАГРУЗКА' : 'ВЫЗОВ ПОЛУЧЕН', {
           fontFamily: FONT,
           fontSize: H < 650 ? '10px' : '11px',
           fontStyle: 'bold',
@@ -218,13 +229,14 @@ export class MenuScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setResolution(2)
         .setDepth(5);
-      const target =
-        incomingChallenge.objective === 'boss1-clear'
+      const target = incomingChallenge
+        ? incomingChallenge.objective === 'boss1-clear'
           ? `Подави IMMUNE PRIME быстрее ${fmtTime(incomingChallenge.timeMs)}`
           : incomingChallenge.objective === 'campaign-clear'
             ? `Заверши кампанию быстрее ${fmtTime(incomingChallenge.timeMs)}`
-            : `Продержись дольше ${fmtTime(incomingChallenge.timeMs)}`;
-      this.add
+            : `Продержись дольше ${fmtTime(incomingChallenge.timeMs)}`
+        : 'Получаю фиксированный seed и цель…';
+      challengeTargetText = this.add
         .text(W / 2, challengeY + 2, target, {
           fontFamily: FONT,
           fontSize: H < 650 ? '10px' : '11px',
@@ -235,19 +247,17 @@ export class MenuScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setResolution(2)
         .setDepth(5);
-      this.add
-        .text(
-          W / 2,
-          challengeY + 18,
-          `${incomingChallenge.kills} иммун. · ${incomingChallenge.hostCellsInfected} клеток · мутация ${incomingChallenge.level}`,
-          {
-            fontFamily: UI_FONT,
-            fontSize: H < 650 ? '10px' : '11px',
-            fontStyle: '600',
-            color: UI_TEXT.secondary,
-            align: 'center',
-          }
-        )
+      const detail = incomingChallenge
+        ? `${incomingChallenge.kills} иммун. · ${incomingChallenge.hostCellsInfected} клеток · мутация ${incomingChallenge.level}`
+        : 'STANDARD · управление и случайность фиксированы';
+      challengeDetailText = this.add
+        .text(W / 2, challengeY + 18, detail, {
+          fontFamily: UI_FONT,
+          fontSize: H < 650 ? '10px' : '11px',
+          fontStyle: '600',
+          color: UI_TEXT.secondary,
+          align: 'center',
+        })
         .setOrigin(0.5)
         .setResolution(2)
         .setDepth(5);
@@ -327,24 +337,32 @@ export class MenuScene extends Phaser.Scene {
 
     const renderDifficulty = () => {
       const profile = getDifficultyProfile(selectedDifficulty);
+      const duelLocked = incomingDuelId !== null && !duelUnavailable;
+      const challengeLocked = Boolean(incomingChallenge) || duelLocked;
       difficultyText.setText(
-        incomingChallenge ? 'СЛОЖНОСТЬ: СТАНДАРТ · ВЫЗОВ' : `СЛОЖНОСТЬ: ${profile.label}  ›`
+        challengeLocked
+          ? `СЛОЖНОСТЬ: СТАНДАРТ · ${duelLocked ? 'ДУЭЛЬ' : 'ВЫЗОВ'}`
+          : `СЛОЖНОСТЬ: ${profile.label}  ›`
       );
       difficultyText.setColor(profile.id === 'strained' ? '#ffe066' : '#fff4ec');
       difficultyDesc.setText(
-        incomingChallenge ? 'соревновательные вызовы фиксируют Standard' : profile.description
+        challengeLocked
+          ? duelLocked
+            ? 'фиксированный Standard · без глобального рейтинга'
+            : 'соревновательные вызовы фиксируют Standard'
+          : profile.description
       );
       difficultyBg.setStrokeStyle(
         profile.id === 'strained' ? 1.8 : 1.4,
-        incomingChallenge ? COLORS.gold : profile.id === 'strained' ? COLORS.gold : COLORS.cyan,
-        incomingChallenge ? 0.9 : profile.id === 'strained' ? 0.9 : 0.68
+        challengeLocked ? COLORS.gold : profile.id === 'strained' ? COLORS.gold : COLORS.cyan,
+        challengeLocked ? 0.9 : profile.id === 'strained' ? 0.9 : 0.68
       );
     };
     renderDifficulty();
     difficultyBg.on('pointerup', () => {
       Sfx.play('click');
       PlatformBridge.haptic('light');
-      if (incomingChallenge) return;
+      if (incomingChallenge || (incomingDuelId && !duelUnavailable)) return;
       selectedDifficulty = nextDifficultyId(selectedDifficulty);
       writeDifficultySelection(selectedDifficulty);
       this.registry.set('difficultyId', selectedDifficulty);
@@ -384,8 +402,16 @@ export class MenuScene extends Phaser.Scene {
       .setDepth(6);
     let startHint: Phaser.GameObjects.Text | null = null;
     const renderControlMode = () => {
-      controlText.setText(`УПРАВЛЕНИЕ: ${controlModeLabel(selectedControlMode)}  ›`);
-      controlDesc.setText(controlModeDescription(selectedControlMode));
+      if (duelLoading) {
+        controlText.setText('УПРАВЛЕНИЕ: ЗАГРУЗКА ДУЭЛИ');
+        controlDesc.setText('режим управления придёт из снимка вызова');
+      } else if (incomingDuel) {
+        controlText.setText(`УПРАВЛЕНИЕ: ${controlModeLabel(selectedControlMode)} · ДУЭЛЬ`);
+        controlDesc.setText('зафиксировано вызовом · менять нельзя');
+      } else {
+        controlText.setText(`УПРАВЛЕНИЕ: ${controlModeLabel(selectedControlMode)}  ›`);
+        controlDesc.setText(controlModeDescription(selectedControlMode));
+      }
       const controlAccent =
         selectedControlMode === 'two-hand'
           ? COLORS.cyan
@@ -393,7 +419,9 @@ export class MenuScene extends Phaser.Scene {
             ? COLORS.purple
             : COLORS.magenta;
       controlBg.setStrokeStyle(selectedControlMode === 'one-hand' ? 1.4 : 1.8, controlAccent, 0.82);
-      if (resumeCheckpoint) {
+      if (incomingDuel) {
+        startHint?.setText(`тот же seed · быстрее ${fmtTime(incomingDuel.targetTimeMs)}`);
+      } else if (resumeCheckpoint) {
         const resumeStage =
           STAGES.find((stage) => stage.id === resumeCheckpoint.director.stageId) ?? STAGES[0];
         startHint?.setText(
@@ -407,6 +435,7 @@ export class MenuScene extends Phaser.Scene {
     controlBg.on('pointerup', () => {
       Sfx.play('click');
       PlatformBridge.haptic('light');
+      if (duelLoading || incomingDuel) return;
       selectedControlMode = nextControlMode(selectedControlMode);
       writeControlMode(selectedControlMode);
       this.registry.set('controlMode', selectedControlMode);
@@ -421,15 +450,17 @@ export class MenuScene extends Phaser.Scene {
       .rectangle(W / 2, btnY, btnW, resumeCheckpoint ? 58 : 66, 0x5c143e, 0.92)
       .setStrokeStyle(2, incomingChallenge ? COLORS.gold : COLORS.magenta, 1)
       .setDepth(5);
-    this.add
+    const startButtonText = this.add
       .text(
         W / 2,
         btnY - 5,
-        incomingChallenge
-          ? 'ПРИНЯТЬ ВЫЗОВ'
-          : resumeCheckpoint
-            ? 'ПРОДОЛЖИТЬ ЗАБЕГ'
-            : 'НАЧАТЬ ЗАРАЖЕНИЕ',
+        incomingDuelId
+          ? 'ЗАГРУЗКА ДУЭЛИ…'
+          : incomingChallenge
+            ? 'ПРИНЯТЬ ВЫЗОВ'
+            : resumeCheckpoint
+              ? 'ПРОДОЛЖИТЬ ЗАБЕГ'
+              : 'НАЧАТЬ ЗАРАЖЕНИЕ',
         {
         fontFamily: FONT,
         fontSize: H < 650 ? '18px' : '22px',
@@ -460,10 +491,18 @@ export class MenuScene extends Phaser.Scene {
       this.registry.remove('runCheckpointResume');
       this.registry.set('difficultyId', selectedDifficulty);
       this.registry.set('controlMode', selectedControlMode);
+      if (incomingDuel) {
+        this.registry.set('duelChallenge', incomingDuel);
+        this.registry.set('runSeedOverride', incomingDuel.runSeed);
+        void trackDuelEvent(incomingDuel.challengeId, 'start', PlatformBridge);
+      } else {
+        this.registry.set('duelChallenge', null);
+        this.registry.remove('runSeedOverride');
+      }
       this.scene.start('Game');
     };
     const startFreshRun = () => {
-      if (freshRunStarting) return;
+      if (freshRunStarting || duelLoading) return;
       freshRunStarting = true;
       let launched = false;
       const launchOnce = () => {
@@ -487,6 +526,7 @@ export class MenuScene extends Phaser.Scene {
     btnBg.on('pointerup', () => {
       Sfx.play('click');
       PlatformBridge.haptic('medium');
+      if (duelLoading) return;
       if (resumeCheckpoint) {
         this.registry.set('difficultyId', resumeCheckpoint.difficultyId);
         this.registry.set('controlMode', resumeCheckpoint.controlMode);
@@ -498,6 +538,40 @@ export class MenuScene extends Phaser.Scene {
     });
     btnBg.on('pointerover', () => btnBg.setFillStyle(0x7a1a52, 1));
     btnBg.on('pointerout', () => btnBg.setFillStyle(0x5c143e, 0.92));
+
+    if (incomingDuelId) {
+      void loadDuelChallenge(incomingDuelId).then((challenge) => {
+        if (!this.sys.isActive()) return;
+        duelLoading = false;
+        if (!challenge) {
+          duelUnavailable = true;
+          this.registry.set('duelChallenge', null);
+          challengeHeadline?.setText('ДУЭЛЬ НЕДОСТУПНА').setColor('#ff9b66');
+          challengeTargetText?.setText('Ссылка истекла или вызов больше не существует');
+          challengeDetailText?.setText('можно начать обычный Standard-забег');
+          startButtonText.setText('НАЧАТЬ ОБЫЧНЫЙ ЗАБЕГ');
+          renderDifficulty();
+          renderControlMode();
+          return;
+        }
+
+        incomingDuel = challenge;
+        selectedDifficulty = 'standard';
+        selectedControlMode = challenge.controlMode;
+        this.registry.set('duelChallenge', challenge);
+        this.registry.set('difficultyId', 'standard');
+        this.registry.set('controlMode', challenge.controlMode);
+        challengeHeadline?.setText('ФИКСИРОВАННАЯ ДУЭЛЬ').setColor('#ffe066');
+        challengeTargetText?.setText(`Заверши ту же кампанию быстрее ${fmtTime(challenge.targetTimeMs)}`);
+        challengeDetailText?.setText(
+          `тот же seed · ${controlModeLabel(challenge.controlMode)} · без наград и глобального рейтинга`
+        );
+        startButtonText.setText('ПРИНЯТЬ ДУЭЛЬ');
+        renderDifficulty();
+        renderControlMode();
+        void trackDuelEvent(challenge.challengeId, 'open', PlatformBridge);
+      });
+    }
 
     if (resumeCheckpoint) {
       const newRunY = btnY + 42;
