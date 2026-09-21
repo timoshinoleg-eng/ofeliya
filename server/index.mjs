@@ -17,7 +17,7 @@
  *        MAX_BOT_TOKEN (или production BOT_TOKEN как fallback)
  */
 import { createServer } from 'node:http';
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -76,6 +76,12 @@ const RUN_SEED_RE = /^[A-Za-z0-9_-]{1,32}$/;
 const DIFFICULTY_IDS = new Set(['standard', 'strained']);
 const CONTROL_MODES = new Set(['one-hand', 'two-hand', 'dual-move']);
 const COMPLETION_STAGES = new Set(['bloodstream', 'heart']);
+
+const DUEL_ID_RE = /^[A-Za-z0-9_-]{16,32}$/;
+const DUEL_TTL_MS = 7 * 86_400_000;
+const MAX_DUELS = 5_000;
+const MAX_DUEL_ATTEMPTS = 20_000;
+const MAX_DUEL_EVENTS = 30_000;
 
 function storedRulesetVersion(score) {
   return Number.isInteger(score?.rulesetVersion) ? score.rulesetVersion : 1;
@@ -169,7 +175,14 @@ const MAX_SCORES = 20_000;
 const MAX_REFS = 10_000;
 
 function emptyStore() {
-  return { scores: [], refs: [], refRewards: {} };
+  return {
+    scores: [],
+    refs: [],
+    refRewards: {},
+    duels: [],
+    duelAttempts: [],
+    duelEvents: [],
+  };
 }
 
 function loadStore() {
@@ -180,6 +193,9 @@ function loadStore() {
       scores: Array.isArray(s.scores) ? s.scores : [],
       refs: Array.isArray(s.refs) ? s.refs : [],
       refRewards: s.refRewards && typeof s.refRewards === 'object' ? s.refRewards : {},
+      duels: Array.isArray(s.duels) ? s.duels : [],
+      duelAttempts: Array.isArray(s.duelAttempts) ? s.duelAttempts : [],
+      duelEvents: Array.isArray(s.duelEvents) ? s.duelEvents : [],
     };
   } catch {
     return emptyStore();
@@ -364,6 +380,67 @@ function parseStoredIdentity(raw) {
     if (KNOWN_PLATFORMS.has(platform) && uid) return { platform, uid, key: value };
   }
   return value ? { platform: null, uid: value, key: value } : null;
+}
+
+function verifyDuelIdentity(body) {
+  const platform = body?.platform;
+  if (platform !== 'max' && platform !== 'telegram') return null;
+  const token = platform === 'telegram' ? TG_TOKEN : MAX_TOKEN;
+  const verified = validateInitData(body?.initData, token);
+  if (!verified) return null;
+  return { platform, uid: verified.uid };
+}
+
+function newDuelId() {
+  return randomBytes(12).toString('base64url');
+}
+
+function findDuel(challengeId) {
+  if (!DUEL_ID_RE.test(challengeId)) return null;
+  return store.duels.find((duel) => duel.challengeId === challengeId) ?? null;
+}
+
+function publicDuelSnapshot(duel) {
+  return {
+    challengeId: duel.challengeId,
+    rulesetVersion: duel.rulesetVersion,
+    campaignVersion: duel.campaignVersion,
+    runSeed: duel.runSeed,
+    difficultyId: 'standard',
+    controlMode: duel.controlMode,
+    targetTimeMs: duel.targetTimeMs,
+    createdAt: duel.createdAt,
+    expiresAt: duel.expiresAt,
+  };
+}
+
+function recordDuelEvent(challengeId, event, identity, ts = Date.now()) {
+  store.duelEvents.push({
+    challengeId,
+    event,
+    platform: identity.platform,
+    uid: identity.uid,
+    ts,
+  });
+  if (store.duelEvents.length > MAX_DUEL_EVENTS) {
+    store.duelEvents.splice(0, store.duelEvents.length - MAX_DUEL_EVENTS);
+  }
+}
+
+function duelAttemptStats(challengeId, identity) {
+  const mine = store.duelAttempts.filter(
+    (row) =>
+      row.challengeId === challengeId &&
+      row.platform === identity.platform &&
+      row.uid === identity.uid &&
+      row.valid
+  );
+  const winningTimes = mine.filter((row) => row.win).map((row) => row.timeMs);
+  return {
+    attemptCount: mine.length,
+    bestTimeMs: winningTimes.length ? Math.min(...winningTimes) : null,
+    beaten: mine.some((row) => row.beaten),
+  };
 }
 
 // ---------- push-уведомление referrer'у (V7) ----------
@@ -551,6 +628,8 @@ const server = createServer(async (req, res) => {
         ok: true,
         app: 'ofeliya-server',
         scores: store.scores.length,
+        duels: store.duels.length,
+        duelAttempts: store.duelAttempts.length,
         rulesetVersion: CURRENT_RULESET_VERSION,
         campaignVersion: CURRENT_CAMPAIGN_VERSION,
       });
@@ -564,6 +643,153 @@ const server = createServer(async (req, res) => {
         rankedDifficultyId: 'standard',
         minCampaignWinTimeMs: ANTI_CHEAT.campaignMinWinTimeMs,
         supportedRulesets: [1, CURRENT_RULESET_VERSION],
+      });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/duel') {
+      const body = await readBody(req);
+      const identity = verifyDuelIdentity(body);
+      if (!identity) return send(res, 403, { ok: false, error: 'verified messenger identity required' });
+      const payload = body?.payload;
+      if (!payload || typeof payload !== 'object') return send(res, 400, { ok: false, error: 'no payload' });
+      if (payload.resumed === true) return send(res, 422, { ok: false, error: 'resumed run cannot create duel' });
+
+      const parsedContract = parseScoreContract(payload);
+      if (!parsedContract.ok) {
+        return send(res, 422, { ok: false, error: `score-contract: ${parsedContract.error}` });
+      }
+      const contract = parsedContract.contract;
+      const cheat = antiCheatCheck(payload, contract);
+      if (cheat) return send(res, 422, { ok: false, error: `anti-cheat: ${cheat}` });
+      if (
+        contract.legacy ||
+        contract.rulesetVersion !== CURRENT_RULESET_VERSION ||
+        contract.campaignVersion !== CURRENT_CAMPAIGN_VERSION ||
+        contract.difficultyId !== 'standard' ||
+        contract.completionStage !== 'heart' ||
+        contract.bossesDefeated !== 2 ||
+        payload.win !== true
+      ) {
+        return send(res, 422, { ok: false, error: 'duel requires verified Standard campaign clear' });
+      }
+
+      let challengeId = newDuelId();
+      while (findDuel(challengeId)) challengeId = newDuelId();
+      const now = Date.now();
+      const duel = {
+        challengeId,
+        ownerPlatform: identity.platform,
+        ownerUid: identity.uid,
+        rulesetVersion: contract.rulesetVersion,
+        campaignVersion: contract.campaignVersion,
+        runSeed: contract.runSeed,
+        difficultyId: 'standard',
+        controlMode: contract.controlMode,
+        targetTimeMs: Math.round(payload.timeMs),
+        source: {
+          kills: Math.round(payload.kills),
+          level: Math.round(payload.level),
+          bossesDefeated: contract.bossesDefeated,
+          boss1ClearMs: contract.boss1ClearMs,
+          hostCellsInfected: contract.hostCellsInfected,
+        },
+        createdAt: now,
+        expiresAt: now + DUEL_TTL_MS,
+      };
+      store.duels.push(duel);
+      if (store.duels.length > MAX_DUELS) store.duels.splice(0, store.duels.length - MAX_DUELS);
+      recordDuelEvent(challengeId, 'create', identity, now);
+      saveStore();
+      return send(res, 201, { ok: true, ranked: false, challenge: publicDuelSnapshot(duel) });
+    }
+
+    const duelGetMatch = /^\/api\/duel\/([A-Za-z0-9_-]{16,32})$/.exec(url.pathname);
+    if (req.method === 'GET' && duelGetMatch) {
+      const duel = findDuel(duelGetMatch[1]);
+      if (!duel) return send(res, 404, { ok: false, error: 'duel not found' });
+      if (Date.now() >= duel.expiresAt) return send(res, 410, { ok: false, error: 'duel expired' });
+      return send(res, 200, { ok: true, ranked: false, challenge: publicDuelSnapshot(duel) });
+    }
+
+    const duelEventMatch = /^\/api\/duel\/([A-Za-z0-9_-]{16,32})\/event$/.exec(url.pathname);
+    if (req.method === 'POST' && duelEventMatch) {
+      const duel = findDuel(duelEventMatch[1]);
+      if (!duel) return send(res, 404, { ok: false, error: 'duel not found' });
+      if (Date.now() >= duel.expiresAt) return send(res, 410, { ok: false, error: 'duel expired' });
+      const body = await readBody(req);
+      const identity = verifyDuelIdentity(body);
+      if (!identity) return send(res, 403, { ok: false, error: 'verified messenger identity required' });
+      if (!['open', 'start', 'rematch'].includes(body?.event)) {
+        return send(res, 400, { ok: false, error: 'bad duel event' });
+      }
+      recordDuelEvent(duel.challengeId, body.event, identity);
+      saveStore();
+      return send(res, 200, { ok: true, ranked: false });
+    }
+
+    const duelAttemptMatch = /^\/api\/duel\/([A-Za-z0-9_-]{16,32})\/attempt$/.exec(url.pathname);
+    if (req.method === 'POST' && duelAttemptMatch) {
+      const duel = findDuel(duelAttemptMatch[1]);
+      if (!duel) return send(res, 404, { ok: false, error: 'duel not found' });
+      if (Date.now() >= duel.expiresAt) return send(res, 410, { ok: false, error: 'duel expired' });
+
+      const body = await readBody(req);
+      const identity = verifyDuelIdentity(body);
+      if (!identity) return send(res, 403, { ok: false, error: 'verified messenger identity required' });
+      const payload = body?.payload;
+      if (!payload || typeof payload !== 'object') return send(res, 400, { ok: false, error: 'no payload' });
+      if (payload.resumed === true) return send(res, 422, { ok: false, error: 'resumed duel attempt rejected' });
+
+      const parsedContract = parseScoreContract(payload);
+      if (!parsedContract.ok) {
+        return send(res, 422, { ok: false, error: `score-contract: ${parsedContract.error}` });
+      }
+      const contract = parsedContract.contract;
+      const cheat = antiCheatCheck(payload, contract);
+      if (cheat) return send(res, 422, { ok: false, error: `anti-cheat: ${cheat}` });
+      if (
+        contract.legacy ||
+        contract.rulesetVersion !== duel.rulesetVersion ||
+        contract.campaignVersion !== duel.campaignVersion ||
+        contract.difficultyId !== 'standard' ||
+        contract.runSeed !== duel.runSeed ||
+        contract.controlMode !== duel.controlMode
+      ) {
+        return send(res, 422, { ok: false, error: 'duel snapshot mismatch' });
+      }
+
+      const now = Date.now();
+      const win =
+        payload.win === true &&
+        contract.completionStage === 'heart' &&
+        contract.bossesDefeated === 2;
+      const timeMs = Math.round(payload.timeMs);
+      const beaten = win && timeMs < duel.targetTimeMs;
+      store.duelAttempts.push({
+        challengeId: duel.challengeId,
+        platform: identity.platform,
+        uid: identity.uid,
+        valid: true,
+        win,
+        beaten,
+        timeMs,
+        ts: now,
+      });
+      if (store.duelAttempts.length > MAX_DUEL_ATTEMPTS) {
+        store.duelAttempts.splice(0, store.duelAttempts.length - MAX_DUEL_ATTEMPTS);
+      }
+      recordDuelEvent(duel.challengeId, 'attempt', identity, now);
+      if (beaten) recordDuelEvent(duel.challengeId, 'beaten', identity, now);
+      saveStore();
+
+      const stats = duelAttemptStats(duel.challengeId, identity);
+      return send(res, 200, {
+        ok: true,
+        ranked: false,
+        valid: true,
+        beaten,
+        targetTimeMs: duel.targetTimeMs,
+        ...stats,
       });
     }
 
