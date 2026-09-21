@@ -497,7 +497,8 @@ export class MenuScene extends Phaser.Scene {
         void trackDuelEvent(incomingDuel.challengeId, 'start', PlatformBridge);
       } else {
         this.registry.set('duelChallenge', null);
-        this.registry.remove('runSeedOverride');
+        // Preserve the existing deterministic-run contract: GameScene owns and consumes any
+        // one-shot runSeedOverride already present in the registry.
       }
       this.scene.start('Game');
     };
