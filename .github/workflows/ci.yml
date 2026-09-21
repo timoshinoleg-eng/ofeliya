@@ -26,6 +26,9 @@ jobs:
       - name: Challenge v1/v2 compatibility smoke
         run: npm run test:challenge
 
+      - name: Fixed-seed duel contract smoke
+        run: npm run test:duel
+
       - name: Save migration compatibility smoke
         run: npm run test:save
 
