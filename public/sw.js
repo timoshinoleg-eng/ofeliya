@@ -4,7 +4,7 @@
  * - App shell: pre-cache on install;
  * - navigation: network-first with cached index fallback;
  * - assets/fonts: stale-while-revalidate;
- * - audio: network only;
+ * - audio/video: network only (browser HTTP cache handles media/range requests);
  * - cache cleanup is scoped to OFELIYA only.
  */
 const VERSION = 'ofeliya-20260921-direct-nav-v1';
@@ -24,6 +24,7 @@ const SHELL = [
 ];
 
 const AUDIO_PREFIX = new URL('./audio/', self.registration.scope).pathname;
+const VIDEO_PREFIX = new URL('./video/', self.registration.scope).pathname;
 const ASSET_PREFIX = new URL('./assets/', self.registration.scope).pathname;
 const FONT_PREFIX = new URL('./fonts/', self.registration.scope).pathname;
 
@@ -59,7 +60,7 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
   const path = url.pathname;
 
-  if (path.startsWith(AUDIO_PREFIX)) return;
+  if (path.startsWith(AUDIO_PREFIX) || path.startsWith(VIDEO_PREFIX)) return;
 
   if (req.mode === 'navigate') {
     event.respondWith(

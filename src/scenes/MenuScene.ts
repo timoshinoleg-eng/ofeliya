@@ -28,6 +28,7 @@ import { SaveSystem } from '../systems/SaveSystem';
 import { RunCheckpoint } from '../systems/RunCheckpoint';
 import { Sfx } from '../systems/Sfx';
 import { StartupTrace } from '../systems/StartupTrace';
+import { VideoInterstitial } from '../systems/VideoInterstitial';
 
 export class MenuScene extends Phaser.Scene {
   private codexOverlay: Phaser.GameObjects.Container | null = null;
@@ -452,15 +453,38 @@ export class MenuScene extends Phaser.Scene {
       .setDepth(6);
     renderControlMode();
 
-    const startFreshRun = () => {
+    let freshRunStarting = false;
+    const launchFreshRun = () => {
+      if (!freshRunStarting) freshRunStarting = true;
       RunCheckpoint.clear();
       this.registry.remove('runCheckpointResume');
       this.registry.set('difficultyId', selectedDifficulty);
       this.registry.set('controlMode', selectedControlMode);
       this.scene.start('Game');
     };
+    const startFreshRun = () => {
+      if (freshRunStarting) return;
+      freshRunStarting = true;
+      let launched = false;
+      const launchOnce = () => {
+        if (launched) return;
+        launched = true;
+        launchFreshRun();
+      };
+      const playing = VideoInterstitial.play('startIntro', {
+        onComplete: launchOnce,
+        onFail: launchOnce,
+        maxDurationMs: 3200,
+        ariaLabel: 'Пропустить вступление',
+      });
+      if (!playing) launchOnce();
+    };
 
-    btnBg.setInteractive({ useHandCursor: true }).on('pointerup', () => {
+    btnBg.setInteractive({ useHandCursor: true });
+    btnBg.on('pointerdown', () => {
+      if (!resumeCheckpoint) VideoInterstitial.preload('startIntro');
+    });
+    btnBg.on('pointerup', () => {
       Sfx.play('click');
       PlatformBridge.haptic('medium');
       if (resumeCheckpoint) {

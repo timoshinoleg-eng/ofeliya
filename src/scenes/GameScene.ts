@@ -63,6 +63,7 @@ import {
 import { SCORE_CAMPAIGN_VERSION, SCORE_RULESET_VERSION } from '../game/RunVersions';
 import { Sfx } from '../systems/Sfx';
 import { VfxSystem } from '../systems/VfxSystem';
+import { VideoInterstitial } from '../systems/VideoInterstitial';
 import { PERFORMANCE } from '../systems/PerformanceProfile';
 import { HostCellSystem, type HostCellLysisEvent } from '../systems/HostCellSystem';
 import type { UIScene } from './UIScene';
@@ -341,6 +342,14 @@ export class GameScene extends Phaser.Scene {
     this.registry.set('runResult', null);
     this.registry.set('run', this.snapshot());
     this.saveCheckpointNow();
+
+    // Stage 4 videos are lazy: never requested before an active run exists.
+    VideoInterstitial.preload('defeat');
+    if (this.stageDirector.currentStage.id === 'bloodstream') {
+      VideoInterstitial.preload('bloodstreamToHeart');
+    } else if (this.stageDirector.currentStage.id === 'heart') {
+      VideoInterstitial.preload('victory');
+    }
 
     if (!resume && SaveSystem.get().runs === 0) this.showIntroHint();
 
@@ -991,13 +1000,19 @@ export class GameScene extends Phaser.Scene {
     this.aimMarker.setVisible(false);
     this.physics.world.pause();
 
-    this.getUiScene()?.showStageTransition(
-      from.name,
-      to.name,
-      to.theme.accentColor,
-      () => this.requestStageTransitionCommit(token)
+    const videoAttempted =
+      this.getUiScene()?.showStageTransition(
+        from.name,
+        to.name,
+        to.theme.accentColor,
+        () => this.requestStageTransitionCommit(token),
+        from.id === 'bloodstream' && to.id === 'heart' ? 'bloodstreamToHeart' : undefined
+      ) ?? false;
+    // The UI calls the same guarded commit callback when video ends, is skipped, or falls back.
+    // This timer is only a hard lifecycle guard; procedural fallback keeps the original 2.4 s pace.
+    transaction.timer = this.time.delayedCall(videoAttempted ? 8500 : 2400, () =>
+      this.commitStageTransition(token)
     );
-    transaction.timer = this.time.delayedCall(2400, () => this.commitStageTransition(token));
   }
 
   private requestStageTransitionCommit(token: number): void {
@@ -1030,6 +1045,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.resetStageWorld(transaction.to);
+    if (transaction.to.id === 'heart') VideoInterstitial.preload('victory');
     if (transaction.from.id === 'bloodstream' && transaction.to.id === 'heart') {
       const rewardChoices = guaranteedLegendaryChoices(
         this.runState,
