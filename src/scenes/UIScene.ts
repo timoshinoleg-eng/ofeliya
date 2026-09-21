@@ -448,8 +448,13 @@ export class UIScene extends Phaser.Scene {
     return playing;
   }
 
-  showBossReveal(name: string, textureKey: string, accent: number): void {
-    if (this.transitionOverlay || this.modalOpen) return;
+  showBossReveal(
+    name: string,
+    textureKey: string,
+    accent: number,
+    videoId?: VideoInterstitialId
+  ): boolean {
+    if (this.transitionOverlay || this.modalOpen) return false;
     const W = this.scale.width;
     const H = this.scale.height;
     const compact = H < 620;
@@ -547,6 +552,26 @@ export class UIScene extends Phaser.Scene {
       hold: 700,
       ease: 'Quad.Out',
       onComplete: () => c.destroy(true),
+    });
+
+    if (!videoId) return false;
+    let videoPausedGame = false;
+    const resumeBossFight = () => {
+      if (!videoPausedGame) return;
+      videoPausedGame = false;
+      if (this.scene.isPaused('Game')) this.scene.resume('Game');
+    };
+    return VideoInterstitial.play(videoId, {
+      onVisible: () => {
+        if (!this.scene.isActive('Game') || this.scene.isPaused('Game')) return;
+        videoPausedGame = true;
+        this.resetControls();
+        this.scene.pause('Game');
+      },
+      onComplete: resumeBossFight,
+      onFail: resumeBossFight,
+      maxDurationMs: 5000,
+      ariaLabel: 'Пропустить появление босса',
     });
   }
 

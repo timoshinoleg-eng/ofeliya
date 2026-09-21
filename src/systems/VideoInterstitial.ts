@@ -14,6 +14,7 @@ type VideoAsset = {
 type PlayOptions = {
   onComplete: () => void;
   onFail: () => void;
+  onVisible?: () => void;
   maxStartWaitMs?: number;
   maxDurationMs?: number;
   ariaLabel?: string;
@@ -24,8 +25,8 @@ const VIDEO_ASSETS: Record<VideoInterstitialId, VideoAsset> = {
   bloodstreamToHeart: { file: '02_bloodstream_to_heart.mp4', durationMs: 7417 },
   defeat: { file: '04_defeat_v3.mp4', durationMs: 2834 },
   victory: { file: '06_victory_canonical.mp4', durationMs: 7584 },
-  immunePrimeIntro: { file: '07_immune_prime_intro.mp4', durationMs: 8500 },
-  cardiacTitanIntro: { file: '08_cardiac_titan_intro.mp4', durationMs: 8500 },
+  immunePrimeIntro: { file: '07_immune_prime_intro_v2.mp4', durationMs: 3917 },
+  cardiacTitanIntro: { file: '08_cardiac_titan_intro_v2.mp4', durationMs: 3917 },
 };
 
 const DEFAULT_START_WATCHDOG_MS = 1800;
@@ -212,6 +213,7 @@ export class VideoInterstitial {
         }
         // Do not reveal a decoded first frame until playback has actually advanced.
         // Android WebViews can emit "playing" immediately before a transient buffer stall.
+        options.onVisible?.();
         overlay.style.opacity = '1';
         armHardLimit();
       }
