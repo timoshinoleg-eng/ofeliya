@@ -111,6 +111,7 @@ async function touchText(ctx, page, sceneKey, label) {
         targetTimeMs,
         attemptCount: attempts.length,
         bestTimeMs: null,
+        everBeaten: false,
       }),
     });
   });
