@@ -20,9 +20,9 @@ type PlayOptions = {
 };
 
 const VIDEO_ASSETS: Record<VideoInterstitialId, VideoAsset> = {
-  startIntro: { file: '01_start_intro_v2.mp4', durationMs: 4042 },
+  startIntro: { file: '01_start_intro_v3.mp4', durationMs: 2709 },
   bloodstreamToHeart: { file: '02_bloodstream_to_heart.mp4', durationMs: 7417 },
-  defeat: { file: '04_defeat_v2.mp4', durationMs: 4042 },
+  defeat: { file: '04_defeat_v3.mp4', durationMs: 2834 },
   victory: { file: '06_victory_canonical.mp4', durationMs: 7584 },
   immunePrimeIntro: { file: '07_immune_prime_intro.mp4', durationMs: 8500 },
   cardiacTitanIntro: { file: '08_cardiac_titan_intro.mp4', durationMs: 8500 },
@@ -115,7 +115,7 @@ export class VideoInterstitial {
       inset: '0',
       zIndex: '10000',
       overflow: 'hidden',
-      background: '#050308',
+      background: '#12070d',
       opacity: '0',
       transition: 'opacity 120ms linear',
       cursor: 'pointer',
@@ -128,7 +128,7 @@ export class VideoInterstitial {
       display: 'block',
       objectFit: 'cover',
       pointerEvents: 'none',
-      background: '#050308',
+      background: '#12070d',
     });
     overlay.appendChild(video);
     host.appendChild(overlay);
