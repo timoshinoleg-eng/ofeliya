@@ -79,8 +79,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install browser smoke driver
-        run: npm install --no-save --package-lock=false playwright-core@1.55.0
+      - name: Install browser smoke driver and image metrics
+        run: npm install --no-save --package-lock=false playwright-core@1.55.0 pngjs@7.0.0
 
       - name: Start configured dev server
         env:
@@ -149,12 +149,31 @@ jobs:
       - name: Bloodstream to Heart campaign browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/stage-transition-smoke.cjs
 
+      - name: Post-Stage-4 visual matrix 390x740
+        env:
+          OFELIYA_BASE_URL: http://127.0.0.1:5173/
+          OFELIYA_MATRIX_WIDTH: "390"
+          OFELIYA_MATRIX_HEIGHT: "740"
+          OFELIYA_MATRIX_DIR: /tmp/release-visual-matrix/390x740
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/release-visual-matrix.cjs
+
+      - name: Post-Stage-4 visual matrix 360x640
+        env:
+          OFELIYA_BASE_URL: http://127.0.0.1:5173/
+          OFELIYA_MATRIX_WIDTH: "360"
+          OFELIYA_MATRIX_HEIGHT: "640"
+          OFELIYA_MATRIX_DIR: /tmp/release-visual-matrix/360x640
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/release-visual-matrix.cjs
+
       - name: Upload browser smoke captures
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: max-browser-smoke
-          path: /tmp/browser-smoke/*.png
+          path: |
+            /tmp/browser-smoke/*.png
+            /tmp/release-visual-matrix/**/*.png
+            /tmp/release-visual-matrix/**/matrix.json
           if-no-files-found: ignore
 
   production-contract:
