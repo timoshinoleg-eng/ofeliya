@@ -172,6 +172,8 @@ async function visibleUiText(page, wanted) {
       '02_bloodstream_to_heart.mp4',
       '04_defeat_v3.mp4',
       '06_victory_canonical.mp4',
+      '07_immune_prime_intro_v2.mp4',
+      '08_cardiac_titan_intro_v2.mp4',
     ]) {
       const res = await page.request.get('http://127.0.0.1:5173/video/' + file);
       if (res.status() !== 200) throw new Error(`video asset missing ${file}: HTTP ${res.status()}`);
@@ -389,7 +391,105 @@ async function visibleUiText(page, wanted) {
     await ctx.close();
   }
 
-  await browser.close();
+  // Boss intro begins only at the boss boundary, freezes combat after real video progress,
+  // and resumes the same boss fight when playback ends.
+  {
+    const requests = [];
+    const ctx = await makeContext(browser, 'transient');
+    const { page, errors } = await bootMenu(ctx, requests);
+    await startGameDirect(page);
+    await sleep(150);
+    if (requests.some((url) => url.includes('07_immune_prime_intro_v2.mp4'))) {
+      throw new Error('IMMUNE PRIME video requested before boss warning');
+    }
+
+    await page.evaluate(() => {
+      const gs = window.__game.scene.getScene('Game');
+      gs.runState.stage.hp = 1_000_000;
+      gs.runState.stage.maxHp = 1_000_000;
+      gs.runState.stage.timeMs = gs.stageDirector.currentStage.durationMs;
+      gs.handleStageEvents(gs.stageDirector.update(gs.runState.stage.timeMs));
+    });
+
+    await page.waitForSelector('[data-ofeliya-video="immunePrimeIntro"]');
+    await page.waitForFunction(() => {
+      const overlay = document.querySelector('[data-ofeliya-video="immunePrimeIntro"]');
+      return overlay?.style.opacity === '1';
+    }, null, { timeout: 1500 });
+    await page.waitForFunction(() => window.__game.scene.isPaused('Game'));
+
+    const bossFrozen = await page.evaluate(() => {
+      const gs = window.__game.scene.getScene('Game');
+      return {
+        paused: window.__game.scene.isPaused('Game'),
+        phase: gs.stageDirector.phase,
+        bossActive: Boolean(gs.wave.boss?.active),
+      };
+    });
+    if (!bossFrozen.paused || bossFrozen.phase !== 'BOSS_ACTIVE' || !bossFrozen.bossActive) {
+      throw new Error('boss video did not freeze active combat safely: ' + JSON.stringify(bossFrozen));
+    }
+    if (!requests.some((url) => url.includes('07_immune_prime_intro_v2.mp4'))) {
+      throw new Error('IMMUNE PRIME V2 video path was never requested');
+    }
+
+    await page.evaluate(() => {
+      document
+        .querySelector('[data-ofeliya-video="immunePrimeIntro"] video')
+        ?.dispatchEvent(new Event('ended'));
+    });
+    await page.waitForFunction(() => !window.__game.scene.isPaused('Game'));
+    const resumed = await page.evaluate(() => ({
+      phase: window.__game.scene.getScene('Game').stageDirector.phase,
+      overlay: document.querySelectorAll('[data-ofeliya-video="immunePrimeIntro"]').length,
+    }));
+    if (resumed.phase !== 'BOSS_ACTIVE' || resumed.overlay !== 0) {
+      throw new Error('boss combat did not resume cleanly after intro: ' + JSON.stringify(resumed));
+    }
+    if (errors.length) throw new Error('boss video caused page errors: ' + errors.join(' | '));
+    await ctx.close();
+  }
+
+  // Failed boss media must leave the existing procedural reveal/gameplay path usable.
+  {
+    const requests = [];
+    const ctx = await makeContext(browser);
+    await ctx.route('**/video/**', (route) => route.fulfill({ status: 404, body: '' }));
+    const { page, errors } = await bootMenu(ctx, requests);
+    await startGameDirect(page);
+    await page.evaluate(() => {
+      const gs = window.__game.scene.getScene('Game');
+      gs.runState.stage.hp = 1_000_000;
+      gs.runState.stage.maxHp = 1_000_000;
+      gs.runState.stage.timeMs = gs.stageDirector.currentStage.durationMs;
+      gs.handleStageEvents(gs.stageDirector.update(gs.runState.stage.timeMs));
+    });
+    await sleep(2400);
+    const fallbackState = await page.evaluate(() => {
+      const gs = window.__game.scene.getScene('Game');
+      return {
+        paused: window.__game.scene.isPaused('Game'),
+        phase: gs.stageDirector.phase,
+        bossActive: Boolean(gs.wave.boss?.active),
+        videoOverlays: document.querySelectorAll('[data-ofeliya-video]').length,
+      };
+    });
+    if (
+      fallbackState.paused ||
+      fallbackState.phase !== 'BOSS_ACTIVE' ||
+      !fallbackState.bossActive ||
+      fallbackState.videoOverlays !== 0
+    ) {
+      throw new Error('boss 404 fallback blocked gameplay: ' + JSON.stringify(fallbackState));
+    }
+    if (!requests.some((url) => url.includes('07_immune_prime_intro_v2.mp4'))) {
+      throw new Error('boss 404 path was never requested');
+    }
+    if (errors.length) throw new Error('boss 404 fallback page errors: ' + errors.join(' | '));
+    await ctx.close();
+  }
+
+    await browser.close();
   console.log('video interstitial browser smoke: ok');
 })().catch((error) => {
   console.error(error.stack || error);
