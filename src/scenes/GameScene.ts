@@ -529,24 +529,11 @@ export class GameScene extends Phaser.Scene {
           : stage.id === 'heart'
             ? 'cardiacTitanIntro'
             : undefined;
-      let videoPausedGame = false;
       this.getUiScene()?.showBossReveal(
         stage.boss.name,
         stage.boss.textureKey,
         stage.theme.accentColor,
-        bossVideoId,
-        () => {
-          if (this.stageDirector.phase !== 'BOSS_ACTIVE' || this.scene.isPaused()) return;
-          videoPausedGame = true;
-          this.scene.pause();
-        },
-        () => {
-          if (!videoPausedGame) return;
-          videoPausedGame = false;
-          if (this.stageDirector.phase === 'BOSS_ACTIVE' && this.scene.isPaused()) {
-            this.scene.resume();
-          }
-        }
+        bossVideoId
       );
       PlatformBridge.haptic('heavy');
     } else if (elite) {
