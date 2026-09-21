@@ -4,9 +4,9 @@ This directory is reserved for optional Stage 4 cinematic MP4 assets.
 
 Expected production files, in integration order:
 
-- 01_start_intro_v2.mp4
+- 01_start_intro_v3.mp4
 - 02_bloodstream_to_heart.mp4
-- 04_defeat_v2.mp4
+- 04_defeat_v3.mp4
 - 06_victory_canonical.mp4
 - 07_immune_prime_intro.mp4 (P2)
 - 08_cardiac_titan_intro.mp4 (P2)
