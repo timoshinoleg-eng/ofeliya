@@ -18,7 +18,7 @@ function browserDriver() {
     headless: true,
     args: process.platform === 'win32' ? [] : ['--no-sandbox', '--disable-dev-shm-usage'],
   });
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 740 }, deviceScaleFactor: 1 });
   await ctx.route('https://st.max.ru/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/javascript', body: '' })
   );
@@ -29,7 +29,7 @@ function browserDriver() {
       version: '26.20.0',
       initData: 'signed-visual-smoke',
       initDataUnsafe: { user: { id: 42, first_name: 'Visual', last_name: 'QA' } },
-      getViewportSize: async () => ({ width: '390', height: '844' }),
+      getViewportSize: async () => ({ width: '390', height: '740' }),
       BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} },
       HapticFeedback: { impactOccurred() {}, notificationOccurred() {} },
     };
@@ -130,6 +130,13 @@ function browserDriver() {
       eliteRingVisible: Boolean(elite?.eliteRing?.visible),
       bulletTexture: source.texture.key,
       bulletDepth: source.depth,
+      hud: {
+        levelSize: parseFloat(String(ui.levelText?.style?.fontSize ?? '0')) || 0,
+        killsSize: parseFloat(String(ui.killsText?.style?.fontSize ?? '0')) || 0,
+        hpSize: parseFloat(String(ui.hpText?.style?.fontSize ?? '0')) || 0,
+        bossSize: parseFloat(String(ui.bossLabel?.style?.fontSize ?? '0')) || 0,
+        backdropAlpha: ui.hudBackdrop?.alpha ?? 0,
+      },
     };
   });
 
@@ -143,7 +150,12 @@ function browserDriver() {
     !(contract.anchorDepth < contract.playerDepth) ||
     !contract.eliteMarkerVisible ||
     !contract.eliteRingVisible ||
-    contract.bulletTexture !== 'viral-particle'
+    contract.bulletTexture !== 'viral-particle' ||
+    contract.hud.levelSize < 14 ||
+    contract.hud.killsSize < 14 ||
+    contract.hud.hpSize < 11 ||
+    contract.hud.bossSize < 12 ||
+    contract.hud.backdropAlpha < 0.3
   ) {
     throw new Error('Visual readability contract failed: ' + JSON.stringify(contract));
   }
@@ -162,7 +174,39 @@ function browserDriver() {
     if (actual < density) {
       throw new Error(`Visual readability density ${density} could not be reached: ${actual}`);
     }
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(150);
+    const densityContract = await page.evaluate((target) => {
+      const gs = window.__game.scene.getScene('Game');
+      const enemies = gs.enemies.getChildren().filter((enemy) => enemy.active);
+      const normals = enemies.filter((enemy) => !enemy.isBoss && !enemy.isElite);
+      const elites = enemies.filter((enemy) => enemy.isElite || enemy.isBoss);
+      const distance = (enemy) => Math.hypot(enemy.x - gs.player.x, enemy.y - gs.player.y);
+      const far = normals.filter((enemy) => distance(enemy) > 170);
+      const near = normals.filter((enemy) => distance(enemy) <= 150);
+      const avg = (rows) =>
+        rows.length ? rows.reduce((sum, enemy) => sum + (enemy.alpha ?? 1), 0) / rows.length : 1;
+      return {
+        target,
+        cachedDensity: gs.getCombatVisualDensity(),
+        farAverageAlpha: avg(far),
+        nearAverageAlpha: avg(near),
+        eliteMinAlpha: elites.length ? Math.min(...elites.map((enemy) => enemy.alpha ?? 1)) : 1,
+      };
+    }, density);
+
+    if (densityContract.cachedDensity < density) {
+      throw new Error('visual density cache lagged stress target: ' + JSON.stringify(densityContract));
+    }
+    if (density >= 150) {
+      if (
+        densityContract.farAverageAlpha >= 0.9 ||
+        densityContract.nearAverageAlpha <= densityContract.farAverageAlpha ||
+        densityContract.eliteMinAlpha < 0.98
+      ) {
+        throw new Error('dense-combat priority contract failed: ' + JSON.stringify(densityContract));
+      }
+    }
+
     await page.locator('#game').screenshot({
       path: path.join(captureDir, `06-readability-stress-${density}.png`),
     });

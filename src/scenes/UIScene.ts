@@ -38,6 +38,7 @@ type TintableEmitter = Phaser.GameObjects.Particles.ParticleEmitter & {
 export class UIScene extends Phaser.Scene {
   private gs: GameScene | null = null;
 
+  private hudBackdrop!: Phaser.GameObjects.Rectangle;
   private xpBack!: Phaser.GameObjects.Graphics;
   private xpFill!: Phaser.GameObjects.Graphics;
   private hpBack!: Phaser.GameObjects.Graphics;
@@ -86,6 +87,9 @@ export class UIScene extends Phaser.Scene {
 
     const W = this.scale.width;
 
+    this.hudBackdrop = this.add
+      .rectangle(W / 2, 50, W - 12, 90, 0x05070f, 0.38)
+      .setDepth(DEPTH - 2);
     this.xpBack = this.add.graphics().setDepth(DEPTH);
     this.xpFill = this.add.graphics().setDepth(DEPTH + 1);
     this.hpBack = this.add.graphics().setDepth(DEPTH);
@@ -107,11 +111,21 @@ export class UIScene extends Phaser.Scene {
         .setResolution(2)
         .setDepth(DEPTH + 1);
 
-    this.timerText = text(W / 2, 28, '00:00', 24, '#e8f4ff');
-    this.levelText = text(16, 30, 'МУТАЦИЯ 1', 13, '#ff78c8', 0);
-    this.killsText = text(W - 16, 30, 'ИММУН. 0', 13, '#dff8ff', 1);
-    this.hpText = text(W / 2, 58, '', 10, '#e8f4ff');
-    this.bossLabel = text(W / 2, 72, IDENTITY.boss, 11, '#ff3860');
+    this.timerText = text(W / 2, 28, '00:00', 24, '#f4fbff')
+      .setFontStyle('bold')
+      .setShadow(0, 1, '#02030a', 4, true, true);
+    this.levelText = text(16, 30, 'МУТАЦИЯ 1', 14, '#ff8fd0', 0)
+      .setFontStyle('bold')
+      .setShadow(0, 1, '#02030a', 3, true, true);
+    this.killsText = text(W - 16, 30, 'ИММУН. 0', 14, '#e9fbff', 1)
+      .setFontStyle('bold')
+      .setShadow(0, 1, '#02030a', 3, true, true);
+    this.hpText = text(W / 2, 57, '', 11, '#f4fbff')
+      .setFontStyle('bold')
+      .setShadow(0, 1, '#02030a', 3, true, true);
+    this.bossLabel = text(W / 2, 71, IDENTITY.boss, 12, '#ff5472')
+      .setFontStyle('bold')
+      .setShadow(0, 1, '#02030a', 3, true, true);
     this.muteText = this.add
       .text(W - 16, 54, '♪', { fontFamily: FONT, fontSize: '16px', color: Sfx.muted ? '#5a6480' : '#35e0ff' })
       .setOrigin(1, 0)
@@ -458,9 +472,10 @@ export class UIScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
     const compact = H < 620;
+    this.setHudCinematicAlpha(0.12);
     const c = this.add.container(0, 0).setDepth(150).setAlpha(0);
 
-    const bandH = compact ? 150 : 178;
+    const bandH = compact ? 156 : 184;
     const band = this.add
       .rectangle(W / 2, H / 2, W, bandH, 0x040308, 0.78)
       .setStrokeStyle(1, accent, 0.4);
@@ -510,7 +525,7 @@ export class UIScene extends Phaser.Scene {
 
     c.add(
       this.add
-        .text(W * 0.57, H / 2 - 30, 'ИММУННЫЙ КОНТАКТ', {
+        .text(W * 0.52, H / 2 - 31, 'ИММУННЫЙ КОНТАКТ', {
           fontFamily: FONT,
           fontSize: compact ? '10px' : '11px',
           fontStyle: 'bold',
@@ -522,12 +537,12 @@ export class UIScene extends Phaser.Scene {
     );
     c.add(
       this.add
-        .text(W * 0.57, H / 2 + 4, name, {
+        .text(W * 0.52, H / 2 + 3, name, {
           fontFamily: FONT,
-          fontSize: compact ? '21px' : '26px',
+          fontSize: compact ? '19px' : '22px',
           fontStyle: 'bold',
           color: `#${accent.toString(16).padStart(6, '0')}`,
-          wordWrap: { width: W * 0.38 },
+          wordWrap: { width: W * 0.45 },
         })
         .setOrigin(0, 0.5)
         .setResolution(2)
@@ -535,7 +550,7 @@ export class UIScene extends Phaser.Scene {
     );
     c.add(
       this.add
-        .text(W * 0.57, H / 2 + 39, 'АДАПТАЦИЯ НАЧАЛАСЬ', {
+        .text(W * 0.52, H / 2 + 40, 'АДАПТАЦИЯ НАЧАЛАСЬ', {
           fontFamily: FONT,
           fontSize: compact ? '9px' : '10px',
           color: '#fff4ec',
@@ -551,7 +566,10 @@ export class UIScene extends Phaser.Scene {
       yoyo: true,
       hold: 700,
       ease: 'Quad.Out',
-      onComplete: () => c.destroy(true),
+      onComplete: () => {
+        c.destroy(true);
+        this.setHudCinematicAlpha(1);
+      },
     });
 
     if (!videoId) return false;
@@ -598,8 +616,33 @@ export class UIScene extends Phaser.Scene {
     if (this.scene.isPaused('Game')) this.scene.resume('Game');
   }
 
+  private setHudCinematicAlpha(alpha: number): void {
+    const value = Phaser.Math.Clamp(alpha, 0, 1);
+    for (const obj of [
+      this.hudBackdrop,
+      this.xpBack,
+      this.xpFill,
+      this.hpBack,
+      this.hpFill,
+      this.bossBack,
+      this.bossFill,
+      this.bossLabel,
+      this.timerText,
+      this.levelText,
+      this.killsText,
+      this.hpText,
+      this.muteText,
+      this.pauseHit,
+      this.pauseText,
+      this.comboText,
+    ]) {
+      obj?.setAlpha(value);
+    }
+  }
+
   private layout(): void {
     const W = this.scale.width;
+    this.hudBackdrop.setPosition(W / 2, 50).setDisplaySize(W - 12, 90);
     this.timerText.setX(W / 2);
     this.levelText.setX(16);
     this.killsText.setX(W - 16);
@@ -723,7 +766,7 @@ export class UIScene extends Phaser.Scene {
     });
     this.fanfare.emitParticleAt(W / 2, H / 2, 22);
 
-    const titleY = compact ? H * 0.1 : H * 0.13;
+    const titleY = compact ? H * 0.09 : H * 0.115;
     const titleT = this.add
       .text(W / 2, titleY, legendaryReward ? 'ЛЕГЕНДАРНЫЙ ТРОФЕЙ' : IDENTITY.levelUp, {
         fontFamily: FONT,
@@ -749,7 +792,7 @@ export class UIScene extends Phaser.Scene {
       this.add
         .text(
           W / 2,
-          titleY + (compact ? 31 : 38),
+          titleY + (compact ? 39 : 46),
           legendaryReward
             ? 'IMMUNE PRIME подавлен · выбери мутацию для СЕРДЦА'
             : 'стадия ' + gs.runState.stage.level + ' · выбери мутацию',
@@ -758,6 +801,9 @@ export class UIScene extends Phaser.Scene {
           fontSize: compact ? '13px' : '15px',
           fontStyle: '650',
           color: UI_TEXT.primary,
+          align: 'center',
+          wordWrap: { width: W - 44, useAdvancedWrap: true },
+          lineSpacing: 2,
           }
         )
         .setOrigin(0.5)
@@ -769,7 +815,7 @@ export class UIScene extends Phaser.Scene {
     const ch = compact ? 112 : 136;
     const gap = compact ? 9 : 11;
     const totalH = cards.length * ch + (cards.length - 1) * gap;
-    const blockCenter = compact ? H * 0.56 : H * 0.55;
+    const blockCenter = compact ? H * 0.59 : H * 0.57;
     let y = blockCenter - totalH / 2 + ch / 2;
 
     cards.forEach((def: UpgradeDef, cardIndex: number) => {
