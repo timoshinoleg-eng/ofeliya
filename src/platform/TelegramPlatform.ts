@@ -1,3 +1,4 @@
+import { buildTelegramStartLink } from './TelegramLinks';
 import {
   type HapticStyle,
   type NotifyType,
@@ -12,9 +13,6 @@ interface TelegramBackButton {
   onClick?: (callback: () => void) => void;
   offClick?: (callback: () => void) => void;
 }
-
-const TELEGRAM_BOT_NAME_RE = /^[A-Za-z0-9_]{1,64}$/;
-const TELEGRAM_APP_SHORT_NAME_RE = /^[A-Za-z0-9_]{1,64}$/;
 
 interface TelegramWebApp {
   initData?: string;
@@ -88,16 +86,11 @@ export class TelegramPlatform implements PlatformAdapter {
   }
 
   buildStartLink(payload: string): string | null {
-    const bot = String(import.meta.env.VITE_TELEGRAM_BOT_NAME ?? '').trim().replace(/^@/, '');
-    if (!TELEGRAM_BOT_NAME_RE.test(bot)) return null;
-
-    const encoded = encodeURIComponent(payload);
-    const shortName = String(import.meta.env.VITE_TELEGRAM_APP_SHORT_NAME ?? '').trim();
-    if (shortName && TELEGRAM_APP_SHORT_NAME_RE.test(shortName)) {
-      return `https://t.me/${bot}/${shortName}?startapp=${encoded}`;
-    }
-    // Main Mini Apps do not require a short name: t.me/<bot>?startapp=<payload>.
-    return `https://t.me/${bot}?startapp=${encoded}`;
+    return buildTelegramStartLink(
+      payload,
+      String(import.meta.env.VITE_TELEGRAM_BOT_NAME ?? ''),
+      String(import.meta.env.VITE_TELEGRAM_APP_SHORT_NAME ?? '')
+    );
   }
 
   async getViewportSize(): Promise<{ width: number; height: number } | null> {
