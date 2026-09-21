@@ -439,7 +439,7 @@ function duelAttemptStats(challengeId, identity) {
   return {
     attemptCount: mine.length,
     bestTimeMs: winningTimes.length ? Math.min(...winningTimes) : null,
-    beaten: mine.some((row) => row.beaten),
+    everBeaten: mine.some((row) => row.beaten),
   };
 }
 
