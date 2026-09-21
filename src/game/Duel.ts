@@ -23,6 +23,7 @@ export interface DuelAttemptResult {
   targetTimeMs: number;
   attemptCount: number;
   bestTimeMs: number | null;
+  everBeaten: boolean;
 }
 
 export function encodeDuelStartPayload(challengeId: string): string | null {
