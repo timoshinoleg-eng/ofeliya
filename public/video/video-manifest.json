@@ -1,13 +1,44 @@
 {
-  "version": 1,
+  "version": 2,
   "basePath": "/video/",
-  "generatedFromPack": "OFELIYA_stage4_video_ready_pack.zip",
+  "pack": "OFELIYA_stage4_complete_integration_pack.zip",
   "assets": {
+    "startIntro": {
+      "file": "01_start_intro.mp4",
+      "durationSec": 2.25,
+      "bytes": 134871,
+      "sha256": "162066499f6300e0b04c568e70ac8394e29f3f43d2c6e6189dd5b07993a0c5d8",
+      "priority": "P1",
+      "canonical": true,
+      "preloadPhase": "menu-new-run-intent",
+      "fallback": "start-run-without-video"
+    },
+    "bloodstreamToHeart": {
+      "file": "02_bloodstream_to_heart.mp4",
+      "durationSec": 7.416667,
+      "bytes": 898779,
+      "sha256": "eb86a38188b065df426d804fa2174b749828ee01eb6c9175d254c5f7064480aa",
+      "priority": "P1",
+      "canonical": true,
+      "preloadPhase": "bloodstream-active",
+      "fallback": "procedural-stage-transition"
+    },
+    "defeat": {
+      "file": "04_defeat.mp4",
+      "durationSec": 2.25,
+      "bytes": 207449,
+      "sha256": "dbdd0b56a3d192aa176a0183bbf3e8dfbf9118b654563098c363a92c0d8bfe54",
+      "priority": "P1",
+      "canonical": true,
+      "preloadPhase": "active-run",
+      "fallback": "procedural-defeat"
+    },
     "victory": {
       "file": "06_victory_canonical.mp4",
       "durationSec": 7.583333,
-      "bytes": 1704293,
-      "sha256": "bdf48ec908936a346eaf720e9b84ac1cfa415f25c95c898672b93662d62d31fc",
+      "bytes": 1697476,
+      "sha256": "4a2ce19083e468e32a71f4a96e4b5f17fc873b043839483dcd3c130f9bace57d",
+      "priority": "P1",
       "canonical": true,
       "preloadPhase": "heart-active",
       "fallback": "procedural-victory"
@@ -15,30 +46,22 @@
     "immunePrimeIntro": {
       "file": "07_immune_prime_intro.mp4",
       "durationSec": 8.5,
-      "bytes": 1339746,
-      "sha256": "6c2ba27d3e329aaa0c0f95fde25b6935f7600bd4146ee6bbc2b519f9c857d846",
-      "canonical": true,
+      "bytes": 1337636,
+      "sha256": "ed19ca326c3e387463aa15f5c8edcb275fdd8d56c23eb0d9ddd3ac3ed6e537d8",
       "priority": "P2",
+      "canonical": true,
       "preloadPhase": "bloodstream-late",
       "fallback": "procedural-boss-intro"
     },
     "cardiacTitanIntro": {
       "file": "08_cardiac_titan_intro.mp4",
       "durationSec": 8.5,
-      "bytes": 1315261,
-      "sha256": "febab9d81b6397c9acc7afc8511382f7eb168edc0a2797888e24e1d5133c1113",
-      "canonical": true,
+      "bytes": 1305088,
+      "sha256": "3098aa548b22a184f40bdb0dc7f430fd0d067c8921a580bf1076649f25ac1011",
       "priority": "P2",
+      "canonical": true,
       "preloadPhase": "heart-late",
       "fallback": "procedural-boss-intro"
-    },
-    "cardiacTitanIntroAlt": {
-      "file": "09_cardiac_titan_intro_alt.mp4",
-      "durationSec": 8.5,
-      "bytes": 1505842,
-      "sha256": "0b154cc21cec66630970514d584d3811c2e345b9e826224531ef0cc17eb7354d",
-      "canonical": false,
-      "priority": "backup-only"
     }
   },
   "playback": {
@@ -48,5 +71,10 @@
     "startupCritical": false,
     "startWatchdogMs": 900,
     "spinnerAllowed": false
-  }
+  },
+  "excludedFromRuntime": [
+    "03_victory_candidate_DO_NOT_USE.mp4",
+    "05_atmospheric_background_candidate.mp4",
+    "09_cardiac_titan_intro_alt.mp4"
+  ]
 }
