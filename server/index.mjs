@@ -21,6 +21,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { saveTelegramPreparedMessage } from './telegram-share.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT ?? 8787);
@@ -34,6 +35,8 @@ const MAX_TOKEN = process.env.MAX_BOT_TOKEN || process.env.BOT_TOKEN || '';
 // валидируется и VK-скоры попадают в верифицированный общий топ.
 const VK_SECURE_KEY = process.env.VK_SECURE_KEY ?? '';
 const GAME_URL = process.env.GAME_URL ?? '';
+const TELEGRAM_SHARE_COOLDOWN_MS = 2_500;
+const telegramShareLastAt = new Map();
 
 // ---------- сезон (C5) ----------
 // Сезон = фиксированное окно от EPOCH (по умолчанию 2026-09-01), длина по
@@ -644,6 +647,41 @@ const server = createServer(async (req, res) => {
         rankedDifficultyId: 'standard',
         minCampaignWinTimeMs: ANTI_CHEAT.campaignMinWinTimeMs,
         supportedRulesets: [1, CURRENT_RULESET_VERSION],
+      });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/telegram/share') {
+      const body = await readBody(req);
+      const verified = validateInitData(body?.initData, TG_TOKEN);
+      if (!verified) {
+        return send(res, 403, { ok: false, error: 'verified Telegram identity required' });
+      }
+
+      const now = Date.now();
+      const shareKey = `telegram:${verified.uid}`;
+      const previous = telegramShareLastAt.get(shareKey) ?? 0;
+      if (now - previous < TELEGRAM_SHARE_COOLDOWN_MS) {
+        return send(res, 429, { ok: false, error: 'share rate limited' });
+      }
+      telegramShareLastAt.set(shareKey, now);
+      if (telegramShareLastAt.size > 5_000) {
+        const oldestKey = telegramShareLastAt.keys().next().value;
+        if (oldestKey) telegramShareLastAt.delete(oldestKey);
+      }
+
+      const prepared = await saveTelegramPreparedMessage({
+        token: TG_TOKEN,
+        userId: verified.uid,
+        text: body?.text,
+        link: body?.link,
+      });
+      if (!prepared) {
+        return send(res, 502, { ok: false, error: 'Telegram prepared share unavailable' });
+      }
+      return send(res, 200, {
+        ok: true,
+        messageId: prepared.id,
+        expirationDate: prepared.expirationDate,
       });
     }
 

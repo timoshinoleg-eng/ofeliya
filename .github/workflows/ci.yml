@@ -47,6 +47,9 @@ jobs:
       - name: Adaptive audio deterministic smoke
         run: npm run test:audio
 
+      - name: Telegram share contract smoke
+        run: npm run test:telegram-share
+
       - name: Gameplay RNG deterministic smoke
         run: npm run test:rng
 
