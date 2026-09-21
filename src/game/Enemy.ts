@@ -223,6 +223,34 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const dx = p.x - this.x;
     const dy = p.y - this.y;
     const d = Math.hypot(dx, dy) || 1;
+
+    // Dense fights should preserve danger hierarchy instead of turning every silhouette equally
+    // bright. Bosses/elites stay at full priority; nearby normal enemies remain readable while
+    // distant low-value bodies recede as density rises.
+    if (this.isBoss || this.isElite) {
+      this.setAlpha(1);
+    } else {
+      const density = this.gs?.getCombatVisualDensity() ?? 0;
+      const nearPlayer = d <= 150;
+      const alpha =
+        density >= 180
+          ? nearPlayer
+            ? 0.94
+            : this.kind === 'swarm'
+              ? 0.58
+              : 0.72
+          : density >= 140
+            ? nearPlayer
+              ? 0.97
+              : this.kind === 'swarm'
+                ? 0.7
+                : 0.82
+            : density >= 110 && !nearPlayer
+              ? 0.88
+              : 1;
+      this.setAlpha(alpha);
+    }
+
     const pressure = this.gs?.getEnemyPressureMultiplier() ?? 1;
     const forwardSpeed = this.speed * pressure;
 
