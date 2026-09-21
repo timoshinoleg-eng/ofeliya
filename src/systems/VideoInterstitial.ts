@@ -135,6 +135,7 @@ export class VideoInterstitial {
 
     let settled = false;
     let progressed = false;
+    let buffering = false;
     let lastMediaTime = 0;
     let startTimer = 0;
     let stallTimer = 0;
@@ -214,7 +215,8 @@ export class VideoInterstitial {
         overlay.style.opacity = '1';
         armHardLimit();
       }
-      clearStallWatchdog();
+      if (buffering) armStallWatchdog();
+      else clearStallWatchdog();
     };
 
     const armStallWatchdog = (): void => {
@@ -224,6 +226,7 @@ export class VideoInterstitial {
 
     video.addEventListener('playing', () => {
       if (settled) return;
+      buffering = false;
       clearStallWatchdog();
       if (progressProbeTimer) window.clearTimeout(progressProbeTimer);
       progressProbeTimer = window.setTimeout(() => {
@@ -232,8 +235,12 @@ export class VideoInterstitial {
       }, 120);
     });
     video.addEventListener('timeupdate', markProgress);
-    video.addEventListener('waiting', armStallWatchdog);
-    video.addEventListener('stalled', armStallWatchdog);
+    const onBuffering = (): void => {
+      buffering = true;
+      armStallWatchdog();
+    };
+    video.addEventListener('waiting', onBuffering);
+    video.addEventListener('stalled', onBuffering);
     video.addEventListener('error', () => finish('fail'));
     video.addEventListener('abort', () => finish('fail'));
     video.addEventListener('ended', () => finish('complete'));
