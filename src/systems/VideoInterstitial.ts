@@ -134,7 +134,6 @@ export class VideoInterstitial {
     host.appendChild(overlay);
 
     let settled = false;
-    let started = false;
     let progressed = false;
     let lastMediaTime = 0;
     let startTimer = 0;
@@ -225,7 +224,6 @@ export class VideoInterstitial {
 
     video.addEventListener('playing', () => {
       if (settled) return;
-      started = true;
       clearStallWatchdog();
       if (progressProbeTimer) window.clearTimeout(progressProbeTimer);
       progressProbeTimer = window.setTimeout(() => {
