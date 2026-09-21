@@ -54,24 +54,34 @@
       "fallback": "procedural-victory"
     },
     "immunePrimeIntro": {
-      "file": "07_immune_prime_intro.mp4",
-      "durationSec": 8.5,
-      "bytes": 1337636,
-      "sha256": "ed19ca326c3e387463aa15f5c8edcb275fdd8d56c23eb0d9ddd3ac3ed6e537d8",
-      "priority": "P2",
+      "file": "07_immune_prime_intro_v2.mp4",
+      "durationSec": 3.916667,
+      "bytes": 957719,
+      "sha256": "589735115c6f0cef166674599ffe2004c4ad0817c8cfae938daa5c2a3be5b3a8",
+      "priority": "P2-integrated",
       "canonical": true,
       "preloadPhase": "bloodstream-late",
-      "fallback": "procedural-boss-intro"
+      "fallback": "procedural-boss-intro",
+      "codecProfile": "Constrained Baseline",
+      "hasBFrames": false,
+      "motionSpeed": "1x",
+      "tailHoldSec": 0.45,
+      "blackTail": false
     },
     "cardiacTitanIntro": {
-      "file": "08_cardiac_titan_intro.mp4",
-      "durationSec": 8.5,
-      "bytes": 1305088,
-      "sha256": "3098aa548b22a184f40bdb0dc7f430fd0d067c8921a580bf1076649f25ac1011",
-      "priority": "P2",
+      "file": "08_cardiac_titan_intro_v2.mp4",
+      "durationSec": 3.916667,
+      "bytes": 924206,
+      "sha256": "786f908ca7fa1e3fa255b81ad88ab0535eb0e635ab0500c3f3693b897b214143",
+      "priority": "P2-integrated",
       "canonical": true,
       "preloadPhase": "heart-late",
-      "fallback": "procedural-boss-intro"
+      "fallback": "procedural-boss-intro",
+      "codecProfile": "Constrained Baseline",
+      "hasBFrames": false,
+      "motionSpeed": "1x",
+      "tailHoldSec": 0.45,
+      "blackTail": false
     }
   },
   "playback": {
@@ -82,7 +92,8 @@
     "startWatchdogMs": 1800,
     "spinnerAllowed": false,
     "stallWatchdogMs": 2200,
-    "revealAfterProgress": true
+    "revealAfterProgress": true,
+    "bossFreeze": "pause Game only after real media progress; resume on complete/fail/skip"
   },
   "excludedFromRuntime": [
     "03_victory_candidate_DO_NOT_USE.mp4",
@@ -93,6 +104,8 @@
     "01_start_intro.mp4",
     "04_defeat.mp4",
     "01_start_intro_v2.mp4",
-    "04_defeat_v2.mp4"
+    "04_defeat_v2.mp4",
+    "07_immune_prime_intro.mp4",
+    "08_cardiac_titan_intro.mp4"
   ]
 }
