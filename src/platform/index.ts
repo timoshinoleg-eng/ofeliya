@@ -18,14 +18,28 @@ class PlatformFacade implements PlatformAdapter {
   private readonly browser = new BrowserPlatform();
   private readonly max = new MaxPlatform();
   private telegram: TelegramPlatform | null = null;
+  private activeAdapter: PlatformAdapter | null = null;
+  private desiredBackHandler: (() => void) | null = null;
+
+  private resolveAdapter(): PlatformAdapter {
+    let next: PlatformAdapter = this.browser;
+    if (this.max.available) {
+      next = this.max;
+    } else if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
+      if (!this.telegram) this.telegram = new TelegramPlatform();
+      next = this.telegram;
+    }
+
+    if (next !== this.activeAdapter) {
+      this.activeAdapter?.setBackHandler(null);
+      this.activeAdapter = next;
+      if (this.desiredBackHandler) next.setBackHandler(this.desiredBackHandler);
+    }
+    return next;
+  }
 
   private get adapter(): PlatformAdapter {
-    if (this.max.available) return this.max;
-    if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
-      if (!this.telegram) this.telegram = new TelegramPlatform();
-      return this.telegram;
-    }
-    return this.browser;
+    return this.resolveAdapter();
   }
 
   get kind(): PlatformKind { return this.adapter.kind; }
@@ -41,7 +55,10 @@ class PlatformFacade implements PlatformAdapter {
   getViewportSize(): Promise<{ width: number; height: number } | null> {
     return this.adapter.getViewportSize();
   }
-  setBackHandler(callback: (() => void) | null): void { this.adapter.setBackHandler(callback); }
+  setBackHandler(callback: (() => void) | null): void {
+    this.desiredBackHandler = callback;
+    this.adapter.setBackHandler(callback);
+  }
   shareResult(text: string, link?: string): Promise<boolean> {
     return this.adapter.shareResult(text, link);
   }
