@@ -131,6 +131,9 @@ jobs:
       - name: Seeded gameplay runtime browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/rng-runtime-smoke.cjs
 
+      - name: Fixed-seed duel runtime browser smoke
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/duel-runtime-smoke.cjs
+
       - name: Trusted score client browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/score-client-smoke.cjs
 
