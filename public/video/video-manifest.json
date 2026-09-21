@@ -69,8 +69,10 @@
     "playsInline": true,
     "preloadDefault": "metadata",
     "startupCritical": false,
-    "startWatchdogMs": 900,
-    "spinnerAllowed": false
+    "startWatchdogMs": 1800,
+    "spinnerAllowed": false,
+    "stallWatchdogMs": 2200,
+    "revealAfterProgress": true
   },
   "excludedFromRuntime": [
     "03_victory_candidate_DO_NOT_USE.mp4",
