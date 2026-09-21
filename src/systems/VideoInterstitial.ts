@@ -28,8 +28,9 @@ const VIDEO_ASSETS: Record<VideoInterstitialId, VideoAsset> = {
   cardiacTitanIntro: { file: '08_cardiac_titan_intro.mp4', durationMs: 8500 },
 };
 
-const DEFAULT_START_WATCHDOG_MS = 900;
-const STALL_WATCHDOG_MS = 900;
+const DEFAULT_START_WATCHDOG_MS = 1800;
+const STALL_WATCHDOG_MS = 2200;
+const MIN_VISIBLE_PROGRESS_SEC = 0.05;
 
 function videoEnabled(): boolean {
   if (typeof window === 'undefined' || typeof document === 'undefined') return false;
@@ -134,17 +135,22 @@ export class VideoInterstitial {
 
     let settled = false;
     let started = false;
+    let progressed = false;
+    let lastMediaTime = 0;
     let startTimer = 0;
     let stallTimer = 0;
     let maxTimer = 0;
+    let progressProbeTimer = 0;
 
     const clearTimers = (): void => {
       if (startTimer) window.clearTimeout(startTimer);
       if (stallTimer) window.clearTimeout(stallTimer);
       if (maxTimer) window.clearTimeout(maxTimer);
+      if (progressProbeTimer) window.clearTimeout(progressProbeTimer);
       startTimer = 0;
       stallTimer = 0;
       maxTimer = 0;
+      progressProbeTimer = 0;
     };
 
     const cleanup = (): void => {
@@ -180,22 +186,54 @@ export class VideoInterstitial {
       stallTimer = 0;
     };
 
+    const hardLimit = Math.max(
+      options.maxDurationMs ?? 0,
+      VIDEO_ASSETS[id].durationMs + STALL_WATCHDOG_MS + 800
+    );
+
+    const armHardLimit = (): void => {
+      if (settled || maxTimer) return;
+      maxTimer = window.setTimeout(() => finish('complete'), hardLimit);
+    };
+
+    const markProgress = (): void => {
+      if (settled) return;
+      const mediaTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+      const advanced =
+        mediaTime >= MIN_VISIBLE_PROGRESS_SEC || mediaTime > lastMediaTime + 0.015;
+      lastMediaTime = Math.max(lastMediaTime, mediaTime);
+      if (!advanced && !progressed) return;
+
+      if (!progressed) {
+        progressed = true;
+        if (startTimer) {
+          window.clearTimeout(startTimer);
+          startTimer = 0;
+        }
+        // Do not reveal a decoded first frame until playback has actually advanced.
+        // Android WebViews can emit "playing" immediately before a transient buffer stall.
+        overlay.style.opacity = '1';
+        armHardLimit();
+      }
+      clearStallWatchdog();
+    };
+
     const armStallWatchdog = (): void => {
-      if (!started || settled || stallTimer) return;
+      if (!progressed || settled || stallTimer) return;
       stallTimer = window.setTimeout(() => finish('fail'), STALL_WATCHDOG_MS);
     };
 
     video.addEventListener('playing', () => {
       if (settled) return;
       started = true;
-      if (startTimer) {
-        window.clearTimeout(startTimer);
-        startTimer = 0;
-      }
       clearStallWatchdog();
-      overlay.style.opacity = '1';
+      if (progressProbeTimer) window.clearTimeout(progressProbeTimer);
+      progressProbeTimer = window.setTimeout(() => {
+        progressProbeTimer = 0;
+        markProgress();
+      }, 120);
     });
-    video.addEventListener('timeupdate', clearStallWatchdog);
+    video.addEventListener('timeupdate', markProgress);
     video.addEventListener('waiting', armStallWatchdog);
     video.addEventListener('stalled', armStallWatchdog);
     video.addEventListener('error', () => finish('fail'));
@@ -205,12 +243,8 @@ export class VideoInterstitial {
 
     const startWait = options.maxStartWaitMs ?? DEFAULT_START_WATCHDOG_MS;
     startTimer = window.setTimeout(() => {
-      if (!started) finish('fail');
+      if (!progressed) finish('fail');
     }, startWait);
-
-    const hardLimit =
-      options.maxDurationMs ?? VIDEO_ASSETS[id].durationMs + Math.max(1200, startWait);
-    maxTimer = window.setTimeout(() => finish(started ? 'complete' : 'fail'), hardLimit);
 
     this.cancelActivePlayback = cancelOnly;
 
