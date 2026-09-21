@@ -40,6 +40,10 @@ Destination: public/video/. All prepared files are 720x1280 vertical 9:16, H.264
 | 08_cardiac_titan_intro.mp4 | 8.50 s | 1.3 MB | 3098aa548b22a184f40bdb0dc7f430fd0d067c8921a580bf1076649f25ac1011 |
 | 09_cardiac_titan_intro_alt.mp4 | 8.50 s | 1.5 MB | 420dd55a8b41bdb791e38fb0549ba1878ac9c7cad8c8087a1dffa6b263a94755 |
 
+## Asset handoff state
+
+A complete integration pack has now been assembled from the persisted original insert pack plus the final reviewed Stage 4 encodes: `OFELIYA_stage4_complete_integration_pack.zip`. It contains P1 assets `01`, `02`, `04`, `06`, P2 assets `07`, `08`, and reference-only candidates separately. The MP4 binaries are **not yet committed to this repository**. Do not enable a runtime video path until the corresponding MP4 exists under `public/video/` and its SHA-256 matches `public/video/video-manifest.json`.
+
 ## Runtime contract
 
 - Video is an enhancement, never a prerequisite.

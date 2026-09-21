@@ -1,0 +1,80 @@
+{
+  "version": 2,
+  "basePath": "/video/",
+  "pack": "OFELIYA_stage4_complete_integration_pack.zip",
+  "assets": {
+    "startIntro": {
+      "file": "01_start_intro.mp4",
+      "durationSec": 2.25,
+      "bytes": 134871,
+      "sha256": "162066499f6300e0b04c568e70ac8394e29f3f43d2c6e6189dd5b07993a0c5d8",
+      "priority": "P1",
+      "canonical": true,
+      "preloadPhase": "menu-new-run-intent",
+      "fallback": "start-run-without-video"
+    },
+    "bloodstreamToHeart": {
+      "file": "02_bloodstream_to_heart.mp4",
+      "durationSec": 7.416667,
+      "bytes": 898779,
+      "sha256": "eb86a38188b065df426d804fa2174b749828ee01eb6c9175d254c5f7064480aa",
+      "priority": "P1",
+      "canonical": true,
+      "preloadPhase": "bloodstream-active",
+      "fallback": "procedural-stage-transition"
+    },
+    "defeat": {
+      "file": "04_defeat.mp4",
+      "durationSec": 2.25,
+      "bytes": 207449,
+      "sha256": "dbdd0b56a3d192aa176a0183bbf3e8dfbf9118b654563098c363a92c0d8bfe54",
+      "priority": "P1",
+      "canonical": true,
+      "preloadPhase": "active-run",
+      "fallback": "procedural-defeat"
+    },
+    "victory": {
+      "file": "06_victory_canonical.mp4",
+      "durationSec": 7.583333,
+      "bytes": 1697476,
+      "sha256": "4a2ce19083e468e32a71f4a96e4b5f17fc873b043839483dcd3c130f9bace57d",
+      "priority": "P1",
+      "canonical": true,
+      "preloadPhase": "heart-active",
+      "fallback": "procedural-victory"
+    },
+    "immunePrimeIntro": {
+      "file": "07_immune_prime_intro.mp4",
+      "durationSec": 8.5,
+      "bytes": 1337636,
+      "sha256": "ed19ca326c3e387463aa15f5c8edcb275fdd8d56c23eb0d9ddd3ac3ed6e537d8",
+      "priority": "P2",
+      "canonical": true,
+      "preloadPhase": "bloodstream-late",
+      "fallback": "procedural-boss-intro"
+    },
+    "cardiacTitanIntro": {
+      "file": "08_cardiac_titan_intro.mp4",
+      "durationSec": 8.5,
+      "bytes": 1305088,
+      "sha256": "3098aa548b22a184f40bdb0dc7f430fd0d067c8921a580bf1076649f25ac1011",
+      "priority": "P2",
+      "canonical": true,
+      "preloadPhase": "heart-late",
+      "fallback": "procedural-boss-intro"
+    }
+  },
+  "playback": {
+    "muted": true,
+    "playsInline": true,
+    "preloadDefault": "metadata",
+    "startupCritical": false,
+    "startWatchdogMs": 900,
+    "spinnerAllowed": false
+  },
+  "excludedFromRuntime": [
+    "03_victory_candidate_DO_NOT_USE.mp4",
+    "05_atmospheric_background_candidate.mp4",
+    "09_cardiac_titan_intro_alt.mp4"
+  ]
+}
