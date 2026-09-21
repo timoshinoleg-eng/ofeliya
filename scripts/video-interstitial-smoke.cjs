@@ -168,9 +168,9 @@ async function visibleUiText(page, wanted) {
     await sleep(350);
     if (requests.length) throw new Error('cold boot requested video before intent: ' + requests.join(', '));
     for (const file of [
-      '01_start_intro.mp4',
+      '01_start_intro_v2.mp4',
       '02_bloodstream_to_heart.mp4',
-      '04_defeat.mp4',
+      '04_defeat_v2.mp4',
       '06_victory_canonical.mp4',
     ]) {
       const res = await page.request.get('http://127.0.0.1:5173/video/' + file);
@@ -345,7 +345,7 @@ async function visibleUiText(page, wanted) {
       null,
       { timeout: 4500 }
     );
-    if (!requests.some((url) => url.includes('04_defeat.mp4'))) {
+    if (!requests.some((url) => url.includes('04_defeat_v2.mp4'))) {
       throw new Error('defeat video path was never requested');
     }
     if (errors.length) throw new Error('defeat 404 fallback page errors: ' + errors.join(' | '));
