@@ -407,6 +407,8 @@ async function visibleUiText(page, wanted) {
       const gs = window.__game.scene.getScene('Game');
       gs.runState.stage.hp = 1_000_000;
       gs.runState.stage.maxHp = 1_000_000;
+      gs.runState.stage.xp = 0;
+      gs.runState.stage.xpNext = 1_000_000_000;
       gs.runState.stage.timeMs = gs.stageDirector.currentStage.durationMs;
       gs.handleStageEvents(gs.stageDirector.update(gs.runState.stage.timeMs));
     });
@@ -461,6 +463,8 @@ async function visibleUiText(page, wanted) {
       const gs = window.__game.scene.getScene('Game');
       gs.runState.stage.hp = 1_000_000;
       gs.runState.stage.maxHp = 1_000_000;
+      gs.runState.stage.xp = 0;
+      gs.runState.stage.xpNext = 1_000_000_000;
       gs.runState.stage.timeMs = gs.stageDirector.currentStage.durationMs;
       gs.handleStageEvents(gs.stageDirector.update(gs.runState.stage.timeMs));
     });
