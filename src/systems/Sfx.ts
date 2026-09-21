@@ -186,10 +186,6 @@ class SfxImpl {
     }
   }
 
-  get audioContext(): AudioContext | null { return this.ctx; }
-  get layerOutput(): GainNode | null { return this.layerBus; }
-  get currentBedIndex(): number { return this.bedIndex; }
-
   /** Deterministic run bed. Same run seed → same bed; never a random per-lifecycle pick. */
   startBed(index: number): void {
     this.setBedIndex(index);

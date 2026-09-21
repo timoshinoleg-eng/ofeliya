@@ -24,16 +24,6 @@ export type AdaptiveMood =
   | 'transition'
   | 'ended';
 
-export const ADAPTIVE_MOODS: readonly AdaptiveMood[] = [
-  'calm',
-  'pressure',
-  'danger',
-  'critical',
-  'boss',
-  'transition',
-  'ended',
-];
-
 /** Enemy classes that contribute to nearby pressure. Mirrors config's EnemyKind minus the boss. */
 export type ThreatKind = 'swarm' | 'runner' | 'brute' | 'boss';
 

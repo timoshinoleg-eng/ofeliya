@@ -5,7 +5,6 @@ import {
   pickMusicBedIndex,
   tensionForMood,
   type AdaptiveMood,
-  type AdaptiveMoodStatus,
   type AdaptiveTuning,
   type DangerInput,
 } from './adaptiveAudioMath';
@@ -219,14 +218,6 @@ export class AdaptiveAudioDirector {
 
   get mood(): AdaptiveMood {
     return this.tracker.currentMood;
-  }
-
-  get status(): AdaptiveMoodStatus {
-    return this.tracker.status;
-  }
-
-  get deterministicBedIndex(): number {
-    return this.bedIndex;
   }
 
   get debugState(): {
