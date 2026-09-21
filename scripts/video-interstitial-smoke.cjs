@@ -232,9 +232,14 @@ async function visibleUiText(page, wanted) {
       gs.wave.boss.takeDamage(Number.MAX_SAFE_INTEGER);
     });
     await page.waitForFunction(
+      () => window.__game.scene.getScene('Game').stageDirector.phase === 'STAGE_TRANSITION',
+      null,
+      { timeout: 3500 }
+    );
+    await page.waitForFunction(
       () => window.__game.scene.getScene('Game').stageDirector.currentStage.id === 'heart',
       null,
-      { timeout: 4500 }
+      { timeout: 3800 }
     );
     if (!requests.some((url) => url.includes('02_bloodstream_to_heart.mp4'))) {
       throw new Error('Bloodstream -> Heart video path was never requested');
