@@ -144,6 +144,7 @@ export async function submitDuelAttempt(
     response.ranked !== false ||
     typeof response.valid !== 'boolean' ||
     typeof response.beaten !== 'boolean' ||
+    typeof response.everBeaten !== 'boolean' ||
     typeof response.targetTimeMs !== 'number' ||
     typeof response.attemptCount !== 'number'
   ) {
