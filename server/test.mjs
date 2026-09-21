@@ -64,6 +64,37 @@ function makeWebAppT(pairs, secretKey) {
 
 const ALICE = { id: 111, first_name: 'Alice', username: 'alice' };
 const BOB = { id: 222, first_name: 'Bob', username: 'bob' };
+
+function campaignPayload({
+  seed = 'duel-seed-001',
+  timeMs = 600_000,
+  controlMode = 'dual-move',
+  win = true,
+  completionStage = win ? 'heart' : 'bloodstream',
+  bossesDefeated = win ? 2 : 0,
+  boss1ClearMs = win ? 320_000 : null,
+  difficultyId = 'standard',
+  resumed = false,
+} = {}) {
+  return {
+    rulesetVersion: 2,
+    campaignVersion: 2,
+    difficultyId,
+    completionStage,
+    runSeed: seed,
+    controlMode,
+    bossesDefeated,
+    boss1ClearMs,
+    hostCellsInfected: 9,
+    win,
+    timeMs,
+    kills: 420,
+    level: 17,
+    resumed,
+    daily: false,
+  };
+}
+
 const j = (r) => r.json();
 let passed = 0;
 function ok(name, fn) {
@@ -357,6 +388,182 @@ await ok('анти-чит: застарелый auth_date (403)', async () => {
     body: JSON.stringify({ platform: 'telegram', initData, payload: { win: true, timeMs: 340_000, kills: 240, level: 12 } }),
   });
   assert.equal(res.status, 403);
+});
+
+await ok('fixed-seed duel: verified Standard clear creates immutable 7-day snapshot', async () => {
+  const before = await j(await fetch(`${BASE}/health`));
+  const response = await fetch(`${BASE}/api/duel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform: 'max',
+      initData: signInitData(BOB, MAX_TOKEN),
+      payload: campaignPayload(),
+    }),
+  });
+  assert.equal(response.status, 201);
+  const created = await j(response);
+  assert.equal(created.ok, true);
+  assert.equal(created.ranked, false);
+  assert.match(created.challenge.challengeId, /^[A-Za-z0-9_-]{16,32}$/);
+  assert.equal(created.challenge.runSeed, 'duel-seed-001');
+  assert.equal(created.challenge.controlMode, 'dual-move');
+  assert.equal(created.challenge.difficultyId, 'standard');
+  assert.equal(created.challenge.targetTimeMs, 600_000);
+  assert.ok(created.challenge.expiresAt - created.challenge.createdAt >= 7 * 86_400_000 - 1000);
+
+  const loaded = await j(await fetch(`${BASE}/api/duel/${created.challenge.challengeId}`));
+  assert.deepEqual(loaded.challenge, created.challenge);
+  assert.equal(Object.hasOwn(loaded.challenge, 'ownerUid'), false);
+  assert.equal(Object.hasOwn(loaded.challenge, 'source'), false);
+
+  globalThis.__DUEL_ID = created.challenge.challengeId;
+  const after = await j(await fetch(`${BASE}/health`));
+  assert.equal(after.duels, before.duels + 1);
+  assert.ok(after.duelEvents >= before.duelEvents + 1);
+});
+
+await ok('fixed-seed duel: create rejects browser, resumed and Strained sources', async () => {
+  const browser = await fetch(`${BASE}/api/duel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platform: 'browser', anonId: 'anon-duel-test', payload: campaignPayload() }),
+  });
+  assert.equal(browser.status, 403);
+
+  const resumed = await fetch(`${BASE}/api/duel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform: 'max',
+      initData: signInitData(BOB, MAX_TOKEN),
+      payload: campaignPayload({ resumed: true }),
+    }),
+  });
+  assert.equal(resumed.status, 422);
+
+  const strained = await fetch(`${BASE}/api/duel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform: 'max',
+      initData: signInitData(BOB, MAX_TOKEN),
+      payload: campaignPayload({ difficultyId: 'strained' }),
+    }),
+  });
+  assert.equal(strained.status, 422);
+});
+
+await ok('fixed-seed duel: open/start/rematch telemetry is verified and bounded to snapshot', async () => {
+  const challengeId = globalThis.__DUEL_ID;
+  assert.ok(challengeId);
+  for (const event of ['open', 'start', 'rematch']) {
+    const response = await fetch(`${BASE}/api/duel/${challengeId}/event`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        platform: 'telegram',
+        initData: signInitData(ALICE, TG_TOKEN),
+        event,
+      }),
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await j(response)).ranked, false);
+  }
+
+  const bad = await fetch(`${BASE}/api/duel/${challengeId}/event`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform: 'telegram',
+      initData: signInitData(ALICE, 'WRONG:TOKEN'),
+      event: 'start',
+    }),
+  });
+  assert.equal(bad.status, 403);
+});
+
+await ok('fixed-seed duel: exact seed/control required; slower loses, faster wins, rematches unlimited', async () => {
+  const challengeId = globalThis.__DUEL_ID;
+  const auth = {
+    platform: 'telegram',
+    initData: signInitData(ALICE, TG_TOKEN),
+  };
+
+  const wrongSeed = await fetch(`${BASE}/api/duel/${challengeId}/attempt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...auth,
+      payload: campaignPayload({ seed: 'different-seed', timeMs: 590_000 }),
+    }),
+  });
+  assert.equal(wrongSeed.status, 422);
+  assert.match((await j(wrongSeed)).error, /snapshot mismatch/);
+
+  const wrongControl = await fetch(`${BASE}/api/duel/${challengeId}/attempt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...auth,
+      payload: campaignPayload({ controlMode: 'one-hand', timeMs: 590_000 }),
+    }),
+  });
+  assert.equal(wrongControl.status, 422);
+
+  const slower = await j(await fetch(`${BASE}/api/duel/${challengeId}/attempt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...auth, payload: campaignPayload({ timeMs: 610_000 }) }),
+  }));
+  assert.equal(slower.ok, true);
+  assert.equal(slower.ranked, false);
+  assert.equal(slower.valid, true);
+  assert.equal(slower.beaten, false);
+  assert.equal(slower.attemptCount, 1);
+  assert.equal(slower.bestTimeMs, 610_000);
+
+  const death = await j(await fetch(`${BASE}/api/duel/${challengeId}/attempt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...auth,
+      payload: campaignPayload({
+        win: false,
+        timeMs: 580_000,
+        completionStage: 'bloodstream',
+        bossesDefeated: 0,
+        boss1ClearMs: null,
+      }),
+    }),
+  }));
+  assert.equal(death.beaten, false);
+  assert.equal(death.attemptCount, 2);
+  assert.equal(death.bestTimeMs, 610_000);
+
+  const faster = await j(await fetch(`${BASE}/api/duel/${challengeId}/attempt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...auth, payload: campaignPayload({ timeMs: 590_000 }) }),
+  }));
+  assert.equal(faster.ok, true);
+  assert.equal(faster.beaten, true);
+  assert.equal(faster.targetTimeMs, 600_000);
+  assert.equal(faster.attemptCount, 3);
+  assert.equal(faster.bestTimeMs, 590_000);
+
+  const tie = await j(await fetch(`${BASE}/api/duel/${challengeId}/attempt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...auth, payload: campaignPayload({ timeMs: 600_000 }) }),
+  }));
+  assert.equal(tie.beaten, false);
+  assert.equal(tie.attemptCount, 4);
+  assert.equal(tie.bestTimeMs, 590_000);
+
+  const health = await j(await fetch(`${BASE}/health`));
+  assert.ok(health.duelAttempts >= 4);
+  assert.ok(health.duelEvents >= 8);
 });
 
 await ok('топ: лучший результат на юзера + более быстрая победа выше', async () => {
