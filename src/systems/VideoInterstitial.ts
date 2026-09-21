@@ -72,11 +72,16 @@ export class VideoInterstitial {
   static preload(id: VideoInterstitialId): void {
     if (!videoEnabled() || this.preloaded.has(id)) return;
     const video = makeVideo(id, 'auto');
+    const discard = () => {
+      if (this.preloaded.get(id) === video) this.preloaded.delete(id);
+    };
+    video.addEventListener('error', discard, { once: true });
+    video.addEventListener('abort', discard, { once: true });
     this.preloaded.set(id, video);
     try {
       video.load();
     } catch {
-      this.preloaded.delete(id);
+      discard();
     }
   }
 
@@ -95,6 +100,9 @@ export class VideoInterstitial {
 
     const video = this.preloaded.get(id) ?? makeVideo(id, 'auto');
     this.preloaded.delete(id);
+    // A preloaded request may already have failed before playback listeners are attached.
+    // Treat that exactly like any other unavailable-media case and use the caller's fallback.
+    if (video.error) return false;
     video.preload = 'auto';
 
     const overlay = document.createElement('div');
