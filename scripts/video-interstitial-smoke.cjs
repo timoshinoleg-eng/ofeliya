@@ -80,6 +80,34 @@ async function makeContext(browser, mediaMode = 'native') {
         });
         return Promise.resolve();
       };
+    } else if (mediaMode === 'transient') {
+      window.__mediaPlayCalls = 0;
+      HTMLMediaElement.prototype.load = function () {};
+      HTMLMediaElement.prototype.play = function () {
+        window.__mediaPlayCalls += 1;
+        const media = this;
+        const setTime = (value) => {
+          try {
+            Object.defineProperty(media, 'currentTime', {
+              configurable: true,
+              writable: true,
+              value,
+            });
+          } catch {}
+        };
+        queueMicrotask(() => media.dispatchEvent(new Event('playing')));
+        window.setTimeout(() => {
+          setTime(0.08);
+          media.dispatchEvent(new Event('timeupdate'));
+          media.dispatchEvent(new Event('waiting'));
+        }, 90);
+        window.setTimeout(() => {
+          media.dispatchEvent(new Event('playing'));
+          setTime(0.32);
+          media.dispatchEvent(new Event('timeupdate'));
+        }, 850);
+        return Promise.resolve();
+      };
     } else if (mediaMode === 'success') {
       window.__mediaPlayCalls = 0;
       HTMLMediaElement.prototype.load = function () {};
@@ -180,10 +208,49 @@ async function visibleUiText(page, wanted) {
     if (!point) throw new Error('stall start button hit target missing');
     const startedAt = Date.now();
     await touchAt(ctx, page, point);
-    await page.waitForFunction(() => window.__game.scene.isActive('Game'), null, { timeout: 2500 });
+    await sleep(350);
+    const flashState = await page.evaluate(() => {
+      const overlay = document.querySelector('[data-ofeliya-video="startIntro"]');
+      return overlay ? overlay.style.opacity : 'missing';
+    });
+    if (flashState !== '0') {
+      throw new Error('unprogressed video became visible before fallback: ' + flashState);
+    }
+    await page.waitForFunction(() => window.__game.scene.isActive('Game'), null, { timeout: 2800 });
     const elapsed = Date.now() - startedAt;
-    if (elapsed > 2200) throw new Error('stall fallback exceeded watchdog budget: ' + elapsed);
+    if (elapsed > 2600) throw new Error('stall fallback exceeded watchdog budget: ' + elapsed);
     if (errors.length) throw new Error('stall fallback caused page errors: ' + errors.join(' | '));
+    await ctx.close();
+  }
+
+  // A short WebView buffering pause after real frame progress must recover, not flash-fallback.
+  {
+    const requests = [];
+    const ctx = await makeContext(browser, 'transient');
+    const { page, errors } = await bootMenu(ctx, requests);
+    const point = await startButtonCenter(page);
+    if (!point) throw new Error('transient-buffer start button hit target missing');
+    await touchAt(ctx, page, point);
+    await page.waitForSelector('[data-ofeliya-video="startIntro"]');
+    await page.waitForFunction(() => {
+      const overlay = document.querySelector('[data-ofeliya-video="startIntro"]');
+      return overlay?.style.opacity === '1';
+    }, null, { timeout: 1200 });
+    await sleep(950);
+    const stillPlaying = await page.evaluate(() => ({
+      overlay: document.querySelectorAll('[data-ofeliya-video="startIntro"]').length,
+      gameActive: window.__game.scene.isActive('Game'),
+    }));
+    if (stillPlaying.overlay !== 1 || stillPlaying.gameActive) {
+      throw new Error('transient buffering incorrectly triggered fallback: ' + JSON.stringify(stillPlaying));
+    }
+    await page.evaluate(() => {
+      document
+        .querySelector('[data-ofeliya-video="startIntro"] video')
+        ?.dispatchEvent(new Event('ended'));
+    });
+    await page.waitForFunction(() => window.__game.scene.isActive('Game'));
+    if (errors.length) throw new Error('transient buffering caused page errors: ' + errors.join(' | '));
     await ctx.close();
   }
 
