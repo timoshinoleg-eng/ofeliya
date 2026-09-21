@@ -18,7 +18,7 @@ function browserDriver() {
     headless: true,
     args: process.platform === 'win32' ? [] : ['--no-sandbox', '--disable-dev-shm-usage'],
   });
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 740 }, deviceScaleFactor: 1 });
   await ctx.route('https://st.max.ru/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/javascript', body: '' })
   );
@@ -29,7 +29,7 @@ function browserDriver() {
       version: '26.20.0',
       initData: 'signed-visual-smoke',
       initDataUnsafe: { user: { id: 42, first_name: 'Visual', last_name: 'QA' } },
-      getViewportSize: async () => ({ width: '390', height: '844' }),
+      getViewportSize: async () => ({ width: '390', height: '740' }),
       BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} },
       HapticFeedback: { impactOccurred() {}, notificationOccurred() {} },
     };
