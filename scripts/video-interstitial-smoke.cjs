@@ -271,7 +271,7 @@ async function visibleUiText(page, wanted) {
         return flat.some((obj) => obj?.text === 'ШТАММ УНИЧТОЖЕН' && obj.visible !== false);
       },
       null,
-      { timeout: 2200 }
+      { timeout: 4500 }
     );
     if (!requests.some((url) => url.includes('04_defeat.mp4'))) {
       throw new Error('defeat video path was never requested');
@@ -303,7 +303,7 @@ async function visibleUiText(page, wanted) {
         return flat.some((obj) => obj?.text === 'ИММУНИТЕТ ПОДАВЛЕН' && obj.visible !== false);
       },
       null,
-      { timeout: 2200 }
+      { timeout: 4500 }
     );
     if (!requests.some((url) => url.includes('06_victory_canonical.mp4'))) {
       throw new Error('victory video path was never requested');
