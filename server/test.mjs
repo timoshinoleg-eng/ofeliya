@@ -520,6 +520,7 @@ await ok('fixed-seed duel: exact seed/control required; slower loses, faster win
   assert.equal(slower.ranked, false);
   assert.equal(slower.valid, true);
   assert.equal(slower.beaten, false);
+  assert.equal(slower.everBeaten, false);
   assert.equal(slower.attemptCount, 1);
   assert.equal(slower.bestTimeMs, 610_000);
 
@@ -538,6 +539,7 @@ await ok('fixed-seed duel: exact seed/control required; slower loses, faster win
     }),
   }));
   assert.equal(death.beaten, false);
+  assert.equal(death.everBeaten, false);
   assert.equal(death.attemptCount, 2);
   assert.equal(death.bestTimeMs, 610_000);
 
@@ -548,6 +550,7 @@ await ok('fixed-seed duel: exact seed/control required; slower loses, faster win
   }));
   assert.equal(faster.ok, true);
   assert.equal(faster.beaten, true);
+  assert.equal(faster.everBeaten, true);
   assert.equal(faster.targetTimeMs, 600_000);
   assert.equal(faster.attemptCount, 3);
   assert.equal(faster.bestTimeMs, 590_000);
@@ -558,6 +561,7 @@ await ok('fixed-seed duel: exact seed/control required; slower loses, faster win
     body: JSON.stringify({ ...auth, payload: campaignPayload({ timeMs: 600_000 }) }),
   }));
   assert.equal(tie.beaten, false);
+  assert.equal(tie.everBeaten, true);
   assert.equal(tie.attemptCount, 4);
   assert.equal(tie.bestTimeMs, 590_000);
 
