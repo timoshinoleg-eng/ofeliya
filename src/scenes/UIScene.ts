@@ -440,7 +440,7 @@ export class UIScene extends Phaser.Scene {
         // Preserve the established 2.4 s procedural transition when media is unavailable.
         const remaining = Math.max(0, 2400 - (this.time.now - attemptStartedAt));
         if (remaining <= 0) onSkip();
-        else this.time.delayedCall(remaining, onSkip);
+        else window.setTimeout(onSkip, remaining);
       },
       maxDurationMs: 8200,
       ariaLabel: 'Пропустить переход',
