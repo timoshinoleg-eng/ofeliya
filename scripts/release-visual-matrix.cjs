@@ -8,6 +8,8 @@ if (!chrome) throw new Error('Chrome not found');
 
 const BASE = process.env.OFELIYA_BASE_URL || 'http://127.0.0.1:4173/';
 const CAPTURE_DIR = process.env.OFELIYA_MATRIX_DIR || '/tmp/release-visual-matrix';
+const MATRIX_WIDTH = Number.parseInt(process.env.OFELIYA_MATRIX_WIDTH || '390', 10);
+const MATRIX_HEIGHT = Number.parseInt(process.env.OFELIYA_MATRIX_HEIGHT || '740', 10);
 const APP_RELEASE_MARKER = 'ofeliya-20260912-strain-zero-rc3-utf8';
 const DENSITIES = [100, 150, 200];
 const CASES = [
@@ -103,7 +105,7 @@ function assertVisualParity(results) {
 
 async function openCase(browser, spec) {
   const ctx = await browser.newContext({
-    viewport: { width: 390, height: 844 },
+    viewport: { width: MATRIX_WIDTH, height: MATRIX_HEIGHT },
     deviceScaleFactor: 2,
     hasTouch: true,
     isMobile: true,
@@ -112,7 +114,7 @@ async function openCase(browser, spec) {
   await ctx.route('https://st.max.ru/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/javascript', body: '' })
   );
-  await ctx.addInitScript(({ tier }) => {
+  await ctx.addInitScript(({ tier, width, height }) => {
     localStorage.setItem('ofeliya_save_v1', JSON.stringify({ muted: true, runs: 1 }));
     localStorage.setItem('ofeliya_performance_tier', tier);
     localStorage.setItem('ofeliya_difficulty_v1', 'standard');
@@ -121,11 +123,11 @@ async function openCase(browser, spec) {
       version: '26.20.0',
       initData: 'signed-release-visual-matrix',
       initDataUnsafe: { user: { id: 42, first_name: 'Release', last_name: 'Matrix' } },
-      getViewportSize: async () => ({ width: '390', height: '844' }),
+      getViewportSize: async () => ({ width: String(width), height: String(height) }),
       BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} },
       HapticFeedback: { impactOccurred() {}, notificationOccurred() {} },
     };
-  }, { tier: spec.tier });
+  }, { tier: spec.tier, width: MATRIX_WIDTH, height: MATRIX_HEIGHT });
 
   const page = await ctx.newPage();
   const errors = [];
@@ -389,10 +391,15 @@ async function openCase(browser, spec) {
   const visualMetrics = assertVisualParity(results);
   fs.writeFileSync(
     path.join(CAPTURE_DIR, 'matrix.json'),
-    JSON.stringify({ generatedAt: new Date().toISOString(), results, visualMetrics }, null, 2)
+    JSON.stringify({
+      generatedAt: new Date().toISOString(),
+      viewport: { width: MATRIX_WIDTH, height: MATRIX_HEIGHT },
+      results,
+      visualMetrics,
+    }, null, 2)
   );
   console.log(
-    `release visual matrix: ok; captures=${CASES.length * DENSITIES.length}; visual-parity=ok`
+    `release visual matrix: ok; viewport=${MATRIX_WIDTH}x${MATRIX_HEIGHT}; captures=${CASES.length * DENSITIES.length}; visual-parity=ok`
   );
 })().catch((error) => {
   console.error(error.stack || error);
