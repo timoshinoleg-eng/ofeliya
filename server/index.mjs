@@ -630,6 +630,7 @@ const server = createServer(async (req, res) => {
         scores: store.scores.length,
         duels: store.duels.length,
         duelAttempts: store.duelAttempts.length,
+        duelEvents: store.duelEvents.length,
         rulesetVersion: CURRENT_RULESET_VERSION,
         campaignVersion: CURRENT_CAMPAIGN_VERSION,
       });
