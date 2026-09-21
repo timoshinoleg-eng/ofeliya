@@ -60,6 +60,27 @@ Files:
 Before redistribution outside this application repository, preserve the OFL license/notice required
 by the upstream font package. The application does not modify or rename the font.
 
+## Adaptive audio foundation — reference-only, no imported code or assets
+
+`src/systems/adaptiveAudioMath.ts` and `src/systems/AdaptiveAudioDirector.ts` implement OFELIYA's own
+adaptive audio foundation. Two permissive donors were read as **design references only**:
+
+- `Giftedx/wild-haggis-survivors` (MIT) — `src/systems/music/Conductor.ts` and
+  `src/systems/music/musicMath.ts`: the pattern of asymmetric attack/release smoothing and of gated
+  moods with separate enter/exit bounds. The donor's Phaser-4 scene architecture and procedural
+  music engine were **not** ported.
+- `AlexanderHeffernan/TheLastLight` (MIT for source/docs) — `src/systems/AudioSystem.ts` and
+  `src/systems/MonsterAudioSystem.ts`: the pattern of a music director that observes wave/boss
+  events and of proximity-driven cues.
+
+No donor source file was copied into this repository, so no donor copyright notice is reproduced
+here. If any donor code is ever imported verbatim, its MIT notice must be added to this file in the
+same change.
+
+**No new audio binaries were added.** OFELIYA's existing CC0 SFX and OpenGameArt beds are reused
+unchanged, and TheLastLight's music (`Suno`-generated, explicitly excluded from its MIT grant) is
+**not** used anywhere in this project.
+
 ## Generated game art
 
 Virus, immune cells, host cells, bloodstream background, mutation icons and gameplay VFX are generated

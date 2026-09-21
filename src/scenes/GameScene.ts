@@ -61,7 +61,16 @@ import {
   type RunCheckpointData,
 } from '../systems/RunCheckpoint';
 import { SCORE_CAMPAIGN_VERSION, SCORE_RULESET_VERSION } from '../game/RunVersions';
-import { Sfx } from '../systems/Sfx';
+import {
+  ADAPTIVE_AUDIO_TUNING,
+  clamp01,
+  enemyThreatWeight,
+  normalizeNearbyThreat,
+  type DangerInput,
+} from '../systems/adaptiveAudioMath';
+import { AdaptiveAudioDirector } from '../systems/AdaptiveAudioDirector';
+import { SfxAdaptiveSink } from '../systems/SfxAdaptiveSink';
+import { MUSIC_TRACK_COUNT, Sfx } from '../systems/Sfx';
 import { VfxSystem } from '../systems/VfxSystem';
 import { VideoInterstitial } from '../systems/VideoInterstitial';
 import { PERFORMANCE } from '../systems/PerformanceProfile';
@@ -124,6 +133,8 @@ export class GameScene extends Phaser.Scene {
   resumed = false;
   private checkpointAccMs = 0;
   private gameplayRng!: RunRng;
+  private audio!: AdaptiveAudioDirector;
+  private audioAccMs = 0;
   private heartbeatPulse!: HeartbeatPulseDirector;
   private impact = new ImpactDirector();
   private zeroPointNextAt = 0;
@@ -198,7 +209,15 @@ export class GameScene extends Phaser.Scene {
     if (resume) this.runState.restoreFromCheckpoint(resume.runState);
     this.resumed = resume !== null;
     this.checkpointAccMs = 0;
-    Sfx.startMusic();
+    // Adaptive audio foundation: one deterministic bed per run plus danger-driven tension layers.
+    // The director only observes gameplay; StageDirector keeps lifecycle authority.
+    this.audio = new AdaptiveAudioDirector(new SfxAdaptiveSink(), { bedCount: MUSIC_TRACK_COUNT });
+    this.audioAccMs = 0;
+    this.audio.start(
+      this.runSeed,
+      this.stageDirector.currentStage.order,
+      this.stageDirector.currentStage.theme.heartbeatMs
+    );
     PlatformBridge.setBackHandler(() => this.exitToMenu());
     this.queuedLevels = 0;
     this.awaitingChoice = false;
@@ -368,6 +387,10 @@ export class GameScene extends Phaser.Scene {
       this.bossDefeatCeremony = null;
       this.introHint = null;
       this.transitionGeneration += 1;
+      // Audio is not a Phaser subsystem, so it is safe (and required) to release it here:
+      // every restart path must not leak the bed, layer nodes or the visibility listener.
+      this.audio?.stop();
+      Sfx.stopMusic();
       this.registry.remove('run');
       this.registry.remove('runResult');
       this.registry.remove('joy');
@@ -378,6 +401,7 @@ export class GameScene extends Phaser.Scene {
   private exitToMenu(): void {
     this.saveCheckpointNow();
     this.cancelStageTransition();
+    this.audio.stop();
     Sfx.stopMusic();
     if (this.scene.isActive('UI') || this.scene.isPaused('UI')) this.scene.stop('UI');
     this.scene.stop();
@@ -461,8 +485,8 @@ export class GameScene extends Phaser.Scene {
     if (st.regen > 0) st.hp = Math.min(st.maxHp, st.hp + (st.regen * delta) / 1000);
 
     // Keep the established frame order: firing resolves before timeline presentations and spawns.
-    this.milestones.setIntensity(st.timeMs / stage.durationMs);
     this.handleStageEvents(this.stageDirector.update(st.timeMs));
+    this.updateAdaptiveAudio(delta);
     this.updateHeartbeatSignature(stage, st.timeMs);
     this.wave.update(delta);
     this.hostCells.update(time, delta, st.timeMs);
@@ -898,8 +922,50 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Throttled adaptive-audio tick. The enemy scan is the only O(n) part, so it runs at the
+   * director's evaluation cadence while the director's own smoothing stays frame-rate independent.
+   * Reads gameplay state only: no gameplay RNG is consumed and no timing value is changed.
+   */
+  private updateAdaptiveAudio(delta: number): void {
+    this.audioAccMs += delta;
+    if (this.audioAccMs < ADAPTIVE_AUDIO_TUNING.updateIntervalMs) return;
+    const dtMs = this.audioAccMs;
+    this.audioAccMs = 0;
+    this.audio.update(this.collectDangerInput(), dtMs);
+    this.registry.set('adaptiveAudio', this.audio.debugState);
+  }
+
+  private collectDangerInput(): DangerInput {
+    const stage = this.stageDirector.currentStage;
+    const st = this.runState.stage;
+    const px = this.player.x;
+    const py = this.player.y;
+    const scanRadius = ADAPTIVE_AUDIO_TUNING.scanRadius;
+    let totalWeight = 0;
+    for (const enemy of this.enemies.getChildren() as Enemy[]) {
+      if (!enemy.active || enemy.isBoss) continue;
+      totalWeight += enemyThreatWeight(
+        enemy.kind,
+        enemy.isElite,
+        Math.hypot(enemy.x - px, enemy.y - py),
+        scanRadius
+      );
+    }
+    const boss = this.wave.boss;
+    const bossHpFraction = boss && boss.active && boss.maxHp > 0 ? clamp01(boss.hp / boss.maxHp) : 1;
+    return {
+      nearbyThreat: normalizeNearbyThreat(totalWeight),
+      hpFraction: st.maxHp > 0 ? clamp01(st.hp / st.maxHp) : 1,
+      bossActive: this.stageDirector.phase === 'BOSS_ACTIVE',
+      bossHpFraction,
+      stageOrder: stage.order,
+    };
+  }
+
   private handleHeartbeatPulseEvent(stage: StageDefinition, event: HeartbeatPulseEvent): void {
     if (event.type === 'heartbeat-telegraph') {
+      this.audio.onHeartbeat('telegraph', event.bossActive);
       this.atmosphere.pulse(
         event.bossActive ? stage.theme.dangerColor : stage.theme.accentColor,
         event.bossActive ? 0.12 : 0.07
@@ -908,6 +974,8 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     if (event.type !== 'heartbeat-impact') return;
+    // Audio beat fires on the real impact event, so the layer is aligned with gameplay timing.
+    this.audio.onHeartbeat('impact', event.bossActive);
     this.atmosphere.heartbeatPulse(
       event.bossActive ? stage.theme.dangerColor : stage.theme.accentColor,
       event.bossActive ? 0.4 : 0.3
@@ -1166,7 +1234,6 @@ export class GameScene extends Phaser.Scene {
     this.atmosphere.setStage(stage);
     this.wave.restore(stage, checkpoint.wave);
     this.hostCells.restore(checkpoint.hostCells);
-    this.milestones.setIntensity(this.runState.stage.timeMs / stage.durationMs);
 
     const { playerX, playerY } = checkpoint.runtime;
     this.player.setMutationState(false, false, false);
@@ -1267,6 +1334,7 @@ export class GameScene extends Phaser.Scene {
           this.atmosphere.setStage(event.stage);
           this.heartbeatPulse.reset();
           this.wave.startStage(event.stage);
+          this.audio.setStage(event.stage.order, event.stage.theme.heartbeatMs);
           break;
         case 'milestone':
           this.milestones.show(event.milestone);
@@ -1275,12 +1343,14 @@ export class GameScene extends Phaser.Scene {
           if (event.stage.id === 'bloodstream') {
             this.hostCells.ensureOpportunityNearPlayer();
           }
+          this.audio.onBossSpawn();
           this.wave.spawnBoss();
           break;
         case 'run-ended':
           this.finish(event.reason === 'campaign-complete', event.reason);
           break;
         case 'boss-warning': {
+          this.audio.onBossWarning();
           this.atmosphere.pulse(event.stage.theme.dangerColor, 0.28);
           const bossVideoId =
             event.stage.id === 'bloodstream'
@@ -1296,6 +1366,7 @@ export class GameScene extends Phaser.Scene {
           // Kill VFX/hit-stop are emitted by onEnemyDied; the director event owns lifecycle only.
           break;
         case 'stage-transition-requested':
+          this.audio.onStageTransition();
           this.beginStageTransition(event.from, event.to);
           break;
       }
@@ -1363,6 +1434,7 @@ export class GameScene extends Phaser.Scene {
       records,
     };
     this.registry.set('runResult', result);
+    this.audio.onRunEnd(win);
     Sfx.play(win ? 'victory' : 'gameover');
     PlatformBridge.notify(win ? 'success' : 'error');
     this.cameras.main.resetFX();

@@ -1,20 +1,20 @@
 import Phaser from 'phaser';
 import { FONT } from './config';
 import type { StageMilestoneDefinition } from './StageDefinitions';
-import { Sfx } from '../systems/Sfx';
 
-/** Stage milestone presentation. StageDirector is the sole timeline authority. */
+/**
+ * Stage milestone presentation. StageDirector is the sole timeline authority.
+ *
+ * Audio ownership note: this class used to drive `Sfx.setRunIntensity` from stage elapsed time.
+ * The bio pulse is now owned by `AdaptiveAudioDirector` and driven by real danger, so milestones
+ * stay purely visual and there is exactly one owner of that audio voice.
+ */
 export class RunMilestones {
   private readonly scene: Phaser.Scene;
   private readonly active = new Set<Phaser.GameObjects.GameObject>();
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
-    Sfx.setRunIntensity(0);
-  }
-
-  setIntensity(progress: number): void {
-    Sfx.setRunIntensity(Phaser.Math.Clamp(progress, 0, 1));
   }
 
   show(def: StageMilestoneDefinition): void {
@@ -94,6 +94,5 @@ export class RunMilestones {
       object.destroy();
     }
     this.active.clear();
-    Sfx.setRunIntensity(0);
   }
 }

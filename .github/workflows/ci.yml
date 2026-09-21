@@ -44,6 +44,9 @@ jobs:
       - name: Campaign pacing deterministic smoke
         run: npm run test:pacing
 
+      - name: Adaptive audio deterministic smoke
+        run: npm run test:audio
+
       - name: Gameplay RNG deterministic smoke
         run: npm run test:rng
 
