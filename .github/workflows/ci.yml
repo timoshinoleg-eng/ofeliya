@@ -79,8 +79,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install browser smoke driver
-        run: npm install --no-save --package-lock=false playwright-core@1.55.0
+      - name: Install browser smoke driver and image metrics
+        run: npm install --no-save --package-lock=false playwright-core@1.55.0 pngjs@7.0.0
 
       - name: Start configured dev server
         env:
