@@ -268,7 +268,12 @@ async function visibleUiText(page, wanted) {
           if (Array.isArray(obj?.list)) obj.list.forEach(visit);
         };
         ui.children.list.forEach(visit);
-        return flat.some((obj) => obj?.text === 'ШТАММ УНИЧТОЖЕН' && obj.visible !== false);
+        return flat.some(
+          (obj) =>
+            typeof obj?.text === 'string' &&
+            obj.text.replace(/\s+/g, ' ').trim() === 'ШТАММ УНИЧТОЖЕН' &&
+            obj.visible !== false
+        );
       },
       null,
       { timeout: 4500 }
@@ -300,7 +305,12 @@ async function visibleUiText(page, wanted) {
           if (Array.isArray(obj?.list)) obj.list.forEach(visit);
         };
         ui.children.list.forEach(visit);
-        return flat.some((obj) => obj?.text === 'ИММУНИТЕТ ПОДАВЛЕН' && obj.visible !== false);
+        return flat.some(
+          (obj) =>
+            typeof obj?.text === 'string' &&
+            obj.text.replace(/\s+/g, ' ').trim() === 'ИММУНИТЕТ ПОДАВЛЕН' &&
+            obj.visible !== false
+        );
       },
       null,
       { timeout: 4500 }
