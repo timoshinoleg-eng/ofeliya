@@ -1,6 +1,11 @@
 import Phaser from 'phaser';
 import { getAchievementDef } from '../game/AchievementSystem';
-import { isChallengeBeaten, type ChallengePayload } from '../game/Challenge';
+import {
+  createChallengePayload,
+  encodeChallengePayload,
+  isChallengeBeaten,
+  type ChallengePayload,
+} from '../game/Challenge';
 import {
   encodeDuelStartPayload,
   isDuelBeaten,
@@ -1698,7 +1703,12 @@ export class UIScene extends Phaser.Scene {
       this.scene.stop('Game');
     });
     y += gap;
-    this.button(c, duelCreatable ? 'БРОСИТЬ ДУЭЛЬ' : 'ПОДЕЛИТЬСЯ РЕЗУЛЬТАТОМ', W / 2, y, false, () => {
+    const shareButtonLabel = challengeTarget
+      ? 'БРОСИТЬ ВЫЗОВ'
+      : duelCreatable
+        ? 'БРОСИТЬ ДУЭЛЬ'
+        : 'ПОДЕЛИТЬСЯ РЕЗУЛЬТАТОМ';
+    this.button(c, shareButtonLabel, W / 2, y, false, () => {
       const mins = fmtTime(res.timeMs);
       const evoShare = res.evolutions.length > 0 ? ` Критические мутации: ${res.evolutions.map((id) => EVOLUTION_NAMES[id]).join(', ')}.` : '';
       const legendaryShare =
@@ -1715,6 +1725,22 @@ export class UIScene extends Phaser.Scene {
       const shareText = res.win
         ? `OFELIYA / STRAIN-0 завершила кампанию за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare}${legendaryShare}`.trim()
         : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare}${legendaryShare}`.trim();
+
+      if (challengeTarget) {
+        const payload = ranked ? encodeChallengePayload(createChallengePayload(res)) : null;
+        const link = payload ? PlatformBridge.buildStartLink(payload) : null;
+        const legacyText = res.win
+          ? `OFELIYA / STRAIN-0 завершила кампанию за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}. Сможешь быстрее?`
+          : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}. Сможешь дольше?`;
+        void PlatformBridge.shareResult(legacyText, link ?? undefined).then((ok) => {
+          if (!ok) {
+            this.toast(c, 'Нативный шаринг недоступен в этом клиенте');
+          } else if (!link && PlatformBridge.kind === 'max') {
+            this.toast(c, 'Ссылка вызова не настроена');
+          }
+        });
+        return;
+      }
 
       if (!duelCreatable) {
         void PlatformBridge.shareResult(shareText).then((ok) => {
