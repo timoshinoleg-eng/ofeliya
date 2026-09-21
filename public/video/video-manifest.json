@@ -4,16 +4,19 @@
   "pack": "OFELIYA_stage4_complete_integration_pack.zip",
   "assets": {
     "startIntro": {
-      "file": "01_start_intro_v2.mp4",
-      "durationSec": 4.041667,
-      "bytes": 582841,
-      "sha256": "22d4aa9e67eb5982855a3faeac7b26ca34a1aaa30f45611e6841da08d67c8451",
+      "file": "01_start_intro_v3.mp4",
+      "durationSec": 2.708333,
+      "bytes": 414582,
+      "sha256": "020e304d4f4742019be9092ce9f7b84e0c7ee7b4d45ed9db00b8ff12ede7c86b",
       "priority": "P1",
       "canonical": true,
       "preloadPhase": "menu-new-run-intent",
       "fallback": "start-run-without-video",
       "codecProfile": "Constrained Baseline",
-      "hasBFrames": false
+      "hasBFrames": false,
+      "motionSpeed": "1x",
+      "tailHoldSec": 0.9,
+      "blackTail": false
     },
     "bloodstreamToHeart": {
       "file": "02_bloodstream_to_heart.mp4",
@@ -26,16 +29,19 @@
       "fallback": "procedural-stage-transition"
     },
     "defeat": {
-      "file": "04_defeat_v2.mp4",
-      "durationSec": 4.041667,
-      "bytes": 683154,
-      "sha256": "69342516a6ea8cc8943dd58aab002147d3faba40a5878540cbd6636dfe1ea20d",
+      "file": "04_defeat_v3.mp4",
+      "durationSec": 2.833333,
+      "bytes": 622538,
+      "sha256": "45493853e110f238eda2e3e753272f5b81ac269c9509266f5b8b1f3760b73cad",
       "priority": "P1",
       "canonical": true,
       "preloadPhase": "active-run",
       "fallback": "procedural-defeat",
       "codecProfile": "Constrained Baseline",
-      "hasBFrames": false
+      "hasBFrames": false,
+      "motionSpeed": "1x",
+      "tailHoldSec": 0.9,
+      "blackTail": false
     },
     "victory": {
       "file": "06_victory_canonical.mp4",
@@ -85,6 +91,8 @@
   ],
   "supersededAssets": [
     "01_start_intro.mp4",
-    "04_defeat.mp4"
+    "04_defeat.mp4",
+    "01_start_intro_v2.mp4",
+    "04_defeat_v2.mp4"
   ]
 }
