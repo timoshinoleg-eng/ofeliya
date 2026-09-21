@@ -25,6 +25,7 @@ import {
 } from '../game/UpgradeSystem';
 import { PlatformBridge } from '../platform';
 import { Sfx } from '../systems/Sfx';
+import { VideoInterstitial, type VideoInterstitialId } from '../systems/VideoInterstitial';
 import { submitRunScore } from '../systems/ScoreClient';
 import type { GameScene } from './GameScene';
 
@@ -183,6 +184,7 @@ export class UIScene extends Phaser.Scene {
       this.scale.off('resize', this.layout, this);
       this.pauseOverlay = null;
       this.manualPaused = false;
+      VideoInterstitial.cancelActive();
     });
     this.layout();
   }
@@ -272,7 +274,13 @@ export class UIScene extends Phaser.Scene {
     }
   }
 
-  showStageTransition(fromName: string, toName: string, accent: number, onSkip: () => void): void {
+  showStageTransition(
+    fromName: string,
+    toName: string,
+    accent: number,
+    onSkip: () => void,
+    videoId?: VideoInterstitialId
+  ): boolean {
     this.hideModal();
     this.hideStageTransition();
     this.uiBlocked = true;
@@ -423,6 +431,21 @@ export class UIScene extends Phaser.Scene {
       repeat: -1,
       ease: 'Sine.InOut',
     });
+
+    if (!videoId) return false;
+    const attemptStartedAt = this.time.now;
+    const playing = VideoInterstitial.play(videoId, {
+      onComplete: onSkip,
+      onFail: () => {
+        // Preserve the established 2.4 s procedural transition when media is unavailable.
+        const remaining = Math.max(0, 2400 - (this.time.now - attemptStartedAt));
+        if (remaining <= 0) onSkip();
+        else this.time.delayedCall(remaining, onSkip);
+      },
+      maxDurationMs: 8200,
+      ariaLabel: 'Пропустить переход',
+    });
+    return playing;
   }
 
   showBossReveal(name: string, textureKey: string, accent: number): void {
@@ -528,7 +551,11 @@ export class UIScene extends Phaser.Scene {
   }
 
   hideStageTransition(): void {
-    if (!this.transitionOverlay) return;
+    VideoInterstitial.cancelActive();
+    if (!this.transitionOverlay) {
+      this.uiBlocked = false;
+      return;
+    }
     this.tweens.killTweensOf(this.transitionOverlay);
     this.transitionOverlay.destroy(true);
     this.transitionOverlay = null;
@@ -1262,6 +1289,24 @@ export class UIScene extends Phaser.Scene {
   }
 
   private showGameOver(res: RunResult): void {
+    this.uiBlocked = true;
+    const id: VideoInterstitialId = res.win ? 'victory' : 'defeat';
+    let rendered = false;
+    const renderOnce = () => {
+      if (rendered) return;
+      rendered = true;
+      this.renderGameOver(res);
+    };
+    const playing = VideoInterstitial.play(id, {
+      onComplete: renderOnce,
+      onFail: renderOnce,
+      maxDurationMs: res.win ? 8500 : 3200,
+      ariaLabel: res.win ? 'Пропустить победный ролик' : 'Пропустить ролик поражения',
+    });
+    if (!playing) renderOnce();
+  }
+
+  private renderGameOver(res: RunResult): void {
     this.uiBlocked = true;
     const ranked = res.difficultyId === 'standard' && !res.resumed;
     const W = this.scale.width;
