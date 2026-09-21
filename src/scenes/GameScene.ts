@@ -523,7 +523,31 @@ export class GameScene extends Phaser.Scene {
       Sfx.play('boss');
       this.atmosphere.pulse(stage.theme.dangerColor, 0.32);
       this.shake(320, 0.008);
-      this.getUiScene()?.showBossReveal(stage.boss.name, stage.boss.textureKey, stage.theme.accentColor);
+      const bossVideoId =
+        stage.id === 'bloodstream'
+          ? 'immunePrimeIntro'
+          : stage.id === 'heart'
+            ? 'cardiacTitanIntro'
+            : undefined;
+      let videoPausedGame = false;
+      this.getUiScene()?.showBossReveal(
+        stage.boss.name,
+        stage.boss.textureKey,
+        stage.theme.accentColor,
+        bossVideoId,
+        () => {
+          if (this.stageDirector.phase !== 'BOSS_ACTIVE' || this.scene.isPaused()) return;
+          videoPausedGame = true;
+          this.scene.pause();
+        },
+        () => {
+          if (!videoPausedGame) return;
+          videoPausedGame = false;
+          if (this.stageDirector.phase === 'BOSS_ACTIVE' && this.scene.isPaused()) {
+            this.scene.resume();
+          }
+        }
+      );
       PlatformBridge.haptic('heavy');
     } else if (elite) {
       Sfx.play('elite');
@@ -1258,10 +1282,18 @@ export class GameScene extends Phaser.Scene {
         case 'run-ended':
           this.finish(event.reason === 'campaign-complete', event.reason);
           break;
-        case 'boss-warning':
+        case 'boss-warning': {
           this.atmosphere.pulse(event.stage.theme.dangerColor, 0.28);
+          const bossVideoId =
+            event.stage.id === 'bloodstream'
+              ? 'immunePrimeIntro'
+              : event.stage.id === 'heart'
+                ? 'cardiacTitanIntro'
+                : undefined;
+          if (bossVideoId) VideoInterstitial.preload(bossVideoId);
           PlatformBridge.haptic('medium');
           break;
+        }
         case 'boss-defeated':
           // Kill VFX/hit-stop are emitted by onEnemyDied; the director event owns lifecycle only.
           break;
