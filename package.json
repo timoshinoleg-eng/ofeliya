@@ -28,7 +28,8 @@
     "bot": "node server/bot.mjs",
     "test:pacing": "node scripts/check-pacing.mjs",
     "test:result-actions": "node scripts/result-actions-smoke.cjs",
-    "test:video": "node scripts/video-interstitial-smoke.cjs"
+    "test:video": "node scripts/video-interstitial-smoke.cjs",
+    "test:duel": "node scripts/check-duel.mjs"
   },
   "dependencies": {
     "@maxhub/max-bot-api": "^0.3.1",

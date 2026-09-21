@@ -6,6 +6,11 @@ import {
   isChallengeBeaten,
   type ChallengePayload,
 } from '../game/Challenge';
+import {
+  encodeDuelStartPayload,
+  isDuelBeaten,
+  type DuelChallengeSnapshot,
+} from '../game/Duel';
 import { COLORS, COMBO, FONT, JUICE, UI_FONT, UI_TEXT, fmtTime } from '../game/config';
 import { getEvolutionDef } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
@@ -27,6 +32,7 @@ import { PlatformBridge } from '../platform';
 import { Sfx } from '../systems/Sfx';
 import { VideoInterstitial, type VideoInterstitialId } from '../systems/VideoInterstitial';
 import { submitRunScore } from '../systems/ScoreClient';
+import { createFixedSeedDuel, submitDuelAttempt, trackDuelEvent } from '../systems/DuelClient';
 import type { GameScene } from './GameScene';
 
 const DEPTH = 50;
@@ -1379,7 +1385,10 @@ export class UIScene extends Phaser.Scene {
 
   private renderGameOver(res: RunResult): void {
     this.uiBlocked = true;
-    const ranked = res.difficultyId === 'standard' && !res.resumed;
+    const duelChallenge = this.registry.get('duelChallenge') as DuelChallengeSnapshot | null | undefined;
+    const standardFresh = res.difficultyId === 'standard' && !res.resumed;
+    const ranked = standardFresh && !duelChallenge;
+    const duelCreatable = standardFresh && res.win;
     const W = this.scale.width;
     const H = this.scale.height;
     const compact = H < 650;
@@ -1508,9 +1517,11 @@ export class UIScene extends Phaser.Scene {
           detailY,
           res.resumed
             ? `РЕЖИМ: ${res.difficultyId === 'standard' ? 'STANDARD' : 'STRAINED'} · ВОЗОБНОВЛЁН · ВНЕ РЕЙТИНГА`
-            : ranked
-              ? 'РЕЖИМ: STANDARD · рейтинговый'
-              : 'РЕЖИМ: STRAINED · вне рейтинга',
+            : duelChallenge
+              ? 'РЕЖИМ: FIXED-SEED DUEL · STANDARD · ВНЕ РЕЙТИНГА'
+              : ranked
+                ? 'РЕЖИМ: STANDARD · рейтинговый'
+                : 'РЕЖИМ: STRAINED · вне рейтинга',
           {
             fontFamily: FONT,
             fontSize: compact ? '9px' : '10px',
@@ -1524,7 +1535,7 @@ export class UIScene extends Phaser.Scene {
 
     detailY += compact ? 20 : 23;
     const scoreStatus = this.add
-      .text(W / 2, detailY, 'СЧЁТ: синхронизация…', {
+      .text(W / 2, detailY, duelChallenge ? 'ДУЭЛЬ: синхронизация…' : 'СЧЁТ: синхронизация…', {
         fontFamily: FONT,
         fontSize: compact ? '9px' : '10px',
         fontStyle: 'bold',
@@ -1537,6 +1548,28 @@ export class UIScene extends Phaser.Scene {
 
     if (res.resumed) {
       scoreStatus.setText('CHECKPOINT RESUME · ВНЕ РЕЙТИНГА').setColor('#ffe066');
+    } else if (duelChallenge) {
+      void submitDuelAttempt(duelChallenge.challengeId, res, PlatformBridge).then((attempt) => {
+        if (!scoreStatus.active) return;
+        if (!attempt) {
+          scoreStatus.setText('ДУЭЛЬ · РЕЗУЛЬТАТ НЕ СИНХРОНИЗИРОВАН').setColor('#ff9b66');
+          return;
+        }
+        if (attempt.beaten) {
+          scoreStatus
+            .setText(
+              `ДУЭЛЬ ВЫИГРАНА · ${fmtTime(res.timeMs)} < ${fmtTime(attempt.targetTimeMs)} · попытка ${attempt.attemptCount}`
+            )
+            .setColor('#7fffa1');
+        } else {
+          const verdict = res.win
+            ? `НУЖНО БЫСТРЕЕ ${fmtTime(attempt.targetTimeMs)}`
+            : 'ПОПЫТКА НЕ ЗАВЕРШЕНА';
+          scoreStatus
+            .setText(`ДУЭЛЬ · ${verdict} · попытка ${attempt.attemptCount}`)
+            .setColor('#ffe066');
+        }
+      });
     } else {
       void submitRunScore(res, PlatformBridge).then((score) => {
         if (!scoreStatus.active) return;
@@ -1622,6 +1655,29 @@ export class UIScene extends Phaser.Scene {
       );
     }
 
+    if (duelChallenge) {
+      detailY += compact ? 24 : 29;
+      const localBeat = isDuelBeaten(duelChallenge.targetTimeMs, res.win, res.timeMs);
+      const label = res.win
+        ? localBeat
+          ? `ДУЭЛЬ · БЫСТРЕЕ ЦЕЛИ ${fmtTime(duelChallenge.targetTimeMs)}`
+          : `ДУЭЛЬ · ЦЕЛЬ ${fmtTime(duelChallenge.targetTimeMs)}`
+        : `ДУЭЛЬ · ЦЕЛЬ ${fmtTime(duelChallenge.targetTimeMs)} · НУЖЕН ФИНИШ`;
+      c.add(
+        this.add
+          .text(W / 2, detailY, label, {
+            fontFamily: FONT,
+            fontSize: compact ? '10px' : '11px',
+            fontStyle: 'bold',
+            color: localBeat ? '#7fffa1' : '#ffe066',
+            align: 'center',
+            wordWrap: { width: W - 42 },
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+      );
+    }
+
     const gap = compact ? 50 : 56;
     const desiredY = Math.max(H * (compact ? 0.66 : 0.68), detailY + (compact ? 54 : 62));
     const maxFirstY = H - 24 - gap * 2;
@@ -1634,31 +1690,84 @@ export class UIScene extends Phaser.Scene {
       // SceneManager always has an active owner for the queued transition.
       gameScene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
         this.registry.set('runResult', null);
+        if (duelChallenge) {
+          this.registry.set('duelChallenge', duelChallenge);
+          this.registry.set('runSeedOverride', duelChallenge.runSeed);
+          this.registry.set('difficultyId', 'standard');
+          this.registry.set('controlMode', duelChallenge.controlMode);
+          void trackDuelEvent(duelChallenge.challengeId, 'rematch', PlatformBridge);
+        }
         this.scene.launch('Game');
         this.scene.restart();
       });
       this.scene.stop('Game');
     });
     y += gap;
-    this.button(c, ranked ? 'БРОСИТЬ ВЫЗОВ' : 'ПОДЕЛИТЬСЯ РЕЗУЛЬТАТОМ', W / 2, y, false, () => {
+    const legacyChallengeCreatable = ranked && !res.win;
+    const shareButtonLabel = challengeTarget || legacyChallengeCreatable
+      ? 'БРОСИТЬ ВЫЗОВ'
+      : duelCreatable
+        ? 'БРОСИТЬ ДУЭЛЬ'
+        : 'ПОДЕЛИТЬСЯ РЕЗУЛЬТАТОМ';
+    this.button(c, shareButtonLabel, W / 2, y, false, () => {
       const mins = fmtTime(res.timeMs);
       const evoShare = res.evolutions.length > 0 ? ` Критические мутации: ${res.evolutions.map((id) => EVOLUTION_NAMES[id]).join(', ')}.` : '';
       const legendaryShare =
         res.legendaryIds.length > 0
           ? ` Legendary: ${res.legendaryIds.map((id) => getLegendaryDefinition(id).title).join(', ')}.`
           : '';
-      const modeShare = ranked ? '' : res.resumed ? ' Возобновлённый забег · вне рейтинга.' : ' Режим: STRAINED.';
+      const modeShare = ranked
+        ? ''
+        : duelChallenge
+          ? ' Fixed-Seed Duel · вне глобального рейтинга.'
+          : res.resumed
+            ? ' Возобновлённый забег · вне рейтинга.'
+            : ' Режим: STRAINED.';
       const shareText = res.win
-        ? `OFELIYA / STRAIN-0 завершила кампанию за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare}${legendaryShare} ${ranked ? 'Сможешь быстрее?' : ''}`.trim()
-        : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare}${legendaryShare} ${ranked ? 'Сможешь дольше?' : ''}`.trim();
-      const payload = ranked ? encodeChallengePayload(createChallengePayload(res)) : null;
-      const link = payload ? PlatformBridge.buildStartLink(payload) : null;
-      void PlatformBridge.shareResult(shareText, link ?? undefined).then((ok) => {
-        if (!ok) {
-          this.toast(c, 'Нативный шаринг недоступен в этом клиенте');
-        } else if (!link && PlatformBridge.kind === 'max') {
-          this.toast(c, 'Ссылка вызова не настроена');
+        ? `OFELIYA / STRAIN-0 завершила кампанию за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare}${legendaryShare}`.trim()
+        : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare}${legendaryShare}`.trim();
+
+      if (challengeTarget || legacyChallengeCreatable) {
+        const payload = ranked ? encodeChallengePayload(createChallengePayload(res)) : null;
+        const link = payload ? PlatformBridge.buildStartLink(payload) : null;
+        const legacyText = res.win
+          ? `OFELIYA / STRAIN-0 завершила кампанию за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}. Сможешь быстрее?`
+          : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}. Сможешь дольше?`;
+        void PlatformBridge.shareResult(legacyText, link ?? undefined).then((ok) => {
+          if (!ok) {
+            this.toast(c, 'Нативный шаринг недоступен в этом клиенте');
+          } else if (!link && PlatformBridge.kind === 'max') {
+            this.toast(c, 'Ссылка вызова не настроена');
+          }
+        });
+        return;
+      }
+
+      if (!duelCreatable) {
+        void PlatformBridge.shareResult(shareText).then((ok) => {
+          if (!ok) this.toast(c, 'Нативный шаринг недоступен в этом клиенте');
+        });
+        return;
+      }
+
+      this.toast(c, 'Создаю фиксированную дуэль…');
+      void createFixedSeedDuel(res, PlatformBridge).then((created) => {
+        if (!created) {
+          this.toast(c, 'Не удалось создать дуэль · нужен подтверждённый MAX/TG запуск');
+          return;
         }
+        const payload = encodeDuelStartPayload(created.challengeId);
+        const link = payload ? PlatformBridge.buildStartLink(payload) : null;
+        if (!link) {
+          this.toast(c, 'Ссылка дуэли не настроена для этой платформы');
+          return;
+        }
+        const duelText =
+          `OFELIYA Fixed-Seed Duel: мой результат ${fmtTime(created.targetTimeMs)}. ` +
+          'Тот же seed, Standard и управление. Сможешь пройти кампанию быстрее?';
+        void PlatformBridge.shareResult(duelText, link).then((ok) => {
+          this.toast(c, ok ? 'ДУЭЛЬ СОЗДАНА · ссылка готова' : 'Нативный шаринг недоступен в этом клиенте');
+        });
       });
     });
     y += gap;
