@@ -35,7 +35,14 @@ if (!chrome) throw new Error('Chrome not found');
           initData: 'late-max-bridge',
           initDataUnsafe: { user: { id: 1, first_name: 'Late' } },
           getViewportSize: async () => ({ width: '360', height: '720' }),
-          BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} },
+          BackButton: {
+            show() { window.__maxBackShown = (window.__maxBackShown || 0) + 1; },
+            hide() { window.__maxBackHidden = (window.__maxBackHidden || 0) + 1; },
+            onClick(callback) { window.__maxBackHandler = callback; },
+            offClick(callback) {
+              if (window.__maxBackHandler === callback) window.__maxBackHandler = null;
+            },
+          },
           HapticFeedback: { impactOccurred() {}, notificationOccurred() {} },
         };
       `,
@@ -69,6 +76,12 @@ if (!chrome) throw new Error('Chrome not found');
     throw new Error('expected browser fallback before late bridge: ' + JSON.stringify(beforeBridge));
   }
 
+  // Enter gameplay while the MAX script is still stalled. GameScene installs its native back
+  // callback through the browser fallback at this point; the facade must remember and rebind it
+  // when the real MAX adapter becomes available later.
+  await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
+  await page.waitForFunction(() => window.__game?.scene.isActive('Game'), null, { timeout: 5000 });
+
   releaseBridge();
 
   await page.waitForFunction(() => window.WebApp?.platform === 'android', null, { timeout: 5000 });
@@ -100,6 +113,19 @@ if (!chrome) throw new Error('Chrome not found');
   if (afterBridge.platform !== 'max' || afterBridge.width !== 360 || afterBridge.height !== 720) {
     throw new Error('late MAX bridge did not resync viewport: ' + JSON.stringify(afterBridge));
   }
+
+  await page.waitForFunction(
+    () => typeof window.__maxBackHandler === 'function' && (window.__maxBackShown || 0) > 0,
+    null,
+    { timeout: 5000 }
+  );
+  await page.evaluate(() => window.__maxBackHandler());
+  await page.waitForFunction(
+    () => window.__game?.scene.isActive('Menu') && !window.__game?.scene.isActive('Game'),
+    null,
+    { timeout: 5000 }
+  );
+
   if (errors.length) throw new Error('page errors: ' + errors.join(' | '));
 
   await ctx.close();
