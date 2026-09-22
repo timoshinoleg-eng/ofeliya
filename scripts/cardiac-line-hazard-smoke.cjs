@@ -68,6 +68,8 @@ function browserDriver() {
     gs.runState.resetStageProgression(gs.stageDirector.currentStage);
     gs.runState.stage.hp = 1_000;
     gs.runState.stage.maxHp = 1_000;
+    // Isolate the beam's exact damage from passive regeneration during the 850 ms telegraph.
+    gs.runState.stage.regen = 0;
     gs.wave.startStage(gs.stageDirector.currentStage);
     gs.heartbeatPulse.reset(0);
     gs.cardiacHazard.reset();
