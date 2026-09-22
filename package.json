@@ -40,7 +40,8 @@
     "test:social-hub": "node scripts/social-hub-smoke.cjs",
     "test:analytics": "node scripts/check-analytics-client.mjs",
     "test:daily-v2": "node scripts/check-daily-v2.mjs",
-    "test:daily-cta": "node scripts/check-daily-cta.mjs"
+    "test:daily-cta": "node scripts/check-daily-cta.mjs",
+    "test:profile": "node scripts/check-profile-client.mjs"
   },
   "dependencies": {
     "@maxhub/max-bot-api": "^0.3.1",
