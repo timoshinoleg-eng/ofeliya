@@ -36,6 +36,17 @@ const friends = {
   ],
 };
 
+const DAILY_TICKET = {
+  runId: 'dailyRun_socialhub01',
+  runSeed: 'social-hub-daily-seed',
+  dateKey: '2026-09-22',
+  issuedAt: 1_000,
+  expiresAt: 9_999_999_999_999,
+  difficultyId: 'standard',
+  rulesetVersion: 2,
+  campaignVersion: 2,
+};
+
 function pathKey(url) {
   const u = new URL(url);
   return u.pathname + u.search;
@@ -64,7 +75,35 @@ async function boot(browser, size, options = {}) {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
       return;
     }
-    requests.push({ method: req.method(), key: pathKey(req.url()) });
+    let body = null;
+    try {
+      body = req.postDataJSON();
+    } catch {}
+    requests.push({ method: req.method(), key: pathKey(req.url()), body });
+    if (url.pathname.endsWith('/api/daily/run')) {
+      if (options.dailyMode === 'network') {
+        await route.abort('failed');
+        return;
+      }
+      if (options.dailyMode === 'capacity') {
+        await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false }) });
+        return;
+      }
+      if (options.dailyMode === 'denied') {
+        await route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ ok: false }) });
+        return;
+      }
+      if (options.dailyMode === 'http') {
+        await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ ok: false }) });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, ticket: DAILY_TICKET }),
+      });
+      return;
+    }
     if (options.mode === 'network') {
       await route.abort('failed');
       return;
@@ -113,7 +152,12 @@ async function boot(browser, size, options = {}) {
       },
       HapticFeedback: { impactOccurred() {}, notificationOccurred() {} },
     };
-  }, { ...size, uid: UID, initData: INIT_DATA, withIdentity: options.withIdentity !== false });
+  }, {
+    ...size,
+    uid: UID,
+    initData: options.withIdentity === false ? '' : INIT_DATA,
+    withIdentity: options.withIdentity !== false,
+  });
 
   const page = await ctx.newPage();
   const errors = [];
@@ -177,6 +221,7 @@ async function inspectHub(page, size) {
     const panel = byName('ofeliya-social-panel');
     const close = byName('ofeliya-social-close-hit');
     const retry = byName('ofeliya-social-retry-bg');
+    const daily = byName('ofeliya-social-daily-bg');
     const disabled = byName('ofeliya-social-daily-disabled');
     const serializeBounds = (obj) => {
       if (!obj || typeof obj.getBounds !== 'function') return null;
@@ -193,6 +238,7 @@ async function inspectHub(page, size) {
     const panelBounds = serializeBounds(panel);
     const closeBounds = serializeBounds(close);
     const retryBounds = serializeBounds(retry);
+    const dailyBounds = serializeBounds(daily);
     const disabledBounds = serializeBounds(disabled);
     const todayStatus = byName('ofeliya-social-today-status');
     const todayStatusBounds = serializeBounds(todayStatus);
@@ -213,8 +259,10 @@ async function inspectHub(page, size) {
       panel: panelBounds,
       close: closeBounds,
       retry: retryBounds,
+      daily: dailyBounds,
       disabled: disabledBounds,
       todayStatus: todayStatusBounds,
+      dailyInteractive: Boolean(daily?.input?.enabled),
       disabledInteractive: Boolean(disabled?.input?.enabled),
       seasonRows: all.filter((obj) => String(obj?.name || '').startsWith('ofeliya-social-season-row-')).length,
       friendRows: all.filter((obj) => String(obj?.name || '').startsWith('ofeliya-social-friend-row-')).length,
@@ -238,8 +286,12 @@ function assertSuccessContract(contract, size) {
     throw new Error('social panel outside viewport ' + JSON.stringify({ size, panel: contract.panel }));
   }
   if (contract.close.width < 43 || contract.close.height < 43) throw new Error('social close target <44 ' + JSON.stringify(contract.close));
+  if (!contract.daily || contract.daily.height < 43 || !contract.dailyInteractive) {
+    throw new Error('active Daily CTA missing/undersized ' + JSON.stringify({ size, daily: contract.daily, interactive: contract.dailyInteractive }));
+  }
+  if (contract.disabled) throw new Error('identity-ready Social Hub rendered disabled Daily CTA');
   if (contract.disabledInteractive) throw new Error('daily disabled surface must not be interactive');
-  if (rectsOverlap(contract.todayStatus, contract.disabled)) throw new Error('today status overlaps disabled Daily CTA ' + JSON.stringify({ size, today: contract.todayStatus, disabled: contract.disabled }));
+  if (rectsOverlap(contract.todayStatus, contract.daily)) throw new Error('today status overlaps Daily CTA ' + JSON.stringify({ size, today: contract.todayStatus, daily: contract.daily }));
   if (contract.seasonRows !== 3 || contract.friendRows !== 3 || !contract.hasSeasonMore || !contract.hasFriendsMore) {
     throw new Error('social row cap contract failed ' + JSON.stringify(contract));
   }
@@ -351,8 +403,102 @@ async function runSkipped(browser) {
     throw new Error('skipped identity request set mismatch ' + JSON.stringify({ actual, expected }));
   }
   if (contract.retry) throw new Error('skipped identity must not be rendered as an error');
+  if (contract.daily) throw new Error('skipped identity must not expose active Daily CTA');
+  if (!contract.disabled || contract.disabledInteractive) throw new Error('skipped identity Daily CTA must be visibly disabled');
   if (rectsOverlap(contract.todayStatus, contract.disabled)) throw new Error('skipped identity copy overlaps disabled Daily CTA ' + JSON.stringify({ today: contract.todayStatus, disabled: contract.disabled }));
   if (errors.length) throw new Error('pageerror in skipped identity ' + JSON.stringify(errors));
+  await ctx.close();
+}
+
+async function runDailyLaunch(browser) {
+  const size = { width: 390, height: 740 };
+  const { ctx, page, requests, errors } = await boot(browser, size);
+  await openHub(page);
+  const before = await inspectHub(page, size);
+  if (!before.daily || !before.dailyInteractive) throw new Error('Daily CTA not active before launch');
+
+  await clickNamed(page, 'ofeliya-social-daily-bg');
+  await page.waitForFunction(
+    () => window.__game.scene.isActive('Game') && !window.__game.scene.isActive('Menu'),
+    null,
+    { timeout: 8000 }
+  );
+
+  const state = await page.evaluate(() => ({
+    intent: window.__game.registry.get('dailyIntent') ?? null,
+    ticket: window.__game.registry.get('dailyTicket') ?? null,
+    runSeed: window.__game.registry.get('runSeed') ?? null,
+    runSeedOverride: window.__game.registry.get('runSeedOverride') ?? null,
+    difficulty: window.__game.registry.get('difficultyId') ?? null,
+    duel: window.__game.registry.get('duelChallenge') ?? null,
+    checkpointResume: window.__game.registry.get('runCheckpointResume') ?? null,
+  }));
+
+  const dailyRequests = requests.filter((item) => item.key === '/api/daily/run');
+  if (dailyRequests.length !== 1 || dailyRequests[0].method !== 'POST') {
+    throw new Error('Daily launch request count/method mismatch ' + JSON.stringify(dailyRequests));
+  }
+  if (dailyRequests[0].body?.platform !== 'max' || dailyRequests[0].body?.initData !== INIT_DATA) {
+    throw new Error('Daily launch request identity mismatch');
+  }
+  if (state.intent?.runId !== DAILY_TICKET.runId || state.ticket?.runId !== DAILY_TICKET.runId) {
+    throw new Error('Daily launch registry intent/ticket mismatch ' + JSON.stringify(state));
+  }
+  if (state.runSeed !== DAILY_TICKET.runSeed || state.runSeedOverride !== null) {
+    throw new Error('Daily launch seed handoff mismatch ' + JSON.stringify(state));
+  }
+  if (state.difficulty !== 'standard' || state.duel !== null || state.checkpointResume !== null) {
+    throw new Error('Daily launch runtime mode mismatch ' + JSON.stringify(state));
+  }
+  if (requests.some((item) => item.key === '/api/score')) throw new Error('Daily launch submitted score before result');
+  if (errors.length) throw new Error('pageerror in Daily launch ' + JSON.stringify(errors));
+  await ctx.close();
+}
+
+async function runDailyLaunchState(browser, dailyMode, expectedText, disabledAfter = false) {
+  const size = { width: 390, height: 740 };
+  const { ctx, page, requests, errors } = await boot(browser, size, { dailyMode });
+  await openHub(page);
+  await clickNamed(page, 'ofeliya-social-daily-bg');
+
+  await page.waitForFunction(
+    (text) => {
+      const menu = window.__game.scene.getScene('Menu');
+      const root = menu.children.list.find((obj) => obj?.name === 'ofeliya-social-hub');
+      if (!root) return false;
+      const flatten = (obj) => {
+        const out = [obj];
+        if (Array.isArray(obj?.list)) for (const child of obj.list) out.push(...flatten(child));
+        return out;
+      };
+      return flatten(root).some((obj) => typeof obj?.text === 'string' && obj.text.includes(text));
+    },
+    expectedText,
+    { timeout: 8000 }
+  );
+
+  const contract = await inspectHub(page, size);
+  const dailyRequests = requests.filter((item) => item.key === '/api/daily/run');
+  if (dailyRequests.length !== 1) throw new Error('Daily failure state auto-retried ' + JSON.stringify({ dailyMode, count: dailyRequests.length }));
+  await sleep(450);
+  if (requests.filter((item) => item.key === '/api/daily/run').length !== 1) {
+    throw new Error('Daily failure state retried without user action ' + dailyMode);
+  }
+  const active = await page.evaluate(() => ({
+    menu: window.__game.scene.isActive('Menu'),
+    game: window.__game.scene.isActive('Game'),
+    intent: window.__game.registry.get('dailyIntent') ?? null,
+    ticket: window.__game.registry.get('dailyTicket') ?? null,
+  }));
+  if (!active.menu || active.game || active.intent !== null || active.ticket !== null) {
+    throw new Error('Daily failure state mutated runtime ' + JSON.stringify({ dailyMode, active }));
+  }
+  if (disabledAfter) {
+    if (!contract.disabled || contract.daily) throw new Error('Daily denied state must become disabled');
+  } else if (!contract.daily || !contract.dailyInteractive) {
+    throw new Error('Daily retryable state must expose manual retry ' + dailyMode);
+  }
+  if (errors.length) throw new Error('pageerror in Daily launch state ' + dailyMode + ': ' + JSON.stringify(errors));
   await ctx.close();
 }
 
@@ -369,7 +515,12 @@ async function runSkipped(browser) {
     await runStateCase(browser, 'network', 'НЕТ СОЕДИНЕНИЯ');
     await runHttpRetry(browser);
     await runSkipped(browser);
-    console.log('social hub browser smoke: ok (4 viewports + empty/http/network/skipped + retry + PII)');
+    await runDailyLaunch(browser);
+    await runDailyLaunchState(browser, 'capacity', 'ЗАБЕГ НЕДОСТУПЕН');
+    await runDailyLaunchState(browser, 'denied', 'НУЖЕН ПОДТВЕРЖДЁННЫЙ ВХОД', true);
+    await runDailyLaunchState(browser, 'http', 'СЕРВЕР НЕ ОТВЕТИЛ');
+    await runDailyLaunchState(browser, 'network', 'НЕТ СОЕДИНЕНИЯ');
+    console.log('social hub browser smoke: ok (4 viewports + social states + atomic Daily launch/states + retry + PII)');
   } finally {
     await browser.close();
   }

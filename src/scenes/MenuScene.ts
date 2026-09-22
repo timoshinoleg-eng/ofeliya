@@ -23,7 +23,7 @@ import {
 } from '../game/DifficultyProfile';
 import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
 import { ensureCinematicTextures } from '../game/CinematicTextures';
-import { clearDailyIntent } from '../game/DailyRunIntent';
+import { clearDailyIntent, launchDailyRun } from '../game/DailyRunIntent';
 import { showLegalOverlay } from '../legal/LegalOverlay';
 import { SocialHub } from '../ui/SocialHub';
 import { PlatformBridge } from '../platform';
@@ -751,9 +751,24 @@ export class MenuScene extends Phaser.Scene {
 
   private showSocialHub(): void {
     if (this.socialHub || this.codexOverlay) return;
-    this.socialHub = new SocialHub(this, PlatformBridge, () => {
-      this.socialHub = null;
-    });
+    this.socialHub = new SocialHub(
+      this,
+      PlatformBridge,
+      async () => {
+        const status = await launchDailyRun({
+          registry: this.registry,
+          platform: PlatformBridge,
+        });
+        if (status === 'ok') {
+          this.socialHub?.destroy();
+          this.scene.start('Game');
+        }
+        return status;
+      },
+      () => {
+        this.socialHub = null;
+      }
+    );
   }
 
   private showCodex(): void {
