@@ -81,6 +81,40 @@ same change.
 unchanged, and TheLastLight's music (`Suno`-generated, explicitly excluded from its MIT grant) is
 **not** used anywhere in this project.
 
+## Factory Overload line-hazard adaptation — MIT
+
+Files:
+
+- `src/game/CardiacLineHazard.ts`
+- Cardiac hazard integration in `src/scenes/GameScene.ts`
+
+The warning → beam lifecycle and line-hit geometry were adapted from
+`ianis66666/factory-overload`, specifically `src/systems/BossHazardSystem.ts`.
+OFELIYA rewrites the mechanic around its own stage lifecycle, mobile readability rules and a
+separate run-seeded deterministic RNG; no upstream art, audio, names or other assets are imported.
+
+Upstream: `https://github.com/ianis66666/factory-overload`
+License: MIT.
+Copyright (c) 2026 元耀 張
+
+> Permission is hereby granted, free of charge, to any person obtaining a copy
+> of this software and associated documentation files (the "Software"), to deal
+> in the Software without restriction, including without limitation the rights
+> to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+> copies of the Software, and to permit persons to whom the Software is
+> furnished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all
+> copies or substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+> IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+> FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+> AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+> LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+> OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+> SOFTWARE.
+
 ## Generated game art
 
 Virus, immune cells, host cells, bloodstream background, mutation icons and gameplay VFX are generated
