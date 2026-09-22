@@ -293,6 +293,20 @@ jobs:
       - name: Build production score image
         run: docker build -f deploy/Dockerfile --target score -t ofeliya-score:strain-zero-ci .
 
+      - name: Smoke production score image runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name ofeliya-score-ci ofeliya-score:strain-zero-ci
+          trap 'docker logs ofeliya-score-ci || true; docker rm -f ofeliya-score-ci >/dev/null 2>&1 || true' EXIT
+          for i in {1..20}; do
+            if docker exec ofeliya-score-ci node -e "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
+              exit 0
+            fi
+            sleep 0.5
+          done
+          exit 1
+
       - name: Build production static image
         run: |
           docker build -f deploy/Dockerfile --target static \

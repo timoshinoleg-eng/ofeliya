@@ -12,6 +12,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 RUN mkdir -p /app/server/data && chown -R node:node /app/server
 COPY --chown=node:node server/index.mjs ./server/index.mjs
+COPY --chown=node:node server/telegram-share.mjs ./server/telegram-share.mjs
 USER node
 CMD ["node", "server/index.mjs"]
 
