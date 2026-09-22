@@ -27,6 +27,7 @@ const SCOPED_FILES = [
   'src/game/AchievementSystem.ts',
   'src/scenes/MenuScene.ts',
   'src/scenes/UIScene.ts',
+  'src/ui/SocialHub.ts',
   'src/legal/LegalOverlay.ts',
 ];
 
