@@ -16,13 +16,21 @@ export function hasTelegramLaunchHint(locationLike: LocationLike): boolean {
   );
 }
 
+function currentTelegramInitData(): string {
+  if (typeof window === 'undefined') return '';
+  const host = window as Window & {
+    Telegram?: { WebApp?: { initData?: string } };
+  };
+  return host.Telegram?.WebApp?.initData ?? '';
+}
+
 export async function ensureTelegramBridge(timeoutMs = 2500): Promise<boolean> {
   if (typeof window === 'undefined' || typeof document === 'undefined') return false;
-  if (window.Telegram?.WebApp?.initData) return true;
+  if (currentTelegramInitData()) return true;
   if (!hasTelegramLaunchHint(window.location)) return false;
 
   const current = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
-  if (current?.dataset.loaded === '1') return !!window.Telegram?.WebApp?.initData;
+  if (current?.dataset.loaded === '1') return !!currentTelegramInitData();
 
   return new Promise<boolean>((resolve) => {
     let settled = false;
@@ -30,7 +38,7 @@ export async function ensureTelegramBridge(timeoutMs = 2500): Promise<boolean> {
       if (settled) return;
       settled = true;
       window.clearTimeout(timer);
-      resolve(!!window.Telegram?.WebApp?.initData);
+      resolve(!!currentTelegramInitData());
     };
 
     const script = current ?? document.createElement('script');
