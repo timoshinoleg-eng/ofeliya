@@ -6,8 +6,6 @@ set -Eeuo pipefail
 APP_ROOT="${OFELIYA_APP_DIR:-/opt/ofeliya}"
 RELEASE_ENV_FILE="${OFELIYA_ENV_FILE:-${APP_ROOT}/.env}"
 REPO_URL="${OFELIYA_REPO_URL:-https://github.com/timoshinoleg-eng/ofeliya.git}"
-COMPOSE_FILE="deploy/compose.production.yml"
-COMPOSE_PROJECT="ofeliya"
 
 if [[ ! "${OFELIYA_RELEASE}" =~ ^[0-9a-fA-F]{40}$ ]]; then
   echo "OFELIYA_RELEASE must be a full 40-character git SHA" >&2
@@ -18,15 +16,44 @@ command -v git >/dev/null || { echo "git is required" >&2; exit 2; }
 command -v docker >/dev/null || { echo "docker is required" >&2; exit 2; }
 docker compose version >/dev/null 2>&1 || { echo "docker compose v2 is required" >&2; exit 2; }
 
-load_env() {
-  set -a
-  # shellcheck disable=SC1090
-  source "$1"
-  set +a
+# Parse dotenv as data, never as shell. Process environment wins over file values,
+# so OFELIYA_RELEASE cannot be replaced by a stale value stored in .env.
+load_env_file() {
+  local file="$1" line key value
+  [[ -f "$file" ]] || return 0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    [[ -z "${line//[[:space:]]/}" ]] && continue
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$line" == *"="* ]] || {
+      echo "Invalid dotenv line in $file" >&2
+      exit 3
+    }
+    key="${line%%=*}"
+    value="${line#*=}"
+    key="${key#"${key%%[![:space:]]*}"}"
+    key="${key%"${key##*[![:space:]]}"}"
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || {
+      echo "Invalid dotenv key in $file: $key" >&2
+      exit 3
+    }
+    if (( ${#value} >= 2 )); then
+      if [[ ("${value:0:1}" == '"' && "${value: -1}" == '"') ||
+            ("${value:0:1}" == "'" && "${value: -1}" == "'") ]]; then
+        value="${value:1:${#value}-2}"
+      fi
+    fi
+    if [[ ! -v "$key" ]]; then
+      export "$key=$value"
+    fi
+  done < "$file"
 }
-if [[ -f "${RELEASE_ENV_FILE}" ]]; then
-  load_env "${RELEASE_ENV_FILE}"
-fi
+
+[[ -f "${RELEASE_ENV_FILE}" ]] || {
+  echo "Ofeliya release env missing: ${RELEASE_ENV_FILE}" >&2
+  exit 3
+}
+load_env_file "${RELEASE_ENV_FILE}"
 
 BOT_MODE="${OFELIYA_BOT_MODE:-shared}"
 BOT_ENV_FILE="${OFELIYA_BOT_ENV_FILE:-/opt/hub/.env}"
@@ -34,15 +61,13 @@ BOT_ENV_FILE="${OFELIYA_BOT_ENV_FILE:-/opt/hub/.env}"
 case "${BOT_MODE}" in
   shared)
     [[ -f "${BOT_ENV_FILE}" ]] || { echo "Shared MAX bot env missing: ${BOT_ENV_FILE}" >&2; exit 3; }
-    load_env "${BOT_ENV_FILE}"
-    [[ -f "${RELEASE_ENV_FILE}" ]] || { echo "Ofeliya release env missing: ${RELEASE_ENV_FILE}" >&2; exit 3; }
-    load_env "${RELEASE_ENV_FILE}"
+    load_env_file "${BOT_ENV_FILE}"
     export OFELIYA_BOT_TOKEN="${OFELIYA_BOT_TOKEN:-${BOT_TOKEN:-}}"
     export OFELIYA_BOT_USERNAME="${OFELIYA_BOT_USERNAME:-${HUB_BOT_USERNAME:-}}"
     export OFELIYA_BOT_ENV_FILE="${BOT_ENV_FILE}"
     ;;
   dedicated)
-    [[ -f "${RELEASE_ENV_FILE}" ]] || { echo "Ofeliya release env missing: ${RELEASE_ENV_FILE}" >&2; exit 3; }
+    BOT_ENV_FILE="${RELEASE_ENV_FILE}"
     export OFELIYA_BOT_ENV_FILE="${RELEASE_ENV_FILE}"
     ;;
   *)
@@ -51,8 +76,28 @@ case "${BOT_MODE}" in
     ;;
 esac
 
+DEDICATED_LOCAL_FILE="deploy/compose.production.dedicated.local.yml"
+CADDY_LOCAL_FILE="deploy/compose.caddy.yml"
+if [[ -n "${OFELIYA_COMPOSE_PROJECT:-}" ]]; then
+  COMPOSE_PROJECT="${OFELIYA_COMPOSE_PROJECT}"
+elif [[ "${BOT_MODE}" == dedicated && -f "${APP_ROOT}/${DEDICATED_LOCAL_FILE}" ]]; then
+  # Existing dedicated Cloud.ru host uses project=deploy.
+  COMPOSE_PROJECT="deploy"
+else
+  COMPOSE_PROJECT="ofeliya"
+fi
+[[ "${COMPOSE_PROJECT}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || {
+  echo "Invalid OFELIYA_COMPOSE_PROJECT: ${COMPOSE_PROJECT}" >&2
+  exit 3
+}
+
 export OFELIYA_EXTRA_CA_CERT="${OFELIYA_EXTRA_CA_CERT:-/opt/quiz-battle/certs/ca-certificates.crt}"
-export OFELIYA_SHARED_NETWORK="${OFELIYA_SHARED_NETWORK:-quiz-battle_default}"
+if [[ "${BOT_MODE}" == dedicated ]]; then
+  export OFELIYA_SHARED_NETWORK="${OFELIYA_SHARED_NETWORK:-${COMPOSE_PROJECT}_ofeliya}"
+else
+  export OFELIYA_SHARED_NETWORK="${OFELIYA_SHARED_NETWORK:-quiz-battle_default}"
+fi
+
 required_env_keys=(
   OFELIYA_BOT_TOKEN OFELIYA_BOT_USERNAME OFELIYA_GAME_URL
   OFELIYA_EXTRA_CA_CERT OFELIYA_SHARED_NETWORK
@@ -102,10 +147,33 @@ git reset --hard "${OFELIYA_RELEASE}"
 export OFELIYA_RELEASE
 export OFELIYA_ENV_FILE="${RELEASE_ENV_FILE}"
 
+compose_files=(-f deploy/compose.production.yml)
+if [[ "${BOT_MODE}" == dedicated ]]; then
+  for local_file in "${DEDICATED_LOCAL_FILE}" "${CADDY_LOCAL_FILE}"; do
+    if [[ -f "${CHECKOUT_DIR}/${local_file}" ]]; then
+      compose_files+=(-f "${CHECKOUT_DIR}/${local_file}")
+    elif [[ "${CHECKOUT_DIR}" != "${APP_ROOT}" && -f "${APP_ROOT}/${local_file}" ]]; then
+      # Legacy /opt/ofeliya/current checkout with host-local overrides one level above.
+      compose_files+=(-f "${APP_ROOT}/${local_file}")
+    fi
+  done
+fi
+
 compose() {
   docker compose -p "${COMPOSE_PROJECT}" \
     --env-file "${BOT_ENV_FILE}" --env-file "${RELEASE_ENV_FILE}" \
-    -f "${COMPOSE_FILE}" "$@"
+    "${compose_files[@]}" "$@"
+}
+
+retry() {
+  local attempts="$1" delay="$2"
+  shift 2
+  local i
+  for ((i=1; i<=attempts; i++)); do
+    if "$@"; then return 0; fi
+    if (( i == attempts )); then return 1; fi
+    sleep "${delay}"
+  done
 }
 
 compose config --quiet
@@ -116,8 +184,8 @@ fi
 compose build "${build_services[@]}"
 compose up -d score static
 
-compose exec -T static wget -q -O /dev/null http://127.0.0.1:8080/
-compose exec -T score node -e "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+retry 12 2 compose exec -T static wget -q -O /dev/null http://127.0.0.1:8080/
+retry 12 2 compose exec -T score node -e "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 if [[ "${BOT_MODE}" == dedicated ]]; then
   compose --profile dedicated-bot up -d bot
@@ -126,5 +194,5 @@ else
 fi
 
 compose ps
-printf 'OFELIYA deployed on Cloud.ru at SHA %s (project=%s bot_mode=%s)\n' \
-  "${OFELIYA_RELEASE}" "${COMPOSE_PROJECT}" "${BOT_MODE}"
+printf 'OFELIYA deployed on Cloud.ru at SHA %s (project=%s bot_mode=%s network=%s)\n' \
+  "${OFELIYA_RELEASE}" "${COMPOSE_PROJECT}" "${BOT_MODE}" "${OFELIYA_SHARED_NETWORK}"
