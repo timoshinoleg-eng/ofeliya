@@ -17,7 +17,7 @@
  *        MAX_BOT_TOKEN (или production BOT_TOKEN как fallback)
  */
 import { createServer } from 'node:http';
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -176,6 +176,11 @@ mkdirSync(DATA_DIR, { recursive: true });
 const STORE_FILE = join(DATA_DIR, 'store.json');
 const MAX_SCORES = 20_000;
 const MAX_REFS = 10_000;
+const MAX_ANALYTICS_EVENTS = 20_000;
+const PRODUCT_EVENTS = new Set([
+  'app_open', 'run_start', 'run_60s', 'boss1', 'heart', 'death',
+  'win', 'replay', 'share', 'daily', 'referral',
+]);
 
 function emptyStore() {
   return {
@@ -185,6 +190,7 @@ function emptyStore() {
     duels: [],
     duelAttempts: [],
     duelEvents: [],
+    analyticsEvents: [],
   };
 }
 
@@ -199,6 +205,7 @@ function loadStore() {
       duels: Array.isArray(s.duels) ? s.duels : [],
       duelAttempts: Array.isArray(s.duelAttempts) ? s.duelAttempts : [],
       duelEvents: Array.isArray(s.duelEvents) ? s.duelEvents : [],
+      analyticsEvents: Array.isArray(s.analyticsEvents) ? s.analyticsEvents : [],
     };
   } catch {
     return emptyStore();
@@ -220,6 +227,22 @@ function saveStore() {
       console.error('[store] save failed:', e.message);
     }
   });
+}
+
+function analyticsActorHash(platform, uid) {
+  return createHash('sha256').update(`${platform}:${uid}`).digest('hex').slice(0, 24);
+}
+
+function sanitizeAnalyticsProps(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out = {};
+  for (const [key, value] of Object.entries(raw).slice(0, 8)) {
+    if (!/^[a-zA-Z0-9_-]{1,32}$/.test(key)) continue;
+    if (typeof value === 'boolean') out[key] = value;
+    else if (typeof value === 'number' && Number.isFinite(value)) out[key] = Math.round(value * 1000) / 1000;
+    else if (typeof value === 'string') out[key] = value.slice(0, 80);
+  }
+  return out;
 }
 
 // ---------- initData валидация ----------
@@ -634,6 +657,7 @@ const server = createServer(async (req, res) => {
         duels: store.duels.length,
         duelAttempts: store.duelAttempts.length,
         duelEvents: store.duelEvents.length,
+        analyticsEvents: store.analyticsEvents.length,
         rulesetVersion: CURRENT_RULESET_VERSION,
         campaignVersion: CURRENT_CAMPAIGN_VERSION,
       });
@@ -683,6 +707,44 @@ const server = createServer(async (req, res) => {
         messageId: prepared.id,
         expirationDate: prepared.expirationDate,
       });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/event') {
+      const body = await readBody(req);
+      const platform = body?.platform;
+      const event = body?.event;
+      if (!['telegram', 'max', 'browser'].includes(platform) || !PRODUCT_EVENTS.has(event)) {
+        return send(res, 400, { ok: false, error: 'bad analytics event' });
+      }
+
+      let uid = null;
+      if (platform === 'browser') {
+        const anonId = body?.anonId;
+        if (typeof anonId !== 'string' || anonId.length < 8 || anonId.length > 64) {
+          return send(res, 400, { ok: false, error: 'bad analytics anonId' });
+        }
+        uid = anonId;
+      } else {
+        const token = platform === 'telegram' ? TG_TOKEN : MAX_TOKEN;
+        const verified = validateInitData(body?.initData, token);
+        if (!verified) {
+          return send(res, 403, { ok: false, error: 'analytics initData validation failed' });
+        }
+        uid = verified.uid;
+      }
+
+      store.analyticsEvents.push({
+        event,
+        platform,
+        actor: analyticsActorHash(platform, uid),
+        props: sanitizeAnalyticsProps(body?.props),
+        ts: Date.now(),
+      });
+      if (store.analyticsEvents.length > MAX_ANALYTICS_EVENTS) {
+        store.analyticsEvents.splice(0, store.analyticsEvents.length - MAX_ANALYTICS_EVENTS);
+      }
+      saveStore();
+      return send(res, 202, { ok: true });
     }
 
     if (req.method === 'POST' && url.pathname === '/api/duel') {
