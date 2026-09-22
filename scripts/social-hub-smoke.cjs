@@ -36,6 +36,17 @@ const friends = {
   ],
 };
 
+const DAILY_TICKET = {
+  runId: 'dailyRun_socialhub01',
+  runSeed: 'social-hub-daily-seed',
+  dateKey: '2026-09-22',
+  issuedAt: 1_000,
+  expiresAt: 9_999_999_999_999,
+  difficultyId: 'standard',
+  rulesetVersion: 2,
+  campaignVersion: 2,
+};
+
 function pathKey(url) {
   const u = new URL(url);
   return u.pathname + u.search;
@@ -64,7 +75,35 @@ async function boot(browser, size, options = {}) {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
       return;
     }
-    requests.push({ method: req.method(), key: pathKey(req.url()) });
+    let body = null;
+    try {
+      body = req.postDataJSON();
+    } catch {}
+    requests.push({ method: req.method(), key: pathKey(req.url()), body });
+    if (url.pathname.endsWith('/api/daily/run')) {
+      if (options.dailyMode === 'network') {
+        await route.abort('failed');
+        return;
+      }
+      if (options.dailyMode === 'capacity') {
+        await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false }) });
+        return;
+      }
+      if (options.dailyMode === 'denied') {
+        await route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ ok: false }) });
+        return;
+      }
+      if (options.dailyMode === 'http') {
+        await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ ok: false }) });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, ticket: DAILY_TICKET }),
+      });
+      return;
+    }
     if (options.mode === 'network') {
       await route.abort('failed');
       return;
@@ -113,7 +152,12 @@ async function boot(browser, size, options = {}) {
       },
       HapticFeedback: { impactOccurred() {}, notificationOccurred() {} },
     };
-  }, { ...size, uid: UID, initData: INIT_DATA, withIdentity: options.withIdentity !== false });
+  }, {
+    ...size,
+    uid: UID,
+    initData: options.withIdentity === false ? '' : INIT_DATA,
+    withIdentity: options.withIdentity !== false,
+  });
 
   const page = await ctx.newPage();
   const errors = [];
