@@ -10,6 +10,7 @@ export const CARDIAC_LINE_HAZARD = {
   intervalMs: 5_200,
   telegraphMs: 850,
   activeMs: 280,
+  scheduleGuardMs: 150,
   offsetRangePx: 118,
   warningHalfThicknessPx: 30,
   beamHalfThicknessPx: 17,
@@ -146,4 +147,19 @@ export function pointInsideCardiacLineHazard(
   if (Math.abs(along) > hazard.halfLength + Math.max(0, radiusPadding)) return false;
   const perpendicular = Math.abs(offsetX * -directionY + offsetY * directionX);
   return perpendicular <= Math.max(0, halfThickness) + Math.max(0, radiusPadding);
+}
+
+
+export function canScheduleCardiacLineHazardBeforeHeartbeat(
+  timeUntilHeartbeatImpactMs: number,
+  heartbeatTelegraphLeadMs: number
+): boolean {
+  if (!Number.isFinite(timeUntilHeartbeatImpactMs)) return false;
+  if (timeUntilHeartbeatImpactMs <= 0) return true;
+  const reservedMs =
+    CARDIAC_LINE_HAZARD.telegraphMs +
+    CARDIAC_LINE_HAZARD.activeMs +
+    Math.max(0, heartbeatTelegraphLeadMs) +
+    CARDIAC_LINE_HAZARD.scheduleGuardMs;
+  return timeUntilHeartbeatImpactMs > reservedMs;
 }
