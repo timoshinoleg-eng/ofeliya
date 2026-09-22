@@ -29,6 +29,7 @@
     "server:test": "node server/test.mjs",
     "bot": "node server/bot.mjs",
     "test:pacing": "node scripts/check-pacing.mjs",
+    "test:cardiac-hazard": "node scripts/cardiac-line-hazard-smoke.cjs",
     "test:audio": "node scripts/check-adaptive-audio.mjs",
     "test:result-actions": "node scripts/result-actions-smoke.cjs",
     "test:video": "node scripts/video-interstitial-smoke.cjs",

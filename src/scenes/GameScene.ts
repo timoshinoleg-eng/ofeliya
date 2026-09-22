@@ -18,11 +18,18 @@ import {
 } from '../game/AchievementSystem';
 import { rollRunChoices } from '../game/EvolutionSystem';
 import { guaranteedLegendaryChoices, type LegendaryId } from '../game/LegendarySystem';
-import { HeartbeatPulseDirector, type HeartbeatPulseEvent } from '../game/HeartbeatPulseDirector';
+import { HEARTBEAT_PULSE_PROFILE, HeartbeatPulseDirector, type HeartbeatPulseEvent } from '../game/HeartbeatPulseDirector';
 import {
   HEART_SAFE_POCKET,
   heartSafePocketProfile,
 } from '../game/HeartPacing';
+import {
+  CARDIAC_LINE_HAZARD,
+  CardiacLineHazardDirector,
+  canScheduleCardiacLineHazardBeforeHeartbeat,
+  pointInsideCardiacLineHazard,
+  type CardiacLineHazardSpec,
+} from '../game/CardiacLineHazard';
 import {
   getDifficultyProfile,
   heartbeatProfileForDifficulty,
@@ -138,6 +145,13 @@ export class GameScene extends Phaser.Scene {
   private audio!: AdaptiveAudioDirector;
   private audioAccMs = 0;
   private heartbeatPulse!: HeartbeatPulseDirector;
+  private cardiacHazard = new CardiacLineHazardDirector();
+  private cardiacHazardRng!: RunRng;
+  private cardiacHazardVisual: {
+    serial: number;
+    warning: Phaser.GameObjects.Rectangle;
+    beam: Phaser.GameObjects.Rectangle;
+  } | null = null;
   private impact = new ImpactDirector();
   private zeroPointNextAt = 0;
   private zeroPointUntil = 0;
@@ -200,6 +214,11 @@ export class GameScene extends Phaser.Scene {
     this.runSeed = this.gameplayRng.seed;
     this.registry.set('runSeed', this.runSeed);
     this.registry.remove('runSeedOverride');
+    // Separate seeded RNG: the phase-two boss hazard must never shift checkpointed gameplay streams.
+    // Boss phases are not resumable checkpoints, so this director can reset safely with the scene.
+    this.cardiacHazardRng = new RunRng(`${this.runSeed}-cardiac-hazard`);
+    this.cardiacHazard.reset();
+    this.cardiacHazardVisual = null;
 
     this.controlMode =
       resume?.controlMode ??
@@ -393,6 +412,8 @@ export class GameScene extends Phaser.Scene {
       this.stageTransition = null;
       this.bossDefeatCeremony = null;
       this.introHint = null;
+      this.cardiacHazard.reset();
+      this.cardiacHazardVisual = null;
       this.transitionGeneration += 1;
       // Audio is not a Phaser subsystem, so it is safe (and required) to release it here:
       // every restart path must not leak the bed, layer nodes or the visibility listener.
@@ -496,6 +517,7 @@ export class GameScene extends Phaser.Scene {
     this.updateAdaptiveAudio(delta);
     this.updateHeartbeatSignature(stage, st.timeMs);
     this.wave.update(delta);
+    this.updateCardiacLineHazard(time);
     this.hostCells.update(time, delta, st.timeMs);
     this.atmosphere.update(time, delta, st.timeMs, stage.durationMs);
 
@@ -929,6 +951,151 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private updateCardiacLineHazard(time: number): void {
+    const stage = this.stageDirector.currentStage;
+    const boss = this.wave.boss;
+    const enabled =
+      stage.id === 'heart' &&
+      stage.boss.behavior === 'heartbeat-pulse' &&
+      this.stageDirector.phase === 'BOSS_ACTIVE' &&
+      Boolean(boss?.active && boss.bossPhase === 2);
+    const timeUntilHeartbeatImpactMs =
+      this.heartbeatPulse.debugState.nextImpactAtMs - this.runState.stage.timeMs;
+    const canSchedule =
+      this.heartbeatSafeIndicator === null &&
+      time > this.heartbeatOpportunityUntil &&
+      canScheduleCardiacLineHazardBeforeHeartbeat(
+        timeUntilHeartbeatImpactMs,
+        HEARTBEAT_PULSE_PROFILE.telegraphLeadMs
+      );
+    const halfLength = Math.hypot(this.scale.width, this.scale.height) / 2 + 180;
+
+    const events = this.cardiacHazard.update(
+      {
+        nowMs: time,
+        enabled,
+        canSchedule,
+        originX: this.player.x,
+        originY: this.player.y,
+        halfLength,
+      },
+      () => this.cardiacHazardRng.next('enemy-spawn')
+    );
+
+    for (const event of events) {
+      if (event.type === 'telegraph') {
+        this.showCardiacLineHazard(event.hazard);
+      } else if (event.type === 'fire') {
+        this.fireCardiacLineHazard(event.hazard);
+      } else if (event.type === 'end') {
+        this.clearCardiacLineHazardVisual(event.serial);
+      } else {
+        this.clearCardiacLineHazardVisual();
+      }
+    }
+  }
+
+  private showCardiacLineHazard(hazard: CardiacLineHazardSpec): void {
+    this.clearCardiacLineHazardVisual();
+    const danger = this.stageDirector.currentStage.theme.dangerColor;
+    const warning = this.add
+      .rectangle(
+        hazard.centerX,
+        hazard.centerY,
+        hazard.halfLength * 2,
+        hazard.warningHalfThickness * 2,
+        danger,
+        0.08
+      )
+      .setStrokeStyle(2.2, danger, 0.86)
+      .setRotation(hazard.angle)
+      .setDepth(25)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    const beam = this.add
+      .rectangle(
+        hazard.centerX,
+        hazard.centerY,
+        hazard.halfLength * 2,
+        hazard.beamHalfThickness * 2,
+        0xffd6df,
+        0.9
+      )
+      .setStrokeStyle(1.5, 0xffffff, 0.9)
+      .setRotation(hazard.angle)
+      .setDepth(27)
+      .setVisible(false)
+      .setBlendMode(Phaser.BlendModes.ADD);
+
+    this.cardiacHazardVisual = { serial: hazard.serial, warning, beam };
+    this.tweens.add({
+      targets: warning,
+      alpha: 0.34,
+      duration: 170,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.InOut',
+    });
+    this.atmosphere.pulse(danger, 0.08);
+  }
+
+  private fireCardiacLineHazard(hazard: CardiacLineHazardSpec): void {
+    const visual = this.cardiacHazardVisual;
+    if (!visual || visual.serial !== hazard.serial) return;
+
+    this.tweens.killTweensOf(visual.warning);
+    visual.warning.setVisible(false);
+    visual.beam.setVisible(true);
+    this.atmosphere.pulse(this.stageDirector.currentStage.theme.dangerColor, 0.2);
+    this.shake(85, 0.0035);
+    PlatformBridge.haptic('light');
+
+    const playerPadding = Math.max(this.player.displayWidth, this.player.displayHeight) * 0.28;
+    if (
+      !pointInsideCardiacLineHazard(
+        this.player.x,
+        this.player.y,
+        hazard,
+        hazard.beamHalfThickness,
+        playerPadding
+      ) ||
+      this.time.now < this.player.hurtUntil
+    ) {
+      return;
+    }
+
+    this.runState.stage.hp -= hazard.damage * this.difficulty.bossDamageMultiplier;
+    this.runState.resetNoDamage();
+    this.player.markHurt(this.time.now);
+    Sfx.play('hurt');
+    PlatformBridge.haptic('medium');
+    this.cameras.main.flash(100, 255, 70, 105);
+    this.shake(130, 0.0055);
+
+    if (
+      this.runState.stage.hp <= 0 &&
+      this.runState.hasLegendary('last-carrier') &&
+      !this.lastCarrierUsed
+    ) {
+      this.activateLastCarrier();
+      return;
+    }
+    if (this.runState.stage.hp <= 0) this.finish(false);
+  }
+
+  private resetCardiacLineHazard(): void {
+    this.cardiacHazard.reset();
+    this.clearCardiacLineHazardVisual();
+  }
+
+  private clearCardiacLineHazardVisual(serial?: number): void {
+    const visual = this.cardiacHazardVisual;
+    if (!visual || (serial !== undefined && visual.serial !== serial)) return;
+    this.tweens.killTweensOf(visual.warning);
+    visual.warning.destroy();
+    visual.beam.destroy();
+    this.cardiacHazardVisual = null;
+  }
+
   /**
    * Throttled adaptive-audio tick. The enemy scan is the only O(n) part, so it runs at the
    * director's evaluation cadence while the director's own smoothing stays frame-rate independent.
@@ -1172,6 +1339,7 @@ export class GameScene extends Phaser.Scene {
   private resetStageWorld(nextStage: StageDefinition): void {
     this.milestones.reset();
     this.hostCells.resetStage();
+    this.resetCardiacLineHazard();
     this.wave.boss = null;
 
     for (const enemy of this.enemies.getChildren() as Enemy[]) {
@@ -1385,6 +1553,7 @@ export class GameScene extends Phaser.Scene {
   finish(win: boolean, reason: RunEndReason = win ? 'campaign-complete' : 'defeat'): void {
     if (this.registry.get('runResult')) return;
     if (this.stageDirector.phase !== 'RUN_ENDED') this.stageDirector.endRun(reason);
+    this.resetCardiacLineHazard();
     RunCheckpoint.clear();
     this.runState.captureStageBuild();
     const run = this.runState.run;

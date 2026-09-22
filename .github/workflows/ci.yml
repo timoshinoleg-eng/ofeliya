@@ -179,6 +179,9 @@ jobs:
       - name: IMMUNE PRIME vulnerability runtime browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/prime-vulnerability-smoke.cjs
 
+      - name: CARDIAC TITAN line hazard runtime smoke
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:cardiac-hazard
+
       - name: Strained difficulty runtime browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/difficulty-runtime-smoke.cjs
 
