@@ -53,6 +53,9 @@ jobs:
       - name: Social client contract smoke
         run: npm run test:social
 
+      - name: Analytics client contract smoke
+        run: npm run test:analytics
+
       - name: Gameplay RNG deterministic smoke
         run: npm run test:rng
 
