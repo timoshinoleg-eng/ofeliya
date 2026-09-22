@@ -22,8 +22,8 @@ function platformLabel(value: string): string {
 
 function relationLabel(value: FriendSnapshot['relation']): string {
   if (value === 'both') return 'ВЗАИМНО';
-  if (value === 'inviter') return 'ПРИГЛАСИЛ ВАС';
-  return 'ПРИГЛАШЁН ВАМИ';
+  if (value === 'inviter') return 'ВАС ПРИГЛАСИЛИ';
+  return 'ВЫ ПРИГЛАСИЛИ';
 }
 
 function errorCopy(status: RemoteStatus): string | null {
