@@ -146,6 +146,9 @@ jobs:
       - name: MAX compact viewport matrix
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/mobile-layout-matrix.cjs
 
+      - name: HUD hierarchy contract
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/hud-hierarchy-smoke.cjs
+
       - name: High-DPI WebGL and Canvas fallback smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/renderer-smoke.cjs
 
