@@ -83,14 +83,23 @@ jobs:
           DEPLOY_USER: ${{ secrets.CLOUDRU_DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.CLOUDRU_DEPLOY_PORT }}
           APP_DIR: ${{ vars.CLOUDRU_OFELIYA_APP_DIR }}
+          COMPOSE_PROJECT: ${{ vars.CLOUDRU_OFELIYA_COMPOSE_PROJECT }}
+          SHARED_NETWORK: ${{ vars.CLOUDRU_OFELIYA_SHARED_NETWORK }}
           RELEASE_SHA: ${{ steps.release.outputs.sha }}
         run: |
           set -Eeuo pipefail
           port="${DEPLOY_PORT:-22}"
           app_dir="${APP_DIR:-/opt/ofeliya}"
+          remote_env="OFELIYA_RELEASE='$RELEASE_SHA' OFELIYA_APP_DIR='$app_dir'"
+          if [[ -n "${COMPOSE_PROJECT:-}" ]]; then
+            remote_env+=" OFELIYA_COMPOSE_PROJECT='$COMPOSE_PROJECT'"
+          fi
+          if [[ -n "${SHARED_NETWORK:-}" ]]; then
+            remote_env+=" OFELIYA_SHARED_NETWORK='$SHARED_NETWORK'"
+          fi
           ssh -i ~/.ssh/cloudru_ofeliya -p "$port" \
             "$DEPLOY_USER@$DEPLOY_HOST" \
-            "OFELIYA_RELEASE='$RELEASE_SHA' OFELIYA_APP_DIR='$app_dir' bash -s" \
+            "$remote_env bash -s" \
             < deploy/deploy-cloudru.sh
 
       - name: Public HTTPS smoke
