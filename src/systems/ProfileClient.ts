@@ -11,6 +11,7 @@ import type { SaveData } from './SaveSystem';
  */
 
 const PROFILE_TIMEOUT_MS = 3000;
+const profileReadCache = new WeakMap<PlatformAdapter, Promise<ServerProfile | null>>();
 
 export interface ProfilePreferences {
   muted?: boolean;
@@ -186,8 +187,20 @@ export async function fetchServerProfile(
 ): Promise<ServerProfile | null> {
   const identity = verifiedIdentity(platform);
   if (!identity) return null;
-  const parsed = parseProfileResponse(await postProfileJson(profileEndpoint(), identity));
-  return parsed ? parsed.profile : null;
+
+  const cached = profileReadCache.get(platform);
+  if (cached) return cached;
+
+  const request = (async () => {
+    const parsed = parseProfileResponse(await postProfileJson(profileEndpoint(), identity));
+    if (!parsed) {
+      profileReadCache.delete(platform);
+      return null;
+    }
+    return parsed.profile;
+  })();
+  profileReadCache.set(platform, request);
+  return request;
 }
 
 /**
@@ -208,5 +221,6 @@ export async function migrateLocalSave(
     })
   );
   if (!parsed || typeof parsed.claimed !== 'boolean') return null;
+  profileReadCache.set(platform, Promise.resolve(parsed.profile));
   return { claimed: parsed.claimed, profile: parsed.profile };
 }

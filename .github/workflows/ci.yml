@@ -68,6 +68,9 @@ jobs:
       - name: Profile client contract smoke
         run: npm run test:profile
 
+      - name: Founder badge horizontal contract
+        run: npm run test:founder-badge
+
       - name: Player language contract smoke
         run: npm run test:language
 
@@ -151,6 +154,9 @@ jobs:
 
       - name: Social hub browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:social-hub
+
+      - name: Founder badge browser smoke
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/founder-badge-smoke.cjs
 
       - name: Daily CTA runtime browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/daily-cta-smoke.cjs

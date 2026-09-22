@@ -28,6 +28,7 @@ const SCOPED_FILES = [
   'src/scenes/MenuScene.ts',
   'src/scenes/UIScene.ts',
   'src/ui/SocialHub.ts',
+  'src/ui/FounderBadge.ts',
   'src/legal/LegalOverlay.ts',
 ];
 

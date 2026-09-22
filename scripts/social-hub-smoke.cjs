@@ -47,6 +47,28 @@ const DAILY_TICKET = {
   campaignVersion: 2,
 };
 
+const PROFILE_RESPONSE = {
+  ok: true,
+  profile: {
+    profileVersion: 1,
+    createdAt: 1_000,
+    updatedAt: 1_000,
+    preferences: {},
+    records: {
+      bestSurvivalMs: 0,
+      bestBoss1ClearMs: 0,
+      bestCampaignClearMs: 0,
+      bestKills: 0,
+      bestLevel: 0,
+      runs: 0,
+      totalKills: 0,
+      achievements: [],
+      migrated: false,
+    },
+    inventory: { schemaVersion: 1, items: {} },
+  },
+};
+
 function pathKey(url) {
   const u = new URL(url);
   return u.pathname + u.search;
@@ -73,6 +95,14 @@ async function boot(browser, size, options = {}) {
     const url = new URL(req.url());
     if (url.pathname.endsWith('/api/event')) {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+      return;
+    }
+    if (url.pathname.endsWith('/api/profile')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(PROFILE_RESPONSE),
+      });
       return;
     }
     let body = null;
