@@ -227,7 +227,7 @@ try {
   );
   const blockedHazard = hazardDirector.update(
     {
-      nowMs: 5_500,
+      nowMs: 5_700,
       enabled: true,
       canSchedule: false,
       originX: 100,
@@ -239,7 +239,7 @@ try {
   assert(blockedHazard.length === 0, 'Cardiac hazard ignored heartbeat scheduling gate');
   const telegraphEvents = hazardDirector.update(
     {
-      nowMs: 5_600,
+      nowMs: 5_800,
       enabled: true,
       canSchedule: true,
       originX: 100,
