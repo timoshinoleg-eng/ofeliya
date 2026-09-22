@@ -74,6 +74,7 @@ assert.ok(
   'runtime/score targets must precede the frontend build stage for legacy Docker builders'
 );
 assert.match(nginx, /location = \/runtime-config\.js[\s\S]*no-store/, 'runtime config must be no-store');
+assert.match(nginx, /location = \/release\.json[\s\S]*no-store/, 'public release identity must be no-store');
 assert.match(runtimeConfig, /ofeliya-__OFELIYA_RELEASE__/, 'runtime config must be release-stamped after build');
 assert.doesNotMatch(runtimeConfig, /location\\.(?:replace|assign|reload)/, 'runtime config must not trigger a second document navigation');
 assert.match(serviceWorker, /ofeliya-__OFELIYA_RELEASE__/, 'service worker cache must be release-stamped after build');
