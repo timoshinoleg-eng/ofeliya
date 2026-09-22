@@ -1,4 +1,4 @@
-import { buildTelegramStartLink } from './TelegramLinks';
+import { buildTelegramStartLink, resolveTelegramBotName } from './TelegramLinks';
 import {
   type HapticStyle,
   type NotifyType,
@@ -58,7 +58,7 @@ export class TelegramPlatform implements PlatformAdapter {
   }
 
   get available(): boolean {
-    return !!this.wa;
+    return !!this.wa?.initData;
   }
 
   get platform(): string {
@@ -88,7 +88,10 @@ export class TelegramPlatform implements PlatformAdapter {
   buildStartLink(payload: string): string | null {
     return buildTelegramStartLink(
       payload,
-      String(import.meta.env.VITE_TELEGRAM_BOT_NAME ?? ''),
+      resolveTelegramBotName({
+        VITE_TG_BOT_USERNAME: import.meta.env.VITE_TG_BOT_USERNAME,
+        VITE_TELEGRAM_BOT_NAME: import.meta.env.VITE_TELEGRAM_BOT_NAME,
+      }),
       String(import.meta.env.VITE_TELEGRAM_APP_SHORT_NAME ?? '')
     );
   }
