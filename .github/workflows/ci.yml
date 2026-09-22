@@ -143,6 +143,9 @@ jobs:
       - name: Codex and mastery browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/codex-smoke.cjs
 
+      - name: Social hub browser smoke
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:social-hub
+
       - name: MAX compact viewport matrix
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/mobile-layout-matrix.cjs
 
