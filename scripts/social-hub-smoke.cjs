@@ -410,6 +410,98 @@ async function runSkipped(browser) {
   await ctx.close();
 }
 
+async function runDailyLaunch(browser) {
+  const size = { width: 390, height: 740 };
+  const { ctx, page, requests, errors } = await boot(browser, size);
+  await openHub(page);
+  const before = await inspectHub(page, size);
+  if (!before.daily || !before.dailyInteractive) throw new Error('Daily CTA not active before launch');
+
+  await clickNamed(page, 'ofeliya-social-daily-bg');
+  await page.waitForFunction(
+    () => window.__game.scene.isActive('Game') && !window.__game.scene.isActive('Menu'),
+    null,
+    { timeout: 8000 }
+  );
+
+  const state = await page.evaluate(() => ({
+    intent: window.__game.registry.get('dailyIntent') ?? null,
+    ticket: window.__game.registry.get('dailyTicket') ?? null,
+    runSeed: window.__game.registry.get('runSeed') ?? null,
+    runSeedOverride: window.__game.registry.get('runSeedOverride') ?? null,
+    difficulty: window.__game.registry.get('difficultyId') ?? null,
+    duel: window.__game.registry.get('duelChallenge') ?? null,
+    checkpointResume: window.__game.registry.get('runCheckpointResume') ?? null,
+  }));
+
+  const dailyRequests = requests.filter((item) => item.key === '/api/daily/run');
+  if (dailyRequests.length !== 1 || dailyRequests[0].method !== 'POST') {
+    throw new Error('Daily launch request count/method mismatch ' + JSON.stringify(dailyRequests));
+  }
+  if (dailyRequests[0].body?.platform !== 'max' || dailyRequests[0].body?.initData !== INIT_DATA) {
+    throw new Error('Daily launch request identity mismatch');
+  }
+  if (state.intent?.runId !== DAILY_TICKET.runId || state.ticket?.runId !== DAILY_TICKET.runId) {
+    throw new Error('Daily launch registry intent/ticket mismatch ' + JSON.stringify(state));
+  }
+  if (state.runSeed !== DAILY_TICKET.runSeed || state.runSeedOverride !== null) {
+    throw new Error('Daily launch seed handoff mismatch ' + JSON.stringify(state));
+  }
+  if (state.difficulty !== 'standard' || state.duel !== null || state.checkpointResume !== null) {
+    throw new Error('Daily launch runtime mode mismatch ' + JSON.stringify(state));
+  }
+  if (requests.some((item) => item.key === '/api/score')) throw new Error('Daily launch submitted score before result');
+  if (errors.length) throw new Error('pageerror in Daily launch ' + JSON.stringify(errors));
+  await ctx.close();
+}
+
+async function runDailyLaunchState(browser, dailyMode, expectedText, disabledAfter = false) {
+  const size = { width: 390, height: 740 };
+  const { ctx, page, requests, errors } = await boot(browser, size, { dailyMode });
+  await openHub(page);
+  await clickNamed(page, 'ofeliya-social-daily-bg');
+
+  await page.waitForFunction(
+    (text) => {
+      const menu = window.__game.scene.getScene('Menu');
+      const root = menu.children.list.find((obj) => obj?.name === 'ofeliya-social-hub');
+      if (!root) return false;
+      const flatten = (obj) => {
+        const out = [obj];
+        if (Array.isArray(obj?.list)) for (const child of obj.list) out.push(...flatten(child));
+        return out;
+      };
+      return flatten(root).some((obj) => typeof obj?.text === 'string' && obj.text.includes(text));
+    },
+    expectedText,
+    { timeout: 8000 }
+  );
+
+  const contract = await inspectHub(page, size);
+  const dailyRequests = requests.filter((item) => item.key === '/api/daily/run');
+  if (dailyRequests.length !== 1) throw new Error('Daily failure state auto-retried ' + JSON.stringify({ dailyMode, count: dailyRequests.length }));
+  await sleep(450);
+  if (requests.filter((item) => item.key === '/api/daily/run').length !== 1) {
+    throw new Error('Daily failure state retried without user action ' + dailyMode);
+  }
+  const active = await page.evaluate(() => ({
+    menu: window.__game.scene.isActive('Menu'),
+    game: window.__game.scene.isActive('Game'),
+    intent: window.__game.registry.get('dailyIntent') ?? null,
+    ticket: window.__game.registry.get('dailyTicket') ?? null,
+  }));
+  if (!active.menu || active.game || active.intent !== null || active.ticket !== null) {
+    throw new Error('Daily failure state mutated runtime ' + JSON.stringify({ dailyMode, active }));
+  }
+  if (disabledAfter) {
+    if (!contract.disabled || contract.daily) throw new Error('Daily denied state must become disabled');
+  } else if (!contract.daily || !contract.dailyInteractive) {
+    throw new Error('Daily retryable state must expose manual retry ' + dailyMode);
+  }
+  if (errors.length) throw new Error('pageerror in Daily launch state ' + dailyMode + ': ' + JSON.stringify(errors));
+  await ctx.close();
+}
+
 (async () => {
   const browser = await chromium.launch({
     executablePath: chrome,
@@ -423,7 +515,12 @@ async function runSkipped(browser) {
     await runStateCase(browser, 'network', 'НЕТ СОЕДИНЕНИЯ');
     await runHttpRetry(browser);
     await runSkipped(browser);
-    console.log('social hub browser smoke: ok (4 viewports + empty/http/network/skipped + retry + PII)');
+    await runDailyLaunch(browser);
+    await runDailyLaunchState(browser, 'capacity', 'ЗАБЕГ НЕДОСТУПЕН');
+    await runDailyLaunchState(browser, 'denied', 'НУЖЕН ПОДТВЕРЖДЁННЫЙ ВХОД', true);
+    await runDailyLaunchState(browser, 'http', 'СЕРВЕР НЕ ОТВЕТИЛ');
+    await runDailyLaunchState(browser, 'network', 'НЕТ СОЕДИНЕНИЯ');
+    console.log('social hub browser smoke: ok (4 viewports + social states + atomic Daily launch/states + retry + PII)');
   } finally {
     await browser.close();
   }
