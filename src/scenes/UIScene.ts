@@ -13,6 +13,7 @@ import {
 } from '../game/Duel';
 import { COLORS, COMBO, FONT, JUICE, UI_FONT, UI_TEXT, fmtTime } from '../game/config';
 import { BUTTON, SCRIM } from '../ui/tokens';
+import { HUD } from '../ui/hudTokens';
 import { getEvolutionDef } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
 import { Joystick } from '../game/Joystick';
@@ -95,7 +96,7 @@ export class UIScene extends Phaser.Scene {
     const W = this.scale.width;
 
     this.hudBackdrop = this.add
-      .rectangle(W / 2, 50, W - 12, 90, 0x05070f, 0.38)
+      .rectangle(W / 2, 50, W - 12, 90, 0x05070f, HUD.plateAlpha)
       .setDepth(DEPTH - 2);
     this.xpBack = this.add.graphics().setDepth(DEPTH);
     this.xpFill = this.add.graphics().setDepth(DEPTH + 1);
@@ -124,21 +125,31 @@ export class UIScene extends Phaser.Scene {
     this.levelText = text(16, 30, 'МУТАЦИЯ 1', 14, '#ff8fd0', 0)
       .setFontStyle('bold')
       .setShadow(0, 1, '#02030a', 3, true, true);
-    this.killsText = text(W - 16, 30, 'УНИЧТОЖЕНО 0', 14, '#e9fbff', 1)
+    this.killsText = text(W - 16, HUD.row.killsY, 'УНИЧТОЖЕНО 0', 14, '#e9fbff', 1)
       .setFontStyle('bold')
       .setShadow(0, 1, '#02030a', 3, true, true);
-    this.hpText = text(W / 2, 57, '', 11, '#f4fbff')
+    this.hpText = text(W / 2, HUD.row.hpTextY, '', 11, '#f4fbff')
       .setFontStyle('bold')
       .setShadow(0, 1, '#02030a', 3, true, true);
-    this.bossLabel = text(W / 2, 71, IDENTITY.boss, 12, '#ff5472')
+    this.bossLabel = text(W / 2, HUD.row.bossLabelY, IDENTITY.boss, 12, '#ff5472')
       .setFontStyle('bold')
       .setShadow(0, 1, '#02030a', 3, true, true);
     this.muteText = this.add
       .text(W - 16, 54, '♪', { fontFamily: FONT, fontSize: '16px', color: Sfx.muted ? '#5a6480' : '#35e0ff' })
       .setOrigin(1, 0)
       .setResolution(2)
-      .setDepth(DEPTH + 1)
-      .setInteractive({ useHandCursor: true })
+      .setDepth(DEPTH + 1);
+    this.muteText
+      .setInteractive({
+        hitArea: new Phaser.Geom.Rectangle(
+          this.muteText.width - 14,
+          -14,
+          HUD.hit.secondary,
+          HUD.hit.secondaryH
+        ),
+        hitAreaCallback: Phaser.Geom.Rectangle.Contains,
+        useHandCursor: true,
+      })
       .on('pointerup', () => {
         const muted = Sfx.toggle();
         this.muteText.setText('♪').setColor(muted ? '#5a6480' : '#35e0ff');
@@ -148,7 +159,16 @@ export class UIScene extends Phaser.Scene {
       .rectangle(W - 52, 65, 34, 30, 0x141a2e, 0.92)
       .setStrokeStyle(1, COLORS.cyan, 0.72)
       .setDepth(DEPTH + 2)
-      .setInteractive({ useHandCursor: true })
+      .setInteractive({
+        hitArea: new Phaser.Geom.Rectangle(
+          (34 - HUD.hit.primary) / 2,
+          (30 - HUD.hit.primary) / 2,
+          HUD.hit.primary,
+          HUD.hit.primary
+        ),
+        hitAreaCallback: Phaser.Geom.Rectangle.Contains,
+        useHandCursor: true,
+      })
       .on('pointerup', () => this.showPauseMenu());
     this.pauseText = this.add
       .text(W - 52, 65, 'II', {
@@ -215,14 +235,15 @@ export class UIScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
     if (run) {
+      const m = this.hudMetrics(W);
       this.xpBack.clear();
-      this.xpBack.fillStyle(0x1a2136, 0.9);
-      this.xpBack.fillRoundedRect(12, 12, W - 24, 10, 5);
+      this.xpBack.fillStyle(HUD.barBack, 0.9);
+      this.xpBack.fillRoundedRect(m.xpX, HUD.row.xpY, m.xpW, HUD.row.xpH, 5);
       this.xpFill.clear();
       const xf = Phaser.Math.Clamp(run.xp / run.xpNext, 0, 1);
       if (xf > 0) {
         this.xpFill.fillStyle(COLORS.magenta, 1);
-        this.xpFill.fillRoundedRect(12, 12, Math.max((W - 24) * xf, 10), 10, 5);
+        this.xpFill.fillRoundedRect(m.xpX, HUD.row.xpY, Math.max(m.xpW * xf, 10), HUD.row.xpH, 5);
       }
 
       this.timerText.setText(fmtTime(run.timeMs));
@@ -241,16 +262,16 @@ export class UIScene extends Phaser.Scene {
         this.lastCombo = 0;
       }
 
-      const bw = 200;
-      const bx = W / 2 - bw / 2;
+      const bw = m.hpW;
+      const bx = m.hpX;
       this.hpBack.clear();
-      this.hpBack.fillStyle(0x1a2136, 0.9);
-      this.hpBack.fillRoundedRect(bx, 54, bw, 12, 6);
+      this.hpBack.fillStyle(HUD.barBack, 0.9);
+      this.hpBack.fillRoundedRect(bx, HUD.row.hpY, bw, HUD.row.hpH, 6);
       this.hpFill.clear();
       const hf = Phaser.Math.Clamp(run.hp / run.maxHp, 0, 1);
       if (hf > 0) {
-        this.hpFill.fillStyle(hf > 0.35 ? COLORS.green : 0xff5a5a, 1);
-        this.hpFill.fillRoundedRect(bx, 54, Math.max(bw * hf, 10), 12, 6);
+        this.hpFill.fillStyle(hf > 0.35 ? COLORS.green : HUD.lowHp, 1);
+        this.hpFill.fillRoundedRect(bx, HUD.row.hpY, Math.max(bw * hf, 10), HUD.row.hpH, 6);
       }
       this.hpText.setText(`${Math.ceil(Math.max(0, run.hp))} / ${run.maxHp}`);
 
@@ -268,15 +289,15 @@ export class UIScene extends Phaser.Scene {
       if (boss) {
         this.bossLabel.setText(run.bossName);
         this.bossBack.clear();
-        this.bossBack.fillStyle(0x1a2136, 0.9);
-        this.bossBack.fillRoundedRect(W / 2 - 140, 82, 280, 9, 4);
+        this.bossBack.fillStyle(HUD.barBack, 0.9);
+        this.bossBack.fillRoundedRect(m.bossX, HUD.row.bossBarY, m.bossW, HUD.row.bossBarH, 4);
         this.bossFill.clear();
         this.bossFill.fillStyle(COLORS.red, 1);
         this.bossFill.fillRoundedRect(
-          W / 2 - 140,
-          82,
-          Math.max(280 * Phaser.Math.Clamp(run.bossHp / run.bossMax, 0, 1), 8),
-          9,
+          m.bossX,
+          HUD.row.bossBarY,
+          Math.max(m.bossW * Phaser.Math.Clamp(run.bossHp / run.bossMax, 0, 1), 8),
+          HUD.row.bossBarH,
           4
         );
       }
@@ -647,17 +668,44 @@ export class UIScene extends Phaser.Scene {
     }
   }
 
+  /** Single writer for the HUD strip geometry (X + Y) and the HUD type floors. */
   private layout(): void {
     const W = this.scale.width;
-    this.hudBackdrop.setPosition(W / 2, 50).setDisplaySize(W - 12, 90);
-    this.timerText.setX(W / 2);
-    this.levelText.setX(16);
-    this.killsText.setX(W - 16);
-    this.hpText.setX(W / 2);
-    this.bossLabel.setX(W / 2);
-    this.muteText.setX(W - 16);
-    this.pauseHit.setX(W - 52);
-    this.pauseText.setX(W - 52);
+    this.hudBackdrop
+      .setPosition(W / 2, HUD.plate.top + HUD.plate.height / 2)
+      .setDisplaySize(W - 12, HUD.plate.height);
+    this.timerText.setPosition(W / 2, HUD.row.timerY).setFontSize(HUD.type.timer);
+    this.levelText.setPosition(HUD.row.levelX, HUD.row.levelY).setFontSize(HUD.type.level);
+    this.killsText.setPosition(W - HUD.row.killsPadX, HUD.row.killsY).setFontSize(HUD.type.kills);
+    this.hpText.setPosition(W / 2, HUD.row.hpTextY).setFontSize(HUD.type.hp);
+    this.bossLabel.setPosition(W / 2, HUD.row.bossLabelY).setFontSize(HUD.type.boss);
+    this.muteText.setPosition(W - HUD.row.mutePadX, HUD.row.muteY);
+    this.pauseHit.setPosition(W - HUD.pauseVisual.x, HUD.pauseVisual.y);
+    this.pauseText.setPosition(W - HUD.pauseVisual.x, HUD.pauseVisual.y);
+    this.comboText.setPosition(HUD.row.comboX, HUD.row.comboY).setFontSize(HUD.type.combo);
+  }
+
+  private hudMetrics(W: number): {
+    xpX: number;
+    xpW: number;
+    xpH: number;
+    hpX: number;
+    hpW: number;
+    bossX: number;
+    bossW: number;
+  } {
+    const xpW = W - HUD.bar.xpPadX - HUD.bar.xpReserveRight;
+    const hpW = Math.min(W - HUD.bar.hpPad, HUD.bar.hpMaxW);
+    const bossW = Math.min(W - HUD.bar.bossPad, HUD.bar.bossMaxW);
+    return {
+      xpX: HUD.bar.xpPadX,
+      xpW,
+      xpH: HUD.row.xpH,
+      hpX: W / 2 - hpW / 2,
+      hpW,
+      bossX: W / 2 - bossW / 2,
+      bossW,
+    };
   }
 
   private resetControls(): void {
