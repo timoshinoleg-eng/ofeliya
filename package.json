@@ -15,6 +15,7 @@
     "test:checkpoint": "node scripts/check-checkpoint.mjs",
     "test:viewport": "node scripts/check-viewport.mjs",
     "test:language": "node scripts/check-language-copy.mjs",
+    "test:tokens": "node tests/tokens-contract.mjs",
     "test:visual-matrix": "node scripts/release-visual-matrix.cjs",
     "release:check": "node scripts/check-release-config.mjs",
     "build": "tsc --noEmit && vite build",
