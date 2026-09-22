@@ -8,6 +8,7 @@ import {
   type SocialSnapshotDetailed,
   type SocialTopEntry,
 } from '../systems/SocialClient';
+import type { DailyTicketStatus } from '../systems/DailyRunClient';
 
 const MAX_ROWS = 3;
 
@@ -49,10 +50,13 @@ export class SocialHub {
   private readonly panelH: number;
   private closed = false;
   private loadGeneration = 0;
+  private lastDetail: SocialSnapshotDetailed | null = null;
+  private dailyLaunchStatus: DailyTicketStatus | 'idle' | 'loading' = 'idle';
 
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly platform: PlatformAdapter,
+    private readonly onDailyLaunch: () => Promise<DailyTicketStatus>,
     private readonly onDismiss: () => void
   ) {
     const W = scene.scale.width;
@@ -185,7 +189,7 @@ export class SocialHub {
     const todayY = this.panelTop + 70;
     this.sectionTitle(todayY, 'СЕГОДНЯ', 'ofeliya-social-today-title');
     this.addText(left, todayY + 22, 'ЗАГРУЗКА ЛИЧНОГО РЕЗУЛЬТАТА…', compact ? 10 : 11, UI_TEXT.secondary, 'left', width);
-    this.addDisabledDailyButton(todayY + 74);
+    this.addDailyButton(todayY + 74, true);
 
     const seasonY = todayY + 136;
     this.sectionTitle(seasonY, 'СЕЗОН', 'ofeliya-social-season-title');
@@ -196,24 +200,119 @@ export class SocialHub {
     this.addText(left, friendsY + 22, 'ЗАГРУЗКА СВЯЗЕЙ…', compact ? 10 : 11, UI_TEXT.secondary, 'left', width);
   }
 
-  private addDisabledDailyButton(y: number): void {
+  private canLaunchDaily(): boolean {
+    return (
+      (this.platform.kind === 'max' || this.platform.kind === 'telegram') &&
+      Boolean(this.platform.initData)
+    );
+  }
+
+  private dailyButtonState(loadingView: boolean): {
+    label: string;
+    enabled: boolean;
+    color: string;
+    fill: number;
+    stroke: number;
+  } {
+    if (loadingView || this.dailyLaunchStatus === 'loading') {
+      return {
+        label: 'ПОЛУЧАЕМ ЕЖЕДНЕВНЫЙ ЗАБЕГ…',
+        enabled: false,
+        color: '#a99eac',
+        fill: 0x1a1520,
+        stroke: COLORS.stroke,
+      };
+    }
+    if (!this.canLaunchDaily() || this.dailyLaunchStatus === 'unavailable') {
+      return {
+        label: 'НУЖЕН ВХОД ЧЕРЕЗ MAX ИЛИ TG',
+        enabled: false,
+        color: '#a99eac',
+        fill: 0x1a1520,
+        stroke: COLORS.stroke,
+      };
+    }
+    if (this.dailyLaunchStatus === 'denied') {
+      return {
+        label: 'НУЖЕН ПОДТВЕРЖДЁННЫЙ ВХОД',
+        enabled: false,
+        color: '#ffb095',
+        fill: 0x1a1520,
+        stroke: COLORS.stroke,
+      };
+    }
+    if (this.dailyLaunchStatus === 'capacity') {
+      return {
+        label: 'ЗАБЕГ НЕДОСТУПЕН · ПОВТОРИТЬ',
+        enabled: true,
+        color: '#ffe7a6',
+        fill: 0x292115,
+        stroke: COLORS.gold,
+      };
+    }
+    if (this.dailyLaunchStatus === 'http') {
+      return {
+        label: 'СЕРВЕР НЕ ОТВЕТИЛ · ПОВТОРИТЬ',
+        enabled: true,
+        color: '#ffcfb8',
+        fill: 0x291817,
+        stroke: 0xff8f66,
+      };
+    }
+    if (this.dailyLaunchStatus === 'network') {
+      return {
+        label: 'НЕТ СОЕДИНЕНИЯ · ПОВТОРИТЬ',
+        enabled: true,
+        color: '#ffcfb8',
+        fill: 0x291817,
+        stroke: 0xff8f66,
+      };
+    }
+    return {
+      label: 'НАЧАТЬ ЕЖЕДНЕВНЫЙ ЗАБЕГ',
+      enabled: true,
+      color: '#c9f6ff',
+      fill: 0x14212a,
+      stroke: COLORS.cyan,
+    };
+  }
+
+  private addDailyButton(y: number, loadingView = false): void {
     const W = this.scene.scale.width;
     const buttonW = Math.min(this.panelW - 34, 310);
+    const state = this.dailyButtonState(loadingView);
     const bg = this.scene.add
-      .rectangle(W / 2, y, buttonW, 44, 0x1a1520, 0.94)
-      .setStrokeStyle(1, COLORS.stroke, 0.72)
-      .setName('ofeliya-social-daily-disabled');
+      .rectangle(W / 2, y, buttonW, 44, state.fill, 0.97)
+      .setStrokeStyle(state.enabled ? 1.5 : 1, state.stroke, state.enabled ? 0.84 : 0.72)
+      .setName(state.enabled ? 'ofeliya-social-daily-bg' : 'ofeliya-social-daily-disabled');
+    if (state.enabled) {
+      bg.setInteractive({ useHandCursor: true }).on('pointerup', () => {
+        void this.startDaily();
+      });
+    }
     const label = this.scene.add
-      .text(W / 2, y, 'ЕЖЕДНЕВНЫЙ ЗАБЕГ · ПОКА НЕДОСТУПЕН', {
+      .text(W / 2, y, state.label, {
         fontFamily: FONT,
         fontSize: this.scene.scale.height < 650 ? '10px' : '11px',
         fontStyle: 'bold',
-        color: '#a99eac',
+        color: state.color,
       })
       .setOrigin(0.5)
       .setResolution(2)
       .setName('ofeliya-social-daily-label');
     this.body.add([bg, label]);
+  }
+
+  private async startDaily(): Promise<void> {
+    if (this.closed || this.dailyLaunchStatus === 'loading' || !this.canLaunchDaily()) return;
+    this.platform.haptic('medium');
+    this.dailyLaunchStatus = 'loading';
+    if (this.lastDetail) this.render(this.lastDetail);
+    const status = await this.onDailyLaunch();
+    if (this.closed) return;
+    if (status === 'ok') return;
+    this.dailyLaunchStatus = status;
+    if (this.lastDetail) this.render(this.lastDetail);
   }
 
   private channelLine(status: RemoteStatus, empty: string, skipped: string): string {
@@ -225,6 +324,7 @@ export class SocialHub {
   }
 
   private render(detail: SocialSnapshotDetailed): void {
+    this.lastDetail = detail;
     this.body.removeAll(true);
     const compact = this.scene.scale.height < 650;
     const left = this.panelLeft + 17;
@@ -252,7 +352,7 @@ export class SocialHub {
         );
     }
     this.addText(left, todayY + 22, dailyLine, bodySize, dailyError ? '#ffb095' : UI_TEXT.primary, 'left', width, 'ofeliya-social-today-status');
-    this.addDisabledDailyButton(todayY + 74);
+    this.addDailyButton(todayY + 74);
 
     const seasonY = todayY + 136;
     const seasonTitle =
