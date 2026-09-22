@@ -24,6 +24,11 @@ import {
   heartSafePocketProfile,
 } from '../game/HeartPacing';
 import {
+  CardiacLineHazardDirector,
+  pointInsideCardiacLineHazard,
+  type CardiacLineHazardSpec,
+} from '../game/CardiacLineHazard';
+import {
   getDifficultyProfile,
   heartbeatProfileForDifficulty,
   pickEliteModifier,
@@ -138,6 +143,13 @@ export class GameScene extends Phaser.Scene {
   private audio!: AdaptiveAudioDirector;
   private audioAccMs = 0;
   private heartbeatPulse!: HeartbeatPulseDirector;
+  private cardiacHazard = new CardiacLineHazardDirector();
+  private cardiacHazardRng!: RunRng;
+  private cardiacHazardVisual: {
+    serial: number;
+    warning: Phaser.GameObjects.Rectangle;
+    beam: Phaser.GameObjects.Rectangle;
+  } | null = null;
   private impact = new ImpactDirector();
   private zeroPointNextAt = 0;
   private zeroPointUntil = 0;
@@ -200,6 +212,11 @@ export class GameScene extends Phaser.Scene {
     this.runSeed = this.gameplayRng.seed;
     this.registry.set('runSeed', this.runSeed);
     this.registry.remove('runSeedOverride');
+    // Separate seeded RNG: the phase-two boss hazard must never shift checkpointed gameplay streams.
+    // Boss phases are not resumable checkpoints, so this director can reset safely with the scene.
+    this.cardiacHazardRng = new RunRng(`${this.runSeed}-cardiac-hazard`);
+    this.cardiacHazard.reset();
+    this.cardiacHazardVisual = null;
 
     this.controlMode =
       resume?.controlMode ??
@@ -393,6 +410,8 @@ export class GameScene extends Phaser.Scene {
       this.stageTransition = null;
       this.bossDefeatCeremony = null;
       this.introHint = null;
+      this.cardiacHazard.reset();
+      this.cardiacHazardVisual = null;
       this.transitionGeneration += 1;
       // Audio is not a Phaser subsystem, so it is safe (and required) to release it here:
       // every restart path must not leak the bed, layer nodes or the visibility listener.
@@ -496,6 +515,7 @@ export class GameScene extends Phaser.Scene {
     this.updateAdaptiveAudio(delta);
     this.updateHeartbeatSignature(stage, st.timeMs);
     this.wave.update(delta);
+    this.updateCardiacLineHazard(time);
     this.hostCells.update(time, delta, st.timeMs);
     this.atmosphere.update(time, delta, st.timeMs, stage.durationMs);
 
@@ -1172,6 +1192,7 @@ export class GameScene extends Phaser.Scene {
   private resetStageWorld(nextStage: StageDefinition): void {
     this.milestones.reset();
     this.hostCells.resetStage();
+    this.resetCardiacLineHazard();
     this.wave.boss = null;
 
     for (const enemy of this.enemies.getChildren() as Enemy[]) {
@@ -1385,6 +1406,7 @@ export class GameScene extends Phaser.Scene {
   finish(win: boolean, reason: RunEndReason = win ? 'campaign-complete' : 'defeat'): void {
     if (this.registry.get('runResult')) return;
     if (this.stageDirector.phase !== 'RUN_ENDED') this.stageDirector.endRun(reason);
+    this.resetCardiacLineHazard();
     RunCheckpoint.clear();
     this.runState.captureStageBuild();
     const run = this.runState.run;
