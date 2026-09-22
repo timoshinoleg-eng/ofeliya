@@ -587,6 +587,120 @@ await ok('топ: лучший результат на юзера + более �
   assert.ok(top.top.every((row) => !Object.hasOwn(row, 'uid')));
 });
 
+await ok('Daily V2: сервер выдаёт identity-bound ticket и переиспользует незакрытый', async () => {
+  const auth = {
+    platform: 'telegram',
+    initData: signInitData(ALICE, TG_TOKEN),
+  };
+  const firstResponse = await fetch(`${BASE}/api/daily/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(auth),
+  });
+  assert.equal(firstResponse.status, 201);
+  const first = await j(firstResponse);
+  assert.equal(first.ok, true);
+  assert.equal(first.reused, false);
+  assert.equal(first.ticket.difficultyId, 'standard');
+  assert.equal(first.ticket.rulesetVersion, 2);
+  assert.equal(first.ticket.campaignVersion, 2);
+  assert.match(first.ticket.runId, /^[A-Za-z0-9_-]{16,32}$/);
+  assert.match(first.ticket.runSeed, /^[a-f0-9]{16}$/);
+
+  const secondResponse = await fetch(`${BASE}/api/daily/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(auth),
+  });
+  assert.equal(secondResponse.status, 200);
+  const second = await j(secondResponse);
+  assert.equal(second.reused, true);
+  assert.equal(second.ticket.runId, first.ticket.runId);
+  assert.equal(second.ticket.runSeed, first.ticket.runSeed);
+
+  const scoreResponse = await fetch(`${BASE}/api/score`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...auth,
+      payload: {
+        ...campaignPayload({ seed: first.ticket.runSeed, timeMs: 600_000 }),
+        daily: true,
+        dailyRunId: first.ticket.runId,
+        dateKey: '1999-01-01',
+      },
+    }),
+  });
+  assert.equal(scoreResponse.status, 200);
+  const scored = await j(scoreResponse);
+  assert.equal(scored.ok, true);
+  assert.equal(scored.dailyRunAccepted, true);
+
+  const duplicate = await fetch(`${BASE}/api/score`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...auth,
+      payload: {
+        ...campaignPayload({ seed: first.ticket.runSeed, timeMs: 601_000 }),
+        daily: true,
+        dailyRunId: first.ticket.runId,
+      },
+    }),
+  });
+  assert.equal(duplicate.status, 409);
+
+  const next = await j(await fetch(`${BASE}/api/daily/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(auth),
+  }));
+  assert.notEqual(next.ticket.runId, first.ticket.runId);
+  assert.equal(next.ticket.runSeed, first.ticket.runSeed);
+});
+
+await ok('Daily V2: ticket нельзя использовать другой identity или seed', async () => {
+  const aliceAuth = {
+    platform: 'telegram',
+    initData: signInitData(ALICE, TG_TOKEN),
+  };
+  const ticketBody = await j(await fetch(`${BASE}/api/daily/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(aliceAuth),
+  }));
+  const ticket = ticketBody.ticket;
+
+  const wrongOwner = await fetch(`${BASE}/api/score`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform: 'telegram',
+      initData: signInitData(BOB, TG_TOKEN),
+      payload: {
+        ...campaignPayload({ seed: ticket.runSeed, timeMs: 600_000 }),
+        daily: true,
+        dailyRunId: ticket.runId,
+      },
+    }),
+  });
+  assert.equal(wrongOwner.status, 403);
+
+  const wrongSeed = await fetch(`${BASE}/api/score`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...aliceAuth,
+      payload: {
+        ...campaignPayload({ seed: 'wrong-daily-seed', timeMs: 600_000 }),
+        daily: true,
+        dailyRunId: ticket.runId,
+      },
+    }),
+  });
+  assert.equal(wrongSeed.status, 422);
+});
+
 await ok('top daily: только daily-результаты сегодня', async () => {
   await j(await fetch(`${BASE}/api/score`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
