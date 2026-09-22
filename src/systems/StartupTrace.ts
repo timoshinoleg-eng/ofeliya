@@ -127,6 +127,7 @@ class StartupTraceImpl {
 
   constructor() {
     this.setMeta('redirectCount', this.earlyState?.redirectCount ?? 0);
+    this.setMeta('release', this.earlyState?.release ?? 'unknown');
     this.setMeta('swControlledAtModule', Boolean(navigator.serviceWorker?.controller));
     this.setMeta('visibilityAtModule', document.visibilityState);
     this.setMeta('devicePixelRatio', roundMs(window.devicePixelRatio || 1));
