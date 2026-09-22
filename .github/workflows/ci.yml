@@ -50,6 +50,9 @@ jobs:
       - name: Telegram share contract smoke
         run: npm run test:telegram-share
 
+      - name: Telegram runtime contract smoke
+        run: npm run test:telegram-runtime
+
       - name: Social client contract smoke
         run: npm run test:social
 
@@ -115,6 +118,9 @@ jobs:
 
       - name: Stalled MAX viewport startup smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/startup-viewport-smoke.cjs
+
+      - name: Telegram bridge runtime browser smoke
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/telegram-runtime-smoke.cjs
 
       - name: MAX viewport challenge and legal browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/browser-smoke.cjs
