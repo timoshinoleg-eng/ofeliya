@@ -26,8 +26,10 @@ import { ensureCinematicTextures } from '../game/CinematicTextures';
 import { clearDailyIntent, launchDailyRun } from '../game/DailyRunIntent';
 import { showLegalOverlay } from '../legal/LegalOverlay';
 import { SocialHub } from '../ui/SocialHub';
+import { FOUNDER_BADGE_LABEL, hasFounderBadge } from '../ui/FounderBadge';
 import { PlatformBridge } from '../platform';
 import { SaveSystem } from '../systems/SaveSystem';
+import { fetchServerProfile } from '../systems/ProfileClient';
 import { RunCheckpoint } from '../systems/RunCheckpoint';
 import { Sfx } from '../systems/Sfx';
 import { StartupTrace } from '../systems/StartupTrace';
@@ -37,6 +39,8 @@ import { loadDuelChallenge, trackDuelEvent } from '../systems/DuelClient';
 export class MenuScene extends Phaser.Scene {
   private codexOverlay: Phaser.GameObjects.Container | null = null;
   private socialHub: SocialHub | null = null;
+  private founderBadge: Phaser.GameObjects.Container | null = null;
+  private profileLoadGeneration = 0;
 
   constructor() {
     super('Menu');
@@ -54,6 +58,9 @@ export class MenuScene extends Phaser.Scene {
     const H = this.scale.height;
     this.codexOverlay = null;
     this.socialHub = null;
+    this.founderBadge?.destroy();
+    this.founderBadge = null;
+    const profileLoadGeneration = ++this.profileLoadGeneration;
     this.cameras.main.setBackgroundColor(COLORS.bg);
     Sfx.stopMusic();
     PlatformBridge.setBackHandler(null);
@@ -172,6 +179,32 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setResolution(2)
       .setDepth(5);
+
+    // Cosmetic meta is fail-closed: only a strictly parsed, signed server profile can
+    // surface the founder entitlement. No local save/registry state can manufacture it.
+    void fetchServerProfile(PlatformBridge).then((profile) => {
+      if (profileLoadGeneration !== this.profileLoadGeneration || !this.sys.isActive()) return;
+      if (!hasFounderBadge(profile)) return;
+
+      const badgeY = H * 0.175;
+      const badgeW = Math.min(W - 48, 156);
+      const badge = this.add.container(0, 0).setDepth(6).setName('ofeliya-menu-founder-badge');
+      const plate = this.add
+        .rectangle(W / 2, badgeY, badgeW, 24, COLORS.bg, 0.86)
+        .setStrokeStyle(1, COLORS.gold, 0.78);
+      const label = this.add
+        .text(W / 2, badgeY, `◆  ${FOUNDER_BADGE_LABEL}`, {
+          fontFamily: FONT,
+          fontSize: H < 650 ? '9px' : '10px',
+          fontStyle: 'bold',
+          color: '#ffe066',
+          letterSpacing: 0.6,
+        })
+        .setOrigin(0.5)
+        .setResolution(2);
+      badge.add([plate, label]);
+      this.founderBadge = badge;
+    });
 
     const hookY = H * 0.43;
     this.add
@@ -736,6 +769,9 @@ export class MenuScene extends Phaser.Scene {
       this.scale.off('resize', this.onResize, this);
       this.socialHub?.destroy();
       this.socialHub = null;
+      this.profileLoadGeneration += 1;
+      this.founderBadge?.destroy();
+      this.founderBadge = null;
       if (diagnosticTapTimer !== null) window.clearTimeout(diagnosticTapTimer);
     });
 
