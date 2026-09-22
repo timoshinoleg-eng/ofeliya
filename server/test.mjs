@@ -893,25 +893,25 @@ await ok('analytics: tampered messenger identity is rejected', async () => {
   assert.equal(response.status, 403);
 });
 
-await ok('analytics: browser anon event accepted, unknown event rejected', async () => {
-  const accepted = await fetch(`${BASE}/api/event`, {
+await ok('analytics: browser and unknown events are rejected', async () => {
+  const browser = await fetch(`${BASE}/api/event`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       platform: 'browser',
       anonId: 'anon-analytics-123456',
       event: 'run_start',
-      props: { difficulty: 'standard', nested: { ignored: true } },
+      props: { difficulty: 'standard' },
     }),
   });
-  assert.equal(accepted.status, 202);
+  assert.equal(browser.status, 400);
 
   const rejected = await fetch(`${BASE}/api/event`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      platform: 'browser',
-      anonId: 'anon-analytics-123456',
+      platform: 'telegram',
+      initData: signInitData(ALICE, TG_TOKEN),
       event: 'arbitrary_event',
       props: {},
     }),
