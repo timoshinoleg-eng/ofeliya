@@ -81,6 +81,7 @@ assert.match(serviceWorker, /ofeliya-__OFELIYA_RELEASE__/, 'service worker cache
 assert.match(releaseStamp, /dist\/release\.json/, 'release stamping must emit a public immutable release identity');
 assert.match(compose, /VITE_RELEASE_SHA:\s*\$\{OFELIYA_RELEASE:\?/, 'production static build must receive the requested release SHA');
 assert.match(dockerfile, /ARG VITE_RELEASE_SHA/, 'Dockerfile must accept the requested release SHA');
+assert.match(dockerfile, /RUN test -n "\$VITE_RELEASE_SHA"/, 'production static build must refuse a missing release SHA');
 assert.match(serviceWorker, /key\.startsWith\(CACHE_PREFIX\)/, 'cache cleanup must be scoped to Ofeliya');
 
 console.log('Strain Zero production release contract: ok');
