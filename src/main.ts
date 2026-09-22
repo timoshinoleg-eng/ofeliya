@@ -131,6 +131,28 @@ function installWebGLRecovery(game: Phaser.Game): void {
   );
 }
 
+function installAppOpenTracking(): void {
+  let sent = false;
+  const tryTrack = (): void => {
+    if (sent) return;
+    if (
+      (PlatformBridge.kind !== 'max' && PlatformBridge.kind !== 'telegram') ||
+      !PlatformBridge.initData
+    ) {
+      return;
+    }
+    sent = true;
+    void trackProductEvent('app_open', PlatformBridge, { release: RELEASE_MARKER });
+  };
+
+  // The MAX bridge is intentionally async. Install the listener before the first viewport wait
+  // so a slow bridge cannot be permanently classified as a generic browser launch.
+  window.addEventListener('ofeliya:max-bridge-ready', tryTrack, { once: true });
+  tryTrack();
+  window.setTimeout(tryTrack, 350);
+  window.setTimeout(tryTrack, 1200);
+}
+
 async function boot(): Promise<void> {
   StartupTrace.mark('boot.start');
   StartupTrace.setMeta('platformInitial', PlatformBridge.kind);
@@ -138,6 +160,7 @@ async function boot(): Promise<void> {
   const host = document.getElementById('game');
   if (!host) throw new Error('Missing #game host');
   document.documentElement.dataset.ofeliyaRelease = RELEASE_MARKER;
+  installAppOpenTracking();
 
   const viewport = new ViewportManager(host);
   viewport.start();
@@ -148,7 +171,6 @@ async function boot(): Promise<void> {
   StartupTrace.setMeta('viewportSourceFirst', host.dataset.viewportSource ?? 'unknown');
   StartupTrace.setMeta('viewportWidthFirst', host.clientWidth);
   StartupTrace.setMeta('viewportHeightFirst', host.clientHeight);
-  void trackProductEvent('app_open', PlatformBridge, { release: RELEASE_MARKER });
 
   await waitForFonts();
 

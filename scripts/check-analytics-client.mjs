@@ -50,10 +50,10 @@ try {
   );
   assert.equal(buildAnalyticsSubmission('app_open', platform('max', '')), null);
 
-  const browser = buildAnalyticsSubmission('app_open', platform('browser'), { release: 'r1' });
-  assert.equal(browser.platform, 'browser');
-  assert.equal(browser.event, 'app_open');
-  assert.match(browser.anonId, /^anon-/);
+  assert.equal(
+    buildAnalyticsSubmission('app_open', platform('browser'), { release: 'r1' }),
+    null
+  );
 
   console.log('analytics client contract: ok');
 } finally {
