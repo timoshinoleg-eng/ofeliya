@@ -85,6 +85,7 @@ try {
   const {
     CARDIAC_LINE_HAZARD,
     CardiacLineHazardDirector,
+    canScheduleCardiacLineHazardBeforeHeartbeat,
     pointInsideCardiacLineHazard,
   } = require(join(temp, 'game/CardiacLineHazard.js'));
   const {
@@ -196,6 +197,26 @@ try {
   assert(
     CARDIAC_LINE_HAZARD.damage > 0 && CARDIAC_LINE_HAZARD.damage < PLAYER.hp * 0.2,
     'CARDIAC TITAN line hazard left the bounded chip-damage band'
+  );
+
+  const heartbeatReservedMs =
+    CARDIAC_LINE_HAZARD.telegraphMs +
+    CARDIAC_LINE_HAZARD.activeMs +
+    HEARTBEAT_PULSE_PROFILE.telegraphLeadMs +
+    CARDIAC_LINE_HAZARD.scheduleGuardMs;
+  assert(
+    !canScheduleCardiacLineHazardBeforeHeartbeat(
+      heartbeatReservedMs,
+      HEARTBEAT_PULSE_PROFILE.telegraphLeadMs
+    ),
+    'CARDIAC TITAN upcoming heartbeat telegraph guard failed at boundary'
+  );
+  assert(
+    canScheduleCardiacLineHazardBeforeHeartbeat(
+      heartbeatReservedMs + 1,
+      HEARTBEAT_PULSE_PROFILE.telegraphLeadMs
+    ),
+    'CARDIAC TITAN hazard cannot schedule after a safe heartbeat gap'
   );
 
   const hazardDirector = new CardiacLineHazardDirector();
