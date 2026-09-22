@@ -1,3 +1,10 @@
+export function resolveTelegramBotName(env: {
+  VITE_TG_BOT_USERNAME?: string;
+  VITE_TELEGRAM_BOT_NAME?: string;
+}): string {
+  return String(env.VITE_TG_BOT_USERNAME || env.VITE_TELEGRAM_BOT_NAME || '').trim();
+}
+
 const TELEGRAM_BOT_NAME_RE = /^[A-Za-z0-9_]{1,64}$/;
 const TELEGRAM_APP_SHORT_NAME_RE = /^[A-Za-z0-9_]{1,64}$/;
 
