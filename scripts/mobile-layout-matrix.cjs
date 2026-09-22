@@ -90,7 +90,18 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       const codex = visible.find((obj) => obj.text.startsWith('КОДЕКС '));
       const legal = visible.find((obj) => obj.text === 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА');
       const tagline = visible.find((obj) => obj.text === 'Двигай штамм · собирай РНК · выбирай мутации');
-      const boundsOf = (obj) => obj?.getBounds?.() ?? null;
+      const boundsOf = (obj) => {
+        const bounds = obj?.getBounds?.();
+        if (!bounds) return null;
+        return {
+          left: bounds.left,
+          right: bounds.right,
+          top: bounds.top,
+          bottom: bounds.bottom,
+          width: bounds.width,
+          height: bounds.height,
+        };
+      };
       const utility = {
         sound: boundsOf(sound),
         social: boundsOf(social),
