@@ -7,6 +7,7 @@ import { UIScene } from './scenes/UIScene';
 import { installMobileLayoutGuard } from './ui/MobileLayoutGuard';
 import { PlatformBridge } from './platform';
 import { StartupTrace } from './systems/StartupTrace';
+import { trackProductEvent } from './systems/AnalyticsClient';
 
 declare global {
   interface Window {
@@ -147,6 +148,7 @@ async function boot(): Promise<void> {
   StartupTrace.setMeta('viewportSourceFirst', host.dataset.viewportSource ?? 'unknown');
   StartupTrace.setMeta('viewportWidthFirst', host.clientWidth);
   StartupTrace.setMeta('viewportHeightFirst', host.clientHeight);
+  void trackProductEvent('app_open', PlatformBridge, { release: RELEASE_MARKER });
 
   await waitForFonts();
 

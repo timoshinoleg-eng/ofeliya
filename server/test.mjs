@@ -747,6 +747,64 @@ await ok('vk: подделанный web_app_t → unverified (фолбэк на
   assert.ok(shadow.top.every((row) => !Object.hasOwn(row, 'uid')));
 });
 
+await ok('analytics: signed Telegram event is accepted and counted', async () => {
+  const response = await fetch(`${BASE}/api/event`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform: 'telegram',
+      initData: signInitData(ALICE, TG_TOKEN),
+      event: 'app_open',
+      props: { release: 'test', noisy: 'x'.repeat(120) },
+    }),
+  });
+  assert.equal(response.status, 202);
+  const body = await j(response);
+  assert.equal(body.ok, true);
+  const health = await j(await fetch(`${BASE}/health`));
+  assert.ok(health.analyticsEvents >= 1);
+});
+
+await ok('analytics: tampered messenger identity is rejected', async () => {
+  const response = await fetch(`${BASE}/api/event`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform: 'telegram',
+      initData: signInitData(ALICE, 'WRONG:TOKEN'),
+      event: 'app_open',
+      props: {},
+    }),
+  });
+  assert.equal(response.status, 403);
+});
+
+await ok('analytics: browser anon event accepted, unknown event rejected', async () => {
+  const accepted = await fetch(`${BASE}/api/event`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform: 'browser',
+      anonId: 'anon-analytics-123456',
+      event: 'run_start',
+      props: { difficulty: 'standard', nested: { ignored: true } },
+    }),
+  });
+  assert.equal(accepted.status, 202);
+
+  const rejected = await fetch(`${BASE}/api/event`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform: 'browser',
+      anonId: 'anon-analytics-123456',
+      event: 'arbitrary_event',
+      props: {},
+    }),
+  });
+  assert.equal(rejected.status, 400);
+});
+
 const { parseStartParam } = await import('./bot.mjs');
 await ok('бот: parseStartParam — deep-link ref_<uid>', async () => {
   assert.equal(parseStartParam('/start ref_m_12345'), 'ref_m_12345');
