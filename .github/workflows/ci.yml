@@ -71,6 +71,9 @@ jobs:
       - name: Viewport math smoke
         run: npm run test:viewport
 
+      - name: UI token contract
+        run: npm run test:tokens
+
       - name: Startup renderer contract
         run: node tests/startup-renderer-contract.mjs
 
