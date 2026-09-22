@@ -59,6 +59,11 @@ async function boot(browser, size, options = {}) {
   let batch = 0;
   await ctx.route('**/api/**', async (route) => {
     const req = route.request();
+    const url = new URL(req.url());
+    if (url.pathname.endsWith('/api/event')) {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+      return;
+    }
     requests.push({ method: req.method(), key: pathKey(req.url()) });
     if (options.mode === 'network') {
       await route.abort('failed');
