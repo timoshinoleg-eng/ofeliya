@@ -192,13 +192,86 @@ export async function submitRunScore(
   return postScoreSubmission(submission);
 }
 
+/**
+ * Client-visible daily submission outcome, derived ONLY from the HTTP status code the
+ * server already returns plus `dailyRunAccepted`. No DTO change, no server change.
+ */
+export type DailySubmitStatus =
+  | 'ok'
+  | 'rejected'
+  | 'closed'
+  | 'expired'
+  | 'denied'
+  | 'http'
+  | 'network'
+  | 'unavailable';
+
+/**
+ * Additive daily submission entry point. Reports WHY a daily score was not accepted so
+ * the result screen can render a specific status line without falling back to the
+ * ordinary ranked path.
+ */
+export async function submitDailyRunScoreDetailed(
+  result: RunResult,
+  platform: PlatformAdapter,
+  ticket: DailyRunTicket
+): Promise<{ response: ScoreSubmitResponse | null; status: DailySubmitStatus }> {
+  const submission = buildDailyScoreSubmission(result, platform, ticket);
+  // Precondition unmet (resumed / seed mismatch / no messenger identity): no request at all.
+  if (!submission) return { response: null, status: 'unavailable' };
+
+  const controller = new AbortController();
+  const timer = globalThis.setTimeout(() => controller.abort(), SCORE_TIMEOUT_MS);
+  try {
+    const response = await fetch(scoreEndpoint(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(submission),
+      signal: controller.signal,
+      credentials: 'same-origin',
+    });
+    if (response.status === 403) return { response: null, status: 'denied' };
+    if (response.status === 409) return { response: null, status: 'closed' };
+    if (response.status === 410) return { response: null, status: 'expired' };
+    if (response.status === 422) return { response: null, status: 'rejected' };
+    if (!response.ok) return { response: null, status: 'http' };
+    let body: Partial<ScoreSubmitResponse>;
+    try {
+      body = (await response.json()) as Partial<ScoreSubmitResponse>;
+    } catch {
+      return { response: null, status: 'http' };
+    }
+    if (
+      body.ok !== true ||
+      typeof body.ranked !== 'boolean' ||
+      typeof body.rulesetVersion !== 'number' ||
+      typeof body.campaignVersion !== 'number'
+    ) {
+      return { response: null, status: 'http' };
+    }
+    const normalized: ScoreSubmitResponse = {
+      ok: true,
+      rank: typeof body.rank === 'number' ? body.rank : null,
+      ranked: body.ranked,
+      rulesetVersion: body.rulesetVersion,
+      campaignVersion: body.campaignVersion,
+      dailyRunAccepted:
+        typeof body.dailyRunAccepted === 'boolean' ? body.dailyRunAccepted : undefined,
+    };
+    if (normalized.dailyRunAccepted !== true) return { response: null, status: 'rejected' };
+    return { response: normalized, status: 'ok' };
+  } catch {
+    return { response: null, status: 'network' };
+  } finally {
+    globalThis.clearTimeout(timer);
+  }
+}
+
 export async function submitDailyRunScore(
   result: RunResult,
   platform: PlatformAdapter,
   ticket: DailyRunTicket
 ): Promise<ScoreSubmitResponse | null> {
-  const submission = buildDailyScoreSubmission(result, platform, ticket);
-  if (!submission) return null;
-  const response = await postScoreSubmission(submission);
-  return response?.dailyRunAccepted === true ? response : null;
+  const { response, status } = await submitDailyRunScoreDetailed(result, platform, ticket);
+  return status === 'ok' ? response : null;
 }

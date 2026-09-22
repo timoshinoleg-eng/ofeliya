@@ -33,8 +33,10 @@ import {
 import { PlatformBridge } from '../platform';
 import { Sfx } from '../systems/Sfx';
 import { VideoInterstitial, type VideoInterstitialId } from '../systems/VideoInterstitial';
-import { submitRunScore } from '../systems/ScoreClient';
+import { submitDailyRunScoreDetailed, submitRunScore, type DailySubmitStatus } from '../systems/ScoreClient';
 import { createFixedSeedDuel, submitDuelAttempt, trackDuelEvent } from '../systems/DuelClient';
+import { clearDailyIntent, readDailyIntent, resolveDailyResultBranch } from '../game/DailyRunIntent';
+import type { DailyRunTicket } from '../systems/DailyRunClient';
 import type { GameScene } from './GameScene';
 
 const DEPTH = 50;
@@ -1432,11 +1434,61 @@ export class UIScene extends Phaser.Scene {
     if (!playing) renderOnce();
   }
 
+  private renderDailySubmitStatus(
+    status: DailySubmitStatus,
+    scoreStatus: Phaser.GameObjects.Text,
+    rank: number | null
+  ): void {
+    switch (status) {
+      case 'ok':
+        scoreStatus
+          .setText(
+            rank
+              ? `ЕЖЕДНЕВНЫЙ ЗАБЕГ · #${rank} СРЕДИ ИГРОКОВ СЕГОДНЯ`
+              : 'ЕЖЕДНЕВНЫЙ ЗАБЕГ · РЕЗУЛЬТАТ СОХРАНЁН'
+          )
+          .setColor('#8fe8ff');
+        break;
+      case 'rejected':
+        scoreStatus.setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · РЕЗУЛЬТАТ НЕ СИНХРОНИЗИРОВАН').setColor('#ff9b66');
+        break;
+      case 'closed':
+        scoreStatus.setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · ОКНО РЕЗУЛЬТАТА ЗАКРЫТО').setColor('#ff9b66');
+        break;
+      case 'expired':
+        scoreStatus.setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · ВРЕМЯ РЕЗУЛЬТАТА ИСТЕКЛО').setColor('#ff9b66');
+        break;
+      case 'denied':
+        scoreStatus.setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · НУЖЕН ПОДТВЕРЖДЁННЫЙ ЗАПУСК').setColor('#ff9b66');
+        break;
+      case 'http':
+        scoreStatus.setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · СЕРВИС НЕДОСТУПЕН').setColor('#8f9ab7');
+        break;
+      case 'network':
+        scoreStatus.setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · ПРОВЕРЬТЕ СОЕДИНЕНИЕ').setColor('#8f9ab7');
+        break;
+      case 'unavailable':
+        scoreStatus.setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · НУЖНА ИДЕНТИЧНОСТЬ МЕССЕНДЖЕРА').setColor('#8f9ab7');
+        break;
+    }
+  }
+
   private renderGameOver(res: RunResult): void {
     this.uiBlocked = true;
     const duelChallenge = this.registry.get('duelChallenge') as DuelChallengeSnapshot | null | undefined;
+    const dailyIntent = readDailyIntent(this.registry);
+    const dailyTicket =
+      (this.registry.get('dailyTicket') as DailyRunTicket | null | undefined) ?? null;
+    const dailyBranch = resolveDailyResultBranch({
+      resumed: res.resumed,
+      dailyIntent,
+      ticket: dailyTicket,
+      runSeed: res.runSeed,
+      now: Date.now(),
+    });
     const standardFresh = res.difficultyId === 'standard' && !res.resumed;
-    const ranked = standardFresh && !duelChallenge;
+    // A daily-launched run must never render global-ranking semantics.
+    const ranked = standardFresh && !duelChallenge && dailyIntent === null;
     const duelCreatable = standardFresh && res.win;
     const W = this.scale.width;
     const H = this.scale.height;
@@ -1569,11 +1621,13 @@ export class UIScene extends Phaser.Scene {
           detailY,
           res.resumed
             ? `РЕЖИМ: ${res.difficultyId === 'standard' ? 'СТАНДАРТ' : 'НАПРЯЖЕНИЕ'} · ВОЗОБНОВЛЁН · ВНЕ РЕЙТИНГА`
-            : duelChallenge
-              ? 'РЕЖИМ: ДУЭЛЬ · СТАНДАРТ · ВНЕ РЕЙТИНГА'
-              : ranked
-                ? 'РЕЖИМ: СТАНДАРТ · рейтинговый'
-                : 'РЕЖИМ: НАПРЯЖЕНИЕ · вне рейтинга',
+            : dailyIntent
+              ? 'РЕЖИМ: СТАНДАРТ · ежедневный забег'
+              : duelChallenge
+                ? 'РЕЖИМ: ДУЭЛЬ · СТАНДАРТ · ВНЕ РЕЙТИНГА'
+                : ranked
+                  ? 'РЕЖИМ: СТАНДАРТ · рейтинговый'
+                  : 'РЕЖИМ: НАПРЯЖЕНИЕ · вне рейтинга',
           {
             fontFamily: FONT,
             fontSize: compact ? '9px' : '10px',
@@ -1598,8 +1652,23 @@ export class UIScene extends Phaser.Scene {
       .setResolution(2);
     c.add(scoreStatus);
 
-    if (res.resumed) {
+    if (dailyBranch === 'resumed') {
       scoreStatus.setText('ЗАБЕГ ВОЗОБНОВЛЁН · ВНЕ РЕЙТИНГА').setColor('#ffe066');
+    } else if (dailyBranch === 'daily' && dailyTicket) {
+      // Clear the intent before awaiting so a settled daily run can never leak forward.
+      clearDailyIntent(this.registry);
+      void submitDailyRunScoreDetailed(res, PlatformBridge, dailyTicket).then(
+        ({ response, status }) => {
+          if (!scoreStatus.active) return;
+          this.renderDailySubmitStatus(status, scoreStatus, response?.rank ?? null);
+        }
+      );
+    } else if (dailyBranch === 'blocked') {
+      // Fail-closed: a daily intent with a missing/mismatched/expired ticket submits NOTHING.
+      clearDailyIntent(this.registry);
+      scoreStatus
+        .setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · РЕЗУЛЬТАТ НЕ СИНХРОНИЗИРОВАН')
+        .setColor('#ff9b66');
     } else if (duelChallenge) {
       void submitDuelAttempt(duelChallenge.challengeId, res, PlatformBridge).then((attempt) => {
         if (!scoreStatus.active) return;
@@ -1770,11 +1839,13 @@ export class UIScene extends Phaser.Scene {
           : '';
       const modeShare = ranked
         ? ''
-        : duelChallenge
-          ? ' Дуэль · вне глобального рейтинга.'
-          : res.resumed
-            ? ' Возобновлённый забег · вне рейтинга.'
-            : ' Режим: НАПРЯЖЕНИЕ.';
+        : dailyIntent
+          ? ' Ежедневный забег.'
+          : duelChallenge
+            ? ' Дуэль · вне глобального рейтинга.'
+            : res.resumed
+              ? ' Возобновлённый забег · вне рейтинга.'
+              : ' Режим: НАПРЯЖЕНИЕ.';
       const shareText = res.win
         ? `OFELIYA / STRAIN-0 завершила кампанию за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare}${legendaryShare}`.trim()
         : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare}${legendaryShare}`.trim();
