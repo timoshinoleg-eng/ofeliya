@@ -12,6 +12,7 @@ import {
   type DuelChallengeSnapshot,
 } from '../game/Duel';
 import { COLORS, COMBO, FONT, JUICE, UI_FONT, UI_TEXT, fmtTime } from '../game/config';
+import { BUTTON, SCRIM } from '../ui/tokens';
 import { getEvolutionDef } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
 import { Joystick } from '../game/Joystick';
@@ -312,7 +313,7 @@ export class UIScene extends Phaser.Scene {
     const c = this.add.container(0, 0).setDepth(160);
     this.transitionOverlay = c;
 
-    const dim = this.add.rectangle(W / 2, H / 2, W, H, 0x050308, 0.96).setInteractive();
+    const dim = this.add.rectangle(W / 2, H / 2, W, H, SCRIM.transition.color, SCRIM.transition.alpha).setInteractive();
     dim.on('pointerup', onSkip);
     c.add(dim);
 
@@ -692,7 +693,7 @@ export class UIScene extends Phaser.Scene {
     const c = this.add.container(0, 0).setDepth(220);
     this.pauseOverlay = c;
 
-    c.add(this.add.rectangle(W / 2, H / 2, W, H, 0x05070f, 0.9).setInteractive());
+    c.add(this.add.rectangle(W / 2, H / 2, W, H, SCRIM.pause.color, SCRIM.pause.alpha).setInteractive());
     c.add(
       this.add
         .text(W / 2, H * 0.34, 'ПАУЗА', {
@@ -755,7 +756,7 @@ export class UIScene extends Phaser.Scene {
     const c = this.add.container(0, 0).setDepth(100);
     this.modal = c;
 
-    const dim = this.add.rectangle(W / 2, H / 2, W, H, 0x09040a, 0.91).setInteractive();
+    const dim = this.add.rectangle(W / 2, H / 2, W, H, SCRIM.levelUp.color, SCRIM.levelUp.alpha).setInteractive();
     c.add(dim);
 
     const ring = this.add
@@ -1038,7 +1039,7 @@ export class UIScene extends Phaser.Scene {
     const c = this.add.container(0, 0).setDepth(108);
     this.modal = c;
     const dim = this.add
-      .rectangle(W / 2, H / 2, W, H, 0x030208, 0.94)
+      .rectangle(W / 2, H / 2, W, H, SCRIM.legendary.color, SCRIM.legendary.alpha)
       .setInteractive({ useHandCursor: true });
     c.add(dim);
 
@@ -1259,7 +1260,7 @@ export class UIScene extends Phaser.Scene {
 
     const c = this.add.container(0, 0).setDepth(106);
     this.modal = c;
-    c.add(this.add.rectangle(W / 2, H / 2, W, H, 0x03040a, 0.9).setInteractive());
+    c.add(this.add.rectangle(W / 2, H / 2, W, H, SCRIM.evolution.color, SCRIM.evolution.alpha).setInteractive());
 
     const outer = this.add
       .circle(W / 2, H * 0.43, 58)
@@ -1394,7 +1395,7 @@ export class UIScene extends Phaser.Scene {
     const compact = H < 650;
     const c = this.add.container(0, 0).setName('ofeliya-result').setDepth(110);
 
-    c.add(this.add.rectangle(W / 2, H / 2, W, H, 0x05070f, 0.84).setInteractive());
+    c.add(this.add.rectangle(W / 2, H / 2, W, H, SCRIM.result.color, SCRIM.result.alpha).setInteractive());
     if (res.win && this.textures.exists('cinematic-victory')) {
       c.add(
         this.add
@@ -1816,8 +1817,8 @@ export class UIScene extends Phaser.Scene {
     const w = 230;
     const h = 46;
     const bg = this.add
-      .rectangle(x, y, w, h, primary ? COLORS.magenta : COLORS.panel, primary ? 0.18 : 0.95)
-      .setStrokeStyle(2, primary ? COLORS.magenta : COLORS.stroke, 1);
+      .rectangle(x, y, w, h, primary ? COLORS.magenta : COLORS.panel, primary ? BUTTON.primaryFill : BUTTON.secondaryFill)
+      .setStrokeStyle(BUTTON.strokeWidth, primary ? COLORS.magenta : COLORS.stroke, BUTTON.strokeAlpha);
     if (layoutName) bg.setName(layoutName + '-bg');
     const t = this.add
       .text(x, y, label, {
@@ -1832,7 +1833,7 @@ export class UIScene extends Phaser.Scene {
     bg.setInteractive({ useHandCursor: true }).on('pointerup', () => cb());
     bg.on('pointerover', () => bg.setFillStyle(COLORS.panelHover, 1));
     bg.on('pointerout', () =>
-      bg.setFillStyle(primary ? COLORS.magenta : COLORS.panel, primary ? 0.18 : 0.95)
+      bg.setFillStyle(primary ? COLORS.magenta : COLORS.panel, primary ? BUTTON.primaryFill : BUTTON.secondaryFill)
     );
     c.add([bg, t]);
   }
