@@ -257,7 +257,7 @@ try {
     'Cardiac hazard center is not hittable'
   );
   assert(
-    !pointInsideCardiacLineHazard(line.centerX, line.centerY + 100, line, line.beamHalfThickness, 0),
+    !pointInsideCardiacLineHazard(line.centerX + 100, line.centerY, line, line.beamHalfThickness, 0),
     'Cardiac hazard thickness check is too permissive'
   );
   const fireEvents = hazardDirector.update(
