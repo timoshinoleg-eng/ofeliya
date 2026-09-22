@@ -647,8 +647,13 @@ export class MenuScene extends Phaser.Scene {
       });
     }
 
-    const utilityY =
-      btnY + (resumeCheckpoint ? (H < 650 ? 60 : 72) : H < 650 ? 48 : 55);
+    // Keep the action/utilities/footer as separate vertical bands on short MAX WebViews.
+    // The old btnY-relative row collided with the footer copy at 568–640 px (and with the
+    // resume secondary action at the shortest viewport).
+    const compactFooter = H < 720;
+    const utilityY = compactFooter
+      ? H - 60
+      : btnY + (resumeCheckpoint ? 72 : 55);
     const soundText = this.add
       .text(W / 2 - 100, utilityY, `звук: ${Sfx.muted ? 'выкл' : 'вкл'}`, {
         fontFamily: UI_FONT,
@@ -704,18 +709,20 @@ export class MenuScene extends Phaser.Scene {
         this.showCodex();
       });
 
-    this.add
-      .text(W / 2, H - 66, 'Двигай штамм · собирай РНК · выбирай мутации', {
-        fontFamily: UI_FONT,
-        fontSize: H < 650 ? '12px' : '13px',
-        fontStyle: '600',
-        color: '#d8d1e2',
-        align: 'center',
-        wordWrap: { width: W - 36 },
-      })
-      .setOrigin(0.5)
-      .setResolution(2)
-      .setDepth(5);
+    if (!compactFooter) {
+      this.add
+        .text(W / 2, H - 66, 'Двигай штамм · собирай РНК · выбирай мутации', {
+          fontFamily: UI_FONT,
+          fontSize: '13px',
+          fontStyle: '600',
+          color: '#d8d1e2',
+          align: 'center',
+          wordWrap: { width: W - 36 },
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setDepth(5);
+    }
 
     this.add
       .text(W / 2, H - 43, 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА', {
