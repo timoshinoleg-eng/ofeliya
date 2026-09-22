@@ -7,6 +7,7 @@ import { UIScene } from './scenes/UIScene';
 import { installMobileLayoutGuard } from './ui/MobileLayoutGuard';
 import { PlatformBridge } from './platform';
 import { StartupTrace } from './systems/StartupTrace';
+import { ensureTelegramBridge } from './platform/TelegramBridgeLoader';
 import { trackProductEvent } from './systems/AnalyticsClient';
 
 declare global {
@@ -255,4 +256,4 @@ async function boot(): Promise<void> {
   }
 }
 
-void boot();
+void ensureTelegramBridge().then(() => boot());
