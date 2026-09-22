@@ -652,7 +652,7 @@ export class MenuScene extends Phaser.Scene {
     // resume secondary action at the shortest viewport).
     const compactFooter = H < 720;
     const utilityY = compactFooter
-      ? H - 60
+      ? H - 64
       : btnY + (resumeCheckpoint ? 72 : 55);
     const soundText = this.add
       .text(W / 2 - 100, utilityY, `звук: ${Sfx.muted ? 'выкл' : 'вкл'}`, {
