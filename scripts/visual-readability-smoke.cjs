@@ -135,7 +135,7 @@ function browserDriver() {
         killsSize: parseFloat(String(ui.killsText?.style?.fontSize ?? '0')) || 0,
         hpSize: parseFloat(String(ui.hpText?.style?.fontSize ?? '0')) || 0,
         bossSize: parseFloat(String(ui.bossLabel?.style?.fontSize ?? '0')) || 0,
-        backdropAlpha: ui.hudBackdrop?.alpha ?? 0,
+        backdropAlpha: ui.hudBackdrop?.fillAlpha ?? 0,
       },
     };
   });
@@ -151,10 +151,10 @@ function browserDriver() {
     !contract.eliteMarkerVisible ||
     !contract.eliteRingVisible ||
     contract.bulletTexture !== 'viral-particle' ||
-    contract.hud.levelSize < 14 ||
+    contract.hud.levelSize < 15 ||
     contract.hud.killsSize < 14 ||
-    contract.hud.hpSize < 11 ||
-    contract.hud.bossSize < 12 ||
+    contract.hud.hpSize < 12 ||
+    contract.hud.bossSize < 13 ||
     contract.hud.backdropAlpha < 0.3
   ) {
     throw new Error('Visual readability contract failed: ' + JSON.stringify(contract));
