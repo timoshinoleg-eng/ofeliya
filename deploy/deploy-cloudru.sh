@@ -148,11 +148,15 @@ export OFELIYA_RELEASE
 export OFELIYA_ENV_FILE="${RELEASE_ENV_FILE}"
 
 compose_files=(-f deploy/compose.production.yml)
-if [[ "${BOT_MODE}" == dedicated && -f "${DEDICATED_LOCAL_FILE}" ]]; then
-  compose_files+=(-f "${DEDICATED_LOCAL_FILE}")
-fi
-if [[ "${BOT_MODE}" == dedicated && -f "${CADDY_LOCAL_FILE}" ]]; then
-  compose_files+=(-f "${CADDY_LOCAL_FILE}")
+if [[ "${BOT_MODE}" == dedicated ]]; then
+  for local_file in "${DEDICATED_LOCAL_FILE}" "${CADDY_LOCAL_FILE}"; do
+    if [[ -f "${CHECKOUT_DIR}/${local_file}" ]]; then
+      compose_files+=(-f "${CHECKOUT_DIR}/${local_file}")
+    elif [[ "${CHECKOUT_DIR}" != "${APP_ROOT}" && -f "${APP_ROOT}/${local_file}" ]]; then
+      # Legacy /opt/ofeliya/current checkout with host-local overrides one level above.
+      compose_files+=(-f "${APP_ROOT}/${local_file}")
+    fi
+  done
 fi
 
 compose() {
