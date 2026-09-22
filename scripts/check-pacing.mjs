@@ -47,6 +47,7 @@ try {
       'src/game/HeartPacing.ts',
       'src/game/BossPacing.ts',
       'src/game/BossVulnerability.ts',
+      'src/game/CardiacLineHazard.ts',
       'src/game/DifficultyProfile.ts',
       'src/game/RunState.ts',
       '--target',
@@ -81,6 +82,11 @@ try {
   const {
     PRIME_VULNERABILITY,
   } = require(join(temp, 'game/BossVulnerability.js'));
+  const {
+    CARDIAC_LINE_HAZARD,
+    CardiacLineHazardDirector,
+    pointInsideCardiacLineHazard,
+  } = require(join(temp, 'game/CardiacLineHazard.js'));
   const {
     STANDARD_DIFFICULTY,
     STRAINED_DIFFICULTY,
@@ -177,6 +183,108 @@ try {
     'IMMUNE PRIME lysis punish window became too short'
   );
 
+  const hazardMovementBudget = PLAYER.speed * (CARDIAC_LINE_HAZARD.telegraphMs / 1000);
+  assert(
+    hazardMovementBudget > CARDIAC_LINE_HAZARD.offsetRangePx + CARDIAC_LINE_HAZARD.beamHalfThicknessPx,
+    'CARDIAC TITAN line hazard is no longer dodgeable from the worst telegraph offset at base speed'
+  );
+  assert(
+    CARDIAC_LINE_HAZARD.initialDelayMs >=
+      HEARTBEAT_PULSE_PROFILE.bossFirstImpactDelayMs + HEART_SAFE_POCKET.boss.opportunityMs,
+    'CARDIAC TITAN line hazard can overlap the first heartbeat decision window'
+  );
+  assert(
+    CARDIAC_LINE_HAZARD.damage > 0 && CARDIAC_LINE_HAZARD.damage < PLAYER.hp * 0.2,
+    'CARDIAC TITAN line hazard left the bounded chip-damage band'
+  );
+
+  const hazardDirector = new CardiacLineHazardDirector();
+  const rolls = [0.25, 0.75];
+  const nextRoll = () => rolls.shift() ?? 0.5;
+  const idleHazard = hazardDirector.update(
+    {
+      nowMs: 0,
+      enabled: false,
+      canSchedule: true,
+      originX: 100,
+      originY: 100,
+      halfLength: 300,
+    },
+    nextRoll
+  );
+  assert(idleHazard.length === 0, 'inactive Cardiac hazard emitted events');
+
+  hazardDirector.update(
+    {
+      nowMs: 1_000,
+      enabled: true,
+      canSchedule: true,
+      originX: 100,
+      originY: 100,
+      halfLength: 300,
+    },
+    nextRoll
+  );
+  const blockedHazard = hazardDirector.update(
+    {
+      nowMs: 5_500,
+      enabled: true,
+      canSchedule: false,
+      originX: 100,
+      originY: 100,
+      halfLength: 300,
+    },
+    nextRoll
+  );
+  assert(blockedHazard.length === 0, 'Cardiac hazard ignored heartbeat scheduling gate');
+  const telegraphEvents = hazardDirector.update(
+    {
+      nowMs: 5_600,
+      enabled: true,
+      canSchedule: true,
+      originX: 100,
+      originY: 100,
+      halfLength: 300,
+    },
+    nextRoll
+  );
+  const line = telegraphEvents[0]?.hazard;
+  assert(telegraphEvents[0]?.type === 'telegraph' && line, 'Cardiac hazard telegraph missing');
+  assert(Math.abs(line.angle - Math.PI / 2) < 1e-9, 'Cardiac hazard seeded angle changed');
+  assert(Math.abs(line.centerX - 41) < 1e-9 && Math.abs(line.centerY - 100) < 1e-9, 'Cardiac hazard seeded offset changed');
+  assert(
+    pointInsideCardiacLineHazard(line.centerX, line.centerY, line, line.beamHalfThickness, 0),
+    'Cardiac hazard center is not hittable'
+  );
+  assert(
+    !pointInsideCardiacLineHazard(line.centerX, line.centerY + 100, line, line.beamHalfThickness, 0),
+    'Cardiac hazard thickness check is too permissive'
+  );
+  const fireEvents = hazardDirector.update(
+    {
+      nowMs: line.fireAtMs,
+      enabled: true,
+      canSchedule: true,
+      originX: 100,
+      originY: 100,
+      halfLength: 300,
+    },
+    nextRoll
+  );
+  assert(fireEvents[0]?.type === 'fire', 'Cardiac hazard fire event missing');
+  const endEvents = hazardDirector.update(
+    {
+      nowMs: line.endAtMs,
+      enabled: true,
+      canSchedule: true,
+      originX: 100,
+      originY: 100,
+      halfLength: 300,
+    },
+    nextRoll
+  );
+  assert(endEvents.some((event) => event.type === 'end'), 'Cardiac hazard end event missing');
+
   const report = {
     campaign: {
       bloodstreamMs: BLOODSTREAM_STAGE.durationMs,
@@ -214,6 +322,14 @@ try {
         preBossImpactCount: strainedHeartImpacts.length,
         bossIntervalMs: strainedHeart.bossIntervalMs,
       },
+    },
+    cardiacTitanLineHazard: {
+      initialDelayMs: CARDIAC_LINE_HAZARD.initialDelayMs,
+      intervalMs: CARDIAC_LINE_HAZARD.intervalMs,
+      telegraphMs: CARDIAC_LINE_HAZARD.telegraphMs,
+      activeMs: CARDIAC_LINE_HAZARD.activeMs,
+      damage: CARDIAC_LINE_HAZARD.damage,
+      baseMovementBudgetPx: Math.round(hazardMovementBudget),
     },
     immunePrime: {
       phase2AtHpFraction: BOSS_PHASE_TWO_HP_FRACTION,
