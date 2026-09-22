@@ -178,12 +178,24 @@ async function inspectHub(page, size) {
     const close = byName('ofeliya-social-close-hit');
     const retry = byName('ofeliya-social-retry-bg');
     const disabled = byName('ofeliya-social-daily-disabled');
-    const panelBounds = panel.getBounds();
-    const closeBounds = close.getBounds();
-    const retryBounds = retry?.getBounds?.() ?? null;
-    const disabledBounds = disabled?.getBounds?.() ?? null;
+    const serializeBounds = (obj) => {
+      if (!obj || typeof obj.getBounds !== 'function') return null;
+      const b = obj.getBounds();
+      return {
+        left: b.left,
+        right: b.right,
+        top: b.top,
+        bottom: b.bottom,
+        width: b.width,
+        height: b.height,
+      };
+    };
+    const panelBounds = serializeBounds(panel);
+    const closeBounds = serializeBounds(close);
+    const retryBounds = serializeBounds(retry);
+    const disabledBounds = serializeBounds(disabled);
     const todayStatus = byName('ofeliya-social-today-status');
-    const todayStatusBounds = todayStatus?.getBounds?.() ?? null;
+    const todayStatusBounds = serializeBounds(todayStatus);
     const texts = all.filter((obj) => typeof obj?.text === 'string' && obj.visible !== false).map((obj) => obj.text);
     const content = all.filter((obj) => obj !== root && obj !== byName('ofeliya-social-dim') && obj !== panel && obj.visible !== false && typeof obj?.getBounds === 'function');
     const overflow = content
