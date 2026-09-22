@@ -24,6 +24,7 @@ import {
 import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
 import { ensureCinematicTextures } from '../game/CinematicTextures';
 import { showLegalOverlay } from '../legal/LegalOverlay';
+import { SocialHub } from '../ui/SocialHub';
 import { PlatformBridge } from '../platform';
 import { SaveSystem } from '../systems/SaveSystem';
 import { RunCheckpoint } from '../systems/RunCheckpoint';
@@ -34,6 +35,7 @@ import { loadDuelChallenge, trackDuelEvent } from '../systems/DuelClient';
 
 export class MenuScene extends Phaser.Scene {
   private codexOverlay: Phaser.GameObjects.Container | null = null;
+  private socialHub: SocialHub | null = null;
 
   constructor() {
     super('Menu');
@@ -50,6 +52,7 @@ export class MenuScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
     this.codexOverlay = null;
+    this.socialHub = null;
     this.cameras.main.setBackgroundColor(COLORS.bg);
     Sfx.stopMusic();
     PlatformBridge.setBackHandler(null);
@@ -611,7 +614,7 @@ export class MenuScene extends Phaser.Scene {
     const utilityY =
       btnY + (resumeCheckpoint ? (H < 650 ? 60 : 72) : H < 650 ? 48 : 55);
     const soundText = this.add
-      .text(W / 2 - 72, utilityY, `звук: ${Sfx.muted ? 'выкл' : 'вкл'}`, {
+      .text(W / 2 - 100, utilityY, `звук: ${Sfx.muted ? 'выкл' : 'вкл'}`, {
         fontFamily: UI_FONT,
         fontSize: H < 650 ? '11px' : '13px',
         fontStyle: '650',
@@ -627,10 +630,29 @@ export class MenuScene extends Phaser.Scene {
         if (!muted) Sfx.play('click');
       });
 
+
+    this.add
+      .text(W / 2, utilityY, 'СОЦИУМ', {
+        fontFamily: FONT,
+        fontSize: H < 650 ? '11px' : '12px',
+        fontStyle: 'bold',
+        color: '#c9f6ff',
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .setResolution(2)
+      .setDepth(5)
+      .setName('ofeliya-menu-social')
+      .on('pointerup', () => {
+        Sfx.play('click');
+        PlatformBridge.haptic('light');
+        this.showSocialHub();
+      });
+
     const codexSave = SaveSystem.get();
     const codexFound = codexSave.evolutionsSeen.length + codexSave.legendarySeen.length;
     this.add
-      .text(W / 2 + 72, utilityY, `КОДЕКС ${codexFound}/9`, {
+      .text(W / 2 + 100, utilityY, `КОДЕКС ${codexFound}/9`, {
         fontFamily: FONT,
         fontSize: H < 650 ? '12px' : '13px',
         fontStyle: 'bold',
@@ -709,6 +731,8 @@ export class MenuScene extends Phaser.Scene {
     this.scale.on('resize', this.onResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.onResize, this);
+      this.socialHub?.destroy();
+      this.socialHub = null;
       if (diagnosticTapTimer !== null) window.clearTimeout(diagnosticTapTimer);
     });
 
@@ -719,6 +743,13 @@ export class MenuScene extends Phaser.Scene {
       requestAnimationFrame(() => {
         StartupTrace.finish('menu.visible');
       });
+    });
+  }
+
+  private showSocialHub(): void {
+    if (this.socialHub) return;
+    this.socialHub = new SocialHub(this, PlatformBridge, () => {
+      this.socialHub = null;
     });
   }
 
