@@ -1,5 +1,6 @@
 import type { RunResult } from '../game/RunContracts';
 import type { PlatformAdapter } from '../platform/PlatformBridge';
+import type { DailyRunTicket } from './DailyRunClient';
 import { SCORE_CAMPAIGN_VERSION, SCORE_RULESET_VERSION } from '../game/RunVersions';
 
 export { SCORE_CAMPAIGN_VERSION, SCORE_RULESET_VERSION } from '../game/RunVersions';
@@ -13,6 +14,7 @@ export interface ScoreSubmitResponse {
   ranked: boolean;
   rulesetVersion: number;
   campaignVersion: number;
+  dailyRunAccepted?: boolean;
 }
 
 export interface ScoreSubmission {
@@ -33,7 +35,9 @@ export interface ScoreSubmission {
     timeMs: number;
     kills: number;
     level: number;
-    daily: false;
+    daily: boolean;
+    dailyRunId?: string;
+    dateKey?: string;
   };
 }
 
@@ -114,17 +118,30 @@ function scoreEndpoint(): string {
   return new URL('api/score', window.location.href).toString();
 }
 
-export async function submitRunScore(
+export function buildDailyScoreSubmission(
   result: RunResult,
-  platform: PlatformAdapter
-): Promise<ScoreSubmitResponse | null> {
-  // Local checkpoint state is not server-authoritative. Never let a resumed Standard run
-  // enter the canonical score submission path.
-  if (result.resumed) return null;
-  const submission = buildScoreSubmission(result, platform);
-  // A messenger result without signed initData must never be downgraded to an anonymous trusted score.
-  if (submission.platform !== 'browser' && !submission.initData) return null;
+  platform: PlatformAdapter,
+  ticket: DailyRunTicket
+): ScoreSubmission | null {
+  if (
+    result.resumed ||
+    result.difficultyId !== 'standard' ||
+    result.runSeed !== ticket.runSeed ||
+    (platform.kind !== 'max' && platform.kind !== 'telegram') ||
+    !platform.initData
+  ) {
+    return null;
+  }
+  const submission = buildScoreSubmission(result, platform, ticket.dateKey);
+  submission.payload.daily = true;
+  submission.payload.dailyRunId = ticket.runId;
+  submission.payload.dateKey = ticket.dateKey;
+  return submission;
+}
 
+async function postScoreSubmission(
+  submission: ScoreSubmission
+): Promise<ScoreSubmitResponse | null> {
   const controller = new AbortController();
   const timer = globalThis.setTimeout(() => controller.abort(), SCORE_TIMEOUT_MS);
   try {
@@ -151,10 +168,37 @@ export async function submitRunScore(
       ranked: body.ranked,
       rulesetVersion: body.rulesetVersion,
       campaignVersion: body.campaignVersion,
+      dailyRunAccepted:
+        typeof body.dailyRunAccepted === 'boolean' ? body.dailyRunAccepted : undefined,
     };
   } catch {
     return null;
   } finally {
     globalThis.clearTimeout(timer);
   }
+}
+
+export async function submitRunScore(
+  result: RunResult,
+  platform: PlatformAdapter
+): Promise<ScoreSubmitResponse | null> {
+  // Local checkpoint state is not server-authoritative. Never let a resumed Standard run
+  // enter the canonical score submission path.
+  if (result.resumed) return null;
+  const submission = buildScoreSubmission(result, platform);
+  // A messenger result without signed initData must never be downgraded to an anonymous trusted score.
+  if (submission.platform !== 'browser' && !submission.initData) return null;
+
+  return postScoreSubmission(submission);
+}
+
+export async function submitDailyRunScore(
+  result: RunResult,
+  platform: PlatformAdapter,
+  ticket: DailyRunTicket
+): Promise<ScoreSubmitResponse | null> {
+  const submission = buildDailyScoreSubmission(result, platform, ticket);
+  if (!submission) return null;
+  const response = await postScoreSubmission(submission);
+  return response?.dailyRunAccepted === true ? response : null;
 }

@@ -177,6 +177,10 @@ const STORE_FILE = join(DATA_DIR, 'store.json');
 const MAX_SCORES = 20_000;
 const MAX_REFS = 10_000;
 const MAX_ANALYTICS_EVENTS = 20_000;
+const MAX_DAILY_RUNS = 10_000;
+const DAILY_RUN_TTL_MS = 2 * 60 * 60 * 1000;
+const DAILY_RUN_GRACE_MS = 30 * 60 * 1000;
+const DAILY_RUN_ID_RE = /^[A-Za-z0-9_-]{16,32}$/;
 const PRODUCT_EVENTS = new Set([
   'app_open', 'run_start', 'run_60s', 'boss1', 'heart', 'death',
   'win', 'replay', 'share', 'daily', 'referral',
@@ -191,6 +195,7 @@ function emptyStore() {
     duelAttempts: [],
     duelEvents: [],
     analyticsEvents: [],
+    dailyRuns: [],
   };
 }
 
@@ -206,6 +211,7 @@ function loadStore() {
       duelAttempts: Array.isArray(s.duelAttempts) ? s.duelAttempts : [],
       duelEvents: Array.isArray(s.duelEvents) ? s.duelEvents : [],
       analyticsEvents: Array.isArray(s.analyticsEvents) ? s.analyticsEvents : [],
+      dailyRuns: Array.isArray(s.dailyRuns) ? s.dailyRuns : [],
     };
   } catch {
     return emptyStore();
@@ -419,6 +425,69 @@ function verifyDuelIdentity(body) {
 
 function newDuelId() {
   return randomBytes(12).toString('base64url');
+}
+
+function dailyRunSeed(dateKey) {
+  return createHash('sha256')
+    .update(`ofeliya:daily:v2:${dateKey}:${CURRENT_RULESET_VERSION}:${CURRENT_CAMPAIGN_VERSION}`)
+    .digest('hex')
+    .slice(0, 16);
+}
+
+function findDailyRun(runId) {
+  if (typeof runId !== 'string' || !DAILY_RUN_ID_RE.test(runId)) return null;
+  return store.dailyRuns.find((run) => run.runId === runId) ?? null;
+}
+
+function publicDailyRun(run) {
+  return {
+    runId: run.runId,
+    runSeed: run.runSeed,
+    dateKey: run.dateKey,
+    issuedAt: run.issuedAt,
+    expiresAt: run.expiresAt,
+    difficultyId: 'standard',
+    rulesetVersion: run.rulesetVersion,
+    campaignVersion: run.campaignVersion,
+  };
+}
+
+function issueDailyRun(identity, now = Date.now()) {
+  const dateKey = localDateKey(now);
+  const existing = store.dailyRuns.find(
+    (run) =>
+      run.platform === identity.platform &&
+      run.uid === identity.uid &&
+      run.dateKey === dateKey &&
+      run.closedAt == null &&
+      run.expiresAt > now
+  );
+  if (existing) return { run: existing, reused: true };
+
+  const dayEnd = new Date(now);
+  dayEnd.setHours(24, 0, 0, 0);
+  const expiresAt = Math.min(
+    now + DAILY_RUN_TTL_MS,
+    dayEnd.getTime() + DAILY_RUN_GRACE_MS
+  );
+  const run = {
+    runId: randomBytes(12).toString('base64url'),
+    platform: identity.platform,
+    uid: identity.uid,
+    dateKey,
+    runSeed: dailyRunSeed(dateKey),
+    rulesetVersion: CURRENT_RULESET_VERSION,
+    campaignVersion: CURRENT_CAMPAIGN_VERSION,
+    difficultyId: 'standard',
+    issuedAt: now,
+    expiresAt,
+    closedAt: null,
+  };
+  store.dailyRuns.push(run);
+  if (store.dailyRuns.length > MAX_DAILY_RUNS) {
+    store.dailyRuns.splice(0, store.dailyRuns.length - MAX_DAILY_RUNS);
+  }
+  return { run, reused: false };
 }
 
 function findDuel(challengeId) {
@@ -658,6 +727,7 @@ const server = createServer(async (req, res) => {
         duelAttempts: store.duelAttempts.length,
         duelEvents: store.duelEvents.length,
         analyticsEvents: store.analyticsEvents.length,
+        dailyRuns: store.dailyRuns.length,
         rulesetVersion: CURRENT_RULESET_VERSION,
         campaignVersion: CURRENT_CAMPAIGN_VERSION,
       });
@@ -745,6 +815,22 @@ const server = createServer(async (req, res) => {
       }
       saveStore();
       return send(res, 202, { ok: true });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/daily/run') {
+      const body = await readBody(req);
+      const identity = verifyDuelIdentity(body);
+      if (!identity) {
+        return send(res, 403, { ok: false, error: 'verified messenger identity required' });
+      }
+
+      const issued = issueDailyRun(identity);
+      saveStore();
+      return send(res, issued.reused ? 200 : 201, {
+        ok: true,
+        reused: issued.reused,
+        ticket: publicDailyRun(issued.run),
+      });
     }
 
     if (req.method === 'POST' && url.pathname === '/api/duel') {
@@ -939,7 +1025,37 @@ const server = createServer(async (req, res) => {
       const cheat = antiCheatCheck(payload, contract);
       if (cheat) return send(res, 422, { ok: false, error: `anti-cheat: ${cheat}` });
 
-      const dateKey =
+      let dailyRun = null;
+      if (payload.dailyRunId != null) {
+        if (!verified || (platform !== 'telegram' && platform !== 'max')) {
+          return send(res, 403, { ok: false, error: 'verified messenger daily identity required' });
+        }
+        dailyRun = findDailyRun(payload.dailyRunId);
+        if (!dailyRun) return send(res, 422, { ok: false, error: 'daily run not found' });
+        if (dailyRun.platform !== platform || dailyRun.uid !== uid) {
+          return send(res, 403, { ok: false, error: 'daily run owner mismatch' });
+        }
+        if (dailyRun.closedAt != null) {
+          return send(res, 409, { ok: false, error: 'daily run already closed' });
+        }
+        if (Date.now() >= dailyRun.expiresAt) {
+          return send(res, 410, { ok: false, error: 'daily run expired' });
+        }
+        if (
+          payload.daily !== true ||
+          contract.legacy ||
+          contract.rulesetVersion !== dailyRun.rulesetVersion ||
+          contract.campaignVersion !== dailyRun.campaignVersion ||
+          contract.difficultyId !== dailyRun.difficultyId ||
+          contract.runSeed !== dailyRun.runSeed
+        ) {
+          return send(res, 422, { ok: false, error: 'dailyRunId does not match score contract' });
+        }
+      }
+
+      const dateKey = dailyRun
+        ? dailyRun.dateKey
+        :
         typeof payload.dateKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(payload.dateKey)
           ? payload.dateKey
           : localDateKey();
@@ -947,7 +1063,8 @@ const server = createServer(async (req, res) => {
         platform,
         uid,
         dateKey,
-        daily: payload.daily === true,
+        daily: dailyRun ? true : payload.daily === true,
+        dailyRunId: dailyRun?.runId ?? null,
         win: payload.win === true,
         timeMs: Math.round(payload.timeMs),
         kills: Math.round(payload.kills),
@@ -969,6 +1086,7 @@ const server = createServer(async (req, res) => {
 
       store.scores.push(record);
       if (store.scores.length > MAX_SCORES) store.scores.splice(0, store.scores.length - MAX_SCORES);
+      if (dailyRun) dailyRun.closedAt = record.ts;
 
       // Реферал V2: from хранится как platform:uid. Legacy bare uid остаётся
       // читаемым, но не получает outbound push из-за неоднозначной платформы.
@@ -1003,6 +1121,7 @@ const server = createServer(async (req, res) => {
         ranked: record.ranked,
         rulesetVersion: record.rulesetVersion,
         campaignVersion: record.campaignVersion,
+        dailyRunAccepted: dailyRun != null,
         top: publicTop(top),
         refReward,
       });

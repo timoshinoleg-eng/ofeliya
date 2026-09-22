@@ -56,6 +56,9 @@ jobs:
       - name: Analytics client contract smoke
         run: npm run test:analytics
 
+      - name: Daily V2 client contract smoke
+        run: npm run test:daily-v2
+
       - name: Gameplay RNG deterministic smoke
         run: npm run test:rng
 
