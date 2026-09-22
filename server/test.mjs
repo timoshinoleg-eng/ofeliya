@@ -30,7 +30,7 @@ const DATA_DIR = mkdtempSync(join(tmpdir(), 'ofeliya-server-test-'));
 process.env.DATA_DIR = DATA_DIR;
 process.env.PORT = '0';
 
-const { server } = await import('./index.mjs');
+const { server, compactDailyRunEntries } = await import('./index.mjs');
 await new Promise((resolve) => server.once('listening', resolve));
 const BASE = `http://127.0.0.1:${server.address().port}`;
 
@@ -657,6 +657,42 @@ await ok('Daily V2: сервер выдаёт identity-bound ticket и пере�
   }));
   assert.notEqual(next.ticket.runId, first.ticket.runId);
   assert.equal(next.ticket.runSeed, first.ticket.runSeed);
+});
+
+await ok('Daily V2: ruleset v2 daily без ticket отклоняется', async () => {
+  const response = await fetch(`${BASE}/api/score`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform: 'telegram',
+      initData: signInitData(ALICE, TG_TOKEN),
+      payload: {
+        ...campaignPayload({ seed: 'ticketless-v2', timeMs: 600_000 }),
+        daily: true,
+      },
+    }),
+  });
+  assert.equal(response.status, 422);
+  assert.match((await j(response)).error, /ticket required/);
+});
+
+await ok('Daily V2: capacity compaction preserves active tickets', async () => {
+  const now = Date.now();
+  const active = [
+    { runId: 'active-1', closedAt: null, expiresAt: now + 60_000 },
+    { runId: 'active-2', closedAt: null, expiresAt: now + 60_000 },
+  ];
+  const stale = [
+    { runId: 'closed', closedAt: now - 1, expiresAt: now + 60_000 },
+    { runId: 'expired', closedAt: null, expiresAt: now - 1 },
+  ];
+  const compacted = compactDailyRunEntries([...stale, ...active], now, 3, 1);
+  assert.equal(compacted.hasCapacity, true);
+  assert.deepEqual(compacted.runs.map((run) => run.runId).sort(), ['active-1', 'active-2']);
+
+  const full = compactDailyRunEntries(active, now, 2, 1);
+  assert.equal(full.hasCapacity, false);
+  assert.equal(full.runs.length, 2);
 });
 
 await ok('Daily V2: ticket нельзя использовать другой identity или seed', async () => {
