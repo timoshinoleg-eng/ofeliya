@@ -153,6 +153,7 @@ export class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setResolution(2)
+      .setName('ofeliya-menu-title')
       .setDepth(5);
     title.setShadow(0, 0, 'rgba(255,79,181,0.48)', 7, true, true);
 
@@ -180,6 +181,7 @@ export class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setResolution(2)
+      .setName('ofeliya-menu-hook')
       .setDepth(5);
 
     this.add
@@ -192,6 +194,7 @@ export class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setResolution(2)
+      .setName('ofeliya-menu-subtitle')
       .setDepth(5);
 
     const displayName = PlatformBridge.getDisplayName();
@@ -205,6 +208,7 @@ export class MenuScene extends Phaser.Scene {
         })
         .setOrigin(0.5)
         .setResolution(2)
+        .setName('ofeliya-menu-carrier')
         .setDepth(5);
     }
 
@@ -228,14 +232,15 @@ export class MenuScene extends Phaser.Scene {
         })
         .setOrigin(0.5)
         .setResolution(2)
+        .setName('ofeliya-menu-challenge-header')
         .setDepth(5);
       const target = incomingChallenge
         ? incomingChallenge.objective === 'boss1-clear'
-          ? `Подави IMMUNE PRIME быстрее ${fmtTime(incomingChallenge.timeMs)}`
+          ? `Подави ИММУННОГО ПРАЙМА быстрее ${fmtTime(incomingChallenge.timeMs)}`
           : incomingChallenge.objective === 'campaign-clear'
             ? `Заверши кампанию быстрее ${fmtTime(incomingChallenge.timeMs)}`
             : `Продержись дольше ${fmtTime(incomingChallenge.timeMs)}`
-        : 'Получаю фиксированный seed и цель…';
+        : 'Получаю условия дуэли…';
       challengeTargetText = this.add
         .text(W / 2, challengeY + 2, target, {
           fontFamily: FONT,
@@ -246,10 +251,11 @@ export class MenuScene extends Phaser.Scene {
         })
         .setOrigin(0.5)
         .setResolution(2)
+        .setName('ofeliya-menu-challenge-target')
         .setDepth(5);
       const detail = incomingChallenge
-        ? `${incomingChallenge.kills} иммун. · ${incomingChallenge.hostCellsInfected} клеток · мутация ${incomingChallenge.level}`
-        : 'STANDARD · управление и случайность фиксированы';
+        ? `уничтожено ${incomingChallenge.kills} · заражено ${incomingChallenge.hostCellsInfected} · мутация ${incomingChallenge.level}`
+        : 'СТАНДАРТ · управление и случайность фиксированы';
       challengeDetailText = this.add
         .text(W / 2, challengeY + 18, detail, {
           fontFamily: UI_FONT,
@@ -260,6 +266,7 @@ export class MenuScene extends Phaser.Scene {
         })
         .setOrigin(0.5)
         .setResolution(2)
+        .setName('ofeliya-menu-challenge-meta')
         .setDepth(5);
     } else if (resumeCheckpoint) {
       const resumeStage =
@@ -290,7 +297,7 @@ export class MenuScene extends Phaser.Scene {
       const campaign = save.bestCampaignClearMs > 0 ? fmtTime(save.bestCampaignClearMs) : '—';
       const records =
         save.runs > 0
-          ? `Выживание ${survival}   ·   IMMUNE PRIME ${boss1}\nКампания ${campaign}   ·   иммунных клеток ${save.bestKills}`
+          ? `Выживание ${survival}   ·   ИММУННЫЙ ПРАЙМ ${boss1}\nКампания ${campaign}   ·   уничтожено клеток ${save.bestKills}`
           : 'STRAIN-0 · ПЕРВЫЙ ЦИКЛ ЗАРАЖЕНИЯ';
       this.add
         .text(W / 2, H * 0.57, records, {
@@ -348,8 +355,8 @@ export class MenuScene extends Phaser.Scene {
       difficultyDesc.setText(
         challengeLocked
           ? duelLocked
-            ? 'фиксированный Standard · без глобального рейтинга'
-            : 'соревновательные вызовы фиксируют Standard'
+            ? 'фиксированный СТАНДАРТ · без глобального рейтинга'
+            : 'соревновательные вызовы фиксируют сложность «Стандарт»'
           : profile.description
       );
       difficultyBg.setStrokeStyle(
@@ -420,7 +427,7 @@ export class MenuScene extends Phaser.Scene {
             : COLORS.magenta;
       controlBg.setStrokeStyle(selectedControlMode === 'one-hand' ? 1.4 : 1.8, controlAccent, 0.82);
       if (incomingDuel) {
-        startHint?.setText(`тот же seed · быстрее ${fmtTime(incomingDuel.targetTimeMs)}`);
+        startHint?.setText(`тот же забег · быстрее ${fmtTime(incomingDuel.targetTimeMs)}`);
       } else if (resumeCheckpoint) {
         const resumeStage =
           STAGES.find((stage) => stage.id === resumeCheckpoint.director.stageId) ?? STAGES[0];
@@ -470,6 +477,7 @@ export class MenuScene extends Phaser.Scene {
       )
       .setOrigin(0.5)
       .setResolution(2)
+      .setName('ofeliya-menu-action')
       .setDepth(6);
     startHint = this.add
       .text(W / 2, btnY + 18, '', {
@@ -481,6 +489,7 @@ export class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setResolution(2)
+      .setName('ofeliya-menu-action-hint')
       .setDepth(6);
     renderControlMode();
 
@@ -549,7 +558,7 @@ export class MenuScene extends Phaser.Scene {
           this.registry.set('duelChallenge', null);
           challengeHeadline?.setText('ДУЭЛЬ НЕДОСТУПНА').setColor('#ff9b66');
           challengeTargetText?.setText('Ссылка истекла или вызов больше не существует');
-          challengeDetailText?.setText('можно начать обычный Standard-забег');
+          challengeDetailText?.setText('можно начать обычный забег · сложность СТАНДАРТ');
           startButtonText.setText('НАЧАТЬ ОБЫЧНЫЙ ЗАБЕГ');
           renderDifficulty();
           renderControlMode();
@@ -565,7 +574,7 @@ export class MenuScene extends Phaser.Scene {
         challengeHeadline?.setText('ФИКСИРОВАННАЯ ДУЭЛЬ').setColor('#ffe066');
         challengeTargetText?.setText(`Заверши ту же кампанию быстрее ${fmtTime(challenge.targetTimeMs)}`);
         challengeDetailText?.setText(
-          `тот же seed · ${controlModeLabel(challenge.controlMode)} · без наград и глобального рейтинга`
+          `тот же забег · ${controlModeLabel(challenge.controlMode)} · без наград и глобального рейтинга`
         );
         startButtonText.setText('ПРИНЯТЬ ДУЭЛЬ');
         renderDifficulty();
@@ -787,7 +796,7 @@ export class MenuScene extends Phaser.Scene {
     const tabY = top + 82;
     const tabDefs: Array<[CodexPage, string, number]> = [
       ['mutations', 'МУТАЦИИ', W / 2 - 104],
-      ['legendary', 'LEGENDARY', W / 2],
+      ['legendary', 'ЛЕГЕНДАРНЫЕ', W / 2],
       ['mastery', 'МАСТЕРСТВО', W / 2 + 104],
     ];
 
@@ -853,7 +862,7 @@ export class MenuScene extends Phaser.Scene {
             left + 49,
             y + 22,
             found
-              ? 'Критическая форма зарегистрирована в Codex.'
+              ? 'Критическая форма зарегистрирована в КОДЕКСЕ.'
               : 'Развивай совместимые ветви мутаций.',
             compact ? 12 : 13,
             found ? UI_TEXT.secondary : '#d0c7d8',
@@ -899,14 +908,14 @@ export class MenuScene extends Phaser.Scene {
         addText(
           left + 28,
           bodyTop + 39,
-          `${save.standardCampaignClears > 0 ? '◆' : '◇'} STANDARD · пройдено ${save.standardCampaignClears} · рекорд ${standardBest}`,
+          `${save.standardCampaignClears > 0 ? '◆' : '◇'} СТАНДАРТ · пройдено ${save.standardCampaignClears} · рекорд ${standardBest}`,
           compact ? 12 : 13,
           save.standardCampaignClears > 0 ? '#8fe8ff' : '#c7bfd0'
         );
         addText(
           left + 28,
           bodyTop + 81,
-          `${save.strainedCampaignClears > 0 ? '◆' : '◇'} STRAINED · пройдено ${save.strainedCampaignClears} · рекорд ${strainedBest}`,
+          `${save.strainedCampaignClears > 0 ? '◆' : '◇'} НАПРЯЖЕНИЕ · пройдено ${save.strainedCampaignClears} · рекорд ${strainedBest}`,
           compact ? 12 : 13,
           save.strainedCampaignClears > 0 ? '#ffe066' : '#c7bfd0'
         );
@@ -931,7 +940,7 @@ export class MenuScene extends Phaser.Scene {
         addText(
           left + 28,
           top + panelH - 106,
-          `ЦИКЛОВ: ${save.runs}   ·   ИММУННЫХ КЛЕТОК: ${save.totalKills}`,
+          `ЦИКЛОВ: ${save.runs}   ·   УНИЧТОЖЕНО КЛЕТОК: ${save.totalKills}`,
           compact ? 11 : 13,
           '#d8d1e2'
         );
@@ -963,7 +972,7 @@ export class MenuScene extends Phaser.Scene {
 
     overlay.add(
       this.add
-        .text(W / 2, top + panelH - 40, 'Codex хранит открытия · без постоянных бонусов', {
+        .text(W / 2, top + panelH - 40, 'КОДЕКС хранит открытия · без постоянных бонусов', {
           fontFamily: UI_FONT,
           fontSize: compact ? '11px' : '12px',
           fontStyle: '650',

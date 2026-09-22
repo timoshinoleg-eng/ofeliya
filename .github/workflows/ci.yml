@@ -62,6 +62,9 @@ jobs:
       - name: Daily V2 client contract smoke
         run: npm run test:daily-v2
 
+      - name: Player language contract smoke
+        run: npm run test:language
+
       - name: Gameplay RNG deterministic smoke
         run: npm run test:rng
 

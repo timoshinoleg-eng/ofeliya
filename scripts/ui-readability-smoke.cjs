@@ -208,9 +208,9 @@ async function inspectCodex(page, size) {
     const important = rows.filter((row) =>
       row.text !== '×' &&
       row.text !== 'КОДЕКС · STRAIN-0' &&
-      !row.text.startsWith('Codex хранит открытия')
+      !row.text.startsWith('КОДЕКС хранит открытия')
     );
-    const footer = rows.find((row) => row.text.startsWith('Codex хранит открытия')) ?? null;
+    const footer = rows.find((row) => row.text.startsWith('КОДЕКС хранит открытия')) ?? null;
     const overflow = rows.filter(({ bounds }) =>
       bounds.left < 2 || bounds.right > width - 2 || bounds.top < 2 || bounds.bottom > height - 2
     );

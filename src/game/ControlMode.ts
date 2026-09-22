@@ -28,7 +28,7 @@ export function nextControlMode(mode: ControlMode): ControlMode {
 
 export function controlModeLabel(mode: ControlMode): string {
   if (mode === 'one-hand') return 'ОДНА РУКА';
-  if (mode === 'two-hand') return 'ДВЕ РУКИ · TWIN-STICK';
+  if (mode === 'two-hand') return 'ДВЕ РУКИ · ПРИЦЕЛ';
   return 'ДВЕ РУКИ · ДВИЖЕНИЕ';
 }
 

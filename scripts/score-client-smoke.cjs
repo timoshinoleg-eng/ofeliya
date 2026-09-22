@@ -100,7 +100,7 @@ function browserDriver() {
     };
     ui.children.list.forEach(visit);
     return flat.some(
-      (obj) => typeof obj.text === 'string' && obj.text.includes('РЕЙТИНГ · RULESET 2 · #7')
+      (obj) => typeof obj.text === 'string' && obj.text.includes('РЕЙТИНГ · МЕСТО #7')
     );
   }, null, { timeout: 2500 });
 
@@ -152,7 +152,7 @@ function browserDriver() {
     ui.children.list.forEach(visit);
     const texts = flat.filter((obj) => typeof obj.text === 'string').map((obj) => obj.text);
     return {
-      rank: texts.find((text) => text.includes('РЕЙТИНГ · RULESET 2 · #7')) ?? null,
+      rank: texts.find((text) => text.includes('РЕЙТИНГ · МЕСТО #7')) ?? null,
       retry: texts.includes('ЕЩЁ ОДИН ЦИКЛ'),
       menu: texts.includes('В МЕНЮ'),
       share: texts.includes('БРОСИТЬ ВЫЗОВ'),

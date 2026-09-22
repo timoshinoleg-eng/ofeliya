@@ -47,7 +47,7 @@ export function showLegalOverlay(): void {
     </style>
     <div class="legal-sheet">
       <div class="legal-head"><h1>OFELIYA · STRAIN ZERO</h1><button class="legal-close" type="button">ЗАКРЫТЬ</button></div>
-      ${missing.length ? `<div class="legal-note">Pre-release: обязательные реквизиты публикации не заполнены (${escapeHtml(missing.join(', '))}). Production MAX build должен выполняться через <strong>npm run build:max</strong>.</div>` : ''}
+      ${missing.length ? `<div class="legal-note">Предрелиз: обязательные реквизиты публикации не заполнены (${escapeHtml(missing.join(', '))}). Production MAX build должен выполняться через <strong>npm run build:max</strong>.</div>` : ''}
 
       <h2>О приложении и разработчике</h2>
       ${row('Приложение', `${info.appName} · v${info.version}`)}
