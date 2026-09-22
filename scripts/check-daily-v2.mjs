@@ -26,7 +26,7 @@ try {
     { stdio: 'inherit' }
   );
 
-  const { requestDailyRun } = require(join(temp, 'systems/DailyRunClient.js'));
+  const { requestDailyRun, requestDailyRunDetailed } = require(join(temp, 'systems/DailyRunClient.js'));
   const {
     buildDailyScoreSubmission,
     submitDailyRunScore,
@@ -124,6 +124,74 @@ try {
   assert.equal(response.dailyRunAccepted, true);
   assert.equal(response.rank, 3);
   assert.equal(requests.at(-1).body.payload.dailyRunId, ticket.runId);
+
+  // --- detailed ticket status contract ---
+  const jsonRes = (status, body) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  });
+
+  global.fetch = async () => jsonRes(200, { ok: true, ticket });
+  let detailed = await requestDailyRunDetailed(platform);
+  assert.equal(detailed.status, 'ok');
+  assert.deepEqual(detailed.ticket, ticket);
+
+  global.fetch = async () => jsonRes(503, { ok: false });
+  detailed = await requestDailyRunDetailed(platform);
+  assert.equal(detailed.status, 'capacity');
+  assert.equal(detailed.ticket, null);
+
+  global.fetch = async () => jsonRes(403, { ok: false });
+  detailed = await requestDailyRunDetailed(platform);
+  assert.equal(detailed.status, 'denied');
+  assert.equal(detailed.ticket, null);
+
+  global.fetch = async () => jsonRes(500, {});
+  detailed = await requestDailyRunDetailed(platform);
+  assert.equal(detailed.status, 'http');
+  assert.equal(detailed.ticket, null);
+
+  // ok:false 2xx is not an accepted ticket -> closest error status
+  global.fetch = async () => jsonRes(200, { ok: false, ticket });
+  detailed = await requestDailyRunDetailed(platform);
+  assert.equal(detailed.status, 'http');
+  assert.equal(detailed.ticket, null);
+
+  // malformed 2xx ticket shape -> closest error status
+  global.fetch = async () => jsonRes(200, { ok: true, ticket: { runId: 5 } });
+  detailed = await requestDailyRunDetailed(platform);
+  assert.equal(detailed.status, 'http');
+  assert.equal(detailed.ticket, null);
+
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => { throw new SyntaxError('bad json'); },
+  });
+  detailed = await requestDailyRunDetailed(platform);
+  assert.equal(detailed.status, 'http');
+  assert.equal(detailed.ticket, null);
+
+  global.fetch = async () => {
+    throw new Error('boom');
+  };
+  detailed = await requestDailyRunDetailed(platform);
+  assert.equal(detailed.status, 'network');
+  assert.equal(detailed.ticket, null);
+
+  // unavailable: precondition unmet, fetch must not be attempted
+  let unavailableFetches = 0;
+  global.fetch = async () => {
+    unavailableFetches += 1;
+    return jsonRes(200, { ok: true, ticket });
+  };
+  detailed = await requestDailyRunDetailed({ ...platform, kind: 'browser' });
+  assert.equal(detailed.status, 'unavailable');
+  assert.equal(detailed.ticket, null);
+  detailed = await requestDailyRunDetailed({ ...platform, initData: '' });
+  assert.equal(detailed.status, 'unavailable');
+  assert.equal(unavailableFetches, 0);
 
   console.log('Daily V2 client contract: ok');
 } finally {
