@@ -14,16 +14,16 @@ const MAX_ROWS = 3;
 function platformLabel(value: string): string {
   const normalized = value.trim().toLowerCase();
   if (normalized === 'max') return 'MAX';
-  if (normalized === 'telegram') return 'Telegram';
+  if (normalized === 'telegram') return 'TG';
   if (normalized === 'vk') return 'VK';
-  if (normalized === 'browser') return 'БРАУЗЕР';
-  return 'ДРУГАЯ ПЛАТФОРМА';
+  if (normalized === 'browser') return 'WEB';
+  return 'ДРУГАЯ';
 }
 
 function relationLabel(value: FriendSnapshot['relation']): string {
   if (value === 'both') return 'ВЗАИМНО';
-  if (value === 'inviter') return 'ВАС ПРИГЛАСИЛИ';
-  return 'ПО ВАШЕМУ ПРИГЛАШЕНИЮ';
+  if (value === 'inviter') return 'ПРИГЛАСИЛ ВАС';
+  return 'ПРИГЛАШЁН ВАМИ';
 }
 
 function errorCopy(status: RemoteStatus): string | null {
@@ -37,7 +37,7 @@ function seasonRow(entry: SocialTopEntry): string {
 }
 
 function friendRow(entry: FriendSnapshot): string {
-  return `${relationLabel(entry.relation)} · ${platformLabel(entry.platform)} · ${fmtTime(entry.timeMs)} · ${entry.kills}`;
+  return `${relationLabel(entry.relation)} · ${platformLabel(entry.platform)} · ${fmtTime(entry.timeMs)} · УНИЧТОЖЕНО ${entry.kills}`;
 }
 
 export class SocialHub {
@@ -75,7 +75,7 @@ export class SocialHub {
 
     this.root.add(
       scene.add
-        .text(W / 2, this.panelTop + 24, 'СОЦИУМ', {
+        .text(W / 2, this.panelTop + 24, 'СВОДКА', {
           fontFamily: FONT,
           fontSize: H < 650 ? '18px' : '21px',
           fontStyle: 'bold',
@@ -185,13 +185,13 @@ export class SocialHub {
     const todayY = this.panelTop + 70;
     this.sectionTitle(todayY, 'СЕГОДНЯ', 'ofeliya-social-today-title');
     this.addText(left, todayY + 22, 'ЗАГРУЗКА ЛИЧНОГО РЕЗУЛЬТАТА…', compact ? 10 : 11, UI_TEXT.secondary, 'left', width);
-    this.addDisabledDailyButton(todayY + 48);
+    this.addDisabledDailyButton(todayY + 74);
 
-    const seasonY = todayY + 108;
+    const seasonY = todayY + 136;
     this.sectionTitle(seasonY, 'СЕЗОН', 'ofeliya-social-season-title');
     this.addText(left, seasonY + 22, 'ЗАГРУЗКА ТАБЛИЦЫ…', compact ? 10 : 11, UI_TEXT.secondary, 'left', width);
 
-    const friendsY = seasonY + 128;
+    const friendsY = seasonY + 124;
     this.sectionTitle(friendsY, 'ДРУЗЬЯ', 'ofeliya-social-friends-title');
     this.addText(left, friendsY + 22, 'ЗАГРУЗКА СВЯЗЕЙ…', compact ? 10 : 11, UI_TEXT.secondary, 'left', width);
   }
@@ -252,9 +252,9 @@ export class SocialHub {
         );
     }
     this.addText(left, todayY + 22, dailyLine, bodySize, dailyError ? '#ffb095' : UI_TEXT.primary, 'left', width, 'ofeliya-social-today-status');
-    this.addDisabledDailyButton(todayY + 48);
+    this.addDisabledDailyButton(todayY + 74);
 
-    const seasonY = todayY + 108;
+    const seasonY = todayY + 136;
     const seasonTitle =
       detail.status.season === 'ok' && detail.snapshot.season
         ? `СЕЗОН ${detail.snapshot.season.index} · ${detail.snapshot.season.daysLeft} ДН.`
@@ -284,7 +284,7 @@ export class SocialHub {
       );
     }
 
-    const friendsY = seasonY + 128;
+    const friendsY = seasonY + 124;
     this.sectionTitle(friendsY, 'ДРУЗЬЯ', 'ofeliya-social-friends-title');
     const friendsError = errorCopy(detail.status.friends);
     if (friendsError) {
