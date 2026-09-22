@@ -471,6 +471,14 @@ function publicDailyRun(run) {
   };
 }
 
+export function compactDailyRunEntries(runs, now = Date.now(), cap = MAX_DAILY_RUNS, reserve = 0) {
+  const active = runs.filter((run) => run.closedAt == null && run.expiresAt > now);
+  return {
+    runs: active,
+    hasCapacity: active.length <= Math.max(0, cap - reserve),
+  };
+}
+
 function issueDailyRun(identity, now = Date.now()) {
   const dateKey = localDateKey(now);
   const existing = store.dailyRuns.find(
@@ -481,7 +489,11 @@ function issueDailyRun(identity, now = Date.now()) {
       run.closedAt == null &&
       run.expiresAt > now
   );
-  if (existing) return { run: existing, reused: true };
+  if (existing) return { run: existing, reused: true, capacity: true };
+
+  const compacted = compactDailyRunEntries(store.dailyRuns, now, MAX_DAILY_RUNS, 1);
+  store.dailyRuns = compacted.runs;
+  if (!compacted.hasCapacity) return { run: null, reused: false, capacity: false };
 
   const dayEnd = new Date(now);
   dayEnd.setHours(24, 0, 0, 0);
@@ -503,10 +515,7 @@ function issueDailyRun(identity, now = Date.now()) {
     closedAt: null,
   };
   store.dailyRuns.push(run);
-  if (store.dailyRuns.length > MAX_DAILY_RUNS) {
-    store.dailyRuns.splice(0, store.dailyRuns.length - MAX_DAILY_RUNS);
-  }
-  return { run, reused: false };
+  return { run, reused: false, capacity: true };
 }
 
 function findDuel(challengeId) {
@@ -839,6 +848,9 @@ const server = createServer(async (req, res) => {
       }
 
       const issued = issueDailyRun(identity);
+      if (!issued.capacity || !issued.run) {
+        return send(res, 503, { ok: false, error: 'daily run capacity temporarily unavailable' });
+      }
       saveStore();
       return send(res, issued.reused ? 200 : 201, {
         ok: true,
@@ -1038,6 +1050,10 @@ const server = createServer(async (req, res) => {
       const contract = parsedContract.contract;
       const cheat = antiCheatCheck(payload, contract);
       if (cheat) return send(res, 422, { ok: false, error: `anti-cheat: ${cheat}` });
+
+      if (!contract.legacy && payload.daily === true && payload.dailyRunId == null) {
+        return send(res, 422, { ok: false, error: 'current-ruleset daily run ticket required' });
+      }
 
       let dailyRun = null;
       if (payload.dailyRunId != null) {
