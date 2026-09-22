@@ -25,7 +25,7 @@ class PlatformFacade implements PlatformAdapter {
     let next: PlatformAdapter = this.browser;
     if (this.max.available) {
       next = this.max;
-    } else if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
+    } else if (typeof window !== 'undefined' && window.Telegram?.WebApp?.initData) {
       if (!this.telegram) this.telegram = new TelegramPlatform();
       next = this.telegram;
     }
