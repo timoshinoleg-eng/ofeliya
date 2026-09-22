@@ -77,17 +77,26 @@ try {
     requests.push({ url: String(url), body: JSON.parse(options.body) });
     return jsonRes(200, { ok: true, profile });
   };
-  const read = await fetchServerProfile(platform);
+  const readPlatform = { ...platform };
+  const [read, concurrentRead] = await Promise.all([
+    fetchServerProfile(readPlatform),
+    fetchServerProfile(readPlatform),
+  ]);
   assert.deepEqual(read, profile);
+  assert.deepEqual(concurrentRead, profile);
+  assert.equal(requests.length, 1, 'concurrent profile reads must share one network request');
   assert.match(requests.at(-1).url, /api\/profile$/);
   assert.deepEqual(requests.at(-1).body, { platform: 'telegram', initData: 'signed-init-data' });
+  assert.deepEqual(await fetchServerProfile(readPlatform), profile);
+  assert.equal(requests.length, 1, 'successful profile read must stay cached for the session');
 
   // --- valid migration claim ---
   global.fetch = async (url, options) => {
     requests.push({ url: String(url), body: JSON.parse(options.body) });
     return jsonRes(200, { ok: true, claimed: true, profile });
   };
-  const migrated = await migrateLocalSave(platform, {
+  const migrationPlatform = { ...platform };
+  const migrated = await migrateLocalSave(migrationPlatform, {
     bestTimeMs: 111,
     bestSurvivalMs: 0,
     bestWinTimeMs: 222,
@@ -114,6 +123,13 @@ try {
   assert.equal(sentSave.bestKills, 0, 'negative numbers clamp to 0');
   assert.deepEqual(sentSave.achievements, ['first-contact']);
   assert.equal(sentSave.muted, true);
+  const migrationRequestCount = requests.length;
+  assert.deepEqual(await fetchServerProfile(migrationPlatform), profile);
+  assert.equal(
+    requests.length,
+    migrationRequestCount,
+    'successful migration must prime the profile cache'
+  );
 
   // buildMigrationSave is deterministic and clamps NaN/negatives
   assert.equal(buildMigrationSave({ runs: Number.NaN }).runs, 0);
@@ -126,31 +142,31 @@ try {
 
   // --- reject: ok !== true ---
   global.fetch = async () => jsonRes(200, { ok: false, profile });
-  assert.equal(await fetchServerProfile(platform), null);
+  assert.equal(await fetchServerProfile({ ...platform }), null);
   assert.equal(await migrateLocalSave(platform, { runs: 1 }), null);
 
   // --- reject: missing/invalid fields ---
   global.fetch = async () => jsonRes(200, { ok: true, profile: { ...profile, records: undefined } });
-  assert.equal(await fetchServerProfile(platform), null);
+  assert.equal(await fetchServerProfile({ ...platform }), null);
 
   global.fetch = async () => jsonRes(200, { ok: true, profile: { ...profile, profileVersion: '1' } });
-  assert.equal(await fetchServerProfile(platform), null);
+  assert.equal(await fetchServerProfile({ ...platform }), null);
 
   global.fetch = async () => jsonRes(200, { ok: true, profile: { ...profile, records: { ...profile.records, achievements: undefined } } });
-  assert.equal(await fetchServerProfile(platform), null);
+  assert.equal(await fetchServerProfile({ ...platform }), null);
 
   global.fetch = async () => jsonRes(200, {
     ok: true,
     profile: { ...profile, inventory: { schemaVersion: 1, items: { x: { source: 'purchase', grantedAt: 1 } } } },
   });
-  assert.equal(await fetchServerProfile(platform), null, 'purchase source must never be accepted');
+  assert.equal(await fetchServerProfile({ ...platform }), null, 'purchase source must never be accepted');
 
   global.fetch = async () => jsonRes(200, { ok: true, claimed: 'yes', profile });
   assert.equal(await migrateLocalSave(platform, { runs: 1 }), null);
 
   // raw identity fields are rejected outright
   global.fetch = async () => jsonRes(200, { ok: true, profile: { ...profile, uid: '111' } });
-  assert.equal(await fetchServerProfile(platform), null);
+  assert.equal(await fetchServerProfile({ ...platform }), null);
 
   // --- reject: malformed JSON ---
   global.fetch = async () => ({
@@ -158,17 +174,26 @@ try {
     status: 200,
     json: async () => { throw new SyntaxError('bad json'); },
   });
-  assert.equal(await fetchServerProfile(platform), null);
+  assert.equal(await fetchServerProfile({ ...platform }), null);
 
   // --- reject: non-2xx ---
   global.fetch = async () => jsonRes(403, { ok: false });
-  assert.equal(await fetchServerProfile(platform), null);
+  assert.equal(await fetchServerProfile({ ...platform }), null);
   global.fetch = async () => jsonRes(500, {});
-  assert.equal(await fetchServerProfile(platform), null);
+  assert.equal(await fetchServerProfile({ ...platform }), null);
 
-  // --- reject: network failure ---
+  // --- reject: network failure remains retryable on the same platform object ---
+  const retryPlatform = { ...platform };
+  let retryFetches = 0;
+  global.fetch = async () => {
+    retryFetches += 1;
+    if (retryFetches === 1) throw new Error('boom');
+    return jsonRes(200, { ok: true, profile });
+  };
+  assert.equal(await fetchServerProfile(retryPlatform), null);
+  assert.deepEqual(await fetchServerProfile(retryPlatform), profile);
+  assert.equal(retryFetches, 2, 'failed profile read must not poison the session cache');
   global.fetch = async () => { throw new Error('boom'); };
-  assert.equal(await fetchServerProfile(platform), null);
   assert.equal(await migrateLocalSave(platform, { runs: 1 }), null);
 
   // --- precondition: browser / no initData never issues a request ---
