@@ -632,7 +632,7 @@ export class MenuScene extends Phaser.Scene {
 
 
     this.add
-      .text(W / 2, utilityY, 'СОЦИУМ', {
+      .text(W / 2, utilityY, 'СВОДКА', {
         fontFamily: FONT,
         fontSize: H < 650 ? '11px' : '12px',
         fontStyle: 'bold',
@@ -747,14 +747,14 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private showSocialHub(): void {
-    if (this.socialHub) return;
+    if (this.socialHub || this.codexOverlay) return;
     this.socialHub = new SocialHub(this, PlatformBridge, () => {
       this.socialHub = null;
     });
   }
 
   private showCodex(): void {
-    if (this.codexOverlay) return;
+    if (this.codexOverlay || this.socialHub) return;
 
     const W = this.scale.width;
     const H = this.scale.height;
