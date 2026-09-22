@@ -18,13 +18,15 @@ import {
 } from '../game/AchievementSystem';
 import { rollRunChoices } from '../game/EvolutionSystem';
 import { guaranteedLegendaryChoices, type LegendaryId } from '../game/LegendarySystem';
-import { HeartbeatPulseDirector, type HeartbeatPulseEvent } from '../game/HeartbeatPulseDirector';
+import { HEARTBEAT_PULSE_PROFILE, HeartbeatPulseDirector, type HeartbeatPulseEvent } from '../game/HeartbeatPulseDirector';
 import {
   HEART_SAFE_POCKET,
   heartSafePocketProfile,
 } from '../game/HeartPacing';
 import {
+  CARDIAC_LINE_HAZARD,
   CardiacLineHazardDirector,
+  canScheduleCardiacLineHazardBeforeHeartbeat,
   pointInsideCardiacLineHazard,
   type CardiacLineHazardSpec,
 } from '../game/CardiacLineHazard';
@@ -957,8 +959,15 @@ export class GameScene extends Phaser.Scene {
       stage.boss.behavior === 'heartbeat-pulse' &&
       this.stageDirector.phase === 'BOSS_ACTIVE' &&
       Boolean(boss?.active && boss.bossPhase === 2);
+    const timeUntilHeartbeatImpactMs =
+      this.heartbeatPulse.debugState.nextImpactAtMs - this.runState.stage.timeMs;
     const canSchedule =
-      this.heartbeatSafeIndicator === null && time > this.heartbeatOpportunityUntil;
+      this.heartbeatSafeIndicator === null &&
+      time > this.heartbeatOpportunityUntil &&
+      canScheduleCardiacLineHazardBeforeHeartbeat(
+        timeUntilHeartbeatImpactMs,
+        HEARTBEAT_PULSE_PROFILE.telegraphLeadMs
+      );
     const halfLength = Math.hypot(this.scale.width, this.scale.height) / 2 + 180;
 
     const events = this.cardiacHazard.update(
