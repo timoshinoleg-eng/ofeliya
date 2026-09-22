@@ -177,6 +177,9 @@ const STORE_FILE = join(DATA_DIR, 'store.json');
 const MAX_SCORES = 20_000;
 const MAX_REFS = 10_000;
 const MAX_ANALYTICS_EVENTS = 20_000;
+const ANALYTICS_RATE_WINDOW_MS = 60_000;
+const ANALYTICS_RATE_LIMIT = 60;
+const analyticsRateByActor = new Map();
 const MAX_DAILY_RUNS = 10_000;
 const DAILY_RUN_TTL_MS = 2 * 60 * 60 * 1000;
 const DAILY_RUN_GRACE_MS = 30 * 60 * 1000;
@@ -249,6 +252,22 @@ function sanitizeAnalyticsProps(raw) {
     else if (typeof value === 'string') out[key] = value.slice(0, 80);
   }
   return out;
+}
+
+function allowAnalyticsEvent(actor, now = Date.now()) {
+  const current = analyticsRateByActor.get(actor);
+  if (!current || now - current.windowStart >= ANALYTICS_RATE_WINDOW_MS) {
+    analyticsRateByActor.set(actor, { windowStart: now, count: 1 });
+  } else {
+    if (current.count >= ANALYTICS_RATE_LIMIT) return false;
+    current.count += 1;
+  }
+
+  if (analyticsRateByActor.size > 5_000) {
+    const oldest = analyticsRateByActor.keys().next().value;
+    if (oldest) analyticsRateByActor.delete(oldest);
+  }
+  return true;
 }
 
 // ---------- initData валидация ----------
@@ -783,30 +802,25 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req);
       const platform = body?.platform;
       const event = body?.event;
-      if (!['telegram', 'max', 'browser'].includes(platform) || !PRODUCT_EVENTS.has(event)) {
+      if (!['telegram', 'max'].includes(platform) || !PRODUCT_EVENTS.has(event)) {
         return send(res, 400, { ok: false, error: 'bad analytics event' });
       }
 
-      let uid = null;
-      if (platform === 'browser') {
-        const anonId = body?.anonId;
-        if (typeof anonId !== 'string' || anonId.length < 8 || anonId.length > 64) {
-          return send(res, 400, { ok: false, error: 'bad analytics anonId' });
-        }
-        uid = anonId;
-      } else {
-        const token = platform === 'telegram' ? TG_TOKEN : MAX_TOKEN;
-        const verified = validateInitData(body?.initData, token);
-        if (!verified) {
-          return send(res, 403, { ok: false, error: 'analytics initData validation failed' });
-        }
-        uid = verified.uid;
+      const token = platform === 'telegram' ? TG_TOKEN : MAX_TOKEN;
+      const verified = validateInitData(body?.initData, token);
+      if (!verified) {
+        return send(res, 403, { ok: false, error: 'analytics initData validation failed' });
+      }
+
+      const actor = analyticsActorHash(platform, verified.uid);
+      if (!allowAnalyticsEvent(actor)) {
+        return send(res, 429, { ok: false, error: 'analytics rate limited' });
       }
 
       store.analyticsEvents.push({
         event,
         platform,
-        actor: analyticsActorHash(platform, uid),
+        actor,
         props: sanitizeAnalyticsProps(body?.props),
         ts: Date.now(),
       });
