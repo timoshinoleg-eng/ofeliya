@@ -71,6 +71,12 @@ function browserDriver() {
     // Isolate the beam's exact damage from passive regeneration during the 850 ms telegraph.
     gs.runState.stage.regen = 0;
     gs.wave.startStage(gs.stageDirector.currentStage);
+    // Isolate the boss hazard from WaveDirector opening/minion spawns. They have their own tests and
+    // can legitimately change HP/iframes while this smoke is measuring the beam's exact damage.
+    for (const enemy of gs.enemies.getChildren()) {
+      if (enemy.active) enemy.deactivateForStageReset();
+    }
+    gs.wave.update = () => {};
     gs.heartbeatPulse.reset(0);
     gs.cardiacHazard.reset();
     gs.cardiacHazardVisual = null;
