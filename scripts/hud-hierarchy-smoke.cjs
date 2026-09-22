@@ -497,6 +497,7 @@ function assertContainment(kind, label, contract) {
       await page.evaluate(() => {
         const gs = window.__game.scene.getScene('Game');
         gs.runState.stage.combo = 24;
+        gs.runState.stage.comboTimer = 5000;
       });
       await sleep(160);
       const comboState = await readHud(page);
