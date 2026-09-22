@@ -1,6 +1,5 @@
 import type { PlatformAdapter } from '../platform/PlatformBridge';
 
-const ANALYTICS_ANON_KEY = 'ofeliya_analytics_anon_v1';
 const ANALYTICS_TIMEOUT_MS = 1800;
 
 export type ProductEvent =
@@ -18,36 +17,9 @@ export type ProductEvent =
 
 export type ProductEventProps = Record<string, string | number | boolean>;
 
-function randomAnonId(): string {
-  try {
-    if (globalThis.crypto?.getRandomValues) {
-      const words = new Uint32Array(3);
-      globalThis.crypto.getRandomValues(words);
-      return `anon-${Array.from(words, (word) => word.toString(16).padStart(8, '0')).join('')}`;
-    }
-  } catch {
-    // Restricted WebViews can deny crypto.
-  }
-  return `anon-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
-}
-
-function analyticsAnonId(): string {
-  if (typeof localStorage === 'undefined') return randomAnonId();
-  try {
-    const current = localStorage.getItem(ANALYTICS_ANON_KEY);
-    if (current && current.length >= 8 && current.length <= 64) return current;
-    const created = randomAnonId();
-    localStorage.setItem(ANALYTICS_ANON_KEY, created);
-    return created;
-  } catch {
-    return randomAnonId();
-  }
-}
-
 export interface AnalyticsSubmission {
-  platform: 'max' | 'telegram' | 'browser';
-  initData?: string;
-  anonId?: string;
+  platform: 'max' | 'telegram';
+  initData: string;
   event: ProductEvent;
   props: ProductEventProps;
 }
@@ -57,17 +29,16 @@ export function buildAnalyticsSubmission(
   platform: PlatformAdapter,
   props: ProductEventProps = {}
 ): AnalyticsSubmission | null {
-  const kind = platform.kind === 'max' || platform.kind === 'telegram' ? platform.kind : 'browser';
-  if (kind !== 'browser' && !platform.initData) return null;
+  if ((platform.kind !== 'max' && platform.kind !== 'telegram') || !platform.initData) {
+    return null;
+  }
 
-  const submission: AnalyticsSubmission = {
-    platform: kind,
+  return {
+    platform: platform.kind,
+    initData: platform.initData,
     event,
     props,
   };
-  if (kind === 'browser') submission.anonId = analyticsAnonId();
-  else submission.initData = platform.initData;
-  return submission;
 }
 
 function endpoint(): string {
