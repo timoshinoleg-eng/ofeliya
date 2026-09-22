@@ -15,6 +15,8 @@ const dockerfile = read('deploy/Dockerfile');
 const nginx = read('deploy/nginx.conf');
 const runtimeConfig = read('public/runtime-config.js');
 const serviceWorker = read('public/sw.js');
+const releaseSource = read('src/release.ts');
+const releaseStamp = read('scripts/stamp-release.mjs');
 
 const runtimePos = index.indexOf('./runtime-config.js');
 const maxBridgePos = index.indexOf('https://st.max.ru/js/max-web-app.js');
@@ -36,7 +38,8 @@ assert.match(
   'Canvas text workaround must be scoped to the fallback path only'
 );
 assert.match(main, /FONT_READY_TIMEOUT_MS\s*=\s*700/, 'font loading must not block MAX startup indefinitely');
-assert.match(main, /ofeliya-20260921-direct-nav-v1/, 'bundle must carry the direct-navigation release marker');
+assert.match(main, /import \{ RELEASE_MARKER \} from '\.\/release'/, 'bundle must use the centralized build release marker');
+assert.match(releaseSource, /VITE_RELEASE_SHA/, 'client release identity must come from the build SHA');
 assert.match(caddy, /handle_path \/ofeliya\/\*/, 'Ofeliya must own /ofeliya/ namespace');
 assert.doesNotMatch(caddy, /handle_path \/hub\/\*/, 'Ofeliya must not claim Hub routes');
 assert.match(botConfig, /shared \? value\('HUB_BOT_USERNAME'\)/, 'shared mode may explicitly reuse the Hub bot username');
@@ -71,9 +74,12 @@ assert.ok(
   'runtime/score targets must precede the frontend build stage for legacy Docker builders'
 );
 assert.match(nginx, /location = \/runtime-config\.js[\s\S]*no-store/, 'runtime config must be no-store');
-assert.match(runtimeConfig, /ofeliya-20260921-direct-nav-v1/, 'runtime config must identify the direct-navigation startup release');
+assert.match(runtimeConfig, /ofeliya-__OFELIYA_RELEASE__/, 'runtime config must be release-stamped after build');
 assert.doesNotMatch(runtimeConfig, /location\\.(?:replace|assign|reload)/, 'runtime config must not trigger a second document navigation');
-assert.match(serviceWorker, /ofeliya-20260921-direct-nav-v1/, 'service worker cache must rotate for the direct-navigation release');
+assert.match(serviceWorker, /ofeliya-__OFELIYA_RELEASE__/, 'service worker cache must be release-stamped after build');
+assert.match(releaseStamp, /dist\/release\.json/, 'release stamping must emit a public immutable release identity');
+assert.match(compose, /VITE_RELEASE_SHA:\s*\$\{OFELIYA_RELEASE:\?/, 'production static build must receive the requested release SHA');
+assert.match(dockerfile, /ARG VITE_RELEASE_SHA/, 'Dockerfile must accept the requested release SHA');
 assert.match(serviceWorker, /key\.startsWith\(CACHE_PREFIX\)/, 'cache cleanup must be scoped to Ofeliya');
 
 console.log('Strain Zero production release contract: ok');
