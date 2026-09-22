@@ -9,6 +9,7 @@ import { PlatformBridge } from './platform';
 import { StartupTrace } from './systems/StartupTrace';
 import { ensureTelegramBridge } from './platform/TelegramBridgeLoader';
 import { trackProductEvent } from './systems/AnalyticsClient';
+import { RELEASE_MARKER } from './release';
 
 declare global {
   interface Window {
@@ -19,7 +20,6 @@ declare global {
 
 const FONT_READY_TIMEOUT_MS = 700;
 const CANVAS_FALLBACK_KEY = 'ofeliya_canvas_fallback_v2';
-const RELEASE_MARKER = 'ofeliya-20260921-direct-nav-v1';
 
 function waitForFonts(): Promise<void> {
   StartupTrace.mark('fonts.start');
