@@ -69,7 +69,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         text.startsWith('Мутируй быстрее') ||
         text.startsWith('Носитель:') ||
         text === 'ВЫЗОВ ПОЛУЧЕН' ||
-        text.startsWith('Подави IMMUNE PRIME') ||
+        text.startsWith('Подави ИММУННОГО ПРАЙМА') ||
         text.startsWith('Продержись дольше') ||
         /иммун\.\s*·.*клеток.*мутация/i.test(text) ||
         text === 'ПРИНЯТЬ ВЫЗОВ' ||

@@ -133,7 +133,7 @@ function browserDriver() {
     await page.waitForTimeout(40);
   };
 
-  await clickTab('LEGENDARY');
+  await clickTab('ЛЕГЕНДАРНЫЕ');
   snapshot = await textSnapshot();
   if (
     !snapshot.texts.some((text) => text.includes('НУЛЕВАЯ ТОЧКА')) ||
@@ -146,8 +146,8 @@ function browserDriver() {
   await clickTab('МАСТЕРСТВО');
   snapshot = await textSnapshot();
   if (
-    !snapshot.texts.some((text) => text.includes('STANDARD · пройдено 2 · рекорд 09:15')) ||
-    !snapshot.texts.some((text) => text.includes('STRAINED · пройдено 1 · рекорд 10:05')) ||
+    !snapshot.texts.some((text) => text.includes('СТАНДАРТ · пройдено 2 · рекорд 09:15')) ||
+    !snapshot.texts.some((text) => text.includes('НАПРЯЖЕНИЕ · пройдено 1 · рекорд 10:05')) ||
     !snapshot.texts.some((text) => text.includes('ДОСТИЖЕНИЯ · 2/9')) ||
     !snapshot.texts.some((text) => text.includes('ПЕРВЫЙ КОНТАКТ')) ||
     !snapshot.texts.some((text) => text.includes('ЦЕПНАЯ РЕАКЦИЯ')) ||

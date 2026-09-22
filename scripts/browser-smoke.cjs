@@ -55,7 +55,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       .map(({ text, bounds }) => ({ text, left: bounds.left, right: bounds.right, width: bounds.width }));
     const target = textObjects.find(
       (obj) =>
-        obj.text.startsWith('Подави IMMUNE PRIME') ||
+        obj.text.startsWith('Подави ИММУННОГО ПРАЙМА') ||
         obj.text.startsWith('Заверши кампанию') ||
         obj.text.startsWith('Продержись дольше')
     );
@@ -150,7 +150,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       (obj) => typeof obj.text === 'string' && obj.visible !== false && (obj.alpha ?? 1) > 0.01 && typeof obj.getBounds === 'function'
     ) ?? [];
     const time = modalTexts.find((obj) => /^\d{2}:\d{2}$/.test(obj.text));
-    const stats = modalTexts.find((obj) => obj.text.startsWith('ИММУНИТЕТ:') && obj.text.includes('Клеток:'));
+    const stats = modalTexts.find((obj) => obj.text.startsWith('УНИЧТОЖЕНО:') && obj.text.includes('Заражено:'));
     const shareText = modalTexts.find((obj) => obj.text === 'БРОСИТЬ ВЫЗОВ');
     const verdict = modalTexts.find((obj) => obj.text.includes('ВЫЗОВ ПРЕВЗОЙДЁН'));
     const buttons = modalTexts.filter((obj) => ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В МЕНЮ'].includes(obj.text));

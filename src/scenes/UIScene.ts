@@ -123,7 +123,7 @@ export class UIScene extends Phaser.Scene {
     this.levelText = text(16, 30, 'МУТАЦИЯ 1', 14, '#ff8fd0', 0)
       .setFontStyle('bold')
       .setShadow(0, 1, '#02030a', 3, true, true);
-    this.killsText = text(W - 16, 30, 'ИММУН. 0', 14, '#e9fbff', 1)
+    this.killsText = text(W - 16, 30, 'УНИЧТОЖЕНО 0', 14, '#e9fbff', 1)
       .setFontStyle('bold')
       .setShadow(0, 1, '#02030a', 3, true, true);
     this.hpText = text(W / 2, 57, '', 11, '#f4fbff')
@@ -226,7 +226,7 @@ export class UIScene extends Phaser.Scene {
 
       this.timerText.setText(fmtTime(run.timeMs));
       this.levelText.setText(`МУТАЦИЯ ${run.level}`);
-      this.killsText.setText(`ИММУН. ${run.kills}`);
+      this.killsText.setText(`УНИЧТОЖЕНО ${run.kills}`);
 
       const showCombo = run.combo >= COMBO.showFrom;
       this.comboText.setVisible(showCombo);
@@ -800,8 +800,8 @@ export class UIScene extends Phaser.Scene {
           W / 2,
           titleY + (compact ? 39 : 46),
           legendaryReward
-            ? 'IMMUNE PRIME подавлен · выбери мутацию для СЕРДЦА'
-            : 'стадия ' + gs.runState.stage.level + ' · выбери мутацию',
+            ? 'ИММУННЫЙ ПРАЙМ подавлен · выбери мутацию для СЕРДЦА'
+            : 'МУТАЦИЯ ' + gs.runState.stage.level + ' · выбери карту',
           {
           fontFamily: UI_FONT,
           fontSize: compact ? '13px' : '15px',
@@ -1392,7 +1392,7 @@ export class UIScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
     const compact = H < 650;
-    const c = this.add.container(0, 0).setDepth(110);
+    const c = this.add.container(0, 0).setName('ofeliya-result').setDepth(110);
 
     c.add(this.add.rectangle(W / 2, H / 2, W, H, 0x05070f, 0.84).setInteractive());
     if (res.win && this.textures.exists('cinematic-victory')) {
@@ -1416,6 +1416,7 @@ export class UIScene extends Phaser.Scene {
         })
         .setOrigin(0.5)
         .setResolution(2)
+        .setName('ofeliya-result-title')
         .setShadow(0, 0, res.win ? 'rgba(255,224,102,0.7)' : 'rgba(255,56,96,0.7)', 16, true, true)
     );
 
@@ -1429,6 +1430,7 @@ export class UIScene extends Phaser.Scene {
         })
         .setOrigin(0.5)
         .setResolution(2)
+        .setName('ofeliya-result-time')
     );
 
     const statY = titleY + (compact ? 79 : 100);
@@ -1437,7 +1439,7 @@ export class UIScene extends Phaser.Scene {
         .text(
           W / 2,
           statY,
-          `${IDENTITY.kills}: ${res.kills}   ·   Клеток: ${res.hostCellsInfected}   ·   Пик мутации: ${res.highestLevel}   ·   ×${res.comboBest}`,
+          `${IDENTITY.kills}: ${res.kills}   ·   Заражено: ${res.hostCellsInfected}   ·   Пик мутации: ${res.highestLevel}   ·   Комбо ×${res.comboBest}`,
           {
             fontFamily: FONT,
             fontSize: compact ? '11px' : '13px',
@@ -1446,6 +1448,7 @@ export class UIScene extends Phaser.Scene {
         )
         .setOrigin(0.5)
         .setResolution(2)
+        .setName('ofeliya-result-stats')
     );
 
     let detailY = statY + 27;
@@ -1516,12 +1519,12 @@ export class UIScene extends Phaser.Scene {
           W / 2,
           detailY,
           res.resumed
-            ? `РЕЖИМ: ${res.difficultyId === 'standard' ? 'STANDARD' : 'STRAINED'} · ВОЗОБНОВЛЁН · ВНЕ РЕЙТИНГА`
+            ? `РЕЖИМ: ${res.difficultyId === 'standard' ? 'СТАНДАРТ' : 'НАПРЯЖЕНИЕ'} · ВОЗОБНОВЛЁН · ВНЕ РЕЙТИНГА`
             : duelChallenge
-              ? 'РЕЖИМ: FIXED-SEED DUEL · STANDARD · ВНЕ РЕЙТИНГА'
+              ? 'РЕЖИМ: ДУЭЛЬ · СТАНДАРТ · ВНЕ РЕЙТИНГА'
               : ranked
-                ? 'РЕЖИМ: STANDARD · рейтинговый'
-                : 'РЕЖИМ: STRAINED · вне рейтинга',
+                ? 'РЕЖИМ: СТАНДАРТ · рейтинговый'
+                : 'РЕЖИМ: НАПРЯЖЕНИЕ · вне рейтинга',
           {
             fontFamily: FONT,
             fontSize: compact ? '9px' : '10px',
@@ -1547,7 +1550,7 @@ export class UIScene extends Phaser.Scene {
     c.add(scoreStatus);
 
     if (res.resumed) {
-      scoreStatus.setText('CHECKPOINT RESUME · ВНЕ РЕЙТИНГА').setColor('#ffe066');
+      scoreStatus.setText('ЗАБЕГ ВОЗОБНОВЛЁН · ВНЕ РЕЙТИНГА').setColor('#ffe066');
     } else if (duelChallenge) {
       void submitDuelAttempt(duelChallenge.challengeId, res, PlatformBridge).then((attempt) => {
         if (!scoreStatus.active) return;
@@ -1579,7 +1582,7 @@ export class UIScene extends Phaser.Scene {
         }
         if (score.ranked) {
           scoreStatus
-            .setText(score.rank ? `РЕЙТИНГ · RULESET ${score.rulesetVersion} · #${score.rank}` : 'РЕЙТИНГ · РЕЗУЛЬТАТ СОХРАНЁН')
+            .setText(score.rank ? `РЕЙТИНГ · МЕСТО #${score.rank}` : 'РЕЙТИНГ · РЕЗУЛЬТАТ СОХРАНЁН')
             .setColor('#8fe8ff');
         } else if (PlatformBridge.kind === 'browser') {
           scoreStatus.setText('ТЕСТОВЫЙ РЕЗУЛЬТАТ · ВНЕ РЕЙТИНГА').setColor('#8f9ab7');
@@ -1632,14 +1635,14 @@ export class UIScene extends Phaser.Scene {
       detailY += compact ? 24 : 29;
       const target =
         challengeTarget.objective === 'boss1-clear'
-          ? `IMMUNE PRIME быстрее ${fmtTime(challengeTarget.timeMs)}`
+          ? `ИММУННЫЙ ПРАЙМ быстрее ${fmtTime(challengeTarget.timeMs)}`
           : challengeTarget.objective === 'campaign-clear'
             ? `кампания быстрее ${fmtTime(challengeTarget.timeMs)}`
             : `дольше ${fmtTime(challengeTarget.timeMs)}`;
       const beaten = ranked && isChallengeBeaten(challengeTarget, res);
       const label = ranked
         ? `ВЫЗОВ ${beaten ? 'ПРЕВЗОЙДЁН' : 'НЕ ПРЕВЗОЙДЁН'} · цель ${target}`
-        : 'ВЫЗОВ НЕ ЗАСЧИТАН · требуется STANDARD';
+        : 'ВЫЗОВ НЕ ЗАСЧИТАН · требуется СТАНДАРТ';
       c.add(
         this.add
           .text(W / 2, detailY, label, {
@@ -1701,7 +1704,7 @@ export class UIScene extends Phaser.Scene {
         this.scene.restart();
       });
       this.scene.stop('Game');
-    });
+    }, 'ofeliya-result-retry');
     y += gap;
     const legacyChallengeCreatable = ranked && !res.win;
     const shareButtonLabel = challengeTarget || legacyChallengeCreatable
@@ -1714,15 +1717,15 @@ export class UIScene extends Phaser.Scene {
       const evoShare = res.evolutions.length > 0 ? ` Критические мутации: ${res.evolutions.map((id) => EVOLUTION_NAMES[id]).join(', ')}.` : '';
       const legendaryShare =
         res.legendaryIds.length > 0
-          ? ` Legendary: ${res.legendaryIds.map((id) => getLegendaryDefinition(id).title).join(', ')}.`
+          ? ` Легендарные: ${res.legendaryIds.map((id) => getLegendaryDefinition(id).title).join(', ')}.`
           : '';
       const modeShare = ranked
         ? ''
         : duelChallenge
-          ? ' Fixed-Seed Duel · вне глобального рейтинга.'
+          ? ' Дуэль · вне глобального рейтинга.'
           : res.resumed
             ? ' Возобновлённый забег · вне рейтинга.'
-            : ' Режим: STRAINED.';
+            : ' Режим: НАПРЯЖЕНИЕ.';
       const shareText = res.win
         ? `OFELIYA / STRAIN-0 завершила кампанию за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare}${legendaryShare}`.trim()
         : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare}${legendaryShare}`.trim();
@@ -1763,18 +1766,18 @@ export class UIScene extends Phaser.Scene {
           return;
         }
         const duelText =
-          `OFELIYA Fixed-Seed Duel: мой результат ${fmtTime(created.targetTimeMs)}. ` +
-          'Тот же seed, Standard и управление. Сможешь пройти кампанию быстрее?';
+          `OFELIYA · ДУЭЛЬ: мой результат ${fmtTime(created.targetTimeMs)}. ` +
+          'Тот же забег, сложность СТАНДАРТ и управление. Сможешь пройти кампанию быстрее?';
         void PlatformBridge.shareResult(duelText, link).then((ok) => {
           this.toast(c, ok ? 'ДУЭЛЬ СОЗДАНА · ссылка готова' : 'Нативный шаринг недоступен в этом клиенте');
         });
       });
-    });
+    }, 'ofeliya-result-share');
     y += gap;
     this.button(c, 'В МЕНЮ', W / 2, y, false, () => {
       this.gs?.scene.stop();
       this.scene.start('Menu');
-    });
+    }, 'ofeliya-result-menu');
   }
 
   private buildSummary(stacks: Record<string, number>): string {
@@ -1782,14 +1785,14 @@ export class UIScene extends Phaser.Scene {
       dmg: 'ШИПЫ',
       rate: 'РЕПЛИКАЦИЯ',
       multi: 'КОПИИ',
-      pierce: 'ПРОНИКН.',
-      speed: 'ПОДВИЖН.',
+      pierce: 'ПРОБИТИЕ',
+      speed: 'СКОРОСТЬ',
       hp: 'КАПСИД',
-      magnet: 'АФФИНИТЕТ',
+      magnet: 'МАГНИТ',
       orbit: 'СПУТНИКИ',
       nova: 'ЛИЗИС',
-      regen: 'РЕКОМБ.',
-      infect: 'ЗАРАЖ.',
+      regen: 'РЕГЕН.',
+      infect: 'ЗАРАЖЕНИЕ',
       lysis: 'ЦИТОЛИЗ',
       factory: 'ФАБРИКА',
     };
@@ -1807,13 +1810,15 @@ export class UIScene extends Phaser.Scene {
     x: number,
     y: number,
     primary: boolean,
-    cb: () => void
+    cb: () => void,
+    layoutName?: string
   ): void {
     const w = 230;
     const h = 46;
     const bg = this.add
       .rectangle(x, y, w, h, primary ? COLORS.magenta : COLORS.panel, primary ? 0.18 : 0.95)
       .setStrokeStyle(2, primary ? COLORS.magenta : COLORS.stroke, 1);
+    if (layoutName) bg.setName(layoutName + '-bg');
     const t = this.add
       .text(x, y, label, {
         fontFamily: FONT,
@@ -1823,6 +1828,7 @@ export class UIScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setResolution(2);
+    if (layoutName) t.setName(layoutName + '-label');
     bg.setInteractive({ useHandCursor: true }).on('pointerup', () => cb());
     bg.on('pointerover', () => bg.setFillStyle(COLORS.panelHover, 1));
     bg.on('pointerout', () =>

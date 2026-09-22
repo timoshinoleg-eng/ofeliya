@@ -1,8 +1,5 @@
 import Phaser from 'phaser';
 
-const RESULT_BUTTONS = new Set(['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'ПОДЕЛИТЬСЯ РЕЗУЛЬТАТОМ', 'В МЕНЮ']);
-const RESULT_TITLES = new Set(['ШТАММ УНИЧТОЖЕН', 'ИММУНИТЕТ ПОДАВЛЕН']);
-
 const menuSignatures = new WeakMap<Phaser.Scene, string>();
 const laidOutResults = new WeakSet<Phaser.GameObjects.Container>();
 
@@ -41,15 +38,15 @@ function guardMenu(scene: Phaser.Scene): void {
     fitToWidth(text, W - 24, 0.58);
   }
 
-  const byExact = (value: string) => texts.find((text) => text.text === value);
-  const title = byExact('OFELIYA');
+  const byName = (name: string) => texts.find((text) => text.name === name);
+  const title = byName('ofeliya-menu-title');
   if (title) fitToWidth(title, W - 34, 0.58);
 
-  const hook = texts.find((text) => text.text.startsWith('ОРГАНИЗМ ЕЩЁ НЕ ЗНАЕТ'));
+  const hook = byName('ofeliya-menu-hook');
   if (hook) fitToWidth(hook, W - 34, 0.68);
 
-  const subtitle = texts.find((text) => text.text.startsWith('Мутируй быстрее'));
-  const carrier = texts.find((text) => text.text.startsWith('Носитель:'));
+  const subtitle = byName('ofeliya-menu-subtitle');
+  const carrier = byName('ofeliya-menu-carrier');
   // The carrier greeting is useful context, not a release-critical control. On short MAX
   // viewports it competes with the challenge card, so omit it instead of shrinking every
   // important challenge label into unreadable text.
@@ -59,50 +56,27 @@ function guardMenu(scene: Phaser.Scene): void {
     subtitle.setY(hook.getBounds().bottom + 12 + subtitleHalf);
   }
 
-  const challengeHeader = byExact('ВЫЗОВ ПОЛУЧЕН');
+  const challengeHeader = byName('ofeliya-menu-challenge-header');
   if (challengeHeader) fitToWidth(challengeHeader, Math.min(W - 64, 286), 0.72);
 
-  const challengeMeta = texts.find((text) => /иммун\.\s*·.*клеток.*мутация/i.test(text.text));
+  const challengeMeta = byName('ofeliya-menu-challenge-meta');
   if (challengeMeta) fitToWidth(challengeMeta, Math.min(W - 64, 286), 0.64);
 
-  const challengeTarget = texts.find(
-    (text) =>
-      text.text.startsWith('Подави IMMUNE PRIME') ||
-      text.text.startsWith('Заверши кампанию') ||
-      text.text.startsWith('Продержись дольше')
-  );
+  const challengeTarget = byName('ofeliya-menu-challenge-target');
   if (challengeTarget) fitToWidth(challengeTarget, Math.min(W - 64, 286), 0.64);
 
-  const action = texts.find(
-    (text) => text.text === 'ПРИНЯТЬ ВЫЗОВ' || text.text === 'НАЧАТЬ ЗАРАЖЕНИЕ'
-  );
+  const action = byName('ofeliya-menu-action');
   if (action) fitToWidth(action, Math.min(W - 82, 258), 0.62);
 
-  const actionHint = texts.find((text) => text.text.startsWith('атака автоматическая'));
+  const actionHint = byName('ofeliya-menu-action-hint');
   if (actionHint) fitToWidth(actionHint, W - 58, 0.68);
 }
 
 function resultContainer(scene: Phaser.Scene): Phaser.GameObjects.Container | null {
-  for (const obj of scene.children.list) {
-    if (!(obj instanceof Phaser.GameObjects.Container)) continue;
-    const hasTitle = obj.list.some(
-      (child) => child instanceof Phaser.GameObjects.Text && RESULT_TITLES.has(child.text.replace(/\n/g, ' '))
-    );
-    if (hasTitle) return obj;
-  }
-  return null;
-}
-
-function pairedButtonBackground(
-  container: Phaser.GameObjects.Container,
-  label: Phaser.GameObjects.Text
-): Phaser.GameObjects.Rectangle | null {
   return (
-    container.list.find(
-      (obj): obj is Phaser.GameObjects.Rectangle =>
-        obj instanceof Phaser.GameObjects.Rectangle &&
-        !!obj.input?.enabled &&
-        Math.abs(obj.y - label.y) < 1
+    scene.children.list.find(
+      (obj): obj is Phaser.GameObjects.Container =>
+        obj instanceof Phaser.GameObjects.Container && obj.name === 'ofeliya-result'
     ) ?? null
   );
 }
@@ -119,12 +93,22 @@ function guardGameOver(scene: Phaser.Scene): void {
   const texts = container.list.filter(
     (obj): obj is Phaser.GameObjects.Text => obj instanceof Phaser.GameObjects.Text
   );
-  const title = texts.find((text) => RESULT_TITLES.has(text.text.replace(/\n/g, ' ')));
-  const time = texts.find((text) => /^\d{2}:\d{2}$/.test(text.text));
-  const stats = texts.find((text) => text.text.includes('Клеток:') && /мутац/i.test(text.text));
-  const buttonLabels = texts.filter((text) => RESULT_BUTTONS.has(text.text));
+  const byName = (name: string) => texts.find((text) => text.name === name);
+  const rectByName = (name: string) =>
+    container.list.find(
+      (obj): obj is Phaser.GameObjects.Rectangle =>
+        obj instanceof Phaser.GameObjects.Rectangle && obj.name === name
+    ) ?? null;
 
-  if (!title || !time || !stats || buttonLabels.length !== 3) return;
+  const title = byName('ofeliya-result-title');
+  const time = byName('ofeliya-result-time');
+  const stats = byName('ofeliya-result-stats');
+  const retryButton = byName('ofeliya-result-retry-label');
+  const shareButton = byName('ofeliya-result-share-label');
+  const menuButton = byName('ofeliya-result-menu-label');
+
+  if (!title || !time || !stats || !retryButton || !shareButton || !menuButton) return;
+  const buttonLabels = [retryButton, shareButton, menuButton];
 
   if (W < 420 && !title.text.includes('\n')) {
     title.setText(title.text.replace(' ', '\n')).setAlign('center').setLineSpacing(0);
@@ -152,7 +136,7 @@ function guardGameOver(scene: Phaser.Scene): void {
         text !== title &&
         text !== time &&
         text !== stats &&
-        !RESULT_BUTTONS.has(text.text)
+        !buttonLabels.includes(text)
     )
     .sort((a, b) => a.y - b.y);
 
@@ -180,14 +164,12 @@ function guardGameOver(scene: Phaser.Scene): void {
   }
 
   const buttonYs = [H - 166, H - 112, H - 58];
-  const shareLabel = buttonLabels.some((item) => item.text === 'БРОСИТЬ ВЫЗОВ')
-    ? 'БРОСИТЬ ВЫЗОВ'
-    : 'ПОДЕЛИТЬСЯ РЕЗУЛЬТАТОМ';
-  const orderedButtons = ['ЕЩЁ ОДИН ЦИКЛ', shareLabel, 'В МЕНЮ'];
-  orderedButtons.forEach((label, index) => {
-    const text = buttonLabels.find((item) => item.text === label);
-    if (!text) return;
-    const bg = pairedButtonBackground(container, text);
+  const buttonRows = [
+    { text: retryButton, bg: rectByName('ofeliya-result-retry-bg') },
+    { text: shareButton, bg: rectByName('ofeliya-result-share-bg') },
+    { text: menuButton, bg: rectByName('ofeliya-result-menu-bg') },
+  ];
+  buttonRows.forEach(({ text, bg }, index) => {
     const y = buttonYs[index];
     text.setPosition(W / 2, y);
     fitToWidth(text, Math.min(W - 78, 208), 0.68);

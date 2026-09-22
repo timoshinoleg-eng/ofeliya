@@ -33,7 +33,7 @@ export interface DifficultyProfile {
 export const STANDARD_DIFFICULTY: DifficultyProfile = {
   id: 'standard',
   label: 'СТАНДАРТ',
-  shortLabel: 'STANDARD',
+  shortLabel: 'СТАНДАРТ',
   description: 'Базовый ритм кампании',
   enemyHpMultiplier: 1,
   enemyDamageMultiplier: 1,
@@ -58,8 +58,8 @@ export const STANDARD_DIFFICULTY: DifficultyProfile = {
 export const STRAINED_DIFFICULTY: DifficultyProfile = {
   id: 'strained',
   label: 'НАПРЯЖЕНИЕ',
-  shortLabel: 'STRAINED',
-  description: 'Элиты мутируют · давление растёт',
+  shortLabel: 'НАПРЯЖЕНИЕ',
+  description: 'Особые клетки мутируют · давление растёт',
   enemyHpMultiplier: 1.08,
   enemyDamageMultiplier: 1.12,
   enemySpeedMultiplier: 1.06,
