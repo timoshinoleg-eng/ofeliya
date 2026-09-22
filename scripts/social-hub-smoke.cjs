@@ -181,6 +181,9 @@ async function inspectHub(page, size) {
     const panelBounds = panel.getBounds();
     const closeBounds = close.getBounds();
     const retryBounds = retry?.getBounds?.() ?? null;
+    const disabledBounds = disabled?.getBounds?.() ?? null;
+    const todayStatus = byName('ofeliya-social-today-status');
+    const todayStatusBounds = todayStatus?.getBounds?.() ?? null;
     const texts = all.filter((obj) => typeof obj?.text === 'string' && obj.visible !== false).map((obj) => obj.text);
     const content = all.filter((obj) => obj !== root && obj !== byName('ofeliya-social-dim') && obj !== panel && obj.visible !== false && typeof obj?.getBounds === 'function');
     const overflow = content
@@ -198,6 +201,8 @@ async function inspectHub(page, size) {
       panel: panelBounds,
       close: closeBounds,
       retry: retryBounds,
+      disabled: disabledBounds,
+      todayStatus: todayStatusBounds,
       disabledInteractive: Boolean(disabled?.input?.enabled),
       seasonRows: all.filter((obj) => String(obj?.name || '').startsWith('ofeliya-social-season-row-')).length,
       friendRows: all.filter((obj) => String(obj?.name || '').startsWith('ofeliya-social-friend-row-')).length,
@@ -210,6 +215,11 @@ async function inspectHub(page, size) {
   }, { ...size, uid: UID, initData: INIT_DATA });
 }
 
+function rectsOverlap(a, b) {
+  if (!a || !b) return false;
+  return !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top);
+}
+
 function assertSuccessContract(contract, size) {
   if (contract.overflow.length) throw new Error('social hub overflow ' + JSON.stringify({ size, overflow: contract.overflow }));
   if (contract.panel.left < 0 || contract.panel.right > size.width || contract.panel.top < 0 || contract.panel.bottom > size.height) {
@@ -217,6 +227,7 @@ function assertSuccessContract(contract, size) {
   }
   if (contract.close.width < 43 || contract.close.height < 43) throw new Error('social close target <44 ' + JSON.stringify(contract.close));
   if (contract.disabledInteractive) throw new Error('daily disabled surface must not be interactive');
+  if (rectsOverlap(contract.todayStatus, contract.disabled)) throw new Error('today status overlaps disabled Daily CTA ' + JSON.stringify({ size, today: contract.todayStatus, disabled: contract.disabled }));
   if (contract.seasonRows !== 3 || contract.friendRows !== 3 || !contract.hasSeasonMore || !contract.hasFriendsMore) {
     throw new Error('social row cap contract failed ' + JSON.stringify(contract));
   }
@@ -328,6 +339,7 @@ async function runSkipped(browser) {
     throw new Error('skipped identity request set mismatch ' + JSON.stringify({ actual, expected }));
   }
   if (contract.retry) throw new Error('skipped identity must not be rendered as an error');
+  if (rectsOverlap(contract.todayStatus, contract.disabled)) throw new Error('skipped identity copy overlaps disabled Daily CTA ' + JSON.stringify({ today: contract.todayStatus, disabled: contract.disabled }));
   if (errors.length) throw new Error('pageerror in skipped identity ' + JSON.stringify(errors));
   await ctx.close();
 }
