@@ -176,7 +176,7 @@ export const UPGRADES: UpgradeDef[] = [
     id: 'infect',
     shortName: 'РЕЦЕПТОРНЫЙ ЗАХВАТ',
     name: 'Заражение +22% · радиус +8%',
-    desc: 'OFELIYA быстрее заражает клетки организма и дольше держит безопасную дистанцию',
+    desc: 'OFELIYA быстрее заражает клетки организма и увеличивает радиус заражения',
     max: 4,
     family: 'core',
     rarity: 'common',
