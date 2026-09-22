@@ -58,6 +58,11 @@ class SfxImpl {
   private musicAbort: AbortController | null = null;
   private musicRequestId = 0;
   private musicWanted = false;
+  /** Deduplicates WebAudio resume attempts across SFX/music during WebView lifecycle changes. */
+  private audioResume: Promise<boolean> | null = null;
+  /** One-shot user-gesture retry used when MAX/Android suspends WebAudio around video playback. */
+  private musicUnlockHandler: (() => void) | null = null;
+  private lastMusicError: string | null = null;
   /** Deterministic bed index. Replaces the previous per-lifecycle `Math.random()` track pick. */
   private bedIndex = 0;
   private musicTension = MUSIC_TENSION_NEUTRAL;
@@ -80,6 +85,7 @@ class SfxImpl {
     if (m) {
       this.stopBioAmbience();
       this.resetMusicDuck();
+      this.disarmMusicUnlockRetry();
       if (!this.musicSrc) this.cancelMusicLoad();
     } else if (this.musicWanted) {
       this.startMusic();
@@ -174,16 +180,23 @@ class SfxImpl {
     }
   }
 
-  /** Document-visibility suspend. Resuming is a no-op while muted (master gain already 0). */
+  /** Document-visibility suspend. A visible WebView also retries a blocked music bed. */
   setSuspended(suspended: boolean): void {
     const ctx = this.ctx;
     if (!ctx) return;
-    try {
-      if (suspended) void ctx.suspend();
-      else void ctx.resume();
-    } catch {
-      /* WebViews can reject suspend/resume during teardown. */
+    if (suspended) {
+      try {
+        void ctx.suspend().catch(() => {});
+      } catch {
+        /* WebViews can reject suspend during teardown. */
+      }
+      return;
     }
+    void this.resumeAudioContext().then((running) => {
+      if (!this.musicWanted || this.muted) return;
+      if (running) this.spawnMusic();
+      else this.armMusicUnlockRetry();
+    });
   }
 
   /** Deterministic run bed. Same run seed → same bed; never a random per-lifecycle pick. */
@@ -237,8 +250,59 @@ class SfxImpl {
         this.layerBus.connect(this.musicFilter);
       } catch { return null; }
     }
-    if (this.ctx.state === 'suspended') void this.ctx.resume();
+    if (this.ctx.state === 'suspended') void this.resumeAudioContext();
     return this.ctx;
+  }
+
+  /**
+   * Resume the shared AudioContext without leaking rejected promises. MAX/Android WebViews can
+   * suspend WebAudio after an HTML-video/visibility transition even though the context was already
+   * unlocked by the menu tap.
+   */
+  private resumeAudioContext(): Promise<boolean> {
+    const ctx = this.ctx;
+    if (!ctx || ctx.state === 'closed') return Promise.resolve(false);
+    if (ctx.state === 'running') return Promise.resolve(true);
+    if (this.audioResume) return this.audioResume;
+
+    const pending = Promise.resolve()
+      .then(() => ctx.resume())
+      .then(() => ctx.state === 'running')
+      .catch(() => false);
+    this.audioResume = pending;
+    void pending.finally(() => {
+      if (this.audioResume === pending) this.audioResume = null;
+    });
+    return pending;
+  }
+
+  /**
+   * If a WebView rejects resume outside a user activation, retry on the next real gesture instead
+   * of leaving music permanently silent while procedural SFX continue to work.
+   */
+  private armMusicUnlockRetry(): void {
+    if (this.musicUnlockHandler || !this.musicWanted || this.muted || typeof window === 'undefined') return;
+    const retry = (): void => {
+      this.disarmMusicUnlockRetry();
+      void this.resumeAudioContext().then((running) => {
+        if (!this.musicWanted || this.muted) return;
+        if (running) this.spawnMusic();
+        else this.armMusicUnlockRetry();
+      });
+    };
+    this.musicUnlockHandler = retry;
+    window.addEventListener('pointerdown', retry, true);
+    window.addEventListener('touchend', retry, true);
+    window.addEventListener('keydown', retry, true);
+  }
+
+  private disarmMusicUnlockRetry(): void {
+    const retry = this.musicUnlockHandler;
+    if (!retry || typeof window === 'undefined') return;
+    window.removeEventListener('pointerdown', retry, true);
+    window.removeEventListener('touchend', retry, true);
+    window.removeEventListener('keydown', retry, true);
+    this.musicUnlockHandler = null;
   }
 
   private ensureBioAmbience(): void {
@@ -433,25 +497,81 @@ class SfxImpl {
     if (this.musicBuf) { this.spawnMusic(); return; }
     if (this.musicAbort) return;
     const ctx = this.ensure(); if (!ctx || !this.musicGain) return;
-    const requestId = ++this.musicRequestId; const controller = new AbortController();
+    const requestId = ++this.musicRequestId;
+    const controller = new AbortController();
     this.musicAbort = controller;
-    const track = MUSIC_TRACKS[this.bedIndex] ?? MUSIC_TRACKS[0];
-    void fetch(BASE + track, { signal: controller.signal })
-      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('HTTP ' + r.status))))
-      .then((ab) => ctx.decodeAudioData(ab))
-      .then((buf) => {
-        if (requestId !== this.musicRequestId || !this.musicWanted || this.muted) return;
-        this.musicBuf = buf; this.spawnMusic();
-      })
-      .catch(() => {})
-      .finally(() => { if (requestId === this.musicRequestId && this.musicAbort === controller) this.musicAbort = null; });
+    void this.loadMusicBed(ctx, requestId, controller).finally(() => {
+      if (requestId === this.musicRequestId && this.musicAbort === controller) this.musicAbort = null;
+    });
+  }
+
+  /**
+   * Decode the deterministic bed first, then walk the licensed set only if that asset/codec fails.
+   * A single bad file must not turn the whole run silent in one WebView implementation.
+   */
+  private async loadMusicBed(
+    ctx: AudioContext,
+    requestId: number,
+    controller: AbortController
+  ): Promise<void> {
+    const preferredBed = this.bedIndex;
+    let lastError: unknown = null;
+
+    for (let offset = 0; offset < MUSIC_TRACK_COUNT; offset += 1) {
+      if (controller.signal.aborted || requestId !== this.musicRequestId) return;
+      const trackIndex = (preferredBed + offset) % MUSIC_TRACK_COUNT;
+      const track = MUSIC_TRACKS[trackIndex] ?? MUSIC_TRACKS[0];
+      try {
+        const response = await fetch(BASE + track, { signal: controller.signal });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const buffer = await ctx.decodeAudioData(await response.arrayBuffer());
+        if (
+          controller.signal.aborted ||
+          requestId !== this.musicRequestId ||
+          !this.musicWanted ||
+          this.muted
+        ) return;
+        if (trackIndex !== preferredBed) {
+          console.warn('[OFELIYA audio] preferred music bed failed; using licensed fallback', {
+            preferredBed,
+            fallbackBed: trackIndex,
+          });
+        }
+        this.bedIndex = trackIndex;
+        this.musicBuf = buffer;
+        this.lastMusicError = null;
+        this.spawnMusic();
+        return;
+      } catch (error) {
+        if (controller.signal.aborted || requestId !== this.musicRequestId) return;
+        lastError = error;
+      }
+    }
+
+    this.lastMusicError = lastError instanceof Error ? lastError.message : String(lastError ?? 'unknown');
+    console.warn('[OFELIYA audio] unable to load any licensed music bed', {
+      preferredBed,
+      error: this.lastMusicError,
+    });
   }
 
   private spawnMusic(): void {
     if (!this.musicWanted || this.muted || !this.ctx || !this.musicBuf || !this.musicGain || this.musicSrc) return;
-    if (this.ctx.state === 'suspended') void this.ctx.resume();
-    const src = this.ctx.createBufferSource(); src.buffer = this.musicBuf; src.loop = true;
-    src.connect(this.musicGain); src.start(); this.musicSrc = src;
+    if (this.ctx.state !== 'running') {
+      void this.resumeAudioContext().then((running) => {
+        if (!this.musicWanted || this.muted || this.musicSrc) return;
+        if (running) this.spawnMusic();
+        else this.armMusicUnlockRetry();
+      });
+      return;
+    }
+    this.disarmMusicUnlockRetry();
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.musicBuf;
+    src.loop = true;
+    src.connect(this.musicGain);
+    src.start();
+    this.musicSrc = src;
   }
 
   private stopCurrentMusicSource(): void {
@@ -462,7 +582,12 @@ class SfxImpl {
   }
 
   stopMusic(): void {
-    this.musicWanted = false; this.cancelMusicLoad(); this.musicBuf = null; this.stopBioAmbience();
+    this.musicWanted = false;
+    this.disarmMusicUnlockRetry();
+    this.cancelMusicLoad();
+    this.musicBuf = null;
+    this.lastMusicError = null;
+    this.stopBioAmbience();
     this.setBioCadence(0);
     this.stopCurrentMusicSource();
     this.resetMusicDuck();

@@ -476,6 +476,26 @@ try {
     'the tension filter must stay on the music bus'
   );
 
+  assert(
+    /private resumeAudioContext\(\): Promise<boolean>/.test(sfxSource) &&
+      /armMusicUnlockRetry/.test(sfxSource) &&
+      /pointerdown/.test(sfxSource),
+    'music must retain a user-gesture recovery path for suspended WebViews'
+  );
+  assert(
+    /for \(let offset = 0; offset < MUSIC_TRACK_COUNT; offset \+= 1\)/.test(sfxSource),
+    'a single undecodable licensed bed must fall back to the remaining licensed set'
+  );
+  const musicSection = sfxSource.slice(sfxSource.indexOf('startMusic(): void'));
+  assert(
+    !/\.catch\(\(\) => \{\}\)/.test(musicSection),
+    'music load/resume failures must not be silently swallowed'
+  );
+  assert(
+    !/ctx\.state === 'suspended'\) void ctx\.resume\(\)/.test(musicSection),
+    'music must not start a buffer source before AudioContext resume is confirmed'
+  );
+
   const milestonesSource = read('src/game/RunMilestones.ts');
   assert(
     !/from '\.\.\/systems\/Sfx'/.test(milestonesSource) &&
