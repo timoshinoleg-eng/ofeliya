@@ -18,7 +18,7 @@
     "test:tokens": "node tests/tokens-contract.mjs",
     "test:visual-matrix": "node scripts/release-visual-matrix.cjs",
     "release:check": "node scripts/check-release-config.mjs",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && node scripts/stamp-release.mjs",
     "build:max": "node scripts/check-release-config.mjs && npm run build",
     "preview": "vite preview",
     "bot:max": "node bot/index.mjs",
