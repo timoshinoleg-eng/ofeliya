@@ -221,6 +221,7 @@ async function inspectHub(page, size) {
     const panel = byName('ofeliya-social-panel');
     const close = byName('ofeliya-social-close-hit');
     const retry = byName('ofeliya-social-retry-bg');
+    const daily = byName('ofeliya-social-daily-bg');
     const disabled = byName('ofeliya-social-daily-disabled');
     const serializeBounds = (obj) => {
       if (!obj || typeof obj.getBounds !== 'function') return null;
@@ -237,6 +238,7 @@ async function inspectHub(page, size) {
     const panelBounds = serializeBounds(panel);
     const closeBounds = serializeBounds(close);
     const retryBounds = serializeBounds(retry);
+    const dailyBounds = serializeBounds(daily);
     const disabledBounds = serializeBounds(disabled);
     const todayStatus = byName('ofeliya-social-today-status');
     const todayStatusBounds = serializeBounds(todayStatus);
@@ -257,8 +259,10 @@ async function inspectHub(page, size) {
       panel: panelBounds,
       close: closeBounds,
       retry: retryBounds,
+      daily: dailyBounds,
       disabled: disabledBounds,
       todayStatus: todayStatusBounds,
+      dailyInteractive: Boolean(daily?.input?.enabled),
       disabledInteractive: Boolean(disabled?.input?.enabled),
       seasonRows: all.filter((obj) => String(obj?.name || '').startsWith('ofeliya-social-season-row-')).length,
       friendRows: all.filter((obj) => String(obj?.name || '').startsWith('ofeliya-social-friend-row-')).length,
@@ -282,8 +286,12 @@ function assertSuccessContract(contract, size) {
     throw new Error('social panel outside viewport ' + JSON.stringify({ size, panel: contract.panel }));
   }
   if (contract.close.width < 43 || contract.close.height < 43) throw new Error('social close target <44 ' + JSON.stringify(contract.close));
+  if (!contract.daily || contract.daily.height < 43 || !contract.dailyInteractive) {
+    throw new Error('active Daily CTA missing/undersized ' + JSON.stringify({ size, daily: contract.daily, interactive: contract.dailyInteractive }));
+  }
+  if (contract.disabled) throw new Error('identity-ready Social Hub rendered disabled Daily CTA');
   if (contract.disabledInteractive) throw new Error('daily disabled surface must not be interactive');
-  if (rectsOverlap(contract.todayStatus, contract.disabled)) throw new Error('today status overlaps disabled Daily CTA ' + JSON.stringify({ size, today: contract.todayStatus, disabled: contract.disabled }));
+  if (rectsOverlap(contract.todayStatus, contract.daily)) throw new Error('today status overlaps Daily CTA ' + JSON.stringify({ size, today: contract.todayStatus, daily: contract.daily }));
   if (contract.seasonRows !== 3 || contract.friendRows !== 3 || !contract.hasSeasonMore || !contract.hasFriendsMore) {
     throw new Error('social row cap contract failed ' + JSON.stringify(contract));
   }
@@ -395,6 +403,8 @@ async function runSkipped(browser) {
     throw new Error('skipped identity request set mismatch ' + JSON.stringify({ actual, expected }));
   }
   if (contract.retry) throw new Error('skipped identity must not be rendered as an error');
+  if (contract.daily) throw new Error('skipped identity must not expose active Daily CTA');
+  if (!contract.disabled || contract.disabledInteractive) throw new Error('skipped identity Daily CTA must be visibly disabled');
   if (rectsOverlap(contract.todayStatus, contract.disabled)) throw new Error('skipped identity copy overlaps disabled Daily CTA ' + JSON.stringify({ today: contract.todayStatus, disabled: contract.disabled }));
   if (errors.length) throw new Error('pageerror in skipped identity ' + JSON.stringify(errors));
   await ctx.close();
