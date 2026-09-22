@@ -65,6 +65,9 @@ jobs:
       - name: Daily CTA atomicity contract
         run: npm run test:daily-cta
 
+      - name: Profile client contract smoke
+        run: npm run test:profile
+
       - name: Player language contract smoke
         run: npm run test:language
 

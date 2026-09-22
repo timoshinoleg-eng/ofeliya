@@ -966,6 +966,268 @@ await ok('бот: parseStartParam — результат друга', async () =
   assert.equal(parseStartParam('/start r_run_240w'), 'r_run_240w');
 });
 
+// ---------- профили (V1) ----------
+const { readFileSync, writeFileSync } = await import('node:fs');
+const { execFileSync } = await import('node:child_process');
+const SERVER_INDEX_URL = new URL('./index.mjs', import.meta.url).href;
+const PROFILES_FILE = join(DATA_DIR, 'profiles.json');
+const STORE_FILE = join(DATA_DIR, 'store.json');
+const PROFILE_HEADERS = { 'Content-Type': 'application/json' };
+const readProfile = (platform, initData) =>
+  fetch(`${BASE}/api/profile`, {
+    method: 'POST', headers: PROFILE_HEADERS,
+    body: JSON.stringify({ platform, initData }),
+  }).then(j);
+
+/** Дочерний процесс сервера на том же DATA_DIR: доказывает перезагрузку с диска. */
+function runChildServer(env) {
+  const script = `
+const { server } = await import(${JSON.stringify(SERVER_INDEX_URL)});
+await new Promise((resolve) => server.once('listening', resolve));
+const port = server.address().port;
+const res = await fetch('http://127.0.0.1:' + port + '/api/profile', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ platform: 'telegram', initData: process.env.OFELIYA_TEST_INITDATA }),
+});
+process.stdout.write('__OFELIYA_PROFILE__' + JSON.stringify(await res.json()));
+server.close();
+`;
+  return execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+    env,
+    encoding: 'utf8',
+    timeout: 20_000,
+  });
+}
+
+await ok('profile: tampered initData отклоняется (403)', async () => {
+  const res = await fetch(`${BASE}/api/profile`, {
+    method: 'POST', headers: PROFILE_HEADERS,
+    body: JSON.stringify({ platform: 'telegram', initData: signInitData(ALICE, TG_TOKEN).replace(/auth_date=\d+/, 'auth_date=1') }),
+  });
+  assert.equal(res.status, 403);
+});
+
+await ok('profile: отсутствующий initData отклоняется (403)', async () => {
+  const res = await fetch(`${BASE}/api/profile`, {
+    method: 'POST', headers: PROFILE_HEADERS,
+    body: JSON.stringify({ platform: 'telegram' }),
+  });
+  assert.equal(res.status, 403);
+});
+
+await ok('profile: некорректное тело запроса отклоняется (422)', async () => {
+  for (const raw of ['{}', '{"platform":42}', '[]', 'null']) {
+    const res = await fetch(`${BASE}/api/profile`, {
+      method: 'POST', headers: PROFILE_HEADERS, body: raw,
+    });
+    assert.equal(res.status, 422);
+  }
+});
+
+await ok('profile: browser и vk не получают серверный профиль (403)', async () => {
+  for (const platform of ['browser', 'vk']) {
+    const res = await fetch(`${BASE}/api/profile`, {
+      method: 'POST', headers: PROFILE_HEADERS,
+      body: JSON.stringify({ platform, initData: 'whatever', anonId: '0123456789abcdef' }),
+    });
+    assert.equal(res.status, 403);
+  }
+});
+
+let aliceProfile = null;
+await ok('profile: валидный MAX/TG read создаёт независимые пустые V1-профили', async () => {
+  aliceProfile = await readProfile('telegram', signInitData(ALICE, TG_TOKEN));
+  const bob = await readProfile('max', signInitData(BOB, MAX_TOKEN));
+  for (const r of [aliceProfile, bob]) {
+    assert.equal(r.ok, true);
+    assert.equal(r.profile.profileVersion, 1);
+    assert.equal(r.profile.inventory.schemaVersion, 1);
+    assert.equal(r.profile.records.migrated, false);
+    assert.deepEqual(r.profile.inventory.items, {});
+    assert.equal(typeof r.profile.createdAt, 'number');
+    assert.equal(typeof r.profile.updatedAt, 'number');
+  }
+});
+
+await ok('profile: повторное чтение стабильно (идемпотентно, без новых профилей)', async () => {
+  const again = await readProfile('telegram', signInitData(ALICE, TG_TOKEN));
+  assert.deepEqual(again, aliceProfile);
+  const onDisk = JSON.parse(readFileSync(PROFILES_FILE, 'utf8'));
+  assert.equal(Object.keys(onDisk.profiles).length, 2);
+});
+
+let aliceMigratedProfile = null;
+await ok('profile/migrate: первый claim выигрывает; числа клампятся; неизвестные ключи отбрасываются', async () => {
+  const scoresBefore = (await j(await fetch(`${BASE}/health`))).scores;
+  const r = await fetch(`${BASE}/api/profile/migrate`, {
+    method: 'POST', headers: PROFILE_HEADERS,
+    body: JSON.stringify({
+      platform: 'telegram',
+      initData: signInitData(ALICE, TG_TOKEN),
+      save: {
+        bestSurvivalMs: 421_234.7,
+        bestBoss1ClearMs: -5,
+        bestCampaignClearMs: Number.NaN,
+        bestKills: 999_999_999_999,
+        bestLevel: 42,
+        runs: 12,
+        totalKills: 5_000,
+        achievements: ['first-contact', 'first-contact', 'not a valid id!', 42, 'cleanup-500'],
+        evolutionsSeen: ['prism'],
+        legendarySeen: ['zero-point'],
+        bestTimeMs: 999,
+        bestWinTimeMs: 888,
+        hackerField: { evil: true },
+        muted: true,
+      },
+    }),
+  }).then(j);
+  assert.equal(r.ok, true);
+  assert.equal(r.claimed, true);
+  assert.equal(r.profile.records.migrated, true);
+  assert.equal(r.profile.records.bestSurvivalMs, 421_234.7);
+  assert.equal(r.profile.records.bestBoss1ClearMs, 0);
+  assert.equal(r.profile.records.bestCampaignClearMs, 0);
+  assert.equal(r.profile.records.bestKills, 1_000_000_000);
+  assert.equal(r.profile.records.bestLevel, 42);
+  assert.equal(r.profile.records.runs, 12);
+  assert.deepEqual(r.profile.records.achievements, ['first-contact', 'cleanup-500']);
+  assert.equal(r.profile.records.evolutionsSeen, undefined);
+  assert.equal(r.profile.records.legendarySeen, undefined);
+  assert.equal(r.profile.preferences.muted, true);
+  assert.deepEqual(Object.keys(r.profile.inventory.items), ['founder-badge-v1']);
+  assert.equal(r.profile.inventory.items['founder-badge-v1'].source, 'migration');
+  // advisory: миграция не создаёт ranked/verified скор
+  const health = await j(await fetch(`${BASE}/health`));
+  assert.equal(health.scores, scoresBefore);
+  aliceMigratedProfile = r.profile;
+});
+
+await ok('profile/migrate: повторный claim идемпотентен (claimed:false, профиль не меняется)', async () => {
+  const again = await fetch(`${BASE}/api/profile/migrate`, {
+    method: 'POST', headers: PROFILE_HEADERS,
+    body: JSON.stringify({
+      platform: 'telegram',
+      initData: signInitData(ALICE, TG_TOKEN),
+      save: { bestSurvivalMs: 1, runs: 1, achievements: ['deep-dive'] },
+    }),
+  }).then(j);
+  assert.equal(again.ok, true);
+  assert.equal(again.claimed, false);
+  assert.deepEqual(again.profile, aliceMigratedProfile);
+  // независимость платформ: MAX-профиль BOB не затронут миграцией ALICE
+  const bob = await readProfile('max', signInitData(BOB, MAX_TOKEN));
+  assert.equal(bob.profile.records.migrated, false);
+  assert.deepEqual(bob.profile.inventory.items, {});
+});
+
+await ok('profile/migrate: некорректный/отсутствующий save → 422', async () => {
+  const initData = signInitData(BOB, MAX_TOKEN);
+  for (const save of [undefined, 'string', 42, []]) {
+    const res = await fetch(`${BASE}/api/profile/migrate`, {
+      method: 'POST', headers: PROFILE_HEADERS,
+      body: JSON.stringify({ platform: 'max', initData, save }),
+    });
+    assert.equal(res.status, 422);
+  }
+});
+
+await ok('profile/migrate: слишком большой save → 422', async () => {
+  const res = await fetch(`${BASE}/api/profile/migrate`, {
+    method: 'POST', headers: PROFILE_HEADERS,
+    body: JSON.stringify({ platform: 'max', initData: signInitData(BOB, MAX_TOKEN), save: { pad: 'x'.repeat(9000) } }),
+  });
+  assert.equal(res.status, 422);
+});
+
+await ok('profile/migrate: конкурентные дубли не дают двойной грант', async () => {
+  const dora = { id: 909_101, first_name: 'Dora' };
+  const initData = signInitData(dora, TG_TOKEN);
+  const fire = () => fetch(`${BASE}/api/profile/migrate`, {
+    method: 'POST', headers: PROFILE_HEADERS,
+    body: JSON.stringify({ platform: 'telegram', initData, save: { runs: 3, bestKills: 9 } }),
+  }).then(j);
+  const results = await Promise.all([fire(), fire(), fire(), fire()]);
+  assert.ok(results.every((r) => r.ok));
+  assert.equal(results.filter((r) => r.claimed === true).length, 1);
+  const onDisk = JSON.parse(readFileSync(PROFILES_FILE, 'utf8'));
+  const doraDisk = onDisk.profiles['telegram:909101'];
+  assert.ok(doraDisk);
+  assert.deepEqual(Object.keys(doraDisk.inventory.items), ['founder-badge-v1']);
+  assert.ok(onDisk.migrations['telegram:909101'].claimedAt > 0);
+});
+
+await ok('profile: публичные ответы не содержат raw uid/userKey/initData/имя', async () => {
+  const user = { id: 515_000, first_name: 'Secretive', username: 'secretive' };
+  const initData = signInitData(user, TG_TOKEN);
+  const readText = await (await fetch(`${BASE}/api/profile`, {
+    method: 'POST', headers: PROFILE_HEADERS,
+    body: JSON.stringify({ platform: 'telegram', initData }),
+  })).text();
+  const migrateText = await (await fetch(`${BASE}/api/profile/migrate`, {
+    method: 'POST', headers: PROFILE_HEADERS,
+    body: JSON.stringify({ platform: 'telegram', initData, save: { runs: 1 } }),
+  })).text();
+  for (const text of [readText, migrateText]) {
+    assert.ok(!text.includes('"515000"'), 'raw uid leaked');
+    assert.ok(!text.includes('telegram:515000'), 'userKey leaked');
+    assert.ok(!text.includes(initData), 'initData leaked');
+    assert.ok(!text.includes('Secretive'), 'display name leaked');
+    const parsed = JSON.parse(text);
+    assert.equal('uid' in parsed.profile, false);
+    assert.equal('userKey' in parsed.profile, false);
+    assert.equal('initData' in parsed.profile, false);
+  }
+  assert.equal(JSON.parse(migrateText).claimed, true);
+});
+
+await ok('profile: битый profiles.json коэрсится к пустому стору (не роняет загрузку)', async () => {
+  const corruptDir = mkdtempSync(join(tmpdir(), 'ofeliya-profiles-corrupt-'));
+  try {
+    writeFileSync(join(corruptDir, 'profiles.json'), '{"profiles":"garbage","migrations":null,"version":"x"}');
+    const initData = signInitData({ id: 700_100, first_name: 'Rex' }, TG_TOKEN);
+    const out = runChildServer({ ...process.env, DATA_DIR: corruptDir, OFELIYA_TEST_INITDATA: initData });
+    const parsed = JSON.parse(out.split('__OFELIYA_PROFILE__')[1]);
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.profile.records.migrated, false);
+    assert.deepEqual(parsed.profile.inventory.items, {});
+  } finally {
+    rmSync(corruptDir, { recursive: true, force: true });
+  }
+});
+
+await ok('profile: profiles.json переживает перезапись store.json legacy-формой (rollback safety)', async () => {
+  const before = readFileSync(PROFILES_FILE, 'utf8');
+  // Симуляция старой сборки: store.json содержит только известные старые ключи.
+  writeFileSync(STORE_FILE, JSON.stringify({ scores: [], refs: [], refRewards: {} }));
+  // Обычный путь записи скора вызывает saveStore(): старая сборка переписала бы
+  // store.json целиком из известных ей ключей.
+  const res = await fetch(`${BASE}/api/score`, {
+    method: 'POST', headers: PROFILE_HEADERS,
+    body: JSON.stringify({
+      platform: 'telegram', initData: signInitData(ALICE, TG_TOKEN),
+      payload: { win: true, timeMs: 340_000, kills: 240, level: 12, daily: false },
+    }),
+  });
+  assert.equal(res.status, 200);
+  await new Promise((resolve) => setTimeout(resolve, 50)); // debounced saveStore (setImmediate)
+  const storeAfter = JSON.parse(readFileSync(STORE_FILE, 'utf8'));
+  assert.equal('profiles' in storeAfter, false);
+  assert.equal(readFileSync(PROFILES_FILE, 'utf8'), before);
+  const read = await readProfile('telegram', signInitData(ALICE, TG_TOKEN));
+  assert.equal(read.profile.records.migrated, true);
+});
+
+await ok('profile: сохранённый ответ переживает перезагрузку из profiles.json (дочерний сервер)', async () => {
+  const initData = signInitData(ALICE, TG_TOKEN);
+  const out = runChildServer({ ...process.env, DATA_DIR, OFELIYA_TEST_INITDATA: initData });
+  const parsed = JSON.parse(out.split('__OFELIYA_PROFILE__')[1]);
+  assert.equal(parsed.ok, true);
+  assert.deepEqual(parsed.profile, aliceMigratedProfile);
+  assert.equal(parsed.profile.createdAt, aliceMigratedProfile.createdAt);
+});
+
 server.close();
 rmSync(DATA_DIR, { recursive: true, force: true });
 console.log(`\n${passed} проверок пройдено${process.exitCode ? ' (Есть провалы!)' : ''}`);

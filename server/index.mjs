@@ -701,6 +701,179 @@ function dailyStats(user, platform, rulesetVersion = CURRENT_RULESET_VERSION) {
   };
 }
 
+// ---------- профили (V1): отдельный profiles.json ----------
+/**
+ * Профили живут в ОТДЕЛЬНОМ файле profiles.json, а НЕ ключом в store.json.
+ * Причина (rollback safety): loadStore() возвращает только известные ему ключи,
+ * а saveStore() перезаписывает store.json целиком — старая сборка после отката
+ * молча стёрла бы неизвестный ей ключ `profiles` при первом же флеше. Отдельный
+ * файл старые сборки просто игнорируют, данные переживают откат нетронутыми.
+ *
+ * Запись профилей СИНХРОННАЯ (tmp+rename) в пути запроса: 200 для профиля
+ * означает «уже сохранено на диске», в отличие от дебаунса store.json.
+ * Один writer, одна реплика: файл не защищён от конкурентного доступа.
+ */
+const PROFILES_FILE = join(DATA_DIR, 'profiles.json');
+const PROFILE_VERSION = 1;
+const INVENTORY_SCHEMA_VERSION = 1;
+const MAX_PROFILES = 50_000;
+const MAX_PROFILE_ITEMS = 64;
+const MAX_PROFILE_ACHIEVEMENTS = 64;
+const MAX_PROFILE_SAVE_BYTES = 8_192;
+const MAX_PROFILE_TIME_MS = 86_400_000;
+const MAX_PROFILE_COUNTER = 1_000_000_000;
+// Энтитлменты: source строго из allowlist. Значение 'purchase' ОСОЗНАННО
+// отсутствует: платная ценность требует транзакционного стора, идемпотентного
+// реестра заказов и серверной верификации чеков (см. README «Профили игрока»).
+const ENTITLEMENT_SOURCES = new Set(['grant', 'migration', 'promo']);
+// Статический серверный каталог косметики: клиент не может изобрести item id.
+const PROFILE_CATALOG = new Set(['founder-badge-v1']);
+// V1 выдаёт ровно один неконкурентный cosmetic за миграцию (courtesy grant,
+// не verified achievement и не конкурентное преимущество).
+const PROFILE_MIGRATION_GRANTS = [
+  { itemId: 'founder-badge-v1', source: 'migration' },
+];
+const ACHIEVEMENT_ID_RE = /^[A-Za-z0-9_.:-]{1,64}$/;
+
+function emptyProfileStore() {
+  return { version: 1, profiles: {}, migrations: {} };
+}
+
+function loadProfileStore() {
+  try {
+    const parsed = JSON.parse(readFileSync(PROFILES_FILE, 'utf8'));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return emptyProfileStore();
+    const isMap = (v) => v && typeof v === 'object' && !Array.isArray(v);
+    // Коэрсим как loadStore(): неизвестные/битые формы молча возвращаются к пустым.
+    return {
+      version: 1,
+      profiles: isMap(parsed.profiles) ? parsed.profiles : {},
+      migrations: isMap(parsed.migrations) ? parsed.migrations : {},
+    };
+  } catch {
+    return emptyProfileStore();
+  }
+}
+
+let profileStore = loadProfileStore();
+
+function saveProfilesNow() {
+  const tmp = `${PROFILES_FILE}.tmp`;
+  writeFileSync(tmp, JSON.stringify(profileStore));
+  renameSync(tmp, PROFILES_FILE);
+}
+
+/**
+ * Сериализация на пользователя: два конкурентных запроса одного userKey не
+ * могут interleaved-прочитать-изменить-записать (идемпотентность миграции).
+ */
+const profileLocks = new Map();
+function withProfileLock(userKey, task) {
+  const previous = profileLocks.get(userKey) ?? Promise.resolve();
+  const next = previous.then(task, task);
+  profileLocks.set(userKey, next.then(() => {}, () => {}));
+  if (profileLocks.size > 5_000) {
+    const oldest = profileLocks.keys().next().value;
+    if (oldest) profileLocks.delete(oldest);
+  }
+  return next;
+}
+
+function clampProfileNumber(value, max) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.min(value, max) : 0;
+}
+
+function newProfile(now) {
+  return {
+    profileVersion: PROFILE_VERSION,
+    createdAt: now,
+    updatedAt: now,
+    preferences: {},
+    records: {
+      bestSurvivalMs: 0,
+      bestBoss1ClearMs: 0,
+      bestCampaignClearMs: 0,
+      bestKills: 0,
+      bestLevel: 0,
+      runs: 0,
+      totalKills: 0,
+      achievements: [],
+      migrated: false,
+    },
+    inventory: { schemaVersion: INVENTORY_SCHEMA_VERSION, items: {} },
+  };
+}
+
+function sanitizeAchievementIds(raw) {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set();
+  for (const id of raw) {
+    if (typeof id === 'string' && ACHIEVEMENT_ID_RE.test(id)) seen.add(id);
+    if (seen.size >= MAX_PROFILE_ACHIEVEMENTS) break;
+  }
+  return [...seen];
+}
+
+function applyMigrationSave(profile, save) {
+  const records = save && typeof save === 'object' && !Array.isArray(save) ? save : {};
+  const preferences = {};
+  if (typeof records.muted === 'boolean') preferences.muted = records.muted;
+  if (typeof records.controlMode === 'string' && CONTROL_MODES.has(records.controlMode)) {
+    preferences.controlMode = records.controlMode;
+  }
+  if (typeof records.difficultyId === 'string' && DIFFICULTY_IDS.has(records.difficultyId)) {
+    preferences.difficultyId = records.difficultyId;
+  }
+  profile.preferences = preferences;
+  profile.records = {
+    // Legacy-алиасы (bestTimeMs/bestWinTimeMs) сервер сознательно не читает:
+    // клиент (ProfileClient) сам нормализует их по правилам SaveSystem.
+    bestSurvivalMs: clampProfileNumber(records.bestSurvivalMs, MAX_PROFILE_TIME_MS),
+    bestBoss1ClearMs: clampProfileNumber(records.bestBoss1ClearMs, MAX_PROFILE_TIME_MS),
+    bestCampaignClearMs: clampProfileNumber(records.bestCampaignClearMs, MAX_PROFILE_TIME_MS),
+    bestKills: clampProfileNumber(records.bestKills, MAX_PROFILE_COUNTER),
+    bestLevel: clampProfileNumber(records.bestLevel, MAX_PROFILE_COUNTER),
+    runs: clampProfileNumber(records.runs, MAX_PROFILE_COUNTER),
+    totalKills: clampProfileNumber(records.totalKills, MAX_PROFILE_COUNTER),
+    achievements: sanitizeAchievementIds(records.achievements),
+    // Advisory-only: локальные рекорды клиента никогда не становятся
+    // ranked/verified скорами и не конвертируются в платную ценность.
+    migrated: true,
+  };
+}
+
+/** Append-only грант: существующий item не переписывается, id только из каталога. */
+function grantProfileItem(profile, itemId, source, now = Date.now()) {
+  if (!PROFILE_CATALOG.has(itemId) || !ENTITLEMENT_SOURCES.has(source)) return false;
+  const items = profile.inventory.items;
+  if (items[itemId]) return false;
+  if (Object.keys(items).length >= MAX_PROFILE_ITEMS) return false;
+  items[itemId] = { source, grantedAt: now };
+  return true;
+}
+
+/** Публичная read-модель: без raw uid/userKey/initData/имён/аватаров. */
+function publicProfile(profile) {
+  return {
+    profileVersion: profile.profileVersion,
+    createdAt: profile.createdAt,
+    updatedAt: profile.updatedAt,
+    preferences: profile.preferences,
+    records: profile.records,
+    inventory: profile.inventory,
+  };
+}
+
+/** Только messenger-идентичность (max/telegram), как verifyDuelIdentity. */
+function verifyMessengerProfileIdentity(body) {
+  const platform = body?.platform;
+  if (platform !== 'max' && platform !== 'telegram') return null;
+  const token = platform === 'telegram' ? TG_TOKEN : (MAX_TOKEN || BOT_TOKEN);
+  const verified = validateInitData(body?.initData, token);
+  if (!verified) return null;
+  return { platform, uid: verified.uid, userKey: `${platform}:${verified.uid}` };
+}
+
 // ---------- HTTP ----------
 function send(res, code, obj) {
   const body = JSON.stringify(obj);
@@ -1290,6 +1463,86 @@ const server = createServer(async (req, res) => {
       }
       out.sort(compareScores);
       return send(res, 200, { ok: true, platform, friends: out.slice(0, 10) });
+    }
+
+    // V1 профили: только верифицированное чтение и одноразовая advisory-миграция.
+    // Общего profile update / grant endpoint нет — мутационной поверхности,
+    // доступной без подписи, этот этап не добавляет (см. README «Профили игрока»).
+    if (req.method === 'POST' && url.pathname === '/api/profile') {
+      const body = await readBody(req);
+      if (!body || typeof body !== 'object' || Array.isArray(body) || typeof body.platform !== 'string') {
+        return send(res, 422, { ok: false, error: 'bad profile request' });
+      }
+      const identity = verifyMessengerProfileIdentity(body);
+      if (!identity) return send(res, 403, { ok: false, error: 'verified messenger identity required' });
+
+      const outcome = await withProfileLock(identity.userKey, () => {
+        let profile = profileStore.profiles[identity.userKey];
+        if (!profile) {
+          // Lazy auto-vivify пустого V1 профиля (как lazy-create daily-тикета).
+          if (Object.keys(profileStore.profiles).length >= MAX_PROFILES) return { capacity: true };
+          profile = newProfile(Date.now());
+          profileStore.profiles[identity.userKey] = profile;
+          saveProfilesNow();
+        }
+        return { profile };
+      });
+      if (outcome.capacity) {
+        return send(res, 503, { ok: false, error: 'profile capacity temporarily unavailable' });
+      }
+      return send(res, 200, { ok: true, profile: publicProfile(outcome.profile) });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/profile/migrate') {
+      const body = await readBody(req);
+      if (!body || typeof body !== 'object' || Array.isArray(body) || typeof body.platform !== 'string') {
+        return send(res, 422, { ok: false, error: 'bad profile request' });
+      }
+      const identity = verifyMessengerProfileIdentity(body);
+      if (!identity) return send(res, 403, { ok: false, error: 'verified messenger identity required' });
+      const save = body?.save;
+      if (!save || typeof save !== 'object' || Array.isArray(save)) {
+        return send(res, 422, { ok: false, error: 'bad save' });
+      }
+      let saveHash = null;
+      try {
+        const raw = JSON.stringify(save);
+        if (raw == null || Buffer.byteLength(raw, 'utf8') > MAX_PROFILE_SAVE_BYTES) {
+          return send(res, 422, { ok: false, error: 'save too large' });
+        }
+        saveHash = createHash('sha256').update(raw).digest('hex').slice(0, 32);
+      } catch {
+        return send(res, 422, { ok: false, error: 'bad save' });
+      }
+
+      const outcome = await withProfileLock(identity.userKey, () => {
+        let profile = profileStore.profiles[identity.userKey];
+        let mutated = false;
+        if (!profile) {
+          if (Object.keys(profileStore.profiles).length >= MAX_PROFILES) return { capacity: true };
+          profile = newProfile(Date.now());
+          profileStore.profiles[identity.userKey] = profile;
+          mutated = true;
+        }
+        // One-time claim: первый валидный claim выигрывает, повторные получают
+        // существующий профиль без ошибки (чтобы не провоцировать retry storms).
+        if (profileStore.migrations[identity.userKey]) {
+          if (mutated) saveProfilesNow();
+          return { profile, claimed: false };
+        }
+        applyMigrationSave(profile, save);
+        for (const grant of PROFILE_MIGRATION_GRANTS) {
+          grantProfileItem(profile, grant.itemId, grant.source);
+        }
+        profile.updatedAt = Date.now();
+        profileStore.migrations[identity.userKey] = { claimedAt: Date.now(), saveHash };
+        saveProfilesNow();
+        return { profile, claimed: true };
+      });
+      if (outcome.capacity) {
+        return send(res, 503, { ok: false, error: 'profile capacity temporarily unavailable' });
+      }
+      return send(res, 200, { ok: true, claimed: outcome.claimed, profile: publicProfile(outcome.profile) });
     }
 
     return send(res, 404, { ok: false, error: 'not found' });

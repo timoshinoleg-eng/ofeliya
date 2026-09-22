@@ -164,6 +164,36 @@ Cinematic presentation использует лёгкие runtime-generated key-a
 Difficulty и control mode используют отдельные storage keys, чтобы не ломать backward compatibility
 основного progression save.
 
+## Профили игрока (V1, сервер)
+
+Появился минимальный серверный профиль/инвентарь — только для мессенджеров (MAX и Telegram),
+до косметики/meta/billing. Это первый персистентный профиль игрока на сервере.
+
+Контракт аддитивный (`profileVersion: 1`), в публичных ответах нет raw `uid`/`userKey`/`initData`,
+имён и аватаров. Намеренно нет ни общей записи профиля, ни grant-endpoint.
+
+- `POST /api/profile` — тело `{ platform, initData }` (только `max`/`telegram`).
+  `200` + `{ ok, profile }`; `403` без валидной подписи или для browser/vk; `422` на некорректное тело.
+  Чтение стабильное/идемпотентное; при первом чтении лениво создаётся пустой профиль.
+- `POST /api/profile/migrate` — тело `{ platform, initData, save }`. Одноразовый advisory-claim:
+  первый валидный claim → `claimed:true`, повторные → `claimed:false` с уже сохранённым профилем;
+  `422` на явно испорченный или слишком большой `save`. Локальные рекорды клампятся и остаются
+  **advisory**: они никогда не становятся ranked/verified скорами и не дают платной ценности.
+
+Инвентарь: `inventory.items[itemId].source ∈ { grant, migration, promo }`; каталог item id —
+статический серверный allowlist, клиент не может изобрести id. Источник `purchase` **осознанно
+отсутствует**: биллинг (Telegram/MAX Stars, чеки, возвраты, реконсиляция) в этот этап не входит и
+потребует отдельного транзакционного стора.
+
+Хранение и откат: профили лежат в **отдельном `DATA_DIR/profiles.json`**, а не ключом в `store.json`.
+Старые сборки перезаписывают `store.json` только из известных ключей и при откате молча стёрли бы
+новый ключ `profiles`; отдельный файл старые сборки игнорируют, поэтому данные переживают откат
+нетронутыми. Запись профиля синхронная (tmp + rename) прямо в пути запроса: `200` означает
+«уже сохранено на диске». Ограничения V1: **одна реплика, один writer** (общий Docker volume) и
+запись полной перезаписью файла; при росте объёма или любого платного значения нужен транзакционный
+стор. Удаление — операторский или будущий подписанный путь; тихого каскадного удаления score/referral
+истории нет.
+
 ## Performance и audio lifecycle
 
 Есть два presentation tier: `full` и `reduced`. Reduced tier уменьшает только presentation cost и
@@ -192,6 +222,7 @@ npm run test:stages
 npm run test:legendary
 npm run test:difficulty
 npm run test:viewport
+npm run test:profile
 npm run test:startup
 npm run release:check   # CI fixture с непустыми non-placeholder release values
 npm run build

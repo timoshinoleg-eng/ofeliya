@@ -188,6 +188,50 @@ Dense readability contract produces captures at **100 / 150 / 200 active enemies
 
 A dedicated release visual matrix runs **100 / 150 / 200 × WebGL/Canvas × full/reduced** and compares luminance plus edge energy so renderer/tier regressions cannot silently make dense combat darker or softer.
 
+## Server profile foundation (V1)
+
+Implemented as the smallest rollback-safe persistent messenger profile/inventory layer, before
+cosmetics/meta/billing. Scope is deliberately narrow and additive.
+
+- Identity: only `max`/`telegram`, via the existing `validateInitData` HMAC check, keyed internally as
+  `userKey = "${platform}:${uid}"`. `browser`/`vk` get no server profile. Reads are side-effect free
+  apart from lazy creation of an empty V1 profile on first read.
+- DTO: versioned (`profileVersion: 1`), additive-only, with `{ createdAt, updatedAt, preferences,
+  records, inventory }`. Public responses never contain raw `uid`/`userKey`/`initData`, display names
+  or avatars. `records.*` is advisory only — never ranked, never verified, never paid value.
+- Inventory: `inventory.items[itemId] = { source, grantedAt }` with `source ∈ {grant, migration,
+  promo}`. The item catalog is a static server-side allowlist; clients cannot invent ids. The
+  `purchase` source is intentionally absent — billing is out of scope for this phase.
+- Endpoints (additive, no existing route changed): `POST /api/profile` (verified read; 200/403/422)
+  and `POST /api/profile/migrate` (one-time advisory claim; first valid claim wins, repeats return the
+  stored profile with `claimed:false`). There is no general profile-update or entitlement-grant route.
+
+### Persistence and rollback safety
+
+- Profiles live in a **separate `DATA_DIR/profiles.json`**, never as a key inside `store.json`.
+  `loadStore()` returns only the keys it knows and `saveStore()` rewrites the whole file, so a rollback
+  to a pre-profile build would silently erase a `profiles` key on the next flush. A separate file is
+  simply ignored by older builds and survives rollback intact. This is the primary rollback property.
+- Profile writes are **synchronous and durable** (tmp + rename) inside the request path, so a `200`
+  means "persisted" even though `store.json` remains debounced. A failed flush surfaces as `500`, never
+  a false success.
+- One in-process per-`userKey` promise queue serializes read-modify-write so concurrent duplicate
+  migration claims cannot double-grant. Entitlements are append-only and never silently revoked.
+- Bounded by explicit constants: profile count, items per profile, achievements per profile, and the
+  accepted migration payload size. Load coerces corrupt or legacy-shaped files back to a safe empty
+  store instead of throwing.
+
+### Limits and deferred work
+
+- Single replica, single writer, whole-file rewrite per flush — the same constraints as `store.json`.
+  Growth, sustained writes, more than one replica, or any paid value require moving to a transactional
+  store first.
+- Retention/deletion: an un-migrated empty profile is kept indefinitely in V1; erasure is an
+  operator-run or future signed path. Ranked score rows and referral edges are a **separate** retention
+  decision and are never cascade-deleted by a profile delete.
+- No compose/nginx change was needed: the existing `DATA_DIR` volume and `/api/` reverse proxy already
+  cover the new file and routes.
+
 ## Still deferred
 
 The next major additions should be treated as separate migrations rather than silently folded into hot loops:
@@ -196,4 +240,7 @@ The next major additions should be treated as separate migrations rather than si
 - telemetry-driven balance tuning and real-device balance calibration;
 - additional competitive modes beyond the current trusted score/ruleset contract;
 - permanent stat-power meta progression;
-- broader external art/audio pipeline only if it preserves current mobile performance and provenance rules.
+- broader external art/audio pipeline only if it preserves current mobile performance and provenance rules;
+- paid value of any kind (Telegram/MAX Stars, receipts, refunds, reconciliation): billing stays out
+  until a transactional entitlement store, an idempotent order ledger keyed by provider transaction id,
+  server-side receipt verification and a revocation flow exist (see "Server profile foundation (V1)").
