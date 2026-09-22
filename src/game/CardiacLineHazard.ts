@@ -6,7 +6,7 @@
  * scheduling/geometry can be tested independently and driven by a run-seeded RNG.
  */
 export const CARDIAC_LINE_HAZARD = {
-  initialDelayMs: 1_800,
+  initialDelayMs: 4_400,
   intervalMs: 5_200,
   telegraphMs: 850,
   activeMs: 280,
