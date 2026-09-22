@@ -36,6 +36,7 @@
     "test:telegram-share": "node scripts/check-telegram-share.mjs",
     "test:telegram-runtime": "node scripts/check-telegram-runtime.mjs",
     "test:social": "node scripts/check-social-client.mjs",
+    "test:social-hub": "node scripts/social-hub-smoke.cjs",
     "test:analytics": "node scripts/check-analytics-client.mjs",
     "test:daily-v2": "node scripts/check-daily-v2.mjs"
   },
