@@ -23,6 +23,7 @@ import {
 } from '../game/DifficultyProfile';
 import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
 import { ensureCinematicTextures } from '../game/CinematicTextures';
+import { clearDailyIntent } from '../game/DailyRunIntent';
 import { showLegalOverlay } from '../legal/LegalOverlay';
 import { SocialHub } from '../ui/SocialHub';
 import { PlatformBridge } from '../platform';
@@ -499,6 +500,7 @@ export class MenuScene extends Phaser.Scene {
     let freshRunStarting = false;
     const launchFreshRun = () => {
       if (!freshRunStarting) freshRunStarting = true;
+      clearDailyIntent(this.registry);
       RunCheckpoint.clear();
       this.registry.remove('runCheckpointResume');
       this.registry.set('difficultyId', selectedDifficulty);
@@ -541,6 +543,7 @@ export class MenuScene extends Phaser.Scene {
       PlatformBridge.haptic('medium');
       if (duelLoading) return;
       if (resumeCheckpoint) {
+        clearDailyIntent(this.registry);
         this.registry.set('difficultyId', resumeCheckpoint.difficultyId);
         this.registry.set('controlMode', resumeCheckpoint.controlMode);
         this.registry.set('runCheckpointResume', resumeCheckpoint);
