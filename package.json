@@ -32,7 +32,8 @@
     "test:video": "node scripts/video-interstitial-smoke.cjs",
     "test:duel": "node scripts/check-duel.mjs",
     "test:telegram-share": "node scripts/check-telegram-share.mjs",
-    "test:social": "node scripts/check-social-client.mjs"
+    "test:social": "node scripts/check-social-client.mjs",
+    "test:analytics": "node scripts/check-analytics-client.mjs"
   },
   "dependencies": {
     "@maxhub/max-bot-api": "^0.3.1",
