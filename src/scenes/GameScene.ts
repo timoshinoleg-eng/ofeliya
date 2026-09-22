@@ -60,6 +60,7 @@ import {
   validateRunCheckpoint,
   type RunCheckpointData,
 } from '../systems/RunCheckpoint';
+import { readDailyIntent, shouldCheckpoint } from '../game/DailyRunIntent';
 import { SCORE_CAMPAIGN_VERSION, SCORE_RULESET_VERSION } from '../game/RunVersions';
 import {
   ADAPTIVE_AUDIO_TUNING,
@@ -132,6 +133,7 @@ export class GameScene extends Phaser.Scene {
   controlMode!: ControlMode;
   resumed = false;
   private checkpointAccMs = 0;
+  private dailyRun = false;
   private gameplayRng!: RunRng;
   private audio!: AdaptiveAudioDirector;
   private audioAccMs = 0;
@@ -188,6 +190,11 @@ export class GameScene extends Phaser.Scene {
     this.registry.set('difficultyId', this.difficulty.id);
 
     const requestedSeed = this.registry.get('runSeedOverride') as string | number | undefined;
+    // The separate Daily intent is authoritative for fail-closed checkpoint policy.
+    // Even if the ticket/seed state is later corrupted, this run must never become resumable
+    // as an ordinary run. Non-daily launch paths clear the marker in MenuScene.
+    const dailyIntent = readDailyIntent(this.registry);
+    this.dailyRun = dailyIntent !== null;
     this.gameplayRng = new RunRng(resume?.runSeed ?? requestedSeed ?? generateRunSeed());
     if (resume) this.gameplayRng.restore(resume.rng);
     this.runSeed = this.gameplayRng.seed;
@@ -1250,6 +1257,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   saveCheckpointNow(): boolean {
+    // Option 1: a daily run is never checkpointed (its ticket is reusable, the run is not resumable).
+    if (!shouldCheckpoint(this.dailyRun)) return false;
     if (
       !isCheckpointSafePhase(this.stageDirector.phase) ||
       this.awaitingChoice ||
