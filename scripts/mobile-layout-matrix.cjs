@@ -85,16 +85,43 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         }
       }
 
+      const sound = visible.find((obj) => obj.text.startsWith('звук:'));
+      const social = visible.find((obj) => obj.text === 'СВОДКА');
+      const codex = visible.find((obj) => obj.text.startsWith('КОДЕКС '));
+      const legal = visible.find((obj) => obj.text === 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА');
+      const tagline = visible.find((obj) => obj.text === 'Двигай штамм · собирай РНК · выбирай мутации');
+      const boundsOf = (obj) => obj?.getBounds?.() ?? null;
+      const utility = {
+        sound: boundsOf(sound),
+        social: boundsOf(social),
+        codex: boundsOf(codex),
+        legal: boundsOf(legal),
+        tagline: boundsOf(tagline),
+      };
+
       return {
         renderer: game.renderer?.constructor?.name ?? '',
         scale: [game.scale.width, game.scale.height],
         overflow,
         overlaps,
+        utility,
         hasTitle: texts.some((obj) => obj.text === 'OFELIYA'),
         hasChallenge: texts.some((obj) => obj.text === 'ВЫЗОВ ПОЛУЧЕН'),
         hasAction: texts.some((obj) => obj.text === 'ПРИНЯТЬ ВЫЗОВ'),
       };
     }, size);
+
+    const compactFooter = size.height < 720;
+    const utility = menu.utility;
+    const utilityRowOk =
+      utility.sound &&
+      utility.social &&
+      utility.codex &&
+      utility.legal &&
+      utility.sound.right + 4 <= utility.social.left &&
+      utility.social.right + 4 <= utility.codex.left &&
+      utility.social.bottom + 4 <= utility.legal.top &&
+      (!compactFooter || utility.tagline === null);
 
     if (
       menu.scale[0] !== size.width ||
@@ -102,6 +129,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       !menu.hasTitle ||
       !menu.hasChallenge ||
       !menu.hasAction ||
+      !utilityRowOk ||
       menu.overflow.length ||
       menu.overlaps.length
     ) {
