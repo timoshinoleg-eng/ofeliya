@@ -1050,9 +1050,16 @@ export class UIScene extends Phaser.Scene {
         );
       }
 
-      bg.setInteractive({ useHandCursor: true }).on('pointerup', () => {
-        if (!gs.acceptChoiceClick(def.id)) return;
-        Sfx.play('click');
+      const armedPointers = new Set<number>();
+      bg.setInteractive({ useHandCursor: true })
+        .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+          armedPointers.add(pointer.id);
+        })
+        .on('pointerup', (pointer: Phaser.Input.Pointer) => {
+          // A release may resolve only a card that this same pointer actually pressed.
+          // Fresh offers create fresh card instances with an empty armed-pointer set.
+          if (!armedPointers.delete(pointer.id) || !gs.acceptChoiceClick(def.id)) return;
+          Sfx.play('click');
         const more = gs.chooseUpgrade(def.id);
         const legendaryId = gs.consumeLegendaryCeremony();
         const evolutionId = gs.consumeEvolutionCeremony();
