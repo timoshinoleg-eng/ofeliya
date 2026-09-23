@@ -427,7 +427,7 @@ export class MenuScene extends Phaser.Scene {
           : `${profile.label}  ›`
       );
       difficultyText.setColor(profile.id === 'strained' || challengeLocked ? '#ffe066' : '#fff4ec');
-      difficultyDesc.setVisible(true);
+      difficultyDesc.setVisible(H >= 650);
       difficultyDesc.setText(
         challengeLocked
           ? duelLocked
@@ -536,7 +536,7 @@ export class MenuScene extends Phaser.Scene {
         controlText.setText(splitSelectors ? `${splitControlValue}  ›` : `${controlModeLabel(selectedControlMode)}  ›`);
         controlDesc.setText(splitSelectors ? splitControlDescription : controlModeDescription(selectedControlMode));
       }
-      controlDesc.setVisible(true);
+      controlDesc.setVisible(H >= 650);
       const controlAccent =
         selectedControlMode === 'two-hand'
           ? COLORS.cyan
