@@ -48,6 +48,14 @@ jobs:
             echo "Refusing deploy: $sha is not contained in origin/main" >&2
             exit 3
           fi
+          # Public SHA verification was introduced by this main commit. Older releases do not
+          # expose release.json, so accepting them here would deploy first and only then fail smoke.
+          release_identity_floor="d74d31732545769af5d4a3fda232bd10cdba3800"
+          git cat-file -e "${release_identity_floor}^{commit}"
+          if ! git merge-base --is-ancestor "$release_identity_floor" "$sha"; then
+            echo "Refusing deploy: $sha predates verifiable release identity ($release_identity_floor)" >&2
+            exit 4
+          fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
       - name: Validate Cloud.ru SSH configuration
