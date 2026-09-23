@@ -114,7 +114,6 @@ export class GameScene extends Phaser.Scene {
   private nextFireAt = 0;
   private novaAcc = 0;
   private queuedLevels = 0;
-  private choiceAcceptAfterMs = 0;
   awaitingChoice = false;
   pendingChoices: UpgradeDef[] = [];
   legendaryRewardPending = false;
@@ -247,7 +246,6 @@ export class GameScene extends Phaser.Scene {
     );
     PlatformBridge.setBackHandler(() => this.exitToMenu());
     this.queuedLevels = 0;
-    this.choiceAcceptAfterMs = 0;
     this.awaitingChoice = false;
     this.pendingChoices = [];
     this.legendaryRewardPending = false;
@@ -805,11 +803,8 @@ export class GameScene extends Phaser.Scene {
     this.queuedLevels += this.runState.addXp(value);
   }
 
-  acceptChoiceClick(id: string, nowMs = performance.now()): boolean {
-    if (!this.awaitingChoice || !this.pendingChoices.some((choice) => choice.id === id)) return false;
-    if (!Number.isFinite(nowMs) || nowMs < this.choiceAcceptAfterMs) return false;
-    this.choiceAcceptAfterMs = nowMs + 300;
-    return true;
+  acceptChoiceClick(id: string): boolean {
+    return this.awaitingChoice && this.pendingChoices.some((choice) => choice.id === id);
   }
 
   chooseUpgrade(id: string): boolean {
