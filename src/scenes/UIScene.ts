@@ -966,32 +966,24 @@ export class UIScene extends Phaser.Scene {
           .setResolution(2)
       );
 
+      const effectY = ch / 2 - (compact ? 36 : 40);
+      const effectW = Math.max(108, right - tx);
+      const effectPlate = this.add
+        .rectangle(tx + effectW / 2, effectY, effectW, compact ? 21 : 24, accent, 0.11)
+        .setStrokeStyle(1, accent, 0.3);
+      card.add(effectPlate);
       card.add(
         this.add
-          .text(tx, -ch / 2 + (compact ? 60 : 68), def.name, {
+          .text(tx + 8, effectY, def.name, {
             fontFamily: UI_FONT,
-            fontSize: compact ? '12px' : '14px',
+            fontSize: compact ? '11px' : '13px',
             fontStyle: '700',
-            color: legendary || evolution ? '#fff1ac' : def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
-            wordWrap: { width: Math.max(100, right - tx) },
+            color: legendary || evolution ? '#fff1ac' : def.rarity === 'rare' ? '#ddd0ff' : '#9ef1ff',
+            wordWrap: { width: Math.max(92, effectW - 16) },
           })
+          .setOrigin(0, 0.5)
           .setResolution(2)
       );
-
-      if (!compact && !evolution && !legendary) {
-        card.add(
-          this.add
-            .text(tx, -ch / 2 + 91, def.desc, {
-              fontFamily: UI_FONT,
-              fontSize: '13px',
-              fontStyle: '600',
-              color: '#eee8f5',
-              lineSpacing: 1,
-              wordWrap: { width: Math.max(100, right - tx - 4) },
-            })
-            .setResolution(2)
-        );
-      }
 
       if (!evolution && def.evolutionHint) {
         card.add(
@@ -1078,8 +1070,8 @@ export class UIScene extends Phaser.Scene {
           this.scene.resume('Game');
         }
       });
-      bg.on('pointerover', () => bg.setFillStyle(legendary || evolution ? 0x332d18 : COLORS.panelHover, 1));
-      bg.on('pointerout', () => bg.setFillStyle(COLORS.panel, 0.985));
+      bg.on('pointerover', () => bg.setFillStyle(special ? 0x2a1b20 : 0x20101c, 1));
+      bg.on('pointerout', () => bg.setFillStyle(special ? 0x1b1217 : COLORS.panel, 0.985));
 
       c.add(card);
       card.setScale(0.94).setAlpha(0);
