@@ -35,6 +35,9 @@ jobs:
       - name: Stage runtime contract smoke
         run: npm run test:stages
 
+      - name: Run-wide no-damage streak contract
+        run: npm run test:streaks
+
       - name: Legendary system deterministic smoke
         run: npm run test:legendary
 
@@ -178,6 +181,9 @@ jobs:
 
       - name: Legendary cinematic ceremony browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/legendary-ceremony-smoke.cjs
+
+      - name: Mutation choice integrity browser smoke
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:choice-integrity
 
       - name: Seeded gameplay runtime browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/rng-runtime-smoke.cjs
