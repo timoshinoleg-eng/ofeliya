@@ -357,7 +357,7 @@ export class MenuScene extends Phaser.Scene {
     const selectorW = splitSelectors
       ? Math.min((W - 34 - selectorGap) / 2, 164)
       : Math.min(W - 34, 330);
-    const selectorH = splitSelectors ? 64 : H < 650 ? 46 : 54;
+    const selectorH = splitSelectors ? 72 : H < 650 ? 46 : 54;
     const selectorY = splitSelectors ? H * 0.685 : 0;
     const difficultyY = splitSelectors ? selectorY : H * 0.635;
     const difficultyX = splitSelectors ? W / 2 - selectorW / 2 - selectorGap / 2 : W / 2;
@@ -395,7 +395,7 @@ export class MenuScene extends Phaser.Scene {
     const difficultyDesc = this.add
       .text(
         splitSelectors ? difficultyLeft + 14 : difficultyRight - 12,
-        difficultyY + (splitSelectors ? 19 : 1),
+        difficultyY + (splitSelectors ? 18 : 1),
         '',
         {
           fontFamily: UI_FONT,
@@ -490,7 +490,7 @@ export class MenuScene extends Phaser.Scene {
     const controlDesc = this.add
       .text(
         splitSelectors ? controlLeft + 14 : controlRight - 12,
-        controlY + (splitSelectors ? 19 : 1),
+        controlY + (splitSelectors ? 18 : 1),
         '',
         {
           fontFamily: UI_FONT,
