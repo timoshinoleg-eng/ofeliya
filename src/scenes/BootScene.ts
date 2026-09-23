@@ -413,6 +413,66 @@ export class BootScene extends Phaser.Scene {
       g.fillCircle(20, 20, 4);
     });
 
+    // заражение — рецептор и расходящиеся точки захвата
+    put('infect', () => {
+      line(COLORS.cyan, 2.5, 0.9);
+      g.strokeCircle(20, 20, 11);
+      solid(COLORS.green);
+      g.fillCircle(20, 20, 5);
+      for (let i = 0; i < 6; i++) {
+        const a = (i * Math.PI * 2) / 6;
+        const x1 = 20 + Math.cos(a) * 13;
+        const y1 = 20 + Math.sin(a) * 13;
+        const x2 = 20 + Math.cos(a) * 17;
+        const y2 = 20 + Math.sin(a) * 17;
+        line(COLORS.cyan, 2, 0.78);
+        g.beginPath();
+        g.moveTo(x1, y1);
+        g.lineTo(x2, y2);
+        g.strokePath();
+        solid(COLORS.green);
+        g.fillCircle(x2, y2, 2.5);
+      }
+    });
+
+    // лизис — разрыв мембраны
+    put('lysis', () => {
+      line(COLORS.purple, 3, 0.92);
+      g.strokeCircle(20, 20, 10);
+      solid(COLORS.magenta);
+      g.fillCircle(20, 20, 4);
+      for (let i = 0; i < 7; i++) {
+        const a = (i * Math.PI * 2) / 7 + 0.18;
+        const inner = 12;
+        const outer = i % 2 === 0 ? 18 : 16;
+        line(i % 2 === 0 ? COLORS.magenta : COLORS.purple, 2.5, 0.9);
+        g.beginPath();
+        g.moveTo(20 + Math.cos(a) * inner, 20 + Math.sin(a) * inner);
+        g.lineTo(20 + Math.cos(a) * outer, 20 + Math.sin(a) * outer);
+        g.strokePath();
+      }
+    });
+
+    // фабрика — заражённая клетка с РНК-линией и выходящими частицами
+    put('factory', () => {
+      solid(COLORS.green);
+      g.fillRoundedRect(7, 8, 26, 23, 7);
+      line(0x0b0e1a, 2.4, 0.95);
+      g.beginPath();
+      g.moveTo(12, 14);
+      g.lineTo(16, 18);
+      g.lineTo(12, 22);
+      g.lineTo(16, 26);
+      g.lineTo(21, 22);
+      g.lineTo(25, 26);
+      g.lineTo(29, 22);
+      g.strokePath();
+      solid(COLORS.magenta);
+      g.fillCircle(11, 35, 3);
+      g.fillCircle(20, 36, 3.5);
+      g.fillCircle(30, 34, 2.8);
+    });
+
     // регенерация — шевроны в круге
     put('regen', () => {
       line(COLORS.green, 2.5, 0.85);

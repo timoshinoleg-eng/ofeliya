@@ -887,36 +887,58 @@ export class UIScene extends Phaser.Scene {
             ? COLORS.purple
             : COLORS.cyan;
       const progress = getUpgradeProgress(gs.runState, def);
+      const special = evolution || legendary;
       const bg = this.add
-        .rectangle(0, 0, cw, ch, COLORS.panel, 0.985)
-        .setStrokeStyle(
-          legendary ? 3.5 : evolution ? 3 : def.rarity === 'rare' ? 2.5 : 2,
-          accent,
-          legendary || evolution ? 1 : 0.85
-        );
+        .rectangle(0, 0, cw, ch, special ? 0x1b1217 : COLORS.panel, 1)
+        .setStrokeStyle(1, special ? COLORS.gold : COLORS.stroke, special ? 0.62 : 0.42);
       card.add(bg);
 
-      if (evolution || legendary) {
+      // Visual-impact pass: cards read as biological modules instead of neon-outlined tables.
+      // The accent rail carries rarity/family identity while the surface border stays quiet.
+      const rail = this.add
+        .rectangle(-cw / 2 + 5, 0, 7, ch - 10, accent, special ? 0.98 : 0.88)
+        .setOrigin(0.5);
+      const iconX = -cw / 2 + 39;
+      const iconSize = compact ? 46 : 52;
+
+      if (special) {
         card.add(
-          this.add
-            .rectangle(0, 0, cw - 6, ch - 6, COLORS.gold, legendary ? 0.07 : 0.035)
-            .setStrokeStyle(1, COLORS.gold, legendary ? 0.52 : 0.28)
+          this.add.rectangle(3, 0, cw - 20, ch - 8, COLORS.gold, legendary ? 0.055 : 0.025)
         );
       }
 
       const iconKey = evolution && def.evolutionId ? `mutation-${def.evolutionId}` : `up-${def.id}`;
       const hasIcon = this.textures.exists(iconKey);
+      const reserveIconZone = hasIcon || !legendary;
+      if (reserveIconZone) {
+        const iconPlate = this.add
+          .rectangle(iconX, -2, iconSize, iconSize, accent, special ? 0.18 : 0.1)
+          .setStrokeStyle(1, accent, special ? 0.56 : 0.38);
+        card.add(iconPlate);
+      }
       if (hasIcon) {
         card.add(
           this.add
-            .image(-cw / 2 + 38, -2, iconKey)
-            .setScale(compact ? 0.82 : 0.9)
+            .image(iconX, -2, iconKey)
+            .setScale(compact ? 0.9 : 1.02)
             .setTint(evolution ? COLORS.gold : def.rarity === 'rare' ? 0xe9dcff : 0xffffff)
+        );
+      } else if (!legendary) {
+        card.add(
+          this.add
+            .text(iconX, -2, evolution ? '◆' : '•', {
+              fontFamily: FONT,
+              fontSize: compact ? '22px' : '26px',
+              fontStyle: 'bold',
+              color: special ? '#ffe066' : def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
+            })
+            .setOrigin(0.5)
+            .setResolution(2)
         );
       }
 
-      const tx = -cw / 2 + (hasIcon ? 68 : 16);
-      const right = cw / 2 - 12;
+      const tx = legendary && !hasIcon ? -cw / 2 + 18 : -cw / 2 + 73;
+      const right = cw / 2 - 14;
       const family = legendary
         ? 'ЛЕГЕНДАРНАЯ МУТАЦИЯ'
         : evolution
@@ -947,32 +969,24 @@ export class UIScene extends Phaser.Scene {
           .setResolution(2)
       );
 
+      const effectY = ch / 2 - (compact ? 36 : 40);
+      const effectW = Math.max(108, right - tx);
+      const effectPlate = this.add
+        .rectangle(tx + effectW / 2, effectY, effectW, compact ? 21 : 24, accent, 0.11)
+        .setStrokeStyle(1, accent, 0.3);
+      card.add(effectPlate);
       card.add(
         this.add
-          .text(tx, -ch / 2 + (compact ? 60 : 68), def.name, {
+          .text(tx + 8, effectY, def.name, {
             fontFamily: UI_FONT,
-            fontSize: compact ? '12px' : '14px',
+            fontSize: compact ? '11px' : '13px',
             fontStyle: '700',
-            color: legendary || evolution ? '#fff1ac' : def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
-            wordWrap: { width: Math.max(100, right - tx) },
+            color: legendary || evolution ? '#fff1ac' : def.rarity === 'rare' ? '#ddd0ff' : '#9ef1ff',
+            wordWrap: { width: Math.max(92, effectW - 16) },
           })
+          .setOrigin(0, 0.5)
           .setResolution(2)
       );
-
-      if (!compact && !evolution && !legendary) {
-        card.add(
-          this.add
-            .text(tx, -ch / 2 + 91, def.desc, {
-              fontFamily: UI_FONT,
-              fontSize: '13px',
-              fontStyle: '600',
-              color: '#eee8f5',
-              lineSpacing: 1,
-              wordWrap: { width: Math.max(100, right - tx - 4) },
-            })
-            .setResolution(2)
-        );
-      }
 
       if (!evolution && def.evolutionHint) {
         card.add(
@@ -1059,8 +1073,8 @@ export class UIScene extends Phaser.Scene {
           this.scene.resume('Game');
         }
       });
-      bg.on('pointerover', () => bg.setFillStyle(legendary || evolution ? 0x332d18 : COLORS.panelHover, 1));
-      bg.on('pointerout', () => bg.setFillStyle(COLORS.panel, 0.985));
+      bg.on('pointerover', () => bg.setFillStyle(special ? 0x2a1b20 : 0x20101c, 1));
+      bg.on('pointerout', () => bg.setFillStyle(special ? 0x1b1217 : COLORS.panel, 1));
 
       c.add(card);
       card.setScale(0.94).setAlpha(0);

@@ -13,17 +13,15 @@ function browserDriver() {
 async function tapControlSelector(page) {
   await page.evaluate(() => {
     const menu = window.__game.scene.getScene('Menu');
-    const label = menu.children.list.find(
-      (obj) => obj?.type === 'Text' && typeof obj.text === 'string' && obj.text.startsWith('УПРАВЛЕНИЕ:')
-    );
-    if (!label) throw new Error('control selector label missing');
-    const selector = menu.children.list.find(
-      (obj) =>
-        obj?.type === 'Rectangle' &&
-        obj.input?.enabled &&
-        Math.abs(obj.y - label.y - 7) < 22 &&
-        obj.width > 200
-    );
+    const selector =
+      menu.children.getByName('ofeliya-menu-control-selector') ??
+      menu.children.list.find(
+        (obj) =>
+          obj?.type === 'Rectangle' &&
+          obj.input?.enabled &&
+          obj.width > 200 &&
+          Math.abs(obj.y - menu.scale.height * 0.715) < 32
+      );
     if (!selector) throw new Error('control selector hit target missing');
     selector.emit('pointerup');
   });
@@ -32,9 +30,11 @@ async function tapControlSelector(page) {
 async function readMenuMode(page) {
   return page.evaluate(() => {
     const menu = window.__game.scene.getScene('Menu');
-    const label = menu.children.list.find(
-      (obj) => obj?.type === 'Text' && typeof obj.text === 'string' && obj.text.startsWith('УПРАВЛЕНИЕ:')
-    );
+    const label =
+      menu.children.getByName('ofeliya-menu-control-value') ??
+      menu.children.list.find(
+        (obj) => obj?.type === 'Text' && typeof obj.text === 'string' && obj.text.startsWith('УПРАВЛЕНИЕ:')
+      );
     return {
       registry: menu.registry.get('controlMode'),
       stored: localStorage.getItem('ofeliya_control_mode_v1'),
@@ -104,7 +104,7 @@ function mag(v) {
   if (
     dualSelected.registry !== 'dual-move' ||
     dualSelected.stored !== 'dual-move' ||
-    !dualSelected.label.includes('ДВЕ РУКИ · ДВИЖЕНИЕ')
+    !dualSelected.label.includes('ДВА СТИКА') && !dualSelected.label.includes('ДВЕ РУКИ · ДВИЖЕНИЕ')
   ) {
     throw new Error('menu did not expose dual-move selection: ' + JSON.stringify(dualSelected));
   }
