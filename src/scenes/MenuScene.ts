@@ -629,6 +629,7 @@ export class MenuScene extends Phaser.Scene {
         .rectangle(W / 2, newRunY, Math.min(btnW, 190), 22, 0x14101a, 0.78)
         .setStrokeStyle(1, COLORS.cyan, 0.45)
         .setDepth(7)
+        .setName('ofeliya-menu-new-run')
         .setInteractive({ useHandCursor: true });
       this.add
         .text(W / 2, newRunY, 'НАЧАТЬ НОВЫЙ', {
@@ -652,9 +653,12 @@ export class MenuScene extends Phaser.Scene {
     // The old btnY-relative row collided with the footer copy at 568–640 px (and with the
     // resume secondary action at the shortest viewport).
     const compactFooter = H < 720;
+    // Resume adds a secondary action immediately below the main button. On the shortest MAX
+    // viewport reserve a narrow middle band for utilities and move legal copy down by 5 px.
     const utilityY = compactFooter
-      ? H - 64
+      ? H - (resumeCheckpoint ? 59 : 64)
       : btnY + (resumeCheckpoint ? 72 : 55);
+    const legalY = compactFooter && resumeCheckpoint ? H - 38 : H - 43;
     const soundText = this.add
       .text(W / 2 - 100, utilityY, `звук: ${Sfx.muted ? 'выкл' : 'вкл'}`, {
         fontFamily: UI_FONT,
@@ -726,7 +730,7 @@ export class MenuScene extends Phaser.Scene {
     }
 
     this.add
-      .text(W / 2, H - 43, 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА', {
+      .text(W / 2, legalY, 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА', {
         fontFamily: UI_FONT,
         fontSize: H < 650 ? '11px' : '12px',
         fontStyle: '700',

@@ -14,6 +14,73 @@ const sizes = [
 const BUTTONS = ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В МЕНЮ'];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+async function assertCompactResumeMenu(browser) {
+  const size = { width: 320, height: 568 };
+  const ctx = await browser.newContext({ viewport: size, deviceScaleFactor: 1 });
+  await ctx.route('https://st.max.ru/**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/javascript', body: '' })
+  );
+  await ctx.addInitScript(({ width, height }) => {
+    localStorage.setItem('ofeliya_save_v1', JSON.stringify({ muted: true, runs: 1 }));
+    sessionStorage.clear();
+    window.WebApp = {
+      platform: 'android',
+      version: '26.20.0',
+      initData: 'signed-resume-layout-matrix',
+      initDataUnsafe: { user: { id: 42, first_name: 'Resume', last_name: 'Matrix' } },
+      getViewportSize: async () => ({ width: String(width), height: String(height) }),
+      BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} },
+      HapticFeedback: { impactOccurred() {}, notificationOccurred() {} },
+    };
+  }, size);
+
+  const page = await ctx.newPage();
+  await page.goto('http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
+  await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
+  await page.waitForFunction(() => window.__game.scene.isActive('Game'));
+  await sleep(120);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
+  await sleep(180);
+
+  const layout = await page.evaluate(() => {
+    const scene = window.__game.scene.getScene('Menu');
+    const visible = scene.children.list.filter(
+      (obj) => obj.visible !== false && (obj.alpha ?? 1) > 0.01 && typeof obj.getBounds === 'function'
+    );
+    const text = (predicate) => visible.find((obj) => typeof obj.text === 'string' && predicate(obj.text));
+    const bounds = (obj) => {
+      const b = obj?.getBounds?.();
+      return b ? { left: b.left, right: b.right, top: b.top, bottom: b.bottom } : null;
+    };
+    return {
+      action: bounds(text((value) => value === 'ПРОДОЛЖИТЬ ЗАБЕГ')),
+      newRun: bounds(scene.children.getByName('ofeliya-menu-new-run')),
+      sound: bounds(text((value) => value.startsWith('звук:'))),
+      social: bounds(text((value) => value === 'СВОДКА')),
+      codex: bounds(text((value) => value.startsWith('КОДЕКС '))),
+      legal: bounds(text((value) => value === 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА')),
+    };
+  });
+
+  const required = ['action', 'newRun', 'sound', 'social', 'codex', 'legal'];
+  for (const key of required) {
+    if (!layout[key]) throw new Error(`resume menu missing ${key}: ${JSON.stringify(layout)}`);
+  }
+  if (
+    layout.action.bottom > layout.newRun.top + 1 ||
+    layout.newRun.bottom + 2 > Math.min(layout.sound.top, layout.social.top, layout.codex.top) ||
+    Math.max(layout.sound.bottom, layout.social.bottom, layout.codex.bottom) + 4 > layout.legal.top
+  ) {
+    throw new Error(`resume menu 320x568 overlap: ${JSON.stringify(layout)}`);
+  }
+
+  await page.locator('#game').screenshot({ path: '/tmp/browser-smoke/03b-matrix-resume-menu-320x568.png' });
+  await ctx.close();
+}
+
+
 (async () => {
   const browser = await chromium.launch({
     executablePath: chrome,
@@ -230,8 +297,9 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     await ctx.close();
   }
 
+  await assertCompactResumeMenu(browser);
   await browser.close();
-  console.log(`MAX mobile layout matrix: ok (${sizes.map((s) => `${s.width}x${s.height}`).join(', ')})`);
+  console.log(`MAX mobile layout matrix: ok (${sizes.map((s) => `${s.width}x${s.height}`).join(', ')} + resume 320x568)`);
 })().catch((error) => {
   console.error(error.stack || error);
   process.exit(1);
