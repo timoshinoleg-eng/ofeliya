@@ -9,7 +9,7 @@ import { PlatformBridge } from './platform';
 import { StartupTrace } from './systems/StartupTrace';
 import { ensureTelegramBridge } from './platform/TelegramBridgeLoader';
 import { trackProductEvent } from './systems/AnalyticsClient';
-import { RELEASE_MARKER } from './release';
+import { RELEASE_MARKER, RELEASE_SHA, RELEASE_SHORT } from './release';
 
 declare global {
   interface Window {
@@ -19,6 +19,82 @@ declare global {
 }
 
 const FONT_READY_TIMEOUT_MS = 700;
+
+const RELEASE_REFRESH_KEY = 'ofeliya_release_refresh_v1';
+const RELEASE_CHECK_TIMEOUT_MS = 1200;
+let releaseCheckInFlight: Promise<boolean> | null = null;
+
+async function clearOfeliyaCaches(): Promise<void> {
+  if (!('caches' in window)) return;
+  const keys = await window.caches.keys();
+  await Promise.all(
+    keys
+      .filter((key) => key.startsWith('ofeliya-'))
+      .map((key) => window.caches.delete(key))
+  );
+}
+
+async function ensureCurrentRelease(): Promise<boolean> {
+  if (!import.meta.env.PROD || !location.protocol.startsWith('http')) return false;
+  if (releaseCheckInFlight) return releaseCheckInFlight;
+
+  releaseCheckInFlight = (async () => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), RELEASE_CHECK_TIMEOUT_MS);
+      let response: Response;
+      try {
+        response = await fetch(`${import.meta.env.BASE_URL}release.json`, {
+          cache: 'no-store',
+          credentials: 'same-origin',
+          signal: controller.signal,
+        });
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
+      if (!response.ok) return false;
+
+      const payload = (await response.json()) as { release?: unknown };
+      const serverRelease = String(payload.release ?? '').trim();
+      if (!/^[0-9a-f]{40}$/i.test(serverRelease)) return false;
+
+      if (serverRelease === RELEASE_SHA) {
+        sessionStorage.removeItem(RELEASE_REFRESH_KEY);
+        return false;
+      }
+
+      StartupTrace.setMeta('releaseMismatch', `${RELEASE_SHORT}->${serverRelease.slice(0, 7)}`);
+
+      // One attempt per target SHA avoids a reload loop if a host unexpectedly serves
+      // mismatched assets. The release query also gives MAX a distinct launch URL.
+      if (sessionStorage.getItem(RELEASE_REFRESH_KEY) === serverRelease) return false;
+      sessionStorage.setItem(RELEASE_REFRESH_KEY, serverRelease);
+
+      await clearOfeliyaCaches();
+
+      const next = new URL(window.location.href);
+      next.searchParams.set('release', serverRelease.slice(0, 7));
+      window.location.replace(next.toString());
+      return true;
+    } catch (error) {
+      console.warn('[release] refresh check failed:', error);
+      return false;
+    } finally {
+      releaseCheckInFlight = null;
+    }
+  })();
+
+  return releaseCheckInFlight;
+}
+
+function installReleaseResumeGuard(): void {
+  const check = (): void => {
+    if (document.visibilityState === 'visible') void ensureCurrentRelease();
+  };
+  document.addEventListener('visibilitychange', check);
+  window.addEventListener('pageshow', () => void ensureCurrentRelease());
+}
+
 const CANVAS_FALLBACK_KEY = 'ofeliya_canvas_fallback_v2';
 
 function waitForFonts(): Promise<void> {
@@ -162,6 +238,7 @@ async function boot(): Promise<void> {
   if (!host) throw new Error('Missing #game host');
   document.documentElement.dataset.ofeliyaRelease = RELEASE_MARKER;
   installAppOpenTracking();
+  installReleaseResumeGuard();
 
   const viewport = new ViewportManager(host);
   viewport.start();
@@ -250,10 +327,15 @@ async function boot(): Promise<void> {
   ) {
     window.addEventListener('load', () => {
       navigator.serviceWorker
-        .register(`${import.meta.env.BASE_URL}sw.js`)
-        .catch((error) => console.warn('[sw] registration failed:', error));
+        .register(`${import.meta.env.BASE_URL}sw.js`, { updateViaCache: 'none' })
+        .then((registration) => registration.update())
+        .catch((error) => console.warn('[sw] registration/update failed:', error));
     });
   }
 }
 
-void ensureTelegramBridge().then(() => boot());
+void (async () => {
+  if (await ensureCurrentRelease()) return;
+  await ensureTelegramBridge();
+  await boot();
+})();
