@@ -58,57 +58,38 @@ jobs:
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
-      - name: Validate Cloud.ru SSH configuration
+      - name: Validate bastion SSH configuration
         shell: bash
         env:
-          DEPLOY_HOST: ${{ secrets.CLOUDRU_DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.CLOUDRU_DEPLOY_USER }}
-          DEPLOY_KEY: ${{ secrets.CLOUDRU_DEPLOY_SSH_KEY }}
+          BASTION_KEY: ${{ secrets.CLOUDRU_BASTION_SSH_KEY }}
         run: |
           set -Eeuo pipefail
-          [[ -n "$DEPLOY_HOST" ]] || { echo 'Missing CLOUDRU_DEPLOY_HOST' >&2; exit 10; }
-          [[ -n "$DEPLOY_USER" ]] || { echo 'Missing CLOUDRU_DEPLOY_USER' >&2; exit 10; }
-          [[ -n "$DEPLOY_KEY" ]] || { echo 'Missing CLOUDRU_DEPLOY_SSH_KEY' >&2; exit 10; }
+          [[ -n "$BASTION_KEY" ]] || { echo 'Missing CLOUDRU_BASTION_SSH_KEY' >&2; exit 10; }
 
-      - name: Configure SSH
+      - name: Configure bastion SSH
         shell: bash
         env:
-          DEPLOY_HOST: ${{ secrets.CLOUDRU_DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.CLOUDRU_DEPLOY_PORT }}
-          DEPLOY_KEY: ${{ secrets.CLOUDRU_DEPLOY_SSH_KEY }}
+          BASTION_KEY: ${{ secrets.CLOUDRU_BASTION_SSH_KEY }}
         run: |
           set -Eeuo pipefail
-          port="${DEPLOY_PORT:-22}"
           install -m 700 -d ~/.ssh
-          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/cloudru_ofeliya
-          chmod 600 ~/.ssh/cloudru_ofeliya
-          ssh-keyscan -p "$port" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          printf '%s\n' "$BASTION_KEY" > ~/.ssh/cloudru_bastion
+          chmod 600 ~/.ssh/cloudru_bastion
+          ssh-keyscan -p 22 -H 176.108.246.251 >> ~/.ssh/known_hosts
 
-      - name: Deploy exact main SHA to Cloud.ru VM
+      - name: Deploy exact main SHA through restricted bastion
         shell: bash
         env:
-          DEPLOY_HOST: ${{ secrets.CLOUDRU_DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.CLOUDRU_DEPLOY_USER }}
-          DEPLOY_PORT: ${{ secrets.CLOUDRU_DEPLOY_PORT }}
-          APP_DIR: ${{ vars.CLOUDRU_OFELIYA_APP_DIR }}
-          COMPOSE_PROJECT: ${{ vars.CLOUDRU_OFELIYA_COMPOSE_PROJECT }}
-          SHARED_NETWORK: ${{ vars.CLOUDRU_OFELIYA_SHARED_NETWORK }}
           RELEASE_SHA: ${{ steps.release.outputs.sha }}
         run: |
           set -Eeuo pipefail
-          port="${DEPLOY_PORT:-22}"
-          app_dir="${APP_DIR:-/opt/ofeliya}"
-          remote_env="OFELIYA_RELEASE='$RELEASE_SHA' OFELIYA_APP_DIR='$app_dir'"
-          if [[ -n "${COMPOSE_PROJECT:-}" ]]; then
-            remote_env+=" OFELIYA_COMPOSE_PROJECT='$COMPOSE_PROJECT'"
-          fi
-          if [[ -n "${SHARED_NETWORK:-}" ]]; then
-            remote_env+=" OFELIYA_SHARED_NETWORK='$SHARED_NETWORK'"
-          fi
-          ssh -i ~/.ssh/cloudru_ofeliya -p "$port" \
-            "$DEPLOY_USER@$DEPLOY_HOST" \
-            "$remote_env bash -s" \
-            < deploy/deploy-cloudru.sh
+          ssh -i ~/.ssh/cloudru_bastion \
+            -p 22 \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            ubuntu@176.108.246.251 \
+            "deploy $RELEASE_SHA"
 
       - name: Public HTTPS smoke
         shell: bash
