@@ -229,8 +229,12 @@ export class RunState {
   }
 
   resetStageProgression(stage: Pick<StageDefinition, 'id' | 'order'>): void {
+    // A no-damage streak is a run-wide consecutive contract. Stage progression resets the
+    // build/xp/combat state, but only actual player damage is allowed to break this streak.
+    const noDamageMs = this.stage.noDamageMs;
     this.captureStageBuild();
     this.stage = createStageProgress(stage);
+    this.stage.noDamageMs = noDamageMs;
     this.run.currentStageOrder = stage.order;
     this.run.highestStageOrder = Math.max(this.run.highestStageOrder, stage.order);
   }

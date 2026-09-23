@@ -102,7 +102,9 @@ function browserDriver() {
         (obj) => obj?.type === 'Rectangle' && obj.input?.enabled && obj.width > 200
       );
       if (hit) {
-        hit.emit('pointerup');
+        const pointer = { id: 404 };
+        hit.emit('pointerdown', pointer);
+        hit.emit('pointerup', pointer);
         return true;
       }
     }

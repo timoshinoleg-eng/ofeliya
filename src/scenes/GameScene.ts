@@ -803,29 +803,34 @@ export class GameScene extends Phaser.Scene {
     this.queuedLevels += this.runState.addXp(value);
   }
 
+  acceptChoiceClick(id: string): boolean {
+    return this.awaitingChoice && this.pendingChoices.some((choice) => choice.id === id);
+  }
+
   chooseUpgrade(id: string): boolean {
-    const rewardChoice = this.legendaryRewardPending;
     const def = this.pendingChoices.find((c) => c.id === id);
-    if (def) {
-      def.apply(this.runState);
-      if (def.kind === 'evolution' && def.evolutionId) {
-        this.pendingEvolutionCeremony = def.evolutionId;
-        this.syncPlayerMutationSilhouette();
-        this.atmosphere.pulse(COLORS.gold, 0.3);
-      } else if (def.kind === 'legendary' && def.legendaryId) {
-        this.pendingLegendaryCeremony = def.legendaryId;
-        this.vfx.legendary(this.player.x, this.player.y, COLORS.gold);
-        this.atmosphere.pulse(COLORS.gold, 0.34);
-        this.shake(180, 0.004);
-        this.hitStop(this.impact.hitStopMs('legendary_pick'));
-        if (def.legendaryId === 'zero-point') this.zeroPointNextAt = this.time.now + 12_000;
-      } else {
-        this.runState.bump(id);
-      }
-      this.captureAchievements(false, false);
-      Sfx.play('click');
-      PlatformBridge.notify('success');
+    // Stale or fabricated ids must be a pure no-op: do not burn queued levels, pity,
+    // reward state or progression RNG just because an old pointer event arrived late.
+    if (!def) return this.awaitingChoice;
+    const rewardChoice = this.legendaryRewardPending;
+    def.apply(this.runState);
+    if (def.kind === 'evolution' && def.evolutionId) {
+      this.pendingEvolutionCeremony = def.evolutionId;
+      this.syncPlayerMutationSilhouette();
+      this.atmosphere.pulse(COLORS.gold, 0.3);
+    } else if (def.kind === 'legendary' && def.legendaryId) {
+      this.pendingLegendaryCeremony = def.legendaryId;
+      this.vfx.legendary(this.player.x, this.player.y, COLORS.gold);
+      this.atmosphere.pulse(COLORS.gold, 0.34);
+      this.shake(180, 0.004);
+      this.hitStop(this.impact.hitStopMs('legendary_pick'));
+      if (def.legendaryId === 'zero-point') this.zeroPointNextAt = this.time.now + 12_000;
+    } else {
+      this.runState.bump(id);
     }
+    this.captureAchievements(false, false);
+    Sfx.play('click');
+    PlatformBridge.notify('success');
     if (rewardChoice) this.legendaryRewardPending = false;
     if (this.queuedLevels > 0) {
       this.queuedLevels -= 1;
