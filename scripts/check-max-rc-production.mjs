@@ -67,11 +67,27 @@ assert.match(deployScript, /APP_ROOT\}\/current/, 'legacy release layout must de
 assert.match(envExample, /OFELIYA_SHARED_NETWORK=quiz-battle_default/, 'env example must declare shared network explicitly');
 assert.match(envExample, /OFELIYA_EXTRA_CA_CERT=\/opt\/quiz-battle\/certs\/ca-certificates\.crt/, 'env example must declare CA path explicitly');
 assert.match(compose, /VITE_MAX_BOT_NAME:\s*\$\{OFELIYA_BOT_USERNAME:\?/, 'Strain Zero bot name must be injected at build time');
+assert.match(
+  compose,
+  /VITE_TG_BOT_USERNAME:\s*\$\{VITE_TG_BOT_USERNAME:-\}/,
+  'Telegram bot username must be forwarded into the production static build when configured'
+);
+assert.match(
+  compose,
+  /VITE_TELEGRAM_APP_SHORT_NAME:\s*\$\{VITE_TELEGRAM_APP_SHORT_NAME:-\}/,
+  'Telegram Mini App short name must be forwarded into the production static build when configured'
+);
 assert.match(compose, /VITE_DEVELOPER_LEGAL_NAME:\s*\$\{OFELIYA_DEVELOPER_LEGAL_NAME:\?/, 'legal name must be required for production static build');
 assert.match(compose, /VITE_DEVELOPER_REGISTRATION:\s*\$\{OFELIYA_DEVELOPER_REGISTRATION:\?/, 'registration must be required for production static build');
 assert.match(compose, /VITE_DEVELOPER_ADDRESS:\s*\$\{OFELIYA_DEVELOPER_ADDRESS:\?/, 'developer address must be required for production static build');
 assert.match(compose, /VITE_SUPPORT_EMAIL:\s*\$\{OFELIYA_SUPPORT_EMAIL:\?/, 'support email must be required for production static build');
 assert.match(dockerfile, /ARG VITE_MAX_BOT_NAME/, 'Dockerfile must accept the Strain Zero MAX bot name');
+assert.match(dockerfile, /ARG VITE_TG_BOT_USERNAME/, 'Dockerfile must accept the Telegram bot username');
+assert.match(
+  dockerfile,
+  /ARG VITE_TELEGRAM_APP_SHORT_NAME/,
+  'Dockerfile must accept the optional Telegram Mini App short name'
+);
 assert.match(dockerfile, /ARG VITE_DEVELOPER_LEGAL_NAME/, 'Dockerfile must accept legal release metadata');
 assert.match(dockerfile, /RUN npm run build:max/, 'production image must execute the MAX release gate');
 assert.ok(
