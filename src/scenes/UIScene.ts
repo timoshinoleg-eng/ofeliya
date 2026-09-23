@@ -1051,6 +1051,7 @@ export class UIScene extends Phaser.Scene {
       }
 
       bg.setInteractive({ useHandCursor: true }).on('pointerup', () => {
+        if (!gs.acceptChoiceClick(def.id)) return;
         Sfx.play('click');
         const more = gs.chooseUpgrade(def.id);
         const legendaryId = gs.consumeLegendaryCeremony();
