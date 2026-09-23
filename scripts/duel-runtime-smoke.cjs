@@ -191,11 +191,12 @@ async function touchText(ctx, page, sceneKey, label) {
     throw new Error('duel open telemetry missing: ' + JSON.stringify(events));
   }
 
-  const controlLabel =
-    menuState.texts.find((text) => text.startsWith('УПРАВЛЕНИЕ:')) ??
-    menuState.texts.find((text) => text.endsWith('· ДУЭЛЬ') && text !== 'ФИКСИРОВАННАЯ ДУЭЛЬ');
-  if (!controlLabel) throw new Error('duel control selector value missing');
-  await touchText(ctx, page, 'Menu', controlLabel);
+  await page.evaluate(() => {
+    const menu = window.__game.scene.getScene('Menu');
+    const selector = menu.children.getByName('ofeliya-menu-control-selector');
+    if (!selector?.input?.enabled) throw new Error('duel control selector hit target missing');
+    selector.emit('pointerup');
+  });
   const afterControlTouch = await page.evaluate(() => window.__game.registry.get('controlMode'));
   if (afterControlTouch !== 'dual-move') {
     throw new Error('fixed duel control mode changed after selector touch: ' + afterControlTouch);
