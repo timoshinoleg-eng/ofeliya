@@ -44,7 +44,8 @@
     "test:profile": "node scripts/check-profile-client.mjs",
     "test:founder-badge": "node scripts/check-founder-badge.mjs",
     "test:streaks": "node scripts/check-no-damage-streak.mjs",
-    "test:choice-integrity": "node scripts/levelup-choice-smoke.cjs"
+    "test:choice-integrity": "node scripts/levelup-choice-smoke.cjs",
+    "test:visual-gameplay-impact": "node scripts/visual-gameplay-impact-smoke.cjs"
   },
   "dependencies": {
     "@maxhub/max-bot-api": "^0.3.1",
