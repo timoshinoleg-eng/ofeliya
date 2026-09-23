@@ -900,10 +900,6 @@ export class UIScene extends Phaser.Scene {
         .setOrigin(0.5);
       const iconX = -cw / 2 + 39;
       const iconSize = compact ? 46 : 52;
-      const iconPlate = this.add
-        .rectangle(iconX, -2, iconSize, iconSize, accent, special ? 0.18 : 0.1)
-        .setStrokeStyle(1, accent, special ? 0.56 : 0.38);
-      card.add([rail, iconPlate]);
 
       if (special) {
         card.add(
@@ -913,6 +909,13 @@ export class UIScene extends Phaser.Scene {
 
       const iconKey = evolution && def.evolutionId ? `mutation-${def.evolutionId}` : `up-${def.id}`;
       const hasIcon = this.textures.exists(iconKey);
+      const reserveIconZone = hasIcon || !legendary;
+      if (reserveIconZone) {
+        const iconPlate = this.add
+          .rectangle(iconX, -2, iconSize, iconSize, accent, special ? 0.18 : 0.1)
+          .setStrokeStyle(1, accent, special ? 0.56 : 0.38);
+        card.add(iconPlate);
+      }
       if (hasIcon) {
         card.add(
           this.add
@@ -920,10 +923,10 @@ export class UIScene extends Phaser.Scene {
             .setScale(compact ? 0.9 : 1.02)
             .setTint(evolution ? COLORS.gold : def.rarity === 'rare' ? 0xe9dcff : 0xffffff)
         );
-      } else {
+      } else if (!legendary) {
         card.add(
           this.add
-            .text(iconX, -2, legendary ? '★' : evolution ? '◆' : '•', {
+            .text(iconX, -2, evolution ? '◆' : '•', {
               fontFamily: FONT,
               fontSize: compact ? '22px' : '26px',
               fontStyle: 'bold',
@@ -934,7 +937,7 @@ export class UIScene extends Phaser.Scene {
         );
       }
 
-      const tx = -cw / 2 + 73;
+      const tx = legendary && !hasIcon ? -cw / 2 + 18 : -cw / 2 + 73;
       const right = cw / 2 - 14;
       const family = legendary
         ? 'ЛЕГЕНДАРНАЯ МУТАЦИЯ'
