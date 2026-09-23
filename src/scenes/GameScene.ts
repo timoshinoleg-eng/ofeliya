@@ -114,6 +114,7 @@ export class GameScene extends Phaser.Scene {
   private nextFireAt = 0;
   private novaAcc = 0;
   private queuedLevels = 0;
+  private choiceAcceptAfterMs = 0;
   awaitingChoice = false;
   pendingChoices: UpgradeDef[] = [];
   legendaryRewardPending = false;
@@ -246,6 +247,7 @@ export class GameScene extends Phaser.Scene {
     );
     PlatformBridge.setBackHandler(() => this.exitToMenu());
     this.queuedLevels = 0;
+    this.choiceAcceptAfterMs = 0;
     this.awaitingChoice = false;
     this.pendingChoices = [];
     this.legendaryRewardPending = false;
@@ -803,10 +805,20 @@ export class GameScene extends Phaser.Scene {
     this.queuedLevels += this.runState.addXp(value);
   }
 
+  acceptChoiceClick(id: string, nowMs = performance.now()): boolean {
+    if (!this.awaitingChoice || !this.pendingChoices.some((choice) => choice.id === id)) return false;
+    if (!Number.isFinite(nowMs) || nowMs < this.choiceAcceptAfterMs) return false;
+    this.choiceAcceptAfterMs = nowMs + 300;
+    return true;
+  }
+
   chooseUpgrade(id: string): boolean {
-    const rewardChoice = this.legendaryRewardPending;
     const def = this.pendingChoices.find((c) => c.id === id);
-    if (def) {
+    // Stale or fabricated ids must be a pure no-op: do not burn queued levels, pity,
+    // reward state or progression RNG just because an old pointer event arrived late.
+    if (!def) return this.awaitingChoice;
+    const rewardChoice = this.legendaryRewardPending;
+    {
       def.apply(this.runState);
       if (def.kind === 'evolution' && def.evolutionId) {
         this.pendingEvolutionCeremony = def.evolutionId;
