@@ -374,7 +374,7 @@ export class MenuScene extends Phaser.Scene {
     this.add
       .text(difficultyLeft + 14, difficultyY - (splitSelectors ? 20 : 12), 'СЛОЖНОСТЬ', {
         fontFamily: UI_FONT,
-        fontSize: splitSelectors ? '9px' : H < 650 ? '9px' : '10px',
+        fontSize: splitSelectors ? '10px' : H < 650 ? '9px' : '10px',
         fontStyle: '700',
         color: UI_TEXT.secondary,
         letterSpacing: 0.8,
@@ -399,7 +399,7 @@ export class MenuScene extends Phaser.Scene {
         '',
         {
           fontFamily: UI_FONT,
-          fontSize: splitSelectors ? '9px' : H < 650 ? '11px' : '12px',
+          fontSize: splitSelectors ? '13px' : H < 650 ? '11px' : '13px',
           fontStyle: '650',
           color: UI_TEXT.secondary,
           align: splitSelectors ? 'left' : 'right',
@@ -468,7 +468,7 @@ export class MenuScene extends Phaser.Scene {
     this.add
       .text(controlLeft + 14, controlY - (splitSelectors ? 20 : 11), 'УПРАВЛЕНИЕ', {
         fontFamily: UI_FONT,
-        fontSize: splitSelectors ? '9px' : H < 650 ? '9px' : '10px',
+        fontSize: splitSelectors ? '10px' : H < 650 ? '9px' : '10px',
         fontStyle: '700',
         color: UI_TEXT.secondary,
         letterSpacing: 0.8,
@@ -479,7 +479,7 @@ export class MenuScene extends Phaser.Scene {
     const controlText = this.add
       .text(controlLeft + 14, controlY - (splitSelectors ? 2 : -8), '', {
         fontFamily: FONT,
-        fontSize: splitSelectors ? '12px' : H < 650 ? '12px' : '15px',
+        fontSize: splitSelectors ? '13px' : H < 650 ? '12px' : '15px',
         fontStyle: 'bold',
         color: UI_TEXT.primary,
         wordWrap: { width: splitSelectors ? selectorW - 24 : selectorW * 0.52 },
@@ -494,7 +494,7 @@ export class MenuScene extends Phaser.Scene {
         '',
         {
           fontFamily: UI_FONT,
-          fontSize: splitSelectors ? '9px' : H < 650 ? '11px' : '12px',
+          fontSize: splitSelectors ? '13px' : H < 650 ? '11px' : '13px',
           fontStyle: '650',
           color: UI_TEXT.secondary,
           align: splitSelectors ? 'left' : 'right',
