@@ -367,6 +367,7 @@ export class MenuScene extends Phaser.Scene {
       .rectangle(difficultyX, difficultyY, selectorW, selectorH, 0x171018, 0.97)
       .setStrokeStyle(1, COLORS.stroke, 0.46)
       .setDepth(5)
+      .setName('ofeliya-menu-difficulty-selector')
       .setInteractive({ useHandCursor: true });
     const difficultyRail = this.add
       .rectangle(difficultyLeft + 5, difficultyY, 5, selectorH - 10, COLORS.cyan, 0.92)
@@ -391,6 +392,7 @@ export class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0, 0.5)
       .setResolution(2)
+      .setName('ofeliya-menu-difficulty-value')
       .setDepth(6);
     const difficultyDesc = this.add
       .text(
@@ -461,6 +463,7 @@ export class MenuScene extends Phaser.Scene {
       .rectangle(controlX, controlY, selectorW, controlH, 0x121820, 0.96)
       .setStrokeStyle(1, COLORS.stroke, 0.44)
       .setDepth(5)
+      .setName('ofeliya-menu-control-selector')
       .setInteractive({ useHandCursor: true });
     const controlRail = this.add
       .rectangle(controlLeft + 5, controlY, 5, controlH - 10, COLORS.magenta, 0.94)
@@ -486,6 +489,7 @@ export class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0, 0.5)
       .setResolution(2)
+      .setName('ofeliya-menu-control-value')
       .setDepth(6);
     const controlDesc = this.add
       .text(
