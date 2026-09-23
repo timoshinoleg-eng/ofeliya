@@ -372,7 +372,7 @@ export class MenuScene extends Phaser.Scene {
       .rectangle(difficultyLeft + 5, difficultyY, 5, selectorH - 10, COLORS.cyan, 0.92)
       .setDepth(6);
     this.add
-      .text(difficultyLeft + 14, difficultyY - (splitSelectors ? 20 : 12), 'СЛОЖНОСТЬ', {
+      .text(difficultyLeft + 14, difficultyY - (splitSelectors ? 20 : 12), 'СЛОЖНОСТЬ:', {
         fontFamily: UI_FONT,
         fontSize: splitSelectors ? '10px' : H < 650 ? '9px' : '10px',
         fontStyle: '700',
@@ -466,7 +466,7 @@ export class MenuScene extends Phaser.Scene {
       .rectangle(controlLeft + 5, controlY, 5, controlH - 10, COLORS.magenta, 0.94)
       .setDepth(6);
     this.add
-      .text(controlLeft + 14, controlY - (splitSelectors ? 20 : 11), 'УПРАВЛЕНИЕ', {
+      .text(controlLeft + 14, controlY - (splitSelectors ? 20 : 11), 'УПРАВЛЕНИЕ:', {
         fontFamily: UI_FONT,
         fontSize: splitSelectors ? '10px' : H < 650 ? '9px' : '10px',
         fontStyle: '700',
