@@ -889,7 +889,7 @@ export class UIScene extends Phaser.Scene {
       const progress = getUpgradeProgress(gs.runState, def);
       const special = evolution || legendary;
       const bg = this.add
-        .rectangle(0, 0, cw, ch, special ? 0x1b1217 : COLORS.panel, 0.985)
+        .rectangle(0, 0, cw, ch, special ? 0x1b1217 : COLORS.panel, 1)
         .setStrokeStyle(1, special ? COLORS.gold : COLORS.stroke, special ? 0.62 : 0.42);
       card.add(bg);
 
@@ -1074,7 +1074,7 @@ export class UIScene extends Phaser.Scene {
         }
       });
       bg.on('pointerover', () => bg.setFillStyle(special ? 0x2a1b20 : 0x20101c, 1));
-      bg.on('pointerout', () => bg.setFillStyle(special ? 0x1b1217 : COLORS.panel, 0.985));
+      bg.on('pointerout', () => bg.setFillStyle(special ? 0x1b1217 : COLORS.panel, 1));
 
       c.add(card);
       card.setScale(0.94).setAlpha(0);
