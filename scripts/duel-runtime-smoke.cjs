@@ -191,8 +191,10 @@ async function touchText(ctx, page, sceneKey, label) {
     throw new Error('duel open telemetry missing: ' + JSON.stringify(events));
   }
 
-  const controlLabel = menuState.texts.find((text) => text.startsWith('УПРАВЛЕНИЕ:'));
-  if (!controlLabel) throw new Error('duel control label missing');
+  const controlLabel =
+    menuState.texts.find((text) => text.startsWith('УПРАВЛЕНИЕ:')) ??
+    menuState.texts.find((text) => text.endsWith('· ДУЭЛЬ') && text !== 'ФИКСИРОВАННАЯ ДУЭЛЬ');
+  if (!controlLabel) throw new Error('duel control selector value missing');
   await touchText(ctx, page, 'Menu', controlLabel);
   const afterControlTouch = await page.evaluate(() => window.__game.registry.get('controlMode'));
   if (afterControlTouch !== 'dual-move') {
