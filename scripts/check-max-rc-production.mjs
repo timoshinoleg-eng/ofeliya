@@ -39,7 +39,11 @@ assert.match(
   'Canvas text workaround must be scoped to the fallback path only'
 );
 assert.match(main, /FONT_READY_TIMEOUT_MS\s*=\s*700/, 'font loading must not block MAX startup indefinitely');
-assert.match(main, /import \{ RELEASE_MARKER \} from '\.\/release'/, 'bundle must use the centralized build release marker');
+assert.match(
+  main,
+  /import \{ RELEASE_MARKER, RELEASE_SHA, RELEASE_SHORT \} from '\.\/release'/,
+  'bundle must use centralized release identity for runtime refresh checks'
+);
 assert.match(releaseSource, /VITE_RELEASE_SHA/, 'client release identity must come from the build SHA');
 assert.match(caddy, /handle_path \/ofeliya\/\*/, 'Ofeliya must own /ofeliya/ namespace');
 assert.doesNotMatch(caddy, /handle_path \/hub\/\*/, 'Ofeliya must not claim Hub routes');
@@ -104,5 +108,16 @@ assert.match(compose, /VITE_RELEASE_SHA:\s*\$\{OFELIYA_RELEASE:\?/, 'production 
 assert.match(dockerfile, /ARG VITE_RELEASE_SHA/, 'Dockerfile must accept the requested release SHA');
 assert.match(dockerfile, /RUN test -n "\$VITE_RELEASE_SHA"/, 'production static build must refuse a missing release SHA');
 assert.match(serviceWorker, /key\.startsWith\(CACHE_PREFIX\)/, 'cache cleanup must be scoped to Ofeliya');
+assert.match(
+  main,
+  /fetch\(\`\$\{import\.meta\.env\.BASE_URL\}release\.json\`[\s\S]*cache:\s*'no-store'/,
+  'MAX client must compare its bundle against uncached public release identity'
+);
+assert.match(main, /serverRelease === RELEASE_SHA/, 'release guard must compare full immutable SHA');
+assert.match(main, /key\.startsWith\('ofeliya-'\)/, 'client-side emergency cache cleanup must remain scoped to Ofeliya');
+assert.match(main, /next\.searchParams\.set\('release'/, 'stale MAX WebView must navigate to a release-distinct URL');
+assert.match(main, /visibilitychange/, 'release guard must re-check after MAX resumes a retained WebView');
+assert.match(main, /updateViaCache:\s*'none'/, 'service worker updates must bypass the HTTP cache');
+assert.match(main, /registration\.update\(\)/, 'service worker must be explicitly checked on every fresh document load');
 
 console.log('Strain Zero production release contract: ok');
