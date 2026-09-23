@@ -357,7 +357,7 @@ export class MenuScene extends Phaser.Scene {
     const selectorW = splitSelectors
       ? Math.min((W - 34 - selectorGap) / 2, 164)
       : Math.min(W - 34, 330);
-    const selectorH = splitSelectors ? 72 : H < 650 ? 46 : 54;
+    const selectorH = splitSelectors ? 58 : H < 650 ? 46 : 54;
     const selectorY = splitSelectors ? H * 0.685 : 0;
     const difficultyY = splitSelectors ? selectorY : H * 0.635;
     const difficultyX = splitSelectors ? W / 2 - selectorW / 2 - selectorGap / 2 : W / 2;
@@ -373,7 +373,7 @@ export class MenuScene extends Phaser.Scene {
       .rectangle(difficultyLeft + 5, difficultyY, 5, selectorH - 10, COLORS.cyan, 0.92)
       .setDepth(6);
     this.add
-      .text(difficultyLeft + 14, difficultyY - (splitSelectors ? 20 : 12), 'СЛОЖНОСТЬ:', {
+      .text(difficultyLeft + 14, difficultyY - (splitSelectors ? 15 : 12), 'СЛОЖНОСТЬ:', {
         fontFamily: UI_FONT,
         fontSize: splitSelectors ? '10px' : H < 650 ? '9px' : '10px',
         fontStyle: '700',
@@ -384,7 +384,7 @@ export class MenuScene extends Phaser.Scene {
       .setResolution(2)
       .setDepth(6);
     const difficultyText = this.add
-      .text(difficultyLeft + 14, difficultyY - (splitSelectors ? 2 : -8), '', {
+      .text(difficultyLeft + 14, difficultyY + (splitSelectors ? 7 : 8), '', {
         fontFamily: FONT,
         fontSize: splitSelectors ? '14px' : H < 650 ? '13px' : '16px',
         fontStyle: 'bold',
@@ -421,10 +421,13 @@ export class MenuScene extends Phaser.Scene {
         challengeLocked || profile.id === 'strained' ? COLORS.gold : COLORS.cyan;
       difficultyText.setText(
         challengeLocked
-          ? `СТАНДАРТ · ${duelLocked ? 'ДУЭЛЬ' : 'ВЫЗОВ'}`
+          ? splitSelectors
+            ? 'СТАНДАРТ'
+            : `СТАНДАРТ · ${duelLocked ? 'ДУЭЛЬ' : 'ВЫЗОВ'}`
           : `${profile.label}  ›`
       );
       difficultyText.setColor(profile.id === 'strained' || challengeLocked ? '#ffe066' : '#fff4ec');
+      difficultyDesc.setVisible(!splitSelectors);
       difficultyDesc.setText(
         challengeLocked
           ? duelLocked
@@ -469,7 +472,7 @@ export class MenuScene extends Phaser.Scene {
       .rectangle(controlLeft + 5, controlY, 5, controlH - 10, COLORS.magenta, 0.94)
       .setDepth(6);
     this.add
-      .text(controlLeft + 14, controlY - (splitSelectors ? 20 : 11), 'УПРАВЛЕНИЕ:', {
+      .text(controlLeft + 14, controlY - (splitSelectors ? 15 : 11), 'УПРАВЛЕНИЕ:', {
         fontFamily: UI_FONT,
         fontSize: splitSelectors ? '10px' : H < 650 ? '9px' : '10px',
         fontStyle: '700',
@@ -480,7 +483,7 @@ export class MenuScene extends Phaser.Scene {
       .setResolution(2)
       .setDepth(6);
     const controlText = this.add
-      .text(controlLeft + 14, controlY - (splitSelectors ? 2 : -8), '', {
+      .text(controlLeft + 14, controlY + (splitSelectors ? 7 : 8), '', {
         fontFamily: FONT,
         fontSize: splitSelectors ? '13px' : H < 650 ? '12px' : '15px',
         fontStyle: 'bold',
@@ -527,12 +530,13 @@ export class MenuScene extends Phaser.Scene {
         controlText.setText('ЗАГРУЗКА ДУЭЛИ');
         controlDesc.setText(splitSelectors ? 'режим придёт из вызова' : 'режим придёт\nиз снимка вызова');
       } else if (incomingDuel) {
-        controlText.setText(splitSelectors ? `${splitControlValue} · ДУЭЛЬ` : `${controlModeLabel(selectedControlMode)} · ДУЭЛЬ`);
-        controlDesc.setText(splitSelectors ? 'режим зафиксирован' : 'зафиксировано вызовом\nменять нельзя');
+        controlText.setText(splitSelectors ? splitControlValue : `${controlModeLabel(selectedControlMode)} · ДУЭЛЬ`);
+        controlDesc.setText('зафиксировано вызовом\nменять нельзя');
       } else {
         controlText.setText(splitSelectors ? `${splitControlValue}  ›` : `${controlModeLabel(selectedControlMode)}  ›`);
         controlDesc.setText(splitSelectors ? splitControlDescription : controlModeDescription(selectedControlMode));
       }
+      controlDesc.setVisible(!splitSelectors);
       const controlAccent =
         selectedControlMode === 'two-hand'
           ? COLORS.cyan
