@@ -427,7 +427,7 @@ export class MenuScene extends Phaser.Scene {
           : `${profile.label}  ›`
       );
       difficultyText.setColor(profile.id === 'strained' || challengeLocked ? '#ffe066' : '#fff4ec');
-      difficultyDesc.setVisible(H >= 650);
+      difficultyDesc.setVisible(true);
       difficultyDesc.setText(
         challengeLocked
           ? duelLocked
@@ -437,7 +437,9 @@ export class MenuScene extends Phaser.Scene {
             : splitSelectors
               ? 'фиксировано условиями вызова'
               : 'сложность фиксирована\nусловиями вызова'
-          : profile.description
+          : H < 650
+            ? profile.id === 'strained' ? 'сложнее' : 'базовый'
+            : profile.description
       );
       difficultyRail.setFillStyle(difficultyAccent, 0.94);
       difficultyBg
@@ -528,15 +530,19 @@ export class MenuScene extends Phaser.Scene {
             : 'оба стика · автоатака';
       if (duelLoading) {
         controlText.setText('ЗАГРУЗКА ДУЭЛИ');
-        controlDesc.setText(splitSelectors ? 'режим придёт из вызова' : 'режим придёт\nиз снимка вызова');
+        controlDesc.setText(H < 650 ? 'фиксировано' : splitSelectors ? 'режим придёт из вызова' : 'режим придёт\nиз снимка вызова');
       } else if (incomingDuel) {
         controlText.setText(splitSelectors ? splitControlValue : `${controlModeLabel(selectedControlMode)} · ДУЭЛЬ`);
-        controlDesc.setText('зафиксировано вызовом\nменять нельзя');
+        controlDesc.setText(H < 650 ? 'фиксировано' : 'зафиксировано вызовом\nменять нельзя');
       } else {
         controlText.setText(splitSelectors ? `${splitControlValue}  ›` : `${controlModeLabel(selectedControlMode)}  ›`);
-        controlDesc.setText(splitSelectors ? splitControlDescription : controlModeDescription(selectedControlMode));
+        controlDesc.setText(
+          H < 650
+            ? selectedControlMode === 'two-hand' ? 'прицел' : 'автоатака'
+            : splitSelectors ? splitControlDescription : controlModeDescription(selectedControlMode)
+        );
       }
-      controlDesc.setVisible(H >= 650);
+      controlDesc.setVisible(true);
       const controlAccent =
         selectedControlMode === 'two-hand'
           ? COLORS.cyan
