@@ -54,6 +54,10 @@ try {
     buildTelegramStartLink('duel_abc', resolveTelegramBotName({ VITE_TG_BOT_USERNAME: 'ofeliya_bot' })),
     'https://t.me/ofeliya_bot?startapp=duel_abc'
   );
+  assert.equal(
+    buildTelegramStartLink('duel_abc', 'ofeliya_bot', 'strain_zero'),
+    'https://t.me/ofeliya_bot/strain_zero?startapp=duel_abc'
+  );
 
   console.log('telegram runtime contract: ok');
 } finally {
