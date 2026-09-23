@@ -55,7 +55,6 @@ function browserDriver() {
     gs.queuedLevels = 1;
     gs.awaitingChoice = true;
     gs.legendaryRewardPending = true;
-    gs.choiceAcceptAfterMs = 0;
     gs.pendingChoices = [
       {
         id: 'smoke-stale-anchor',
@@ -115,7 +114,6 @@ function browserDriver() {
     gs.queuedLevels = 1;
     gs.awaitingChoice = true;
     gs.legendaryRewardPending = false;
-    gs.choiceAcceptAfterMs = 0;
     gs.pendingChoices = [
       {
         id: 'smoke-first',
@@ -158,7 +156,10 @@ function browserDriver() {
 
     const first = firstChoiceHit();
     if (!first) return { error: 'first hit missing' };
-    first.emit('pointerup');
+    // Both fingers press the old visible card. Finger 1 resolves the offer while finger 2 stays held.
+    first.emit('pointerdown', { id: 101 });
+    first.emit('pointerdown', { id: 202 });
+    first.emit('pointerup', { id: 101 });
 
     const afterFirst = {
       stack: gs.runState.stackOf('smoke-first'),
@@ -170,11 +171,13 @@ function browserDriver() {
       modalOpen: ui.modalOpen,
     };
 
-    // The first handler synchronously re-renders the next offer. Emit a second pointerup in the
-    // same JS task to model a stale second-finger/double-tap release without CDP scheduling delay.
+    // Hold finger 2 beyond the former 300 ms time gate. The fresh offer never received its
+    // pointerdown, so this late release must remain inert regardless of elapsed time.
+    const heldUntil = performance.now() + 360;
+    while (performance.now() < heldUntil) {}
     const second = firstChoiceHit();
     if (!second) return { error: 'second hit missing', afterFirst };
-    second.emit('pointerup');
+    second.emit('pointerup', { id: 202 });
 
     return {
       afterFirst,
@@ -214,12 +217,28 @@ function browserDriver() {
     throw new Error('stale double-tap mutated the fresh offer: ' + JSON.stringify(result));
   }
 
-  await page.waitForTimeout(320);
   const recovered = await page.evaluate(() => {
-    const gs = window.__game.scene.getScene('Game');
-    return gs.acceptChoiceClick(gs.pendingChoices[0]?.id ?? '', performance.now());
+    const game = window.__game;
+    const gs = game.scene.getScene('Game');
+    const ui = game.scene.getScene('UI');
+    const root = ui.modal;
+    if (!root) return { error: 'recovery modal missing' };
+    let hit = null;
+    for (const child of root.list ?? []) {
+      if (child?.type !== 'Container') continue;
+      hit = (child.list ?? []).find(
+        (obj) => obj?.type === 'Rectangle' && obj.input?.enabled && obj.width > 200
+      );
+      if (hit) break;
+    }
+    if (!hit) return { error: 'recovery hit missing' };
+    hit.emit('pointerdown', { id: 303 });
+    hit.emit('pointerup', { id: 303 });
+    return { awaitingChoice: gs.awaitingChoice, pendingCount: gs.pendingChoices.length };
   });
-  if (!recovered) throw new Error('choice gesture gate did not recover after 300ms');
+  if (recovered.error || recovered.awaitingChoice || recovered.pendingCount !== 0) {
+    throw new Error('fresh press/release did not resolve the current offer: ' + JSON.stringify(recovered));
+  }
 
   if (errors.length) throw new Error('page errors: ' + errors.join(' | '));
   await browser.close();
