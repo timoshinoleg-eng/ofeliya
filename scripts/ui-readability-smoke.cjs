@@ -90,9 +90,8 @@ async function inspectMenu(page, size) {
     const texts = menu.children.list.filter(
       (obj) => typeof obj?.text === 'string' && obj.visible !== false && (obj.alpha ?? 1) > 0.05
     );
-    const pick = (predicate) => {
-      const obj = texts.find((candidate) => predicate(candidate.text));
-      if (!obj) return null;
+    const toRow = (obj) => {
+      if (!obj || typeof obj.text !== 'string' || obj.visible === false || (obj.alpha ?? 1) <= 0.05) return null;
       const b = obj.getBounds();
       return {
         text: obj.text,
@@ -102,7 +101,11 @@ async function inspectMenu(page, size) {
         bounds: { left: b.left, right: b.right, top: b.top, bottom: b.bottom },
       };
     };
+    const pick = (predicate) => toRow(texts.find((candidate) => predicate(candidate.text)));
+    const pickNamed = (name) => toRow(menu.children.getByName(name));
     const rows = [
+      pickNamed('ofeliya-menu-difficulty-value'),
+      pickNamed('ofeliya-menu-control-value'),
       pick((t) => t.startsWith('Мутируй быстрее')),
       pick((t) => t.startsWith('Носитель:')),
       pick((t) => t.startsWith('Выживание ')),
