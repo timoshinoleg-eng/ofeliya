@@ -104,7 +104,7 @@ function mag(v) {
   if (
     dualSelected.registry !== 'dual-move' ||
     dualSelected.stored !== 'dual-move' ||
-    !dualSelected.label.includes('ДВЕ РУКИ · ДВИЖЕНИЕ')
+    !dualSelected.label.includes('ДВА СТИКА') && !dualSelected.label.includes('ДВЕ РУКИ · ДВИЖЕНИЕ')
   ) {
     throw new Error('menu did not expose dual-move selection: ' + JSON.stringify(dualSelected));
   }
