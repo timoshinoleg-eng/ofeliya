@@ -3,11 +3,9 @@ import { resolve } from 'node:path';
 
 const TOKEN = '__OFELIYA_RELEASE__';
 const pkg = JSON.parse(readFileSync(resolve('package.json'), 'utf8'));
-const raw = String(
-  process.env.VITE_RELEASE_SHA ||
-    process.env.GITHUB_SHA ||
-    `dev-${pkg.version || 'unknown'}`
-).trim();
+// Vite compiles src/release.ts from VITE_RELEASE_SHA. Keep post-build stamping on the exact
+// same fallback so the bundle, service worker, runtime config and release.json can never disagree.
+const raw = String(process.env.VITE_RELEASE_SHA || 'dev').trim();
 const release = raw.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64) || 'dev';
 
 for (const relative of ['dist/sw.js', 'dist/runtime-config.js']) {
