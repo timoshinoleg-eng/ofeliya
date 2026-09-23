@@ -354,29 +354,49 @@ export class MenuScene extends Phaser.Scene {
 
     const difficultyY = H * 0.635;
     const difficultyW = Math.min(W - 34, 330);
+    const difficultyH = H < 650 ? 46 : 54;
+    const difficultyLeft = W / 2 - difficultyW / 2;
+    const difficultyRight = W / 2 + difficultyW / 2;
     const difficultyBg = this.add
-      .rectangle(W / 2, difficultyY, difficultyW, H < 650 ? 46 : 54, 0x21101d, 0.97)
-      .setStrokeStyle(1.4, COLORS.cyan, 0.68)
+      .rectangle(W / 2, difficultyY, difficultyW, difficultyH, 0x171018, 0.97)
+      .setStrokeStyle(1, COLORS.stroke, 0.46)
       .setDepth(5)
       .setInteractive({ useHandCursor: true });
+    const difficultyRail = this.add
+      .rectangle(difficultyLeft + 6, difficultyY, 5, difficultyH - 10, COLORS.cyan, 0.92)
+      .setDepth(6);
+    this.add
+      .text(difficultyLeft + 18, difficultyY - 12, 'СЛОЖНОСТЬ', {
+        fontFamily: UI_FONT,
+        fontSize: H < 650 ? '9px' : '10px',
+        fontStyle: '700',
+        color: UI_TEXT.secondary,
+        letterSpacing: 0.8,
+      })
+      .setOrigin(0, 0.5)
+      .setResolution(2)
+      .setDepth(6);
     const difficultyText = this.add
-      .text(W / 2, difficultyY - 8, '', {
+      .text(difficultyLeft + 18, difficultyY + 8, '', {
         fontFamily: FONT,
-        fontSize: H < 650 ? '12px' : '15px',
+        fontSize: H < 650 ? '13px' : '16px',
         fontStyle: 'bold',
         color: UI_TEXT.primary,
       })
-      .setOrigin(0.5)
+      .setOrigin(0, 0.5)
       .setResolution(2)
       .setDepth(6);
     const difficultyDesc = this.add
-      .text(W / 2, difficultyY + 9, '', {
+      .text(difficultyRight - 12, difficultyY + 1, '', {
         fontFamily: UI_FONT,
-        fontSize: H < 650 ? '11px' : '13px',
+        fontSize: H < 650 ? '9px' : '11px',
         fontStyle: '650',
         color: UI_TEXT.secondary,
+        align: 'right',
+        lineSpacing: 1,
+        wordWrap: { width: Math.min(142, difficultyW * 0.43) },
       })
-      .setOrigin(0.5)
+      .setOrigin(1, 0.5)
       .setResolution(2)
       .setDepth(6);
 
@@ -384,24 +404,25 @@ export class MenuScene extends Phaser.Scene {
       const profile = getDifficultyProfile(selectedDifficulty);
       const duelLocked = incomingDuelId !== null && !duelUnavailable;
       const challengeLocked = Boolean(incomingChallenge) || duelLocked;
+      const difficultyAccent =
+        challengeLocked || profile.id === 'strained' ? COLORS.gold : COLORS.cyan;
       difficultyText.setText(
         challengeLocked
-          ? `СЛОЖНОСТЬ: СТАНДАРТ · ${duelLocked ? 'ДУЭЛЬ' : 'ВЫЗОВ'}`
-          : `СЛОЖНОСТЬ: ${profile.label}  ›`
+          ? `СТАНДАРТ · ${duelLocked ? 'ДУЭЛЬ' : 'ВЫЗОВ'}`
+          : `${profile.label}  ›`
       );
-      difficultyText.setColor(profile.id === 'strained' ? '#ffe066' : '#fff4ec');
+      difficultyText.setColor(profile.id === 'strained' || challengeLocked ? '#ffe066' : '#fff4ec');
       difficultyDesc.setText(
         challengeLocked
           ? duelLocked
-            ? 'фиксированный СТАНДАРТ · без глобального рейтинга'
-            : 'соревновательные вызовы фиксируют сложность «Стандарт»'
+            ? 'фиксированный режим\nбез глобального рейтинга'
+            : 'сложность фиксирована\nусловиями вызова'
           : profile.description
       );
-      difficultyBg.setStrokeStyle(
-        profile.id === 'strained' ? 1.8 : 1.4,
-        challengeLocked ? COLORS.gold : profile.id === 'strained' ? COLORS.gold : COLORS.cyan,
-        challengeLocked ? 0.9 : profile.id === 'strained' ? 0.9 : 0.68
-      );
+      difficultyRail.setFillStyle(difficultyAccent, 0.94);
+      difficultyBg
+        .setStrokeStyle(1, difficultyAccent, challengeLocked || profile.id === 'strained' ? 0.5 : 0.34)
+        .setFillStyle(profile.id === 'strained' ? 0x1f1714 : 0x171018, 0.97);
     };
     renderDifficulty();
     difficultyBg.on('pointerup', () => {
@@ -413,48 +434,66 @@ export class MenuScene extends Phaser.Scene {
       this.registry.set('difficultyId', selectedDifficulty);
       renderDifficulty();
     });
-    difficultyBg.on('pointerover', () => difficultyBg.setFillStyle(0x2a1425, 1));
-    difficultyBg.on('pointerout', () => difficultyBg.setFillStyle(0x21101d, 0.94));
+    difficultyBg.on('pointerover', () => difficultyBg.setAlpha(1));
+    difficultyBg.on('pointerout', () => difficultyBg.setAlpha(0.97));
 
     const controlY = H * 0.715;
     const controlW = Math.min(W - 34, 330);
     const controlH = H < 650 ? 44 : 52;
+    const controlLeft = W / 2 - controlW / 2;
+    const controlRight = W / 2 + controlW / 2;
     const controlBg = this.add
-      .rectangle(W / 2, controlY, controlW, controlH, 0x141d2a, 0.94)
-      .setStrokeStyle(1.4, COLORS.magenta, 0.7)
+      .rectangle(W / 2, controlY, controlW, controlH, 0x121820, 0.96)
+      .setStrokeStyle(1, COLORS.stroke, 0.44)
       .setDepth(5)
       .setInteractive({ useHandCursor: true });
+    const controlRail = this.add
+      .rectangle(controlLeft + 6, controlY, 5, controlH - 10, COLORS.magenta, 0.94)
+      .setDepth(6);
+    this.add
+      .text(controlLeft + 18, controlY - 11, 'УПРАВЛЕНИЕ', {
+        fontFamily: UI_FONT,
+        fontSize: H < 650 ? '9px' : '10px',
+        fontStyle: '700',
+        color: UI_TEXT.secondary,
+        letterSpacing: 0.8,
+      })
+      .setOrigin(0, 0.5)
+      .setResolution(2)
+      .setDepth(6);
     const controlText = this.add
-      .text(W / 2, controlY - 7, '', {
+      .text(controlLeft + 18, controlY + 8, '', {
         fontFamily: FONT,
-        fontSize: H < 650 ? '12px' : '14px',
+        fontSize: H < 650 ? '12px' : '15px',
         fontStyle: 'bold',
         color: UI_TEXT.primary,
       })
-      .setOrigin(0.5)
+      .setOrigin(0, 0.5)
       .setResolution(2)
       .setDepth(6);
     const controlDesc = this.add
-      .text(W / 2, controlY + 8, '', {
+      .text(controlRight - 12, controlY + 1, '', {
         fontFamily: UI_FONT,
-        fontSize: H < 650 ? '11px' : '13px',
+        fontSize: H < 650 ? '9px' : '11px',
         fontStyle: '650',
         color: UI_TEXT.secondary,
-        align: 'center',
+        align: 'right',
+        lineSpacing: 1,
+        wordWrap: { width: Math.min(144, controlW * 0.44) },
       })
-      .setOrigin(0.5)
+      .setOrigin(1, 0.5)
       .setResolution(2)
       .setDepth(6);
     let startHint: Phaser.GameObjects.Text | null = null;
     const renderControlMode = () => {
       if (duelLoading) {
-        controlText.setText('УПРАВЛЕНИЕ: ЗАГРУЗКА ДУЭЛИ');
-        controlDesc.setText('режим управления придёт из снимка вызова');
+        controlText.setText('ЗАГРУЗКА ДУЭЛИ');
+        controlDesc.setText('режим придёт\nиз снимка вызова');
       } else if (incomingDuel) {
-        controlText.setText(`УПРАВЛЕНИЕ: ${controlModeLabel(selectedControlMode)} · ДУЭЛЬ`);
-        controlDesc.setText('зафиксировано вызовом · менять нельзя');
+        controlText.setText(`${controlModeLabel(selectedControlMode)} · ДУЭЛЬ`);
+        controlDesc.setText('зафиксировано вызовом\nменять нельзя');
       } else {
-        controlText.setText(`УПРАВЛЕНИЕ: ${controlModeLabel(selectedControlMode)}  ›`);
+        controlText.setText(`${controlModeLabel(selectedControlMode)}  ›`);
         controlDesc.setText(controlModeDescription(selectedControlMode));
       }
       const controlAccent =
@@ -463,7 +502,8 @@ export class MenuScene extends Phaser.Scene {
           : selectedControlMode === 'dual-move'
             ? COLORS.purple
             : COLORS.magenta;
-      controlBg.setStrokeStyle(selectedControlMode === 'one-hand' ? 1.4 : 1.8, controlAccent, 0.82);
+      controlRail.setFillStyle(controlAccent, 0.95);
+      controlBg.setStrokeStyle(1, controlAccent, selectedControlMode === 'one-hand' ? 0.34 : 0.5);
       if (incomingDuel) {
         startHint?.setText(`тот же забег · быстрее ${fmtTime(incomingDuel.targetTimeMs)}`);
       } else if (resumeCheckpoint) {
@@ -486,15 +526,23 @@ export class MenuScene extends Phaser.Scene {
       this.registry.set('controlMode', selectedControlMode);
       renderControlMode();
     });
-    controlBg.on('pointerover', () => controlBg.setFillStyle(0x1b2939, 1));
-    controlBg.on('pointerout', () => controlBg.setFillStyle(0x141d2a, 0.94));
+    controlBg.on('pointerover', () => controlBg.setAlpha(1));
+    controlBg.on('pointerout', () => controlBg.setAlpha(0.96));
 
     const btnY = H * (resumeCheckpoint ? 0.785 : 0.805);
     const btnW = Math.min(W - 30, 338);
+    const btnH = resumeCheckpoint ? 58 : 66;
+    const btnAccent = incomingChallenge ? COLORS.gold : COLORS.magenta;
+    this.add
+      .rectangle(W / 2 + 3, btnY + 4, btnW, btnH, 0x050308, 0.58)
+      .setDepth(4);
     const btnBg = this.add
-      .rectangle(W / 2, btnY, btnW, resumeCheckpoint ? 58 : 66, 0x5c143e, 0.92)
-      .setStrokeStyle(2, incomingChallenge ? COLORS.gold : COLORS.magenta, 1)
+      .rectangle(W / 2, btnY, btnW, btnH, 0x5c143e, 0.95)
+      .setStrokeStyle(1, btnAccent, 0.58)
       .setDepth(5);
+    this.add
+      .rectangle(W / 2, btnY - btnH / 2 + 3, btnW - 10, 4, btnAccent, 0.96)
+      .setDepth(6);
     const startButtonText = this.add
       .text(
         W / 2,
