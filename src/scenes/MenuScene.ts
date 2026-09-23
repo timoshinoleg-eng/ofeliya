@@ -240,7 +240,7 @@ export class MenuScene extends Phaser.Scene {
       this.add
         .text(W / 2, hookY + 70, `Носитель: ${displayName}`, {
           fontFamily: UI_FONT,
-          fontSize: H < 650 ? '12px' : '12px',
+          fontSize: H < 650 ? '12px' : '14px',
           fontStyle: '700',
           color: '#9deeff',
         })
