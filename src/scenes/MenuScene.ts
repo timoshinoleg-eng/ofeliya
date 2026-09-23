@@ -352,23 +352,29 @@ export class MenuScene extends Phaser.Scene {
         .setDepth(5);
     }
 
-    const difficultyY = H * 0.635;
-    const difficultyW = Math.min(W - 34, 330);
-    const difficultyH = H < 650 ? 46 : 54;
-    const difficultyLeft = W / 2 - difficultyW / 2;
-    const difficultyRight = W / 2 + difficultyW / 2;
+    const splitSelectors = W >= 360 && H >= 650;
+    const selectorGap = splitSelectors ? 10 : 0;
+    const selectorW = splitSelectors
+      ? Math.min((W - 34 - selectorGap) / 2, 164)
+      : Math.min(W - 34, 330);
+    const selectorH = splitSelectors ? 64 : H < 650 ? 46 : 54;
+    const selectorY = splitSelectors ? H * 0.685 : 0;
+    const difficultyY = splitSelectors ? selectorY : H * 0.635;
+    const difficultyX = splitSelectors ? W / 2 - selectorW / 2 - selectorGap / 2 : W / 2;
+    const difficultyLeft = difficultyX - selectorW / 2;
+    const difficultyRight = difficultyX + selectorW / 2;
     const difficultyBg = this.add
-      .rectangle(W / 2, difficultyY, difficultyW, difficultyH, 0x171018, 0.97)
+      .rectangle(difficultyX, difficultyY, selectorW, selectorH, 0x171018, 0.97)
       .setStrokeStyle(1, COLORS.stroke, 0.46)
       .setDepth(5)
       .setInteractive({ useHandCursor: true });
     const difficultyRail = this.add
-      .rectangle(difficultyLeft + 6, difficultyY, 5, difficultyH - 10, COLORS.cyan, 0.92)
+      .rectangle(difficultyLeft + 5, difficultyY, 5, selectorH - 10, COLORS.cyan, 0.92)
       .setDepth(6);
     this.add
-      .text(difficultyLeft + 18, difficultyY - 12, 'СЛОЖНОСТЬ', {
+      .text(difficultyLeft + 14, difficultyY - (splitSelectors ? 20 : 12), 'СЛОЖНОСТЬ', {
         fontFamily: UI_FONT,
-        fontSize: H < 650 ? '9px' : '10px',
+        fontSize: splitSelectors ? '9px' : H < 650 ? '9px' : '10px',
         fontStyle: '700',
         color: UI_TEXT.secondary,
         letterSpacing: 0.8,
@@ -377,9 +383,9 @@ export class MenuScene extends Phaser.Scene {
       .setResolution(2)
       .setDepth(6);
     const difficultyText = this.add
-      .text(difficultyLeft + 18, difficultyY + 8, '', {
+      .text(difficultyLeft + 14, difficultyY - (splitSelectors ? 2 : -8), '', {
         fontFamily: FONT,
-        fontSize: H < 650 ? '13px' : '16px',
+        fontSize: splitSelectors ? '14px' : H < 650 ? '13px' : '16px',
         fontStyle: 'bold',
         color: UI_TEXT.primary,
       })
@@ -387,16 +393,21 @@ export class MenuScene extends Phaser.Scene {
       .setResolution(2)
       .setDepth(6);
     const difficultyDesc = this.add
-      .text(difficultyRight - 12, difficultyY + 1, '', {
-        fontFamily: UI_FONT,
-        fontSize: H < 650 ? '11px' : '12px',
-        fontStyle: '650',
-        color: UI_TEXT.secondary,
-        align: 'right',
-        lineSpacing: 1,
-        wordWrap: { width: Math.min(142, difficultyW * 0.43) },
-      })
-      .setOrigin(1, 0.5)
+      .text(
+        splitSelectors ? difficultyLeft + 14 : difficultyRight - 12,
+        difficultyY + (splitSelectors ? 19 : 1),
+        '',
+        {
+          fontFamily: UI_FONT,
+          fontSize: splitSelectors ? '9px' : H < 650 ? '11px' : '12px',
+          fontStyle: '650',
+          color: UI_TEXT.secondary,
+          align: splitSelectors ? 'left' : 'right',
+          lineSpacing: 1,
+          wordWrap: { width: splitSelectors ? selectorW - 26 : Math.min(142, selectorW * 0.43) },
+        }
+      )
+      .setOrigin(splitSelectors ? 0 : 1, 0.5)
       .setResolution(2)
       .setDepth(6);
 
@@ -415,8 +426,12 @@ export class MenuScene extends Phaser.Scene {
       difficultyDesc.setText(
         challengeLocked
           ? duelLocked
-            ? 'фиксированный режим\nбез глобального рейтинга'
-            : 'сложность фиксирована\nусловиями вызова'
+            ? splitSelectors
+              ? 'фиксировано · вне рейтинга'
+              : 'фиксированный режим\nбез глобального рейтинга'
+            : splitSelectors
+              ? 'фиксировано условиями вызова'
+              : 'сложность фиксирована\nусловиями вызова'
           : profile.description
       );
       difficultyRail.setFillStyle(difficultyAccent, 0.94);
@@ -437,23 +452,23 @@ export class MenuScene extends Phaser.Scene {
     difficultyBg.on('pointerover', () => difficultyBg.setAlpha(1));
     difficultyBg.on('pointerout', () => difficultyBg.setAlpha(0.97));
 
-    const controlY = H * 0.715;
-    const controlW = Math.min(W - 34, 330);
-    const controlH = H < 650 ? 44 : 52;
-    const controlLeft = W / 2 - controlW / 2;
-    const controlRight = W / 2 + controlW / 2;
+    const controlY = splitSelectors ? selectorY : H * 0.715;
+    const controlX = splitSelectors ? W / 2 + selectorW / 2 + selectorGap / 2 : W / 2;
+    const controlH = splitSelectors ? selectorH : H < 650 ? 44 : 52;
+    const controlLeft = controlX - selectorW / 2;
+    const controlRight = controlX + selectorW / 2;
     const controlBg = this.add
-      .rectangle(W / 2, controlY, controlW, controlH, 0x121820, 0.96)
+      .rectangle(controlX, controlY, selectorW, controlH, 0x121820, 0.96)
       .setStrokeStyle(1, COLORS.stroke, 0.44)
       .setDepth(5)
       .setInteractive({ useHandCursor: true });
     const controlRail = this.add
-      .rectangle(controlLeft + 6, controlY, 5, controlH - 10, COLORS.magenta, 0.94)
+      .rectangle(controlLeft + 5, controlY, 5, controlH - 10, COLORS.magenta, 0.94)
       .setDepth(6);
     this.add
-      .text(controlLeft + 18, controlY - 11, 'УПРАВЛЕНИЕ', {
+      .text(controlLeft + 14, controlY - (splitSelectors ? 20 : 11), 'УПРАВЛЕНИЕ', {
         fontFamily: UI_FONT,
-        fontSize: H < 650 ? '9px' : '10px',
+        fontSize: splitSelectors ? '9px' : H < 650 ? '9px' : '10px',
         fontStyle: '700',
         color: UI_TEXT.secondary,
         letterSpacing: 0.8,
@@ -462,36 +477,42 @@ export class MenuScene extends Phaser.Scene {
       .setResolution(2)
       .setDepth(6);
     const controlText = this.add
-      .text(controlLeft + 18, controlY + 8, '', {
+      .text(controlLeft + 14, controlY - (splitSelectors ? 2 : -8), '', {
         fontFamily: FONT,
-        fontSize: H < 650 ? '12px' : '15px',
+        fontSize: splitSelectors ? '12px' : H < 650 ? '12px' : '15px',
         fontStyle: 'bold',
         color: UI_TEXT.primary,
+        wordWrap: { width: splitSelectors ? selectorW - 24 : selectorW * 0.52 },
       })
       .setOrigin(0, 0.5)
       .setResolution(2)
       .setDepth(6);
     const controlDesc = this.add
-      .text(controlRight - 12, controlY + 1, '', {
-        fontFamily: UI_FONT,
-        fontSize: H < 650 ? '11px' : '12px',
-        fontStyle: '650',
-        color: UI_TEXT.secondary,
-        align: 'right',
-        lineSpacing: 1,
-        wordWrap: { width: Math.min(144, controlW * 0.44) },
-      })
-      .setOrigin(1, 0.5)
+      .text(
+        splitSelectors ? controlLeft + 14 : controlRight - 12,
+        controlY + (splitSelectors ? 19 : 1),
+        '',
+        {
+          fontFamily: UI_FONT,
+          fontSize: splitSelectors ? '9px' : H < 650 ? '11px' : '12px',
+          fontStyle: '650',
+          color: UI_TEXT.secondary,
+          align: splitSelectors ? 'left' : 'right',
+          lineSpacing: 1,
+          wordWrap: { width: splitSelectors ? selectorW - 26 : Math.min(144, selectorW * 0.44) },
+        }
+      )
+      .setOrigin(splitSelectors ? 0 : 1, 0.5)
       .setResolution(2)
       .setDepth(6);
     let startHint: Phaser.GameObjects.Text | null = null;
     const renderControlMode = () => {
       if (duelLoading) {
         controlText.setText('ЗАГРУЗКА ДУЭЛИ');
-        controlDesc.setText('режим придёт\nиз снимка вызова');
+        controlDesc.setText(splitSelectors ? 'режим придёт из вызова' : 'режим придёт\nиз снимка вызова');
       } else if (incomingDuel) {
         controlText.setText(`${controlModeLabel(selectedControlMode)} · ДУЭЛЬ`);
-        controlDesc.setText('зафиксировано вызовом\nменять нельзя');
+        controlDesc.setText(splitSelectors ? 'зафиксировано вызовом' : 'зафиксировано вызовом\nменять нельзя');
       } else {
         controlText.setText(`${controlModeLabel(selectedControlMode)}  ›`);
         controlDesc.setText(controlModeDescription(selectedControlMode));
