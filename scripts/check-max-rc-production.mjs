@@ -117,6 +117,10 @@ assert.match(main, /serverRelease === RELEASE_SHA/, 'release guard must compare 
 assert.match(main, /key\.startsWith\('ofeliya-'\)/, 'client-side emergency cache cleanup must remain scoped to Ofeliya');
 assert.match(main, /next\.searchParams\.set\('release'/, 'stale MAX WebView must navigate to a release-distinct URL');
 assert.match(main, /visibilitychange/, 'release guard must re-check after MAX resumes a retained WebView');
+assert.match(main, /RELEASE_CHECK_TIMEOUT_MS\s*=\s*1200/, 'pre-boot release check must be tightly bounded');
+assert.match(main, /new AbortController\(\)/, 'release fetch must be abortable');
+assert.match(main, /signal:\s*controller\.signal/, 'release fetch must receive the abort signal');
+assert.match(main, /controller\.abort\(\)/, 'release check timeout must abort a stalled request');
 assert.match(main, /updateViaCache:\s*'none'/, 'service worker updates must bypass the HTTP cache');
 assert.match(main, /registration\.update\(\)/, 'service worker must be explicitly checked on every fresh document load');
 
