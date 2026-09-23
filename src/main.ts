@@ -21,6 +21,7 @@ declare global {
 const FONT_READY_TIMEOUT_MS = 700;
 
 const RELEASE_REFRESH_KEY = 'ofeliya_release_refresh_v1';
+const RELEASE_CHECK_TIMEOUT_MS = 1200;
 let releaseCheckInFlight: Promise<boolean> | null = null;
 
 async function clearOfeliyaCaches(): Promise<void> {
@@ -39,10 +40,18 @@ async function ensureCurrentRelease(): Promise<boolean> {
 
   releaseCheckInFlight = (async () => {
     try {
-      const response = await fetch(`${import.meta.env.BASE_URL}release.json`, {
-        cache: 'no-store',
-        credentials: 'same-origin',
-      });
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), RELEASE_CHECK_TIMEOUT_MS);
+      let response: Response;
+      try {
+        response = await fetch(`${import.meta.env.BASE_URL}release.json`, {
+          cache: 'no-store',
+          credentials: 'same-origin',
+          signal: controller.signal,
+        });
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
       if (!response.ok) return false;
 
       const payload = (await response.json()) as { release?: unknown };
