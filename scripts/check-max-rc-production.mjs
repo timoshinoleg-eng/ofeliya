@@ -104,6 +104,21 @@ assert.match(
   /git merge-base --is-ancestor "\$release_identity_floor" "\$sha"/,
   'deploy must reject rollback targets that predate verifiable release identity'
 );
+assert.match(
+  deployWorkflow,
+  /secrets\.CLOUDRU_BASTION_SSH_KEY/,
+  'GitHub deploy must use the restricted bastion key'
+);
+assert.doesNotMatch(
+  deployWorkflow,
+  /CLOUDRU_DEPLOY_SSH_KEY/,
+  'GitHub deploy must not receive the production target private key'
+);
+assert.match(
+  deployWorkflow,
+  /ubuntu@176\.108\.246\.251[\s\S]*"deploy \$RELEASE_SHA"/,
+  'GitHub deploy must invoke only the restricted bastion deploy command'
+);
 assert.match(compose, /VITE_RELEASE_SHA:\s*\$\{OFELIYA_RELEASE:\?/, 'production static build must receive the requested release SHA');
 assert.match(dockerfile, /ARG VITE_RELEASE_SHA/, 'Dockerfile must accept the requested release SHA');
 assert.match(dockerfile, /RUN test -n "\$VITE_RELEASE_SHA"/, 'production static build must refuse a missing release SHA');
