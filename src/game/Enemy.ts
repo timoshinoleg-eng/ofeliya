@@ -435,11 +435,13 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (!this.bossTelegraph) this.bossTelegraph = this.scene.add.graphics().setDepth(8);
     const radius = primeAttackPhasePacing(this.bossPhase).radius;
     this.bossTelegraph.clear().setVisible(true).setPosition(this.x, this.y);
-    this.bossTelegraph.lineStyle(this.bossPhase === 2 ? 4 : 3, COLORS.red, 0.8);
+    this.bossTelegraph.lineStyle(this.bossPhase === 2 ? 5 : 4, COLORS.red, 0.94);
     this.bossTelegraph.strokeCircle(0, 0, radius);
-    this.bossTelegraph.lineStyle(1.5, COLORS.white, 0.5);
+    this.bossTelegraph.lineStyle(2, COLORS.white, 0.62);
     this.bossTelegraph.strokeCircle(0, 0, radius * 0.72);
-    this.bossTelegraph.fillStyle(COLORS.red, 0.055);
+    this.bossTelegraph.lineStyle(1.5, COLORS.red, 0.42);
+    this.bossTelegraph.strokeCircle(0, 0, radius * 0.9);
+    this.bossTelegraph.fillStyle(COLORS.red, 0.075);
     this.bossTelegraph.fillCircle(0, 0, radius);
   }
 
@@ -505,13 +507,23 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.roleTelegraph.clear().setVisible(true).setPosition(this.x, this.y);
 
     if (this.kind === 'runner') {
-      this.roleTelegraph.lineStyle(3, COLORS.cyan, 0.8);
+      const laneStart = Math.max(18, this.radius + 5);
+      const laneEnd = 154;
+      // A broad translucent lane survives phone downscaling; the bright center line keeps direction exact.
+      this.roleTelegraph.lineStyle(13, COLORS.cyan, 0.12);
       this.roleTelegraph.beginPath();
-      this.roleTelegraph.moveTo(this.lockedDirX * 18, this.lockedDirY * 18);
-      this.roleTelegraph.lineTo(this.lockedDirX * 92, this.lockedDirY * 92);
+      this.roleTelegraph.moveTo(this.lockedDirX * laneStart, this.lockedDirY * laneStart);
+      this.roleTelegraph.lineTo(this.lockedDirX * laneEnd, this.lockedDirY * laneEnd);
       this.roleTelegraph.strokePath();
-      this.roleTelegraph.lineStyle(1.5, COLORS.white, 0.55);
-      this.roleTelegraph.strokeCircle(0, 0, Math.max(18, this.radius + 7));
+      this.roleTelegraph.lineStyle(3.2, COLORS.cyan, 0.92);
+      this.roleTelegraph.beginPath();
+      this.roleTelegraph.moveTo(this.lockedDirX * laneStart, this.lockedDirY * laneStart);
+      this.roleTelegraph.lineTo(this.lockedDirX * laneEnd, this.lockedDirY * laneEnd);
+      this.roleTelegraph.strokePath();
+      this.roleTelegraph.fillStyle(COLORS.white, 0.82);
+      this.roleTelegraph.fillCircle(this.lockedDirX * laneEnd, this.lockedDirY * laneEnd, 4.5);
+      this.roleTelegraph.lineStyle(1.8, COLORS.white, 0.68);
+      this.roleTelegraph.strokeCircle(0, 0, Math.max(19, this.radius + 8));
     } else {
       this.roleTelegraph.lineStyle(3, COLORS.orange, 0.72);
       this.roleTelegraph.strokeCircle(0, 0, Math.max(58, this.radius + 38));
