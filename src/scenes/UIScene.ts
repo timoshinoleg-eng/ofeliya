@@ -887,20 +887,27 @@ export class UIScene extends Phaser.Scene {
             ? COLORS.purple
             : COLORS.cyan;
       const progress = getUpgradeProgress(gs.runState, def);
+      const special = evolution || legendary;
       const bg = this.add
-        .rectangle(0, 0, cw, ch, COLORS.panel, 0.985)
-        .setStrokeStyle(
-          legendary ? 3.5 : evolution ? 3 : def.rarity === 'rare' ? 2.5 : 2,
-          accent,
-          legendary || evolution ? 1 : 0.85
-        );
+        .rectangle(0, 0, cw, ch, special ? 0x1b1217 : COLORS.panel, 0.985)
+        .setStrokeStyle(1, special ? COLORS.gold : COLORS.stroke, special ? 0.62 : 0.42);
       card.add(bg);
 
-      if (evolution || legendary) {
+      // Visual-impact pass: cards read as biological modules instead of neon-outlined tables.
+      // The accent rail carries rarity/family identity while the surface border stays quiet.
+      const rail = this.add
+        .rectangle(-cw / 2 + 5, 0, 7, ch - 10, accent, special ? 0.98 : 0.88)
+        .setOrigin(0.5);
+      const iconX = -cw / 2 + 39;
+      const iconSize = compact ? 46 : 52;
+      const iconPlate = this.add
+        .rectangle(iconX, -2, iconSize, iconSize, accent, special ? 0.18 : 0.1)
+        .setStrokeStyle(1, accent, special ? 0.56 : 0.38);
+      card.add([rail, iconPlate]);
+
+      if (special) {
         card.add(
-          this.add
-            .rectangle(0, 0, cw - 6, ch - 6, COLORS.gold, legendary ? 0.07 : 0.035)
-            .setStrokeStyle(1, COLORS.gold, legendary ? 0.52 : 0.28)
+          this.add.rectangle(3, 0, cw - 20, ch - 8, COLORS.gold, legendary ? 0.055 : 0.025)
         );
       }
 
@@ -909,14 +916,26 @@ export class UIScene extends Phaser.Scene {
       if (hasIcon) {
         card.add(
           this.add
-            .image(-cw / 2 + 38, -2, iconKey)
-            .setScale(compact ? 0.82 : 0.9)
+            .image(iconX, -2, iconKey)
+            .setScale(compact ? 0.9 : 1.02)
             .setTint(evolution ? COLORS.gold : def.rarity === 'rare' ? 0xe9dcff : 0xffffff)
+        );
+      } else {
+        card.add(
+          this.add
+            .text(iconX, -2, legendary ? '★' : evolution ? '◆' : '•', {
+              fontFamily: FONT,
+              fontSize: compact ? '22px' : '26px',
+              fontStyle: 'bold',
+              color: special ? '#ffe066' : def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
+            })
+            .setOrigin(0.5)
+            .setResolution(2)
         );
       }
 
-      const tx = -cw / 2 + (hasIcon ? 68 : 16);
-      const right = cw / 2 - 12;
+      const tx = -cw / 2 + 73;
+      const right = cw / 2 - 14;
       const family = legendary
         ? 'ЛЕГЕНДАРНАЯ МУТАЦИЯ'
         : evolution
