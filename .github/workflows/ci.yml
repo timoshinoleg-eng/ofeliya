@@ -131,6 +131,9 @@ jobs:
           cat /tmp/vite.log
           exit 1
 
+      - name: Music bed browser decode smoke
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/music-bed-browser-smoke.cjs
+
       - name: Stalled MAX viewport startup smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/startup-viewport-smoke.cjs
 
