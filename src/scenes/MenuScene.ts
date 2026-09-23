@@ -389,7 +389,7 @@ export class MenuScene extends Phaser.Scene {
     const difficultyDesc = this.add
       .text(difficultyRight - 12, difficultyY + 1, '', {
         fontFamily: UI_FONT,
-        fontSize: H < 650 ? '9px' : '11px',
+        fontSize: H < 650 ? '11px' : '12px',
         fontStyle: '650',
         color: UI_TEXT.secondary,
         align: 'right',
@@ -474,7 +474,7 @@ export class MenuScene extends Phaser.Scene {
     const controlDesc = this.add
       .text(controlRight - 12, controlY + 1, '', {
         fontFamily: UI_FONT,
-        fontSize: H < 650 ? '9px' : '11px',
+        fontSize: H < 650 ? '11px' : '12px',
         fontStyle: '650',
         color: UI_TEXT.secondary,
         align: 'right',
