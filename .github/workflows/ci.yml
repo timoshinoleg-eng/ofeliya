@@ -329,6 +329,7 @@ jobs:
             --build-arg VITE_DEVELOPER_REGISTRATION=CI-REG-1 \
             --build-arg 'VITE_DEVELOPER_ADDRESS=CI Test Address' \
             --build-arg VITE_SUPPORT_EMAIL=qa@example.test \
+            --build-arg VITE_RELEASE_SHA="$GITHUB_SHA" \
             -t ofeliya-static:strain-zero-ci .
 
       - name: Validate nginx config

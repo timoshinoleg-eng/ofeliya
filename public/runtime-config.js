@@ -1,7 +1,7 @@
 (() => {
   // Direct startup: cache freshness comes from no-cache HTML + content-hashed assets.
   // Never navigate from this pre-module script; Android WebView may abort the main bundle stream.
-  const release = 'ofeliya-20260921-direct-nav-v1';
+  const release = 'ofeliya-__OFELIYA_RELEASE__';
   const traceKey = 'ofeliya_startup_nav_v1';
   const nowOrigin = Number.isFinite(performance.timeOrigin) ? performance.timeOrigin : Date.now();
 

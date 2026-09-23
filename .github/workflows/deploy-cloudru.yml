@@ -119,4 +119,13 @@ jobs:
           esac
           curl --fail --show-error --silent --location --retry 5 --retry-all-errors \
             --max-time 20 "$PUBLIC_URL" >/dev/null
+          release_url="${PUBLIC_URL%/}/release.json"
+          release_payload="$(curl --fail --show-error --silent --location --retry 5 --retry-all-errors \
+            --max-time 20 "$release_url")"
+          expected="\"release\":\"$RELEASE_SHA\""
+          if [[ "$release_payload" != *"$expected"* ]]; then
+            echo "Public release mismatch: expected $RELEASE_SHA at $release_url" >&2
+            echo "Payload: $release_payload" >&2
+            exit 21
+          fi
           printf 'Cloud.ru public smoke passed for %s at %s\n' "$RELEASE_SHA" "$PUBLIC_URL"

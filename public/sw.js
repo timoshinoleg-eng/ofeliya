@@ -7,7 +7,7 @@
  * - audio/video: network only (browser HTTP cache handles media/range requests);
  * - cache cleanup is scoped to OFELIYA only.
  */
-const VERSION = 'ofeliya-20260921-direct-nav-v1';
+const VERSION = 'ofeliya-__OFELIYA_RELEASE__';
 const CACHE_PREFIX = 'ofeliya-';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;

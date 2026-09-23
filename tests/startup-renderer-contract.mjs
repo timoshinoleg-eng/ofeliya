@@ -72,8 +72,13 @@ for (const forbidden of ['initData', 'getUser', 'username', 'first_name', 'last_
 const swSource = await readFile(new URL('../public/sw.js', import.meta.url), 'utf8');
 assert.match(
   swSource,
+  /const VERSION = 'ofeliya-__OFELIYA_RELEASE__'/,
+  'Source service-worker cache namespace must be release-stamped at build time'
+);
+assert.doesNotMatch(
+  swSource,
   /ofeliya-20260921-direct-nav-v1/,
-  'Service-worker cache namespace must rotate with the direct-navigation startup fix'
+  'Service-worker source must not retain a stale hard-coded release namespace'
 );
 assert.match(
   swSource,

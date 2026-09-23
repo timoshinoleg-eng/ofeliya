@@ -28,6 +28,7 @@ import { showLegalOverlay } from '../legal/LegalOverlay';
 import { SocialHub } from '../ui/SocialHub';
 import { FOUNDER_BADGE_LABEL, hasFounderBadge } from '../ui/FounderBadge';
 import { PlatformBridge } from '../platform';
+import { RELEASE_SHORT } from '../release';
 import { SaveSystem } from '../systems/SaveSystem';
 import { fetchServerProfile } from '../systems/ProfileClient';
 import { RunCheckpoint } from '../systems/RunCheckpoint';
@@ -743,7 +744,7 @@ export class MenuScene extends Phaser.Scene {
     let diagnosticTapCount = 0;
     let diagnosticTapTimer: number | null = null;
     const versionText = this.add
-      .text(W / 2, H - 9, `mini-app · ${PlatformBridge.platform} · v0.1.0`, {
+      .text(W / 2, H - 9, `mini-app · ${PlatformBridge.platform} · ${RELEASE_SHORT}`, {
         fontFamily: FONT,
         fontSize: '9px',
         color: '#654454',
