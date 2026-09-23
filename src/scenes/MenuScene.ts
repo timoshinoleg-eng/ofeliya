@@ -357,7 +357,7 @@ export class MenuScene extends Phaser.Scene {
     const selectorW = splitSelectors
       ? Math.min((W - 34 - selectorGap) / 2, 164)
       : Math.min(W - 34, 330);
-    const selectorH = splitSelectors ? 58 : H < 650 ? 46 : 54;
+    const selectorH = splitSelectors ? 84 : H < 650 ? 46 : 54;
     const selectorY = splitSelectors ? H * 0.685 : 0;
     const difficultyY = splitSelectors ? selectorY : H * 0.635;
     const difficultyX = splitSelectors ? W / 2 - selectorW / 2 - selectorGap / 2 : W / 2;
@@ -373,9 +373,9 @@ export class MenuScene extends Phaser.Scene {
       .rectangle(difficultyLeft + 5, difficultyY, 5, selectorH - 10, COLORS.cyan, 0.92)
       .setDepth(6);
     this.add
-      .text(difficultyLeft + 14, difficultyY - (splitSelectors ? 15 : 12), 'СЛОЖНОСТЬ:', {
+      .text(difficultyLeft + 14, difficultyY - (splitSelectors ? 27 : 12), 'СЛОЖНОСТЬ:', {
         fontFamily: UI_FONT,
-        fontSize: splitSelectors ? '10px' : H < 650 ? '9px' : '10px',
+        fontSize: splitSelectors ? '12px' : H < 650 ? '11px' : '12px',
         fontStyle: '700',
         color: UI_TEXT.secondary,
         letterSpacing: 0.8,
@@ -384,7 +384,7 @@ export class MenuScene extends Phaser.Scene {
       .setResolution(2)
       .setDepth(6);
     const difficultyText = this.add
-      .text(difficultyLeft + 14, difficultyY + (splitSelectors ? 7 : 8), '', {
+      .text(difficultyLeft + 14, difficultyY - (splitSelectors ? 7 : -8), '', {
         fontFamily: FONT,
         fontSize: splitSelectors ? '14px' : H < 650 ? '13px' : '16px',
         fontStyle: 'bold',
@@ -397,7 +397,7 @@ export class MenuScene extends Phaser.Scene {
     const difficultyDesc = this.add
       .text(
         splitSelectors ? difficultyLeft + 14 : difficultyRight - 12,
-        difficultyY + (splitSelectors ? 18 : 1),
+        difficultyY + (splitSelectors ? 23 : 1),
         '',
         {
           fontFamily: UI_FONT,
@@ -406,7 +406,7 @@ export class MenuScene extends Phaser.Scene {
           color: UI_TEXT.secondary,
           align: splitSelectors ? 'left' : 'right',
           lineSpacing: 1,
-          wordWrap: { width: splitSelectors ? selectorW - 26 : Math.min(142, selectorW * 0.43) },
+          wordWrap: { width: splitSelectors ? selectorW - 28 : Math.min(142, selectorW * 0.43), useAdvancedWrap: true },
         }
       )
       .setOrigin(splitSelectors ? 0 : 1, 0.5)
@@ -427,7 +427,7 @@ export class MenuScene extends Phaser.Scene {
           : `${profile.label}  ›`
       );
       difficultyText.setColor(profile.id === 'strained' || challengeLocked ? '#ffe066' : '#fff4ec');
-      difficultyDesc.setVisible(!splitSelectors);
+      difficultyDesc.setVisible(true);
       difficultyDesc.setText(
         challengeLocked
           ? duelLocked
@@ -472,9 +472,9 @@ export class MenuScene extends Phaser.Scene {
       .rectangle(controlLeft + 5, controlY, 5, controlH - 10, COLORS.magenta, 0.94)
       .setDepth(6);
     this.add
-      .text(controlLeft + 14, controlY - (splitSelectors ? 15 : 11), 'УПРАВЛЕНИЕ:', {
+      .text(controlLeft + 14, controlY - (splitSelectors ? 27 : 11), 'УПРАВЛЕНИЕ:', {
         fontFamily: UI_FONT,
-        fontSize: splitSelectors ? '10px' : H < 650 ? '9px' : '10px',
+        fontSize: splitSelectors ? '12px' : H < 650 ? '11px' : '12px',
         fontStyle: '700',
         color: UI_TEXT.secondary,
         letterSpacing: 0.8,
@@ -483,12 +483,12 @@ export class MenuScene extends Phaser.Scene {
       .setResolution(2)
       .setDepth(6);
     const controlText = this.add
-      .text(controlLeft + 14, controlY + (splitSelectors ? 7 : 8), '', {
+      .text(controlLeft + 14, controlY - (splitSelectors ? 7 : -8), '', {
         fontFamily: FONT,
         fontSize: splitSelectors ? '13px' : H < 650 ? '12px' : '15px',
         fontStyle: 'bold',
         color: UI_TEXT.primary,
-        wordWrap: { width: splitSelectors ? selectorW - 24 : selectorW * 0.52 },
+        wordWrap: { width: splitSelectors ? selectorW - 28 : selectorW * 0.52, useAdvancedWrap: true },
       })
       .setOrigin(0, 0.5)
       .setResolution(2)
@@ -497,7 +497,7 @@ export class MenuScene extends Phaser.Scene {
     const controlDesc = this.add
       .text(
         splitSelectors ? controlLeft + 14 : controlRight - 12,
-        controlY + (splitSelectors ? 18 : 1),
+        controlY + (splitSelectors ? 23 : 1),
         '',
         {
           fontFamily: UI_FONT,
@@ -506,7 +506,7 @@ export class MenuScene extends Phaser.Scene {
           color: UI_TEXT.secondary,
           align: splitSelectors ? 'left' : 'right',
           lineSpacing: 1,
-          wordWrap: { width: splitSelectors ? selectorW - 26 : Math.min(144, selectorW * 0.44) },
+          wordWrap: { width: splitSelectors ? selectorW - 28 : Math.min(144, selectorW * 0.44), useAdvancedWrap: true },
         }
       )
       .setOrigin(splitSelectors ? 0 : 1, 0.5)
@@ -536,7 +536,7 @@ export class MenuScene extends Phaser.Scene {
         controlText.setText(splitSelectors ? `${splitControlValue}  ›` : `${controlModeLabel(selectedControlMode)}  ›`);
         controlDesc.setText(splitSelectors ? splitControlDescription : controlModeDescription(selectedControlMode));
       }
-      controlDesc.setVisible(!splitSelectors);
+      controlDesc.setVisible(true);
       const controlAccent =
         selectedControlMode === 'two-hand'
           ? COLORS.cyan
