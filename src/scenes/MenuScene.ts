@@ -522,7 +522,7 @@ export class MenuScene extends Phaser.Scene {
           ? 'АВТОАТАКА · одно касание'
           : selectedControlMode === 'two-hand'
             ? 'ПРИЦЕЛ · справа атака'
-            : 'ДВИЖЕНИЕ · автоатака';
+            : 'оба стика · автоатака';
       if (duelLoading) {
         controlText.setText('ЗАГРУЗКА ДУЭЛИ');
         controlDesc.setText(splitSelectors ? 'режим придёт из вызова' : 'режим придёт\nиз снимка вызова');
