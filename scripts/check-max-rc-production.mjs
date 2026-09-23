@@ -17,6 +17,7 @@ const runtimeConfig = read('public/runtime-config.js');
 const serviceWorker = read('public/sw.js');
 const releaseSource = read('src/release.ts');
 const releaseStamp = read('scripts/stamp-release.mjs');
+const deployWorkflow = read('.github/workflows/deploy-cloudru.yml');
 
 const runtimePos = index.indexOf('./runtime-config.js');
 const maxBridgePos = index.indexOf('https://st.max.ru/js/max-web-app.js');
@@ -79,6 +80,26 @@ assert.match(runtimeConfig, /ofeliya-__OFELIYA_RELEASE__/, 'runtime config must 
 assert.doesNotMatch(runtimeConfig, /location\\.(?:replace|assign|reload)/, 'runtime config must not trigger a second document navigation');
 assert.match(serviceWorker, /ofeliya-__OFELIYA_RELEASE__/, 'service worker cache must be release-stamped after build');
 assert.match(releaseStamp, /dist\/release\.json/, 'release stamping must emit a public immutable release identity');
+assert.match(
+  releaseStamp,
+  /process\.env\.VITE_RELEASE_SHA \|\| 'dev'/,
+  'bundle and post-build release stamping must use the same fallback'
+);
+assert.doesNotMatch(
+  releaseStamp,
+  /process\.env\.GITHUB_SHA|dev-\$\{pkg\.version/,
+  'post-build stamping must not invent a release identity that Vite did not compile'
+);
+assert.match(
+  deployWorkflow,
+  /release_identity_floor="d74d31732545769af5d4a3fda232bd10cdba3800"/,
+  'deploy must pin the first main commit that supports public release identity'
+);
+assert.match(
+  deployWorkflow,
+  /git merge-base --is-ancestor "\$release_identity_floor" "\$sha"/,
+  'deploy must reject rollback targets that predate verifiable release identity'
+);
 assert.match(compose, /VITE_RELEASE_SHA:\s*\$\{OFELIYA_RELEASE:\?/, 'production static build must receive the requested release SHA');
 assert.match(dockerfile, /ARG VITE_RELEASE_SHA/, 'Dockerfile must accept the requested release SHA');
 assert.match(dockerfile, /RUN test -n "\$VITE_RELEASE_SHA"/, 'production static build must refuse a missing release SHA');
