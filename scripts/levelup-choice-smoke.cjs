@@ -103,7 +103,15 @@ function browserDriver() {
   }
 
   await page.evaluate(() => {
-    const gs = window.__game.scene.getScene('Game');
+    const game = window.__game;
+    const gs = game.scene.getScene('Game');
+    const ui = game.scene.getScene('UI');
+    // The stale-id probe intentionally leaves an awaiting choice. Tear down any modal that the
+    // UI may have rendered for that probe so this scenario starts from the fresh offer it asserts.
+    gs.awaitingChoice = false;
+    ui.hideModal();
+    if (game.scene.isPaused('Game')) game.scene.resume('Game');
+
     gs.queuedLevels = 1;
     gs.awaitingChoice = true;
     gs.legendaryRewardPending = false;
