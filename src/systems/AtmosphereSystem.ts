@@ -149,10 +149,10 @@ export class AtmosphereSystem {
     this.stage = stage;
     this.plasma.setTexture(stage.theme.plasmaTexture).clearTint();
     const heart = stage.theme.ambientProfile === 'heart';
-    this.structure.setVisible(heart).setAlpha(heart ? 0.24 : 0);
+    this.structure.setVisible(heart).setAlpha(heart ? 0.34 : 0);
     if (heart && stage.theme.structureTexture) this.structure.setTexture(stage.theme.structureTexture);
-    this.erythrocytes.forEach((cell, index) => cell.image.setVisible(!heart || index % 3 === 0));
-    this.hostCells.forEach((cell, index) => cell.image.setVisible(!heart || index % 2 === 0));
+    this.erythrocytes.forEach((cell, index) => cell.image.setVisible(!heart || index % 4 === 0));
+    this.hostCells.forEach((cell, index) => cell.image.setVisible(!heart || index % 3 === 0));
     this.particles.forEach((particle, index) => {
       particle.image.setTint(index % 7 === 0 ? stage.theme.accentColor : stage.theme.particleTint);
     });
@@ -178,10 +178,10 @@ export class AtmosphereSystem {
     const flow = (heart ? 0.72 : 1) + progress * (heart ? 0.42 : 0.65) + beat * 0.32;
     this.plasma.tilePositionX = cam.scrollX * 0.7 - time * (heart ? 0.004 : 0.007) * flow;
     this.plasma.tilePositionY = cam.scrollY * 0.7 + Math.sin(time * (heart ? 0.00034 : 0.00018)) * (heart ? 4 : 8);
-    this.plasma.setTint(heart ? 0xffe3d1 : progress > 0.72 ? 0xffd6df : 0xffffff);
+    this.plasma.setTint(heart ? 0xffc9a8 : progress > 0.72 ? 0xffd6df : 0xffffff);
     this.structure.tilePositionX = cam.scrollX * 0.52 + time * 0.003;
     this.structure.tilePositionY = cam.scrollY * 0.52 - time * 0.0015;
-    if (heart) this.structure.setAlpha(0.16 + beat * 0.15 + progress * 0.04);
+    if (heart) this.structure.setAlpha(0.27 + beat * 0.2 + progress * 0.05);
 
     for (const cell of this.erythrocytes) {
       cell.x += cell.vx * flow * dt - camDx * cell.parallax;
