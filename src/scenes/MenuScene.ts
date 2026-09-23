@@ -240,7 +240,7 @@ export class MenuScene extends Phaser.Scene {
       this.add
         .text(W / 2, hookY + 70, `Носитель: ${displayName}`, {
           fontFamily: UI_FONT,
-          fontSize: H < 650 ? '12px' : '14px',
+          fontSize: H < 650 ? '12px' : '12px',
           fontStyle: '700',
           color: '#9deeff',
         })
@@ -335,7 +335,7 @@ export class MenuScene extends Phaser.Scene {
       const campaign = save.bestCampaignClearMs > 0 ? fmtTime(save.bestCampaignClearMs) : '—';
       const records =
         save.runs > 0
-          ? `Выживание ${survival}   ·   ИММУННЫЙ ПРАЙМ ${boss1}\nКампания ${campaign}   ·   уничтожено клеток ${save.bestKills}`
+          ? `Выживание ${survival} · ПРАЙМ ${boss1}\nКампания ${campaign} · клетки ${save.bestKills}`
           : 'STRAIN-0 · ПЕРВЫЙ ЦИКЛ ЗАРАЖЕНИЯ';
       this.add
         .text(W / 2, H * 0.57, records, {
@@ -511,15 +511,27 @@ export class MenuScene extends Phaser.Scene {
       .setDepth(6);
     let startHint: Phaser.GameObjects.Text | null = null;
     const renderControlMode = () => {
+      const splitControlValue =
+        selectedControlMode === 'one-hand'
+          ? 'ОДНА РУКА'
+          : selectedControlMode === 'two-hand'
+            ? 'ДВЕ РУКИ'
+            : 'ДВА СТИКА';
+      const splitControlDescription =
+        selectedControlMode === 'one-hand'
+          ? 'АВТОАТАКА · одно касание'
+          : selectedControlMode === 'two-hand'
+            ? 'ПРИЦЕЛ · справа атака'
+            : 'ДВИЖЕНИЕ · автоатака';
       if (duelLoading) {
         controlText.setText('ЗАГРУЗКА ДУЭЛИ');
         controlDesc.setText(splitSelectors ? 'режим придёт из вызова' : 'режим придёт\nиз снимка вызова');
       } else if (incomingDuel) {
-        controlText.setText(`${controlModeLabel(selectedControlMode)} · ДУЭЛЬ`);
-        controlDesc.setText(splitSelectors ? 'зафиксировано вызовом' : 'зафиксировано вызовом\nменять нельзя');
+        controlText.setText(splitSelectors ? `${splitControlValue} · ДУЭЛЬ` : `${controlModeLabel(selectedControlMode)} · ДУЭЛЬ`);
+        controlDesc.setText(splitSelectors ? 'режим зафиксирован' : 'зафиксировано вызовом\nменять нельзя');
       } else {
-        controlText.setText(`${controlModeLabel(selectedControlMode)}  ›`);
-        controlDesc.setText(controlModeDescription(selectedControlMode));
+        controlText.setText(splitSelectors ? `${splitControlValue}  ›` : `${controlModeLabel(selectedControlMode)}  ›`);
+        controlDesc.setText(splitSelectors ? splitControlDescription : controlModeDescription(selectedControlMode));
       }
       const controlAccent =
         selectedControlMode === 'two-hand'
