@@ -124,6 +124,7 @@ export class GameScene extends Phaser.Scene {
   private hitStopUntil = 0;
   private hitStopped = false;
   private dmgTexts: Phaser.GameObjects.Text[] = [];
+  private playerImpactCue: Phaser.GameObjects.Graphics | null = null;
   private dmgCursor = 0;
   private lastDmgAt = 0;
   private lastDmg: { obj: Phaser.GameObjects.Text; value: number; at: number } | null = null;
@@ -793,8 +794,41 @@ export class GameScene extends Phaser.Scene {
   private styleDmg(t: Phaser.GameObjects.Text, value: number): void {
     const crit = value >= JUICE.critDamage;
     t.setText(String(Math.round(value)));
-    t.setFontSize(crit ? 18 : 14);
-    t.setColor(crit ? '#ffe066' : '#e8f4ff');
+    t.setFontSize(crit ? 20 : 15);
+    t.setColor(crit ? '#ffe066' : '#f2fbff');
+    t.setStroke(crit ? '#5c3a00' : '#08131a', crit ? 4 : 3);
+  }
+
+  private showPlayerImpactCue(sourceX: number, sourceY: number): void {
+    const cue = this.playerImpactCue ?? this.add.graphics().setDepth(29);
+    this.playerImpactCue = cue;
+    this.tweens.killTweensOf(cue);
+
+    const dx = sourceX - this.player.x;
+    const dy = sourceY - this.player.y;
+    const distance = Math.hypot(dx, dy) || 1;
+    const ux = dx / distance;
+    const uy = dy / distance;
+
+    cue.clear().setVisible(true).setAlpha(1).setScale(1).setPosition(this.player.x, this.player.y);
+    cue.lineStyle(3, COLORS.red, 0.92);
+    cue.strokeCircle(0, 0, 22);
+    cue.lineStyle(5, COLORS.white, 0.7);
+    cue.beginPath();
+    cue.moveTo(ux * 24, uy * 24);
+    cue.lineTo(ux * 43, uy * 43);
+    cue.strokePath();
+    cue.fillStyle(COLORS.red, 0.9);
+    cue.fillCircle(ux * 47, uy * 47, 4);
+
+    this.tweens.add({
+      targets: cue,
+      alpha: 0,
+      scale: 1.24,
+      duration: 230,
+      ease: 'Quad.Out',
+      onComplete: () => cue.setVisible(false),
+    });
   }
 
   onGemCollected(value: number): void {
@@ -1832,6 +1866,7 @@ export class GameScene extends Phaser.Scene {
     const s = JUICE.shakeHurt;
     this.shake(s.duration, s.intensity);
     this.hitStop(this.impact.hitStopMs('critical_hit'));
+    this.showPlayerImpactCue(e.x, e.y);
     const dx = e.x - this.player.x;
     const dy = e.y - this.player.y;
     const d = Math.hypot(dx, dy) || 1;
