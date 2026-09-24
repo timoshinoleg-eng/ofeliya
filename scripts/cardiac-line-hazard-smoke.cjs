@@ -48,12 +48,19 @@ function browserDriver() {
   });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
   await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
-  await page.waitForFunction(
-    () => window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI')
-  );
+  await page.waitForFunction(() => {
+    const game = window.__game;
+    return Boolean(
+      game &&
+      (game.scene.isActive('Game') || game.scene.isPaused('Game')) &&
+      game.scene.isActive('UI')
+    );
+  });
 
   const setup = await page.evaluate(() => {
-    const gs = window.__game.scene.getScene('Game');
+    const game = window.__game;
+    const gs = game.scene.getScene('Game');
+    if (game.scene.isPaused('Game')) game.scene.resume('Game');
     gs.nextFireAt = Number.MAX_SAFE_INTEGER;
     for (const enemy of gs.enemies.getChildren()) {
       if (enemy.active) enemy.deactivateForStageReset();
@@ -80,6 +87,11 @@ function browserDriver() {
     gs.heartbeatPulse.reset(0);
     gs.cardiacHazard.reset();
     gs.cardiacHazardVisual = null;
+
+    // This smoke owns the phase-two hazard contract, not the boss-reveal presentation.
+    // Prevent the real reveal/video path from pausing Game while the synthetic boss is exercised.
+    const ui = window.__game.scene.getScene('UI');
+    ui.showBossReveal = () => false;
 
     const boss = gs.spawnEnemy('boss', gs.player.x + 260, gs.player.y, false);
     if (!boss) throw new Error('failed to spawn CARDIAC TITAN');

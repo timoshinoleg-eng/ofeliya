@@ -106,6 +106,8 @@ function browserDriver() {
         rna: 4,
         radius: 1,
         damage: 0,
+        interactionId: host.interactionId,
+        slotIndex: gs.hostCells.cells.indexOf(host),
       });
       const loot = gs.gems
         .getChildren()

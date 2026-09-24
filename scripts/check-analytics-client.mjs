@@ -45,8 +45,12 @@ try {
   });
 
   assert.deepEqual(
-    buildAnalyticsSubmission('app_open', platform('telegram', 'signed'), { release: 'r1' }),
-    { platform: 'telegram', initData: 'signed', event: 'app_open', props: { release: 'r1' } }
+    buildAnalyticsSubmission('first_rna_pickup', platform('telegram', 'signed'), { value: 4 }),
+    { platform: 'telegram', initData: 'signed', event: 'first_rna_pickup', props: { value: 4 } }
+  );
+  assert.deepEqual(
+    buildAnalyticsSubmission('first_enemy_hit', platform('max', 'signed-max'), { kind: 'swarm' }),
+    { platform: 'max', initData: 'signed-max', event: 'first_enemy_hit', props: { kind: 'swarm' } }
   );
   assert.equal(buildAnalyticsSubmission('app_open', platform('max', '')), null);
 

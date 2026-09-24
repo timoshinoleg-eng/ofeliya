@@ -291,7 +291,14 @@ async function bootFrozen(page) {
   await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'), null, { timeout: 45000 });
   await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
-  await page.waitForFunction(() => window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI'), null, { timeout: 45000 });
+  await page.waitForFunction(() => {
+    const game = window.__game;
+    return Boolean(
+      game &&
+      (game.scene.isActive('Game') || game.scene.isPaused('Game')) &&
+      game.scene.isActive('UI')
+    );
+  }, null, { timeout: 45000 });
   await page.evaluate(() => {
     const gs = window.__game.scene.getScene('Game');
     const ui = window.__game.scene.getScene('UI');

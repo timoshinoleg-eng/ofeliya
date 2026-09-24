@@ -106,6 +106,11 @@ export class VfxSystem {
     this.ring(x, y, COLORS.cyan, radius, 360, 0.3);
   }
 
+  lysis(x: number, y: number, innerRadius: number, gameplayRadius: number): void {
+    this.nova(x, y, innerRadius);
+    this.ring(x, y, COLORS.green, gameplayRadius, 320, 0.16);
+  }
+
   singularity(x: number, y: number, radius: number): void {
     this.tint(this.rewardEmitter, COLORS.purple);
     this.emit(this.rewardEmitter, x, y, 18, true);

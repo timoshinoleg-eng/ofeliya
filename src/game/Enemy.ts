@@ -597,12 +597,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.flashUntil = now + 70;
     this.knockX += kx;
     this.knockY += ky;
+    if (actualDamage > 0 && this.hp > 0 && !this.isBoss) {
+      this.gs?.showEnemyHealth(this);
+    }
     if (this.hp <= 0) {
       this.eliteRing?.setVisible(false);
       this.eliteMarker?.setVisible(false);
       this.bossAura?.setVisible(false);
       this.roleTelegraph?.setVisible(false).clear();
       this.bossTelegraph?.setVisible(false).clear();
+      this.gs?.hideEnemyHealth(this);
       this.disableBody(true, true);
       this.gs?.onEnemyDied(this);
     }

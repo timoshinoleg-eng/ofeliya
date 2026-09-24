@@ -17,7 +17,11 @@ import {
   type AchievementId,
 } from '../game/AchievementSystem';
 import { rollRunChoices } from '../game/EvolutionSystem';
-import { guaranteedLegendaryChoices, type LegendaryId } from '../game/LegendarySystem';
+import {
+  getLegendaryDefinition,
+  guaranteedLegendaryChoices,
+  type LegendaryId,
+} from '../game/LegendarySystem';
 import { HEARTBEAT_PULSE_PROFILE, HeartbeatPulseDirector, type HeartbeatPulseEvent } from '../game/HeartbeatPulseDirector';
 import {
   HEART_SAFE_POCKET,
@@ -80,9 +84,15 @@ import { AdaptiveAudioDirector } from '../systems/AdaptiveAudioDirector';
 import { SfxAdaptiveSink } from '../systems/SfxAdaptiveSink';
 import { MUSIC_TRACK_COUNT, Sfx } from '../systems/Sfx';
 import { VfxSystem } from '../systems/VfxSystem';
+import { EnemyHealthOverlay } from '../systems/EnemyHealthOverlay';
 import { VideoInterstitial } from '../systems/VideoInterstitial';
 import { PERFORMANCE } from '../systems/PerformanceProfile';
-import { HostCellSystem, type HostCellLysisEvent } from '../systems/HostCellSystem';
+import {
+  HostCellSystem,
+  type HostCellInteractionEvent,
+  type HostCellLysisEvent,
+} from '../systems/HostCellSystem';
+import { trackProductEvent, type ProductEvent, type ProductEventProps } from '../systems/AnalyticsClient';
 import type { UIScene } from './UIScene';
 
 interface CoreMark {
@@ -92,6 +102,17 @@ interface CoreMark {
   windowUntil: number;
 }
 
+type HostCellHintType = 'approach' | 'enter' | 'exit';
+
+interface ComprehensionPresentationState {
+  runSeed: string;
+  events: ProductEvent[];
+  hostCellHints: HostCellHintType[];
+  hostCellSlotsWithHint: number[];
+}
+
+const COMPREHENSION_STATE_KEY = 'ofeliya_comprehension_v1';
+
 export class GameScene extends Phaser.Scene {
   player!: Player;
   runState!: RunState;
@@ -99,7 +120,13 @@ export class GameScene extends Phaser.Scene {
   private atmosphere!: AtmosphereSystem;
   private vignette!: Phaser.GameObjects.Image;
   private vfx!: VfxSystem;
+  private enemyHealth!: EnemyHealthOverlay;
   private hostCells!: HostCellSystem;
+  private firstRunComprehension = false;
+  private hostCellsCompletedThisRun = 0;
+  private hostCellHintEventsShown = new Set<HostCellHintType>();
+  private hostCellSlotsWithHint = new Set<number>();
+  private comprehensionEventsSent = new Set<ProductEvent>();
   private bullets!: Phaser.Physics.Arcade.Group;
   private enemies!: Phaser.Physics.Arcade.Group;
   private gems!: Phaser.Physics.Arcade.Group;
@@ -235,6 +262,11 @@ export class GameScene extends Phaser.Scene {
     this.runState = new RunState(this.stageDirector.currentStage);
     if (resume) this.runState.restoreFromCheckpoint(resume.runState);
     this.resumed = resume !== null;
+    this.firstRunComprehension = SaveSystem.get().runs === 0;
+    this.hostCellsCompletedThisRun = resume ? this.runState.run.hostCellsInfected : 0;
+    this.hostCellHintEventsShown = new Set();
+    this.hostCellSlotsWithHint = new Set();
+    this.restoreComprehensionPresentationState();
     this.checkpointAccMs = 0;
     // Adaptive audio foundation: one deterministic bed per run plus danger-driven tension layers.
     // The director only observes gameplay; StageDirector keeps lifecycle authority.
@@ -313,6 +345,7 @@ export class GameScene extends Phaser.Scene {
     this.enemies = this.physics.add.group({ classType: Enemy, maxSize: 260 });
     this.gems = this.physics.add.group({ classType: Gem, maxSize: 220 });
     this.vfx = new VfxSystem(this);
+    this.enemyHealth = new EnemyHealthOverlay(this);
     this.hostCells = new HostCellSystem(
       this,
       this.player,
@@ -324,7 +357,9 @@ export class GameScene extends Phaser.Scene {
         lysisRadius: this.runState.hostLysisRadius,
         lysisDamage: this.runState.hostLysisDamage,
       }),
-      () => this.gameplayRng.next('host-cell')
+      () => this.gameplayRng.next('host-cell'),
+      (event) => this.onHostCellInteraction(event),
+      (slotIndex) => this.onHostCellSpawn(slotIndex)
     );
 
     this.dmgTexts = [];
@@ -518,6 +553,7 @@ export class GameScene extends Phaser.Scene {
     this.updateAdaptiveAudio(delta);
     this.updateHeartbeatSignature(stage, st.timeMs);
     this.wave.update(delta);
+    this.enemyHealth.update(time);
     this.updateCardiacLineHazard(time);
     this.hostCells.update(time, delta, st.timeMs);
     this.atmosphere.update(time, delta, st.timeMs, stage.durationMs);
@@ -545,6 +581,7 @@ export class GameScene extends Phaser.Scene {
         () => this.gameplayRng.next('progression')
       );
       this.awaitingChoice = true;
+      if (this.pendingChoices.length > 0) this.trackComprehensionOnce('first_mutation_opened');
       this.queuedLevels -= 1;
     }
 
@@ -605,8 +642,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   onEnemyDied(e: Enemy): void {
+    this.enemyHealth?.hide(e);
     const st = this.runState.stage;
     this.runState.recordKill(COMBO.windowMs);
+    this.trackComprehensionOnce('first_enemy_kill', {
+      kind: e.kind,
+      elite: e.isElite,
+      boss: e.isBoss,
+    });
     this.captureAchievements(false, true);
     this.vfx.kill(e.x, e.y, e.color, e.isBoss ? 'boss' : e.isElite ? 'elite' : 'normal');
     if (e.isElite && e.eliteModifier === 'volatile') this.triggerVolatileElite(e);
@@ -687,8 +730,17 @@ export class GameScene extends Phaser.Scene {
 
   private onHostCellLysis(event: HostCellLysisEvent): void {
     this.runState.recordHostCellInfected();
-    // Gameplay radius is unchanged; the smaller visual nova leaves room for the membrane contour.
-    this.vfx.nova(event.x, event.y, event.radius * 0.72);
+    this.hostCellsCompletedThisRun += 1;
+    const hadContextualHint = this.hostCellSlotsWithHint.delete(event.slotIndex);
+    this.persistComprehensionPresentationState();
+    if (
+      this.firstRunComprehension &&
+      this.hostCellsCompletedThisRun === 2 &&
+      !hadContextualHint
+    ) {
+      this.trackComprehensionOnce('second_host_cell_completed_without_hint');
+    }
+    this.vfx.lysis(event.x, event.y, event.radius * 0.72, event.radius);
     this.atmosphere.pulse(COLORS.green, 0.14);
     Sfx.play('nova');
     PlatformBridge.haptic('medium');
@@ -702,6 +754,8 @@ export class GameScene extends Phaser.Scene {
 
     const list = this.enemies.getChildren() as Enemy[];
     const rhythmLysisMultiplier = this.time.now <= this.heartbeatOpportunityUntil ? 1.35 : 1;
+    let enemiesHit = 0;
+    let enemiesKilled = 0;
     for (const e of list) {
       if (!e.active) continue;
       const dx = e.x - event.x;
@@ -710,14 +764,63 @@ export class GameScene extends Phaser.Scene {
       if (d > event.radius + e.radius) continue;
       const dd = d || 1;
       this.vfx.hit(e.x, e.y, COLORS.green);
-      e.takeDamage(
+      const wasAlive = e.active && e.hp > 0;
+      const dealt = e.takeDamage(
         event.damage * rhythmLysisMultiplier,
         (dx / dd) * 210,
         (dy / dd) * 210,
         'lysis'
       );
+      if (dealt > 0) enemiesHit += 1;
+      if (wasAlive && !e.active) enemiesKilled += 1;
     }
     if (this.runState.hasLegendary('lysis-chain')) this.triggerLysisChain(event, list);
+    this.trackComprehensionOnce('first_lysis', {
+      enemiesHit,
+      enemiesKilled,
+      rna: event.rna,
+      stage: this.stageDirector.currentStage.id,
+    });
+  }
+
+  private onHostCellInteraction(event: HostCellInteractionEvent): void {
+    const analyticsEvent: Record<HostCellInteractionEvent['type'], ProductEvent> = {
+      approach: 'host_cell_approached',
+      enter: 'infection_started',
+      exit: 'infection_interrupted',
+      resume: 'infection_resumed',
+    };
+    this.trackComprehensionOnce(analyticsEvent[event.type], { progress: event.progress });
+
+    if (!this.firstRunComprehension) return;
+    if (event.type === 'resume') return;
+    if (
+      this.hostCellsCompletedThisRun > 0 &&
+      (event.type === 'approach' || event.type === 'enter')
+    ) {
+      return;
+    }
+    if (this.hostCellHintEventsShown.has(event.type)) return;
+
+    const copy = {
+      approach: 'КЛЕТКА ОРГАНИЗМА · ЗАРАЗИ РЯДОМ',
+      enter: 'ЗАРАЖЕНИЕ НАЧАЛОСЬ · ОСТАВАЙСЯ РЯДОМ',
+      exit: 'ВНЕ ЗОНЫ · ЗАРАЖЕНИЕ ОСЛАБЕВАЕТ',
+      resume: '',
+    }[event.type];
+    const ui = this.getUiScene();
+    if (ui) {
+      ui.showContextHint(copy);
+      this.hostCellHintEventsShown.add(event.type);
+      this.hostCellSlotsWithHint.add(event.slotIndex);
+      this.persistComprehensionPresentationState();
+    }
+  }
+
+  private onHostCellSpawn(slotIndex: number): void {
+    if (this.hostCellSlotsWithHint.delete(slotIndex)) {
+      this.persistComprehensionPresentationState();
+    }
   }
 
   private hitStop(ms: number): void {
@@ -835,6 +938,8 @@ export class GameScene extends Phaser.Scene {
     Sfx.play('pickup');
     this.vfx.pickup(this.player.x, this.player.y);
     this.queuedLevels += this.runState.addXp(value);
+    this.getUiScene()?.notifyRnaPickup(value);
+    this.trackComprehensionOnce('first_rna_pickup', { value });
   }
 
   acceptChoiceClick(id: string): boolean {
@@ -848,6 +953,13 @@ export class GameScene extends Phaser.Scene {
     if (!def) return this.awaitingChoice;
     const rewardChoice = this.legendaryRewardPending;
     def.apply(this.runState);
+    this.trackComprehensionOnce('first_mutation_selected', {
+      id: def.id,
+      kind: def.kind ?? 'upgrade',
+      archetype: def.legendaryId
+        ? getLegendaryDefinition(def.legendaryId).archetype
+        : def.evolutionId ?? def.family,
+    });
     if (def.kind === 'evolution' && def.evolutionId) {
       this.pendingEvolutionCeremony = def.evolutionId;
       this.syncPlayerMutationSilhouette();
@@ -1377,6 +1489,8 @@ export class GameScene extends Phaser.Scene {
 
   private resetStageWorld(nextStage: StageDefinition): void {
     this.milestones.reset();
+    this.enemyHealth.clear();
+    this.getUiScene()?.discardContextHint();
     this.hostCells.resetStage();
     this.resetCardiacLineHazard();
     this.wave.boss = null;
@@ -1536,6 +1650,82 @@ export class GameScene extends Phaser.Scene {
     return this.scene.get('UI') as UIScene;
   }
 
+  showEnemyHealth(enemy: Enemy): void {
+    this.enemyHealth?.show(enemy, this.time.now);
+  }
+
+  hideEnemyHealth(enemy: Enemy): void {
+    this.enemyHealth?.hide(enemy);
+  }
+
+  private restoreComprehensionPresentationState(): void {
+    this.comprehensionEventsSent = new Set<ProductEvent>();
+    this.hostCellHintEventsShown = new Set<HostCellHintType>();
+    try {
+      const raw = localStorage.getItem(COMPREHENSION_STATE_KEY);
+      if (!raw) return;
+      const stored = JSON.parse(raw) as Partial<ComprehensionPresentationState>;
+      if (stored.runSeed !== this.runSeed) {
+        localStorage.removeItem(COMPREHENSION_STATE_KEY);
+        return;
+      }
+      if (Array.isArray(stored.events)) {
+        for (const event of stored.events) {
+          if (typeof event === 'string') this.comprehensionEventsSent.add(event as ProductEvent);
+        }
+      }
+      if (Array.isArray(stored.hostCellHints)) {
+        for (const hint of stored.hostCellHints) {
+          if (hint === 'approach' || hint === 'enter' || hint === 'exit') {
+            this.hostCellHintEventsShown.add(hint);
+          }
+        }
+      }
+      if (Array.isArray(stored.hostCellSlotsWithHint)) {
+        for (const slotIndex of stored.hostCellSlotsWithHint) {
+          if (Number.isInteger(slotIndex) && slotIndex >= 0 && slotIndex < 6) {
+            this.hostCellSlotsWithHint.add(slotIndex);
+          }
+        }
+      }
+    } catch {
+      try {
+        localStorage.removeItem(COMPREHENSION_STATE_KEY);
+      } catch {
+        // Storage can be unavailable in hardened webviews; gameplay must remain unaffected.
+      }
+    }
+  }
+
+  private persistComprehensionPresentationState(): void {
+    try {
+      const state: ComprehensionPresentationState = {
+        runSeed: this.runSeed,
+        events: [...this.comprehensionEventsSent],
+        hostCellHints: [...this.hostCellHintEventsShown],
+        hostCellSlotsWithHint: [...this.hostCellSlotsWithHint],
+      };
+      localStorage.setItem(COMPREHENSION_STATE_KEY, JSON.stringify(state));
+    } catch {
+      // Presentation telemetry must never affect gameplay if storage is unavailable.
+    }
+  }
+
+  private clearComprehensionPresentationState(): void {
+    try {
+      localStorage.removeItem(COMPREHENSION_STATE_KEY);
+    } catch {
+      // Ignore storage failures during run teardown.
+    }
+  }
+
+  private trackComprehensionOnce(event: ProductEvent, props: ProductEventProps = {}): void {
+    if (this.comprehensionEventsSent.has(event)) return;
+    this.comprehensionEventsSent.add(event);
+    this.persistComprehensionPresentationState();
+    void trackProductEvent(event, PlatformBridge, props);
+  }
+
   private handleStageEvents(events: readonly StageDirectorEvent[]): void {
     for (const event of events) {
       switch (event.type) {
@@ -1594,6 +1784,7 @@ export class GameScene extends Phaser.Scene {
     if (this.stageDirector.phase !== 'RUN_ENDED') this.stageDirector.endRun(reason);
     this.resetCardiacLineHazard();
     RunCheckpoint.clear();
+    this.clearComprehensionPresentationState();
     this.runState.captureStageBuild();
     const run = this.runState.run;
     const stage = this.runState.stage;
@@ -1844,6 +2035,13 @@ export class GameScene extends Phaser.Scene {
     const rhythmBurst = this.consumeMyocardialRhythm();
     this.vfx.hit(e.x, e.y, b.prism ? COLORS.gold : e.color);
     const dealtDamage = e.takeDamage(damage, (bv.x / vm) * 130, (bv.y / vm) * 130);
+    if (dealtDamage > 0) {
+      this.trackComprehensionOnce('first_enemy_hit', {
+        kind: e.kind,
+        elite: e.isElite,
+        boss: e.isBoss,
+      });
+    }
     Sfx.play('hit');
     this.showDamage(e.x, e.y, dealtDamage);
     this.trySplitProjectile(b, bv);
