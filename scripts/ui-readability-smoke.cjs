@@ -362,18 +362,18 @@ function assertMutation(contract, compact) {
   if (contract.cards.length !== 3) {
     throw new Error('readability mutation card count: ' + JSON.stringify(contract.cards));
   }
-  const expectedHeight = compact ? 112 : 136;
+  const expectedHeight = compact ? 124 : 148;
   if (contract.cards.some((card) => card.height < expectedHeight || card.minTextSize < (compact ? 11 : 12))) {
     throw new Error('readability mutation card typography: ' + JSON.stringify(contract.cards));
   }
   if (!compact && contract.cards.some((card) => card.bodySystemCount < 2)) {
     throw new Error('readability mutation body font missing: ' + JSON.stringify(contract.cards));
   }
-  const progressRows = contract.rows.filter((row) => /^\d+\s*→\s*\d+\s*\/\s*\d+$/.test(row.text));
+  const progressRows = contract.rows.filter((row) => /^УРОВЕНЬ\s+\d+\s*\/\s*\d+$/.test(row.text));
   if (!compact && progressRows.some((row) => row.size < 13)) {
     throw new Error('readability mutation progress must be >= 13px: ' + JSON.stringify(progressRows));
   }
-  const longTitle = contract.rows.find((row) => row.text === 'МНОЖЕСТВЕННАЯ РЕПЛИКАЦИЯ');
+  const longTitle = contract.rows.find((row) => row.text === 'МНОЖЕСТВЕННЫЙ ЗАЛП');
   if (longTitle && (longTitle.bounds.left < 2 || longTitle.bounds.right > (compact ? 358 : 388))) {
     throw new Error('long mutation title must wrap inside the mobile viewport: ' + JSON.stringify(longTitle));
   }
