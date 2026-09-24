@@ -40,9 +40,12 @@ export class EnemyHealthOverlay {
       slot = this.slots.find((candidate) => !candidate.enemy);
       if (!slot) slot = this.slots.find((candidate) => time >= candidate.visibleUntil);
       if (!slot) {
-        const oldestRegular = this.slots
-          .filter((candidate) => !candidate.isElite)
-          .sort((a, b) => a.visibleUntil - b.visibleUntil)[0];
+        let oldestRegular: EnemyHealthSlot | undefined;
+        for (const candidate of this.slots) {
+          if (!candidate.isElite && (!oldestRegular || candidate.visibleUntil < oldestRegular.visibleUntil)) {
+            oldestRegular = candidate;
+          }
+        }
         if (!oldestRegular) return;
         slot = oldestRegular;
       }

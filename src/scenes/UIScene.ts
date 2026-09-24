@@ -147,7 +147,7 @@ export class UIScene extends Phaser.Scene {
       .setShadow(0, 1, '#02030a', 3, true, true)
       .setVisible(false);
     this.contextHintPanel = this.add
-      .rectangle(0, 0, Math.min(W - 28, 360), 44, 0x071410, 0.88)
+      .rectangle(0, 0, Math.min(W - 28, 360), 34, 0x071410, 0.88)
       .setStrokeStyle(1, COLORS.green, 0.68);
     this.contextHintText = this.add
       .text(0, 0, '', {
@@ -161,7 +161,7 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setResolution(2);
     this.contextHintContainer = this.add
-      .container(W / 2, 158, [this.contextHintPanel, this.contextHintText])
+      .container(W / 2, 116, [this.contextHintPanel, this.contextHintText])
       .setDepth(DEPTH + 8)
       .setVisible(false);
     this.killsText = text(W - 16, HUD.row.killsY, 'УНИЧТОЖЕНО 0', 14, '#e9fbff', 1)
@@ -299,6 +299,7 @@ export class UIScene extends Phaser.Scene {
       if (this.levelText.width > availableLabelWidth) {
         this.levelText.setText(`РНК ${run.xp}/${run.xpNext}`);
       }
+      this.layoutRnaPickupFeedback();
       this.killsText.setText(`УНИЧТОЖЕНО ${run.kills}`);
 
       const showCombo = run.combo >= COMBO.showFrom;
@@ -379,7 +380,8 @@ export class UIScene extends Phaser.Scene {
         .setText(`+${total} РНК`)
         .setVisible(true)
         .setAlpha(1)
-        .setPosition(this.rnaPickupText.x, HUD.row.xpY - 1);
+        .setPosition(this.rnaPickupText.x, HUD.row.levelY);
+      this.layoutRnaPickupFeedback();
       this.tweens.killTweensOf(this.rnaPickupText);
       this.rnaPickupText.y += 3;
       this.tweens.add({
@@ -424,14 +426,14 @@ export class UIScene extends Phaser.Scene {
     this.contextHintTimer = null;
     this.tweens.killTweensOf(container);
     label.setText(message);
-    container.setVisible(true).setAlpha(0).setY(166);
-    this.tweens.add({ targets: container, alpha: 1, y: 158, duration: 140, ease: 'Quad.Out' });
+    container.setVisible(true).setAlpha(0).setY(124);
+    this.tweens.add({ targets: container, alpha: 1, y: 116, duration: 140, ease: 'Quad.Out' });
     this.contextHintTimer = this.time.delayedCall(duration, () => {
       this.contextHintTimer = null;
       this.tweens.add({
         targets: container,
         alpha: 0,
-        y: 152,
+        y: 110,
         duration: 170,
         ease: 'Quad.In',
         onComplete: () => container.setVisible(false),
@@ -447,7 +449,7 @@ export class UIScene extends Phaser.Scene {
       this.contextHintTimer?.remove(false);
       this.contextHintTimer = null;
       this.tweens.killTweensOf(container);
-      container.setVisible(false).setAlpha(1).setY(158);
+      container.setVisible(false).setAlpha(1).setY(116);
     }
   }
 
@@ -464,6 +466,20 @@ export class UIScene extends Phaser.Scene {
     const pending = this.pendingContextHint;
     this.pendingContextHint = null;
     this.renderContextHint(pending.message, pending.duration);
+  }
+
+  private layoutRnaPickupFeedback(): void {
+    if (!this.levelText || !this.rnaPickupText) return;
+    this.rnaPickupText.setPosition(
+      this.levelText.x + this.levelText.width + 6,
+      HUD.row.levelY
+    );
+    const timerLeft = this.timerText.x - this.timerText.width / 2;
+    if (this.rnaPickupText.x + this.rnaPickupText.width > timerLeft - 4) {
+      this.rnaPickupText.setFontSize(10);
+    } else {
+      this.rnaPickupText.setFontSize(11);
+    }
   }
 
   showStageTransition(
@@ -831,7 +847,7 @@ export class UIScene extends Phaser.Scene {
     this.timerText.setPosition(W / 2, HUD.row.timerY).setFontSize(HUD.type.timer);
     this.levelText.setPosition(HUD.row.levelX, HUD.row.levelY).setFontSize(HUD.type.level);
     const metrics = this.hudMetrics(W);
-    this.rnaPickupText.setPosition(metrics.xpX + metrics.xpW + 7, HUD.row.xpY - 1);
+    this.layoutRnaPickupFeedback();
     this.killsText.setPosition(W - HUD.row.killsPadX, HUD.row.killsY).setFontSize(HUD.type.kills);
     this.hpText.setPosition(W / 2, HUD.row.hpTextY).setFontSize(HUD.type.hp);
     this.bossLabel.setPosition(W / 2, HUD.row.bossLabelY).setFontSize(HUD.type.boss);
@@ -839,8 +855,8 @@ export class UIScene extends Phaser.Scene {
     this.pauseHit.setPosition(W - HUD.pauseVisual.x, HUD.pauseVisual.y);
     this.pauseText.setPosition(W - HUD.pauseVisual.x, HUD.pauseVisual.y);
     this.comboText.setPosition(HUD.row.comboX, HUD.row.comboY).setFontSize(HUD.type.combo);
-    this.contextHintContainer?.setPosition(W / 2, 158);
-    this.contextHintPanel?.setSize(Math.min(W - 28, 360), 44);
+    this.contextHintContainer?.setPosition(W / 2, 116);
+    this.contextHintPanel?.setSize(Math.min(W - 28, 360), 34);
     this.contextHintText
       ?.setFontSize(W < 370 ? 11 : 12)
       .setWordWrapWidth(Math.min(W - 52, 332));
@@ -946,7 +962,8 @@ export class UIScene extends Phaser.Scene {
     this.uiBlocked = false;
     this.resetControls();
     if (resumeGame && this.scene.isPaused('Game')) this.scene.resume('Game');
-    this.flushContextHint();
+    if (resumeGame) this.flushContextHint();
+    else this.pendingContextHint = null;
   }
 
   private showLevelUp(): void {

@@ -1,0 +1,458 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+
+function browserDriver() {
+  if (process.platform === 'win32') {
+    return { chromium: require('playwright').chromium, executablePath: undefined };
+  }
+  const { chromium } = require('playwright-core');
+  const executablePath = ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(fs.existsSync);
+  if (!executablePath) throw new Error('Chrome not found');
+  return { chromium, executablePath };
+}
+
+const BASE_URL = process.env.OFELIYA_BASE_URL || 'http://127.0.0.1:5173/';
+const VIEWPORTS = [
+  { width: 320, height: 568 },
+  { width: 360, height: 640 },
+  { width: 360, height: 760 },
+  { width: 390, height: 740 },
+  { width: 390, height: 844 },
+  { width: 412, height: 915 },
+];
+const captureDir = path.join(process.cwd(), '.tmp-comprehension-smoke');
+
+async function prepareContext(context, runs) {
+  await context.route('https://st.max.ru/**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/javascript', body: '' })
+  );
+  await context.addInitScript((runCount) => {
+    window.WebApp = {
+      platform: 'android',
+      version: '26.20.0',
+      initData: 'signed-comprehension-smoke',
+      initDataUnsafe: { user: { id: 42, first_name: 'Comprehension', last_name: 'Smoke' } },
+      getViewportSize: async () => ({ width: String(innerWidth), height: String(innerHeight) }),
+      BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} },
+      HapticFeedback: { impactOccurred() {}, notificationOccurred() {} },
+    };
+    localStorage.setItem('ofeliya_save_v1', JSON.stringify({ muted: true, runs: runCount }));
+  }, runs);
+}
+
+async function bootGame(page) {
+  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
+  await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
+  await page.waitForFunction(() => {
+    const game = window.__game;
+    if (!game) return false;
+    const scene = game.scene.getScene('Game');
+    const ui = game.scene.getScene('UI');
+    return Boolean(scene?.enemyHealth && ui && (game.scene.isActive('Game') || game.scene.isPaused('Game')));
+  });
+  await page.evaluate(() => {
+    const game = window.__game;
+    const gs = game.scene.getScene('Game');
+    const ui = game.scene.getScene('UI');
+    gs.awaitingChoice = false;
+    gs.pendingChoices = [];
+    gs.queuedLevels = 0;
+    gs.runState.stage.xp = 0;
+    gs.runState.stage.xpNext = 1_000_000;
+    gs.runState.stage.hp = 1_000_000;
+    gs.runState.stage.maxHp = 1_000_000;
+    gs.nextFireAt = Number.MAX_SAFE_INTEGER;
+    gs.wave.update = () => {};
+    for (const enemy of gs.enemies.getChildren()) if (enemy.active) enemy.deactivateForStageReset();
+    for (const bullet of gs.bullets.getChildren()) if (bullet.active) bullet.deactivateForStageReset();
+    for (const gem of gs.gems.getChildren()) if (gem.active) gem.deactivateForStageReset();
+    ui.dismissProgressionForStageBoundary();
+    if (game.scene.isPaused('Game')) game.scene.resume('Game');
+    game.registry.set('joy', { x: 0, y: 0 });
+    gs.physics.world.pause();
+    gs.scene.pause('Game');
+    ui.rnaPickupTimer?.remove(false);
+    ui.rnaPickupTimer = null;
+    ui.rnaPickupTotal = 0;
+    ui.rnaPickupText.setVisible(false).setText('');
+    ui.tweens.killTweensOf(ui.rnaPickupText);
+  });
+}
+
+(async () => {
+  const { chromium, executablePath } = browserDriver();
+  const browser = await chromium.launch({
+    executablePath,
+    headless: true,
+    args: process.platform === 'win32' ? [] : ['--no-sandbox', '--disable-dev-shm-usage'],
+  });
+  fs.mkdirSync(captureDir, { recursive: true });
+
+  try {
+    const context = await browser.newContext({
+      viewport: { width: 390, height: 740 },
+      deviceScaleFactor: 1,
+      hasTouch: true,
+      isMobile: true,
+    });
+    await prepareContext(context, 0);
+    const events = [];
+    await context.route('**/api/event', async (route) => {
+      const request = route.request();
+      if (request.method() === 'POST') {
+        try { events.push(JSON.parse(request.postData() || '{}')); } catch {}
+      }
+      await route.fulfill({ status: 202, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+    });
+    const page = await context.newPage();
+    const pageErrors = [];
+    page.on('pageerror', (error) => pageErrors.push(String(error)));
+    await bootGame(page);
+
+    const setup = await page.evaluate(() => {
+      const gs = window.__game.scene.getScene('Game');
+      const ui = window.__game.scene.getScene('UI');
+      const hintMessages = [];
+      window.__comprehensionHintMessages = hintMessages;
+      const showHint = ui.showContextHint.bind(ui);
+      ui.showContextHint = (message, duration) => { hintMessages.push(message); showHint(message, duration); };
+      const cell = gs.hostCells.cells[0];
+      const x = gs.player.x + 80;
+      const y = gs.player.y;
+      cell.active = true;
+      cell.infection = 0;
+      cell.image.setPosition(x, y).setVisible(true).setAlpha(0.78);
+      cell.infectionOverlay.setPosition(x, y).setVisible(false).setAlpha(0);
+      cell.ring.setVisible(true);
+      gs.hostCells.update(gs.time.now, 0, 0);
+      const approach = {
+        progress: cell.infection,
+        hintCount: hintMessages.length,
+        hint: ui.contextHintText?.text ?? '',
+        rangeVisible: cell.ring.visible,
+        rangeCommands: cell.ring.commandBuffer?.length ?? 0,
+        runtimeRadius: gs.runState.infectionRadius,
+      };
+      return { x, y, approach };
+    });
+
+    assert.equal(setup.approach.progress, 0, 'approach changed gameplay infection');
+    assert.equal(setup.approach.hintCount, 1, 'first-run approach hint missing');
+    assert.match(setup.approach.hint, /КЛЕТКА ХОЗЯИНА/);
+    assert.ok(setup.approach.rangeVisible && setup.approach.rangeCommands > 0, 'runtime range boundary is not visible');
+
+    const combat = await page.evaluate(() => {
+      const gs = window.__game.scene.getScene('Game');
+      const regular = gs.spawnEnemy('swarm', gs.player.x + 120, gs.player.y + 10, false);
+      if (!regular) throw new Error('regular enemy pool unavailable');
+      regular.xpValue = 0;
+      const bullet = gs.bullets.get(gs.player.x, gs.player.y);
+      if (!bullet) throw new Error('bullet pool unavailable');
+      bullet.fire(gs.time.now, 0, 1, 0);
+      gs.onBulletHit(bullet, regular);
+      const slot = gs.enemyHealth.slots.find((candidate) => candidate.enemy === regular);
+      const regularHpFraction = slot ? slot.enemy.hp / slot.enemy.maxHp : 0;
+      const visibleBarsAfterHit = gs.enemyHealth.slots.filter((candidate) => candidate.graphics.visible).length;
+
+      const boss = gs.spawnEnemy('boss', gs.player.x + 170, gs.player.y, false);
+      if (!boss) throw new Error('boss pool unavailable');
+      boss.takeDamage(1);
+      const visibleBarsAfterBossHit = gs.enemyHealth.slots.filter((candidate) => candidate.graphics.visible).length;
+
+      const doomed = gs.spawnEnemy('runner', gs.player.x + 190, gs.player.y + 20, false);
+      if (!doomed) throw new Error('runner pool unavailable');
+      doomed.xpValue = 0;
+      doomed.hp = 1;
+      doomed.takeDamage(1);
+      const hiddenAfterKill = !gs.enemyHealth.slots.some((candidate) => candidate.enemy === doomed && candidate.graphics.visible);
+
+      for (let i = 0; i < 14; i++) {
+        const enemy = gs.spawnEnemy('brute', gs.player.x + 240 + i, gs.player.y + 30, false);
+        if (!enemy) continue;
+        enemy.xpValue = 0;
+        enemy.takeDamage(1);
+      }
+      const cappedCount = gs.enemyHealth.slots.filter((candidate) => candidate.graphics.visible).length;
+      gs.enemyHealth.update(gs.time.now + 2000);
+      const expiredCount = gs.enemyHealth.slots.filter((candidate) => candidate.graphics.visible).length;
+      return {
+        regularHpFraction,
+        visibleBarsAfterHit,
+        visibleBarsAfterBossHit,
+        hiddenAfterKill,
+        cappedCount,
+        expiredCount,
+      };
+    });
+    assert.ok(combat.regularHpFraction > 0 && combat.regularHpFraction < 1, 'regular enemy health fraction is invalid');
+    assert.equal(combat.visibleBarsAfterHit, 1, 'health bar did not appear after damage');
+    assert.equal(combat.visibleBarsAfterBossHit, 1, 'boss got a local health bar');
+    assert.ok(combat.hiddenAfterKill, 'health bar remained after kill');
+    assert.ok(combat.cappedCount <= 10, 'enemy health pool exceeded capacity');
+    assert.equal(combat.expiredCount, 0, 'expired enemy bars remained visible');
+
+    const rna = await page.evaluate(() => {
+      const gs = window.__game.scene.getScene('Game');
+      const ui = window.__game.scene.getScene('UI');
+      const beforeXp = gs.runState.stage.xp;
+      const beforeQueued = gs.queuedLevels;
+      gs.onGemCollected(2);
+      gs.onGemCollected(2);
+      const xpDelta = gs.runState.stage.xp - beforeXp;
+      const queuedDelta = gs.queuedLevels - beforeQueued;
+      const hud = ui.levelText.text;
+      gs.trackComprehensionOnce('first_mutation_opened');
+      gs.trackComprehensionOnce('first_mutation_opened');
+      gs.awaitingChoice = true;
+      gs.pendingChoices = [{
+        id: 'comprehension-smoke-upgrade', shortName: 'ТЕСТ', name: 'Тестовая мутация',
+        desc: 'Урон +1', max: 1, family: 'utility', rarity: 'common', kind: 'upgrade',
+        apply() {},
+      }];
+      gs.chooseUpgrade('comprehension-smoke-upgrade');
+      return { xpDelta, queuedDelta, hud, pickupVisibleAfter: false };
+    });
+    await page.waitForFunction(() => {
+      const ui = window.__game.scene.getScene('UI');
+      return ui.rnaPickupText.visible && ui.rnaPickupText.text === '+4 РНК';
+    }, null, { timeout: 5000 });
+    const pickup = await page.evaluate(() => {
+      const ui = window.__game.scene.getScene('UI');
+      return {
+        text: ui.rnaPickupText.text,
+        visible: ui.rnaPickupText.visible,
+        time: ui.time.now,
+        timer: Boolean(ui.rnaPickupTimer),
+        total: ui.rnaPickupTotal,
+        timerDispatched: ui.rnaPickupTimer?.hasDispatched,
+        timerElapsed: ui.rnaPickupTimer?.getElapsed?.(),
+        timeScale: ui.time.timeScale,
+        timePaused: ui.time.paused,
+        active: ui.scene.isActive('UI'),
+        paused: ui.scene.isPaused('UI'),
+      };
+    });
+    assert.equal(rna.xpDelta, 4, 'RNA pickup did not add XP exactly once per pickup');
+    assert.equal(rna.queuedDelta, 0, 'RNA pickup changed the level queue below threshold');
+    assert.match(rna.hud, /^РНК\s+\d+\/\d+/);
+    assert.equal(pickup.text, '+4 РНК', `aggregated RNA feedback is incorrect: ${JSON.stringify(pickup)}`);
+    assert.equal(pickup.visible, true, 'RNA pickup feedback is hidden');
+
+    const interaction = await page.evaluate(({ x, y }) => {
+      const gs = window.__game.scene.getScene('Game');
+      const ui = window.__game.scene.getScene('UI');
+      const cell = gs.hostCells.cells[0];
+      const initialXp = gs.runState.stage.xp;
+      const gemCountBefore = gs.gems.getChildren().filter((gem) => gem.active).length;
+      const hostCellsBefore = gs.runState.run.hostCellsInfected;
+      const enemyA = gs.spawnEnemy('swarm', x + 110, y, false);
+      const enemyB = gs.spawnEnemy('runner', x + 230, y, false);
+      if (!enemyA || !enemyB) throw new Error('lysis enemy pool unavailable');
+      enemyA.xpValue = 0;
+      enemyB.xpValue = 0;
+      enemyA.hp = enemyA.maxHp = 200;
+      enemyB.hp = enemyB.maxHp = 200;
+      const ringRadii = [];
+      const ring = gs.vfx.ring.bind(gs.vfx);
+      gs.vfx.ring = (...args) => { ringRadii.push(args[3]); ring(...args); };
+
+      gs.player.setPosition(x, y);
+      const now = gs.time.now + 100;
+      gs.hostCells.update(now, 125, 0);
+      const enteredProgress = cell.infection;
+      gs.player.setPosition(x + 100, y);
+      gs.hostCells.update(now + 125, 125, 0);
+      const exitedProgress = cell.infection;
+      gs.player.setPosition(x, y);
+      gs.hostCells.update(now + 250, 125, 0);
+      const resumedProgress = cell.infection;
+      const tutorialHintsBeforeLysis = window.__comprehensionHintMessages.length;
+
+      cell.infection = 0.99;
+      gs.hostCells.update(now + 375, 125, 0);
+      const firstLysis = {
+        inactive: !cell.active,
+        enemyADamage: 200 - enemyA.hp,
+        enemyBDamage: 200 - enemyB.hp,
+        radiusCalls: ringRadii.slice(),
+        hostCellsInfected: gs.runState.run.hostCellsInfected - hostCellsBefore,
+        gemsSpawned: gs.gems.getChildren().filter((gem) => gem.active).length - gemCountBefore,
+      };
+
+      const second = gs.hostCells.cells[1];
+      second.active = true;
+      second.infection = 0.99;
+      second.image.setPosition(x, y).setVisible(true).setAlpha(0.9);
+      second.infectionOverlay.setPosition(x, y).setVisible(true).setAlpha(0.9);
+      second.ring.setVisible(true);
+      gs.hostCells.update(now + 500, 125, 0);
+      const secondCellHints = window.__comprehensionHintMessages.length - tutorialHintsBeforeLysis;
+      const xpUnchangedByLysis = gs.runState.stage.xp === initialXp;
+      return {
+        enteredProgress,
+        exitedProgress,
+        resumedProgress,
+        firstLysis,
+        secondCellHints,
+        xpUnchangedByLysis,
+        secondCompleted: gs.hostCellsCompletedThisRun,
+        uiHintText: ui.contextHintText.text,
+      };
+    }, setup);
+
+    // Capture the three first-run teaching states through the actual reusable UI channel.
+    for (const viewport of VIEWPORTS) {
+      const matrixContext = await browser.newContext({
+        viewport,
+        deviceScaleFactor: 1,
+        hasTouch: true,
+        isMobile: true,
+      });
+      await prepareContext(matrixContext, 0);
+      await matrixContext.route('**/api/event', (route) =>
+        route.fulfill({ status: 202, contentType: 'application/json', body: '{"ok":true}' })
+      );
+      const matrixPage = await matrixContext.newPage();
+      await bootGame(matrixPage);
+      await matrixPage.evaluate(() => {
+        const ui = window.__game.scene.getScene('UI');
+        ui.update();
+        ui.showContextHint('КЛЕТКА ХОЗЯИНА · ОСТАВАЙСЯ РЯДОМ', 900);
+        ui.notifyRnaPickup(1);
+      });
+      await matrixPage.waitForFunction(() => {
+        const ui = window.__game.scene.getScene('UI');
+        return ui.rnaPickupText.visible && ui.rnaPickupText.text === '+1 РНК';
+      }, null, { timeout: 5000 });
+      const view = await matrixPage.evaluate((size) => {
+        const game = window.__game;
+        const ui = window.__game.scene.getScene('UI');
+        const gameScene = game.scene.getScene('Game');
+        const bounds = (object) => {
+          const b = object.getBounds();
+          return { left: b.left, right: b.right, top: b.top, bottom: b.bottom };
+        };
+        return {
+          viewport: size,
+          scale: { width: ui.scale.width, height: ui.scale.height },
+          rnaLabel: ui.levelText.text,
+          rnaBounds: bounds(ui.rnaPickupText),
+          hintBounds: bounds(ui.contextHintText),
+          timerBounds: bounds(ui.timerText),
+          killsBounds: bounds(ui.killsText),
+          popupVisible: ui.rnaPickupText.visible,
+          gameSize: { width: gameScene.scale.width, height: gameScene.scale.height },
+        };
+      }, viewport);
+      assert.ok(view.rnaBounds.left >= 0 && view.rnaBounds.right <= viewport.width, `RNA popup clipped at ${viewport.width}x${viewport.height}`);
+      assert.ok(view.hintBounds.left >= 0 && view.hintBounds.right <= viewport.width, `context hint clipped at ${viewport.width}x${viewport.height}`);
+      assert.ok(view.hintBounds.top >= 0 && view.hintBounds.bottom <= viewport.height, `context hint outside viewport at ${viewport.width}x${viewport.height}`);
+      assert.ok(view.rnaBounds.right <= viewport.width && view.rnaBounds.top >= 0, `RNA pickup outside viewport at ${viewport.width}x${viewport.height}`);
+      assert.ok(view.rnaBounds.right <= view.timerBounds.left || view.rnaBounds.left >= view.timerBounds.right || view.rnaBounds.bottom <= view.timerBounds.top || view.rnaBounds.top >= view.timerBounds.bottom, `RNA pickup overlaps timer at ${viewport.width}x${viewport.height}`);
+      assert.ok(view.rnaBounds.right <= view.killsBounds.left || view.rnaBounds.left >= view.killsBounds.right || view.rnaBounds.bottom <= view.killsBounds.top || view.rnaBounds.top >= view.killsBounds.bottom, `RNA pickup overlaps kill counter at ${viewport.width}x${viewport.height}`);
+      await matrixPage.evaluate(() => {
+        const ui = window.__game.scene.getScene('UI');
+        ui.tweens.killTweensOf(ui.rnaPickupText);
+        ui.rnaPickupText.setAlpha(1).setVisible(true);
+      });
+      await matrixPage.screenshot({ path: path.join(captureDir, `comprehension-${viewport.width}x${viewport.height}.png`) });
+
+      const modal = await matrixPage.evaluate(() => {
+        const game = window.__game;
+        const gs = game.scene.getScene('Game');
+        const ui = game.scene.getScene('UI');
+        gs.awaitingChoice = true;
+        gs.pendingChoices = ['dmg', 'rate', 'hp'].map((id) => ({
+          id,
+          shortName: id.toUpperCase(),
+          name: `Тестовая мутация ${id}`,
+          desc: 'Проверка мобильной компоновки.',
+          max: 1,
+          family: 'utility',
+          rarity: 'common',
+          kind: 'upgrade',
+          showProgress: false,
+          apply() {},
+        }));
+        ui.update();
+        const texts = [];
+        const visit = (object) => {
+          if (object.type === 'Text' && object.visible && object.alpha > 0.01) {
+            const b = object.getBounds();
+            texts.push({ left: b.left, right: b.right, top: b.top, bottom: b.bottom });
+          }
+          for (const child of object.list || []) visit(child);
+        };
+        if (ui.modal) visit(ui.modal);
+        const cards = ui.modal?.list.filter((object) => object.type === 'Container' && object.visible).length ?? 0;
+        return { visible: Boolean(ui.modal?.visible), cards, texts };
+      });
+      await matrixPage.screenshot({ path: path.join(captureDir, `mutation-${viewport.width}x${viewport.height}.png`) });
+      assert.ok(modal.visible, `mutation modal missing at ${viewport.width}x${viewport.height}`);
+      assert.equal(modal.cards, 3, `mutation cards missing at ${viewport.width}x${viewport.height}`);
+      assert.ok(modal.texts.every((bounds) => bounds.left >= 0 && bounds.right <= viewport.width && bounds.top >= 0 && bounds.bottom <= viewport.height), `mutation text clipped at ${viewport.width}x${viewport.height}: ${JSON.stringify(modal.texts)}`);
+      await matrixContext.close();
+    }
+
+    assert.ok(interaction.enteredProgress > 0, 'enter did not start infection');
+    assert.ok(interaction.exitedProgress > 0 && interaction.exitedProgress < interaction.enteredProgress, 'leaving did not preserve and decay progress');
+    assert.ok(interaction.resumedProgress > interaction.exitedProgress, 're-entry did not resume progress');
+    assert.ok(interaction.firstLysis.inactive, '100% infection did not lyse immediately');
+    assert.equal(interaction.firstLysis.enemyADamage, 26, 'enemy inside lysis radius got wrong damage');
+    assert.equal(interaction.firstLysis.enemyBDamage, 0, 'enemy outside lysis radius took damage');
+    assert.deepEqual(interaction.firstLysis.radiusCalls.slice(-2), [108, 150], 'lysis inner/outer VFX radii do not match runtime radius');
+    assert.equal(interaction.firstLysis.hostCellsInfected, 1, 'host cell completion was double-counted');
+    assert.equal(interaction.firstLysis.gemsSpawned, 4, 'lysis RNA gem count changed');
+    assert.ok(interaction.xpUnchangedByLysis, 'lysis directly added XP');
+    assert.equal(interaction.secondCompleted, 2, 'second Host Cell completion was not counted');
+    assert.equal(interaction.secondCellHints, 0, 'second Host Cell repeated tutorial hints');
+
+    await page.waitForTimeout(250);
+    const eventCounts = events.reduce((counts, entry) => {
+      counts[entry.event] = (counts[entry.event] || 0) + 1;
+      return counts;
+    }, {});
+    for (const event of [
+      'first_enemy_hit', 'first_enemy_kill', 'first_rna_pickup', 'first_mutation_opened',
+      'first_mutation_selected', 'host_cell_approached', 'infection_started',
+      'infection_interrupted', 'infection_resumed', 'first_lysis',
+      'second_host_cell_completed_without_hint',
+    ]) {
+      assert.equal(eventCounts[event], 1, `${event} count was ${eventCounts[event] ?? 0}, expected one`);
+    }
+    assert.ok(events.every((entry) => !('x' in (entry.props || {})) && !('y' in (entry.props || {}))), 'comprehension telemetry contains coordinates');
+    assert.deepEqual(pageErrors, [], `browser errors: ${pageErrors.join('\n')}`);
+
+    const returning = await browser.newContext({ viewport: { width: 390, height: 740 }, deviceScaleFactor: 1 });
+    await prepareContext(returning, 1);
+    const returningPage = await returning.newPage();
+    await bootGame(returningPage);
+    const returningResult = await returningPage.evaluate(() => {
+      const gs = window.__game.scene.getScene('Game');
+      const ui = window.__game.scene.getScene('UI');
+      let hintCount = 0;
+      const showHint = ui.showContextHint.bind(ui);
+      ui.showContextHint = (...args) => { hintCount += 1; showHint(...args); };
+      const cell = gs.hostCells.cells[0];
+      cell.active = true;
+      cell.infection = 0;
+      cell.image.setPosition(gs.player.x + 80, gs.player.y).setVisible(true);
+      cell.infectionOverlay.setVisible(false);
+      cell.ring.setVisible(true);
+      gs.hostCells.update(gs.time.now, 0, 0);
+      return { hintCount, rangeCommands: cell.ring.commandBuffer?.length ?? 0 };
+    });
+    assert.equal(returningResult.hintCount, 0, 'returning run received Host Cell tutorial copy');
+    assert.ok(returningResult.rangeCommands > 0, 'returning run lost actual-radius readability');
+    await returning.close();
+    await context.close();
+    console.log(`gameplay comprehension browser smoke: ok (${VIEWPORTS.map(({ width, height }) => `${width}x${height}`).join(', ')})`);
+  } finally {
+    await browser.close();
+  }
+})().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

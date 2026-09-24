@@ -782,7 +782,7 @@ export class GameScene extends Phaser.Scene {
     this.hostCellHintEventsShown.add(event.type);
 
     const copy = {
-      approach: 'КЛЕТКА ХОЗЯИНА · ПОДОЙДИ БЛИЖЕ, ЧТОБЫ ЗАРАЗИТЬ',
+      approach: 'КЛЕТКА ХОЗЯИНА · ЗАРАЗИ РЯДОМ',
       enter: 'ЗАРАЖЕНИЕ НАЧАЛОСЬ · ОСТАВАЙСЯ РЯДОМ',
       exit: 'ВНЕ ЗОНЫ · ЗАРАЖЕНИЕ ОСЛАБЕВАЕТ',
       resume: '',

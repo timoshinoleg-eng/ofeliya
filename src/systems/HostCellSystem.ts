@@ -164,10 +164,10 @@ export class HostCellSystem {
       } else if (
         cell.wasInside &&
         !inside &&
-        cell.infection > 0 &&
-        cell.infection < 1
+        progressBefore > 0 &&
+        progressBefore < 1
       ) {
-        this.emitInteraction(cell, 'exit', tuning.infectionRadius);
+        this.emitInteraction(cell, 'exit', tuning.infectionRadius, progressBefore);
       }
       cell.wasInside = inside;
 
@@ -544,14 +544,15 @@ export class HostCellSystem {
   private emitInteraction(
     cell: HostCellSlot,
     type: HostCellInteractionEvent['type'],
-    radius: number
+    radius: number,
+    progress = cell.infection
   ): void {
     this.onInteraction?.({
       type,
       x: cell.image.x,
       y: cell.image.y,
       radius,
-      progress: cell.infection,
+      progress,
     });
   }
 }
