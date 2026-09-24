@@ -37,9 +37,9 @@ export const EVOLUTIONS: EvolutionDef[] = [
   {
     id: 'singularity',
     name: EVOLUTION_NAMES.singularity,
-    effect: 'Мембрана схлопывается перед мощным лизис-импульсом',
-    desc: 'Каждый импульс получает фазу стягивания биоматерии и последующий разрыв наружу.',
-    recipe: 'ЛИЗИС-ПУЛЬС III + РНК-АФФИНИТЕТ II',
+    effect: 'Импульс стягивает врагов, затем взрывается наружу',
+    desc: 'Перед каждой круговой волной ближайшие враги стягиваются к OFELIYA.',
+    recipe: 'МЕМБРАННЫЙ ИМПУЛЬС III + РНК-АФФИНИТЕТ II',
     eligible: (s) => s.stackOf('nova') >= 3 && s.stackOf('magnet') >= 2,
   },
 ];
