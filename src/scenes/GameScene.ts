@@ -112,9 +112,9 @@ export class GameScene extends Phaser.Scene {
   private enemyHealth!: EnemyHealthOverlay;
   private hostCells!: HostCellSystem;
   private firstRunComprehension = false;
-  private firstHostCellTutorialFinished = false;
   private hostCellsCompletedThisRun = 0;
   private hostCellHintEventsShown = new Set<'approach' | 'enter' | 'exit'>();
+  private hostCellInteractionIdsWithHint = new Set<number>();
   private comprehensionEventsSent = new Set<ProductEvent>();
   private bullets!: Phaser.Physics.Arcade.Group;
   private enemies!: Phaser.Physics.Arcade.Group;
@@ -252,9 +252,9 @@ export class GameScene extends Phaser.Scene {
     if (resume) this.runState.restoreFromCheckpoint(resume.runState);
     this.resumed = resume !== null;
     this.firstRunComprehension = !resume && SaveSystem.get().runs === 0;
-    this.firstHostCellTutorialFinished = false;
     this.hostCellsCompletedThisRun = 0;
     this.hostCellHintEventsShown = new Set();
+    this.hostCellInteractionIdsWithHint = new Set();
     this.checkpointAccMs = 0;
     // Adaptive audio foundation: one deterministic bed per run plus danger-driven tension layers.
     // The director only observes gameplay; StageDirector keeps lifecycle authority.
@@ -439,7 +439,6 @@ export class GameScene extends Phaser.Scene {
       this.cardiacHazard.reset();
       this.cardiacHazardVisual = null;
       this.transitionGeneration += 1;
-      this.enemyHealth?.destroy();
       // Audio is not a Phaser subsystem, so it is safe (and required) to release it here:
       // every restart path must not leak the bed, layer nodes or the visibility listener.
       this.audio?.stop();
@@ -720,8 +719,12 @@ export class GameScene extends Phaser.Scene {
   private onHostCellLysis(event: HostCellLysisEvent): void {
     this.runState.recordHostCellInfected();
     this.hostCellsCompletedThisRun += 1;
-    if (this.hostCellsCompletedThisRun === 1) this.firstHostCellTutorialFinished = true;
-    if (this.hostCellsCompletedThisRun === 2 && this.firstHostCellTutorialFinished) {
+    const hadContextualHint = this.hostCellInteractionIdsWithHint.delete(event.interactionId);
+    if (
+      this.firstRunComprehension &&
+      this.hostCellsCompletedThisRun === 2 &&
+      !hadContextualHint
+    ) {
       this.trackComprehensionOnce('second_host_cell_completed_without_hint');
     }
     this.vfx.lysis(event.x, event.y, event.radius * 0.72, event.radius);
@@ -776,8 +779,14 @@ export class GameScene extends Phaser.Scene {
     };
     this.trackComprehensionOnce(analyticsEvent[event.type], { progress: event.progress });
 
-    if (!this.firstRunComprehension || this.firstHostCellTutorialFinished) return;
+    if (!this.firstRunComprehension) return;
     if (event.type === 'resume') return;
+    if (
+      this.hostCellsCompletedThisRun > 0 &&
+      (event.type === 'approach' || event.type === 'enter')
+    ) {
+      return;
+    }
     if (this.hostCellHintEventsShown.has(event.type)) return;
     this.hostCellHintEventsShown.add(event.type);
 
@@ -787,7 +796,11 @@ export class GameScene extends Phaser.Scene {
       exit: 'ВНЕ ЗОНЫ · ЗАРАЖЕНИЕ ОСЛАБЕВАЕТ',
       resume: '',
     }[event.type];
-    this.getUiScene()?.showContextHint(copy);
+    const ui = this.getUiScene();
+    if (ui) {
+      ui.showContextHint(copy);
+      this.hostCellInteractionIdsWithHint.add(event.interactionId);
+    }
   }
 
   private hitStop(ms: number): void {

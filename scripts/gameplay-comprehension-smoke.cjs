@@ -44,7 +44,15 @@ async function prepareContext(context, runs) {
 async function bootGame(page) {
   await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
-  await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
+  await page.evaluate(() => {
+    const game = window.__game;
+    const scene = game.scene.getScene('Game');
+    scene.events.once('create', () => {
+      window.__startupIntroVisible = Boolean(scene.introHint?.active);
+      scene.scene.pause('Game');
+    });
+    game.scene.getScene('Menu').scene.start('Game');
+  });
   await page.waitForFunction(() => {
     const game = window.__game;
     if (!game) return false;
@@ -118,16 +126,33 @@ async function bootGame(page) {
       window.__comprehensionHintMessages = hintMessages;
       const showHint = ui.showContextHint.bind(ui);
       ui.showContextHint = (message, duration) => { hintMessages.push(message); showHint(message, duration); };
+      const startupIntroVisible = Boolean(window.__startupIntroVisible);
+      gs.queuedLevels = 1;
+      gs.update(gs.time.now + 16, 16);
+      const introGoneAfterMutation = gs.introHint === null;
+      const firstMutationPresented = gs.awaitingChoice && gs.pendingChoices.length > 0;
+      if (firstMutationPresented) ui.update();
+      gs.awaitingChoice = false;
+      gs.pendingChoices = [];
+      gs.queuedLevels = 0;
+      ui.dismissProgressionForStageBoundary();
+      gs.physics.world.pause();
+      if (!gs.scene.isPaused('Game')) gs.scene.pause('Game');
       const cell = gs.hostCells.cells[0];
       const x = gs.player.x + 80;
       const y = gs.player.y;
       cell.active = true;
       cell.infection = 0;
+      cell.interactionId = 100;
       cell.image.setPosition(x, y).setVisible(true).setAlpha(0.78);
       cell.infectionOverlay.setPosition(x, y).setVisible(false).setAlpha(0);
       cell.ring.setVisible(true);
       gs.hostCells.update(gs.time.now, 0, 0);
       const approach = {
+        startupIntroVisible,
+        introGoneAfterMutation,
+        firstMutationPresented,
+        introGoneBeforeHostCellTeaching: gs.introHint === null,
         progress: cell.infection,
         hintCount: hintMessages.length,
         hint: ui.contextHintText?.text ?? '',
@@ -139,9 +164,14 @@ async function bootGame(page) {
     });
 
     assert.equal(setup.approach.progress, 0, 'approach changed gameplay infection');
+    assert.equal(setup.approach.startupIntroVisible, true, 'fresh first run did not show its startup intro');
+    assert.equal(setup.approach.introGoneAfterMutation, true, 'first mutation did not clear the startup intro');
+    assert.equal(setup.approach.firstMutationPresented, true, 'first-run mutation choice was not presented');
+    assert.equal(setup.approach.introGoneBeforeHostCellTeaching, true, 'Host Cell teaching appeared before the startup intro was gone');
     assert.equal(setup.approach.hintCount, 1, 'first-run approach hint missing');
     assert.match(setup.approach.hint, /КЛЕТКА ХОЗЯИНА/);
     assert.ok(setup.approach.rangeVisible && setup.approach.rangeCommands > 0, 'runtime range boundary is not visible');
+    await page.screenshot({ path: path.join(captureDir, 'onboarding-first-host-cell.png') });
 
     const combat = await page.evaluate(() => {
       const gs = window.__game.scene.getScene('Game');
@@ -177,6 +207,20 @@ async function bootGame(page) {
       const cappedCount = gs.enemyHealth.slots.filter((candidate) => candidate.graphics.visible).length;
       gs.enemyHealth.update(gs.time.now + 2000);
       const expiredCount = gs.enemyHealth.slots.filter((candidate) => candidate.graphics.visible).length;
+      const reused = gs.spawnEnemy('swarm', gs.player.x + 260, gs.player.y + 40, false);
+      if (!reused) throw new Error('enemy pool unavailable for spawnSerial reuse');
+      reused.xpValue = 0;
+      reused.hp = reused.maxHp = 100;
+      reused.takeDamage(10);
+      const staleSlot = gs.enemyHealth.slots.find((candidate) => candidate.enemy === reused);
+      if (!staleSlot) throw new Error('health bar missing before Enemy object reuse');
+      const oldSpawnSerial = reused.spawnSerial;
+      reused.deactivateForStageReset();
+      reused.activate(gs, 'runner', gs.player.x + 260, gs.player.y + 40, { elite: false, hpScale: 1, dmgScale: 1 });
+      const newSpawnSerial = reused.spawnSerial;
+      gs.enemyHealth.update(gs.time.now + 100);
+      const staleBarVisibleAfterReuse = staleSlot.graphics.visible;
+      const staleSlotStillAssignedAfterReuse = staleSlot.enemy === reused && staleSlot.spawnSerial === oldSpawnSerial;
       return {
         regularHpFraction,
         visibleBarsAfterHit,
@@ -184,6 +228,10 @@ async function bootGame(page) {
         hiddenAfterKill,
         cappedCount,
         expiredCount,
+        oldSpawnSerial,
+        newSpawnSerial,
+        staleBarVisibleAfterReuse,
+        staleSlotStillAssignedAfterReuse,
       };
     });
     assert.ok(combat.regularHpFraction > 0 && combat.regularHpFraction < 1, 'regular enemy health fraction is invalid');
@@ -192,6 +240,9 @@ async function bootGame(page) {
     assert.ok(combat.hiddenAfterKill, 'health bar remained after kill');
     assert.ok(combat.cappedCount <= 10, 'enemy health pool exceeded capacity');
     assert.equal(combat.expiredCount, 0, 'expired enemy bars remained visible');
+    assert.notEqual(combat.newSpawnSerial, combat.oldSpawnSerial, 'same Enemy object did not advance spawnSerial on reuse');
+    assert.equal(combat.staleBarVisibleAfterReuse, false, 'stale health bar stayed visible after same-object Enemy reuse');
+    assert.equal(combat.staleSlotStillAssignedAfterReuse, false, 'old health-bar assignment survived Enemy spawnSerial reuse');
 
     const rna = await page.evaluate(() => {
       const gs = window.__game.scene.getScene('Game');
@@ -259,19 +310,14 @@ async function bootGame(page) {
       gs.vfx.ring = (...args) => { ringRadii.push(args[3]); ring(...args); };
 
       gs.player.setPosition(x, y);
+      cell.interactionId = 100;
       const now = gs.time.now + 100;
       gs.hostCells.update(now, 125, 0);
       const enteredProgress = cell.infection;
-      gs.player.setPosition(x + 100, y);
-      gs.hostCells.update(now + 125, 125, 0);
-      const exitedProgress = cell.infection;
-      gs.player.setPosition(x, y);
-      gs.hostCells.update(now + 250, 125, 0);
-      const resumedProgress = cell.infection;
       const tutorialHintsBeforeLysis = window.__comprehensionHintMessages.length;
 
       cell.infection = 0.99;
-      gs.hostCells.update(now + 375, 125, 0);
+      gs.hostCells.update(now + 125, 125, 0);
       const firstLysis = {
         inactive: !cell.active,
         enemyADamage: 200 - enemyA.hp,
@@ -284,18 +330,44 @@ async function bootGame(page) {
       const second = gs.hostCells.cells[1];
       second.active = true;
       second.infection = 0.99;
+      second.interactionId = 101;
       second.image.setPosition(x, y).setVisible(true).setAlpha(0.9);
       second.infectionOverlay.setPosition(x, y).setVisible(true).setAlpha(0.9);
       second.ring.setVisible(true);
-      gs.hostCells.update(now + 500, 125, 0);
+      gs.hostCells.update(now + 250, 125, 0);
       const secondCellHints = window.__comprehensionHintMessages.length - tutorialHintsBeforeLysis;
+      const third = gs.hostCells.cells[2];
+      const hintsBeforeThirdCell = window.__comprehensionHintMessages.length;
+      third.active = true;
+      third.infection = 0;
+      third.interactionId = 102;
+      third.image.setPosition(x, y).setVisible(true).setAlpha(0.78);
+      third.infectionOverlay.setPosition(x, y).setVisible(false).setAlpha(0);
+      third.ring.setVisible(true);
+      gs.player.setPosition(x, y);
+      gs.hostCells.update(now + 375, 125, 0);
+      const thirdEnteredProgress = third.infection;
+      gs.player.setPosition(x + 100, y);
+      gs.hostCells.update(now + 500, 125, 0);
+      const exitedProgress = third.infection;
+      const exitHint = ui.contextHintText.text;
+      const hintsAfterExit = window.__comprehensionHintMessages.length;
+      gs.player.setPosition(x, y);
+      gs.hostCells.update(now + 625, 125, 0);
+      const resumedProgress = third.infection;
+      const hintsAfterResume = window.__comprehensionHintMessages.length;
       const xpUnchangedByLysis = gs.runState.stage.xp === initialXp;
       return {
         enteredProgress,
+        thirdEnteredProgress,
         exitedProgress,
         resumedProgress,
         firstLysis,
         secondCellHints,
+        hintsBeforeThirdCell,
+        hintsAfterExit,
+        hintsAfterResume,
+        exitHint,
         xpUnchangedByLysis,
         secondCompleted: gs.hostCellsCompletedThisRun,
         uiHintText: ui.contextHintText.text,
@@ -408,6 +480,12 @@ async function bootGame(page) {
     assert.ok(interaction.xpUnchangedByLysis, 'lysis directly added XP');
     assert.equal(interaction.secondCompleted, 2, 'second Host Cell completion was not counted');
     assert.equal(interaction.secondCellHints, 0, 'second Host Cell repeated tutorial hints');
+    assert.ok(interaction.thirdEnteredProgress > 0, 'third Host Cell did not start infection');
+    assert.ok(interaction.exitedProgress > 0 && interaction.exitedProgress < interaction.thirdEnteredProgress, 'leaving the third Host Cell did not preserve and decay progress');
+    assert.equal(interaction.hintsAfterExit, interaction.hintsBeforeThirdCell + 1, 'first interrupted infection after first lysis did not show its contextual hint');
+    assert.match(interaction.exitHint, /ОСЛАБЕВАЕТ/, 'interrupted infection hint did not explain decay');
+    assert.ok(interaction.resumedProgress > interaction.exitedProgress, 're-entry did not resume infection progress');
+    assert.equal(interaction.hintsAfterResume, interaction.hintsAfterExit, 'resume displayed a textual hint');
 
     await page.waitForTimeout(250);
     const eventCounts = events.reduce((counts, entry) => {
@@ -427,6 +505,14 @@ async function bootGame(page) {
 
     const returning = await browser.newContext({ viewport: { width: 390, height: 740 }, deviceScaleFactor: 1 });
     await prepareContext(returning, 1);
+    const returningEvents = [];
+    await returning.route('**/api/event', async (route) => {
+      const request = route.request();
+      if (request.method() === 'POST') {
+        try { returningEvents.push(JSON.parse(request.postData() || '{}')); } catch {}
+      }
+      await route.fulfill({ status: 202, contentType: 'application/json', body: '{"ok":true}' });
+    });
     const returningPage = await returning.newPage();
     await bootGame(returningPage);
     const returningResult = await returningPage.evaluate(() => {
@@ -442,10 +528,24 @@ async function bootGame(page) {
       cell.infectionOverlay.setVisible(false);
       cell.ring.setVisible(true);
       gs.hostCells.update(gs.time.now, 0, 0);
-      return { hintCount, rangeCommands: cell.ring.commandBuffer?.length ?? 0 };
+      const lysis = { x: gs.player.x, y: gs.player.y, radius: 0, damage: 0, rna: 0, interactionId: cell.interactionId };
+      gs.onHostCellLysis(lysis);
+      gs.onHostCellLysis(lysis);
+      return {
+        hintCount,
+        rangeCommands: cell.ring.commandBuffer?.length ?? 0,
+        cellsCompleted: gs.hostCellsCompletedThisRun,
+      };
     });
     assert.equal(returningResult.hintCount, 0, 'returning run received Host Cell tutorial copy');
     assert.ok(returningResult.rangeCommands > 0, 'returning run lost actual-radius readability');
+    assert.equal(returningResult.cellsCompleted, 2, 'returning-run regression did not complete two Host Cells');
+    await returningPage.waitForTimeout(250);
+    assert.equal(
+      returningEvents.filter((entry) => entry.event === 'second_host_cell_completed_without_hint').length,
+      0,
+      'returning run emitted first-run-only second Host Cell comprehension event'
+    );
     await returning.close();
     await context.close();
     console.log(`gameplay comprehension browser smoke: ok (${VIEWPORTS.map(({ width, height }) => `${width}x${height}`).join(', ')})`);

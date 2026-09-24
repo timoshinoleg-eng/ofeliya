@@ -11,9 +11,9 @@ interface HostCellSlot {
   infection: number;
   phase: number;
   spawnedAt: number;
+  interactionId: number;
   wasInside: boolean;
   approachNotified: boolean;
-  enteredOnce: boolean;
 }
 
 export interface HostCellTuning {
@@ -30,6 +30,7 @@ export interface HostCellLysisEvent {
   rna: number;
   radius: number;
   damage: number;
+  interactionId: number;
 }
 
 export type HostCellInteractionEvent = {
@@ -38,6 +39,7 @@ export type HostCellInteractionEvent = {
   y: number;
   radius: number;
   progress: number;
+  interactionId: number;
 };
 
 export interface HostCellCheckpointSlot {
@@ -69,6 +71,7 @@ export class HostCellSystem {
   private readonly cells: HostCellSlot[] = [];
   private spawnAcc = 0;
   private firstSpawned = false;
+  private nextInteractionId = 0;
   constructor(
     scene: Phaser.Scene,
     player: Player,
@@ -115,9 +118,9 @@ export class HostCellSystem {
         infection: 0,
         phase: i * 1.23,
         spawnedAt: 0,
+        interactionId: 0,
         wasInside: false,
         approachNotified: false,
-        enteredOnce: false,
       });
     }
   }
@@ -160,7 +163,6 @@ export class HostCellSystem {
       if (inside && !cell.wasInside) {
         const type = progressBefore > 0 ? 'resume' : 'enter';
         this.emitInteraction(cell, type, tuning.infectionRadius);
-        cell.enteredOnce = true;
       } else if (
         cell.wasInside &&
         !inside &&
@@ -293,9 +295,9 @@ export class HostCellSystem {
       cell.active = true;
       cell.infection = saved.infection;
       cell.spawnedAt = now - saved.spawnedAgoMs;
+      cell.interactionId = ++this.nextInteractionId;
       cell.wasInside = false;
       cell.approachNotified = false;
-      cell.enteredOnce = false;
       cell.image
         .setPosition(saved.x, saved.y)
         .setVisible(true)
@@ -338,9 +340,9 @@ export class HostCellSystem {
       cell.active = false;
       cell.infection = 0;
       cell.spawnedAt = 0;
+      cell.interactionId = 0;
       cell.wasInside = false;
       cell.approachNotified = false;
-      cell.enteredOnce = false;
       cell.image.setVisible(false).setAlpha(0).clearTint().setRotation(0).setScale(0.78);
       cell.infectionOverlay.setVisible(false).setAlpha(0).setRotation(0).setScale(0.78);
       cell.ring.setVisible(false).clear();
@@ -399,9 +401,9 @@ export class HostCellSystem {
     slot.active = true;
     slot.infection = 0;
     slot.spawnedAt = this.scene.time.now;
+    slot.interactionId = ++this.nextInteractionId;
     slot.wasInside = false;
     slot.approachNotified = false;
-    slot.enteredOnce = false;
     slot.image
       .setPosition(x, y)
       .setVisible(true)
@@ -429,12 +431,13 @@ export class HostCellSystem {
     const x = cell.image.x;
     const y = cell.image.y;
     const scale = cell.image.scaleX;
+    const interactionId = cell.interactionId;
     cell.active = false;
     cell.infection = 0;
     cell.spawnedAt = 0;
+    cell.interactionId = 0;
     cell.wasInside = false;
     cell.approachNotified = false;
-    cell.enteredOnce = false;
     cell.ring.setVisible(false).clear();
 
     // Preserve the texture's native magenta/green membrane colors. Applying a green tint here
@@ -538,6 +541,7 @@ export class HostCellSystem {
       rna: Math.max(1, Math.round(tuning.rna)),
       radius: Math.max(60, tuning.lysisRadius),
       damage: Math.max(1, tuning.lysisDamage),
+      interactionId,
     });
   }
 
@@ -553,6 +557,7 @@ export class HostCellSystem {
       y: cell.image.y,
       radius,
       progress,
+      interactionId: cell.interactionId,
     });
   }
 }
