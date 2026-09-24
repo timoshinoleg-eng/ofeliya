@@ -84,6 +84,7 @@ import { AdaptiveAudioDirector } from '../systems/AdaptiveAudioDirector';
 import { SfxAdaptiveSink } from '../systems/SfxAdaptiveSink';
 import { MUSIC_TRACK_COUNT, Sfx } from '../systems/Sfx';
 import { VfxSystem } from '../systems/VfxSystem';
+import { EnemyHealthOverlay } from '../systems/EnemyHealthOverlay';
 import { VideoInterstitial } from '../systems/VideoInterstitial';
 import { PERFORMANCE } from '../systems/PerformanceProfile';
 import {
@@ -108,6 +109,7 @@ export class GameScene extends Phaser.Scene {
   private atmosphere!: AtmosphereSystem;
   private vignette!: Phaser.GameObjects.Image;
   private vfx!: VfxSystem;
+  private enemyHealth!: EnemyHealthOverlay;
   private hostCells!: HostCellSystem;
   private firstRunComprehension = false;
   private firstHostCellTutorialFinished = false;
@@ -332,6 +334,7 @@ export class GameScene extends Phaser.Scene {
     this.enemies = this.physics.add.group({ classType: Enemy, maxSize: 260 });
     this.gems = this.physics.add.group({ classType: Gem, maxSize: 220 });
     this.vfx = new VfxSystem(this);
+    this.enemyHealth = new EnemyHealthOverlay(this);
     this.hostCells = new HostCellSystem(
       this,
       this.player,
@@ -436,6 +439,7 @@ export class GameScene extends Phaser.Scene {
       this.cardiacHazard.reset();
       this.cardiacHazardVisual = null;
       this.transitionGeneration += 1;
+      this.enemyHealth?.destroy();
       // Audio is not a Phaser subsystem, so it is safe (and required) to release it here:
       // every restart path must not leak the bed, layer nodes or the visibility listener.
       this.audio?.stop();
@@ -538,6 +542,7 @@ export class GameScene extends Phaser.Scene {
     this.updateAdaptiveAudio(delta);
     this.updateHeartbeatSignature(stage, st.timeMs);
     this.wave.update(delta);
+    this.enemyHealth.update(time);
     this.updateCardiacLineHazard(time);
     this.hostCells.update(time, delta, st.timeMs);
     this.atmosphere.update(time, delta, st.timeMs, stage.durationMs);
@@ -626,6 +631,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   onEnemyDied(e: Enemy): void {
+    this.enemyHealth?.hide(e);
     const st = this.runState.stage;
     this.runState.recordKill(COMBO.windowMs);
     this.trackComprehensionOnce('first_enemy_kill', {
@@ -1450,6 +1456,7 @@ export class GameScene extends Phaser.Scene {
 
   private resetStageWorld(nextStage: StageDefinition): void {
     this.milestones.reset();
+    this.enemyHealth.clear();
     this.hostCells.resetStage();
     this.resetCardiacLineHazard();
     this.wave.boss = null;
@@ -1607,6 +1614,14 @@ export class GameScene extends Phaser.Scene {
   private getUiScene(): UIScene | null {
     if (!this.scene.isActive('UI') && !this.scene.isPaused('UI')) return null;
     return this.scene.get('UI') as UIScene;
+  }
+
+  showEnemyHealth(enemy: Enemy): void {
+    this.enemyHealth?.show(enemy, this.time.now);
+  }
+
+  hideEnemyHealth(enemy: Enemy): void {
+    this.enemyHealth?.hide(enemy);
   }
 
   private trackComprehensionOnce(event: ProductEvent, props: ProductEventProps = {}): void {
