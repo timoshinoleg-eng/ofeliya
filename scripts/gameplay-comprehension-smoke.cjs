@@ -529,7 +529,7 @@ async function bootGame(page) {
       cell.infectionOverlay.setVisible(false);
       cell.ring.setVisible(true);
       gs.hostCells.update(gs.time.now, 0, 0);
-      const lysis = { x: gs.player.x, y: gs.player.y, radius: 0, damage: 0, rna: 0, interactionId: cell.interactionId };
+      const lysis = { x: gs.player.x, y: gs.player.y, radius: 0, damage: 0, rna: 0, interactionId: cell.interactionId, slotIndex: 0 };
       gs.onHostCellLysis(lysis);
       gs.onHostCellLysis(lysis);
       return {
@@ -572,6 +572,7 @@ async function bootGame(page) {
         radius: gs.runState.infectionRadius,
         progress: 0,
         interactionId: 9001,
+        slotIndex: 0,
       });
       // bootGame widens xpNext to freeze progression; restore the real level-1 value before
       // exercising the production checkpoint validator.
@@ -620,6 +621,7 @@ async function bootGame(page) {
         radius: gs.runState.infectionRadius,
         progress: 0,
         interactionId: 9002,
+        slotIndex: 0,
       });
       gs.onHostCellInteraction({
         type: 'enter',
@@ -628,6 +630,7 @@ async function bootGame(page) {
         radius: gs.runState.infectionRadius,
         progress: 0.1,
         interactionId: 9002,
+        slotIndex: 0,
       });
       return {
         resumed: gs.resumed,
