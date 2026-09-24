@@ -182,6 +182,9 @@ jobs:
       - name: Legendary cinematic ceremony browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/legendary-ceremony-smoke.cjs
 
+      - name: Mutation copy clarity contract
+        run: npm run test:mutation-copy
+
       - name: Mutation choice integrity browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:choice-integrity
 
