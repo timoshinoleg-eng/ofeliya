@@ -801,7 +801,7 @@ export class UIScene extends Phaser.Scene {
 
     const W = this.scale.width;
     const H = this.scale.height;
-    const compact = H < 620;
+    const compact = H < 650;
     const legendaryReward = gs.legendaryRewardPending;
     const c = this.add.container(0, 0).setDepth(100);
     this.modal = c;
