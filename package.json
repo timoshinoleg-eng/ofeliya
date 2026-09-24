@@ -45,6 +45,7 @@
     "test:founder-badge": "node scripts/check-founder-badge.mjs",
     "test:streaks": "node scripts/check-no-damage-streak.mjs",
     "test:choice-integrity": "node scripts/levelup-choice-smoke.cjs",
+    "test:mutation-copy": "node scripts/check-mutation-copy.mjs",
     "test:visual-gameplay-impact": "node scripts/visual-gameplay-impact-smoke.cjs"
   },
   "dependencies": {
