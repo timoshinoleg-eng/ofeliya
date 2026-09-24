@@ -718,8 +718,7 @@ export class GameScene extends Phaser.Scene {
     if (this.hostCellsCompletedThisRun === 2 && this.firstHostCellTutorialFinished) {
       this.trackComprehensionOnce('second_host_cell_completed_without_hint');
     }
-    // Gameplay radius is unchanged; the smaller visual nova leaves room for the membrane contour.
-    this.vfx.nova(event.x, event.y, event.radius * 0.72);
+    this.vfx.lysis(event.x, event.y, event.radius * 0.72, event.radius);
     this.atmosphere.pulse(COLORS.green, 0.14);
     Sfx.play('nova');
     PlatformBridge.haptic('medium');
@@ -733,6 +732,8 @@ export class GameScene extends Phaser.Scene {
 
     const list = this.enemies.getChildren() as Enemy[];
     const rhythmLysisMultiplier = this.time.now <= this.heartbeatOpportunityUntil ? 1.35 : 1;
+    let enemiesHit = 0;
+    let enemiesKilled = 0;
     for (const e of list) {
       if (!e.active) continue;
       const dx = e.x - event.x;
@@ -741,14 +742,23 @@ export class GameScene extends Phaser.Scene {
       if (d > event.radius + e.radius) continue;
       const dd = d || 1;
       this.vfx.hit(e.x, e.y, COLORS.green);
-      e.takeDamage(
+      const wasAlive = e.active && e.hp > 0;
+      const dealt = e.takeDamage(
         event.damage * rhythmLysisMultiplier,
         (dx / dd) * 210,
         (dy / dd) * 210,
         'lysis'
       );
+      if (dealt > 0) enemiesHit += 1;
+      if (wasAlive && !e.active) enemiesKilled += 1;
     }
     if (this.runState.hasLegendary('lysis-chain')) this.triggerLysisChain(event, list);
+    this.trackComprehensionOnce('first_lysis', {
+      enemiesHit,
+      enemiesKilled,
+      rna: event.rna,
+      stage: this.stageDirector.currentStage.id,
+    });
   }
 
   private onHostCellInteraction(event: HostCellInteractionEvent): void {
