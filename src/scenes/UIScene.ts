@@ -58,6 +58,9 @@ export class UIScene extends Phaser.Scene {
   private bossLabel!: Phaser.GameObjects.Text;
   private timerText!: Phaser.GameObjects.Text;
   private levelText!: Phaser.GameObjects.Text;
+  private rnaPickupText!: Phaser.GameObjects.Text;
+  private rnaPickupTotal = 0;
+  private rnaPickupTimer: Phaser.Time.TimerEvent | null = null;
   private killsText!: Phaser.GameObjects.Text;
   private hpText!: Phaser.GameObjects.Text;
   private muteText!: Phaser.GameObjects.Text;
@@ -94,6 +97,8 @@ export class UIScene extends Phaser.Scene {
     this.transitionOverlay = null;
     this.pauseOverlay = null;
     this.manualPaused = false;
+    this.rnaPickupTotal = 0;
+    this.rnaPickupTimer = null;
 
     const W = this.scale.width;
 
@@ -127,6 +132,10 @@ export class UIScene extends Phaser.Scene {
     this.levelText = text(16, 30, 'МУТАЦИЯ 1', 14, '#ff8fd0', 0)
       .setFontStyle('bold')
       .setShadow(0, 1, '#02030a', 3, true, true);
+    this.rnaPickupText = text(0, 0, '', 11, '#baffd8', 0)
+      .setFontStyle('bold')
+      .setShadow(0, 1, '#02030a', 3, true, true)
+      .setVisible(false);
     this.killsText = text(W - 16, HUD.row.killsY, 'УНИЧТОЖЕНО 0', 14, '#e9fbff', 1)
       .setFontStyle('bold')
       .setShadow(0, 1, '#02030a', 3, true, true);
@@ -225,6 +234,7 @@ export class UIScene extends Phaser.Scene {
     this.scale.on('resize', this.layout, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.layout, this);
+      this.rnaPickupTimer = null;
       this.pauseOverlay = null;
       this.manualPaused = false;
       VideoInterstitial.cancelActive();
@@ -249,7 +259,13 @@ export class UIScene extends Phaser.Scene {
       }
 
       this.timerText.setText(fmtTime(run.timeMs));
-      this.levelText.setText(`МУТАЦИЯ ${run.level}`);
+      const causalLabel = `РНК ${run.xp}/${run.xpNext} → МУТАЦИЯ`;
+      this.levelText.setText(causalLabel);
+      const availableLabelWidth =
+        this.timerText.x - this.timerText.width / 2 - this.levelText.x - 8;
+      if (this.levelText.width > availableLabelWidth) {
+        this.levelText.setText(`РНК ${run.xp}/${run.xpNext}`);
+      }
       this.killsText.setText(`УНИЧТОЖЕНО ${run.kills}`);
 
       const showCombo = run.combo >= COMBO.showFrom;
@@ -316,6 +332,43 @@ export class UIScene extends Phaser.Scene {
       this.hideStageTransition();
       this.showGameOver(res);
     }
+  }
+
+  notifyRnaPickup(value: number): void {
+    if (!Number.isFinite(value) || value <= 0 || !this.rnaPickupText) return;
+    this.rnaPickupTotal += value;
+    this.rnaPickupTimer?.remove(false);
+    this.rnaPickupTimer = this.time.delayedCall(150, () => {
+      const total = this.rnaPickupTotal;
+      this.rnaPickupTotal = 0;
+      this.rnaPickupTimer = null;
+      this.rnaPickupText
+        .setText(`+${total} РНК`)
+        .setVisible(true)
+        .setAlpha(1)
+        .setPosition(this.rnaPickupText.x, HUD.row.xpY - 1);
+      this.tweens.killTweensOf(this.rnaPickupText);
+      this.rnaPickupText.y += 3;
+      this.tweens.add({
+        targets: this.rnaPickupText,
+        y: this.rnaPickupText.y - 5,
+        alpha: 0,
+        duration: 680,
+        ease: 'Quad.Out',
+        onComplete: () => this.rnaPickupText.setVisible(false),
+      });
+      this.tweens.killTweensOf(this.xpFill);
+      this.xpFill.setAlpha(1);
+      this.tweens.add({
+        targets: this.xpFill,
+        alpha: 0.55,
+        duration: 85,
+        yoyo: true,
+        repeat: 1,
+        ease: 'Sine.InOut',
+        onComplete: () => this.xpFill.setAlpha(1),
+      });
+    });
   }
 
   showStageTransition(
@@ -659,6 +712,7 @@ export class UIScene extends Phaser.Scene {
       this.bossLabel,
       this.timerText,
       this.levelText,
+      this.rnaPickupText,
       this.killsText,
       this.hpText,
       this.muteText,
@@ -678,6 +732,8 @@ export class UIScene extends Phaser.Scene {
       .setDisplaySize(W - 12, HUD.plate.height);
     this.timerText.setPosition(W / 2, HUD.row.timerY).setFontSize(HUD.type.timer);
     this.levelText.setPosition(HUD.row.levelX, HUD.row.levelY).setFontSize(HUD.type.level);
+    const metrics = this.hudMetrics(W);
+    this.rnaPickupText.setPosition(metrics.xpX + metrics.xpW + 7, HUD.row.xpY - 1);
     this.killsText.setPosition(W - HUD.row.killsPadX, HUD.row.killsY).setFontSize(HUD.type.kills);
     this.hpText.setPosition(W / 2, HUD.row.hpTextY).setFontSize(HUD.type.hp);
     this.bossLabel.setPosition(W / 2, HUD.row.bossLabelY).setFontSize(HUD.type.boss);

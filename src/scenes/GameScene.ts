@@ -848,6 +848,7 @@ export class GameScene extends Phaser.Scene {
     Sfx.play('pickup');
     this.vfx.pickup(this.player.x, this.player.y);
     this.queuedLevels += this.runState.addXp(value);
+    this.getUiScene()?.notifyRnaPickup(value);
     this.trackComprehensionOnce('first_rna_pickup', { value });
   }
 
