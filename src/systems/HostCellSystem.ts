@@ -31,6 +31,7 @@ export interface HostCellLysisEvent {
   radius: number;
   damage: number;
   interactionId: number;
+  slotIndex: number;
 }
 
 export type HostCellInteractionEvent = {
@@ -40,6 +41,7 @@ export type HostCellInteractionEvent = {
   radius: number;
   progress: number;
   interactionId: number;
+  slotIndex: number;
 };
 
 export interface HostCellCheckpointSlot {
@@ -68,6 +70,7 @@ export class HostCellSystem {
   private readonly tuningFn: () => HostCellTuning;
   private readonly gameplayRandom: () => number;
   private readonly onInteraction?: (event: HostCellInteractionEvent) => void;
+  private readonly onCellSpawn?: (slotIndex: number) => void;
   private readonly cells: HostCellSlot[] = [];
   private spawnAcc = 0;
   private firstSpawned = false;
@@ -86,7 +89,8 @@ export class HostCellSystem {
     gameplayRandom: () => number = () => {
       throw new Error('HostCellSystem gameplay RNG is not configured');
     },
-    onInteraction?: (event: HostCellInteractionEvent) => void
+    onInteraction?: (event: HostCellInteractionEvent) => void,
+    onCellSpawn?: (slotIndex: number) => void
   ) {
     this.scene = scene;
     this.player = player;
@@ -94,6 +98,7 @@ export class HostCellSystem {
     this.tuningFn = tuningFn;
     this.gameplayRandom = gameplayRandom;
     this.onInteraction = onInteraction;
+    this.onCellSpawn = onCellSpawn;
 
     for (let i = 0; i < 6; i++) {
       const image = scene.add
@@ -402,6 +407,7 @@ export class HostCellSystem {
     slot.infection = 0;
     slot.spawnedAt = this.scene.time.now;
     slot.interactionId = ++this.nextInteractionId;
+    this.onCellSpawn?.(this.cells.indexOf(slot));
     slot.wasInside = false;
     slot.approachNotified = false;
     slot.image
@@ -542,6 +548,7 @@ export class HostCellSystem {
       radius: Math.max(60, tuning.lysisRadius),
       damage: Math.max(1, tuning.lysisDamage),
       interactionId,
+      slotIndex: this.cells.indexOf(cell),
     });
   }
 
@@ -558,6 +565,7 @@ export class HostCellSystem {
       radius,
       progress,
       interactionId: cell.interactionId,
+      slotIndex: this.cells.indexOf(cell),
     });
   }
 }

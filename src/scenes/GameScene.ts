@@ -108,6 +108,7 @@ interface ComprehensionPresentationState {
   runSeed: string;
   events: ProductEvent[];
   hostCellHints: HostCellHintType[];
+  hostCellSlotsWithHint: number[];
 }
 
 const COMPREHENSION_STATE_KEY = 'ofeliya_comprehension_v1';
@@ -124,7 +125,7 @@ export class GameScene extends Phaser.Scene {
   private firstRunComprehension = false;
   private hostCellsCompletedThisRun = 0;
   private hostCellHintEventsShown = new Set<HostCellHintType>();
-  private hostCellInteractionIdsWithHint = new Set<number>();
+  private hostCellSlotsWithHint = new Set<number>();
   private comprehensionEventsSent = new Set<ProductEvent>();
   private bullets!: Phaser.Physics.Arcade.Group;
   private enemies!: Phaser.Physics.Arcade.Group;
@@ -264,7 +265,7 @@ export class GameScene extends Phaser.Scene {
     this.firstRunComprehension = SaveSystem.get().runs === 0;
     this.hostCellsCompletedThisRun = resume ? this.runState.run.hostCellsInfected : 0;
     this.hostCellHintEventsShown = new Set();
-    this.hostCellInteractionIdsWithHint = new Set();
+    this.hostCellSlotsWithHint = new Set();
     this.restoreComprehensionPresentationState();
     this.checkpointAccMs = 0;
     // Adaptive audio foundation: one deterministic bed per run plus danger-driven tension layers.
@@ -357,7 +358,8 @@ export class GameScene extends Phaser.Scene {
         lysisDamage: this.runState.hostLysisDamage,
       }),
       () => this.gameplayRng.next('host-cell'),
-      (event) => this.onHostCellInteraction(event)
+      (event) => this.onHostCellInteraction(event),
+      (slotIndex) => this.onHostCellSpawn(slotIndex)
     );
 
     this.dmgTexts = [];
@@ -729,7 +731,8 @@ export class GameScene extends Phaser.Scene {
   private onHostCellLysis(event: HostCellLysisEvent): void {
     this.runState.recordHostCellInfected();
     this.hostCellsCompletedThisRun += 1;
-    const hadContextualHint = this.hostCellInteractionIdsWithHint.delete(event.interactionId);
+    const hadContextualHint = this.hostCellSlotsWithHint.delete(event.slotIndex);
+    this.persistComprehensionPresentationState();
     if (
       this.firstRunComprehension &&
       this.hostCellsCompletedThisRun === 2 &&
@@ -809,8 +812,14 @@ export class GameScene extends Phaser.Scene {
     if (ui) {
       ui.showContextHint(copy);
       this.hostCellHintEventsShown.add(event.type);
+      this.hostCellSlotsWithHint.add(event.slotIndex);
       this.persistComprehensionPresentationState();
-      this.hostCellInteractionIdsWithHint.add(event.interactionId);
+    }
+  }
+
+  private onHostCellSpawn(slotIndex: number): void {
+    if (this.hostCellSlotsWithHint.delete(slotIndex)) {
+      this.persistComprehensionPresentationState();
     }
   }
 
@@ -1672,6 +1681,13 @@ export class GameScene extends Phaser.Scene {
           }
         }
       }
+      if (Array.isArray(stored.hostCellSlotsWithHint)) {
+        for (const slotIndex of stored.hostCellSlotsWithHint) {
+          if (Number.isInteger(slotIndex) && slotIndex >= 0 && slotIndex < 6) {
+            this.hostCellSlotsWithHint.add(slotIndex);
+          }
+        }
+      }
     } catch {
       try {
         localStorage.removeItem(COMPREHENSION_STATE_KEY);
@@ -1687,6 +1703,7 @@ export class GameScene extends Phaser.Scene {
         runSeed: this.runSeed,
         events: [...this.comprehensionEventsSent],
         hostCellHints: [...this.hostCellHintEventsShown],
+        hostCellSlotsWithHint: [...this.hostCellSlotsWithHint],
       };
       localStorage.setItem(COMPREHENSION_STATE_KEY, JSON.stringify(state));
     } catch {

@@ -587,6 +587,7 @@ async function bootGame(page) {
     assert.equal(resumeFixture.presentation?.runSeed, resumeFixture.checkpoint.runSeed, 'presentation state is not bound to checkpoint seed');
     assert.ok(resumeFixture.presentation?.events?.includes('first_enemy_hit'), 'first-hit telemetry guard was not persisted');
     assert.ok(resumeFixture.presentation?.hostCellHints?.includes('approach'), 'Host Cell hint guard was not persisted');
+    await resumePage.waitForTimeout(250);
     const firstHitBeforeResume = resumeEvents.filter((entry) => entry.event === 'first_enemy_hit').length;
     const approachBeforeResume = resumeEvents.filter((entry) => entry.event === 'host_cell_approached').length;
 
@@ -646,6 +647,72 @@ async function bootGame(page) {
     assert.equal(resumedFirstRun.hintCount, 1, 'resume should suppress the shown approach hint and show only the unseen enter hint');
     assert.equal(resumeEvents.filter((entry) => entry.event === 'first_enemy_hit').length, firstHitBeforeResume, 'resume duplicated first_enemy_hit telemetry');
     assert.equal(resumeEvents.filter((entry) => entry.event === 'host_cell_approached').length, approachBeforeResume, 'resume duplicated host_cell_approached telemetry');
+
+    const hintedSecondCellSaved = await resumePage.evaluate(() => {
+      const gs = window.__game.scene.getScene('Game');
+      gs.runState.recordHostCellInfected();
+      gs.hostCellsCompletedThisRun = 1;
+      const cell = gs.hostCells.cells[1];
+      cell.active = true;
+      cell.infection = 0.4;
+      cell.spawnedAt = gs.time.now;
+      cell.image.setPosition(gs.player.x + 90, gs.player.y).setVisible(true);
+      cell.infectionOverlay.setVisible(true);
+      cell.ring.setVisible(true);
+      gs.hostCellHintEventsShown.delete('exit');
+      gs.onHostCellInteraction({
+        type: 'exit',
+        x: cell.image.x,
+        y: cell.image.y,
+        radius: gs.runState.infectionRadius,
+        progress: 0.4,
+        interactionId: cell.interactionId,
+        slotIndex: 1,
+      });
+      const saved = gs.saveCheckpointNow();
+      const presentation = JSON.parse(localStorage.getItem('ofeliya_comprehension_v1') || 'null');
+      return { saved, presentation };
+    });
+    assert.equal(hintedSecondCellSaved.saved, true, 'second-cell contextual-hint checkpoint was not saved');
+    assert.ok(hintedSecondCellSaved.presentation?.hostCellSlotsWithHint?.includes(1), 'shown second-cell hint was not persisted against its active slot');
+    const hintedSecondCheckpoint = await resumePage.evaluate(() =>
+      JSON.parse(localStorage.getItem('ofeliya_run_checkpoint_v1') || 'null')
+    );
+    await resumePage.evaluate((checkpoint) => {
+      const game = window.__game;
+      if (game.scene.isActive('UI') || game.scene.isPaused('UI')) game.scene.stop('UI');
+      if (game.scene.isActive('Game') || game.scene.isPaused('Game')) game.scene.stop('Game');
+      game.registry.set('runCheckpointResume', checkpoint);
+      game.scene.start('Game');
+    }, hintedSecondCheckpoint);
+    await resumePage.waitForFunction(() => {
+      const game = window.__game;
+      return Boolean(game?.scene.getScene('Game')?.enemyHealth && game.scene.isActive('Game'));
+    }, null, { timeout: 15000 });
+    const hintSurvivedCellRestore = await resumePage.evaluate(() => {
+      const gs = window.__game.scene.getScene('Game');
+      const cell = gs.hostCells.cells[1];
+      const before = {
+        slots: [...gs.hostCellSlotsWithHint],
+        completed: gs.hostCellsCompletedThisRun,
+        hinted: [...gs.hostCellHintEventsShown],
+      };
+      gs.onHostCellLysis({
+        x: cell.image.x,
+        y: cell.image.y,
+        radius: 0,
+        damage: 0,
+        rna: 0,
+        interactionId: cell.interactionId,
+        slotIndex: 1,
+      });
+      return {
+        ok: !gs.comprehensionEventsSent.has('second_host_cell_completed_without_hint'),
+        before,
+        after: [...gs.hostCellSlotsWithHint],
+      };
+    });
+    assert.equal(hintSurvivedCellRestore.ok, true, `a second-cell hint shown before resume was forgotten and misreported as absent: ${JSON.stringify(hintSurvivedCellRestore)}`);
     await resumeContext.close();
 
     await context.close();
