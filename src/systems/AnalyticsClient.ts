@@ -13,7 +13,18 @@ export type ProductEvent =
   | 'replay'
   | 'share'
   | 'daily'
-  | 'referral';
+  | 'referral'
+  | 'first_enemy_hit'
+  | 'first_enemy_kill'
+  | 'first_rna_pickup'
+  | 'first_mutation_opened'
+  | 'first_mutation_selected'
+  | 'host_cell_approached'
+  | 'infection_started'
+  | 'infection_interrupted'
+  | 'infection_resumed'
+  | 'first_lysis'
+  | 'second_host_cell_completed_without_hint';
 
 export type ProductEventProps = Record<string, string | number | boolean>;
 

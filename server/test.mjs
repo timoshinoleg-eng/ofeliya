@@ -904,8 +904,8 @@ await ok('analytics: signed Telegram event is accepted and counted', async () =>
     body: JSON.stringify({
       platform: 'telegram',
       initData: signInitData(ALICE, TG_TOKEN),
-      event: 'app_open',
-      props: { release: 'test', noisy: 'x'.repeat(120) },
+      event: 'first_rna_pickup',
+      props: { value: 4, noisy: 'x'.repeat(120) },
     }),
   });
   assert.equal(response.status, 202);

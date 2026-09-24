@@ -17,7 +17,11 @@ import {
   type AchievementId,
 } from '../game/AchievementSystem';
 import { rollRunChoices } from '../game/EvolutionSystem';
-import { guaranteedLegendaryChoices, type LegendaryId } from '../game/LegendarySystem';
+import {
+  getLegendaryDefinition,
+  guaranteedLegendaryChoices,
+  type LegendaryId,
+} from '../game/LegendarySystem';
 import { HEARTBEAT_PULSE_PROFILE, HeartbeatPulseDirector, type HeartbeatPulseEvent } from '../game/HeartbeatPulseDirector';
 import {
   HEART_SAFE_POCKET,
@@ -83,6 +87,7 @@ import { VfxSystem } from '../systems/VfxSystem';
 import { VideoInterstitial } from '../systems/VideoInterstitial';
 import { PERFORMANCE } from '../systems/PerformanceProfile';
 import { HostCellSystem, type HostCellLysisEvent } from '../systems/HostCellSystem';
+import { trackProductEvent, type ProductEvent, type ProductEventProps } from '../systems/AnalyticsClient';
 import type { UIScene } from './UIScene';
 
 interface CoreMark {
@@ -100,6 +105,7 @@ export class GameScene extends Phaser.Scene {
   private vignette!: Phaser.GameObjects.Image;
   private vfx!: VfxSystem;
   private hostCells!: HostCellSystem;
+  private comprehensionEventsSent = new Set<ProductEvent>();
   private bullets!: Phaser.Physics.Arcade.Group;
   private enemies!: Phaser.Physics.Arcade.Group;
   private gems!: Phaser.Physics.Arcade.Group;
@@ -247,6 +253,7 @@ export class GameScene extends Phaser.Scene {
     );
     PlatformBridge.setBackHandler(() => this.exitToMenu());
     this.queuedLevels = 0;
+    this.comprehensionEventsSent = new Set<ProductEvent>();
     this.awaitingChoice = false;
     this.pendingChoices = [];
     this.legendaryRewardPending = false;
@@ -545,6 +552,7 @@ export class GameScene extends Phaser.Scene {
         () => this.gameplayRng.next('progression')
       );
       this.awaitingChoice = true;
+      if (this.pendingChoices.length > 0) this.trackComprehensionOnce('first_mutation_opened');
       this.queuedLevels -= 1;
     }
 
@@ -607,6 +615,11 @@ export class GameScene extends Phaser.Scene {
   onEnemyDied(e: Enemy): void {
     const st = this.runState.stage;
     this.runState.recordKill(COMBO.windowMs);
+    this.trackComprehensionOnce('first_enemy_kill', {
+      kind: e.kind,
+      elite: e.isElite,
+      boss: e.isBoss,
+    });
     this.captureAchievements(false, true);
     this.vfx.kill(e.x, e.y, e.color, e.isBoss ? 'boss' : e.isElite ? 'elite' : 'normal');
     if (e.isElite && e.eliteModifier === 'volatile') this.triggerVolatileElite(e);
@@ -835,6 +848,7 @@ export class GameScene extends Phaser.Scene {
     Sfx.play('pickup');
     this.vfx.pickup(this.player.x, this.player.y);
     this.queuedLevels += this.runState.addXp(value);
+    this.trackComprehensionOnce('first_rna_pickup', { value });
   }
 
   acceptChoiceClick(id: string): boolean {
@@ -848,6 +862,13 @@ export class GameScene extends Phaser.Scene {
     if (!def) return this.awaitingChoice;
     const rewardChoice = this.legendaryRewardPending;
     def.apply(this.runState);
+    this.trackComprehensionOnce('first_mutation_selected', {
+      id: def.id,
+      kind: def.kind ?? 'upgrade',
+      archetype: def.legendaryId
+        ? getLegendaryDefinition(def.legendaryId).archetype
+        : def.evolutionId ?? def.family,
+    });
     if (def.kind === 'evolution' && def.evolutionId) {
       this.pendingEvolutionCeremony = def.evolutionId;
       this.syncPlayerMutationSilhouette();
@@ -1536,6 +1557,12 @@ export class GameScene extends Phaser.Scene {
     return this.scene.get('UI') as UIScene;
   }
 
+  private trackComprehensionOnce(event: ProductEvent, props: ProductEventProps = {}): void {
+    if (this.comprehensionEventsSent.has(event)) return;
+    this.comprehensionEventsSent.add(event);
+    void trackProductEvent(event, PlatformBridge, props);
+  }
+
   private handleStageEvents(events: readonly StageDirectorEvent[]): void {
     for (const event of events) {
       switch (event.type) {
@@ -1844,6 +1871,13 @@ export class GameScene extends Phaser.Scene {
     const rhythmBurst = this.consumeMyocardialRhythm();
     this.vfx.hit(e.x, e.y, b.prism ? COLORS.gold : e.color);
     const dealtDamage = e.takeDamage(damage, (bv.x / vm) * 130, (bv.y / vm) * 130);
+    if (dealtDamage > 0) {
+      this.trackComprehensionOnce('first_enemy_hit', {
+        kind: e.kind,
+        elite: e.isElite,
+        boss: e.isBoss,
+      });
+    }
     Sfx.play('hit');
     this.showDamage(e.x, e.y, dealtDamage);
     this.trySplitProjectile(b, bv);
