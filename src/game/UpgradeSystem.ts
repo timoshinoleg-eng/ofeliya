@@ -16,7 +16,7 @@ export const UPGRADE_FAMILY_LABELS: Record<UpgradeFamily, string> = {
 export const EVOLUTION_NAMES: Record<EvolutionId, string> = {
   prism: 'ГИПЕРШИП',
   halo: 'СВЕРХКАПСИД',
-  singularity: 'ЛИЗИС',
+  singularity: 'СИНГУЛЯРНОСТЬ',
 };
 
 export interface UpgradeDef {
@@ -59,8 +59,8 @@ export const UPGRADES: UpgradeDef[] = [
   {
     id: 'dmg',
     shortName: 'БЕЛКОВЫЕ ШИПЫ',
-    name: 'Урон +25%',
-    desc: 'Шиповые белки сильнее разрушают иммунные клетки',
+    name: 'Снаряды: урон +25%',
+    desc: 'Каждое попадание снимает больше прочности у иммунных клеток.',
     max: 6,
     family: 'weapon',
     rarity: 'common',
@@ -71,9 +71,9 @@ export const UPGRADES: UpgradeDef[] = [
   },
   {
     id: 'rate',
-    shortName: 'УСКОРЕННАЯ РЕПЛИКАЦИЯ',
-    name: 'Скорострельность +15%',
-    desc: 'Штамм выпускает вирусные частицы чаще',
+    shortName: 'БЫСТРАЯ РЕПЛИКАЦИЯ',
+    name: 'Стрельба: на 15% чаще',
+    desc: 'OFELIYA выпускает вирусные частицы быстрее.',
     max: 6,
     family: 'weapon',
     rarity: 'common',
@@ -84,9 +84,9 @@ export const UPGRADES: UpgradeDef[] = [
   },
   {
     id: 'multi',
-    shortName: 'МНОЖЕСТВЕННАЯ РЕПЛИКАЦИЯ',
-    name: '+1 снаряд',
-    desc: 'Дополнительная вирусная частица в каждом выбросе',
+    shortName: 'МНОЖЕСТВЕННЫЙ ЗАЛП',
+    name: 'Залп: +1 снаряд',
+    desc: 'Каждый выстрел выпускает ещё одну вирусную частицу.',
     max: 3,
     family: 'weapon',
     rarity: 'rare',
@@ -97,8 +97,8 @@ export const UPGRADES: UpgradeDef[] = [
   {
     id: 'pierce',
     shortName: 'ПРОНИКНОВЕНИЕ',
-    name: 'Пробивание +1',
-    desc: 'Вирусная частица проходит ещё через одну иммунную клетку',
+    name: 'Снаряд пробивает +1 цель',
+    desc: 'После попадания снаряд летит дальше и может задеть ещё одну цель.',
     max: 3,
     family: 'weapon',
     rarity: 'rare',
@@ -110,8 +110,8 @@ export const UPGRADES: UpgradeDef[] = [
   {
     id: 'speed',
     shortName: 'ПОДВИЖНЫЙ ШТАММ',
-    name: 'Скорость +8%',
-    desc: 'OFELIYA быстрее перемещается в кровотоке',
+    name: 'Движение: скорость +8%',
+    desc: 'OFELIYA быстрее уходит от атак и перемещается между целями.',
     max: 5,
     family: 'core',
     rarity: 'common',
@@ -123,8 +123,8 @@ export const UPGRADES: UpgradeDef[] = [
   {
     id: 'hp',
     shortName: 'УТОЛЩЁННЫЙ КАПСИД',
-    name: 'Прочность +25',
-    desc: 'Капсид крепче: максимум прочности +25 и сразу +25 прочности',
+    name: 'Макс. прочность +25 · сразу +25',
+    desc: 'Увеличивает запас здоровья и сразу восстанавливает 25 прочности.',
     max: 5,
     family: 'defense',
     rarity: 'common',
@@ -136,8 +136,8 @@ export const UPGRADES: UpgradeDef[] = [
   {
     id: 'magnet',
     shortName: 'РНК-АФФИНИТЕТ',
-    name: 'Магнит +35%',
-    desc: 'Фрагменты РНК притягиваются к штамму издалека',
+    name: 'Подбор РНК: радиус +35%',
+    desc: 'РНК начинает притягиваться к OFELIYA с большего расстояния.',
     max: 4,
     family: 'utility',
     rarity: 'common',
@@ -149,8 +149,8 @@ export const UPGRADES: UpgradeDef[] = [
   {
     id: 'orbit',
     shortName: 'КАПСИДНЫЕ СПУТНИКИ',
-    name: '+1 орбитальная частица',
-    desc: 'Белковые фрагменты вращаются вокруг штамма и режут иммунные клетки',
+    name: 'Орбита: +1 режущий спутник',
+    desc: 'Спутник вращается вокруг OFELIYA и наносит урон врагам при касании.',
     max: 4,
     family: 'weapon',
     rarity: 'rare',
@@ -161,9 +161,9 @@ export const UPGRADES: UpgradeDef[] = [
   },
   {
     id: 'nova',
-    shortName: 'ЛИЗИС-ПУЛЬС',
-    name: 'Импульс +1',
-    desc: 'Периодический мембранный выброс вокруг штамма сильнее и чаще',
+    shortName: 'МЕМБРАННЫЙ ИМПУЛЬС',
+    name: 'Круговая волна: уровень +1',
+    desc: 'Круговая волна сама срабатывает вокруг OFELIYA. Уровни усиливают её.',
     max: 4,
     family: 'weapon',
     rarity: 'rare',
@@ -175,12 +175,11 @@ export const UPGRADES: UpgradeDef[] = [
   {
     id: 'infect',
     shortName: 'РЕЦЕПТОРНЫЙ ЗАХВАТ',
-    name: 'Заражение +22% · радиус +8%',
-    desc: 'OFELIYA быстрее заражает клетки организма и увеличивает радиус заражения',
+    name: 'Заражение: +22% скорость · +8% зона',
+    desc: 'Стой рядом с клеткой: она заражается быстрее и с большей дистанции.',
     max: 4,
     family: 'core',
     rarity: 'common',
-    evolutionHint: 'singularity',
     apply: (s) => {
       s.stage.infectionSpeedMul *= 1.22;
       s.stage.infectionRadiusMul *= 1.08;
@@ -189,12 +188,11 @@ export const UPGRADES: UpgradeDef[] = [
   {
     id: 'lysis',
     shortName: 'ЦИТОЛИЗ',
-    name: 'Лизис +30% · радиус +8%',
-    desc: 'Разрыв заражённой клетки сильнее бьёт по поздним иммунным целям',
+    name: 'Взрыв клетки: +30% урон · +8% радиус',
+    desc: 'Лизис — разрыв заражённой клетки. Взрыв ранит врагов вокруг неё.',
     max: 4,
     family: 'weapon',
     rarity: 'rare',
-    evolutionHint: 'singularity',
     apply: (s) => {
       s.stage.lysisDamageMul *= 1.3;
       s.stage.lysisRadiusMul *= 1.08;
@@ -203,12 +201,11 @@ export const UPGRADES: UpgradeDef[] = [
   {
     id: 'factory',
     shortName: 'ВИРУСНАЯ ФАБРИКА',
-    name: 'РНК с клетки +1 · лизис +10%',
-    desc: 'Каждая заражённая клетка организма даёт больше РНК',
+    name: 'Разрыв клетки: +1 РНК · +10% урон',
+    desc: 'Лизис клетки даёт больше РНК и сильнее ранит врагов.',
     max: 3,
     family: 'utility',
     rarity: 'rare',
-    evolutionHint: 'singularity',
     apply: (s) => {
       s.stage.lysisRnaBonus += 1;
       s.stage.lysisDamageMul *= 1.1;
@@ -217,8 +214,8 @@ export const UPGRADES: UpgradeDef[] = [
   {
     id: 'regen',
     shortName: 'РЕКОМБИНАЦИЯ',
-    name: 'Регенерация +0.6/с',
-    desc: 'Капсид постепенно восстанавливает целостность',
+    name: 'Регенерация: +0,6 прочности/с',
+    desc: 'Постоянно восстанавливает прочность во время забега.',
     max: 3,
     family: 'defense',
     rarity: 'common',
@@ -231,8 +228,8 @@ export const UPGRADES: UpgradeDef[] = [
 const HEAL: UpgradeDef = {
   id: 'heal',
   shortName: 'АВАРИЙНАЯ РЕКОМБИНАЦИЯ',
-  name: 'Восстановить +40 прочности',
-  desc: 'Мгновенно восстанавливает оболочку без постоянного усиления',
+  name: 'Сразу восстановить 40 прочности',
+  desc: 'Мгновенное лечение без постоянного усиления.',
   max: 99,
   family: 'defense',
   rarity: 'common',
