@@ -169,7 +169,7 @@ async function bootGame(page) {
     assert.equal(setup.approach.firstMutationPresented, true, 'first-run mutation choice was not presented');
     assert.equal(setup.approach.introGoneBeforeHostCellTeaching, true, 'Host Cell teaching appeared before the startup intro was gone');
     assert.equal(setup.approach.hintCount, 1, 'first-run approach hint missing');
-    assert.match(setup.approach.hint, /КЛЕТКА ХОЗЯИНА/);
+    assert.match(setup.approach.hint, /КЛЕТКА ОРГАНИЗМА/);
     assert.ok(setup.approach.rangeVisible && setup.approach.rangeCommands > 0, 'runtime range boundary is not visible');
     await page.screenshot({ path: path.join(captureDir, 'onboarding-first-host-cell.png') });
 
@@ -267,13 +267,17 @@ async function bootGame(page) {
     });
     await page.waitForFunction(() => {
       const ui = window.__game.scene.getScene('UI');
-      return ui.rnaPickupText.visible && ui.rnaPickupText.text === '+4 РНК';
+      return ui.rnaPickupText.text === '+4 РНК';
     }, null, { timeout: 5000 });
     const pickup = await page.evaluate(() => {
       const ui = window.__game.scene.getScene('UI');
+      const pickupBounds = ui.rnaPickupText.getBounds();
+      const timerBounds = ui.timerText.getBounds();
       return {
         text: ui.rnaPickupText.text,
         visible: ui.rnaPickupText.visible,
+        right: pickupBounds.right,
+        timerLeft: timerBounds.left,
         time: ui.time.now,
         timer: Boolean(ui.rnaPickupTimer),
         total: ui.rnaPickupTotal,
@@ -289,7 +293,7 @@ async function bootGame(page) {
     assert.equal(rna.queuedDelta, 0, 'RNA pickup changed the level queue below threshold');
     assert.match(rna.hud, /^РНК\s+\d+\/\d+/);
     assert.equal(pickup.text, '+4 РНК', `aggregated RNA feedback is incorrect: ${JSON.stringify(pickup)}`);
-    assert.equal(pickup.visible, true, 'RNA pickup feedback is hidden');
+    assert.ok(!pickup.visible || pickup.right <= pickup.timerLeft - 4, `RNA pickup overlaps timer: ${JSON.stringify(pickup)}`);
 
     const interaction = await page.evaluate(({ x, y }) => {
       const gs = window.__game.scene.getScene('Game');
@@ -391,12 +395,12 @@ async function bootGame(page) {
       await matrixPage.evaluate(() => {
         const ui = window.__game.scene.getScene('UI');
         ui.update();
-        ui.showContextHint('КЛЕТКА ХОЗЯИНА · ОСТАВАЙСЯ РЯДОМ', 900);
+        ui.showContextHint('КЛЕТКА ОРГАНИЗМА · ОСТАВАЙСЯ РЯДОМ', 900);
         ui.notifyRnaPickup(1);
       });
       await matrixPage.waitForFunction(() => {
         const ui = window.__game.scene.getScene('UI');
-        return ui.rnaPickupText.visible && ui.rnaPickupText.text === '+1 РНК';
+        return ui.rnaPickupText.text === '+1 РНК';
       }, null, { timeout: 5000 });
       const view = await matrixPage.evaluate((size) => {
         const game = window.__game;
@@ -418,17 +422,14 @@ async function bootGame(page) {
           gameSize: { width: gameScene.scale.width, height: gameScene.scale.height },
         };
       }, viewport);
-      assert.ok(view.rnaBounds.left >= 0 && view.rnaBounds.right <= viewport.width, `RNA popup clipped at ${viewport.width}x${viewport.height}`);
+      if (view.popupVisible) {
+        assert.ok(view.rnaBounds.left >= 0 && view.rnaBounds.right <= viewport.width, `RNA popup clipped at ${viewport.width}x${viewport.height}`);
+        assert.ok(view.rnaBounds.right <= viewport.width && view.rnaBounds.top >= 0, `RNA pickup outside viewport at ${viewport.width}x${viewport.height}`);
+        assert.ok(view.rnaBounds.right <= view.timerBounds.left || view.rnaBounds.left >= view.timerBounds.right || view.rnaBounds.bottom <= view.timerBounds.top || view.rnaBounds.top >= view.timerBounds.bottom, `RNA pickup overlaps timer at ${viewport.width}x${viewport.height}`);
+        assert.ok(view.rnaBounds.right <= view.killsBounds.left || view.rnaBounds.left >= view.killsBounds.right || view.rnaBounds.bottom <= view.killsBounds.top || view.rnaBounds.top >= view.killsBounds.bottom, `RNA pickup overlaps kill counter at ${viewport.width}x${viewport.height}`);
+      }
       assert.ok(view.hintBounds.left >= 0 && view.hintBounds.right <= viewport.width, `context hint clipped at ${viewport.width}x${viewport.height}`);
       assert.ok(view.hintBounds.top >= 0 && view.hintBounds.bottom <= viewport.height, `context hint outside viewport at ${viewport.width}x${viewport.height}`);
-      assert.ok(view.rnaBounds.right <= viewport.width && view.rnaBounds.top >= 0, `RNA pickup outside viewport at ${viewport.width}x${viewport.height}`);
-      assert.ok(view.rnaBounds.right <= view.timerBounds.left || view.rnaBounds.left >= view.timerBounds.right || view.rnaBounds.bottom <= view.timerBounds.top || view.rnaBounds.top >= view.timerBounds.bottom, `RNA pickup overlaps timer at ${viewport.width}x${viewport.height}`);
-      assert.ok(view.rnaBounds.right <= view.killsBounds.left || view.rnaBounds.left >= view.killsBounds.right || view.rnaBounds.bottom <= view.killsBounds.top || view.rnaBounds.top >= view.killsBounds.bottom, `RNA pickup overlaps kill counter at ${viewport.width}x${viewport.height}`);
-      await matrixPage.evaluate(() => {
-        const ui = window.__game.scene.getScene('UI');
-        ui.tweens.killTweensOf(ui.rnaPickupText);
-        ui.rnaPickupText.setAlpha(1).setVisible(true);
-      });
       await matrixPage.screenshot({ path: path.join(captureDir, `comprehension-${viewport.width}x${viewport.height}.png`) });
 
       const modal = await matrixPage.evaluate(() => {
@@ -547,6 +548,106 @@ async function bootGame(page) {
       'returning run emitted first-run-only second Host Cell comprehension event'
     );
     await returning.close();
+
+    const resumeContext = await browser.newContext({ viewport: { width: 390, height: 740 }, deviceScaleFactor: 1 });
+    await prepareContext(resumeContext, 0);
+    const resumeEvents = [];
+    await resumeContext.route('**/api/event', async (route) => {
+      const request = route.request();
+      if (request.method() === 'POST') {
+        try { resumeEvents.push(JSON.parse(request.postData() || '{}')); } catch {}
+      }
+      await route.fulfill({ status: 202, contentType: 'application/json', body: '{"ok":true}' });
+    });
+    const resumePage = await resumeContext.newPage();
+    await bootGame(resumePage);
+    const resumeFixture = await resumePage.evaluate(() => {
+      const game = window.__game;
+      const gs = game.scene.getScene('Game');
+      gs.trackComprehensionOnce('first_enemy_hit');
+      gs.onHostCellInteraction({
+        type: 'approach',
+        x: gs.player.x,
+        y: gs.player.y,
+        radius: gs.runState.infectionRadius,
+        progress: 0,
+        interactionId: 9001,
+      });
+      // bootGame widens xpNext to freeze progression; restore the real level-1 value before
+      // exercising the production checkpoint validator.
+      gs.runState.stage.xp = 0;
+      gs.runState.stage.xpNext = 5;
+      const saved = gs.saveCheckpointNow();
+      const checkpoint = JSON.parse(localStorage.getItem('ofeliya_run_checkpoint_v1') || 'null');
+      const presentation = JSON.parse(localStorage.getItem('ofeliya_comprehension_v1') || 'null');
+      return { saved, checkpoint, presentation };
+    });
+    assert.equal(resumeFixture.saved, true, 'first-run checkpoint was not saved for resume regression');
+    assert.ok(resumeFixture.checkpoint, 'resume regression checkpoint missing');
+    assert.equal(resumeFixture.presentation?.runSeed, resumeFixture.checkpoint.runSeed, 'presentation state is not bound to checkpoint seed');
+    assert.ok(resumeFixture.presentation?.events?.includes('first_enemy_hit'), 'first-hit telemetry guard was not persisted');
+    assert.ok(resumeFixture.presentation?.hostCellHints?.includes('approach'), 'Host Cell hint guard was not persisted');
+    const firstHitBeforeResume = resumeEvents.filter((entry) => entry.event === 'first_enemy_hit').length;
+    const approachBeforeResume = resumeEvents.filter((entry) => entry.event === 'host_cell_approached').length;
+
+    await resumePage.evaluate((checkpoint) => {
+      const game = window.__game;
+      if (game.scene.isActive('UI') || game.scene.isPaused('UI')) game.scene.stop('UI');
+      if (game.scene.isActive('Game') || game.scene.isPaused('Game')) game.scene.stop('Game');
+      game.registry.set('runCheckpointResume', checkpoint);
+      game.scene.start('Game');
+    }, resumeFixture.checkpoint);
+    await resumePage.waitForFunction(() => {
+      const game = window.__game;
+      if (!game) return false;
+      const gs = game.scene.getScene('Game');
+      const ui = game.scene.getScene('UI');
+      return Boolean(gs?.enemyHealth && ui && (game.scene.isActive('Game') || game.scene.isPaused('Game')));
+    }, null, { timeout: 15000 });
+    const resumedFirstRun = await resumePage.evaluate(() => {
+      const game = window.__game;
+      const gs = game.scene.getScene('Game');
+      const ui = game.scene.getScene('UI');
+      let hintCount = 0;
+      const showHint = ui.showContextHint.bind(ui);
+      ui.showContextHint = (...args) => { hintCount += 1; showHint(...args); };
+      gs.trackComprehensionOnce('first_enemy_hit');
+      gs.onHostCellInteraction({
+        type: 'approach',
+        x: gs.player.x,
+        y: gs.player.y,
+        radius: gs.runState.infectionRadius,
+        progress: 0,
+        interactionId: 9002,
+      });
+      gs.onHostCellInteraction({
+        type: 'enter',
+        x: gs.player.x,
+        y: gs.player.y,
+        radius: gs.runState.infectionRadius,
+        progress: 0.1,
+        interactionId: 9002,
+      });
+      return {
+        resumed: gs.resumed,
+        firstRunComprehension: gs.firstRunComprehension,
+        firstHitRemembered: gs.comprehensionEventsSent.has('first_enemy_hit'),
+        approachRemembered: gs.hostCellHintEventsShown.has('approach'),
+        enterRemembered: gs.hostCellHintEventsShown.has('enter'),
+        hintCount,
+      };
+    });
+    await resumePage.waitForTimeout(250);
+    assert.equal(resumedFirstRun.resumed, true, 'checkpoint regression did not resume the run');
+    assert.equal(resumedFirstRun.firstRunComprehension, true, 'first-run teaching was disabled by checkpoint resume');
+    assert.equal(resumedFirstRun.firstHitRemembered, true, 'first-hit dedupe state was not restored');
+    assert.equal(resumedFirstRun.approachRemembered, true, 'shown Host Cell hint was not restored');
+    assert.equal(resumedFirstRun.enterRemembered, true, 'unseen first-run Host Cell teaching did not remain eligible after resume');
+    assert.equal(resumedFirstRun.hintCount, 1, 'resume should suppress the shown approach hint and show only the unseen enter hint');
+    assert.equal(resumeEvents.filter((entry) => entry.event === 'first_enemy_hit').length, firstHitBeforeResume, 'resume duplicated first_enemy_hit telemetry');
+    assert.equal(resumeEvents.filter((entry) => entry.event === 'host_cell_approached').length, approachBeforeResume, 'resume duplicated host_cell_approached telemetry');
+    await resumeContext.close();
+
     await context.close();
     console.log(`gameplay comprehension browser smoke: ok (${VIEWPORTS.map(({ width, height }) => `${width}x${height}`).join(', ')})`);
   } finally {

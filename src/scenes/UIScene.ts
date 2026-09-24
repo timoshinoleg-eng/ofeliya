@@ -480,17 +480,28 @@ export class UIScene extends Phaser.Scene {
     this.renderContextHint(pending.message, pending.duration);
   }
 
+  discardContextHint(): void {
+    this.pendingContextHint = null;
+    this.contextHintTimer?.remove(false);
+    this.contextHintTimer = null;
+    const container = this.contextHintContainer;
+    if (!container) return;
+    this.tweens.killTweensOf(container);
+    container.setVisible(false).setAlpha(1).setY(116);
+  }
+
   private layoutRnaPickupFeedback(): void {
     if (!this.levelText || !this.rnaPickupText) return;
-    this.rnaPickupText.setPosition(
-      this.levelText.x + this.levelText.width + 6,
-      HUD.row.levelY
-    );
     const timerLeft = this.timerText.x - this.timerText.width / 2;
-    if (this.rnaPickupText.x + this.rnaPickupText.width > timerLeft - 4) {
+    const maxRight = timerLeft - 4;
+    this.rnaPickupText
+      .setFontSize(11)
+      .setPosition(this.levelText.x + this.levelText.width + 6, HUD.row.levelY);
+    if (this.rnaPickupText.x + this.rnaPickupText.width > maxRight) {
       this.rnaPickupText.setFontSize(10);
-    } else {
-      this.rnaPickupText.setFontSize(11);
+    }
+    if (this.rnaPickupText.x + this.rnaPickupText.width > maxRight) {
+      this.rnaPickupText.setVisible(false);
     }
   }
 
@@ -1507,7 +1518,10 @@ export class UIScene extends Phaser.Scene {
           this.uiBlocked = false;
           (this.fanfare as TintableEmitter).setParticleTint?.(COLORS.cyan);
           if (moreChoices) this.showLevelUp();
-          else this.scene.resume('Game');
+          else {
+            this.flushContextHint();
+            this.scene.resume('Game');
+          }
         },
       });
     };
@@ -1621,7 +1635,10 @@ export class UIScene extends Phaser.Scene {
           this.uiBlocked = false;
           (this.fanfare as TintableEmitter).setParticleTint?.(COLORS.cyan);
           if (moreChoices) this.showLevelUp();
-          else this.scene.resume('Game');
+          else {
+            this.flushContextHint();
+            this.scene.resume('Game');
+          }
         },
       });
     });

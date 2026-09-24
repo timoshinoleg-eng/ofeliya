@@ -102,6 +102,16 @@ interface CoreMark {
   windowUntil: number;
 }
 
+type HostCellHintType = 'approach' | 'enter' | 'exit';
+
+interface ComprehensionPresentationState {
+  runSeed: string;
+  events: ProductEvent[];
+  hostCellHints: HostCellHintType[];
+}
+
+const COMPREHENSION_STATE_KEY = 'ofeliya_comprehension_v1';
+
 export class GameScene extends Phaser.Scene {
   player!: Player;
   runState!: RunState;
@@ -113,7 +123,7 @@ export class GameScene extends Phaser.Scene {
   private hostCells!: HostCellSystem;
   private firstRunComprehension = false;
   private hostCellsCompletedThisRun = 0;
-  private hostCellHintEventsShown = new Set<'approach' | 'enter' | 'exit'>();
+  private hostCellHintEventsShown = new Set<HostCellHintType>();
   private hostCellInteractionIdsWithHint = new Set<number>();
   private comprehensionEventsSent = new Set<ProductEvent>();
   private bullets!: Phaser.Physics.Arcade.Group;
@@ -251,10 +261,11 @@ export class GameScene extends Phaser.Scene {
     this.runState = new RunState(this.stageDirector.currentStage);
     if (resume) this.runState.restoreFromCheckpoint(resume.runState);
     this.resumed = resume !== null;
-    this.firstRunComprehension = !resume && SaveSystem.get().runs === 0;
-    this.hostCellsCompletedThisRun = 0;
+    this.firstRunComprehension = SaveSystem.get().runs === 0;
+    this.hostCellsCompletedThisRun = resume ? this.runState.run.hostCellsInfected : 0;
     this.hostCellHintEventsShown = new Set();
     this.hostCellInteractionIdsWithHint = new Set();
+    this.restoreComprehensionPresentationState();
     this.checkpointAccMs = 0;
     // Adaptive audio foundation: one deterministic bed per run plus danger-driven tension layers.
     // The director only observes gameplay; StageDirector keeps lifecycle authority.
@@ -267,7 +278,6 @@ export class GameScene extends Phaser.Scene {
     );
     PlatformBridge.setBackHandler(() => this.exitToMenu());
     this.queuedLevels = 0;
-    this.comprehensionEventsSent = new Set<ProductEvent>();
     this.awaitingChoice = false;
     this.pendingChoices = [];
     this.legendaryRewardPending = false;
@@ -788,10 +798,9 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     if (this.hostCellHintEventsShown.has(event.type)) return;
-    this.hostCellHintEventsShown.add(event.type);
 
     const copy = {
-      approach: 'КЛЕТКА ХОЗЯИНА · ЗАРАЗИ РЯДОМ',
+      approach: 'КЛЕТКА ОРГАНИЗМА · ЗАРАЗИ РЯДОМ',
       enter: 'ЗАРАЖЕНИЕ НАЧАЛОСЬ · ОСТАВАЙСЯ РЯДОМ',
       exit: 'ВНЕ ЗОНЫ · ЗАРАЖЕНИЕ ОСЛАБЕВАЕТ',
       resume: '',
@@ -799,6 +808,8 @@ export class GameScene extends Phaser.Scene {
     const ui = this.getUiScene();
     if (ui) {
       ui.showContextHint(copy);
+      this.hostCellHintEventsShown.add(event.type);
+      this.persistComprehensionPresentationState();
       this.hostCellInteractionIdsWithHint.add(event.interactionId);
     }
   }
@@ -1470,6 +1481,7 @@ export class GameScene extends Phaser.Scene {
   private resetStageWorld(nextStage: StageDefinition): void {
     this.milestones.reset();
     this.enemyHealth.clear();
+    this.getUiScene()?.discardContextHint();
     this.hostCells.resetStage();
     this.resetCardiacLineHazard();
     this.wave.boss = null;
@@ -1637,9 +1649,63 @@ export class GameScene extends Phaser.Scene {
     this.enemyHealth?.hide(enemy);
   }
 
+  private restoreComprehensionPresentationState(): void {
+    this.comprehensionEventsSent = new Set<ProductEvent>();
+    this.hostCellHintEventsShown = new Set<HostCellHintType>();
+    try {
+      const raw = localStorage.getItem(COMPREHENSION_STATE_KEY);
+      if (!raw) return;
+      const stored = JSON.parse(raw) as Partial<ComprehensionPresentationState>;
+      if (stored.runSeed !== this.runSeed) {
+        localStorage.removeItem(COMPREHENSION_STATE_KEY);
+        return;
+      }
+      if (Array.isArray(stored.events)) {
+        for (const event of stored.events) {
+          if (typeof event === 'string') this.comprehensionEventsSent.add(event as ProductEvent);
+        }
+      }
+      if (Array.isArray(stored.hostCellHints)) {
+        for (const hint of stored.hostCellHints) {
+          if (hint === 'approach' || hint === 'enter' || hint === 'exit') {
+            this.hostCellHintEventsShown.add(hint);
+          }
+        }
+      }
+    } catch {
+      try {
+        localStorage.removeItem(COMPREHENSION_STATE_KEY);
+      } catch {
+        // Storage can be unavailable in hardened webviews; gameplay must remain unaffected.
+      }
+    }
+  }
+
+  private persistComprehensionPresentationState(): void {
+    try {
+      const state: ComprehensionPresentationState = {
+        runSeed: this.runSeed,
+        events: [...this.comprehensionEventsSent],
+        hostCellHints: [...this.hostCellHintEventsShown],
+      };
+      localStorage.setItem(COMPREHENSION_STATE_KEY, JSON.stringify(state));
+    } catch {
+      // Presentation telemetry must never affect gameplay if storage is unavailable.
+    }
+  }
+
+  private clearComprehensionPresentationState(): void {
+    try {
+      localStorage.removeItem(COMPREHENSION_STATE_KEY);
+    } catch {
+      // Ignore storage failures during run teardown.
+    }
+  }
+
   private trackComprehensionOnce(event: ProductEvent, props: ProductEventProps = {}): void {
     if (this.comprehensionEventsSent.has(event)) return;
     this.comprehensionEventsSent.add(event);
+    this.persistComprehensionPresentationState();
     void trackProductEvent(event, PlatformBridge, props);
   }
 
@@ -1701,6 +1767,7 @@ export class GameScene extends Phaser.Scene {
     if (this.stageDirector.phase !== 'RUN_ENDED') this.stageDirector.endRun(reason);
     this.resetCardiacLineHazard();
     RunCheckpoint.clear();
+    this.clearComprehensionPresentationState();
     this.runState.captureStageBuild();
     const run = this.runState.run;
     const stage = this.runState.stage;
