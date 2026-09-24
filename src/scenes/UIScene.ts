@@ -41,6 +41,13 @@ import type { GameScene } from './GameScene';
 
 const DEPTH = 50;
 
+function compactHudNumber(value: number): string {
+  const rounded = Math.max(0, Math.round(value));
+  if (rounded >= 1_000_000) return `${Math.round(rounded / 100_000) / 10}M`;
+  if (rounded >= 1_000) return `${Math.round(rounded / 100) / 10}K`;
+  return String(rounded);
+}
+
 type TintableEmitter = Phaser.GameObjects.Particles.ParticleEmitter & {
   setParticleTint?: (color: number) => void;
 };
@@ -298,6 +305,11 @@ export class UIScene extends Phaser.Scene {
         this.timerText.x - this.timerText.width / 2 - this.levelText.x - 8;
       if (this.levelText.width > availableLabelWidth) {
         this.levelText.setText(`РНК ${run.xp}/${run.xpNext}`);
+      }
+      if (this.levelText.width > availableLabelWidth) {
+        this.levelText.setText(
+          `РНК ${compactHudNumber(run.xp)}/${compactHudNumber(run.xpNext)}`
+        );
       }
       this.layoutRnaPickupFeedback();
       this.killsText.setText(`УНИЧТОЖЕНО ${run.kills}`);
