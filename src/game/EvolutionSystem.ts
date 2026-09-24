@@ -37,8 +37,8 @@ export const EVOLUTIONS: EvolutionDef[] = [
   {
     id: 'singularity',
     name: EVOLUTION_NAMES.singularity,
-    effect: 'Импульс стягивает врагов, затем взрывается наружу',
-    desc: 'Перед каждой круговой волной ближайшие враги стягиваются к OFELIYA.',
+    effect: 'Импульс стягивает обычных врагов, затем отбрасывает взрывом',
+    desc: 'Перед каждой круговой волной обычные враги рядом кратко стягиваются к OFELIYA. Боссы не притягиваются.',
     recipe: 'МЕМБРАННЫЙ ИМПУЛЬС III + РНК-АФФИНИТЕТ II',
     eligible: (s) => s.stackOf('nova') >= 3 && s.stackOf('magnet') >= 2,
   },
