@@ -869,7 +869,7 @@ export class UIScene extends Phaser.Scene {
 
     const cards = gs.pendingChoices;
     const cw = Math.min(W - 16, 374);
-    const ch = compact ? 112 : 136;
+    const ch = compact ? 124 : 148;
     const gap = compact ? 9 : 11;
     const totalH = cards.length * ch + (cards.length - 1) * gap;
     const blockCenter = compact ? H * 0.59 : H * 0.57;
@@ -969,38 +969,42 @@ export class UIScene extends Phaser.Scene {
           .setResolution(2)
       );
 
-      const effectY = ch / 2 - (compact ? 36 : 40);
       const effectW = Math.max(108, right - tx);
+      const descY = -ch / 2 + (compact ? 46 : 50);
+      card.add(
+        this.add
+          .text(tx, descY, def.desc, {
+            fontFamily: UI_FONT,
+            fontSize: compact ? '11px' : '12px',
+            fontStyle: '500',
+            color: special ? '#ddd6c3' : '#c8c1cf',
+            lineSpacing: 1,
+            maxLines: 2,
+            wordWrap: { width: effectW, useAdvancedWrap: true },
+          })
+          .setResolution(2)
+      );
+
+      const effectY = ch / 2 - (compact ? 37 : 44);
       const effectPlate = this.add
-        .rectangle(tx + effectW / 2, effectY, effectW, compact ? 21 : 24, accent, 0.11)
+        .rectangle(tx + effectW / 2, effectY, effectW, compact ? 30 : 32, accent, 0.11)
         .setStrokeStyle(1, accent, 0.3);
       card.add(effectPlate);
       card.add(
         this.add
           .text(tx + 8, effectY, def.name, {
             fontFamily: UI_FONT,
-            fontSize: compact ? '11px' : '13px',
+            fontSize: compact ? '11px' : '12px',
             fontStyle: '700',
             color: legendary || evolution ? '#fff1ac' : def.rarity === 'rare' ? '#ddd0ff' : '#9ef1ff',
-            wordWrap: { width: Math.max(92, effectW - 16) },
+            align: 'left',
+            lineSpacing: -1,
+            maxLines: 2,
+            wordWrap: { width: Math.max(92, effectW - 16), useAdvancedWrap: true },
           })
           .setOrigin(0, 0.5)
           .setResolution(2)
       );
-
-      if (!evolution && def.evolutionHint) {
-        card.add(
-          this.add
-            .text(right, -ch / 2 + 9, `→ ${EVOLUTION_NAMES[def.evolutionHint]}`, {
-              fontFamily: FONT,
-              fontSize: compact ? '11px' : '12px',
-              fontStyle: 'bold',
-              color: '#ffe88a',
-            })
-            .setOrigin(1, 0)
-            .setResolution(2)
-        );
-      }
 
       if (def.showProgress !== false && def.max <= 8) {
         const pg = this.add.graphics();
@@ -1019,7 +1023,7 @@ export class UIScene extends Phaser.Scene {
         card.add(pg);
         card.add(
           this.add
-            .text(right, barY - 5, `${progress.current} → ${progress.next} / ${progress.max}`, {
+            .text(right, barY - 5, `УРОВЕНЬ ${progress.next}/${progress.max}`, {
               fontFamily: UI_FONT,
               fontSize: compact ? '11px' : '13px',
               fontStyle: '700',
@@ -1932,7 +1936,7 @@ export class UIScene extends Phaser.Scene {
       hp: 'КАПСИД',
       magnet: 'МАГНИТ',
       orbit: 'СПУТНИКИ',
-      nova: 'ЛИЗИС',
+      nova: 'ИМПУЛЬС',
       regen: 'РЕГЕН.',
       infect: 'ЗАРАЖЕНИЕ',
       lysis: 'ЦИТОЛИЗ',
