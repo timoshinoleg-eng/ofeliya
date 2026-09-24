@@ -390,6 +390,7 @@ function assertMutation(contract, compact) {
 
   for (const size of [
     { width: 390, height: 740, capture: true },
+    { width: 390, height: 620, capture: false },
     { width: 360, height: 640, capture: false },
   ]) {
     const { ctx, page, errors } = await openCase(browser, size);
