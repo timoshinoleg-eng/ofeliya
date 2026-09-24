@@ -11,6 +11,9 @@ interface HostCellSlot {
   infection: number;
   phase: number;
   spawnedAt: number;
+  wasInside: boolean;
+  approachNotified: boolean;
+  enteredOnce: boolean;
 }
 
 export interface HostCellTuning {
@@ -28,6 +31,14 @@ export interface HostCellLysisEvent {
   radius: number;
   damage: number;
 }
+
+export type HostCellInteractionEvent = {
+  type: 'approach' | 'enter' | 'exit' | 'resume';
+  x: number;
+  y: number;
+  radius: number;
+  progress: number;
+};
 
 export interface HostCellCheckpointSlot {
   active: boolean;
@@ -54,6 +65,7 @@ export class HostCellSystem {
   private readonly onLysis: (event: HostCellLysisEvent) => void;
   private readonly tuningFn: () => HostCellTuning;
   private readonly gameplayRandom: () => number;
+  private readonly onInteraction?: (event: HostCellInteractionEvent) => void;
   private readonly cells: HostCellSlot[] = [];
   private spawnAcc = 0;
   private firstSpawned = false;
@@ -70,13 +82,15 @@ export class HostCellSystem {
     }),
     gameplayRandom: () => number = () => {
       throw new Error('HostCellSystem gameplay RNG is not configured');
-    }
+    },
+    onInteraction?: (event: HostCellInteractionEvent) => void
   ) {
     this.scene = scene;
     this.player = player;
     this.onLysis = onLysis;
     this.tuningFn = tuningFn;
     this.gameplayRandom = gameplayRandom;
+    this.onInteraction = onInteraction;
 
     for (let i = 0; i < 6; i++) {
       const image = scene.add
@@ -101,6 +115,9 @@ export class HostCellSystem {
         infection: 0,
         phase: i * 1.23,
         spawnedAt: 0,
+        wasInside: false,
+        approachNotified: false,
+        enteredOnce: false,
       });
     }
   }
@@ -125,6 +142,13 @@ export class HostCellSystem {
       const dy = this.player.y - cell.image.y;
       const distance = Math.hypot(dx, dy);
       const inside = distance <= tuning.infectionRadius;
+      const approachRadius = Math.max(tuning.infectionRadius + 36, tuning.infectionRadius * 1.6);
+      const progressBefore = cell.infection;
+
+      if (!cell.approachNotified && distance <= approachRadius) {
+        cell.approachNotified = true;
+        this.emitInteraction(cell, 'approach', tuning.infectionRadius);
+      }
 
       if (inside) {
         cell.infection = Math.min(1, cell.infection + delta / Math.max(250, tuning.infectionMs));
@@ -132,6 +156,20 @@ export class HostCellSystem {
         // Progress decays gently, so a brief dodge does not erase the interaction.
         cell.infection = Math.max(0, cell.infection - delta / 5000);
       }
+
+      if (inside && !cell.wasInside) {
+        const type = progressBefore > 0 ? 'resume' : 'enter';
+        this.emitInteraction(cell, type, tuning.infectionRadius);
+        cell.enteredOnce = true;
+      } else if (
+        cell.wasInside &&
+        !inside &&
+        cell.infection > 0 &&
+        cell.infection < 1
+      ) {
+        this.emitInteraction(cell, 'exit', tuning.infectionRadius);
+      }
+      cell.wasInside = inside;
 
       const infected = cell.infection;
       const pulse = 1 + Math.sin(time * 0.003 + cell.phase) * 0.025;
@@ -190,9 +228,25 @@ export class HostCellSystem {
       );
       cell.ring.strokePath();
 
-      if (inside && infected > 0 && infected < 1) {
-        cell.ring.lineStyle(1, COLORS.white, 0.09 + infected * 0.08);
-        cell.ring.strokeCircle(cell.image.x, cell.image.y, tuning.infectionRadius);
+      if (distance <= approachRadius) {
+        // Faint short arcs expose the exact runtime gameplay boundary, separately from the
+        // persistent membrane locator and the infection progress arc.
+        cell.ring.lineStyle(1.25, COLORS.white, inside ? 0.36 : 0.2);
+        const segmentCount = 12;
+        const segmentArc = (Math.PI * 2) / segmentCount * 0.48;
+        for (let i = 0; i < segmentCount; i++) {
+          const start = (i / segmentCount) * Math.PI * 2 - Math.PI / 2;
+          cell.ring.beginPath();
+          cell.ring.arc(
+            cell.image.x,
+            cell.image.y,
+            tuning.infectionRadius,
+            start,
+            start + segmentArc,
+            false
+          );
+          cell.ring.strokePath();
+        }
       }
 
       // Membrane warning arcs appear only near rupture, replacing a generic progress-circle feel.
@@ -239,6 +293,9 @@ export class HostCellSystem {
       cell.active = true;
       cell.infection = saved.infection;
       cell.spawnedAt = now - saved.spawnedAgoMs;
+      cell.wasInside = false;
+      cell.approachNotified = false;
+      cell.enteredOnce = false;
       cell.image
         .setPosition(saved.x, saved.y)
         .setVisible(true)
@@ -281,6 +338,9 @@ export class HostCellSystem {
       cell.active = false;
       cell.infection = 0;
       cell.spawnedAt = 0;
+      cell.wasInside = false;
+      cell.approachNotified = false;
+      cell.enteredOnce = false;
       cell.image.setVisible(false).setAlpha(0).clearTint().setRotation(0).setScale(0.78);
       cell.infectionOverlay.setVisible(false).setAlpha(0).setRotation(0).setScale(0.78);
       cell.ring.setVisible(false).clear();
@@ -339,6 +399,9 @@ export class HostCellSystem {
     slot.active = true;
     slot.infection = 0;
     slot.spawnedAt = this.scene.time.now;
+    slot.wasInside = false;
+    slot.approachNotified = false;
+    slot.enteredOnce = false;
     slot.image
       .setPosition(x, y)
       .setVisible(true)
@@ -369,6 +432,9 @@ export class HostCellSystem {
     cell.active = false;
     cell.infection = 0;
     cell.spawnedAt = 0;
+    cell.wasInside = false;
+    cell.approachNotified = false;
+    cell.enteredOnce = false;
     cell.ring.setVisible(false).clear();
 
     // Preserve the texture's native magenta/green membrane colors. Applying a green tint here
@@ -472,6 +538,20 @@ export class HostCellSystem {
       rna: Math.max(1, Math.round(tuning.rna)),
       radius: Math.max(60, tuning.lysisRadius),
       damage: Math.max(1, tuning.lysisDamage),
+    });
+  }
+
+  private emitInteraction(
+    cell: HostCellSlot,
+    type: HostCellInteractionEvent['type'],
+    radius: number
+  ): void {
+    this.onInteraction?.({
+      type,
+      x: cell.image.x,
+      y: cell.image.y,
+      radius,
+      progress: cell.infection,
     });
   }
 }

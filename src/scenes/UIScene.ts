@@ -61,6 +61,11 @@ export class UIScene extends Phaser.Scene {
   private rnaPickupText!: Phaser.GameObjects.Text;
   private rnaPickupTotal = 0;
   private rnaPickupTimer: Phaser.Time.TimerEvent | null = null;
+  private contextHintContainer: Phaser.GameObjects.Container | null = null;
+  private contextHintPanel: Phaser.GameObjects.Rectangle | null = null;
+  private contextHintText: Phaser.GameObjects.Text | null = null;
+  private contextHintTimer: Phaser.Time.TimerEvent | null = null;
+  private pendingContextHint: { message: string; duration: number } | null = null;
   private killsText!: Phaser.GameObjects.Text;
   private hpText!: Phaser.GameObjects.Text;
   private muteText!: Phaser.GameObjects.Text;
@@ -99,6 +104,11 @@ export class UIScene extends Phaser.Scene {
     this.manualPaused = false;
     this.rnaPickupTotal = 0;
     this.rnaPickupTimer = null;
+    this.contextHintContainer = null;
+    this.contextHintPanel = null;
+    this.contextHintText = null;
+    this.contextHintTimer = null;
+    this.pendingContextHint = null;
 
     const W = this.scale.width;
 
@@ -135,6 +145,24 @@ export class UIScene extends Phaser.Scene {
     this.rnaPickupText = text(0, 0, '', 11, '#baffd8', 0)
       .setFontStyle('bold')
       .setShadow(0, 1, '#02030a', 3, true, true)
+      .setVisible(false);
+    this.contextHintPanel = this.add
+      .rectangle(0, 0, Math.min(W - 28, 360), 44, 0x071410, 0.88)
+      .setStrokeStyle(1, COLORS.green, 0.68);
+    this.contextHintText = this.add
+      .text(0, 0, '', {
+        fontFamily: UI_FONT,
+        fontSize: W < 370 ? '11px' : '12px',
+        fontStyle: '700',
+        color: '#eafff1',
+        align: 'center',
+        wordWrap: { width: Math.min(W - 52, 332), useAdvancedWrap: true },
+      })
+      .setOrigin(0.5)
+      .setResolution(2);
+    this.contextHintContainer = this.add
+      .container(W / 2, 158, [this.contextHintPanel, this.contextHintText])
+      .setDepth(DEPTH + 8)
       .setVisible(false);
     this.killsText = text(W - 16, HUD.row.killsY, 'УНИЧТОЖЕНО 0', 14, '#e9fbff', 1)
       .setFontStyle('bold')
@@ -235,6 +263,11 @@ export class UIScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.layout, this);
       this.rnaPickupTimer = null;
+      this.contextHintTimer = null;
+      this.pendingContextHint = null;
+      this.contextHintContainer = null;
+      this.contextHintPanel = null;
+      this.contextHintText = null;
       this.pauseOverlay = null;
       this.manualPaused = false;
       VideoInterstitial.cancelActive();
@@ -371,6 +404,68 @@ export class UIScene extends Phaser.Scene {
     });
   }
 
+  showContextHint(message: string, duration = 1800): void {
+    if (!message || !this.contextHintContainer || !this.contextHintText) return;
+    if (this.modalOpen || this.uiBlocked || this.transitionOverlay || this.overShown) {
+      this.pendingContextHint = { message, duration };
+      this.contextHintTimer?.remove(false);
+      this.contextHintTimer = null;
+      this.contextHintContainer.setVisible(false);
+      return;
+    }
+    this.renderContextHint(message, duration);
+  }
+
+  private renderContextHint(message: string, duration: number): void {
+    const container = this.contextHintContainer;
+    const label = this.contextHintText;
+    if (!container || !label) return;
+    this.contextHintTimer?.remove(false);
+    this.contextHintTimer = null;
+    this.tweens.killTweensOf(container);
+    label.setText(message);
+    container.setVisible(true).setAlpha(0).setY(166);
+    this.tweens.add({ targets: container, alpha: 1, y: 158, duration: 140, ease: 'Quad.Out' });
+    this.contextHintTimer = this.time.delayedCall(duration, () => {
+      this.contextHintTimer = null;
+      this.tweens.add({
+        targets: container,
+        alpha: 0,
+        y: 152,
+        duration: 170,
+        ease: 'Quad.In',
+        onComplete: () => container.setVisible(false),
+      });
+    });
+  }
+
+  private suspendContextHint(): void {
+    const container = this.contextHintContainer;
+    const label = this.contextHintText;
+    if (container?.visible && label?.text) {
+      this.pendingContextHint = { message: label.text, duration: 1200 };
+      this.contextHintTimer?.remove(false);
+      this.contextHintTimer = null;
+      this.tweens.killTweensOf(container);
+      container.setVisible(false).setAlpha(1).setY(158);
+    }
+  }
+
+  private flushContextHint(): void {
+    if (
+      !this.pendingContextHint ||
+      this.modalOpen ||
+      this.uiBlocked ||
+      this.transitionOverlay ||
+      this.overShown
+    ) {
+      return;
+    }
+    const pending = this.pendingContextHint;
+    this.pendingContextHint = null;
+    this.renderContextHint(pending.message, pending.duration);
+  }
+
   showStageTransition(
     fromName: string,
     toName: string,
@@ -378,8 +473,9 @@ export class UIScene extends Phaser.Scene {
     onSkip: () => void,
     videoId?: VideoInterstitialId
   ): boolean {
+    this.suspendContextHint();
     this.hideModal();
-    this.hideStageTransition();
+    this.hideStageTransition(false);
     this.uiBlocked = true;
     this.resetControls();
 
@@ -676,16 +772,18 @@ export class UIScene extends Phaser.Scene {
     });
   }
 
-  hideStageTransition(): void {
+  hideStageTransition(flushPending = true): void {
     VideoInterstitial.cancelActive();
     if (!this.transitionOverlay) {
       this.uiBlocked = false;
+      if (flushPending) this.flushContextHint();
       return;
     }
     this.tweens.killTweensOf(this.transitionOverlay);
     this.transitionOverlay.destroy(true);
     this.transitionOverlay = null;
     this.uiBlocked = false;
+    if (flushPending) this.flushContextHint();
   }
 
   dismissProgressionForStageBoundary(): void {
@@ -741,6 +839,11 @@ export class UIScene extends Phaser.Scene {
     this.pauseHit.setPosition(W - HUD.pauseVisual.x, HUD.pauseVisual.y);
     this.pauseText.setPosition(W - HUD.pauseVisual.x, HUD.pauseVisual.y);
     this.comboText.setPosition(HUD.row.comboX, HUD.row.comboY).setFontSize(HUD.type.combo);
+    this.contextHintContainer?.setPosition(W / 2, 158);
+    this.contextHintPanel?.setSize(Math.min(W - 28, 360), 44);
+    this.contextHintText
+      ?.setFontSize(W < 370 ? 11 : 12)
+      .setWordWrapWidth(Math.min(W - 52, 332));
   }
 
   private hudMetrics(W: number): {
@@ -789,6 +892,7 @@ export class UIScene extends Phaser.Scene {
 
     this.manualPaused = true;
     this.uiBlocked = true;
+    this.suspendContextHint();
     this.resetControls();
     this.scene.pause('Game');
     PlatformBridge.haptic('light');
@@ -842,6 +946,7 @@ export class UIScene extends Phaser.Scene {
     this.uiBlocked = false;
     this.resetControls();
     if (resumeGame && this.scene.isPaused('Game')) this.scene.resume('Game');
+    this.flushContextHint();
   }
 
   private showLevelUp(): void {
@@ -849,6 +954,7 @@ export class UIScene extends Phaser.Scene {
     if (!gs) return;
     this.modalOpen = true;
     this.uiBlocked = true;
+    this.suspendContextHint();
     this.resetControls();
     this.scene.pause('Game');
     Sfx.play('levelup');
@@ -1138,6 +1244,7 @@ export class UIScene extends Phaser.Scene {
           this.showLevelUp();
         } else {
           this.hideModal();
+          this.flushContextHint();
           this.scene.resume('Game');
         }
       });
@@ -1499,6 +1606,10 @@ export class UIScene extends Phaser.Scene {
   }
 
   private showGameOver(res: RunResult): void {
+    this.pendingContextHint = null;
+    this.contextHintTimer?.remove(false);
+    this.contextHintTimer = null;
+    this.contextHintContainer?.setVisible(false);
     this.uiBlocked = true;
     const id: VideoInterstitialId = res.win ? 'victory' : 'defeat';
     let rendered = false;

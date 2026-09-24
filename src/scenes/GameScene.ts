@@ -86,7 +86,11 @@ import { MUSIC_TRACK_COUNT, Sfx } from '../systems/Sfx';
 import { VfxSystem } from '../systems/VfxSystem';
 import { VideoInterstitial } from '../systems/VideoInterstitial';
 import { PERFORMANCE } from '../systems/PerformanceProfile';
-import { HostCellSystem, type HostCellLysisEvent } from '../systems/HostCellSystem';
+import {
+  HostCellSystem,
+  type HostCellInteractionEvent,
+  type HostCellLysisEvent,
+} from '../systems/HostCellSystem';
 import { trackProductEvent, type ProductEvent, type ProductEventProps } from '../systems/AnalyticsClient';
 import type { UIScene } from './UIScene';
 
@@ -105,6 +109,10 @@ export class GameScene extends Phaser.Scene {
   private vignette!: Phaser.GameObjects.Image;
   private vfx!: VfxSystem;
   private hostCells!: HostCellSystem;
+  private firstRunComprehension = false;
+  private firstHostCellTutorialFinished = false;
+  private hostCellsCompletedThisRun = 0;
+  private hostCellHintEventsShown = new Set<'approach' | 'enter' | 'exit'>();
   private comprehensionEventsSent = new Set<ProductEvent>();
   private bullets!: Phaser.Physics.Arcade.Group;
   private enemies!: Phaser.Physics.Arcade.Group;
@@ -241,6 +249,10 @@ export class GameScene extends Phaser.Scene {
     this.runState = new RunState(this.stageDirector.currentStage);
     if (resume) this.runState.restoreFromCheckpoint(resume.runState);
     this.resumed = resume !== null;
+    this.firstRunComprehension = !resume && SaveSystem.get().runs === 0;
+    this.firstHostCellTutorialFinished = false;
+    this.hostCellsCompletedThisRun = 0;
+    this.hostCellHintEventsShown = new Set();
     this.checkpointAccMs = 0;
     // Adaptive audio foundation: one deterministic bed per run plus danger-driven tension layers.
     // The director only observes gameplay; StageDirector keeps lifecycle authority.
@@ -331,7 +343,8 @@ export class GameScene extends Phaser.Scene {
         lysisRadius: this.runState.hostLysisRadius,
         lysisDamage: this.runState.hostLysisDamage,
       }),
-      () => this.gameplayRng.next('host-cell')
+      () => this.gameplayRng.next('host-cell'),
+      (event) => this.onHostCellInteraction(event)
     );
 
     this.dmgTexts = [];
@@ -700,6 +713,11 @@ export class GameScene extends Phaser.Scene {
 
   private onHostCellLysis(event: HostCellLysisEvent): void {
     this.runState.recordHostCellInfected();
+    this.hostCellsCompletedThisRun += 1;
+    if (this.hostCellsCompletedThisRun === 1) this.firstHostCellTutorialFinished = true;
+    if (this.hostCellsCompletedThisRun === 2 && this.firstHostCellTutorialFinished) {
+      this.trackComprehensionOnce('second_host_cell_completed_without_hint');
+    }
     // Gameplay radius is unchanged; the smaller visual nova leaves room for the membrane contour.
     this.vfx.nova(event.x, event.y, event.radius * 0.72);
     this.atmosphere.pulse(COLORS.green, 0.14);
@@ -731,6 +749,29 @@ export class GameScene extends Phaser.Scene {
       );
     }
     if (this.runState.hasLegendary('lysis-chain')) this.triggerLysisChain(event, list);
+  }
+
+  private onHostCellInteraction(event: HostCellInteractionEvent): void {
+    const analyticsEvent: Record<HostCellInteractionEvent['type'], ProductEvent> = {
+      approach: 'host_cell_approached',
+      enter: 'infection_started',
+      exit: 'infection_interrupted',
+      resume: 'infection_resumed',
+    };
+    this.trackComprehensionOnce(analyticsEvent[event.type], { progress: event.progress });
+
+    if (!this.firstRunComprehension || this.firstHostCellTutorialFinished) return;
+    if (event.type === 'resume') return;
+    if (this.hostCellHintEventsShown.has(event.type)) return;
+    this.hostCellHintEventsShown.add(event.type);
+
+    const copy = {
+      approach: 'КЛЕТКА ХОЗЯИНА · ПОДОЙДИ БЛИЖЕ, ЧТОБЫ ЗАРАЗИТЬ',
+      enter: 'ЗАРАЖЕНИЕ НАЧАЛОСЬ · ОСТАВАЙСЯ РЯДОМ',
+      exit: 'ВНЕ ЗОНЫ · ЗАРАЖЕНИЕ ОСЛАБЕВАЕТ',
+      resume: '',
+    }[event.type];
+    this.getUiScene()?.showContextHint(copy);
   }
 
   private hitStop(ms: number): void {
