@@ -14,6 +14,7 @@ const compose = read('deploy/compose.production.yml');
 const runtimeConfig = read('public/runtime-config.js');
 const serviceWorker = read('public/sw.js');
 const envExample = read('deploy/ofeliya.env.example');
+const main = read('src/main.ts');
 
 const runtimePos = index.indexOf('./runtime-config.js');
 const maxBridgePos = index.indexOf('https://st.max.ru/js/max-web-app.js');
@@ -25,6 +26,8 @@ assert.match(
   /new URL\('api\/score', window\.location\.href\)/,
   'score API must resolve relative to the deployed Mini App prefix'
 );
+assert.doesNotMatch(main, /await retryPendingDailySubmission\(/, 'pending score replay must not block startup');
+assert.ok(main.indexOf('await boot();') < main.lastIndexOf('retryPendingScores();'), 'pending score replay must begin after playable boot');
 
 // Ofeliya and Hub are separate Mini Apps. Reusing /hub/* or HUB_* bot identity
 // makes MAX open the Hub/old app even when the UI says OFELIYA.

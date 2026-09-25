@@ -176,8 +176,8 @@ await ok('TG: валидный initData принимается', async () => {
     }),
   }));
   assert.equal(r.ok, true);
-  assert.equal(r.rank, null);
-  assert.equal(r.ranked, false);
+  assert.equal(r.ranked, true);
+  assert.ok(r.rank !== null);
 });
 
 await ok('TG: подделанный initData отклоняется (403)', async () => {
@@ -273,12 +273,15 @@ await ok('ruleset v2: Standard campaign win принимается и ранжи
     }),
   }));
   assert.equal(r.ok, true);
-  assert.equal(r.ranked, false);
-  assert.equal(r.rank, null);
+  assert.equal(r.ranked, true);
+  assert.equal(r.rank, 1);
   assert.equal(r.rulesetVersion, 2);
   const top = await j(await fetch(`${BASE}/api/top?period=all`));
   assert.equal(top.rulesetVersion, 2);
-  assert.equal(top.top.length, 0, 'client-reported scores must not enter ranked leaderboards');
+  assert.equal(top.top.length, 1);
+  assert.equal(top.top[0].difficultyId, 'standard');
+  assert.equal(top.top[0].completionStage, 'heart');
+  assert.equal(top.top[0].rulesetVersion, 2);
 });
 
 await ok('ruleset v2: победа раньше 9:00 невозможна (422)', async () => {
@@ -683,6 +686,8 @@ await ok('Daily V2: сервер выдаёт identity-bound ticket и пере�
   const scored = await j(scoreResponse);
   assert.equal(scored.ok, true);
   assert.equal(scored.dailyRunAccepted, true);
+  assert.equal(scored.ranked, true);
+  assert.ok(scored.rank !== null);
   const retry = await fetch(`${BASE}/api/score`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -700,6 +705,8 @@ await ok('Daily V2: сервер выдаёт identity-bound ticket и пере�
   const retried = await j(retry);
   assert.equal(retry.status, 200);
   assert.equal(retried.scoreId, scored.scoreId);
+  assert.equal(retried.ranked, scored.ranked);
+  assert.equal(retried.rank, scored.rank);
 
   const duplicate = await fetch(`${BASE}/api/score`, {
     method: 'POST',
@@ -866,28 +873,32 @@ await ok('browser: anonId принимается, но не попадает в 
   assert.ok(shadow.top.every((row) => !Object.hasOwn(row, 'uid')));
 });
 
-await ok('daily: недоверенные client-reported результаты не получают rank или статистику', async () => {
-  const now = Date.now();
-  const dk = () => {
-    const d = new Date(now);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  };
-  const entries = [
-    { platform: 'browser', anonId: 'anon-11111111', payload: { daily: true, win: true, timeMs: 312_000, kills: 9, level: 5, dateKey: dk() } },
-    { platform: 'browser', anonId: 'anon-22222222', payload: { daily: true, win: false, timeMs: 30_000, kills: 4, level: 3, dateKey: dk() } },
-    { platform: 'browser', anonId: 'anon-33333333', payload: { daily: true, win: true, timeMs: 320_000, kills: 20, level: 6, dateKey: dk() } },
-  ];
-  for (const body of entries) {
-    await j(await fetch(`${BASE}/api/score`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }));
-  }
-  const d = await j(await fetch(`${BASE}/api/daily`, {
+await ok('daily: authenticated stats ignore anonymous forged Daily rows', async () => {
+  const queryMine = () => fetch(`${BASE}/api/daily`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ platform: 'telegram', initData: signInitData(ALICE, TG_TOKEN) }),
+  }).then(j);
+  const before = await queryMine();
+  assert.equal(before.ok, true);
+  assert.ok(before.total >= 1);
+  assert.ok(before.rank !== null);
+  assert.ok(before.dateKey);
+  assert.ok(before.you);
+
+  const forgedScore = await j(await fetch(`${BASE}/api/score`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform: 'browser', anonId: 'anon-daily-forge-1234',
+      payload: { daily: true, win: true, timeMs: 312_000, kills: 9, level: 5, dateKey: before.dateKey },
+    }),
   }));
-  assert.equal(d.ok, true);
-  assert.equal(d.total, 0);
-  assert.equal(d.rank, null);
-  assert.equal(d.dateKey, null);
+  assert.equal(forgedScore.ok, true);
+  assert.equal(forgedScore.ranked, false);
+  const after = await queryMine();
+  assert.equal(after.total, before.total);
+  assert.equal(after.rank, before.rank);
+  assert.equal(after.dateKey, before.dateKey);
+
   const forged = await fetch(`${BASE}/api/daily?user=111&platform=telegram`);
   assert.equal(forged.status, 404);
 });
@@ -954,13 +965,11 @@ await ok('vk: валидный web_app_t → verified (общий топ)', asyn
     }),
   }));
   assert.equal(r.ok, true);
-  assert.equal(r.rank, null);
-  assert.equal(r.ranked, false);
+  assert.equal(r.ranked, true);
+  assert.ok(r.rank !== null);
   const top = await j(await fetch(`${BASE}/api/top?period=all&ruleset=legacy`));
-  assert.ok(!top.top.some((t) => t.platform === 'vk'));
-  const shadow = await j(await fetch(`${BASE}/api/top?period=all&ruleset=legacy&includeUnverified=1`));
-  assert.ok(shadow.top.some((t) => t.platform === 'vk'));
-  assert.ok(shadow.top.every((row) => !Object.hasOwn(row, 'uid')));
+  assert.ok(top.top.some((t) => t.platform === 'vk'));
+  assert.ok(top.top.every((row) => !Object.hasOwn(row, 'uid')));
 });
 
 await ok('vk: подделанный web_app_t → unverified (фолбэк на anonId)', async () => {
@@ -1308,6 +1317,8 @@ await ok('score submissionId retries return the same score without creating a du
   const first = await j(await submit(requestBody));
   const retry = await j(await submit(requestBody));
   assert.equal(retry.scoreId, first.scoreId);
+  assert.equal(retry.ranked, first.ranked);
+  assert.equal(retry.rank, first.rank);
   const altered = await submit({ ...requestBody, payload: { ...requestBody.payload, kills: 14 } });
   assert.equal(altered.status, 409);
   const stored = JSON.parse(readFileSync(STORE_FILE, 'utf8')).scores;

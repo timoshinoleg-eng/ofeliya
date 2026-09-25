@@ -335,7 +335,18 @@ async function boot(): Promise<void> {
 
 void (async () => {
   if (await ensureCurrentRelease()) return;
+
+  let scoreRetryInFlight = false;
+  const retryPendingScores = (): void => {
+    if (scoreRetryInFlight) return;
+    scoreRetryInFlight = true;
+    void retryPendingDailySubmission(PlatformBridge).finally(() => {
+      scoreRetryInFlight = false;
+    });
+  };
+
+  window.addEventListener('ofeliya:max-bridge-ready', retryPendingScores, { once: true });
   await ensureTelegramBridge();
-  await retryPendingDailySubmission(PlatformBridge);
   await boot();
+  retryPendingScores();
 })();

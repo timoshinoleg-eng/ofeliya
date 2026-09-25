@@ -38,25 +38,6 @@ const VK_SECURE_KEY = process.env.VK_SECURE_KEY ?? '';
 const GAME_URL = process.env.GAME_URL ?? '';
 const TELEGRAM_SHARE_COOLDOWN_MS = 2_500;
 const telegramShareLastAt = new Map();
-const apiWriteRate = new Map();
-const API_WRITE_WINDOW_MS = 60_000;
-const API_WRITE_LIMIT = 180;
-
-function allowApiWrite(req, now = Date.now()) {
-  const actor = req.socket.remoteAddress ?? 'unknown';
-  const previous = apiWriteRate.get(actor);
-  if (!previous || now - previous.windowStart >= API_WRITE_WINDOW_MS) {
-    apiWriteRate.set(actor, { windowStart: now, count: 1 });
-  } else {
-    if (previous.count >= API_WRITE_LIMIT) return false;
-    previous.count += 1;
-  }
-  if (apiWriteRate.size > 10_000) {
-    const oldest = apiWriteRate.keys().next().value;
-    if (oldest) apiWriteRate.delete(oldest);
-  }
-  return true;
-}
 
 // ---------- сезон (C5) ----------
 // Сезон = фиксированное окно от EPOCH (по умолчанию 2026-09-01), длина по
@@ -284,6 +265,20 @@ function writeJsonAtomically(file, value) {
 
 function saveStore() {
   writeJsonAtomically(STORE_FILE, store);
+}
+
+let bestEffortStoreTimer = null;
+function saveStoreBestEffort() {
+  if (bestEffortStoreTimer) return;
+  bestEffortStoreTimer = setTimeout(() => {
+    bestEffortStoreTimer = null;
+    try {
+      saveStore();
+    } catch (error) {
+      console.error('[store] best-effort save failed:', error?.message ?? error);
+    }
+  }, 250);
+  bestEffortStoreTimer.unref?.();
 }
 
 function analyticsActorHash(platform, uid) {
@@ -714,9 +709,10 @@ function getTop({
   const today = localDateKey(now);
   const weekAgo = now - 7 * 86_400_000;
 
-  // Client-reported runs are not proof of completion. Only a future server-verified
-  // run contract may set ranked=true; messenger identity alone is insufficient.
-  let list = store.scores.filter((s) => (includeUnverified || s.ranked === true));
+  // Ranked eligibility combines verified platform identity with the current
+  // score-contract rules. The server still applies plausibility/anti-cheat checks,
+  // but does not claim deterministic replay verification of every run.
+  let list = store.scores.filter((s) => (includeUnverified || (s.ranked ?? s.verified)));
   if (rulesetVersion != null) {
     list = list.filter((s) => storedRulesetVersion(s) === rulesetVersion);
   }
@@ -729,11 +725,11 @@ function getTop({
 
 // V4: «общий» результат дня — «ты №7 из 412 сегодня».
 // «Сегодня» = dateKey собственного daily-скор игрока (его локальный день).
-// Считаем по ВСЕМ daily-сорам за этот день (verified + unverified) — это
-// социальное сравнение за день, а не постоянный лидерборд (сбросится завтра).
+// Daily statistics use the same ranked-eligibility boundary as the public top:
+// anonymous/browser rows never affect a verified player's place.
 function dailyStats(user, platform, rulesetVersion = CURRENT_RULESET_VERSION) {
   const scoped = (s) =>
-    s.ranked === true &&
+    (s.ranked ?? s.verified) &&
     (rulesetVersion == null || storedRulesetVersion(s) === rulesetVersion);
   const mine = bestByUser(
     store.scores.filter((s) => scoped(s) && s.platform === platform && s.uid === user && s.daily)
@@ -989,10 +985,6 @@ const server = createServer(async (req, res) => {
     return res.end();
   }
 
-  if (req.method === 'POST' && !allowApiWrite(req)) {
-    return send(res, 429, { ok: false, error: 'write rate limited' });
-  }
-
   try {
     if (req.method === 'GET' && url.pathname === '/health') {
       return send(res, 200, {
@@ -1084,7 +1076,7 @@ const server = createServer(async (req, res) => {
       if (store.analyticsEvents.length > MAX_ANALYTICS_EVENTS) {
         store.analyticsEvents.splice(0, store.analyticsEvents.length - MAX_ANALYTICS_EVENTS);
       }
-      saveStore();
+      saveStoreBestEffort();
       return send(res, 202, { ok: true });
     }
 
@@ -1328,10 +1320,19 @@ const server = createServer(async (req, res) => {
         }
         if (dailyRun.closedAt != null) {
           if (dailyRun.submissionId === submissionId && dailyRun.submissionHash === submissionHash) {
+            const previousScore = store.scores.find((score) => score.scoreId === dailyRun.scoreId) ?? null;
+            const previousTop = previousScore
+              ? getTop({ period: 'daily', rulesetVersion: previousScore.rulesetVersion })
+              : [];
+            const rank = previousScore
+              ? previousTop.find(
+                  (row) => row.uid === previousScore.uid && row.platform === previousScore.platform
+                )?.rank ?? null
+              : null;
             return send(res, 200, {
               ok: true,
-              rank: null,
-              ranked: false,
+              rank,
+              ranked: previousScore?.ranked === true,
               rulesetVersion: dailyRun.rulesetVersion,
               campaignVersion: dailyRun.campaignVersion,
               dailyRunAccepted: true,
@@ -1363,10 +1364,17 @@ const server = createServer(async (req, res) => {
           if (previous.submissionHash !== submissionHash) {
             return send(res, 409, { ok: false, error: 'submissionId already used for another score' });
           }
+          const previousTop = getTop({
+            period: previous.daily ? 'daily' : 'all',
+            rulesetVersion: previous.rulesetVersion,
+          });
+          const rank = previousTop.find(
+            (row) => row.uid === previous.uid && row.platform === previous.platform
+          )?.rank ?? null;
           return send(res, 200, {
             ok: true,
-            rank: null,
-            ranked: false,
+            rank,
+            ranked: previous.ranked === true,
             rulesetVersion: previous.rulesetVersion,
             campaignVersion: previous.campaignVersion,
             dailyRunAccepted: false,
@@ -1393,9 +1401,7 @@ const server = createServer(async (req, res) => {
         level: Math.round(payload.level),
         ref: parseReferralRef(verifiedStartParam)?.token ?? null,
         verified,
-        // The client currently submits final counters without a server-verifiable run
-        // transcript. Keep the result for personal/social views, but never call it ranked.
-        ranked: false,
+        ranked: verified && contract.rankedEligible,
         rulesetVersion: contract.rulesetVersion,
         campaignVersion: contract.campaignVersion,
         difficultyId: contract.difficultyId,
@@ -1411,12 +1417,10 @@ const server = createServer(async (req, res) => {
         ts: Date.now(),
       };
 
-      if (store.scores.length >= MAX_SCORES) {
-        const removable = store.scores.findIndex((score) => score.ranked !== true);
-        if (removable < 0) return send(res, 503, { ok: false, error: 'score storage capacity reached' });
-        store.scores.splice(removable, 1);
-      }
       store.scores.push(record);
+      if (store.scores.length > MAX_SCORES) {
+        store.scores.splice(0, store.scores.length - MAX_SCORES);
+      }
       if (dailyRun) {
         dailyRun.closedAt = record.ts;
         dailyRun.submissionId = submissionId;

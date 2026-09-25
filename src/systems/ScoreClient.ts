@@ -9,6 +9,7 @@ const ANON_KEY = 'ofeliya_anon_score_id_v1';
 const SCORE_OUTBOX_KEY = 'ofeliya_score_outbox_v1';
 const DAILY_OUTBOX_KEY = 'ofeliya_daily_score_outbox_v1';
 const SCORE_TIMEOUT_MS = 2500;
+const MAX_SCORE_OUTBOX_ENTRIES = 8;
 
 export interface ScoreSubmitResponse {
   ok: boolean;
@@ -103,7 +104,8 @@ function readScoreOutbox(): DailyScoreOutboxEntry[] {
 function writeScoreOutbox(entries: DailyScoreOutboxEntry[]): void {
   if (typeof localStorage === 'undefined') return;
   try {
-    if (entries.length) localStorage.setItem(SCORE_OUTBOX_KEY, JSON.stringify(entries));
+    const bounded = entries.slice(-MAX_SCORE_OUTBOX_ENTRIES);
+    if (bounded.length) localStorage.setItem(SCORE_OUTBOX_KEY, JSON.stringify(bounded));
     else localStorage.removeItem(SCORE_OUTBOX_KEY);
   } catch {
     // Submission is still attempted; persistence is best-effort on restricted WebViews.
@@ -367,30 +369,51 @@ export async function submitDailyRunScoreDetailed(
   }
 }
 
-/** Retry the persisted final Daily submission after reload with the current signed session. */
+/** Retry persisted score submissions after boot without delaying the playable startup path. */
 export async function retryPendingDailySubmission(platform: PlatformAdapter): Promise<void> {
+  const dailyEntry = readDailyOutbox();
+  if (
+    dailyEntry &&
+    (platform.kind === 'max' || platform.kind === 'telegram') &&
+    dailyEntry.submission.platform === platform.kind &&
+    platform.initData
+  ) {
+    const submission = {
+      ...dailyEntry.submission,
+      initData: platform.initData,
+      submissionId: dailyEntry.submissionId,
+    };
+    const result = await submitDailySubmissionBody(submission);
+    if (result === 'accepted' || result === 'expired' || result === 'rejected') {
+      writeDailyOutbox(null);
+    } else {
+      // If the network is unhealthy, do not immediately spend more timeout budget
+      // replaying lower-priority ordinary scores.
+      return;
+    }
+  }
+
   await retryPendingScoreSubmissions(platform);
-  const entry = readDailyOutbox();
-  if (!entry || (platform.kind !== 'max' && platform.kind !== 'telegram') || !platform.initData) return;
-  const submission = { ...entry.submission, initData: platform.initData, submissionId: entry.submissionId };
-  const result = await submitDailySubmissionBody(submission);
-  if (result === 'accepted' || result === 'expired' || result === 'rejected') writeDailyOutbox(null);
 }
 
 async function retryPendingScoreSubmissions(platform: PlatformAdapter): Promise<void> {
   const pending = readScoreOutbox();
   if (!pending.length) return;
   const remaining: DailyScoreOutboxEntry[] = [];
-  for (const entry of pending) {
+  for (let index = 0; index < pending.length; index += 1) {
+    const entry = pending[index];
     if (entry.submission.platform !== 'browser') {
-      if ((platform.kind !== 'max' && platform.kind !== 'telegram') || !platform.initData) {
+      if (entry.submission.platform !== platform.kind || !platform.initData) {
         remaining.push(entry);
         continue;
       }
       entry.submission.initData = platform.initData;
     }
     const response = await postScoreSubmission(entry.submission);
-    if (!response) remaining.push(entry);
+    if (!response) {
+      remaining.push(...pending.slice(index));
+      break;
+    }
   }
   writeScoreOutbox(remaining);
 }

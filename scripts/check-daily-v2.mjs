@@ -29,6 +29,7 @@ try {
   const { requestDailyRun, requestDailyRunDetailed } = require(join(temp, 'systems/DailyRunClient.js'));
   const {
     buildDailyScoreSubmission,
+    submitRunScore,
     submitDailyRunScore,
     submitDailyRunScoreDetailed,
     retryPendingDailySubmission,
@@ -159,6 +160,33 @@ try {
   assert.equal(retryRequests[1].initData, 'fresh-signed-init-data');
   assert.equal(local.has(pendingKey), false);
 
+  // Pending messenger scores must never be replayed under another platform identity.
+  local.set('ofeliya_score_outbox_v1', JSON.stringify([{
+    submissionId: 'telegram-pending-000001',
+    submission: {
+      platform: 'telegram',
+      initData: 'stale-telegram-init',
+      payload: { ...submission.payload, daily: false },
+    },
+  }]));
+  let crossPlatformFetches = 0;
+  global.fetch = async () => {
+    crossPlatformFetches += 1;
+    throw new Error('cross-platform replay must not happen');
+  };
+  await retryPendingDailySubmission({ ...platform, kind: 'max', initData: 'signed-max-init' });
+  assert.equal(crossPlatformFetches, 0);
+  assert.equal(JSON.parse(local.get('ofeliya_score_outbox_v1')).length, 1);
+  local.delete('ofeliya_score_outbox_v1');
+
+  // Failed ordinary submissions are bounded so an offline client cannot create an unbounded replay storm.
+  global.fetch = async () => { throw new Error('offline'); };
+  for (let i = 0; i < 12; i += 1) {
+    await submitRunScore({ ...result, runSeed: `ordinary-${i}` }, platform);
+  }
+  const ordinaryOutbox = JSON.parse(local.get('ofeliya_score_outbox_v1'));
+  assert.equal(ordinaryOutbox.length, 8);
+  local.delete('ofeliya_score_outbox_v1');
   // --- detailed ticket status contract ---
   const jsonRes = (status, body) => ({
     ok: status >= 200 && status < 300,

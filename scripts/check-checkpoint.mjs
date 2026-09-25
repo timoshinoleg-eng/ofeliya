@@ -1,11 +1,12 @@
-import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { buildSync } from 'esbuild';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 
 const temp = mkdtempSync(join(tmpdir(), 'ofeliya-checkpoint-'));
 const require = createRequire(import.meta.url);
+const sourcePath = (path) => resolve(path).split(sep).join('/');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -17,19 +18,22 @@ try {
   writeFileSync(
     entry,
     [
-      `export { RunCheckpoint, RUN_CHECKPOINT_STORAGE_KEY, validateRunCheckpoint } from '${resolve('src/systems/RunCheckpoint.ts')}';`,
-      `export { RunState } from '${resolve('src/game/RunState.ts')}';`,
-      `export { RunRng } from '${resolve('src/game/RunRng.ts')}';`,
-      `export { StageDirector } from '${resolve('src/game/StageDirector.ts')}';`,
-      `export { STAGES } from '${resolve('src/game/StageDefinitions.ts')}';`,
-      `export { HeartbeatPulseDirector } from '${resolve('src/game/HeartbeatPulseDirector.ts')}';`,
+      `export { RunCheckpoint, RUN_CHECKPOINT_STORAGE_KEY, validateRunCheckpoint } from '${sourcePath('src/systems/RunCheckpoint.ts')}';`,
+      `export { RunState } from '${sourcePath('src/game/RunState.ts')}';`,
+      `export { RunRng } from '${sourcePath('src/game/RunRng.ts')}';`,
+      `export { StageDirector } from '${sourcePath('src/game/StageDirector.ts')}';`,
+      `export { STAGES } from '${sourcePath('src/game/StageDefinitions.ts')}';`,
+      `export { HeartbeatPulseDirector } from '${sourcePath('src/game/HeartbeatPulseDirector.ts')}';`,
     ].join('\n')
   );
-  execFileSync(
-    resolve('node_modules/esbuild/bin/esbuild'),
-    [entry, '--bundle', '--platform=node', '--format=cjs', `--outfile=${bundle}`],
-    { stdio: 'inherit' }
-  );
+  buildSync({
+    entryPoints: [entry],
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    outfile: bundle,
+    logLevel: 'warning',
+  });
 
   const storage = new Map();
   global.localStorage = {
