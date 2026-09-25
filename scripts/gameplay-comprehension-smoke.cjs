@@ -560,10 +560,13 @@ async function bootGame(page) {
       await route.fulfill({ status: 202, contentType: 'application/json', body: '{"ok":true}' });
     });
     const resumePage = await resumeContext.newPage();
+    await resumePage.bringToFront();
     await bootGame(resumePage);
-    const resumeFixture = await resumePage.evaluate(() => {
+    const resumeFixture = await resumePage.evaluate(async () => {
       const game = window.__game;
       const gs = game.scene.getScene('Game');
+      const ui = game.scene.getScene('UI');
+      gs.hostCells.update(gs.time.now, 0, 7000);
       gs.trackComprehensionOnce('first_enemy_hit');
       gs.onHostCellInteraction({
         type: 'approach',
@@ -574,6 +577,16 @@ async function bootGame(page) {
         interactionId: 9001,
         slotIndex: 0,
       });
+      gs.onHostCellInteraction({
+        type: 'enter',
+        x: gs.player.x,
+        y: gs.player.y,
+        radius: gs.runState.infectionRadius,
+        progress: 0.1,
+        interactionId: 9001,
+        slotIndex: 0,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 150));
       // bootGame widens xpNext to freeze progression; restore the real level-1 value before
       // exercising the production checkpoint validator.
       gs.runState.stage.xp = 0;
@@ -581,14 +594,26 @@ async function bootGame(page) {
       const saved = gs.saveCheckpointNow();
       const checkpoint = JSON.parse(localStorage.getItem('ofeliya_run_checkpoint_v1') || 'null');
       const presentation = JSON.parse(localStorage.getItem('ofeliya_comprehension_v1') || 'null');
-      return { saved, checkpoint, presentation };
+      return {
+        saved,
+        checkpoint,
+        presentation,
+        visibleHint: ui.contextHintText?.text ?? '',
+        pendingUi: ui.pendingContextHints?.map((hint) => hint.message) ?? [],
+      };
     });
     assert.equal(resumeFixture.saved, true, 'first-run checkpoint was not saved for resume regression');
     assert.ok(resumeFixture.checkpoint, 'resume regression checkpoint missing');
     assert.equal(resumeFixture.presentation?.runSeed, resumeFixture.checkpoint.runSeed, 'presentation state is not bound to checkpoint seed');
-    assert.ok(resumeFixture.presentation?.events?.includes('first_enemy_hit'), 'first-hit telemetry guard was not persisted');
-    assert.ok(resumeFixture.presentation?.hostCellHints?.includes('approach'), 'Host Cell hint guard was not persisted');
-    await resumePage.waitForTimeout(250);
+    assert.ok(resumeFixture.presentation?.events?.includes('first_enemy_hit'), 'first-hit telemetry guard was not persisted after successful delivery');
+    assert.equal(resumeFixture.presentation?.hostCellHints?.includes('approach'), false, 'approach hint was consumed before its display duration completed');
+    assert.deepEqual(
+      resumeFixture.presentation?.pendingHostCellHints?.map((hint) => hint.type),
+      ['approach', 'enter'],
+      'interrupted Host Cell hint queue was not persisted in order'
+    );
+    assert.match(resumeFixture.visibleHint, /КЛЕТКА ОРГАНИЗМА/, 'approach hint was replaced too quickly by enter copy');
+    assert.ok(resumeFixture.pendingUi.some((message) => /ЗАРАЖЕНИЕ НАЧАЛОСЬ/.test(message)), 'enter hint was not queued behind approach');
     const firstHitBeforeResume = resumeEvents.filter((entry) => entry.event === 'first_enemy_hit').length;
     const approachBeforeResume = resumeEvents.filter((entry) => entry.event === 'host_cell_approached').length;
 
@@ -606,53 +631,105 @@ async function bootGame(page) {
       const ui = game.scene.getScene('UI');
       return Boolean(gs?.enemyHealth && ui && (game.scene.isActive('Game') || game.scene.isPaused('Game')));
     }, null, { timeout: 15000 });
+    await resumePage.waitForTimeout(180);
     const resumedFirstRun = await resumePage.evaluate(() => {
       const game = window.__game;
       const gs = game.scene.getScene('Game');
       const ui = game.scene.getScene('UI');
-      let hintCount = 0;
-      const showHint = ui.showContextHint.bind(ui);
-      ui.showContextHint = (...args) => { hintCount += 1; showHint(...args); };
+      gs.runState.stage.xp = 0;
+      gs.runState.stage.xpNext = 1_000_000;
+      gs.nextFireAt = Number.MAX_SAFE_INTEGER;
+      for (const enemy of gs.enemies.getChildren()) {
+        if (enemy.active) enemy.deactivateForStageReset();
+      }
       gs.trackComprehensionOnce('first_enemy_hit');
-      gs.onHostCellInteraction({
-        type: 'approach',
-        x: gs.player.x,
-        y: gs.player.y,
-        radius: gs.runState.infectionRadius,
-        progress: 0,
-        interactionId: 9002,
-        slotIndex: 0,
-      });
-      gs.onHostCellInteraction({
-        type: 'enter',
-        x: gs.player.x,
-        y: gs.player.y,
-        radius: gs.runState.infectionRadius,
-        progress: 0.1,
-        interactionId: 9002,
-        slotIndex: 0,
-      });
       return {
         resumed: gs.resumed,
         firstRunComprehension: gs.firstRunComprehension,
         firstHitRemembered: gs.comprehensionEventsSent.has('first_enemy_hit'),
-        approachRemembered: gs.hostCellHintEventsShown.has('approach'),
-        enterRemembered: gs.hostCellHintEventsShown.has('enter'),
-        hintCount,
+        pending: gs.pendingHostCellHints.map((hint) => hint.type),
+        visibleHint: ui.contextHintText?.text ?? '',
+        hintVisible: Boolean(ui.contextHintContainer?.visible),
       };
     });
     await resumePage.waitForTimeout(250);
     assert.equal(resumedFirstRun.resumed, true, 'checkpoint regression did not resume the run');
     assert.equal(resumedFirstRun.firstRunComprehension, true, 'first-run teaching was disabled by checkpoint resume');
     assert.equal(resumedFirstRun.firstHitRemembered, true, 'first-hit dedupe state was not restored');
-    assert.equal(resumedFirstRun.approachRemembered, true, 'shown Host Cell hint was not restored');
-    assert.equal(resumedFirstRun.enterRemembered, true, 'unseen first-run Host Cell teaching did not remain eligible after resume');
-    assert.equal(resumedFirstRun.hintCount, 1, 'resume should suppress the shown approach hint and show only the unseen enter hint');
+    assert.deepEqual(resumedFirstRun.pending, ['approach', 'enter'], 'resume lost the interrupted Host Cell hint queue');
+    assert.equal(resumedFirstRun.hintVisible, true, 'resume did not replay the interrupted Host Cell hint');
+    assert.match(resumedFirstRun.visibleHint, /КЛЕТКА ОРГАНИЗМА/, 'resume replayed Host Cell hints out of order');
     assert.equal(resumeEvents.filter((entry) => entry.event === 'first_enemy_hit').length, firstHitBeforeResume, 'resume duplicated first_enemy_hit telemetry');
     assert.equal(resumeEvents.filter((entry) => entry.event === 'host_cell_approached').length, approachBeforeResume, 'resume duplicated host_cell_approached telemetry');
 
+    try {
+      await resumePage.waitForFunction(() =>
+        window.__game.scene.getScene('Game').hostCellHintEventsShown.has('approach'),
+      null, { timeout: 20000 });
+    } catch (error) {
+      const diagnostic = await resumePage.evaluate(() => {
+        const ui = window.__game.scene.getScene('UI');
+        return {
+          uiNow: ui.time.now,
+          timer: ui.contextHintTimer && {
+            elapsed: ui.contextHintTimer.elapsed,
+            delay: ui.contextHintTimer.delay,
+            paused: ui.contextHintTimer.paused,
+            hasDispatched: ui.contextHintTimer.hasDispatched,
+          },
+          visible: ui.contextHintContainer?.visible,
+          text: ui.contextHintText?.text,
+          modal: ui.modalOpen,
+          blocked: ui.uiBlocked,
+          gameActive: window.__game.scene.isActive('Game'),
+          gamePaused: window.__game.scene.isPaused('Game'),
+          pending: window.__game.scene.getScene('Game').pendingHostCellHints,
+          shown: [...window.__game.scene.getScene('Game').hostCellHintEventsShown],
+          cell0Active: window.__game.scene.getScene('Game').hostCells.cells[0].active,
+        };
+      });
+      throw new Error(`approach hint did not finish: ${JSON.stringify(diagnostic)}`, { cause: error });
+    }
+    const afterApproach = await resumePage.evaluate(() => {
+      const gs = window.__game.scene.getScene('Game');
+      const ui = window.__game.scene.getScene('UI');
+      return {
+        approachRemembered: gs.hostCellHintEventsShown.has('approach'),
+        enterRemembered: gs.hostCellHintEventsShown.has('enter'),
+        pending: gs.pendingHostCellHints.map((hint) => hint.type),
+        visibleHint: ui.contextHintText?.text ?? '',
+        uiActive: ui.scene.isActive('UI'),
+        uiPaused: ui.scene.isPaused('UI'),
+        hintVisible: ui.contextHintContainer?.visible,
+        uiPending: ui.pendingContextHints?.map((hint) => hint.message),
+        modalOpen: ui.modalOpen,
+        blocked: ui.uiBlocked,
+      };
+    });
+    assert.equal(afterApproach.approachRemembered, true, `approach hint was not consumed after full display: ${JSON.stringify(afterApproach)}`);
+    assert.equal(afterApproach.enterRemembered, false, 'enter hint was consumed before its turn');
+    assert.deepEqual(afterApproach.pending, ['enter'], 'enter hint did not remain queued after approach completed');
+    assert.match(afterApproach.visibleHint, /ЗАРАЖЕНИЕ НАЧАЛОСЬ/, 'queued enter hint did not follow approach');
+
+    await resumePage.waitForFunction(() =>
+      window.__game.scene.getScene('Game').hostCellHintEventsShown.has('enter'),
+    null, { timeout: 20000 });
+    const afterHintQueue = await resumePage.evaluate(() => {
+      const gs = window.__game.scene.getScene('Game');
+      return {
+        enterRemembered: gs.hostCellHintEventsShown.has('enter'),
+        pending: gs.pendingHostCellHints.map((hint) => hint.type),
+        slots: [...gs.hostCellSlotsWithHint],
+      };
+    });
+    assert.equal(afterHintQueue.enterRemembered, true, 'enter hint was not consumed after full display');
+    assert.deepEqual(afterHintQueue.pending, [], 'Host Cell hint queue did not drain after resume');
+    assert.ok(afterHintQueue.slots.includes(0), 'completed first-cell teaching lost slot attribution');
+
     const hintedSecondCellSaved = await resumePage.evaluate(() => {
       const gs = window.__game.scene.getScene('Game');
+      gs.runState.stage.xp = 0;
+      gs.runState.stage.xpNext = 5;
       gs.runState.recordHostCellInfected();
       gs.hostCellsCompletedThisRun = 1;
       const cell = gs.hostCells.cells[1];
@@ -677,7 +754,12 @@ async function bootGame(page) {
       return { saved, presentation };
     });
     assert.equal(hintedSecondCellSaved.saved, true, 'second-cell contextual-hint checkpoint was not saved');
-    assert.ok(hintedSecondCellSaved.presentation?.hostCellSlotsWithHint?.includes(1), 'shown second-cell hint was not persisted against its active slot');
+    assert.ok(
+      hintedSecondCellSaved.presentation?.pendingHostCellHints?.some(
+        (hint) => hint.type === 'exit' && hint.slotIndex === 1
+      ),
+      'interrupted second-cell hint was not persisted against its active slot'
+    );
     const hintedSecondCheckpoint = await resumePage.evaluate(() =>
       JSON.parse(localStorage.getItem('ofeliya_run_checkpoint_v1') || 'null')
     );
@@ -692,11 +774,16 @@ async function bootGame(page) {
       const game = window.__game;
       return Boolean(game?.scene.getScene('Game')?.enemyHealth && game.scene.isActive('Game'));
     }, null, { timeout: 15000 });
+    await resumePage.waitForTimeout(150);
+    const falseAbsenceBefore = resumeEvents.filter(
+      (entry) => entry.event === 'second_host_cell_completed_without_hint'
+    ).length;
     const hintSurvivedCellRestore = await resumePage.evaluate(() => {
       const gs = window.__game.scene.getScene('Game');
       const cell = gs.hostCells.cells[1];
       const before = {
         slots: [...gs.hostCellSlotsWithHint],
+        pending: gs.pendingHostCellHints.map((hint) => ({ ...hint })),
         completed: gs.hostCellsCompletedThisRun,
         hinted: [...gs.hostCellHintEventsShown],
       };
@@ -710,12 +797,24 @@ async function bootGame(page) {
         slotIndex: 1,
       });
       return {
-        ok: !gs.comprehensionEventsSent.has('second_host_cell_completed_without_hint'),
+        noFalseAbsenceInMemory:
+          !gs.comprehensionEventsSent.has('second_host_cell_completed_without_hint') &&
+          !gs.comprehensionEventsInFlight.has('second_host_cell_completed_without_hint'),
         before,
         after: [...gs.hostCellSlotsWithHint],
       };
     });
-    assert.equal(hintSurvivedCellRestore.ok, true, `a second-cell hint shown before resume was forgotten and misreported as absent: ${JSON.stringify(hintSurvivedCellRestore)}`);
+    await resumePage.waitForTimeout(250);
+    assert.equal(
+      hintSurvivedCellRestore.noFalseAbsenceInMemory,
+      true,
+      `a second-cell hint interrupted by checkpoint was forgotten: ${JSON.stringify(hintSurvivedCellRestore)}`
+    );
+    assert.equal(
+      resumeEvents.filter((entry) => entry.event === 'second_host_cell_completed_without_hint').length,
+      falseAbsenceBefore,
+      'second Host Cell was falsely reported as completed without hint after resume'
+    );
     await resumeContext.close();
 
     await context.close();
