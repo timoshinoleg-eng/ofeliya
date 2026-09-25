@@ -1938,11 +1938,14 @@ export class UIScene extends Phaser.Scene {
     if (dailyBranch === 'resumed') {
       scoreStatus.setText('ЗАБЕГ ВОЗОБНОВЛЁН · ВНЕ РЕЙТИНГА').setColor('#ffe066');
     } else if (dailyBranch === 'daily' && dailyTicket) {
+      // Keep Daily identity through the interstitial so the result screen renders the
+      // correct branch, then settle the intent before awaiting network synchronization.
+      // ScoreClient's outbox owns retry after this point.
+      clearDailyIntent(this.registry);
       const submission = this.preVideoDailyScore ?? submitDailyRunScoreDetailed(res, PlatformBridge, dailyTicket);
       this.preVideoDailyScore = null;
       void submission.then(
         ({ response, status }) => {
-          if (status === 'ok') clearDailyIntent(this.registry);
           if (!scoreStatus.active) return;
           this.renderDailySubmitStatus(status, scoreStatus, response?.rank ?? null);
         }
