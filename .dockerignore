@@ -2,3 +2,13 @@
 .codegraph
 node_modules
 dist
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+server/data
+**/data/**
+.ssh
+**/*.pem
+**/*.key

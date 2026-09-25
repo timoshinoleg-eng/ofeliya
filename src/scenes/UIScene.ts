@@ -52,6 +52,13 @@ type TintableEmitter = Phaser.GameObjects.Particles.ParticleEmitter & {
   setParticleTint?: (color: number) => void;
 };
 
+type PendingBossReveal = {
+  name: string;
+  textureKey: string;
+  accent: number;
+  videoId?: VideoInterstitialId;
+};
+
 export class UIScene extends Phaser.Scene {
   private gs: GameScene | null = null;
 
@@ -73,6 +80,9 @@ export class UIScene extends Phaser.Scene {
   private contextHintText: Phaser.GameObjects.Text | null = null;
   private contextHintTimer: Phaser.Time.TimerEvent | null = null;
   private pendingContextHint: { message: string; duration: number } | null = null;
+  private preVideoScore: ReturnType<typeof submitRunScore> | null = null;
+  private preVideoDailyScore: ReturnType<typeof submitDailyRunScoreDetailed> | null = null;
+  private preVideoDuelAttempt: ReturnType<typeof submitDuelAttempt> | null = null;
   private killsText!: Phaser.GameObjects.Text;
   private hpText!: Phaser.GameObjects.Text;
   private muteText!: Phaser.GameObjects.Text;
@@ -91,6 +101,7 @@ export class UIScene extends Phaser.Scene {
   private pauseOverlay: Phaser.GameObjects.Container | null = null;
   private manualPaused = false;
   private modalOpen = false;
+  private pendingBossReveal: PendingBossReveal | null = null;
   private modalGeneration = 0;
   private overShown = false;
   private uiBlocked = false;
@@ -102,6 +113,7 @@ export class UIScene extends Phaser.Scene {
   create(): void {
     this.gs = this.scene.get('Game') as GameScene;
     this.modalOpen = false;
+    this.pendingBossReveal = null;
     this.modalGeneration = 0;
     this.overShown = false;
     this.uiBlocked = false;
@@ -686,7 +698,11 @@ export class UIScene extends Phaser.Scene {
     accent: number,
     videoId?: VideoInterstitialId
   ): boolean {
-    if (this.transitionOverlay || this.modalOpen) return false;
+    if (this.transitionOverlay) return false;
+    if (this.modalOpen) {
+      this.pendingBossReveal = { name, textureKey, accent, videoId };
+      return true;
+    }
     const W = this.scale.width;
     const H = this.scale.height;
     const compact = H < 620;
@@ -1519,6 +1535,7 @@ export class UIScene extends Phaser.Scene {
           (this.fanfare as TintableEmitter).setParticleTint?.(COLORS.cyan);
           if (moreChoices) this.showLevelUp();
           else {
+            this.flushPendingBossReveal();
             this.flushContextHint();
             this.scene.resume('Game');
           }
@@ -1636,6 +1653,7 @@ export class UIScene extends Phaser.Scene {
           (this.fanfare as TintableEmitter).setParticleTint?.(COLORS.cyan);
           if (moreChoices) this.showLevelUp();
           else {
+            this.flushPendingBossReveal();
             this.flushContextHint();
             this.scene.resume('Game');
           }
@@ -1649,6 +1667,15 @@ export class UIScene extends Phaser.Scene {
     this.modal = null;
     this.modalOpen = false;
     this.uiBlocked = false;
+    this.flushPendingBossReveal();
+  }
+
+  private flushPendingBossReveal(): void {
+    if (this.modalOpen || this.transitionOverlay || !this.pendingBossReveal) return;
+    const pending = this.pendingBossReveal;
+    this.pendingBossReveal = null;
+    this.discardContextHint();
+    this.showBossReveal(pending.name, pending.textureKey, pending.accent, pending.videoId);
   }
 
   private showGameOver(res: RunResult): void {
@@ -1657,6 +1684,23 @@ export class UIScene extends Phaser.Scene {
     this.contextHintTimer = null;
     this.contextHintContainer?.setVisible(false);
     this.uiBlocked = true;
+    const dailyIntent = readDailyIntent(this.registry);
+    const dailyTicket = (this.registry.get('dailyTicket') as DailyRunTicket | null | undefined) ?? null;
+    const dailyBranch = resolveDailyResultBranch({
+      resumed: res.resumed,
+      dailyIntent,
+      ticket: dailyTicket,
+      runSeed: res.runSeed,
+      now: Date.now(),
+    });
+    const duelChallenge = this.registry.get('duelChallenge') as DuelChallengeSnapshot | null | undefined;
+    if (dailyBranch === 'daily' && dailyTicket) {
+      this.preVideoDailyScore = submitDailyRunScoreDetailed(res, PlatformBridge, dailyTicket);
+    } else if (dailyBranch === 'inactive' && duelChallenge) {
+      this.preVideoDuelAttempt = submitDuelAttempt(duelChallenge.challengeId, res, PlatformBridge);
+    } else if (dailyBranch === 'inactive' && !duelChallenge) {
+      this.preVideoScore = submitRunScore(res, PlatformBridge);
+    }
     const id: VideoInterstitialId = res.win ? 'victory' : 'defeat';
     let rendered = false;
     const renderOnce = () => {
@@ -1894,10 +1938,11 @@ export class UIScene extends Phaser.Scene {
     if (dailyBranch === 'resumed') {
       scoreStatus.setText('ЗАБЕГ ВОЗОБНОВЛЁН · ВНЕ РЕЙТИНГА').setColor('#ffe066');
     } else if (dailyBranch === 'daily' && dailyTicket) {
-      // Clear the intent before awaiting so a settled daily run can never leak forward.
-      clearDailyIntent(this.registry);
-      void submitDailyRunScoreDetailed(res, PlatformBridge, dailyTicket).then(
+      const submission = this.preVideoDailyScore ?? submitDailyRunScoreDetailed(res, PlatformBridge, dailyTicket);
+      this.preVideoDailyScore = null;
+      void submission.then(
         ({ response, status }) => {
+          if (status === 'ok') clearDailyIntent(this.registry);
           if (!scoreStatus.active) return;
           this.renderDailySubmitStatus(status, scoreStatus, response?.rank ?? null);
         }
@@ -1909,7 +1954,9 @@ export class UIScene extends Phaser.Scene {
         .setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · РЕЗУЛЬТАТ НЕ СИНХРОНИЗИРОВАН')
         .setColor('#ff9b66');
     } else if (duelChallenge) {
-      void submitDuelAttempt(duelChallenge.challengeId, res, PlatformBridge).then((attempt) => {
+      const submission = this.preVideoDuelAttempt ?? submitDuelAttempt(duelChallenge.challengeId, res, PlatformBridge);
+      this.preVideoDuelAttempt = null;
+      void submission.then((attempt) => {
         if (!scoreStatus.active) return;
         if (!attempt) {
           scoreStatus.setText('ДУЭЛЬ · РЕЗУЛЬТАТ НЕ СИНХРОНИЗИРОВАН').setColor('#ff9b66');
@@ -1931,7 +1978,9 @@ export class UIScene extends Phaser.Scene {
         }
       });
     } else {
-      void submitRunScore(res, PlatformBridge).then((score) => {
+      const submission = this.preVideoScore ?? submitRunScore(res, PlatformBridge);
+      this.preVideoScore = null;
+      void submission.then((score) => {
         if (!scoreStatus.active) return;
         if (!score) {
           scoreStatus.setVisible(false);

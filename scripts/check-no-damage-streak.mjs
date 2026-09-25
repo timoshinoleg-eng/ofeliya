@@ -1,11 +1,12 @@
-import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { buildSync } from 'esbuild';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 
 const temp = mkdtempSync(join(tmpdir(), 'ofeliya-no-damage-'));
 const require = createRequire(import.meta.url);
+const sourcePath = (path) => resolve(path).split(sep).join('/');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -14,12 +15,15 @@ function assert(condition, message) {
 try {
   const entry = join(temp, 'entry.ts');
   const bundle = join(temp, 'entry.cjs');
-  writeFileSync(entry, `export { RunState } from '${resolve('src/game/RunState.ts')}';\n`);
-  execFileSync(
-    resolve('node_modules/esbuild/bin/esbuild'),
-    [entry, '--bundle', '--platform=node', '--format=cjs', `--outfile=${bundle}`],
-    { stdio: 'inherit' }
-  );
+  writeFileSync(entry, `export { RunState } from '${sourcePath('src/game/RunState.ts')}';\n`);
+  buildSync({
+    entryPoints: [entry],
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    outfile: bundle,
+    logLevel: 'warning',
+  });
 
   const { RunState } = require(bundle);
   const state = new RunState({ id: 'bloodstream', order: 1 });

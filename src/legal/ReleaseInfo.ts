@@ -1,3 +1,5 @@
+import packageInfo from '../../package.json';
+
 export interface ReleaseInfo {
   appName: string;
   version: string;
@@ -15,7 +17,7 @@ function env(name: string): string {
 
 export const RELEASE_INFO: ReleaseInfo = {
   appName: 'OFELIYA: STRAIN ZERO',
-  version: '0.1.0',
+  version: packageInfo.version,
   developerBrand: env('VITE_DEVELOPER_BRAND') || 'ChatBot24',
   legalName: env('VITE_DEVELOPER_LEGAL_NAME'),
   registration: env('VITE_DEVELOPER_REGISTRATION'),

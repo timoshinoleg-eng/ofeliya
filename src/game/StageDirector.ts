@@ -122,6 +122,10 @@ export class StageDirector {
     return [{ type: 'boss-defeated', stage }];
   }
 
+  retryBossSpawn(): void {
+    if (this.phase === 'BOSS_ACTIVE') this.phase = 'BOSS_WARNING';
+  }
+
   completeBossDefeat(): StageDirectorEvent[] {
     if (this.phase !== 'BOSS_DEFEATED') return [];
     const stage = this.currentStage;

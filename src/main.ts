@@ -9,6 +9,7 @@ import { PlatformBridge } from './platform';
 import { StartupTrace } from './systems/StartupTrace';
 import { ensureTelegramBridge } from './platform/TelegramBridgeLoader';
 import { trackProductEvent } from './systems/AnalyticsClient';
+import { retryPendingDailySubmission } from './systems/ScoreClient';
 import { RELEASE_MARKER, RELEASE_SHA, RELEASE_SHORT } from './release';
 
 declare global {
@@ -325,17 +326,27 @@ async function boot(): Promise<void> {
     import.meta.env.PROD &&
     location.protocol.startsWith('http')
   ) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker
-        .register(`${import.meta.env.BASE_URL}sw.js`, { updateViaCache: 'none' })
-        .then((registration) => registration.update())
-        .catch((error) => console.warn('[sw] registration/update failed:', error));
-    });
+    navigator.serviceWorker
+      .register(`${import.meta.env.BASE_URL}sw.js`, { updateViaCache: 'none' })
+      .then((registration) => registration.update())
+      .catch((error) => console.warn('[sw] registration/update failed:', error));
   }
 }
 
 void (async () => {
   if (await ensureCurrentRelease()) return;
+
+  let scoreRetryInFlight = false;
+  const retryPendingScores = (): void => {
+    if (scoreRetryInFlight) return;
+    scoreRetryInFlight = true;
+    void retryPendingDailySubmission(PlatformBridge).finally(() => {
+      scoreRetryInFlight = false;
+    });
+  };
+
+  window.addEventListener('ofeliya:max-bridge-ready', retryPendingScores, { once: true });
   await ensureTelegramBridge();
   await boot();
+  retryPendingScores();
 })();

@@ -8,6 +8,7 @@
  */
 import { createHmac } from 'node:crypto';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -21,11 +22,11 @@ const VK_SECURE_KEY = 'test-vk-secure-key-123';
 process.env.TZ = new Date().getUTCHours() < 10 ? 'America/Adak' : 'Pacific/Kiritimati';
 
 process.env.TG_BOT_TOKEN = TG_TOKEN;
-// Production MAX bot historically uses BOT_TOKEN. Deliberately do NOT set
-// MAX_BOT_TOKEN here: this verifies the score-service fallback contract.
-process.env.BOT_TOKEN = MAX_TOKEN;
-delete process.env.MAX_BOT_TOKEN;
+// MAX authentication must use the dedicated app token, not the shared bot token.
+process.env.BOT_TOKEN = 'SHARED-MAX-TOKEN';
+process.env.MAX_BOT_TOKEN = MAX_TOKEN;
 process.env.VK_SECURE_KEY = VK_SECURE_KEY;
+process.env.FOUNDER_ELIGIBLE_IDS = 'telegram:111';
 const DATA_DIR = mkdtempSync(join(tmpdir(), 'ofeliya-server-test-'));
 process.env.DATA_DIR = DATA_DIR;
 process.env.PORT = '0';
@@ -34,12 +35,13 @@ const { server, compactDailyRunEntries } = await import('./index.mjs');
 await new Promise((resolve) => server.once('listening', resolve));
 const BASE = `http://127.0.0.1:${server.address().port}`;
 
-function signInitData(user, token, { date = Math.floor(Date.now() / 1000) } = {}) {
+function signInitData(user, token, { date = Math.floor(Date.now() / 1000), startParam } = {}) {
   const params = {
     user: JSON.stringify(user),
     auth_date: String(date),
     query_id: 'AAF-test',
   };
+  if (startParam) params.start_param = startParam;
   const dataCheck = Object.keys(params)
     .sort()
     .map((k) => `${k}=${params[k]}`)
@@ -119,6 +121,42 @@ await ok('GET /health', async () => {
   assert.equal(r.campaignVersion, 2);
 });
 
+await ok('malformed Host returns an error without terminating the server', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const { createConnection } = await import('node:net');
+  const script = `
+const { createConnection } = await import('node:net');
+const { server } = await import(${JSON.stringify(new URL('./index.mjs', import.meta.url).href)});
+await new Promise((resolve) => server.once('listening', resolve));
+const port = server.address().port;
+const response = await new Promise((resolve, reject) => {
+  const socket = createConnection(port, '127.0.0.1', () => socket.write('GET /health HTTP/1.1\\r\\nHost: [\\r\\nConnection: close\\r\\n\\r\\n'));
+  let data = '';
+  socket.on('data', (chunk) => { data += chunk; });
+  socket.on('end', () => resolve(data));
+  socket.on('error', reject);
+});
+const health = await fetch('http://127.0.0.1:' + port + '/health');
+server.close();
+process.stdout.write('__HOST_PROBE__' + JSON.stringify({ response, health: health.status }));
+`;
+  const output = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+    env: { ...process.env, PORT: '0', DATA_DIR },
+    encoding: 'utf8',
+    timeout: 10_000,
+  });
+  const result = JSON.parse(output.split('__HOST_PROBE__')[1]);
+  assert.match(result.response, /^HTTP\/1\.1 400/);
+  assert.equal(result.health, 200);
+});
+
+await ok('POST /api/score rejects JSON null with 400 instead of an internal error', async () => {
+  const res = await fetch(`${BASE}/api/score`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: 'null',
+  });
+  assert.equal(res.status, 400);
+});
+
 await ok('GET /api/ruleset публикует текущий двухактный контракт', async () => {
   const r = await j(await fetch(`${BASE}/api/ruleset`));
   assert.equal(r.ok, true);
@@ -138,7 +176,8 @@ await ok('TG: валидный initData принимается', async () => {
     }),
   }));
   assert.equal(r.ok, true);
-  assert.equal(r.rank, 1);
+  assert.equal(r.ranked, true);
+  assert.ok(r.rank !== null);
 });
 
 await ok('TG: подделанный initData отклоняется (403)', async () => {
@@ -174,7 +213,7 @@ await ok('TG: чужой токен не проходит', async () => {
   assert.equal(res.status, 403);
 });
 
-await ok('MAX: официальный WebAppData initData + BOT_TOKEN fallback принимаются', async () => {
+await ok('MAX: официальный WebAppData принимается только с app token', async () => {
   const r = await j(await fetch(`${BASE}/api/score`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -183,6 +222,17 @@ await ok('MAX: официальный WebAppData initData + BOT_TOKEN fallback �
     }),
   }));
   assert.equal(r.ok, true);
+});
+
+await ok('MAX: общий BOT_TOKEN не подтверждает аудиторию приложения', async () => {
+  const res = await fetch(`${BASE}/api/score`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform: 'max', initData: signInitData(BOB, process.env.BOT_TOKEN),
+      payload: { win: false, timeMs: 30_000, kills: 5, level: 2 },
+    }),
+  });
+  assert.equal(res.status, 403);
 });
 
 await ok('анти-чит: победа до появления босса невозможна (422)', async () => {
@@ -349,7 +399,7 @@ await ok('ruleset v2: Strained сохраняется, но сервер не д
 await ok('ruleset filters: current, legacy и all не смешиваются молча', async () => {
   const current = await j(await fetch(`${BASE}/api/top?period=all`));
   const legacy = await j(await fetch(`${BASE}/api/top?period=all&ruleset=legacy`));
-  const all = await j(await fetch(`${BASE}/api/top?period=all&ruleset=all`));
+  const all = await j(await fetch(`${BASE}/api/top?period=all&ruleset=all&includeUnverified=1`));
   assert.equal(current.rulesetVersion, 2);
   assert.equal(legacy.rulesetVersion, 1);
   assert.equal(all.rulesetVersion, null);
@@ -578,7 +628,7 @@ await ok('топ: лучший результат на юзера + более �
       payload: { win: true, timeMs: 320_000, kills: 150, level: 8 },
     }),
   }));
-  const top = await j(await fetch(`${BASE}/api/top?period=all&ruleset=legacy`));
+  const top = await j(await fetch(`${BASE}/api/top?period=all&ruleset=legacy&includeUnverified=1`));
   assert.equal(top.top.length, 2);
   assert.equal(top.top[0].timeMs, 320_000);
   assert.equal(top.top[0].platform, 'telegram');
@@ -623,6 +673,7 @@ await ok('Daily V2: сервер выдаёт identity-bound ticket и пере�
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       ...auth,
+      submissionId: 'daily-submission-000001',
       payload: {
         ...campaignPayload({ seed: first.ticket.runSeed, timeMs: 600_000 }),
         daily: true,
@@ -635,12 +686,34 @@ await ok('Daily V2: сервер выдаёт identity-bound ticket и пере�
   const scored = await j(scoreResponse);
   assert.equal(scored.ok, true);
   assert.equal(scored.dailyRunAccepted, true);
+  assert.equal(scored.ranked, true);
+  assert.ok(scored.rank !== null);
+  const retry = await fetch(`${BASE}/api/score`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...auth,
+      submissionId: 'daily-submission-000001',
+      payload: {
+        ...campaignPayload({ seed: first.ticket.runSeed, timeMs: 600_000 }),
+        daily: true,
+        dailyRunId: first.ticket.runId,
+        dateKey: '1999-01-01',
+      },
+    }),
+  });
+  const retried = await j(retry);
+  assert.equal(retry.status, 200);
+  assert.equal(retried.scoreId, scored.scoreId);
+  assert.equal(retried.ranked, scored.ranked);
+  assert.equal(retried.rank, scored.rank);
 
   const duplicate = await fetch(`${BASE}/api/score`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       ...auth,
+      submissionId: 'daily-submission-000001',
       payload: {
         ...campaignPayload({ seed: first.ticket.runSeed, timeMs: 601_000 }),
         daily: true,
@@ -713,6 +786,7 @@ await ok('Daily V2: ticket нельзя использовать другой id
     body: JSON.stringify({
       platform: 'telegram',
       initData: signInitData(BOB, TG_TOKEN),
+      submissionId: 'daily-submission-wrong-owner',
       payload: {
         ...campaignPayload({ seed: ticket.runSeed, timeMs: 600_000 }),
         daily: true,
@@ -727,6 +801,7 @@ await ok('Daily V2: ticket нельзя использовать другой id
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       ...aliceAuth,
+      submissionId: 'daily-submission-wrong-seed',
       payload: {
         ...campaignPayload({ seed: 'wrong-daily-seed', timeMs: 600_000 }),
         daily: true,
@@ -745,7 +820,7 @@ await ok('top daily: только daily-результаты сегодня', as
       payload: { win: false, timeMs: 120_000, kills: 60, level: 4, daily: true },
     }),
   }));
-  const daily = await j(await fetch(`${BASE}/api/top?period=daily&ruleset=legacy`));
+  const daily = await j(await fetch(`${BASE}/api/top?period=daily&ruleset=legacy&includeUnverified=1`));
   assert.equal(daily.top.length, 1);
   assert.equal(daily.top[0].timeMs, 120_000);
   assert.equal(daily.top[0].daily, true);
@@ -753,7 +828,7 @@ await ok('top daily: только daily-результаты сегодня', as
 });
 
 await ok('top weekly: результаты за 7 дней', async () => {
-  const weekly = await j(await fetch(`${BASE}/api/top?period=weekly&ruleset=legacy`));
+  const weekly = await j(await fetch(`${BASE}/api/top?period=weekly&ruleset=legacy&includeUnverified=1`));
   assert.ok(weekly.top.length >= 1);
 });
 
@@ -762,20 +837,23 @@ await ok('рефы: награда один раз, повтор без нагр
   const r1 = await j(await fetch(`${BASE}/api/score`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      platform: 'max', initData: signInitData(carol, MAX_TOKEN),
-      payload: { win: true, timeMs: 400_000, kills: 200, level: 10, ref: 't_111' },
+      platform: 'max', initData: signInitData(carol, MAX_TOKEN, { startParam: 't_111' }),
+      payload: { win: true, timeMs: 400_000, kills: 200, level: 10, ref: 't_999' },
     }),
   }));
   assert.ok(r1.refReward);
   assert.equal(r1.refReward.from, 'telegram:111');
   assert.equal(r1.refReward.first, true);
 
-  const r2 = await j(await fetch(`${BASE}/api/ref`, {
+  const r2 = await fetch(`${BASE}/api/ref`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ from: 'telegram:111', to: '333', platform: 'max' }),
+  });
+  assert.equal(r2.status, 410);
+  const status = await j(await fetch(`${BASE}/api/ref/status`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platform: 'telegram', initData: signInitData({ id: 111 }, TG_TOKEN) }),
   }));
-  assert.equal(r2.first, false);
-  const status = await j(await fetch(`${BASE}/api/ref?user=111&platform=telegram`));
   assert.equal(status.invited, 1);
 });
 
@@ -795,28 +873,34 @@ await ok('browser: anonId принимается, но не попадает в 
   assert.ok(shadow.top.every((row) => !Object.hasOwn(row, 'uid')));
 });
 
-await ok('daily: быстрее победа получает лучший rank', async () => {
-  const now = Date.now();
-  const dk = () => {
-    const d = new Date(now);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  };
-  const entries = [
-    { platform: 'browser', anonId: 'anon-11111111', payload: { daily: true, win: true, timeMs: 312_000, kills: 9, level: 5, dateKey: dk() } },
-    { platform: 'browser', anonId: 'anon-22222222', payload: { daily: true, win: false, timeMs: 30_000, kills: 4, level: 3, dateKey: dk() } },
-    { platform: 'browser', anonId: 'anon-33333333', payload: { daily: true, win: true, timeMs: 320_000, kills: 20, level: 6, dateKey: dk() } },
-  ];
-  for (const body of entries) {
-    await j(await fetch(`${BASE}/api/score`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }));
-  }
-  const d = await j(await fetch(`${BASE}/api/daily?user=anon-11111111&platform=browser&ruleset=legacy`));
-  assert.equal(d.ok, true);
-  assert.ok(d.total >= 3);
-  assert.equal(d.rank, 1);
-  assert.equal(d.dateKey, dk());
-  const none = await j(await fetch(`${BASE}/api/daily?user=anon-99999999&platform=browser&ruleset=legacy`));
-  assert.equal(none.rank, null);
-  assert.equal(none.total, 0);
+await ok('daily: authenticated stats ignore anonymous forged Daily rows', async () => {
+  const queryMine = () => fetch(`${BASE}/api/daily`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platform: 'telegram', initData: signInitData(ALICE, TG_TOKEN) }),
+  }).then(j);
+  const before = await queryMine();
+  assert.equal(before.ok, true);
+  assert.ok(before.total >= 1);
+  assert.ok(before.rank !== null);
+  assert.ok(before.dateKey);
+  assert.ok(before.you);
+
+  const forgedScore = await j(await fetch(`${BASE}/api/score`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform: 'browser', anonId: 'anon-daily-forge-1234',
+      payload: { daily: true, win: true, timeMs: 312_000, kills: 9, level: 5, dateKey: before.dateKey },
+    }),
+  }));
+  assert.equal(forgedScore.ok, true);
+  assert.equal(forgedScore.ranked, false);
+  const after = await queryMine();
+  assert.equal(after.total, before.total);
+  assert.equal(after.rank, before.rank);
+  assert.equal(after.dateKey, before.dateKey);
+
+  const forged = await fetch(`${BASE}/api/daily?user=111&platform=telegram`);
+  assert.equal(forged.status, 404);
 });
 
 await ok('season: текущий сезон + сезонный топ (C5)', async () => {
@@ -833,15 +917,24 @@ await ok('season: текущий сезон + сезонный топ (C5)', asy
 });
 
 await ok('friends: топ друзей по реф-рёбрам (двунаправленно)', async () => {
-  const as111 = await j(await fetch(`${BASE}/api/friends?user=111&platform=telegram`));
+  const as111 = await j(await fetch(`${BASE}/api/friends`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platform: 'telegram', initData: signInitData({ id: 111 }, TG_TOKEN) }),
+  }));
   assert.equal(as111.ok, true);
   const invitedBy111 = as111.friends.find((f) => f.relation === 'invited' && f.platform === 'max');
   assert.ok(invitedBy111);
   assert.ok(as111.friends.every((row) => !Object.hasOwn(row, 'uid')));
-  const as333 = await j(await fetch(`${BASE}/api/friends?user=333&platform=max`));
+  const as333 = await j(await fetch(`${BASE}/api/friends`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platform: 'max', initData: signInitData({ id: 333 }, MAX_TOKEN) }),
+  }));
   const inviter = as333.friends.find((f) => f.relation === 'inviter' && f.platform === 'telegram');
   assert.ok(inviter);
-  const lonely = await j(await fetch(`${BASE}/api/friends?user=99999&platform=telegram`));
+  const lonely = await j(await fetch(`${BASE}/api/friends`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platform: 'telegram', initData: signInitData({ id: 99999 }, TG_TOKEN) }),
+  }));
   assert.equal(lonely.friends.length, 0);
 });
 
@@ -872,6 +965,7 @@ await ok('vk: валидный web_app_t → verified (общий топ)', asyn
     }),
   }));
   assert.equal(r.ok, true);
+  assert.equal(r.ranked, true);
   assert.ok(r.rank !== null);
   const top = await j(await fetch(`${BASE}/api/top?period=all&ruleset=legacy`));
   assert.ok(top.top.some((t) => t.platform === 'vk'));
@@ -1154,7 +1248,7 @@ await ok('profile/migrate: конкурентные дубли не дают д�
   const onDisk = JSON.parse(readFileSync(PROFILES_FILE, 'utf8'));
   const doraDisk = onDisk.profiles['telegram:909101'];
   assert.ok(doraDisk);
-  assert.deepEqual(Object.keys(doraDisk.inventory.items), ['founder-badge-v1']);
+  assert.deepEqual(Object.keys(doraDisk.inventory.items), [], 'signed users outside the cohort receive no founder entitlement');
   assert.ok(onDisk.migrations['telegram:909101'].claimedAt > 0);
 });
 
@@ -1182,19 +1276,53 @@ await ok('profile: публичные ответы не содержат raw uid
   assert.equal(JSON.parse(migrateText).claimed, true);
 });
 
-await ok('profile: битый profiles.json коэрсится к пустому стору (не роняет загрузку)', async () => {
+await ok('profile: повреждённый profiles.json блокирует запуск вместо сброса данных', async () => {
   const corruptDir = mkdtempSync(join(tmpdir(), 'ofeliya-profiles-corrupt-'));
   try {
     writeFileSync(join(corruptDir, 'profiles.json'), '{"profiles":"garbage","migrations":null,"version":"x"}');
-    const initData = signInitData({ id: 700_100, first_name: 'Rex' }, TG_TOKEN);
-    const out = runChildServer({ ...process.env, DATA_DIR: corruptDir, OFELIYA_TEST_INITDATA: initData });
-    const parsed = JSON.parse(out.split('__OFELIYA_PROFILE__')[1]);
-    assert.equal(parsed.ok, true);
-    assert.equal(parsed.profile.records.migrated, false);
-    assert.deepEqual(parsed.profile.inventory.items, {});
+    const child = spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(SERVER_INDEX_URL)})`], {
+      env: { ...process.env, DATA_DIR: corruptDir },
+      encoding: 'utf8',
+      timeout: 20_000,
+    });
+    assert.notEqual(child.status, 0, 'server unexpectedly started with malformed persisted profiles');
+    assert.match(child.stderr, /invalid shape|refusing to reset persisted data/);
   } finally {
     rmSync(corruptDir, { recursive: true, force: true });
   }
+});
+
+await ok('score storage is durable before the successful HTTP response', async () => {
+  const user = { id: 616_616, first_name: 'Durable' };
+  const response = await fetch(`${BASE}/api/score`, {
+    method: 'POST', headers: PROFILE_HEADERS,
+    body: JSON.stringify({ platform: 'telegram', initData: signInitData(user, TG_TOKEN), payload: { win: false, timeMs: 120_000, kills: 12, level: 3, daily: false } }),
+  });
+  assert.equal(response.status, 200);
+  const persisted = JSON.parse(readFileSync(STORE_FILE, 'utf8'));
+  assert.ok(persisted.scores.some((score) => score.uid === '616616'));
+});
+
+await ok('score submissionId retries return the same score without creating a duplicate', async () => {
+  const user = { id: 717_717, first_name: 'Retry' };
+  const requestBody = {
+    platform: 'telegram',
+    initData: signInitData(user, TG_TOKEN),
+    submissionId: 'standard-submission-000001',
+    payload: { win: false, timeMs: 121_000, kills: 13, level: 3, daily: false },
+  };
+  const submit = (body) => fetch(`${BASE}/api/score`, {
+    method: 'POST', headers: PROFILE_HEADERS, body: JSON.stringify(body),
+  });
+  const first = await j(await submit(requestBody));
+  const retry = await j(await submit(requestBody));
+  assert.equal(retry.scoreId, first.scoreId);
+  assert.equal(retry.ranked, first.ranked);
+  assert.equal(retry.rank, first.rank);
+  const altered = await submit({ ...requestBody, payload: { ...requestBody.payload, kills: 14 } });
+  assert.equal(altered.status, 409);
+  const stored = JSON.parse(readFileSync(STORE_FILE, 'utf8')).scores;
+  assert.equal(stored.filter((score) => score.submissionId === requestBody.submissionId).length, 1);
 });
 
 await ok('profile: profiles.json переживает перезапись store.json legacy-формой (rollback safety)', async () => {

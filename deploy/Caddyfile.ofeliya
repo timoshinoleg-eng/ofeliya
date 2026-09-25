@@ -23,7 +23,7 @@ handle_path /ofeliya/* {
     -Server
     Referrer-Policy "strict-origin-when-cross-origin"
     Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
-    Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://st.max.ru; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://st.max.ru; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self' https://*.max.ru https://web.max.ru"
+    Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://st.max.ru https://telegram.org; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://st.max.ru https://telegram.org; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self' https://*.max.ru https://web.max.ru https://web.telegram.org"
   }
   reverse_proxy ofeliya-static:8080
 }

@@ -42,4 +42,10 @@ if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
   process.exit(1);
 }
 
+const releaseSha = valueOf('VITE_RELEASE_SHA');
+if (!/^[0-9a-f]{40}$/i.test(releaseSha)) {
+  console.error('VITE_RELEASE_SHA must be a full 40-character Git commit SHA');
+  process.exit(1);
+}
+
 console.log('MAX release config: ok');

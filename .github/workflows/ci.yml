@@ -96,6 +96,7 @@ jobs:
           VITE_DEVELOPER_REGISTRATION: CI-REG-1
           VITE_DEVELOPER_ADDRESS: CI Test Address
           VITE_SUPPORT_EMAIL: qa@example.test
+          VITE_RELEASE_SHA: ${{ github.sha }}
         run: npm run release:check
 
       - name: Typecheck and build

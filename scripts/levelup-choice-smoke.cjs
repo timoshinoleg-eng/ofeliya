@@ -47,7 +47,9 @@ function browserDriver() {
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
   await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
   await page.waitForFunction(
-    () => window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI')
+    () =>
+      (window.__game.scene.isActive('Game') || window.__game.scene.isPaused('Game')) &&
+      window.__game.scene.isActive('UI')
   );
 
   const stale = await page.evaluate(() => {

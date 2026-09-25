@@ -344,15 +344,35 @@ async function runSuccessMatrix(browser) {
     const expected = [
       '/api/season',
       '/api/top?period=season',
-      `/api/daily?user=${UID}&platform=max`,
-      `/api/friends?user=${UID}&platform=max`,
+      '/api/daily',
+      '/api/friends',
     ].sort();
     const actual = requests.map((item) => item.key).sort();
     if (JSON.stringify(actual) !== JSON.stringify(expected)) {
       throw new Error('social request set mismatch ' + JSON.stringify({ size, actual, expected }));
     }
-    if (requests.some((item) => item.method !== 'GET' || item.key.includes('/api/daily/run'))) {
-      throw new Error('forbidden Daily POST/request ' + JSON.stringify(requests));
+    const publicReads = requests.filter((item) =>
+      item.key === '/api/season' || item.key === '/api/top?period=season'
+    );
+    const privateReads = requests.filter((item) =>
+      item.key === '/api/daily' || item.key === '/api/friends'
+    );
+    if (publicReads.some((item) => item.method !== 'GET')) {
+      throw new Error('public social request method mismatch ' + JSON.stringify(publicReads));
+    }
+    if (
+      privateReads.length !== 2 ||
+      privateReads.some(
+        (item) =>
+          item.method !== 'POST' ||
+          item.body?.platform !== 'max' ||
+          item.body?.initData !== INIT_DATA
+      )
+    ) {
+      throw new Error('authenticated social request mismatch ' + JSON.stringify(privateReads));
+    }
+    if (requests.some((item) => item.key.includes('/api/daily/run'))) {
+      throw new Error('social snapshot unexpectedly started Daily run ' + JSON.stringify(requests));
     }
 
     const action = await namedBounds(page, 'ofeliya-menu-action');
