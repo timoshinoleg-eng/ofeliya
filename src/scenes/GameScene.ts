@@ -109,6 +109,7 @@ interface ComprehensionPresentationState {
   events: ProductEvent[];
   hostCellHints: HostCellHintType[];
   hostCellSlotsWithHint: number[];
+  pendingHostCellHints: Array<{ type: HostCellHintType; slotIndex: number }>;
 }
 
 const COMPREHENSION_STATE_KEY = 'ofeliya_comprehension_v1';
@@ -126,7 +127,11 @@ export class GameScene extends Phaser.Scene {
   private hostCellsCompletedThisRun = 0;
   private hostCellHintEventsShown = new Set<HostCellHintType>();
   private hostCellSlotsWithHint = new Set<number>();
+  private pendingHostCellHints: Array<{ type: HostCellHintType; slotIndex: number }> = [];
   private comprehensionEventsSent = new Set<ProductEvent>();
+  private comprehensionEventsInFlight = new Set<ProductEvent>();
+  private comprehensionRetryCounts = new Map<ProductEvent, number>();
+  private comprehensionGeneration = 0;
   private bullets!: Phaser.Physics.Arcade.Group;
   private enemies!: Phaser.Physics.Arcade.Group;
   private gems!: Phaser.Physics.Arcade.Group;
@@ -266,6 +271,9 @@ export class GameScene extends Phaser.Scene {
     this.hostCellsCompletedThisRun = resume ? this.runState.run.hostCellsInfected : 0;
     this.hostCellHintEventsShown = new Set();
     this.hostCellSlotsWithHint = new Set();
+    this.pendingHostCellHints = [];
+    this.comprehensionGeneration += 1;
+    if (!resume) this.clearComprehensionPresentationState();
     this.restoreComprehensionPresentationState();
     this.checkpointAccMs = 0;
     // Adaptive audio foundation: one deterministic bed per run plus danger-driven tension layers.
@@ -420,6 +428,9 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (!this.scene.isActive('UI')) this.scene.launch('UI');
+    if (resume && this.pendingHostCellHints.length > 0) {
+      this.time.delayedCall(50, () => this.replayPendingHostCellHints());
+    }
 
     this.registry.set('joy', { x: 0, y: 0 });
     this.registry.set('runResult', null);
@@ -731,8 +742,9 @@ export class GameScene extends Phaser.Scene {
   private onHostCellLysis(event: HostCellLysisEvent): void {
     this.runState.recordHostCellInfected();
     this.hostCellsCompletedThisRun += 1;
-    const hadContextualHint = this.hostCellSlotsWithHint.delete(event.slotIndex);
-    this.persistComprehensionPresentationState();
+    const hadContextualHint =
+      this.hostCellSlotsWithHint.has(event.slotIndex) ||
+      this.pendingHostCellHints.some((hint) => hint.slotIndex === event.slotIndex);
     if (
       this.firstRunComprehension &&
       this.hostCellsCompletedThisRun === 2 &&
@@ -792,33 +804,74 @@ export class GameScene extends Phaser.Scene {
     };
     this.trackComprehensionOnce(analyticsEvent[event.type], { progress: event.progress });
 
-    if (!this.firstRunComprehension) return;
-    if (event.type === 'resume') return;
+    if (!this.firstRunComprehension || event.type === 'resume') return;
     if (
       this.hostCellsCompletedThisRun > 0 &&
       (event.type === 'approach' || event.type === 'enter')
     ) {
       return;
     }
-    if (this.hostCellHintEventsShown.has(event.type)) return;
 
-    const copy = {
+    const hintType: HostCellHintType = event.type;
+    if (this.hostCellHintEventsShown.has(hintType)) return;
+    if (
+      this.pendingHostCellHints.some(
+        (hint) => hint.type === hintType && hint.slotIndex === event.slotIndex
+      )
+    ) {
+      return;
+    }
+    this.queueHostCellHint(hintType, event.slotIndex);
+  }
+
+  private hostCellHintCopy(type: HostCellHintType): string {
+    return {
       approach: 'КЛЕТКА ОРГАНИЗМА · ЗАРАЗИ РЯДОМ',
       enter: 'ЗАРАЖЕНИЕ НАЧАЛОСЬ · ОСТАВАЙСЯ РЯДОМ',
       exit: 'ВНЕ ЗОНЫ · ЗАРАЖЕНИЕ ОСЛАБЕВАЕТ',
-      resume: '',
-    }[event.type];
+    }[type];
+  }
+
+  private queueHostCellHint(type: HostCellHintType, slotIndex: number): void {
+    this.pendingHostCellHints.push({ type, slotIndex });
+    this.persistComprehensionPresentationState();
+    this.renderPendingHostCellHint(type, slotIndex);
+  }
+
+  private renderPendingHostCellHint(type: HostCellHintType, slotIndex: number): void {
     const ui = this.getUiScene();
-    if (ui) {
-      ui.showContextHint(copy);
-      this.hostCellHintEventsShown.add(event.type);
-      this.hostCellSlotsWithHint.add(event.slotIndex);
-      this.persistComprehensionPresentationState();
+    if (!ui) return;
+    ui.showContextHint(this.hostCellHintCopy(type), 1800, {
+      key: `${type}:${slotIndex}`,
+      queueIfVisible: true,
+      onComplete: () => this.completeHostCellHint(type, slotIndex),
+    });
+  }
+
+  private completeHostCellHint(type: HostCellHintType, slotIndex: number): void {
+    const index = this.pendingHostCellHints.findIndex(
+      (hint) => hint.type === type && hint.slotIndex === slotIndex
+    );
+    if (index < 0) return;
+    this.pendingHostCellHints.splice(index, 1);
+    this.hostCellHintEventsShown.add(type);
+    this.hostCellSlotsWithHint.add(slotIndex);
+    this.persistComprehensionPresentationState();
+  }
+
+  private replayPendingHostCellHints(): void {
+    for (const hint of [...this.pendingHostCellHints]) {
+      this.renderPendingHostCellHint(hint.type, hint.slotIndex);
     }
   }
 
   private onHostCellSpawn(slotIndex: number): void {
-    if (this.hostCellSlotsWithHint.delete(slotIndex)) {
+    const hadOwnership = this.hostCellSlotsWithHint.delete(slotIndex);
+    const pendingBefore = this.pendingHostCellHints.length;
+    this.pendingHostCellHints = this.pendingHostCellHints.filter(
+      (hint) => hint.slotIndex !== slotIndex
+    );
+    if (hadOwnership || this.pendingHostCellHints.length !== pendingBefore) {
       this.persistComprehensionPresentationState();
     }
   }
@@ -1650,6 +1703,15 @@ export class GameScene extends Phaser.Scene {
     return this.scene.get('UI') as UIScene;
   }
 
+  onEnemyDamaged(enemy: Enemy, damage: number): void {
+    if (damage <= 0) return;
+    this.trackComprehensionOnce('first_enemy_hit', {
+      kind: enemy.kind,
+      elite: enemy.isElite,
+      boss: enemy.isBoss,
+    });
+  }
+
   showEnemyHealth(enemy: Enemy): void {
     this.enemyHealth?.show(enemy, this.time.now);
   }
@@ -1660,6 +1722,8 @@ export class GameScene extends Phaser.Scene {
 
   private restoreComprehensionPresentationState(): void {
     this.comprehensionEventsSent = new Set<ProductEvent>();
+    this.comprehensionEventsInFlight = new Set<ProductEvent>();
+    this.comprehensionRetryCounts = new Map<ProductEvent, number>();
     this.hostCellHintEventsShown = new Set<HostCellHintType>();
     try {
       const raw = localStorage.getItem(COMPREHENSION_STATE_KEY);
@@ -1688,6 +1752,19 @@ export class GameScene extends Phaser.Scene {
           }
         }
       }
+      if (Array.isArray(stored.pendingHostCellHints)) {
+        for (const hint of stored.pendingHostCellHints) {
+          if (
+            hint &&
+            (hint.type === 'approach' || hint.type === 'enter' || hint.type === 'exit') &&
+            Number.isInteger(hint.slotIndex) &&
+            hint.slotIndex >= 0 &&
+            hint.slotIndex < 6
+          ) {
+            this.pendingHostCellHints.push({ type: hint.type, slotIndex: hint.slotIndex });
+          }
+        }
+      }
     } catch {
       try {
         localStorage.removeItem(COMPREHENSION_STATE_KEY);
@@ -1704,6 +1781,7 @@ export class GameScene extends Phaser.Scene {
         events: [...this.comprehensionEventsSent],
         hostCellHints: [...this.hostCellHintEventsShown],
         hostCellSlotsWithHint: [...this.hostCellSlotsWithHint],
+        pendingHostCellHints: this.pendingHostCellHints.map((hint) => ({ ...hint })),
       };
       localStorage.setItem(COMPREHENSION_STATE_KEY, JSON.stringify(state));
     } catch {
@@ -1720,10 +1798,26 @@ export class GameScene extends Phaser.Scene {
   }
 
   private trackComprehensionOnce(event: ProductEvent, props: ProductEventProps = {}): void {
-    if (this.comprehensionEventsSent.has(event)) return;
-    this.comprehensionEventsSent.add(event);
-    this.persistComprehensionPresentationState();
-    void trackProductEvent(event, PlatformBridge, props);
+    if (this.comprehensionEventsSent.has(event) || this.comprehensionEventsInFlight.has(event)) return;
+    const generation = this.comprehensionGeneration;
+    this.comprehensionEventsInFlight.add(event);
+    void trackProductEvent(event, PlatformBridge, props).then((delivered) => {
+      if (generation !== this.comprehensionGeneration) return;
+      this.comprehensionEventsInFlight.delete(event);
+      if (delivered) {
+        this.comprehensionEventsSent.add(event);
+        this.comprehensionRetryCounts.delete(event);
+        this.persistComprehensionPresentationState();
+        return;
+      }
+      const retries = this.comprehensionRetryCounts.get(event) ?? 0;
+      if (retries >= 1) return;
+      this.comprehensionRetryCounts.set(event, retries + 1);
+      if (!this.scene.isActive('Game') && !this.scene.isPaused('Game')) return;
+      this.time.delayedCall(900, () => {
+        if (generation === this.comprehensionGeneration) this.trackComprehensionOnce(event, props);
+      });
+    });
   }
 
   private handleStageEvents(events: readonly StageDirectorEvent[]): void {
@@ -1787,6 +1881,7 @@ export class GameScene extends Phaser.Scene {
     if (this.stageDirector.phase !== 'RUN_ENDED') this.stageDirector.endRun(reason);
     this.resetCardiacLineHazard();
     RunCheckpoint.clear();
+    this.comprehensionGeneration += 1;
     this.clearComprehensionPresentationState();
     this.runState.captureStageBuild();
     const run = this.runState.run;
@@ -2038,13 +2133,6 @@ export class GameScene extends Phaser.Scene {
     const rhythmBurst = this.consumeMyocardialRhythm();
     this.vfx.hit(e.x, e.y, b.prism ? COLORS.gold : e.color);
     const dealtDamage = e.takeDamage(damage, (bv.x / vm) * 130, (bv.y / vm) * 130);
-    if (dealtDamage > 0) {
-      this.trackComprehensionOnce('first_enemy_hit', {
-        kind: e.kind,
-        elite: e.isElite,
-        boss: e.isBoss,
-      });
-    }
     Sfx.play('hit');
     this.showDamage(e.x, e.y, dealtDamage);
     this.trySplitProjectile(b, bv);

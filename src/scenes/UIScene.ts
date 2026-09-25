@@ -48,6 +48,19 @@ function compactHudNumber(value: number): string {
   return String(rounded);
 }
 
+type ContextHintOptions = {
+  key?: string;
+  queueIfVisible?: boolean;
+  onComplete?: () => void;
+};
+
+type PendingContextHint = {
+  key: string;
+  message: string;
+  duration: number;
+  onComplete?: () => void;
+};
+
 type TintableEmitter = Phaser.GameObjects.Particles.ParticleEmitter & {
   setParticleTint?: (color: number) => void;
 };
@@ -79,7 +92,9 @@ export class UIScene extends Phaser.Scene {
   private contextHintPanel: Phaser.GameObjects.Rectangle | null = null;
   private contextHintText: Phaser.GameObjects.Text | null = null;
   private contextHintTimer: Phaser.Time.TimerEvent | null = null;
-  private pendingContextHint: { message: string; duration: number } | null = null;
+  private contextHintKey: string | null = null;
+  private contextHintComplete: (() => void) | null = null;
+  private pendingContextHints: PendingContextHint[] = [];
   private preVideoScore: ReturnType<typeof submitRunScore> | null = null;
   private preVideoDailyScore: ReturnType<typeof submitDailyRunScoreDetailed> | null = null;
   private preVideoDuelAttempt: ReturnType<typeof submitDuelAttempt> | null = null;
@@ -127,7 +142,9 @@ export class UIScene extends Phaser.Scene {
     this.contextHintPanel = null;
     this.contextHintText = null;
     this.contextHintTimer = null;
-    this.pendingContextHint = null;
+    this.contextHintKey = null;
+    this.contextHintComplete = null;
+    this.pendingContextHints = [];
 
     const W = this.scale.width;
 
@@ -283,7 +300,9 @@ export class UIScene extends Phaser.Scene {
       this.scale.off('resize', this.layout, this);
       this.rnaPickupTimer = null;
       this.contextHintTimer = null;
-      this.pendingContextHint = null;
+      this.contextHintKey = null;
+      this.contextHintComplete = null;
+      this.pendingContextHints = [];
       this.contextHintContainer = null;
       this.contextHintPanel = null;
       this.contextHintText = null;
@@ -430,37 +449,61 @@ export class UIScene extends Phaser.Scene {
     });
   }
 
-  showContextHint(message: string, duration = 1800): void {
+  showContextHint(message: string, duration = 1800, options: ContextHintOptions = {}): void {
     if (!message || !this.contextHintContainer || !this.contextHintText) return;
+    const next: PendingContextHint = {
+      key: options.key ?? message,
+      message,
+      duration,
+      onComplete: options.onComplete,
+    };
     if (this.modalOpen || this.uiBlocked || this.transitionOverlay || this.overShown) {
-      this.pendingContextHint = { message, duration };
-      this.contextHintTimer?.remove(false);
-      this.contextHintTimer = null;
-      this.contextHintContainer.setVisible(false);
+      if (!this.pendingContextHints.some((pending) => pending.key === next.key)) {
+        this.pendingContextHints.push(next);
+      }
       return;
     }
-    this.renderContextHint(message, duration);
+    if (options.queueIfVisible && this.contextHintContainer.visible) {
+      if (!this.pendingContextHints.some((pending) => pending.key === next.key)) {
+        this.pendingContextHints.push(next);
+      }
+      return;
+    }
+    this.renderContextHint(next);
   }
 
-  private renderContextHint(message: string, duration: number): void {
+  private renderContextHint(hint: PendingContextHint): void {
     const container = this.contextHintContainer;
     const label = this.contextHintText;
     if (!container || !label) return;
     this.contextHintTimer?.remove(false);
     this.contextHintTimer = null;
+    this.contextHintComplete = null;
     this.tweens.killTweensOf(container);
-    label.setText(message);
+    label.setText(hint.message);
+    this.contextHintKey = hint.key;
+    this.contextHintComplete = hint.onComplete ?? null;
     container.setVisible(true).setAlpha(0).setY(124);
     this.tweens.add({ targets: container, alpha: 1, y: 116, duration: 140, ease: 'Quad.Out' });
-    this.contextHintTimer = this.time.delayedCall(duration, () => {
-      this.contextHintTimer = null;
+    this.contextHintTimer = this.time.delayedCall(hint.duration, () => {
       this.tweens.add({
         targets: container,
         alpha: 0,
         y: 110,
         duration: 170,
         ease: 'Quad.In',
-        onComplete: () => container.setVisible(false),
+      });
+      // Complete the hint on the scene clock: tween completion can be skipped
+      // when a WebView throttles or cancels an animation during resume.
+      this.contextHintTimer = this.time.delayedCall(170, () => {
+        this.contextHintTimer = null;
+        this.tweens.killTweensOf(container);
+        container.setVisible(false);
+        this.contextHintKey = null;
+        const complete = this.contextHintComplete;
+        this.contextHintComplete = null;
+        complete?.();
+        this.flushContextHint();
       });
     });
   }
@@ -469,9 +512,18 @@ export class UIScene extends Phaser.Scene {
     const container = this.contextHintContainer;
     const label = this.contextHintText;
     if (container?.visible && label?.text) {
-      this.pendingContextHint = { message: label.text, duration: 1200 };
+      if (!this.pendingContextHints.some((pending) => pending.key === (this.contextHintKey ?? label.text))) {
+        this.pendingContextHints.unshift({
+          key: this.contextHintKey ?? label.text,
+          message: label.text,
+          duration: 1200,
+          onComplete: this.contextHintComplete ?? undefined,
+        });
+      }
       this.contextHintTimer?.remove(false);
       this.contextHintTimer = null;
+      this.contextHintKey = null;
+      this.contextHintComplete = null;
       this.tweens.killTweensOf(container);
       container.setVisible(false).setAlpha(1).setY(116);
     }
@@ -479,7 +531,7 @@ export class UIScene extends Phaser.Scene {
 
   private flushContextHint(): void {
     if (
-      !this.pendingContextHint ||
+      this.pendingContextHints.length === 0 ||
       this.modalOpen ||
       this.uiBlocked ||
       this.transitionOverlay ||
@@ -487,15 +539,16 @@ export class UIScene extends Phaser.Scene {
     ) {
       return;
     }
-    const pending = this.pendingContextHint;
-    this.pendingContextHint = null;
-    this.renderContextHint(pending.message, pending.duration);
+    const pending = this.pendingContextHints.shift();
+    if (pending) this.renderContextHint(pending);
   }
 
   discardContextHint(): void {
-    this.pendingContextHint = null;
+    this.pendingContextHints = [];
     this.contextHintTimer?.remove(false);
     this.contextHintTimer = null;
+    this.contextHintKey = null;
+    this.contextHintComplete = null;
     const container = this.contextHintContainer;
     if (!container) return;
     this.tweens.killTweensOf(container);
@@ -1002,7 +1055,7 @@ export class UIScene extends Phaser.Scene {
     this.resetControls();
     if (resumeGame && this.scene.isPaused('Game')) this.scene.resume('Game');
     if (resumeGame) this.flushContextHint();
-    else this.pendingContextHint = null;
+    else this.pendingContextHints = [];
   }
 
   private showLevelUp(): void {
@@ -1679,7 +1732,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   private showGameOver(res: RunResult): void {
-    this.pendingContextHint = null;
+    this.pendingContextHints = [];
     this.contextHintTimer?.remove(false);
     this.contextHintTimer = null;
     this.contextHintContainer?.setVisible(false);

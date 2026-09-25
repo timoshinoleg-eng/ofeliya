@@ -593,7 +593,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
 
     this.hp -= actualDamage;
-    if (actualDamage > 0) this.lastDamageAt = now;
+    if (actualDamage > 0) {
+      this.lastDamageAt = now;
+      this.gs?.onEnemyDamaged(this, actualDamage);
+    }
     this.flashUntil = now + 70;
     this.knockX += kx;
     this.knockY += ky;

@@ -292,6 +292,7 @@ export class HostCellSystem {
     this.spawnAcc = snapshot.spawnAcc;
     this.firstSpawned = snapshot.firstSpawned;
     const now = this.scene.time.now;
+    const tuning = this.tuningFn();
 
     for (let i = 0; i < this.cells.length; i++) {
       const cell = this.cells[i];
@@ -301,7 +302,10 @@ export class HostCellSystem {
       cell.infection = saved.infection;
       cell.spawnedAt = now - saved.spawnedAgoMs;
       cell.interactionId = ++this.nextInteractionId;
-      cell.wasInside = false;
+      cell.wasInside =
+        Math.hypot(this.player.x - saved.x, this.player.y - saved.y) <= tuning.infectionRadius;
+      // Keep approach eligible after resume so an interrupted first-run hint can be taught again.
+      // wasInside prevents restore itself from being misreported as a leave/re-enter transition.
       cell.approachNotified = false;
       cell.image
         .setPosition(saved.x, saved.y)
