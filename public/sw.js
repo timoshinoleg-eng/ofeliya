@@ -79,13 +79,15 @@ self.addEventListener('fetch', (event) => {
 
   if (req.mode === 'navigate') {
     const shellIndex = new URL('./index.html', self.registration.scope).toString();
-    const network = fetch(req).then((res) => {
-      if (res.ok) {
-        const persist = caches.open(SHELL_CACHE).then((cache) => cache.put(shellIndex, res.clone()));
-        event.waitUntil(persist);
-      }
-      return res;
-    });
+    const network = fetch(req);
+    const persist = network
+      .then(async (res) => {
+        if (!res.ok) return;
+        const cache = await caches.open(SHELL_CACHE);
+        await cache.put(shellIndex, res.clone());
+      })
+      .catch(() => {});
+    event.waitUntil(persist);
     event.respondWith(
       network.catch(() =>
         caches.match(shellIndex).then((hit) => hit || new Response('offline', { status: 503 }))
@@ -94,15 +96,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  const response = caches.match(req).then((hit) => {
-    if (hit) return hit;
-    return fetch(req).then((res) => {
-      if (res.ok && (path.startsWith(ASSET_PREFIX) || path.startsWith(FONT_PREFIX))) {
-        const persist = caches.open(RUNTIME_CACHE).then((cache) => cache.put(req, res.clone()));
-        event.waitUntil(persist);
-      }
-      return res;
-    });
-  });
+  const response = caches.match(req).then((hit) => hit || fetch(req));
+  const persist = response
+    .then(async (res) => {
+      if (!res?.ok || (!path.startsWith(ASSET_PREFIX) && !path.startsWith(FONT_PREFIX))) return;
+      const cache = await caches.open(RUNTIME_CACHE);
+      await cache.put(req, res.clone());
+    })
+    .catch(() => {});
+  event.waitUntil(persist);
   event.respondWith(response);
 });
