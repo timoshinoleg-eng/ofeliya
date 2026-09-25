@@ -14,6 +14,7 @@ const compose = read('deploy/compose.production.yml');
 const runtimeConfig = read('public/runtime-config.js');
 const serviceWorker = read('public/sw.js');
 const envExample = read('deploy/ofeliya.env.example');
+const deployScript = read('deploy/deploy-cloudru.sh');
 const main = read('src/main.ts');
 
 const runtimePos = index.indexOf('./runtime-config.js');
@@ -52,6 +53,11 @@ assert.match(compose, /OFELIYA_ENV_FILE:-\/opt\/ofeliya\/\.env/, 'production ser
 assert.doesNotMatch(compose, /env_file:\s*\/opt\/hub\/\.env/, 'Ofeliya must not read Hub runtime secrets');
 assert.match(compose, /VITE_MAX_BOT_USERNAME: \$\{OFELIYA_BOT_USERNAME:\?OFELIYA_BOT_USERNAME is required;/, 'client build must require an explicit Ofeliya bot username');
 assert.match(compose, /MAX_BOT_TOKEN=.*\$\$OFELIYA_MAX_BOT_TOKEN/, 'score service must verify MAX initData with the app-specific Ofeliya token');
+assert.match(compose, /OFELIYA_MAX_BOT_TOKEN: \$\{OFELIYA_MAX_BOT_TOKEN:-\}/, 'score container must receive the resolved verification token');
+const dedicatedMode = deployScript.match(/\n  dedicated\)([\s\S]*?)\n    ;;/)?.[1] ?? '';
+const sharedMode = deployScript.match(/\n  shared\)([\s\S]*?)\n    ;;/)?.[1] ?? '';
+assert.match(dedicatedMode, /OFELIYA_MAX_BOT_TOKEN="\$\{OFELIYA_MAX_BOT_TOKEN:-\$\{OFELIYA_BOT_TOKEN:-\}\}"/, 'dedicated mode may use its own bot token for MAX verification');
+assert.doesNotMatch(sharedMode, /OFELIYA_MAX_BOT_TOKEN/, 'shared mode must not use the Hub bot token for MAX verification');
 assert.match(compose, /GAME_URL=.*\$\$OFELIYA_GAME_URL/, 'score service must publish Ofeliya links, not Hub links');
 assert.match(compose, /ofeliya-score-data:\/app\/server\/data/, 'score store must stay on a named persistent volume');
 assert.match(compose, /score:[\s\S]*healthcheck:[\s\S]*127\.0\.0\.1:8787\/health/, 'score service must expose a healthcheck');
