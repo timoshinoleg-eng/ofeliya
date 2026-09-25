@@ -69,6 +69,9 @@ case "${BOT_MODE}" in
   dedicated)
     BOT_ENV_FILE="${RELEASE_ENV_FILE}"
     export OFELIYA_BOT_ENV_FILE="${RELEASE_ENV_FILE}"
+    # A dedicated Ofeliya bot signs this Mini App's MAX initData. Older
+    # dedicated hosts only store its token as OFELIYA_BOT_TOKEN.
+    export OFELIYA_MAX_BOT_TOKEN="${OFELIYA_MAX_BOT_TOKEN:-${OFELIYA_BOT_TOKEN:-}}"
     ;;
   *)
     echo "OFELIYA_BOT_MODE must be shared or dedicated" >&2
