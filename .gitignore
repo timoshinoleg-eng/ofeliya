@@ -5,6 +5,7 @@ dist/
 
 # клон пакета игр (временный)
 .tmp-pack/
+.tmp-comprehension-smoke/
 
 # служебные данные инструментов
 .workbuddy-ai/

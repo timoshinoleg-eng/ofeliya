@@ -30,7 +30,15 @@ try {
   const {
     buildDailyScoreSubmission,
     submitDailyRunScore,
+    submitDailyRunScoreDetailed,
+    retryPendingDailySubmission,
   } = require(join(temp, 'systems/ScoreClient.js'));
+  const local = new Map();
+  global.localStorage = {
+    getItem: (key) => local.get(key) ?? null,
+    setItem: (key, value) => local.set(key, value),
+    removeItem: (key) => local.delete(key),
+  };
 
   const platform = {
     kind: 'telegram',
@@ -124,6 +132,32 @@ try {
   assert.equal(response.dailyRunAccepted, true);
   assert.equal(response.rank, 3);
   assert.equal(requests.at(-1).body.payload.dailyRunId, ticket.runId);
+  assert.match(requests.at(-1).body.submissionId, /^[A-Za-z0-9_-]{16,64}$/);
+
+  let failOnce = true;
+  const retryRequests = [];
+  global.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    retryRequests.push(body);
+    if (failOnce) {
+      failOnce = false;
+      throw new Error('response lost after commit');
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, ranked: false, rank: null, rulesetVersion: 2, campaignVersion: 2, dailyRunAccepted: true }),
+    };
+  };
+  const lost = await submitDailyRunScoreDetailed(result, platform, ticket);
+  assert.equal(lost.status, 'network');
+  const pendingKey = 'ofeliya_daily_score_outbox_v1';
+  const pendingId = JSON.parse(local.get(pendingKey)).submissionId;
+  await retryPendingDailySubmission({ ...platform, initData: 'fresh-signed-init-data' });
+  assert.equal(retryRequests[0].submissionId, pendingId);
+  assert.equal(retryRequests[1].submissionId, pendingId);
+  assert.equal(retryRequests[1].initData, 'fresh-signed-init-data');
+  assert.equal(local.has(pendingKey), false);
 
   // --- detailed ticket status contract ---
   const jsonRes = (status, body) => ({

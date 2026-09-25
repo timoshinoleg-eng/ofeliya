@@ -29,7 +29,7 @@ function browserDriver() {
     route.fulfill({ status: 200, contentType: 'application/javascript', body: '' })
   );
   await ctx.addInitScript(() => {
-    localStorage.setItem('ofeliya_save_v1', JSON.stringify({ muted: true, runs: 1 }));
+    localStorage.setItem('ofeliya_save_v1', JSON.stringify({ muted: true, runs: 0 }));
     window.WebApp = {
       platform: 'android',
       version: '26.20.0',
@@ -47,10 +47,32 @@ function browserDriver() {
   const baseUrl = process.env.OFELIYA_BASE_URL || 'http://127.0.0.1:5173/';
   await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
+  await page.evaluate(() => {
+    const game = window.__game;
+    const scene = game.scene.getScene('Game');
+    scene.events.once('create', () => scene.scene.pause('Game'));
+  });
   await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
-  await page.waitForFunction(
-    () => window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI')
-  );
+  try {
+    await page.waitForFunction(
+      () => {
+        const game = window.__game;
+        return (game.scene.isActive('Game') || game.scene.isPaused('Game')) && game.scene.isActive('UI');
+      },
+      null,
+      { timeout: 10_000 }
+    );
+  } catch (error) {
+    const state = await page.evaluate(() => ({
+      scenes: window.__game.scene.scenes.map((scene) => ({
+        key: scene.scene.key,
+        active: scene.scene.isActive(),
+        paused: scene.scene.isPaused(),
+        status: scene.sys.settings.status,
+      })),
+    }));
+    throw new Error(`${error.message}; scene state: ${JSON.stringify(state)}; page errors: ${errors.join(' | ')}`);
+  }
 
   const contract = await page.evaluate(() => {
     const gs = window.__game.scene.getScene('Game');

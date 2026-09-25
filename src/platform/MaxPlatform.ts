@@ -60,7 +60,7 @@ export class MaxPlatform implements PlatformAdapter {
   }
 
   get available(): boolean {
-    return !!this.wa;
+    return typeof this.wa?.initData === 'string' && this.wa.initData.length > 0;
   }
 
   get platform(): string {

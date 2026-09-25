@@ -1749,8 +1749,11 @@ export class GameScene extends Phaser.Scene {
           if (event.stage.id === 'bloodstream') {
             this.hostCells.ensureOpportunityNearPlayer();
           }
+          if (!this.wave.spawnBoss()) {
+            this.stageDirector.retryBossSpawn();
+            break;
+          }
           this.audio.onBossSpawn();
-          this.wave.spawnBoss();
           break;
         case 'run-ended':
           this.finish(event.reason === 'campaign-complete', event.reason);

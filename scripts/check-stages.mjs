@@ -119,6 +119,9 @@ try {
     'boss activation failed'
   );
   assert(single.update(bloodstream.durationMs + 1).length === 0, 'boss spawned more than once');
+  single.retryBossSpawn();
+  assert(single.phase === 'BOSS_WARNING', 'failed boss spawn did not return to retryable phase');
+  assert(single.update(bloodstream.durationMs + 1).at(-1)?.type === 'boss-spawn-requested', 'boss spawn was not retried');
   const defeated = single.bossDefeated();
   assert(defeated[0]?.type === 'boss-defeated', 'boss defeat event missing');
   assert(single.phase === 'BOSS_DEFEATED', 'boss death ceremony phase was skipped');

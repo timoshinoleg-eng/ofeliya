@@ -77,11 +77,20 @@ type FetchOutcome<T> =
   | { kind: 'http' }
   | { kind: 'network' };
 
-async function fetchJsonOutcome<T>(path: string): Promise<FetchOutcome<T>> {
+async function fetchJsonOutcome<T>(
+  path: string,
+  platform?: PlatformAdapter,
+  authenticated = false
+): Promise<FetchOutcome<T>> {
   const controller = new AbortController();
   const timer = globalThis.setTimeout(() => controller.abort(), SOCIAL_TIMEOUT_MS);
   try {
     const response = await fetch(apiUrl(path), {
+      method: authenticated ? 'POST' : 'GET',
+      headers: authenticated ? { 'Content-Type': 'application/json' } : undefined,
+      body: authenticated && platform
+        ? JSON.stringify({ platform: platform.kind, initData: platform.initData })
+        : undefined,
       credentials: 'same-origin',
       signal: controller.signal,
     });
@@ -230,14 +239,11 @@ export function socialRequestPaths(platform: PlatformAdapter): {
   friends: string | null;
 } {
   const identity = socialIdentity(platform);
-  const query = identity
-    ? `user=${encodeURIComponent(identity.user)}&platform=${identity.platform}`
-    : '';
   return {
     season: 'api/season',
     seasonTop: 'api/top?period=season',
-    daily: identity ? `api/daily?${query}` : null,
-    friends: identity ? `api/friends?${query}` : null,
+    daily: identity ? 'api/daily' : null,
+    friends: identity ? 'api/friends' : null,
   };
 }
 
@@ -254,10 +260,10 @@ export async function loadSocialSnapshotDetailed(
     fetchJsonOutcome<{ ok?: boolean; season?: SeasonSnapshot }>(paths.season),
     fetchJsonOutcome<{ ok?: boolean; top?: SocialTopEntry[] }>(paths.seasonTop),
     paths.daily
-      ? fetchJsonOutcome<{ ok?: boolean } & DailySnapshot>(paths.daily)
+      ? fetchJsonOutcome<{ ok?: boolean } & DailySnapshot>(paths.daily, platform, true)
       : Promise.resolve(null),
     paths.friends
-      ? fetchJsonOutcome<{ ok?: boolean; friends?: FriendSnapshot[] }>(paths.friends)
+      ? fetchJsonOutcome<{ ok?: boolean; friends?: FriendSnapshot[] }>(paths.friends, platform, true)
       : Promise.resolve(null),
   ]);
 

@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const read = (path) => readFileSync(path, 'utf8');
 const index = read('index.html');
-const client = read('src/systems/ServerClient.ts');
+const client = read('src/systems/ScoreClient.ts');
 const botConfig = read('bot/config.mjs');
 const botRuntime = read('bot/runtime.mjs');
 const caddy = read('deploy/Caddyfile.ofeliya');
@@ -22,7 +22,7 @@ assert.ok(maxBridgePos > runtimePos, 'release cache-buster must execute before M
 
 assert.match(
   client,
-  /new URL\(clean, document\.baseURI\)/,
+  /new URL\('api\/score', window\.location\.href\)/,
   'score API must resolve relative to the deployed Mini App prefix'
 );
 
@@ -31,7 +31,7 @@ assert.match(
 assert.match(caddy, /handle_path \/ofeliya\/\*/, 'Caddy must strip /ofeliya/ before forwarding to static nginx');
 assert.match(caddy, /path \/ofeliya\/runtime-config\.js/, 'Caddy must expose runtime config under /ofeliya/');
 assert.doesNotMatch(caddy, /handle_path \/hub\/\*/, 'Ofeliya must not claim Hub production routes');
-assert.doesNotMatch(botConfig, /HUB_BOT_USERNAME/, 'Ofeliya bot config must not fall back to Hub username');
+assert.match(botConfig, /shared \? value\('HUB_BOT_USERNAME'\)/, 'shared mode may explicitly reuse the Hub bot username');
 assert.doesNotMatch(botRuntime, /HUB_BOT_WEBHOOK_/, 'Ofeliya webhook config must not fall back to Hub settings');
 assert.match(botRuntime, /\/ofeliya\/bot\/webhook/, 'Ofeliya webhook path must be namespaced');
 
@@ -48,17 +48,18 @@ assert.match(compose, /image: ofeliya-score:\$\{OFELIYA_RELEASE:\?OFELIYA_RELEAS
 assert.match(compose, /OFELIYA_ENV_FILE:-\/opt\/ofeliya\/\.env/, 'production services must default to an Ofeliya-specific env file');
 assert.doesNotMatch(compose, /env_file:\s*\/opt\/hub\/\.env/, 'Ofeliya must not read Hub runtime secrets');
 assert.match(compose, /VITE_MAX_BOT_USERNAME: \$\{OFELIYA_BOT_USERNAME:\?OFELIYA_BOT_USERNAME is required;/, 'client build must require an explicit Ofeliya bot username');
-assert.match(compose, /MAX_BOT_TOKEN=.*\$\$OFELIYA_BOT_TOKEN/, 'score service must verify MAX initData with the Ofeliya token');
+assert.match(compose, /MAX_BOT_TOKEN=.*\$\$OFELIYA_MAX_BOT_TOKEN/, 'score service must verify MAX initData with the app-specific Ofeliya token');
 assert.match(compose, /GAME_URL=.*\$\$OFELIYA_GAME_URL/, 'score service must publish Ofeliya links, not Hub links');
 assert.match(compose, /ofeliya-score-data:\/app\/server\/data/, 'score store must stay on a named persistent volume');
 assert.match(compose, /score:[\s\S]*healthcheck:[\s\S]*127\.0\.0\.1:8787\/health/, 'score service must expose a healthcheck');
 assert.match(compose, /static:[\s\S]*depends_on:[\s\S]*score:[\s\S]*condition: service_healthy/, 'static nginx must wait for a healthy score service');
-assert.match(compose, /external: true[\s\S]*HUB_SHARED_NETWORK:-quiz-battle_default/, 'production services must join the shared external network explicitly');
+assert.match(compose, /external: true[\s\S]*OFELIYA_SHARED_NETWORK:-quiz-battle_default/, 'production services must join the explicitly configured external network');
 
 assert.match(envExample, /OFELIYA_BOT_TOKEN=/, 'production env template must require a dedicated Ofeliya token');
+assert.match(envExample, /OFELIYA_MAX_BOT_TOKEN=/, 'production env template must require an app-specific MAX verification token');
 assert.match(envExample, /OFELIYA_GAME_URL=https:\/\/games\.example\.ru\/ofeliya\//, 'production env template must document the /ofeliya/ Mini App URL');
 assert.match(runtimeConfig, /const release = 'ofeliya-[^']+';/, 'runtime config must carry an explicit release id');
-assert.match(serviceWorker, /const VERSION = 'ofeliya-v041-r2';/, 'service worker cache must rotate with the routing hotfix');
+assert.match(serviceWorker, /const VERSION = 'ofeliya-__OFELIYA_RELEASE__';/, 'service worker cache must be unique to the immutable release');
 assert.match(serviceWorker, /const CACHE_PREFIX = 'ofeliya-';/, 'service worker cache cleanup must be Ofeliya-scoped');
 assert.match(serviceWorker, /key\.startsWith\(CACHE_PREFIX\) && !key\.startsWith\(VERSION\)/, 'service worker must not delete caches owned by other apps on the same origin');
 

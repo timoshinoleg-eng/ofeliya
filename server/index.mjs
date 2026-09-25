@@ -14,11 +14,11 @@
  *
  * Запуск: node server/index.mjs
  *   env: PORT=8787, DATA_DIR=server/data, TG_BOT_TOKEN,
- *        MAX_BOT_TOKEN (или production BOT_TOKEN как fallback)
+ *        MAX_BOT_TOKEN (отдельный токен приложения, без shared fallback)
  */
 import { createServer } from 'node:http';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
+import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { saveTelegramPreparedMessage } from './telegram-share.mjs';
@@ -27,9 +27,10 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT ?? 8787);
 const DATA_DIR = process.env.DATA_DIR ?? join(ROOT, 'server', 'data');
 const TG_TOKEN = process.env.TG_BOT_TOKEN ?? '';
-// Прод-бот из bot/index.mjs исторически читает BOT_TOKEN. Не требуем дублировать
-// один и тот же MAX token в /opt/hub/.env только ради score-service.
-const MAX_TOKEN = process.env.MAX_BOT_TOKEN || process.env.BOT_TOKEN || '';
+// MAX initData не содержит app audience. A shared bot token would authenticate
+// launch data from every Mini App attached to that bot, so fail closed without
+// the dedicated application token.
+const MAX_TOKEN = process.env.MAX_BOT_TOKEN ?? '';
 // V6-server: секрет VK Mini Apps (Apps → Настройки → «Секретный ключ»).
 // Пусто — VK-скоры остаются unverified (как browser). Задан — web_app_t
 // валидируется и VK-скоры попадают в верифицированный общий топ.
@@ -37,6 +38,25 @@ const VK_SECURE_KEY = process.env.VK_SECURE_KEY ?? '';
 const GAME_URL = process.env.GAME_URL ?? '';
 const TELEGRAM_SHARE_COOLDOWN_MS = 2_500;
 const telegramShareLastAt = new Map();
+const apiWriteRate = new Map();
+const API_WRITE_WINDOW_MS = 60_000;
+const API_WRITE_LIMIT = 180;
+
+function allowApiWrite(req, now = Date.now()) {
+  const actor = req.socket.remoteAddress ?? 'unknown';
+  const previous = apiWriteRate.get(actor);
+  if (!previous || now - previous.windowStart >= API_WRITE_WINDOW_MS) {
+    apiWriteRate.set(actor, { windowStart: now, count: 1 });
+  } else {
+    if (previous.count >= API_WRITE_LIMIT) return false;
+    previous.count += 1;
+  }
+  if (apiWriteRate.size > 10_000) {
+    const oldest = apiWriteRate.keys().next().value;
+    if (oldest) apiWriteRate.delete(oldest);
+  }
+  return true;
+}
 
 // ---------- сезон (C5) ----------
 // Сезон = фиксированное окно от EPOCH (по умолчанию 2026-09-01), длина по
@@ -207,39 +227,63 @@ function emptyStore() {
 }
 
 function loadStore() {
+  let raw;
   try {
-    const raw = readFileSync(STORE_FILE, 'utf8');
-    const s = JSON.parse(raw);
-    return {
-      scores: Array.isArray(s.scores) ? s.scores : [],
-      refs: Array.isArray(s.refs) ? s.refs : [],
-      refRewards: s.refRewards && typeof s.refRewards === 'object' ? s.refRewards : {},
-      duels: Array.isArray(s.duels) ? s.duels : [],
-      duelAttempts: Array.isArray(s.duelAttempts) ? s.duelAttempts : [],
-      duelEvents: Array.isArray(s.duelEvents) ? s.duelEvents : [],
-      analyticsEvents: Array.isArray(s.analyticsEvents) ? s.analyticsEvents : [],
-      dailyRuns: Array.isArray(s.dailyRuns) ? s.dailyRuns : [],
-    };
-  } catch {
-    return emptyStore();
+    raw = readFileSync(STORE_FILE, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') return emptyStore();
+    throw error;
   }
+  const parsed = JSON.parse(raw);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('store.json must contain an object; refusing to reset persisted data');
+  }
+  const arrays = ['scores', 'refs', 'duels', 'duelAttempts', 'duelEvents', 'analyticsEvents', 'dailyRuns'];
+  for (const key of arrays) {
+    if (parsed[key] != null && !Array.isArray(parsed[key])) {
+      throw new Error(`store.json field ${key} is invalid; refusing to reset persisted data`);
+    }
+  }
+  if (parsed.refRewards != null && (!parsed.refRewards || typeof parsed.refRewards !== 'object' || Array.isArray(parsed.refRewards))) {
+    throw new Error('store.json field refRewards is invalid; refusing to reset persisted data');
+  }
+  return {
+    scores: parsed.scores ?? [],
+    refs: parsed.refs ?? [],
+    refRewards: parsed.refRewards ?? {},
+    duels: parsed.duels ?? [],
+    duelAttempts: parsed.duelAttempts ?? [],
+    duelEvents: parsed.duelEvents ?? [],
+    analyticsEvents: parsed.analyticsEvents ?? [],
+    dailyRuns: parsed.dailyRuns ?? [],
+  };
 }
 
 let store = loadStore();
-let saveScheduled = false;
-function saveStore() {
-  if (saveScheduled) return;
-  saveScheduled = true;
-  setImmediate(() => {
-    saveScheduled = false;
+function writeJsonAtomically(file, value) {
+  const tmp = `${file}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
+  let fd;
+  try {
+    writeFileSync(tmp, JSON.stringify(value), { flag: 'wx' });
+    fd = openSync(tmp, 'r+');
+    fsyncSync(fd);
+    closeSync(fd);
+    fd = undefined;
+    renameSync(tmp, file);
     try {
-      const tmp = `${STORE_FILE}.tmp`;
-      writeFileSync(tmp, JSON.stringify(store));
-      renameSync(tmp, STORE_FILE);
-    } catch (e) {
-      console.error('[store] save failed:', e.message);
+      const directoryFd = openSync(dirname(file), 'r');
+      try { fsyncSync(directoryFd); } finally { closeSync(directoryFd); }
+    } catch (error) {
+      if (!['EINVAL', 'EPERM', 'EISDIR', 'EBADF'].includes(error.code)) throw error;
     }
-  });
+  } catch (error) {
+    if (fd !== undefined) closeSync(fd);
+    throw error;
+  }
+}
+
+function saveStore() {
+  writeJsonAtomically(STORE_FILE, store);
 }
 
 function analyticsActorHash(platform, uid) {
@@ -325,7 +369,12 @@ export function validateInitData(initData, token, now = Date.now()) {
     user = null;
   }
   if (user?.id == null || String(user.id).length === 0) return null;
-  return { uid: String(user.id), user };
+  return {
+    uid: String(user.id),
+    user,
+    startParam: typeof rest.start_param === 'string' ? rest.start_param : null,
+    queryId: typeof rest.query_id === 'string' ? rest.query_id : null,
+  };
 }
 
 /**
@@ -593,6 +642,7 @@ async function notifyReferrer(ref) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: fromUid, text, disable_web_page_preview: true }),
+      signal: AbortSignal.timeout(5_000),
     });
   } catch {
     /* push — best effort, не трогаем ответ клиенту */
@@ -651,7 +701,7 @@ function sortTop(list) {
 }
 
 function publicTop(list) {
-  return list.map(({ uid, ...row }) => row);
+  return list.map(({ uid, submissionId, submissionHash, scoreId, ...row }) => row);
 }
 
 function getTop({
@@ -664,7 +714,9 @@ function getTop({
   const today = localDateKey(now);
   const weekAgo = now - 7 * 86_400_000;
 
-  let list = store.scores.filter((s) => (includeUnverified || (s.ranked ?? s.verified)));
+  // Client-reported runs are not proof of completion. Only a future server-verified
+  // run contract may set ranked=true; messenger identity alone is insufficient.
+  let list = store.scores.filter((s) => (includeUnverified || s.ranked === true));
   if (rulesetVersion != null) {
     list = list.filter((s) => storedRulesetVersion(s) === rulesetVersion);
   }
@@ -681,6 +733,7 @@ function getTop({
 // социальное сравнение за день, а не постоянный лидерборд (сбросится завтра).
 function dailyStats(user, platform, rulesetVersion = CURRENT_RULESET_VERSION) {
   const scoped = (s) =>
+    s.ranked === true &&
     (rulesetVersion == null || storedRulesetVersion(s) === rulesetVersion);
   const mine = bestByUser(
     store.scores.filter((s) => scoped(s) && s.platform === platform && s.uid === user && s.daily)
@@ -726,6 +779,12 @@ const MAX_PROFILE_ACHIEVEMENTS = 64;
 const MAX_PROFILE_SAVE_BYTES = 8_192;
 const MAX_PROFILE_TIME_MS = 86_400_000;
 const MAX_PROFILE_COUNTER = 1_000_000_000;
+const FOUNDER_ELIGIBLE_IDS = new Set(
+  String(process.env.FOUNDER_ELIGIBLE_IDS ?? '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => /^(?:max|telegram):[A-Za-z0-9_-]{1,64}$/.test(entry))
+);
 // Энтитлменты: source строго из allowlist. Значение 'purchase' ОСОЗНАННО
 // отсутствует: платная ценность требует транзакционного стора, идемпотентного
 // реестра заказов и серверной верификации чеков (см. README «Профили игрока»).
@@ -744,27 +803,29 @@ function emptyProfileStore() {
 }
 
 function loadProfileStore() {
+  let raw;
   try {
-    const parsed = JSON.parse(readFileSync(PROFILES_FILE, 'utf8'));
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return emptyProfileStore();
-    const isMap = (v) => v && typeof v === 'object' && !Array.isArray(v);
-    // Коэрсим как loadStore(): неизвестные/битые формы молча возвращаются к пустым.
-    return {
-      version: 1,
-      profiles: isMap(parsed.profiles) ? parsed.profiles : {},
-      migrations: isMap(parsed.migrations) ? parsed.migrations : {},
-    };
-  } catch {
-    return emptyProfileStore();
+    raw = readFileSync(PROFILES_FILE, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') return emptyProfileStore();
+    throw error;
   }
+  const parsed = JSON.parse(raw);
+  const isMap = (value) => value && typeof value === 'object' && !Array.isArray(value);
+  if (!isMap(parsed) || (parsed.profiles != null && !isMap(parsed.profiles)) || (parsed.migrations != null && !isMap(parsed.migrations))) {
+    throw new Error('profiles.json has an invalid shape; refusing to reset persisted data');
+  }
+  return {
+    version: 1,
+    profiles: parsed.profiles ?? {},
+    migrations: parsed.migrations ?? {},
+  };
 }
 
 let profileStore = loadProfileStore();
 
 function saveProfilesNow() {
-  const tmp = `${PROFILES_FILE}.tmp`;
-  writeFileSync(tmp, JSON.stringify(profileStore));
-  renameSync(tmp, PROFILES_FILE);
+  writeJsonAtomically(PROFILES_FILE, profileStore);
 }
 
 /**
@@ -872,7 +933,7 @@ function publicProfile(profile) {
 function verifyMessengerProfileIdentity(body) {
   const platform = body?.platform;
   if (platform !== 'max' && platform !== 'telegram') return null;
-  const token = platform === 'telegram' ? TG_TOKEN : (MAX_TOKEN || BOT_TOKEN);
+  const token = platform === 'telegram' ? TG_TOKEN : MAX_TOKEN;
   const verified = validateInitData(body?.initData, token);
   if (!verified) return null;
   return { platform, uid: verified.uid, userKey: `${platform}:${verified.uid}` };
@@ -911,15 +972,25 @@ function readBody(req) {
 }
 
 const server = createServer(async (req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host ?? 'localhost'}`);
+  let url;
+  try {
+    if (req.headers.host) new URL(`http://${req.headers.host}`);
+    url = new URL(req.url, 'http://localhost');
+  } catch {
+    return send(res, 400, { ok: false, error: 'bad request URL' });
+  }
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': process.env.ALLOW_ORIGIN ?? '*',
       'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Platform',
     });
     return res.end();
+  }
+
+  if (req.method === 'POST' && !allowApiWrite(req)) {
+    return send(res, 429, { ok: false, error: 'write rate limited' });
   }
 
   try {
@@ -1185,6 +1256,9 @@ const server = createServer(async (req, res) => {
 
     if (req.method === 'POST' && url.pathname === '/api/score') {
       const body = await readBody(req);
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        return send(res, 400, { ok: false, error: 'bad request body' });
+      }
       const { platform, initData, anonId, webAppInit, payload } = body;
       if (!['telegram', 'max', 'browser', 'vk'].includes(platform)) {
         return send(res, 400, { ok: false, error: 'bad platform' });
@@ -1193,6 +1267,7 @@ const server = createServer(async (req, res) => {
 
       let uid = null;
       let verified = false;
+      let verifiedStartParam = null;
       if (platform === 'browser' || platform === 'vk') {
         // V6-server: VK — пробуем верифицировать web_app_t (нужен VK_SECURE_KEY).
         if (platform === 'vk' && webAppInit && VK_SECURE_KEY) {
@@ -1218,6 +1293,7 @@ const server = createServer(async (req, res) => {
         if (!v) return send(res, 403, { ok: false, error: 'initData validation failed' });
         uid = v.uid;
         verified = true;
+        verifiedStartParam = v.startParam;
       }
 
       const parsedContract = parseScoreContract(payload);
@@ -1225,6 +1301,11 @@ const server = createServer(async (req, res) => {
         return send(res, 422, { ok: false, error: `score-contract: ${parsedContract.error}` });
       }
       const contract = parsedContract.contract;
+      const submissionId = typeof body.submissionId === 'string' ? body.submissionId : null;
+      if (body.submissionId != null && (!submissionId || !/^[A-Za-z0-9_-]{16,64}$/.test(submissionId))) {
+        return send(res, 422, { ok: false, error: 'bad submissionId' });
+      }
+      const submissionHash = createHash('sha256').update(JSON.stringify(payload)).digest('hex');
       const cheat = antiCheatCheck(payload, contract);
       if (cheat) return send(res, 422, { ok: false, error: `anti-cheat: ${cheat}` });
 
@@ -1242,7 +1323,21 @@ const server = createServer(async (req, res) => {
         if (dailyRun.platform !== platform || dailyRun.uid !== uid) {
           return send(res, 403, { ok: false, error: 'daily run owner mismatch' });
         }
+        if (!submissionId || !/^[A-Za-z0-9_-]{16,64}$/.test(submissionId)) {
+          return send(res, 422, { ok: false, error: 'daily submissionId required' });
+        }
         if (dailyRun.closedAt != null) {
+          if (dailyRun.submissionId === submissionId && dailyRun.submissionHash === submissionHash) {
+            return send(res, 200, {
+              ok: true,
+              rank: null,
+              ranked: false,
+              rulesetVersion: dailyRun.rulesetVersion,
+              campaignVersion: dailyRun.campaignVersion,
+              dailyRunAccepted: true,
+              scoreId: dailyRun.scoreId,
+            });
+          }
           return send(res, 409, { ok: false, error: 'daily run already closed' });
         }
         if (Date.now() >= dailyRun.expiresAt) {
@@ -1257,6 +1352,26 @@ const server = createServer(async (req, res) => {
           contract.runSeed !== dailyRun.runSeed
         ) {
           return send(res, 422, { ok: false, error: 'dailyRunId does not match score contract' });
+        }
+      }
+
+      if (!dailyRun && submissionId) {
+        const previous = store.scores.find(
+          (score) => score.platform === platform && score.uid === uid && score.submissionId === submissionId
+        );
+        if (previous) {
+          if (previous.submissionHash !== submissionHash) {
+            return send(res, 409, { ok: false, error: 'submissionId already used for another score' });
+          }
+          return send(res, 200, {
+            ok: true,
+            rank: null,
+            ranked: false,
+            rulesetVersion: previous.rulesetVersion,
+            campaignVersion: previous.campaignVersion,
+            dailyRunAccepted: false,
+            scoreId: previous.scoreId,
+          });
         }
       }
 
@@ -1276,9 +1391,11 @@ const server = createServer(async (req, res) => {
         timeMs: Math.round(payload.timeMs),
         kills: Math.round(payload.kills),
         level: Math.round(payload.level),
-        ref: parseReferralRef(payload.ref)?.token ?? null,
+        ref: parseReferralRef(verifiedStartParam)?.token ?? null,
         verified,
-        ranked: verified && contract.rankedEligible,
+        // The client currently submits final counters without a server-verifiable run
+        // transcript. Keep the result for personal/social views, but never call it ranked.
+        ranked: false,
         rulesetVersion: contract.rulesetVersion,
         campaignVersion: contract.campaignVersion,
         difficultyId: contract.difficultyId,
@@ -1288,16 +1405,29 @@ const server = createServer(async (req, res) => {
         bossesDefeated: contract.bossesDefeated,
         boss1ClearMs: contract.boss1ClearMs,
         hostCellsInfected: contract.hostCellsInfected,
+        submissionId,
+        submissionHash: submissionId ? submissionHash : null,
+        scoreId: randomBytes(12).toString('base64url'),
         ts: Date.now(),
       };
 
+      if (store.scores.length >= MAX_SCORES) {
+        const removable = store.scores.findIndex((score) => score.ranked !== true);
+        if (removable < 0) return send(res, 503, { ok: false, error: 'score storage capacity reached' });
+        store.scores.splice(removable, 1);
+      }
       store.scores.push(record);
-      if (store.scores.length > MAX_SCORES) store.scores.splice(0, store.scores.length - MAX_SCORES);
-      if (dailyRun) dailyRun.closedAt = record.ts;
+      if (dailyRun) {
+        dailyRun.closedAt = record.ts;
+        dailyRun.submissionId = submissionId;
+        dailyRun.submissionHash = submissionHash;
+        dailyRun.scoreId = record.scoreId;
+      }
 
       // Реферал V2: from хранится как platform:uid. Legacy bare uid остаётся
       // читаемым, но не получает outbound push из-за неоднозначной платформы.
       let refReward = null;
+      let refToNotify = null;
       const ref = parseReferralRef(record.ref);
       if (ref) {
         const toKey = `${platform}:${uid}`;
@@ -1308,15 +1438,16 @@ const server = createServer(async (req, res) => {
             store.refs.push({ edge: edgeKey, from: ref.key, to: toKey, ts: record.ts });
             if (store.refs.length > MAX_REFS) store.refs.splice(0, store.refs.length - MAX_REFS);
           }
-          if (!store.refRewards[edgeKey]) {
+          if (!store.refRewards[edgeKey] && Object.keys(store.refRewards).length < MAX_REFS) {
             store.refRewards[edgeKey] = record.ts;
             refReward = { from: ref.key, to: toKey, first: true };
-            void notifyReferrer(ref);
+            refToNotify = ref;
           }
         }
       }
 
       saveStore();
+      if (refToNotify) void notifyReferrer(refToNotify);
       const top = getTop({
         period: record.daily ? 'daily' : 'all',
         rulesetVersion: record.rulesetVersion,
@@ -1329,6 +1460,7 @@ const server = createServer(async (req, res) => {
         rulesetVersion: record.rulesetVersion,
         campaignVersion: record.campaignVersion,
         dailyRunAccepted: dailyRun != null,
+        scoreId: record.scoreId,
         top: publicTop(top),
         refReward,
       });
@@ -1360,17 +1492,15 @@ const server = createServer(async (req, res) => {
     }
 
     // V4: «общий» результат дня — «ты №7 из 412 сегодня».
-    if (req.method === 'GET' && url.pathname === '/api/daily') {
-      const user = (url.searchParams.get('user') ?? '').slice(0, 128);
-      const platform = (url.searchParams.get('platform') ?? '').toLowerCase();
-      if (!user || !['telegram', 'max', 'browser', 'vk'].includes(platform)) {
-        return send(res, 400, { ok: false, error: 'bad request' });
-      }
+    if (req.method === 'POST' && url.pathname === '/api/daily') {
+      const body = await readBody(req);
+      const identity = verifyDuelIdentity(body);
+      if (!identity) return send(res, 403, { ok: false, error: 'verified messenger identity required' });
       const rulesetVersion = parseRulesetFilter(url.searchParams.get('ruleset'));
       return send(res, 200, {
         ok: true,
         rulesetVersion,
-        ...dailyStats(user, platform, rulesetVersion),
+        ...dailyStats(identity.uid, identity.platform, rulesetVersion),
       });
     }
 
@@ -1378,57 +1508,29 @@ const server = createServer(async (req, res) => {
     // /api/score. Оставляем совместимость со старым клиентом, но жёстко
     // ограничиваем поля и размер store, чтобы endpoint нельзя было раздувать.
     if (req.method === 'POST' && url.pathname === '/api/ref') {
-      const body = await readBody(req);
-      const { from, to, platform } = body;
-      if (
-        typeof from !== 'string' ||
-        typeof to !== 'string' ||
-        from.length < 1 ||
-        from.length > 64 ||
-        to.length < 1 ||
-        to.length > 64 ||
-        !['telegram', 'max', 'browser', 'vk'].includes(platform)
-      ) {
-        return send(res, 400, { ok: false, error: 'bad ref' });
-      }
-      const edgeKey = `${from}>${platform}:${to}`;
-      let first = false;
-      if (!store.refs.some((r) => r.edge === edgeKey)) {
-        store.refs.push({ edge: edgeKey, from, to: `${platform}:${to}`, ts: Date.now() });
-        if (store.refs.length > MAX_REFS) store.refs.splice(0, store.refs.length - MAX_REFS);
-        first = true;
-      }
-      if (!store.refRewards[edgeKey]) {
-        store.refRewards[edgeKey] = Date.now();
-        first = true;
-      }
-      saveStore();
-      return send(res, 200, { ok: true, first });
+      return send(res, 410, { ok: false, error: 'referrals are accepted only from signed launch data' });
     }
 
-    if (req.method === 'GET' && url.pathname === '/api/ref') {
-      const user = (url.searchParams.get('user') ?? '').slice(0, 64);
-      const platform = (url.searchParams.get('platform') ?? '').toLowerCase();
-      if (!user || !KNOWN_PLATFORMS.has(platform)) {
-        return send(res, 400, { ok: false, error: 'bad request' });
-      }
-      const meKey = `${platform}:${user}`;
+    if (req.method === 'POST' && url.pathname === '/api/ref/status') {
+      const body = await readBody(req);
+      const identity = verifyDuelIdentity(body);
+      if (!identity) return send(res, 403, { ok: false, error: 'verified messenger identity required' });
+      const meKey = `${identity.platform}:${identity.uid}`;
       const mine = store.refs.filter((r) => {
         const from = parseStoredIdentity(r.from);
-        return r.from === meKey || (from?.platform == null && from?.uid === user);
+        return r.from === meKey || (from?.platform == null && from?.uid === identity.uid);
       }).length;
-      return send(res, 200, { ok: true, platform, invited: mine });
+      return send(res, 200, { ok: true, platform: identity.platform, invited: mine });
     }
 
     // V2/V2-ref: friend graph keeps platform identity internally but public
     // response omits raw uid. Legacy bare ref ids remain readable.
-    if (req.method === 'GET' && url.pathname === '/api/friends') {
-      const user = (url.searchParams.get('user') ?? '').slice(0, 64);
-      const platform = (url.searchParams.get('platform') ?? '').toLowerCase();
-      if (!user || !KNOWN_PLATFORMS.has(platform)) {
-        return send(res, 400, { ok: false, error: 'bad request' });
-      }
-      const meKey = `${platform}:${user}`;
+    if (req.method === 'POST' && url.pathname === '/api/friends') {
+      const body = await readBody(req);
+      const identity = verifyDuelIdentity(body);
+      if (!identity) return send(res, 403, { ok: false, error: 'verified messenger identity required' });
+      const meKey = `${identity.platform}:${identity.uid}`;
+      const user = identity.uid;
       const friends = new Map(); // identity -> { platform, uid, relation }
       const addFriend = (identity, relation) => {
         if (!identity?.uid) return;
@@ -1466,7 +1568,7 @@ const server = createServer(async (req, res) => {
         }
       }
       out.sort(compareScores);
-      return send(res, 200, { ok: true, platform, friends: out.slice(0, 10) });
+      return send(res, 200, { ok: true, platform: identity.platform, friends: out.slice(0, 10) });
     }
 
     // V1 профили: только верифицированное чтение и одноразовая advisory-миграция.
@@ -1535,8 +1637,10 @@ const server = createServer(async (req, res) => {
           return { profile, claimed: false };
         }
         applyMigrationSave(profile, save);
-        for (const grant of PROFILE_MIGRATION_GRANTS) {
-          grantProfileItem(profile, grant.itemId, grant.source);
+        if (FOUNDER_ELIGIBLE_IDS.has(identity.userKey)) {
+          for (const grant of PROFILE_MIGRATION_GRANTS) {
+            grantProfileItem(profile, grant.itemId, grant.source);
+          }
         }
         profile.updatedAt = Date.now();
         profileStore.migrations[identity.userKey] = { claimedAt: Date.now(), saveHash };
@@ -1558,7 +1662,7 @@ const server = createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`[ofeliya-server] http://localhost:${PORT} (data: ${DATA_DIR})`);
   if (!TG_TOKEN) console.warn('[ofeliya-server] TG_BOT_TOKEN не задан — telegram-скоры не будут верифицироваться');
-  if (!MAX_TOKEN) console.warn('[ofeliya-server] MAX_BOT_TOKEN/BOT_TOKEN не задан — max-скоры не будут верифицироваться');
+  if (!MAX_TOKEN) console.warn('[ofeliya-server] dedicated MAX_BOT_TOKEN не задан — MAX identity checks fail closed');
 });
 
 export { server };

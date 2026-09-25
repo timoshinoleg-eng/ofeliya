@@ -33,7 +33,7 @@ try {
     available: true,
     platform: kind,
     version: '',
-    initData: '',
+    initData: 'signed-test-data',
     getUser: () => (id == null ? null : { id }),
     getDisplayName: () => null,
     getStartParam: () => null,
@@ -54,8 +54,8 @@ try {
   const paths = socialRequestPaths(platform('max', 'abc-1'));
   assert.equal(paths.season, 'api/season');
   assert.equal(paths.seasonTop, 'api/top?period=season');
-  assert.equal(paths.daily, 'api/daily?user=abc-1&platform=max');
-  assert.equal(paths.friends, 'api/friends?user=abc-1&platform=max');
+  assert.equal(paths.daily, 'api/daily');
+  assert.equal(paths.friends, 'api/friends');
 
   const browserPaths = socialRequestPaths(platform('browser', 'anon'));
   assert.equal(browserPaths.daily, null);
