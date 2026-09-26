@@ -153,6 +153,19 @@ OFELIYA rewrites the donor module in strict TypeScript as a presentation-free sy
 (no Phaser import, step copy moved to the UI layer, renamed to the project's onboarding
 vocabulary); no upstream UI strings, URLs or other assets are imported.
 
+Files (daily streak line):
+
+- `src/systems/DailyHistory.ts`
+- Daily share suffix in `src/scenes/UIScene.ts`
+- Daily streak line in `src/ui/SocialHub.ts`
+
+The daily-result history (14-day rolling window pruned by date string, not client
+clock), the consecutive-day streak summary (current/best, UTC month rollover via
+Date.UTC) and the offline Wordle-style emoji tile share idea were adapted from
+`ricardo-foundry/canvas-vampire-survivors`, `src/daily.js`. The donor's
+`dailySeed()`/`dailyChallenge()`/`cyrb53` are deliberately NOT reproduced:
+OFELIYA's daily runs are server-authoritative (DailyRunClient + DailyRunIntent).
+
 ## Generated game art
 
 Virus, immune cells, host cells, bloodstream background, mutation icons and gameplay VFX are generated

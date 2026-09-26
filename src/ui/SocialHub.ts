@@ -9,6 +9,7 @@ import {
   type SocialTopEntry,
 } from '../systems/SocialClient';
 import type { DailyTicketStatus } from '../systems/DailyRunClient';
+import { dailyStreakSummary } from '../systems/DailyHistory';
 
 const MAX_ROWS = 3;
 
@@ -301,6 +302,20 @@ export class SocialHub {
       .setResolution(2)
       .setName('ofeliya-social-daily-label');
     this.body.add([bg, label]);
+    const streak = dailyStreakSummary();
+    if (streak.current > 0 || streak.best > 0) {
+      const streakText = this.scene.add
+        .text(W / 2, y + 34, `СЕРИЯ ${streak.current} · РЕКОРД ${streak.best}`, {
+          fontFamily: FONT,
+          fontSize: this.scene.scale.height < 650 ? '9px' : '10px',
+          fontStyle: 'bold',
+          color: '#b8f3ff',
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setName('ofeliya-social-daily-streak');
+      this.body.add(streakText);
+    }
   }
 
   private async startDaily(): Promise<void> {

@@ -37,6 +37,7 @@ import { submitDailyRunScoreDetailed, submitRunScore, type DailySubmitStatus } f
 import { createFixedSeedDuel, submitDuelAttempt, trackDuelEvent } from '../systems/DuelClient';
 import { clearDailyIntent, readDailyIntent, resolveDailyResultBranch } from '../game/DailyRunIntent';
 import { OnboardingState, type OnboardingStepId } from '../systems/onboardingState';
+import { buildDailyShareSuffix, recordDailyResult } from '../systems/DailyHistory';
 import { SaveSystem } from '../systems/SaveSystem';
 import type { DailyRunTicket } from '../systems/DailyRunClient';
 import type { GameScene } from './GameScene';
@@ -2118,7 +2119,14 @@ export class UIScene extends Phaser.Scene {
           if (!scoreStatus.active) return;
           this.renderDailySubmitStatus(status, scoreStatus, response?.rank ?? null);
         }
-      );
+      );      recordDailyResult({
+        date: dailyTicket.dateKey,
+        timeMs: res.timeMs,
+        kills: res.kills,
+        level: res.highestLevel,
+        win: res.win,
+        savedAt: Date.now(),
+      });
     } else if (dailyBranch === 'blocked') {
       // Fail-closed: a daily intent with a missing/mismatched/expired ticket submits NOTHING.
       clearDailyIntent(this.registry);
@@ -2306,9 +2314,11 @@ export class UIScene extends Phaser.Scene {
             : res.resumed
               ? ' Возобновлённый забег · вне рейтинга.'
               : ' Режим: НАПРЯЖЕНИЕ.';
-      const shareText = res.win
-        ? `OFELIYA / STRAIN-0 завершила кампанию за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare}${legendaryShare}`.trim()
-        : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare}${legendaryShare}`.trim();
+      const dailySuffix = dailyIntent ? buildDailyShareSuffix({ timeMs: res.timeMs }) : '';
+      const shareText = (res.win
+        ? `OFELIYA / STRAIN-0 завершила кампанию за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare}${legendaryShare}`
+        : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare}${legendaryShare}`
+      ).trim() + (dailySuffix ? `\n\n${dailySuffix}` : '');
 
       if (challengeTarget || legacyChallengeCreatable) {
         const payload = ranked ? encodeChallengePayload(createChallengePayload(res)) : null;
