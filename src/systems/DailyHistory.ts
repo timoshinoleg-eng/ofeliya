@@ -17,7 +17,7 @@
  */
 
 export interface DailyHistoryEntry {
-  /** UTC date key 'YYYY-MM-DD' of the daily ticket launch day. */
+  /** Local date key 'YYYY-MM-DD' of the daily ticket launch day (server localDateKey). */
   date: string;
   timeMs: number;
   kills: number;
@@ -57,19 +57,25 @@ function usableLocalStorage(): boolean {
 
 let memoryStore: string | null = null;
 
-/** Return today's UTC date as 'YYYY-MM-DD'. */
-export function utcDayKey(now: Date = new Date()): string {
-  const y = now.getUTCFullYear();
-  const m = String(now.getUTCMonth() + 1).padStart(2, '0');
-  const d = String(now.getUTCDate()).padStart(2, '0');
+/**
+ * Return the LOCAL wall-clock date as 'YYYY-MM-DD'. OFELIYA's server issues
+ * daily tickets with `localDateKey()` (local calendar), so the history and
+ * streak window MUST use the same local calendar — otherwise a player in a
+ * positive-offset timezone drifts one day across UTC midnight.
+ */
+export function localDayKey(now: Date = new Date()): string {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
 }
 
-/** Add one UTC day to a 'YYYY-MM-DD' string (month/year rollover safe). */
+/** Add one local calendar day to a 'YYYY-MM-DD' string (month/year rollover + DST safe). */
 function nextDayKey(key: string): string {
   const [y, m, d] = key.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1) + 86400 * 1000);
-  return utcDayKey(dt);
+  const dt = new Date(y, (m ?? 1) - 1, d ?? 1);
+  dt.setDate(dt.getDate() + 1);
+  return localDayKey(dt);
 }
 
 export function loadDailyHistory(): Record<string, DailyHistoryEntry> {
@@ -118,7 +124,9 @@ export function recordDailyResult(entry: DailyHistoryEntry): void {
   if (!entry || typeof entry.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) return;
   const history = loadDailyHistory();
   history[entry.date] = { ...entry };
-  const cutoff = utcDayKey(new Date(Date.now() - KEEP_DAYS * 86400 * 1000));
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - KEEP_DAYS);
+  const cutoff = localDayKey(cutoffDate);
   for (const key of Object.keys(history)) {
     const day = key.slice(0, 10);
     if (day < cutoff) delete history[key];
@@ -129,7 +137,7 @@ export function recordDailyResult(entry: DailyHistoryEntry): void {
 /**
  * Streak summary. Any recorded day counts as played (stages don't differ —
  * OFELIYA has one daily ladder). Builds a sorted unique-date list, counts the
- * trailing run of consecutive UTC days ending today as `current`, and the
+ * trailing run of consecutive calendar days ending today as `current`, and the
  * longest consecutive run anywhere as `best` (so the badge stays correct as
  * days roll out of the window). `days` is a 14-day calendar newest-first,
  * ready to render.
@@ -149,7 +157,7 @@ export function dailyStreakSummary(
   }
   const days: DailyDayCell[] = [];
   for (let i = 0; i < KEEP_DAYS; i++) {
-    const key = utcDayKey(new Date(now.getTime() - i * 86400 * 1000));
+    const key = localDayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - i));
     const entry = byDate.get(key);
     days.push({
       date: key,

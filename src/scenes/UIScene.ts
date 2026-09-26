@@ -133,6 +133,8 @@ export class UIScene extends Phaser.Scene {
   private uiBlocked = false;
   private onboarding: OnboardingState | null = null;
   private onboardingContainer: Phaser.GameObjects.Container | null = null;
+  private onboardingTitle: Phaser.GameObjects.Text | null = null;
+  private onboardingBody: Phaser.GameObjects.Text | null = null;
   private onboardingLastXp = 0;
   private onboardingArmed = false;
 
@@ -162,6 +164,8 @@ export class UIScene extends Phaser.Scene {
     this.pendingContextHints = [];
     this.onboarding = null;
     this.onboardingContainer = null;
+    this.onboardingTitle = null;
+    this.onboardingBody = null;
     this.onboardingLastXp = 0;
     this.onboardingArmed = false;
 
@@ -325,6 +329,8 @@ export class UIScene extends Phaser.Scene {
       this.contextHintContainer = null;
       this.contextHintPanel = null;
       this.onboardingContainer = null;
+      this.onboardingTitle = null;
+      this.onboardingBody = null;
       this.onboarding = null;
       this.contextHintText = null;
       this.pauseOverlay = null;
@@ -1081,16 +1087,16 @@ export class UIScene extends Phaser.Scene {
         this.onboarding?.skip();
         this.persistOnboarding();
       });
+      this.onboardingTitle = title;
+      this.onboardingBody = body;
       this.onboardingContainer = this.add
         .container(W / 2, 158, [panel, title, body, skip])
         .setDepth(DEPTH + 8);
     }
     const c = this.onboardingContainer;
-    if (!c) return;
-    const title = c.getAt(1) as Phaser.GameObjects.Text;
-    const body = c.getAt(2) as Phaser.GameObjects.Text;
-    title.setText(copy.title);
-    body.setText(copy.body);
+    if (!c || !this.onboardingTitle || !this.onboardingBody) return;
+    this.onboardingTitle.setText(copy.title);
+    this.onboardingBody.setText(copy.body);
     c.setVisible(!hidden);
   }
 
@@ -1098,6 +1104,8 @@ export class UIScene extends Phaser.Scene {
     SaveSystem.update({ tutorialDone: true });
     this.onboardingContainer?.destroy();
     this.onboardingContainer = null;
+    this.onboardingTitle = null;
+    this.onboardingBody = null;
     this.onboarding = null;
   }
 
@@ -2119,7 +2127,12 @@ export class UIScene extends Phaser.Scene {
           if (!scoreStatus.active) return;
           this.renderDailySubmitStatus(status, scoreStatus, response?.rank ?? null);
         }
-      );      recordDailyResult({
+      );
+
+      // The run factually happened on the ticket's launch day; record it into the
+      // local streak history regardless of the network submission outcome below
+      // (ScoreClient's outbox owns retry). blocked/resumed/inactive never reach here.
+      recordDailyResult({
         date: dailyTicket.dateKey,
         timeMs: res.timeMs,
         kills: res.kills,

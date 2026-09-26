@@ -2,9 +2,12 @@
 // (donor: ricardo-foundry/canvas-vampire-survivors src/daily.js, MIT).
 //
 // Covers: empty history, consecutive-day current streak, gap handling, best
-// streak outside the rolling window, UTC month rollover, record/prune by date
+// streak outside the rolling window, month rollover, record/prune by date
 // string (not client clock), same-date overwrite, 14-day cutoff boundary, and
 // the deterministic Wordle-style share suffix (surrogate-safe tile counting).
+//
+// All fixtures use LOCAL wall-clock dates (matching server localDateKey):
+// no UTC instants, so the asserts are timezone-independent.
 
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -21,6 +24,19 @@ function assert(condition, message) {
 
 function entry(date, timeMs, overrides = {}) {
   return { date, timeMs, kills: 10, level: 3, win: false, savedAt: 0, ...overrides };
+}
+
+// Local-date helpers mirroring the module's localDayKey.
+function localDayKey(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function localDaysAgo(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return localDayKey(d);
 }
 
 try {
@@ -52,17 +68,21 @@ try {
     dailyStreakSummary,
     loadDailyHistory,
     recordDailyResult,
-    utcDayKey,
+    localDayKey: modLocalDayKey,
     _resetForTests,
   } = require(join(temp, 'systems/DailyHistory.js'));
 
+  // localDayKey is deterministic for local-constructed Dates: sanity-check parity.
+  assert(localDayKey(new Date(2026, 1, 10, 12, 0, 0)) === '2026-02-10', 'local fixture helper');
+  assert(modLocalDayKey(new Date(2026, 1, 10, 12, 0, 0)) === '2026-02-10', 'module localDayKey');
+
   // --- empty history ---
-  const now = new Date('2026-02-10T12:00:00Z');
+  const now = new Date(2026, 1, 10, 12, 0, 0);
   const empty = dailyStreakSummary({}, now);
   assert(empty.current === 0 && empty.best === 0, 'empty history has no streaks');
   assert(empty.days.length === 14, '14-day window');
   assert(empty.days.every((d) => !d.played), 'no played days when empty');
-  assert(empty.days[0].date === '2026-02-10', 'window starts today (UTC)');
+  assert(empty.days[0].date === '2026-02-10', 'window starts today');
 
   // --- consecutive days ending today ---
   const s1 = dailyStreakSummary(
@@ -87,24 +107,24 @@ try {
   // --- best streak survives outside the 14-day window ---
   const h3 = {};
   for (let i = 0; i < 5; i++) {
-    const k = utcDayKey(new Date(Date.UTC(2026, 0, 1 + i)));
+    const k = localDayKey(new Date(2026, 0, 1 + i));
     h3[k] = entry(k, 100);
   }
-  const s3 = dailyStreakSummary(h3, new Date('2026-03-01T12:00:00Z'));
+  const s3 = dailyStreakSummary(h3, new Date(2026, 2, 1, 12, 0, 0));
   assert(s3.best === 5, `best streak outside window, got ${s3.best}`);
   assert(s3.current === 0, 'no current streak far from history');
 
-  // --- UTC month rollover counts as consecutive ---
+  // --- month rollover counts as consecutive ---
   const s4 = dailyStreakSummary(
     { '2026-01-31': entry('2026-01-31', 1), '2026-02-01': entry('2026-02-01', 1) },
-    new Date('2026-02-01T06:00:00Z')
+    new Date(2026, 1, 1, 6, 0, 0)
   );
   assert(s4.current === 2 && s4.best === 2, `month rollover consecutive, got ${s4.current}/${s4.best}`);
 
   // --- record + prune by date string ---
   _resetForTests();
-  const today = utcDayKey(new Date());
-  const tooOld = utcDayKey(new Date(Date.now() - 20 * 86400 * 1000));
+  const today = localDayKey(new Date());
+  const tooOld = localDaysAgo(20);
   recordDailyResult(entry(today, 2000, { win: true }));
   recordDailyResult(entry(tooOld, 1000));
   const stored = loadDailyHistory();
@@ -117,7 +137,7 @@ try {
 
   // --- the exact cutoff day survives ---
   _resetForTests();
-  const cutoff = utcDayKey(new Date(Date.now() - 14 * 86400 * 1000));
+  const cutoff = localDaysAgo(14);
   recordDailyResult(entry(cutoff, 500));
   recordDailyResult(entry(today, 500));
   assert(!!loadDailyHistory()[cutoff], 'date exactly 14 days back is kept');
@@ -126,7 +146,7 @@ try {
   assert(buildDailyShareSuffix({ timeMs: 1000 }, {}) === '', 'no suffix without history');
   const h6 = {};
   for (let i = 0; i < 7; i++) {
-    const k = utcDayKey(new Date(Date.UTC(2026, 1, 4 + i)));
+    const k = localDayKey(new Date(2026, 1, 4 + i));
     h6[k] = entry(k, 100 * (i + 1));
   }
   const suffix = buildDailyShareSuffix({ timeMs: 700 }, h6);
