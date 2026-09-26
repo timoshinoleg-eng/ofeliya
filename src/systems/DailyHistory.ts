@@ -41,6 +41,7 @@ export interface DailyStreakSummary {
 }
 
 const STORAGE_KEY = 'ofeliya_daily_history_v1';
+const BEST_STREAK_STORAGE_KEY = 'ofeliya_daily_best_streak_v1';
 const KEEP_DAYS = 14;
 
 function usableLocalStorage(): boolean {
@@ -56,6 +57,26 @@ function usableLocalStorage(): boolean {
 }
 
 let memoryStore: string | null = null;
+let memoryBestStreak = 0;
+
+function loadBestStreak(): number {
+  try {
+    const raw = usableLocalStorage() ? localStorage.getItem(BEST_STREAK_STORAGE_KEY) : null;
+    const value = raw === null ? memoryBestStreak : Number(raw);
+    return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+  } catch {
+    return memoryBestStreak;
+  }
+}
+
+function writeBestStreak(value: number): void {
+  memoryBestStreak = value;
+  try {
+    if (usableLocalStorage()) localStorage.setItem(BEST_STREAK_STORAGE_KEY, String(value));
+  } catch {
+    /* quota / private mode — keep the in-memory value */
+  }
+}
 
 /**
  * Return the LOCAL wall-clock date as 'YYYY-MM-DD'. OFELIYA's server issues
@@ -124,6 +145,9 @@ export function recordDailyResult(entry: DailyHistoryEntry): void {
   if (!entry || typeof entry.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) return;
   const history = loadDailyHistory();
   history[entry.date] = { ...entry };
+  // Keep the all-time high-water mark separately because the detailed daily
+  // entries below are intentionally pruned to a 14-day rolling window.
+  writeBestStreak(Math.max(loadBestStreak(), dailyStreakSummary(history).best));
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - KEEP_DAYS);
   const cutoff = localDayKey(cutoffDate);
@@ -182,6 +206,7 @@ export function dailyStreakSummary(
     if (run > best) best = run;
     prevKey = key;
   }
+  if (history === undefined) best = Math.max(best, loadBestStreak());
   return { current, best, days };
 }
 
@@ -222,7 +247,7 @@ export function buildDailyShareSuffix(
   while (tiles.length < 7) tiles.push('⬛');
   const tileLine = tiles.slice(0, 7).join('');
 
-  const summary = dailyStreakSummary(all);
+  const summary = history === undefined ? dailyStreakSummary() : dailyStreakSummary(all);
   if (summary.current <= 0 && summary.best <= 0) return '';
   const streakLine = `Серия: ${summary.current} дн. · Рекорд: ${summary.best}`;
   return `${streakLine}\n${tileLine}`;
@@ -231,8 +256,12 @@ export function buildDailyShareSuffix(
 /** Test hook: reset in-memory fallback store. */
 export function _resetForTests(): void {
   memoryStore = null;
+  memoryBestStreak = 0;
   try {
-    if (usableLocalStorage()) localStorage.removeItem(STORAGE_KEY);
+    if (usableLocalStorage()) {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(BEST_STREAK_STORAGE_KEY);
+    }
   } catch {
     /* ignore */
   }

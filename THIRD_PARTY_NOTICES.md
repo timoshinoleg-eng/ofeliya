@@ -160,8 +160,9 @@ Files (daily streak line):
 - Daily streak line in `src/ui/SocialHub.ts`
 
 The daily-result history (14-day rolling window pruned by date string, not client
-clock), the consecutive-day streak summary (current/best, UTC month rollover via
-Date.UTC) and the offline Wordle-style emoji tile share idea were adapted from
+clock), the consecutive-day streak summary (current/best, local-calendar rollover
+with `Date.setDate`), the retained all-time best-streak value, and the offline
+Wordle-style emoji tile share idea were adapted from
 `ricardo-foundry/canvas-vampire-survivors`, `src/daily.js`. The donor's
 `dailySeed()`/`dailyChallenge()`/`cyrb53` are deliberately NOT reproduced:
 OFELIYA's daily runs are server-authoritative (DailyRunClient + DailyRunIntent).
