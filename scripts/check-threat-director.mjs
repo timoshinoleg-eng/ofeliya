@@ -160,6 +160,19 @@ try {
   assert(!/from ['"]phaser['"]/.test(source), 'ThreatDirector must stay Phaser-free');
   assert(!/RunRng|gameplayRng/.test(source), 'ThreatDirector must never consume gameplay RNG');
 
+  // Competitive safety: initial rollout observes every run but only changes pacing in
+  // non-daily Strained runs. Standard/fixed-seed duels keep the authored schedule.
+  const gameSceneSource = readFileSync(resolve('src/scenes/GameScene.ts'), 'utf8');
+  assert(
+    /this\.difficulty\.id === 'strained' && !this\.dailyRun/.test(gameSceneSource),
+    'adaptive pacing must stay disabled for Standard and Daily runs during initial rollout'
+  );
+  const waveSource = readFileSync(resolve('src/game/WaveDirector.ts'), 'utf8');
+  assert(
+    /adaptivePacingEnabled = false/.test(waveSource) && /private get pacingDirective/.test(waveSource),
+    'WaveDirector must fail closed to authored pacing when adaptive pacing is disabled'
+  );
+
   console.log('adaptive threat director deterministic smoke: ok');
 } finally {
   rmSync(temp, { recursive: true, force: true });
