@@ -3,11 +3,19 @@ import type { EnemyKind } from './config';
 import type { StageDefinition } from './StageDefinitions';
 import type { DifficultyProfile } from './DifficultyProfile';
 import type { GameScene } from '../scenes/GameScene';
+import {
+  ThreatDirector,
+  type ThreatAssessment,
+  type ThreatDirectorSnapshot,
+} from './ThreatDirector';
 
 export interface WaveDirectorSnapshot {
   spawnAcc: number;
   spawnedElites: number;
   minionAcc: number;
+  /** Optional for backwards-compatible checkpoints created before adaptive threat pacing. */
+  threat?: ThreatDirectorSnapshot;
+  threatAccMs?: number;
 }
 
 /** Owns only stage-local enemy composition; StageDirector owns lifecycle and boss timing. */
@@ -23,6 +31,9 @@ export class WaveDirector {
   private minionAcc = 0;
   private readonly randomKind: () => number;
   private readonly randomSpawn: () => number;
+  private readonly threat = new ThreatDirector();
+  private threatAccMs = 0;
+  private threatAssessment: ThreatAssessment = this.threat.current;
 
   constructor(
     scene: GameScene,
@@ -46,16 +57,23 @@ export class WaveDirector {
     this.spawnedElites = 0;
     this.minionAcc = 0;
     this.boss = null;
+    this.threatAccMs = 0;
+    this.threat.reset(this.scene.runState.stage.timeMs);
+    this.threatAssessment = this.threat.current;
     this.spawnOpeningEnemies();
   }
 
   update(delta: number): void {
     const t = this.scene.runState.stage.timeMs;
     const waves = this.stage.waves;
+    this.updateAdaptiveThreat(delta);
 
     if (this.boss) {
       this.minionAcc += delta;
-      const minionInterval = waves.bossMinionIntervalMs * this.difficulty.bossMinionIntervalMultiplier;
+      const minionInterval =
+        waves.bossMinionIntervalMs *
+        this.difficulty.bossMinionIntervalMultiplier *
+        this.threatAssessment.directive.bossMinionIntervalMultiplier;
       if (this.minionAcc >= minionInterval) {
         this.minionAcc = 0;
         const boss = this.boss;
@@ -75,7 +93,11 @@ export class WaveDirector {
 
     const eliteEveryMs = waves.eliteEveryMs * this.difficulty.eliteIntervalMultiplier;
     const expectedElites = eliteEveryMs > 0 ? Math.floor(t / eliteEveryMs) : 0;
-    if (expectedElites > this.spawnedElites) {
+    if (
+      expectedElites > this.spawnedElites &&
+      this.threatAssessment.directive.allowDangerousCombinations
+    ) {
+      // Skip backlog rather than burst-spawning deferred elites after a recovery window.
       this.spawnedElites = expectedElites;
       const eliteKinds: EnemyKind[] = ['swarm', 'runner', 'brute'];
       const kind = eliteKinds[Math.floor(this.randomKind() * eliteKinds.length)] ?? 'swarm';
@@ -89,13 +111,18 @@ export class WaveDirector {
       progress
     );
     interval *= this.difficulty.spawnIntervalMultiplier;
+    interval *= this.threatAssessment.directive.spawnIntervalMultiplier;
     if (this.boss) interval /= waves.bossPhaseSpawnMultiplier;
     this.spawnAcc += delta;
     while (this.spawnAcc >= interval) {
       this.spawnAcc -= interval;
-      const batch = Math.min(
+      const authoredBatch = Math.min(
         waves.maxBatchSize + this.difficulty.batchBonus,
         1 + Math.floor(t / waves.batchEveryMs) + this.difficulty.batchBonus
+      );
+      const batch = Math.max(
+        1,
+        Math.floor(authoredBatch * this.threatAssessment.directive.batchScale)
       );
       for (let i = 0; i < batch; i++) this.spawn(waves.pickKind(t, this.randomKind()), false);
     }
@@ -106,6 +133,8 @@ export class WaveDirector {
       spawnAcc: this.spawnAcc,
       spawnedElites: this.spawnedElites,
       minionAcc: this.minionAcc,
+      threat: this.threat.snapshot(this.scene.runState.stage.timeMs),
+      threatAccMs: this.threatAccMs,
     };
   }
 
@@ -114,6 +143,9 @@ export class WaveDirector {
     this.spawnAcc = snapshot.spawnAcc;
     this.spawnedElites = snapshot.spawnedElites;
     this.minionAcc = snapshot.minionAcc;
+    this.threatAccMs = Math.max(0, snapshot.threatAccMs ?? 0);
+    this.threat.restore(snapshot.threat, this.scene.runState.stage.timeMs);
+    this.threatAssessment = this.threat.current;
     this.boss = null;
   }
 
@@ -200,6 +232,68 @@ export class WaveDirector {
         progress
       ),
     };
+  }
+
+
+  recordPlayerDamage(damage: number, maxHp: number): void {
+    this.threat.recordDamage(damage, maxHp, this.scene.runState.stage.timeMs);
+  }
+
+  get debugAdaptiveThreatState(): ThreatAssessment {
+    return this.threatAssessment;
+  }
+
+  private updateAdaptiveThreat(delta: number): void {
+    this.threatAccMs += Math.max(0, delta);
+    if (this.threatAccMs < 120) return;
+    this.threatAccMs = 0;
+
+    const player = this.scene.player;
+    const scanRadius = 280;
+    const escapeRadius = 220;
+    const sectorCount = 8;
+    let nearbyWeight = 0;
+    let eliteWeight = 0;
+    const blocked = new Array<boolean>(sectorCount).fill(false);
+
+    for (const enemy of this.enemies.getChildren() as import('./Enemy').Enemy[]) {
+      if (!enemy.active) continue;
+      const dx = enemy.x - player.x;
+      const dy = enemy.y - player.y;
+      const distance = Math.hypot(dx, dy);
+
+      if (!enemy.isBoss && distance < scanRadius) {
+        const proximity = 1 - distance / scanRadius;
+        const cost = this.threatCost(enemy.kind, enemy.isElite);
+        nearbyWeight += cost * proximity;
+        if (enemy.isElite) eliteWeight += proximity;
+      }
+
+      if (distance < escapeRadius) {
+        const angle = Math.atan2(dy, dx) + Math.PI;
+        const normalized = (angle % (Math.PI * 2)) / (Math.PI * 2);
+        const sector = Math.min(sectorCount - 1, Math.floor(normalized * sectorCount));
+        blocked[sector] = true;
+        if (distance < 120) {
+          blocked[(sector + sectorCount - 1) % sectorCount] = true;
+          blocked[(sector + 1) % sectorCount] = true;
+        }
+      }
+    }
+
+    const boss = this.boss;
+    const bossPhase01 = boss && boss.active ? (boss.bossPhase >= 2 ? 1 : 0.55) : 0;
+    const st = this.scene.runState.stage;
+    this.threatAssessment = this.threat.update(
+      {
+        nearbyPressure01: Phaser.Math.Clamp(nearbyWeight / 12, 0, 1),
+        hpFraction: st.maxHp > 0 ? Phaser.Math.Clamp(st.hp / st.maxHp, 0, 1) : 1,
+        escapeSpaceRatio: 1 - blocked.filter(Boolean).length / sectorCount,
+        elitePressure01: Phaser.Math.Clamp(eliteWeight / 2, 0, 1),
+        bossPhase01,
+      },
+      st.timeMs
+    );
   }
 
   private ringPos(): { x: number; y: number } {
