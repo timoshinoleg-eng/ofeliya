@@ -49,7 +49,8 @@
     "test:visual-gameplay-impact": "node scripts/visual-gameplay-impact-smoke.cjs",
     "test:comprehension": "node scripts/gameplay-comprehension-smoke.cjs",
     "test:onboarding": "node scripts/check-onboarding.mjs",
-    "test:daily-history": "node scripts/check-daily-history.mjs"
+    "test:daily-history": "node scripts/check-daily-history.mjs",
+    "test:threat": "node scripts/check-threat-director.mjs"
   },
   "dependencies": {
     "@maxhub/max-bot-api": "^0.3.1",
