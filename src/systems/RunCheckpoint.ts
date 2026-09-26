@@ -223,12 +223,34 @@ function validRng(value: unknown, seed: string): value is RunRngSnapshot {
   );
 }
 
+function validThreatSnapshot(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (
+    !record(value) ||
+    !finite(value.smoothedThreat, 0, 1) ||
+    (value.band !== 'calm' && value.band !== 'engaged' && value.band !== 'high' && value.band !== 'critical') ||
+    (value.lastUpdateAtMs !== null && !finite(value.lastUpdateAtMs, 0, 24 * 60 * 60 * 1000)) ||
+    !Array.isArray(value.damageEvents) ||
+    value.damageEvents.length > 64
+  ) {
+    return false;
+  }
+  return value.damageEvents.every(
+    (event) =>
+      record(event) &&
+      finite(event.atMs, 0, 24 * 60 * 60 * 1000) &&
+      finite(event.fraction, 0, 1)
+  );
+}
+
 function validWave(value: unknown): value is WaveDirectorSnapshot {
   return (
     record(value) &&
     finite(value.spawnAcc, 0, 10_000_000) &&
     integer(value.spawnedElites, 0, 1_000_000) &&
-    finite(value.minionAcc, 0, 10_000_000)
+    finite(value.minionAcc, 0, 10_000_000) &&
+    (value.threatAccMs === undefined || finite(value.threatAccMs, 0, 1_000)) &&
+    validThreatSnapshot(value.threat)
   );
 }
 

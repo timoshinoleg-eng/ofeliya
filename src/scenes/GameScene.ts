@@ -412,7 +412,8 @@ export class GameScene extends Phaser.Scene {
       this.stageDirector.currentStage,
       this.difficulty,
       () => this.gameplayRng.next('enemy-kind'),
-      () => this.gameplayRng.next('enemy-spawn')
+      () => this.gameplayRng.next('enemy-spawn'),
+      this.difficulty.id === 'strained' && !this.dailyRun
     );
     this.milestones = new RunMilestones(this);
     if (resume) this.restoreCheckpointRuntime(resume);
@@ -470,6 +471,7 @@ export class GameScene extends Phaser.Scene {
       this.registry.remove('runResult');
       this.registry.remove('joy');
       this.registry.remove('aimJoy');
+      this.registry.remove('adaptiveThreat');
     });
   }
 
@@ -564,6 +566,10 @@ export class GameScene extends Phaser.Scene {
     this.updateAdaptiveAudio(delta);
     this.updateHeartbeatSignature(stage, st.timeMs);
     this.wave.update(delta);
+    this.registry.set('adaptiveThreat', {
+      ...this.wave.debugAdaptiveThreatState,
+      pacingEnabled: this.difficulty.id === 'strained' && !this.dailyRun,
+    });
     this.enemyHealth.update(time);
     this.updateCardiacLineHazard(time);
     this.hostCells.update(time, delta, st.timeMs);
@@ -720,7 +726,9 @@ export class GameScene extends Phaser.Scene {
     const now = this.time.now;
     if (distance > radius || now < this.player.hurtUntil) return;
 
-    this.runState.stage.hp -= Math.max(6, enemy.dmg * 0.55);
+    const damage = Math.max(6, enemy.dmg * 0.55);
+    this.runState.stage.hp -= damage;
+    this.wave.recordPlayerDamage(damage, this.runState.stage.maxHp);
     this.runState.resetNoDamage();
     this.player.markHurt(now);
     Sfx.play('hurt');
@@ -1119,7 +1127,9 @@ export class GameScene extends Phaser.Scene {
     const now = this.time.now;
     if (distance > radius || now < this.player.hurtUntil) return;
 
-    this.runState.stage.hp -= Math.max(8, damage);
+    const appliedDamage = Math.max(8, damage);
+    this.runState.stage.hp -= appliedDamage;
+    this.wave.recordPlayerDamage(appliedDamage, this.runState.stage.maxHp);
     this.runState.resetNoDamage();
     this.player.markHurt(now);
     Sfx.play('hurt');
@@ -1267,7 +1277,9 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    this.runState.stage.hp -= hazard.damage * this.difficulty.bossDamageMultiplier;
+    const damage = hazard.damage * this.difficulty.bossDamageMultiplier;
+    this.runState.stage.hp -= damage;
+    this.wave.recordPlayerDamage(damage, this.runState.stage.maxHp);
     this.runState.resetNoDamage();
     this.player.markHurt(this.time.now);
     Sfx.play('hurt');
@@ -2147,6 +2159,7 @@ export class GameScene extends Phaser.Scene {
     const now = this.time.now;
     if (now < this.player.hurtUntil) return;
     this.runState.stage.hp -= e.dmg;
+    this.wave.recordPlayerDamage(e.dmg, this.runState.stage.maxHp);
     this.runState.resetNoDamage();
     this.player.markHurt(now);
     Sfx.play('hurt');
