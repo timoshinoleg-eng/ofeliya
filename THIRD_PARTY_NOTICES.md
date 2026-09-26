@@ -115,6 +115,58 @@ Copyright (c) 2026 元耀 張
 > OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 > SOFTWARE.
 
+## Onboarding state machine adaptation — MIT
+
+Files:
+
+- `src/systems/onboardingState.ts`
+- Onboarding presentation (prompts, skip control) in `src/scenes/UIScene.ts`
+
+The five-step onboarding state machine (hold-threshold movement step, time-accumulated
+auto-attack step, event-notified pickup/level-up/pause steps) was adapted from
+`ricardo-foundry/canvas-vampire-survivors`, `src/tutorial.js`.
+
+Upstream: `https://github.com/ricardo-foundry/canvas-vampire-survivors`
+Pinned revision: `v2.8.0` @ `e616704889e57efc9c1f49098786a95c364008d3`
+License: MIT.
+Copyright (c) 2024 Survivor Game
+
+> Permission is hereby granted, free of charge, to any person obtaining a copy
+> of this software and associated documentation files (the "Software"), to deal
+> in the Software without restriction, including without limitation the rights
+> to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+> copies of the Software, and to permit persons to whom the Software is
+> furnished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all
+> copies or substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+> IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+> FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+> AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+> LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+> OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+> SOFTWARE.
+
+OFELIYA rewrites the donor module in strict TypeScript as a presentation-free system
+(no Phaser import, step copy moved to the UI layer, renamed to the project's onboarding
+vocabulary); no upstream UI strings, URLs or other assets are imported.
+
+Files (daily streak line):
+
+- `src/systems/DailyHistory.ts`
+- Daily share suffix in `src/scenes/UIScene.ts`
+- Daily streak line in `src/ui/SocialHub.ts`
+
+The daily-result history (14-day rolling window pruned by date string, not client
+clock), the consecutive-day streak summary (current/best, local-calendar rollover
+with `Date.setDate`), the retained all-time best-streak value, and the offline
+Wordle-style emoji tile share idea were adapted from
+`ricardo-foundry/canvas-vampire-survivors`, `src/daily.js`. The donor's
+`dailySeed()`/`dailyChallenge()`/`cyrb53` are deliberately NOT reproduced:
+OFELIYA's daily runs are server-authoritative (DailyRunClient + DailyRunIntent).
+
 ## Generated game art
 
 Virus, immune cells, host cells, bloodstream background, mutation icons and gameplay VFX are generated

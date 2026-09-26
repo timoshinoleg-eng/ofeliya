@@ -26,6 +26,8 @@ export interface SaveData {
   standardCampaignClears: number;
   strainedCampaignClears: number;
   /** Personal Strained mastery record; never participates in the ranked Standard board. */
+  /** True after the onboarding state machine is finished or skipped. */
+  tutorialDone: boolean;
   bestStrainedCampaignClearMs: number;
 }
 
@@ -53,6 +55,7 @@ const DEFAULTS: SaveData = {
   legendarySeen: [],
   standardCampaignClears: 0,
   strainedCampaignClears: 0,
+  tutorialDone: false,
   bestStrainedCampaignClearMs: 0,
 };
 
@@ -102,6 +105,7 @@ class SaveImpl {
             ),
             standardCampaignClears: this.num(parsed.standardCampaignClears),
             strainedCampaignClears: this.num(parsed.strainedCampaignClears),
+            tutorialDone: typeof parsed.tutorialDone === 'boolean' ? parsed.tutorialDone : false,
             bestStrainedCampaignClearMs: this.num(parsed.bestStrainedCampaignClearMs),
           };
         }
