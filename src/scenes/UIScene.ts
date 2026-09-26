@@ -1053,7 +1053,8 @@ export class UIScene extends Phaser.Scene {
     if (!step) return;
     const copy = ONBOARDING_COPY[step.id];
     const W = this.scale.width;
-    const hidden = this.pendingContextHint !== null || this.overShown || this.modalOpen;
+    const hidden =
+      this.contextHintKey !== null || this.pendingContextHints.length > 0 || this.overShown || this.modalOpen;
     if (!this.onboardingContainer) {
       const panelW = Math.min(W - 28, 380);
       const panel = this.add

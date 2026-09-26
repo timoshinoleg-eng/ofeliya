@@ -57,22 +57,30 @@ function usableLocalStorage(): boolean {
 }
 
 let memoryStore: string | null = null;
-let memoryBestStreak = 0;
+type StreakState = { best: number; current: number; lastDate: string | null };
+let memoryStreakState: StreakState = { best: 0, current: 0, lastDate: null };
 
-function loadBestStreak(): number {
+function loadStreakState(): StreakState {
   try {
     const raw = usableLocalStorage() ? localStorage.getItem(BEST_STREAK_STORAGE_KEY) : null;
-    const value = raw === null ? memoryBestStreak : Number(raw);
-    return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+    if (raw === null) return memoryStreakState;
+    const value: unknown = JSON.parse(raw);
+    if (!value || typeof value !== 'object') return { best: 0, current: 0, lastDate: null };
+    const state = value as Partial<StreakState>;
+    return {
+      best: Number.isSafeInteger(state.best) && state.best! >= 0 ? state.best! : 0,
+      current: Number.isSafeInteger(state.current) && state.current! >= 0 ? state.current! : 0,
+      lastDate: typeof state.lastDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(state.lastDate) ? state.lastDate : null,
+    };
   } catch {
-    return memoryBestStreak;
+    return memoryStreakState;
   }
 }
 
-function writeBestStreak(value: number): void {
-  memoryBestStreak = value;
+function writeStreakState(value: StreakState): void {
+  memoryStreakState = value;
   try {
-    if (usableLocalStorage()) localStorage.setItem(BEST_STREAK_STORAGE_KEY, String(value));
+    if (usableLocalStorage()) localStorage.setItem(BEST_STREAK_STORAGE_KEY, JSON.stringify(value));
   } catch {
     /* quota / private mode — keep the in-memory value */
   }
@@ -145,9 +153,16 @@ export function recordDailyResult(entry: DailyHistoryEntry): void {
   if (!entry || typeof entry.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) return;
   const history = loadDailyHistory();
   history[entry.date] = { ...entry };
-  // Keep the all-time high-water mark separately because the detailed daily
-  // entries below are intentionally pruned to a 14-day rolling window.
-  writeBestStreak(Math.max(loadBestStreak(), dailyStreakSummary(history).best));
+  // Keep streak continuity and its all-time high-water mark separately because
+  // detailed daily entries are intentionally pruned to a rolling window.
+  const state = loadStreakState();
+  const historyBest = dailyStreakSummary(history).best;
+  if (state.lastDate !== entry.date && (!state.lastDate || entry.date > state.lastDate)) {
+    state.current = state.lastDate && nextDayKey(state.lastDate) === entry.date ? state.current + 1 : 1;
+    state.lastDate = entry.date;
+  }
+  state.best = Math.max(state.best, state.current, historyBest);
+  writeStreakState(state);
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - KEEP_DAYS);
   const cutoff = localDayKey(cutoffDate);
@@ -206,7 +221,7 @@ export function dailyStreakSummary(
     if (run > best) best = run;
     prevKey = key;
   }
-  if (history === undefined) best = Math.max(best, loadBestStreak());
+  if (history === undefined) best = Math.max(best, loadStreakState().best);
   return { current, best, days };
 }
 
@@ -256,7 +271,7 @@ export function buildDailyShareSuffix(
 /** Test hook: reset in-memory fallback store. */
 export function _resetForTests(): void {
   memoryStore = null;
-  memoryBestStreak = 0;
+  memoryStreakState = { best: 0, current: 0, lastDate: null };
   try {
     if (usableLocalStorage()) {
       localStorage.removeItem(STORAGE_KEY);

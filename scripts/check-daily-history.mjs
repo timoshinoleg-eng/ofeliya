@@ -142,6 +142,32 @@ try {
   recordDailyResult(entry(today, 500));
   assert(!!loadDailyHistory()[cutoff], 'date exactly 14 days back is kept');
 
+  // --- the all-time best survives daily-entry pruning ---
+  _resetForTests();
+  const NativeDate = globalThis.Date;
+  let fixedNow = new NativeDate(2026, 0, 1, 12).getTime();
+  class ControlledDate extends NativeDate {
+    constructor(...args) {
+      if (args.length === 0) super(fixedNow);
+      else super(...args);
+    }
+    static now() {
+      return fixedNow;
+    }
+  }
+  try {
+    globalThis.Date = ControlledDate;
+    for (let i = 0; i < 20; i++) {
+      fixedNow = new NativeDate(2026, 0, i + 1, 12).getTime();
+      const date = localDayKey(new NativeDate(fixedNow));
+      recordDailyResult(entry(date, 1000));
+    }
+    assert(Object.keys(loadDailyHistory()).length <= 15, 'daily entries remain inside the rolling window');
+    assert(dailyStreakSummary().best === 20, `all-time record expected 20, got ${dailyStreakSummary().best}`);
+  } finally {
+    globalThis.Date = NativeDate;
+  }
+
   // --- share suffix ---
   assert(buildDailyShareSuffix({ timeMs: 1000 }, {}) === '', 'no suffix without history');
   const h6 = {};
