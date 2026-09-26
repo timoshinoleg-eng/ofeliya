@@ -36,10 +36,20 @@ import { VideoInterstitial, type VideoInterstitialId } from '../systems/VideoInt
 import { submitDailyRunScoreDetailed, submitRunScore, type DailySubmitStatus } from '../systems/ScoreClient';
 import { createFixedSeedDuel, submitDuelAttempt, trackDuelEvent } from '../systems/DuelClient';
 import { clearDailyIntent, readDailyIntent, resolveDailyResultBranch } from '../game/DailyRunIntent';
+import { OnboardingState, type OnboardingStepId } from '../systems/onboardingState';
+import { SaveSystem } from '../systems/SaveSystem';
 import type { DailyRunTicket } from '../systems/DailyRunClient';
 import type { GameScene } from './GameScene';
 
 const DEPTH = 50;
+
+const ONBOARDING_COPY: Record<OnboardingStepId, { title: string; body: string }> = {
+  move: { title: 'Шаг 1 / 5 — Движение', body: 'Веди джойстик, чтобы двигаться.' },
+  autoAttack: { title: 'Шаг 2 / 5 — Автоогонь', body: 'Оружие стреляет само. Держись рядом с врагами.' },
+  pickup: { title: 'Шаг 3 / 5 — Биомасса', body: 'Собери биомассу с уничтоженных врагов.' },
+  levelUp: { title: 'Шаг 4 / 5 — Мутация', body: 'Выбери мутацию, чтобы усилить штамм.' },
+  pause: { title: 'Шаг 5 / 5 — Пауза', body: 'Кнопка паузы в правом верхнем углу.' },
+};
 
 function compactHudNumber(value: number): string {
   const rounded = Math.max(0, Math.round(value));
@@ -120,6 +130,10 @@ export class UIScene extends Phaser.Scene {
   private modalGeneration = 0;
   private overShown = false;
   private uiBlocked = false;
+  private onboarding: OnboardingState | null = null;
+  private onboardingContainer: Phaser.GameObjects.Container | null = null;
+  private onboardingLastXp = 0;
+  private onboardingArmed = false;
 
   constructor() {
     super('UI');
@@ -145,6 +159,10 @@ export class UIScene extends Phaser.Scene {
     this.contextHintKey = null;
     this.contextHintComplete = null;
     this.pendingContextHints = [];
+    this.onboarding = null;
+    this.onboardingContainer = null;
+    this.onboardingLastXp = 0;
+    this.onboardingArmed = false;
 
     const W = this.scale.width;
 
@@ -305,6 +323,8 @@ export class UIScene extends Phaser.Scene {
       this.pendingContextHints = [];
       this.contextHintContainer = null;
       this.contextHintPanel = null;
+      this.onboardingContainer = null;
+      this.onboarding = null;
       this.contextHintText = null;
       this.pauseOverlay = null;
       this.manualPaused = false;
@@ -318,6 +338,8 @@ export class UIScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
     if (run) {
+      this.armOnboarding(run);
+      this.tickOnboarding(run);
       const m = this.hudMetrics(W);
       this.xpBack.clear();
       this.xpBack.fillStyle(HUD.barBack, 0.9);
@@ -986,6 +1008,98 @@ export class UIScene extends Phaser.Scene {
     else this.registry.remove('aimJoy');
   }
 
+  private armOnboarding(run: RunSnapshot): void {
+    if (this.onboardingArmed) return;
+    this.onboardingArmed = true;
+    if (SaveSystem.get().tutorialDone) return;
+    if (readDailyIntent(this.registry) !== null) return;
+    if (this.registry.get('duelChallenge')) return;
+    this.onboarding = new OnboardingState();
+    this.onboarding.start();
+    this.onboardingLastXp = run.xp;
+  }
+
+  private tickOnboarding(run: RunSnapshot): void {
+    const ob = this.onboarding;
+    if (!ob || !ob.active) return;
+    if (run.xp > this.onboardingLastXp) {
+      ob.notifyPickup();
+      this.onboardingLastXp = run.xp;
+    }
+    const gameLive = this.scene.isActive('Game') && !this.scene.isPaused('Game');
+    if (gameLive) {
+      const dt = Math.min(0.05, Math.max(0, this.game.loop.delta / 1000));
+      const joy = this.registry.get('joy') as { x: number; y: number } | undefined;
+      ob.tick(dt, joy);
+    }
+    if (ob.completed) {
+      this.persistOnboarding();
+      return;
+    }
+    this.renderOnboarding();
+  }
+
+  private renderOnboarding(): void {
+    const ob = this.onboarding;
+    if (!ob || !ob.active) return;
+    const step = ob.currentStep;
+    if (!step) return;
+    const copy = ONBOARDING_COPY[step.id];
+    const W = this.scale.width;
+    const hidden = this.pendingContextHint !== null || this.overShown || this.modalOpen;
+    if (!this.onboardingContainer) {
+      const panelW = Math.min(W - 28, 380);
+      const panel = this.add
+        .rectangle(0, 0, panelW, 64, 0x071410, 0.88)
+        .setStrokeStyle(1, COLORS.green, 0.68);
+      const title = this.add
+        .text(0, -18, '', { fontFamily: FONT, fontSize: '13px', fontStyle: '700', color: '#ff8fd0', align: 'center' })
+        .setOrigin(0.5)
+        .setResolution(2);
+      const body = this.add
+        .text(0, 6, '', {
+          fontFamily: UI_FONT,
+          fontSize: W < 370 ? '11px' : '12px',
+          color: '#eafff1',
+          align: 'center',
+          wordWrap: { width: panelW - 20, useAdvancedWrap: true },
+        })
+        .setOrigin(0.5)
+        .setResolution(2);
+      const skip = this.add
+        .text(0, 24, 'Пропустить', {
+          fontFamily: UI_FONT,
+          fontSize: '10px',
+          color: '#5a6480',
+          align: 'center',
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setInteractive({ useHandCursor: true });
+      skip.on('pointerup', () => {
+        this.onboarding?.skip();
+        this.persistOnboarding();
+      });
+      this.onboardingContainer = this.add
+        .container(W / 2, 158, [panel, title, body, skip])
+        .setDepth(DEPTH + 8);
+    }
+    const c = this.onboardingContainer;
+    if (!c) return;
+    const title = c.getAt(1) as Phaser.GameObjects.Text;
+    const body = c.getAt(2) as Phaser.GameObjects.Text;
+    title.setText(copy.title);
+    body.setText(copy.body);
+    c.setVisible(!hidden);
+  }
+
+  private persistOnboarding(): void {
+    SaveSystem.update({ tutorialDone: true });
+    this.onboardingContainer?.destroy();
+    this.onboardingContainer = null;
+    this.onboarding = null;
+  }
+
   private showPauseMenu(): void {
     if (
       this.manualPaused ||
@@ -1001,6 +1115,7 @@ export class UIScene extends Phaser.Scene {
     this.manualPaused = true;
     this.uiBlocked = true;
     this.suspendContextHint();
+    this.onboarding?.notifyPause();
     this.resetControls();
     this.scene.pause('Game');
     PlatformBridge.haptic('light');
@@ -1062,6 +1177,7 @@ export class UIScene extends Phaser.Scene {
     const gs = this.gs;
     if (!gs) return;
     this.modalOpen = true;
+    this.onboarding?.notifyLevelUp();
     this.uiBlocked = true;
     this.suspendContextHint();
     this.resetControls();
