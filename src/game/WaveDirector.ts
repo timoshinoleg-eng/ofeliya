@@ -7,6 +7,7 @@ import {
   ThreatDirector,
   type ThreatAssessment,
   type ThreatDirectorSnapshot,
+  type ThreatPacingDirective,
 } from './ThreatDirector';
 
 export interface WaveDirectorSnapshot {
@@ -34,6 +35,7 @@ export class WaveDirector {
   private readonly threat = new ThreatDirector();
   private threatAccMs = 0;
   private threatAssessment: ThreatAssessment = this.threat.current;
+  private readonly adaptivePacingEnabled: boolean;
 
   constructor(
     scene: GameScene,
@@ -41,7 +43,8 @@ export class WaveDirector {
     stage: StageDefinition,
     difficulty: DifficultyProfile,
     randomKind: () => number,
-    randomSpawn: () => number
+    randomSpawn: () => number,
+    adaptivePacingEnabled = false
   ) {
     this.scene = scene;
     this.enemies = enemies;
@@ -49,6 +52,7 @@ export class WaveDirector {
     this.difficulty = difficulty;
     this.randomKind = randomKind;
     this.randomSpawn = randomSpawn;
+    this.adaptivePacingEnabled = adaptivePacingEnabled;
   }
 
   startStage(stage: StageDefinition): void {
@@ -73,7 +77,7 @@ export class WaveDirector {
       const minionInterval =
         waves.bossMinionIntervalMs *
         this.difficulty.bossMinionIntervalMultiplier *
-        this.threatAssessment.directive.bossMinionIntervalMultiplier;
+        this.pacingDirective.bossMinionIntervalMultiplier;
       if (this.minionAcc >= minionInterval) {
         this.minionAcc = 0;
         const boss = this.boss;
@@ -95,7 +99,7 @@ export class WaveDirector {
     const expectedElites = eliteEveryMs > 0 ? Math.floor(t / eliteEveryMs) : 0;
     if (
       expectedElites > this.spawnedElites &&
-      this.threatAssessment.directive.allowDangerousCombinations
+      this.pacingDirective.allowDangerousCombinations
     ) {
       // Skip backlog rather than burst-spawning deferred elites after a recovery window.
       this.spawnedElites = expectedElites;
@@ -111,7 +115,7 @@ export class WaveDirector {
       progress
     );
     interval *= this.difficulty.spawnIntervalMultiplier;
-    interval *= this.threatAssessment.directive.spawnIntervalMultiplier;
+    interval *= this.pacingDirective.spawnIntervalMultiplier;
     if (this.boss) interval /= waves.bossPhaseSpawnMultiplier;
     this.spawnAcc += delta;
     while (this.spawnAcc >= interval) {
@@ -122,7 +126,7 @@ export class WaveDirector {
       );
       const batch = Math.max(
         1,
-        Math.floor(authoredBatch * this.threatAssessment.directive.batchScale)
+        Math.floor(authoredBatch * this.pacingDirective.batchScale)
       );
       for (let i = 0; i < batch; i++) this.spawn(waves.pickKind(t, this.randomKind()), false);
     }
@@ -234,6 +238,17 @@ export class WaveDirector {
     };
   }
 
+
+  private get pacingDirective(): ThreatPacingDirective {
+    if (this.adaptivePacingEnabled) return this.threatAssessment.directive;
+    return {
+      spawnIntervalMultiplier: 1,
+      bossMinionIntervalMultiplier: 1,
+      batchScale: 1,
+      allowDangerousCombinations: true,
+      recoveryWindowMs: 0,
+    };
+  }
 
   recordPlayerDamage(damage: number, maxHp: number): void {
     this.threat.recordDamage(damage, maxHp, this.scene.runState.stage.timeMs);
