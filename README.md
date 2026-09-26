@@ -1,5 +1,11 @@
 # OFELIYA: STRAIN ZERO
 
+<!-- product-snapshot:start -->
+> **Продукт:** мобильный roguelite-survivor для MAX Mini Apps с Telegram-compatible архитектурой, социальными/соревновательными системами и серверной валидацией.
+>
+> **Стадия:** active / production hardening · **Основная платформа:** MAX · **Архитектура:** Telegram-compatible · **Продуктовый фокус:** retention, social loops, мета-прогрессия и будущая монетизация.
+<!-- product-snapshot:end -->
+
 Мобильный portrait roguelite-survivor для **MAX Mini Apps**. Игрок управляет синтетическим вирусом
 `STRAIN-0` внутри живого организма, собирает RNA, мутирует, заражает host cells и проходит
 двухактную кампанию: `КРОВОТОК -> IMMUNE PRIME -> СЕРДЦЕ -> CARDIAC TITAN`.
