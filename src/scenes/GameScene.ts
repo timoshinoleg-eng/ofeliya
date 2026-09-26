@@ -412,7 +412,8 @@ export class GameScene extends Phaser.Scene {
       this.stageDirector.currentStage,
       this.difficulty,
       () => this.gameplayRng.next('enemy-kind'),
-      () => this.gameplayRng.next('enemy-spawn')
+      () => this.gameplayRng.next('enemy-spawn'),
+      this.difficulty.id === 'strained' && !this.dailyRun
     );
     this.milestones = new RunMilestones(this);
     if (resume) this.restoreCheckpointRuntime(resume);
@@ -565,7 +566,10 @@ export class GameScene extends Phaser.Scene {
     this.updateAdaptiveAudio(delta);
     this.updateHeartbeatSignature(stage, st.timeMs);
     this.wave.update(delta);
-    this.registry.set('adaptiveThreat', this.wave.debugAdaptiveThreatState);
+    this.registry.set('adaptiveThreat', {
+      ...this.wave.debugAdaptiveThreatState,
+      pacingEnabled: this.difficulty.id === 'strained' && !this.dailyRun,
+    });
     this.enemyHealth.update(time);
     this.updateCardiacLineHazard(time);
     this.hostCells.update(time, delta, st.timeMs);
