@@ -63,7 +63,7 @@ BOT_MODE="${OFELIYA_BOT_MODE:-dedicated}"
 BOT_ENV_FILE="${RELEASE_ENV_FILE}"
 export OFELIYA_BOT_ENV_FILE="${RELEASE_ENV_FILE}"
 # The dedicated Ofeliya MAX app token may be explicit; otherwise use the same dedicated
-# bot token. Never inherit BOT_TOKEN/HUB_BOT_USERNAME from another project.
+# bot token. Never inherit bot credentials or usernames from another project.
 export OFELIYA_MAX_BOT_TOKEN="${OFELIYA_MAX_BOT_TOKEN:-${OFELIYA_BOT_TOKEN:-}}"
 
 DEDICATED_LOCAL_FILE="deploy/compose.production.dedicated.local.yml"
