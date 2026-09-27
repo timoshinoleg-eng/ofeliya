@@ -143,11 +143,12 @@ function scoreIdentity(input: RunIdentityInput): IdentityScore[] {
     lysisSignals.push('ЦЕПЬ ЛИЗИСА');
   }
 
-  return [
+  const scores: IdentityScore[] = [
     { id: 'projectile', score: projectile, signals: projectileSignals },
     { id: 'orbit-control', score: control, signals: controlSignals },
     { id: 'infection-lysis', score: lysis, signals: lysisSignals },
-  ].sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+  ];
+  return scores.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
 }
 
 /**
