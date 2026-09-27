@@ -69,8 +69,8 @@ assert.throws(
 );
 assert.throws(
   () => botStartConfig({ NODE_ENV: 'production', OFELIYA_BOT_MODE: 'shared' }),
-  /must not start an Ofeliya webhook process/,
-  'shared bot mode must leave webhook ownership to Hub'
+  /OFELIYA_BOT_MODE must be dedicated/,
+  'shared bot ownership is retired and must fail closed'
 );
 assert.deepEqual(botStartConfig({ NODE_ENV: 'development' }), { mode: 'polling' }, 'non-production keeps polling mode');
 

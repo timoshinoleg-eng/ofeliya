@@ -1,17 +1,17 @@
 # OFELIYA production on Cloud.ru VM
 
-OFELIYA production stays on the existing Cloud.ru VM / shared hub host. Render is not the production target.
+OFELIYA production runs on its own dedicated Cloud.ru VM `chatgpt-ofeliya-1`. Render and the legacy Chatbot24/Hub host are not production targets.
 
 ## Host layout
 
 - application checkout: `/opt/ofeliya/current` on the existing legacy-layout host (or `/opt/ofeliya` when that root is already a git checkout);
 - release env: `/opt/ofeliya/.env`;
 - base compose file: `deploy/compose.production.yml`; dedicated hosts may also keep untracked `deploy/compose.production.dedicated.local.yml` and `deploy/compose.caddy.yml`, which the deploy script auto-detects;
-- Compose project: `OFELIYA_COMPOSE_PROJECT`; legacy shared mode defaults to `ofeliya`, while the current dedicated host auto-detects project `deploy` from its local dedicated override;
-- shared-network alias: `OFELIYA_SHARED_NETWORK`; shared mode defaults to `quiz-battle_default`, while dedicated mode defaults to `<compose-project>_ofeliya` so the legacy logical network resolves to the dedicated project's real network;
+- Compose project: `OFELIYA_COMPOSE_PROJECT`; the current dedicated host uses project `deploy`;
+- external network: `OFELIYA_SHARED_NETWORK`; the current dedicated host uses `deploy_ofeliya` (the variable name is retained for deployment compatibility only);
 - public namespace: `/ofeliya/`;
-- MAX bot mode: `shared` by default; Ofeliya reuses the existing Quizika/Hub bot identity while Hub remains the sole webhook owner.
-- dedicated webhook `/ofeliya/bot/webhook` is only used when `OFELIYA_BOT_MODE=dedicated`.
+- MAX bot mode: `dedicated` only;
+- dedicated webhook: `/ofeliya/bot/webhook`.
 
 Do not publish OFELIYA under `/hub/*`. That route belongs to `timoshinoleg-eng/hub` and can make MAX open the wrong/legacy app.
 
@@ -31,7 +31,7 @@ Never commit the real `.env`, bot token, webhook secret, SSH key or legal/privat
 
 ## Caddy ingress
 
-The existing production Caddy host must include the contents of `deploy/Caddyfile.ofeliya` before any catch-all `handle` block. Keep the Hub block (`deploy/Caddyfile.hub` in the Hub repository) separate.
+The dedicated production Caddy host must include the contents of `deploy/Caddyfile.ofeliya` before any catch-all `handle` block. It must not import or depend on the Hub/Chatbot24 Caddy configuration.
 
 After a Caddy change, validate before reload using the host's existing Caddy installation. Do not replace the complete host Caddyfile from this repository.
 
@@ -40,9 +40,9 @@ The MAX Mini App URL must be the Cloud.ru-backed HTTPS URL ending in `/ofeliya/`
 
 ## MAX bot ownership
 
-`OFELIYA_BOT_MODE=shared` remains supported for a shared Hub host. The current separate `chatgpt-ofeliya-1` production VM runs `dedicated` and keeps its bot env in `/opt/ofeliya/.env`. In dedicated mode the deploy script never requires `/opt/hub/.env` and includes the host-local dedicated Compose/Caddy overrides when present.
+The current `chatgpt-ofeliya-1` production VM runs `OFELIYA_BOT_MODE=dedicated` and keeps all bot/runtime env in `/opt/ofeliya/.env`. Shared Hub/Chatbot24 bot ownership is retired and must fail closed.
 
-Do not switch bot ownership or webhook paths during a code deploy. Dedicated mode requires `/ofeliya/bot/webhook`; shared mode leaves Hub as the webhook owner.
+Do not switch bot ownership or webhook paths during a code deploy. Production requires `/ofeliya/bot/webhook` and the canonical Ofeliya bot identity from `PROJECT_IDENTITY.md`.
 
 ## GitHub production deployment
 
@@ -70,7 +70,7 @@ Configure GitHub environment `cloudru-production` with:
 
 - `CLOUDRU_OFELIYA_APP_DIR` — defaults to `/opt/ofeliya`;
 - `CLOUDRU_OFELIYA_COMPOSE_PROJECT` — explicit Compose project override; current dedicated production uses `deploy`;
-- `CLOUDRU_OFELIYA_SHARED_NETWORK` — explicit legacy-network alias override; current dedicated production uses `deploy_ofeliya`.
+- `CLOUDRU_OFELIYA_SHARED_NETWORK` — explicit external-network override; current dedicated production uses `deploy_ofeliya`.
 
 The release `.env` is parsed as dotenv data, not shell-sourced. Values containing spaces therefore do not need shell quoting, and a stale `OFELIYA_RELEASE` entry in the file cannot override the immutable SHA supplied by the workflow.
 
@@ -79,13 +79,13 @@ The release `.env` is parsed as dotenv data, not shell-sourced. Values containin
 `deploy/deploy-cloudru.sh` performs a fail-closed rollout:
 
 1. validates the immutable release SHA and parses production dotenv without executing it as shell;
-2. resolves shared vs dedicated bot mode plus the host's Compose project/network overrides;
+2. validates dedicated bot ownership plus the host's Compose project/network overrides;
 3. checks that the SHA belongs to `origin/main`;
 4. auto-includes the host-local dedicated Compose/Caddy overrides when present;
 5. validates the effective Compose config before changing running containers;
 6. builds immutable `bot`, `score`, and `static` images;
 7. updates `score` and `static`, retrying their internal health probes;
-8. updates the dedicated bot last (or keeps it stopped in shared mode);
+8. updates the dedicated bot last;
 9. the GitHub workflow performs an external HTTPS smoke against `CLOUDRU_OFELIYA_URL`.
 
 If the public URL variable is absent or the HTTPS smoke fails, the workflow fails and must not be treated as a verified release.

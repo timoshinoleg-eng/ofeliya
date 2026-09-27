@@ -6,7 +6,7 @@
 > **Стадия:** active / production hardening · **Основная платформа:** MAX · **Архитектура:** Telegram-compatible · **Фокус:** gameplay clarity, retention, horizontal mastery, social loops и дальнейшая монетизация.
 <!-- product-snapshot:end -->
 
-Мобильный portrait roguelite-survivor для **MAX Mini Apps**. Игрок управляет синтетическим вирусом
+Мобильный portrait roguelite-survivor для **MAX Mini Apps**. Канонический MAX-бот — `@id402806822924_5_bot`, production URL — `https://ofeliya.freeveol.dpdns.org/ofeliya/`. Игрок управляет синтетическим вирусом
 `STRAIN-0` внутри живого организма, собирает RNA, мутирует, заражает host cells и проходит
 двухактную кампанию: `КРОВОТОК -> IMMUNE PRIME -> СЕРДЦЕ -> CARDIAC TITAN`.
 
@@ -19,6 +19,8 @@
 Текущая архитектура: [`ARCHITECTURE_NOTES.md`](./ARCHITECTURE_NOTES.md).
 Release-gate evidence: [`RELEASE_VALIDATION.md`](./RELEASE_VALIDATION.md).
 Third-party provenance: [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md).
+Canonical production identity: [`PROJECT_IDENTITY.md`](./PROJECT_IDENTITY.md).
+Legacy Chatbot24 migration/retirement map: [`docs/CHATBOT24_MIGRATION.md`](./docs/CHATBOT24_MIGRATION.md).
 
 ## Стек
 

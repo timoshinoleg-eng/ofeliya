@@ -8,7 +8,6 @@
     image: ofeliya-runtime:${OFELIYA_RELEASE:?OFELIYA_RELEASE is required}
     command: ["node", "bot/index.mjs"]
     env_file:
-      - ${OFELIYA_BOT_ENV_FILE:-/opt/hub/.env}
       - ${OFELIYA_ENV_FILE:-/opt/ofeliya/.env}
     environment:
       NODE_ENV: production
@@ -26,13 +25,13 @@
       dockerfile: deploy/Dockerfile
       target: static
       args:
-        # Strain Zero uses VITE_MAX_BOT_NAME for challenge/share links.
-        # Keep the historical alias too for compatibility with shared code.
+        # Strain Zero uses its own dedicated bot identity for challenge/share links.
+        # VITE_MAX_BOT_USERNAME remains only as an internal compatibility alias.
         VITE_MAX_BOT_NAME: ${OFELIYA_BOT_USERNAME:?OFELIYA_BOT_USERNAME is required; pass --env-file /opt/ofeliya/.env}
         VITE_MAX_BOT_USERNAME: ${OFELIYA_BOT_USERNAME:?OFELIYA_BOT_USERNAME is required; pass --env-file /opt/ofeliya/.env}
         VITE_TG_BOT_USERNAME: ${VITE_TG_BOT_USERNAME:-}
         VITE_TELEGRAM_APP_SHORT_NAME: ${VITE_TELEGRAM_APP_SHORT_NAME:-}
-        VITE_DEVELOPER_BRAND: ${OFELIYA_DEVELOPER_BRAND:-ChatBot24}
+        VITE_DEVELOPER_BRAND: ${OFELIYA_DEVELOPER_BRAND:-OFELIYA}
         VITE_DEVELOPER_LEGAL_NAME: ${OFELIYA_DEVELOPER_LEGAL_NAME:?OFELIYA_DEVELOPER_LEGAL_NAME is required}
         VITE_DEVELOPER_REGISTRATION: ${OFELIYA_DEVELOPER_REGISTRATION:?OFELIYA_DEVELOPER_REGISTRATION is required}
         VITE_DEVELOPER_ADDRESS: ${OFELIYA_DEVELOPER_ADDRESS:?OFELIYA_DEVELOPER_ADDRESS is required}
@@ -69,7 +68,6 @@
       PORT: 8787
       OFELIYA_MAX_BOT_TOKEN: ${OFELIYA_MAX_BOT_TOKEN:-}
     env_file:
-      - ${OFELIYA_BOT_ENV_FILE:-/opt/hub/.env}
       - ${OFELIYA_ENV_FILE:-/opt/ofeliya/.env}
     volumes:
       - ofeliya-score-data:/app/server/data
@@ -86,8 +84,9 @@
 
 networks:
   quiz-battle:
+    # Historical Compose key only. The external network itself is Ofeliya-owned.
     external: true
-    name: ${OFELIYA_SHARED_NETWORK:-quiz-battle_default}
+    name: ${OFELIYA_SHARED_NETWORK:?OFELIYA_SHARED_NETWORK is required}
 
 volumes:
   ofeliya-score-data:

@@ -9,8 +9,9 @@ function port(value) {
 
 export function botStartConfig(env = process.env) {
   if (env.NODE_ENV !== 'production') return { mode: 'polling' };
-  if (value(env, 'OFELIYA_BOT_MODE') === 'shared') {
-    throw new Error('Shared MAX bot mode must not start an Ofeliya webhook process');
+  const mode = value(env, 'OFELIYA_BOT_MODE') || 'dedicated';
+  if (mode !== 'dedicated') {
+    throw new Error('OFELIYA_BOT_MODE must be dedicated in production');
   }
 
   const domain = value(env, 'OFELIYA_BOT_WEBHOOK_DOMAIN');
