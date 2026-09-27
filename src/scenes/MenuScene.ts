@@ -1137,7 +1137,7 @@ export class MenuScene extends Phaser.Scene {
             left + 48,
             y + (compact ? 17 : 19),
             track.complete ? track.objective : track.nextGoal,
-            compact ? 10 : 12,
+            compact ? 11 : 13,
             track.complete ? '#9fd9aa' : UI_TEXT.secondary,
             panelW - 78
           );
@@ -1153,7 +1153,7 @@ export class MenuScene extends Phaser.Scene {
           left + 28,
           top + panelH - 82,
           `ЦИКЛОВ: ${save.runs}   ·   УНИЧТОЖЕНО КЛЕТОК: ${save.totalKills}`,
-          compact ? 10 : 12,
+          compact ? 11 : 13,
           '#d8d1e2'
         );
       }
