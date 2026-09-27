@@ -19,6 +19,7 @@ export class VfxSystem {
   private readonly budget: VfxBudget;
   private lastHitAt = 0;
   private combatDensity = 0;
+  private runtimeQualityScale = 1;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -100,6 +101,16 @@ export class VfxSystem {
     this.combatDensity = Math.max(0, Math.floor(density));
   }
 
+  /** Presentation-only runtime scaling. Boss/gameplay telegraphs are outside this system. */
+  setRuntimeQualityScale(scale: number): void {
+    if (!Number.isFinite(scale)) return;
+    this.runtimeQualityScale = Phaser.Math.Clamp(scale, 0.45, 1);
+  }
+
+  get debugRuntimeQualityScale(): number {
+    return this.runtimeQualityScale;
+  }
+
   nova(x: number, y: number, radius: number): void {
     this.tint(this.rewardEmitter, COLORS.cyan);
     this.emit(this.rewardEmitter, x, y, 10);
@@ -178,7 +189,7 @@ export class VfxSystem {
   }
 
   private count(base: number): number {
-    return Math.max(1, Math.round(base * PERFORMANCE.vfxScale));
+    return Math.max(1, Math.round(base * PERFORMANCE.vfxScale * this.runtimeQualityScale));
   }
 
   private emit(
