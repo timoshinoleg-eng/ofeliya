@@ -94,8 +94,7 @@ function scoreIdentity(input: RunIdentityInput): IdentityScore[] {
   const projectileSignals: string[] = [];
   let projectile = safeStack(s.dmg) + safeStack(s.rate) * 0.8;
   projectile += safeStack(s.multi) * 1.7 + safeStack(s.pierce) * 1.9;
-  if (safeStack(s.multi) >= 2) projectileSignals.push('многозарядность');
-  if (safeStack(s.pierce) >= 2) projectileSignals.push('пробивание');
+  // Prefer distinctive run-defining discoveries in the compact result summary.
   if (evolutions.has('prism')) {
     projectile += 4;
     projectileSignals.push('ГИПЕРШИП');
@@ -108,12 +107,12 @@ function scoreIdentity(input: RunIdentityInput): IdentityScore[] {
     projectile += 2;
     projectileSignals.push('ХИЩНИК ЯДРА');
   }
+  if (safeStack(s.multi) >= 2) projectileSignals.push('многозарядность');
+  if (safeStack(s.pierce) >= 2) projectileSignals.push('пробивание');
 
   const controlSignals: string[] = [];
   let control = safeStack(s.orbit) * 2 + safeStack(s.nova) * 1.5;
   control += safeStack(s.speed) * 0.6 + safeStack(s.magnet) * 0.45;
-  if (safeStack(s.orbit) >= 2) controlSignals.push('спутники');
-  if (safeStack(s.nova) >= 2) controlSignals.push('импульсы');
   if (evolutions.has('halo')) {
     control += 4;
     controlSignals.push('СВЕРХКАПСИД');
@@ -126,14 +125,12 @@ function scoreIdentity(input: RunIdentityInput): IdentityScore[] {
     control += 1.5;
     controlSignals.push('РИТМ МИОКАРДА');
   }
+  if (safeStack(s.orbit) >= 2) controlSignals.push('спутники');
+  if (safeStack(s.nova) >= 2) controlSignals.push('импульсы');
 
   const lysisSignals: string[] = [];
   let lysis = safeStack(s.infect) * 2 + safeStack(s.lysis) * 2.2 + safeStack(s.factory) * 1.8;
   lysis += Math.min(6, cells) * 0.45;
-  if (safeStack(s.infect) >= 2) lysisSignals.push('быстрое заражение');
-  if (safeStack(s.lysis) >= 2) lysisSignals.push('усиленный лизис');
-  if (safeStack(s.factory) >= 1) lysisSignals.push('вирусная фабрика');
-  if (cells >= 4) lysisSignals.push('клеточный маршрут');
   if (evolutions.has('singularity')) {
     lysis += 2;
     lysisSignals.push('СИНГУЛЯРНОСТЬ');
@@ -142,6 +139,10 @@ function scoreIdentity(input: RunIdentityInput): IdentityScore[] {
     lysis += 4;
     lysisSignals.push('ЦЕПЬ ЛИЗИСА');
   }
+  if (cells >= 4) lysisSignals.push('клеточный маршрут');
+  if (safeStack(s.infect) >= 2) lysisSignals.push('быстрое заражение');
+  if (safeStack(s.lysis) >= 2) lysisSignals.push('усиленный лизис');
+  if (safeStack(s.factory) >= 1) lysisSignals.push('вирусная фабрика');
 
   const scores: IdentityScore[] = [
     { id: 'projectile', score: projectile, signals: projectileSignals },
