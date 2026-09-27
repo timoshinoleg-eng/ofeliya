@@ -125,6 +125,10 @@ export class RuntimeQualityGovernor {
     const safeNow = Number.isFinite(nowMs) ? Math.max(0, nowMs) : 0;
     if (frameDeltaMs >= this.config.suspensionDeltaMs) {
       this.ignoredSuspensionFrames += 1;
+      // Do not let time spent backgrounded count toward upgrade/degrade dwell on the next frame.
+      if (this.lastEvaluationAtMs !== null) this.lastEvaluationAtMs = safeNow;
+      this.overBudgetStreakMs = 0;
+      this.underBudgetStreakMs = 0;
       return false;
     }
 
