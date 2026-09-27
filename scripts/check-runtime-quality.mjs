@@ -102,6 +102,14 @@ try {
     suspended.getSnapshot(suspendedCursor).ignoredSuspensionFrames === 1,
     'suspension frame was not tracked as ignored'
   );
+  // The first normal frame after resume must not inherit the 1.5 s wall-clock gap as quality dwell.
+  suspendedCursor += 16.67;
+  suspended.recordFrame(16.67, suspendedCursor);
+  const resumedSnapshot = suspended.getSnapshot(suspendedCursor);
+  assert(
+    resumedSnapshot.overBudgetStreakMs < 100 && resumedSnapshot.underBudgetStreakMs < 100,
+    'background time leaked into quality dwell after resume'
+  );
 
   const bounded = new RuntimeQualityGovernor({
     initialLevel: 'balanced',
