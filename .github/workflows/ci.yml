@@ -53,6 +53,9 @@ jobs:
       - name: Impact feedback budget deterministic smoke
         run: npm run test:impact-budget
 
+      - name: Runtime quality governor deterministic smoke
+        run: npm run test:runtime-quality
+
       - name: Adaptive audio deterministic smoke
         run: npm run test:audio
 
