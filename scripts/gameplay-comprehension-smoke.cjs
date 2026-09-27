@@ -245,15 +245,30 @@ async function bootGame(page) {
     assert.equal(combat.staleSlotStillAssignedAfterReuse, false, 'old health-bar assignment survived Enemy spawnSerial reuse');
 
     const rna = await page.evaluate(() => {
-      const gs = window.__game.scene.getScene('Game');
-      const ui = window.__game.scene.getScene('UI');
+      const game = window.__game;
+      const gs = game.scene.getScene('Game');
+      const ui = game.scene.getScene('UI');
+
+      // Reproduce the reported stall while Game is paused/skipping its normal registry refresh:
+      // direct pickup feedback still runs in UI, so the counter must be synchronized by the pickup.
+      gs.runState.stage.level = 14;
+      gs.runState.stage.xp = 24;
+      gs.runState.stage.xpNext = 130;
+      game.registry.set('run', gs.snapshot());
+      ui.update();
+      const hudBefore = ui.levelText.text;
+
       const beforeXp = gs.runState.stage.xp;
       const beforeQueued = gs.queuedLevels;
       gs.onGemCollected(2);
-      gs.onGemCollected(2);
+      gs.onGemCollected(3);
+      ui.update();
+
       const xpDelta = gs.runState.stage.xp - beforeXp;
       const queuedDelta = gs.queuedLevels - beforeQueued;
       const hud = ui.levelText.text;
+      const registryRun = game.registry.get('run');
+
       gs.trackComprehensionOnce('first_mutation_opened');
       gs.trackComprehensionOnce('first_mutation_opened');
       gs.awaitingChoice = true;
@@ -263,7 +278,15 @@ async function bootGame(page) {
         apply() {},
       }];
       gs.chooseUpgrade('comprehension-smoke-upgrade');
-      return { xpDelta, queuedDelta, hud, pickupVisibleAfter: false };
+      return {
+        xpDelta,
+        queuedDelta,
+        hudBefore,
+        hud,
+        registryXp: registryRun?.xp,
+        registryXpNext: registryRun?.xpNext,
+        pickupVisibleAfter: false,
+      };
     });
     await page.waitForFunction(() => {
       const ui = window.__game.scene.getScene('UI');
@@ -289,10 +312,13 @@ async function bootGame(page) {
         paused: ui.scene.isPaused('UI'),
       };
     });
-    assert.equal(rna.xpDelta, 4, 'RNA pickup did not add XP exactly once per pickup');
+    assert.equal(rna.xpDelta, 5, 'RNA pickup did not add XP exactly once per pickup');
     assert.equal(rna.queuedDelta, 0, 'RNA pickup changed the level queue below threshold');
-    assert.match(rna.hud, /^РНК\s+\d+\/\d+/);
-    assert.equal(pickup.text, '+4 РНК', `aggregated RNA feedback is incorrect: ${JSON.stringify(pickup)}`);
+    assert.match(rna.hudBefore, /РНК\s+24\/130/, 'RNA regression did not start at 24/130');
+    assert.match(rna.hud, /РНК\s+29\/130/, 'RNA HUD stayed stale after successful pickups');
+    assert.equal(rna.registryXp, 29, 'RNA registry snapshot stayed stale after pickup');
+    assert.equal(rna.registryXpNext, 130, 'RNA pickup unexpectedly changed the next threshold');
+    assert.equal(pickup.text, '+5 РНК', `aggregated RNA feedback is incorrect: ${JSON.stringify(pickup)}`);
     assert.ok(!pickup.visible || pickup.right <= pickup.timerLeft - 4, `RNA pickup overlaps timer: ${JSON.stringify(pickup)}`);
 
     const interaction = await page.evaluate(({ x, y }) => {
