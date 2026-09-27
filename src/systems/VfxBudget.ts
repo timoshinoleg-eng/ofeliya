@@ -10,6 +10,7 @@ export class VfxBudget {
   private readonly burstCapacity: number;
   private readonly protectedReserve: number;
   private tokens: number;
+  private reserveArmed = true;
   private lastAt = 0;
 
   constructor(sustainedPerSecond: number, burstCapacity: number) {
@@ -27,14 +28,18 @@ export class VfxBudget {
       this.burstCapacity,
       this.tokens + (elapsed * this.sustainedPerSecond) / 1000
     );
+    if (this.tokens >= this.burstCapacity) this.reserveArmed = true;
 
     const request = Math.max(0, Math.floor(wanted));
     const eventCap = burst ? this.burstCapacity : this.sustainedPerSecond;
     const spendable = burst
       ? Math.floor(this.tokens)
-      : Math.max(0, Math.floor(this.tokens - this.protectedReserve));
+      : this.reserveArmed
+        ? Math.max(0, Math.floor(this.tokens - this.protectedReserve))
+        : Math.floor(this.tokens);
     const granted = Math.min(request, eventCap, spendable);
     this.tokens -= granted;
+    if (burst && granted > 0) this.reserveArmed = false;
     return granted;
   }
 
@@ -42,12 +47,14 @@ export class VfxBudget {
     tokens: number;
     burstCapacity: number;
     protectedReserve: number;
+    reserveArmed: boolean;
     sustainedPerSecond: number;
   } {
     return {
       tokens: this.tokens,
       burstCapacity: this.burstCapacity,
       protectedReserve: this.protectedReserve,
+      reserveArmed: this.reserveArmed,
       sustainedPerSecond: this.sustainedPerSecond,
     };
   }
@@ -55,5 +62,6 @@ export class VfxBudget {
   reset(now = 0): void {
     this.lastAt = Math.max(0, now);
     this.tokens = this.burstCapacity;
+    this.reserveArmed = true;
   }
 }
