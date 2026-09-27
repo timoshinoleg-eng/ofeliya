@@ -44,6 +44,7 @@ export class AtmosphereSystem {
   private lastCamY = 0;
   private phaseBoost = 0;
   private stage: StageDefinition | null = null;
+  private runtimeQualityScale = 1;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -151,11 +152,10 @@ export class AtmosphereSystem {
     const heart = stage.theme.ambientProfile === 'heart';
     this.structure.setVisible(heart).setAlpha(heart ? 0.34 : 0);
     if (heart && stage.theme.structureTexture) this.structure.setTexture(stage.theme.structureTexture);
-    this.erythrocytes.forEach((cell, index) => cell.image.setVisible(!heart || index % 4 === 0));
-    this.hostCells.forEach((cell, index) => cell.image.setVisible(!heart || index % 3 === 0));
     this.particles.forEach((particle, index) => {
       particle.image.setTint(index % 7 === 0 ? stage.theme.accentColor : stage.theme.particleTint);
     });
+    this.applyRuntimeVisibility();
     this.phaseBoost = 0;
   }
 
@@ -184,6 +184,7 @@ export class AtmosphereSystem {
     if (heart) this.structure.setAlpha(0.27 + beat * 0.2 + progress * 0.05);
 
     for (const cell of this.erythrocytes) {
+      if (!cell.image.visible) continue;
       cell.x += cell.vx * flow * dt - camDx * cell.parallax;
       cell.y += (cell.vy + Math.sin(time * 0.00065 + cell.phase) * 2.4) * dt - camDy * cell.parallax;
       cell.x = this.wrap(cell.x, -90, this.width + 90);
@@ -195,6 +196,7 @@ export class AtmosphereSystem {
     }
 
     for (const cell of this.hostCells) {
+      if (!cell.image.visible) continue;
       cell.x += cell.vx * flow * dt - camDx * cell.parallax;
       cell.y += (cell.vy + Math.cos(time * 0.0004 + cell.phase) * 1.4) * dt - camDy * cell.parallax;
       cell.x = this.wrap(cell.x, -170, this.width + 170);
@@ -206,6 +208,7 @@ export class AtmosphereSystem {
     }
 
     for (const p of this.particles) {
+      if (!p.image.visible) continue;
       p.x += p.vx * flow * dt - camDx * 0.045;
       p.y += (p.vy + Math.sin(time * 0.001 + p.phase) * 1.8) * dt - camDy * 0.045;
       p.x = this.wrap(p.x, -10, this.width + 10);
@@ -216,6 +219,17 @@ export class AtmosphereSystem {
     }
 
     this.phaseBoost *= Math.pow(0.2, dt);
+  }
+
+  /** Runtime governor may only reduce decorative objects; gameplay telegraphs are separate. */
+  setRuntimeQualityScale(scale: number): void {
+    if (!Number.isFinite(scale)) return;
+    this.runtimeQualityScale = Phaser.Math.Clamp(scale, 0.45, 1);
+    this.applyRuntimeVisibility();
+  }
+
+  get debugRuntimeQualityScale(): number {
+    return this.runtimeQualityScale;
   }
 
   pulse(color = COLORS.immune, strength = 0.22): void {
@@ -259,6 +273,25 @@ export class AtmosphereSystem {
     this.erythrocytes.length = 0;
     this.hostCells.length = 0;
     this.particles.length = 0;
+  }
+
+  private applyRuntimeVisibility(): void {
+    const heart = this.stage?.theme.ambientProfile === 'heart';
+    const visibleCount = (length: number) =>
+      Math.max(1, Math.min(length, Math.ceil(length * this.runtimeQualityScale)));
+    const erythrocyteLimit = visibleCount(this.erythrocytes.length);
+    const hostCellLimit = visibleCount(this.hostCells.length);
+    const particleLimit = visibleCount(this.particles.length);
+
+    this.erythrocytes.forEach((cell, index) => {
+      cell.image.setVisible(index < erythrocyteLimit && (!heart || index % 4 === 0));
+    });
+    this.hostCells.forEach((cell, index) => {
+      cell.image.setVisible(index < hostCellLimit && (!heart || index % 3 === 0));
+    });
+    this.particles.forEach((particle, index) => {
+      particle.image.setVisible(index < particleLimit);
+    });
   }
 
   private wrap(value: number, min: number, max: number): number {
