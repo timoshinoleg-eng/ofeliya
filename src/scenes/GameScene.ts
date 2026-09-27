@@ -262,11 +262,9 @@ export class GameScene extends Phaser.Scene {
     this.registry.set('controlMode', this.controlMode);
     this.registry.set('performanceTier', PERFORMANCE.tier);
     this.registry.set('performancePostFx', PERFORMANCE.postFx);
-    this.runtimeQuality = new RuntimeQualityGovernor(
-      PERFORMANCE.tier === 'reduced'
-        ? { initialLevel: 'low', minLevel: 'low', maxLevel: 'low' }
-        : { initialLevel: 'full', minLevel: 'low', maxLevel: 'full' }
-    );
+    // Runtime tiers are relative to the static PerformanceProfile ceiling. A reduced device
+    // already allocates fewer ambient/VFX objects, so it must not be double-penalized on launch.
+    this.runtimeQuality = new RuntimeQualityGovernor();
     this.runtimeQualityRegistryAt = 0;
 
     this.heartbeatPulse = new HeartbeatPulseDirector(
