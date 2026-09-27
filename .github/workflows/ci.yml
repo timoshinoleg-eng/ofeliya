@@ -50,6 +50,9 @@ jobs:
       - name: Adaptive threat pacing deterministic smoke
         run: npm run test:threat
 
+      - name: Impact feedback budget deterministic smoke
+        run: npm run test:impact-budget
+
       - name: Adaptive audio deterministic smoke
         run: npm run test:audio
 
