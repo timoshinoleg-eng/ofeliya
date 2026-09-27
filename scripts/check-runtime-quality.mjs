@@ -103,14 +103,14 @@ try {
     'suspension frame was not tracked as ignored'
   );
 
-  const reduced = new RuntimeQualityGovernor({
-    initialLevel: 'low',
+  const bounded = new RuntimeQualityGovernor({
+    initialLevel: 'balanced',
     minLevel: 'low',
-    maxLevel: 'low',
+    maxLevel: 'balanced',
   });
-  const reducedRun = runFrames(reduced, 8.4, 900);
-  assert(reduced.profile.level === 'low', 'static reduced devices must not auto-upgrade');
-  assert(reducedRun.changes === 0, 'locked reduced profile unexpectedly changed tier');
+  const boundedRun = runFrames(bounded, 8.4, 900);
+  assert(bounded.profile.level === 'balanced', 'configured runtime quality ceiling was exceeded');
+  assert(boundedRun.changes === 0, 'governor changed despite already sitting at its configured ceiling');
 
   // Identical frame traces must always yield identical quality history/snapshot.
   const a = new RuntimeQualityGovernor();
@@ -152,6 +152,10 @@ try {
   assert(
     /runtimeQuality\.recordFrame\(delta, time\)/.test(gameScene),
     'GameScene does not feed active frame time into the runtime governor'
+  );
+  assert(
+    /this\.runtimeQuality = new RuntimeQualityGovernor\(\)/.test(gameScene),
+    'runtime quality must start at 1.0 relative to the static PerformanceProfile ceiling'
   );
   assert(
     /vfx\?\.setRuntimeQualityScale\(profile\.particleScale\)/.test(gameScene) &&
