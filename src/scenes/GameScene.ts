@@ -1023,6 +1023,11 @@ export class GameScene extends Phaser.Scene {
     Sfx.play('pickup');
     this.vfx.pickup(this.player.x, this.player.y);
     this.queuedLevels += this.runState.addXp(value);
+
+    // RNA pickup feedback is dispatched directly to the UI scene, while the main HUD reads the
+    // registry snapshot. Keep both views of progression atomic so a skipped/paused Game update
+    // cannot show "+RNA" feedback beside a stale RNA counter.
+    this.registry.set('run', this.snapshot());
     this.getUiScene()?.notifyRnaPickup(value);
     this.trackComprehensionOnce('first_rna_pickup', { value });
   }
