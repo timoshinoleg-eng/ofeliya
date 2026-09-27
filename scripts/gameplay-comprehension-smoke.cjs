@@ -252,7 +252,7 @@ async function bootGame(page) {
       gs.runState.stage.level = 14;
       gs.runState.stage.xp = 24;
       gs.runState.stage.xpNext = 130;
-      game.registry.set('run', gs.snapshot());
+      window.__game.registry.set('run', gs.snapshot());
       ui.update();
       const hudBefore = ui.levelText.text;
 
@@ -265,7 +265,7 @@ async function bootGame(page) {
       const xpDelta = gs.runState.stage.xp - beforeXp;
       const queuedDelta = gs.queuedLevels - beforeQueued;
       const hud = ui.levelText.text;
-      const registryRun = game.registry.get('run');
+      const registryRun = window.__game.registry.get('run');
       gs.trackComprehensionOnce('first_mutation_opened');
       gs.trackComprehensionOnce('first_mutation_opened');
       gs.awaitingChoice = true;
