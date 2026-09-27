@@ -53,7 +53,8 @@
     "test:threat": "node scripts/check-threat-director.mjs",
     "test:impact-budget": "node scripts/check-impact-budget.mjs",
     "test:runtime-quality": "node scripts/check-runtime-quality.mjs",
-    "test:telegraphs": "node scripts/check-combat-telegraph-language.mjs"
+    "test:telegraphs": "node scripts/check-combat-telegraph-language.mjs",
+    "test:run-identity": "node scripts/check-run-identity.mjs"
   },
   "dependencies": {
     "@maxhub/max-bot-api": "^0.3.1",

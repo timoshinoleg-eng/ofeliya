@@ -149,8 +149,12 @@ function browserDriver() {
     !snapshot.texts.some((text) => text.includes('СТАНДАРТ · пройдено 2 · рекорд 09:15')) ||
     !snapshot.texts.some((text) => text.includes('НАПРЯЖЕНИЕ · пройдено 1 · рекорд 10:05')) ||
     !snapshot.texts.some((text) => text.includes('ДОСТИЖЕНИЯ · 2/9')) ||
-    !snapshot.texts.some((text) => text.includes('ПЕРВЫЙ КОНТАКТ')) ||
-    !snapshot.texts.some((text) => text.includes('ЦЕПНАЯ РЕАКЦИЯ')) ||
+    !snapshot.texts.some((text) => text.includes('ПРОЕКТИЛЬНЫЙ ШТАММ · 1/2')) ||
+    !snapshot.texts.some((text) => text.includes('ГЕОМЕТРИЮ РАСКОЛА')) ||
+    !snapshot.texts.some((text) => text.includes('ОРБИТАЛЬНЫЙ КОНТРОЛЬ · 2/2')) ||
+    !snapshot.texts.some((text) => text.includes('СВЕРХКАПСИД + НУЛЕВАЯ ТОЧКА')) ||
+    !snapshot.texts.some((text) => text.includes('ИНФЕКЦИЯ / ЛИЗИС · 0/2')) ||
+    !snapshot.texts.some((text) => text.includes('Открой СИНГУЛЯРНОСТЬ')) ||
     !snapshot.texts.some((text) => text.includes('ЦИКЛОВ: 7')) ||
     snapshot.gameActive
   ) {
