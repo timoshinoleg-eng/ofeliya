@@ -4,6 +4,7 @@ import { parseDuelStartPayload, type DuelChallengeSnapshot } from '../game/Duel'
 import { ACHIEVEMENTS } from '../game/AchievementSystem';
 import { COLORS, FONT, UI_FONT, UI_TEXT, fmtTime } from '../game/config';
 import { IDENTITY } from '../game/identity';
+import { masteryTracks } from '../game/RunIdentity';
 import { LEGENDARIES } from '../game/LegendarySystem';
 import { STAGES } from '../game/StageDefinitions';
 import { EVOLUTION_NAMES, type EvolutionId } from '../game/UpgradeSystem';
@@ -1113,27 +1114,46 @@ export class MenuScene extends Phaser.Scene {
         );
         addText(
           left + 28,
-          bodyTop + 132,
-          `ДОСТИЖЕНИЯ · ${save.achievements.length}/${ACHIEVEMENTS.length}`,
-          compact ? 13 : 15,
+          bodyTop + 130,
+          'ВЕТКИ ШТАММА',
+          compact ? 12 : 14,
           UI_TEXT.primary
-        );
-        const unlocked = ACHIEVEMENTS.filter((achievement) => save.achievements.includes(achievement.id));
+        ).setFontStyle('700');
+        const tracks = masteryTracks({
+          evolutionsSeen: save.evolutionsSeen,
+          legendarySeen: save.legendarySeen,
+        });
+        tracks.forEach((track, index) => {
+          const y = bodyTop + 154 + index * (compact ? 42 : 46);
+          addText(
+            left + 28,
+            y,
+            `${track.complete ? '◆' : '◇'} ${track.label} · ${track.progress}/${track.max}`,
+            compact ? 11 : 13,
+            track.complete ? '#7fffa1' : '#d8d1e2',
+            panelW - 56
+          ).setFontStyle('700');
+          addText(
+            left + 48,
+            y + (compact ? 17 : 19),
+            track.complete ? track.objective : track.nextGoal,
+            compact ? 10 : 12,
+            track.complete ? '#9fd9aa' : UI_TEXT.secondary,
+            panelW - 78
+          );
+        });
         addText(
           left + 28,
-          bodyTop + 160,
-          unlocked.length
-            ? unlocked.map((achievement) => `◆ ${achievement.name}`).join('\n')
-            : '◇ Пока нет открытых достижений',
-          compact ? 12 : 13,
-          unlocked.length ? UI_TEXT.primary : UI_TEXT.secondary,
-          panelW - 56
-        );
-        addText(
-          left + 28,
-          top + panelH - 106,
-          `ЦИКЛОВ: ${save.runs}   ·   УНИЧТОЖЕНО КЛЕТОК: ${save.totalKills}`,
+          bodyTop + (compact ? 286 : 302),
+          `ДОСТИЖЕНИЯ · ${save.achievements.length}/${ACHIEVEMENTS.length}`,
           compact ? 11 : 13,
+          '#d8d1e2'
+        );
+        addText(
+          left + 28,
+          top + panelH - 82,
+          `ЦИКЛОВ: ${save.runs}   ·   УНИЧТОЖЕНО КЛЕТОК: ${save.totalKills}`,
+          compact ? 10 : 12,
           '#d8d1e2'
         );
       }
