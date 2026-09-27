@@ -87,6 +87,7 @@ import { VfxSystem } from '../systems/VfxSystem';
 import { EnemyHealthOverlay } from '../systems/EnemyHealthOverlay';
 import { VideoInterstitial } from '../systems/VideoInterstitial';
 import { PERFORMANCE } from '../systems/PerformanceProfile';
+import { RuntimeQualityGovernor } from '../systems/RuntimeQualityGovernor';
 import {
   HostCellSystem,
   type HostCellInteractionEvent,
@@ -165,6 +166,8 @@ export class GameScene extends Phaser.Scene {
   private trailAcc = 0;
   private visualEnemyDensity = 0;
   private visualDensityRefreshAt = 0;
+  private runtimeQuality!: RuntimeQualityGovernor;
+  private runtimeQualityRegistryAt = 0;
   private keys: Record<string, Phaser.Input.Keyboard.Key> = {};
   private introHint: Phaser.GameObjects.Container | null = null;
   private transitionGeneration = 0;
@@ -259,6 +262,12 @@ export class GameScene extends Phaser.Scene {
     this.registry.set('controlMode', this.controlMode);
     this.registry.set('performanceTier', PERFORMANCE.tier);
     this.registry.set('performancePostFx', PERFORMANCE.postFx);
+    this.runtimeQuality = new RuntimeQualityGovernor(
+      PERFORMANCE.tier === 'reduced'
+        ? { initialLevel: 'low', minLevel: 'low', maxLevel: 'low' }
+        : { initialLevel: 'full', minLevel: 'low', maxLevel: 'full' }
+    );
+    this.runtimeQualityRegistryAt = 0;
 
     this.heartbeatPulse = new HeartbeatPulseDirector(
       heartbeatProfileForDifficulty(this.difficulty)
@@ -353,6 +362,7 @@ export class GameScene extends Phaser.Scene {
     this.enemies = this.physics.add.group({ classType: Enemy, maxSize: 260 });
     this.gems = this.physics.add.group({ classType: Gem, maxSize: 220 });
     this.vfx = new VfxSystem(this);
+    this.applyRuntimeQuality(this.time.now);
     this.enemyHealth = new EnemyHealthOverlay(this);
     this.hostCells = new HostCellSystem(
       this,
@@ -472,7 +482,15 @@ export class GameScene extends Phaser.Scene {
       this.registry.remove('joy');
       this.registry.remove('aimJoy');
       this.registry.remove('adaptiveThreat');
+      this.registry.remove('runtimeQuality');
     });
+  }
+
+  private applyRuntimeQuality(now: number): void {
+    const profile = this.runtimeQuality.profile;
+    this.vfx?.setRuntimeQualityScale(profile.particleScale);
+    this.atmosphere?.setRuntimeQualityScale(profile.ambientScale);
+    this.registry.set('runtimeQuality', this.runtimeQuality.getSnapshot(now));
   }
 
   private exitToMenu(): void {
@@ -495,6 +513,11 @@ export class GameScene extends Phaser.Scene {
       if (time < this.hitStopUntil) return;
       this.hitStopped = false;
       this.physics.world.resume();
+    }
+    const qualityChanged = this.runtimeQuality.recordFrame(delta, time);
+    if (qualityChanged || time >= this.runtimeQualityRegistryAt) {
+      this.runtimeQualityRegistryAt = time + 1_000;
+      this.applyRuntimeQuality(time);
     }
     this.runState.tick(delta);
     if (time >= this.visualDensityRefreshAt) {
