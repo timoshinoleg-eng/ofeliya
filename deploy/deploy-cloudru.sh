@@ -55,35 +55,22 @@ load_env_file() {
 }
 load_env_file "${RELEASE_ENV_FILE}"
 
-BOT_MODE="${OFELIYA_BOT_MODE:-shared}"
-BOT_ENV_FILE="${OFELIYA_BOT_ENV_FILE:-/opt/hub/.env}"
-
-case "${BOT_MODE}" in
-  shared)
-    [[ -f "${BOT_ENV_FILE}" ]] || { echo "Shared MAX bot env missing: ${BOT_ENV_FILE}" >&2; exit 3; }
-    load_env_file "${BOT_ENV_FILE}"
-    export OFELIYA_BOT_TOKEN="${OFELIYA_BOT_TOKEN:-${BOT_TOKEN:-}}"
-    export OFELIYA_BOT_USERNAME="${OFELIYA_BOT_USERNAME:-${HUB_BOT_USERNAME:-}}"
-    export OFELIYA_BOT_ENV_FILE="${BOT_ENV_FILE}"
-    ;;
-  dedicated)
-    BOT_ENV_FILE="${RELEASE_ENV_FILE}"
-    export OFELIYA_BOT_ENV_FILE="${RELEASE_ENV_FILE}"
-    # A dedicated Ofeliya bot signs this Mini App's MAX initData. Older
-    # dedicated hosts only store its token as OFELIYA_BOT_TOKEN.
-    export OFELIYA_MAX_BOT_TOKEN="${OFELIYA_MAX_BOT_TOKEN:-${OFELIYA_BOT_TOKEN:-}}"
-    ;;
-  *)
-    echo "OFELIYA_BOT_MODE must be shared or dedicated" >&2
-    exit 3
-    ;;
-esac
+BOT_MODE="${OFELIYA_BOT_MODE:-dedicated}"
+[[ "${BOT_MODE}" == dedicated ]] || {
+  echo "OFELIYA_BOT_MODE must be dedicated; Hub/Chatbot24 bot sharing is retired" >&2
+  exit 3
+}
+BOT_ENV_FILE="${RELEASE_ENV_FILE}"
+export OFELIYA_BOT_ENV_FILE="${RELEASE_ENV_FILE}"
+# The dedicated Ofeliya MAX app token may be explicit; otherwise use the same dedicated
+# bot token. Never inherit BOT_TOKEN/HUB_BOT_USERNAME from another project.
+export OFELIYA_MAX_BOT_TOKEN="${OFELIYA_MAX_BOT_TOKEN:-${OFELIYA_BOT_TOKEN:-}}"
 
 DEDICATED_LOCAL_FILE="deploy/compose.production.dedicated.local.yml"
 CADDY_LOCAL_FILE="deploy/compose.caddy.yml"
 if [[ -n "${OFELIYA_COMPOSE_PROJECT:-}" ]]; then
   COMPOSE_PROJECT="${OFELIYA_COMPOSE_PROJECT}"
-elif [[ "${BOT_MODE}" == dedicated && -f "${APP_ROOT}/${DEDICATED_LOCAL_FILE}" ]]; then
+elif [[ -f "${APP_ROOT}/${DEDICATED_LOCAL_FILE}" ]]; then
   # Existing dedicated Cloud.ru host uses project=deploy.
   COMPOSE_PROJECT="deploy"
 else
@@ -94,12 +81,14 @@ fi
   exit 3
 }
 
-export OFELIYA_EXTRA_CA_CERT="${OFELIYA_EXTRA_CA_CERT:-/opt/quiz-battle/certs/ca-certificates.crt}"
-if [[ "${BOT_MODE}" == dedicated ]]; then
-  export OFELIYA_SHARED_NETWORK="${OFELIYA_SHARED_NETWORK:-${COMPOSE_PROJECT}_ofeliya}"
-else
-  export OFELIYA_SHARED_NETWORK="${OFELIYA_SHARED_NETWORK:-quiz-battle_default}"
+export OFELIYA_EXTRA_CA_CERT="${OFELIYA_EXTRA_CA_CERT:-${APP_ROOT}/certs/ca-certificates.crt}"
+if [[ ! -s "${OFELIYA_EXTRA_CA_CERT}" ]]; then
+  system_ca=/etc/ssl/certs/ca-certificates.crt
+  [[ -s "${system_ca}" ]] || { echo "System CA bundle missing: ${system_ca}" >&2; exit 3; }
+  mkdir -p "$(dirname "${OFELIYA_EXTRA_CA_CERT}")"
+  cp "${system_ca}" "${OFELIYA_EXTRA_CA_CERT}"
 fi
+export OFELIYA_SHARED_NETWORK="${OFELIYA_SHARED_NETWORK:-${COMPOSE_PROJECT}_ofeliya}"
 
 required_env_keys=(
   OFELIYA_BOT_TOKEN OFELIYA_MAX_BOT_TOKEN OFELIYA_BOT_USERNAME OFELIYA_GAME_URL
@@ -107,12 +96,10 @@ required_env_keys=(
   OFELIYA_DEVELOPER_LEGAL_NAME OFELIYA_DEVELOPER_REGISTRATION
   OFELIYA_DEVELOPER_ADDRESS OFELIYA_SUPPORT_EMAIL
 )
-if [[ "${BOT_MODE}" == dedicated ]]; then
-  required_env_keys+=(
-    OFELIYA_BOT_WEBHOOK_DOMAIN OFELIYA_BOT_WEBHOOK_PORT
-    OFELIYA_BOT_WEBHOOK_PATH OFELIYA_BOT_WEBHOOK_SECRET
-  )
-fi
+required_env_keys+=(
+  OFELIYA_BOT_WEBHOOK_DOMAIN OFELIYA_BOT_WEBHOOK_PORT
+  OFELIYA_BOT_WEBHOOK_PATH OFELIYA_BOT_WEBHOOK_SECRET
+)
 for key in "${required_env_keys[@]}"; do
   if [[ -z "${!key:-}" ]]; then
     echo "Production env value is missing: ${key}" >&2
@@ -120,7 +107,7 @@ for key in "${required_env_keys[@]}"; do
   fi
 done
 
-if [[ "${BOT_MODE}" == dedicated && "${OFELIYA_BOT_WEBHOOK_PATH}" != /ofeliya/bot/webhook ]]; then
+if [[ "${OFELIYA_BOT_WEBHOOK_PATH}" != /ofeliya/bot/webhook ]]; then
   echo 'OFELIYA_BOT_WEBHOOK_PATH must be /ofeliya/bot/webhook' >&2
   exit 3
 fi
@@ -151,20 +138,17 @@ export OFELIYA_RELEASE
 export OFELIYA_ENV_FILE="${RELEASE_ENV_FILE}"
 
 compose_files=(-f deploy/compose.production.yml)
-if [[ "${BOT_MODE}" == dedicated ]]; then
-  for local_file in "${DEDICATED_LOCAL_FILE}" "${CADDY_LOCAL_FILE}"; do
-    if [[ -f "${CHECKOUT_DIR}/${local_file}" ]]; then
-      compose_files+=(-f "${CHECKOUT_DIR}/${local_file}")
-    elif [[ "${CHECKOUT_DIR}" != "${APP_ROOT}" && -f "${APP_ROOT}/${local_file}" ]]; then
-      # Legacy /opt/ofeliya/current checkout with host-local overrides one level above.
-      compose_files+=(-f "${APP_ROOT}/${local_file}")
-    fi
-  done
-fi
+for local_file in "${DEDICATED_LOCAL_FILE}" "${CADDY_LOCAL_FILE}"; do
+  if [[ -f "${CHECKOUT_DIR}/${local_file}" ]]; then
+    compose_files+=(-f "${CHECKOUT_DIR}/${local_file}")
+  elif [[ "${CHECKOUT_DIR}" != "${APP_ROOT}" && -f "${APP_ROOT}/${local_file}" ]]; then
+    compose_files+=(-f "${APP_ROOT}/${local_file}")
+  fi
+done
 
 compose() {
   docker compose -p "${COMPOSE_PROJECT}" \
-    --env-file "${BOT_ENV_FILE}" --env-file "${RELEASE_ENV_FILE}" \
+    --env-file "${RELEASE_ENV_FILE}" \
     "${compose_files[@]}" "$@"
 }
 
@@ -180,21 +164,14 @@ retry() {
 }
 
 compose config --quiet
-build_services=(score static)
-if [[ "${BOT_MODE}" == dedicated ]]; then
-  build_services+=(bot)
-fi
+build_services=(score static bot)
 compose build "${build_services[@]}"
 compose up -d score static
 
 retry 12 2 compose exec -T static wget -q -O /dev/null http://127.0.0.1:8080/
 retry 12 2 compose exec -T score node -e "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-if [[ "${BOT_MODE}" == dedicated ]]; then
-  compose --profile dedicated-bot up -d bot
-else
-  compose --profile dedicated-bot stop bot >/dev/null 2>&1 || true
-fi
+compose --profile dedicated-bot up -d bot
 
 compose ps
 printf 'OFELIYA deployed on Cloud.ru at SHA %s (project=%s bot_mode=%s network=%s)\n' \
