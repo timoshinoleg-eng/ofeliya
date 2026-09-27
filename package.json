@@ -50,7 +50,8 @@
     "test:comprehension": "node scripts/gameplay-comprehension-smoke.cjs",
     "test:onboarding": "node scripts/check-onboarding.mjs",
     "test:daily-history": "node scripts/check-daily-history.mjs",
-    "test:threat": "node scripts/check-threat-director.mjs"
+    "test:threat": "node scripts/check-threat-director.mjs",
+    "test:impact-budget": "node scripts/check-impact-budget.mjs"
   },
   "dependencies": {
     "@maxhub/max-bot-api": "^0.3.1",

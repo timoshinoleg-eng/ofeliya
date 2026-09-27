@@ -671,9 +671,13 @@ export class GameScene extends Phaser.Scene {
     this.vfx.kill(e.x, e.y, e.color, e.isBoss ? 'boss' : e.isElite ? 'elite' : 'normal');
     if (e.isElite && e.eliteModifier === 'volatile') this.triggerVolatileElite(e);
     if (e.isElite || e.isBoss) {
-      this.hitStop(this.impact.hitStopMs(e.isBoss ? 'boss_phase' : 'elite_death'));
-      const s = JUICE.shakeEliteKill;
-      this.shake(s.duration, s.intensity);
+      const decision = this.impact.request(
+        e.isBoss ? 'boss_phase' : 'elite_death',
+        this.time.now
+      );
+      this.hitStop(decision.hitStopMs);
+      const s = e.isBoss ? { duration: 400, intensity: 0.01 } : JUICE.shakeEliteKill;
+      if (decision.allowCameraShake) this.shake(s.duration, s.intensity, true);
     }
     if (e.xpValue > 0) {
       // The first readable pickup teaches the mutation loop immediately instead of requiring
@@ -684,7 +688,6 @@ export class GameScene extends Phaser.Scene {
     }
     if (e.isBoss && this.wave.boss === e) {
       this.wave.boss = null;
-      this.shake(400, 0.01);
       const defeatedStageId = this.stageDirector.currentStage.id;
       const ceremonyToken = ++this.transitionGeneration;
       this.awaitingChoice = false;
@@ -1029,8 +1032,9 @@ export class GameScene extends Phaser.Scene {
       this.pendingLegendaryCeremony = def.legendaryId;
       this.vfx.legendary(this.player.x, this.player.y, COLORS.gold);
       this.atmosphere.pulse(COLORS.gold, 0.34);
-      this.shake(180, 0.004);
-      this.hitStop(this.impact.hitStopMs('legendary_pick'));
+      const decision = this.impact.request('legendary_pick', this.time.now);
+      if (decision.allowCameraShake) this.shake(180, 0.004, true);
+      this.hitStop(decision.hitStopMs);
       if (def.legendaryId === 'zero-point') this.zeroPointNextAt = this.time.now + 12_000;
     } else {
       this.runState.bump(id);
@@ -1093,7 +1097,8 @@ export class GameScene extends Phaser.Scene {
     const stage = this.stageDirector.currentStage;
     this.atmosphere.pulse(stage.theme.dangerColor, 0.22);
     this.vfx.legendary(boss.x, boss.y, stage.theme.dangerColor);
-    this.shake(220, 0.006);
+    const decision = this.impact.request('boss_phase', this.time.now);
+    if (decision.allowCameraShake) this.shake(220, 0.006, true);
     PlatformBridge.haptic('heavy');
   }
 
@@ -1121,10 +1126,17 @@ export class GameScene extends Phaser.Scene {
       onComplete: () => wave.destroy(),
     });
     this.atmosphere.pulse(COLORS.red, boss.bossPhase === 2 ? 0.24 : 0.16);
-    this.shake(boss.bossPhase === 2 ? 180 : 130, boss.bossPhase === 2 ? 0.006 : 0.004);
+    const now = this.time.now;
+    const impactDecision = this.impact.request('boss_impact', now);
+    if (impactDecision.allowCameraShake) {
+      this.shake(
+        boss.bossPhase === 2 ? 180 : 130,
+        boss.bossPhase === 2 ? 0.006 : 0.004,
+        true
+      );
+    }
 
     const distance = Math.hypot(this.player.x - boss.x, this.player.y - boss.y);
-    const now = this.time.now;
     if (distance > radius || now < this.player.hurtUntil) return;
 
     const appliedDamage = Math.max(8, damage);
@@ -1370,7 +1382,14 @@ export class GameScene extends Phaser.Scene {
       event.bossActive ? stage.theme.dangerColor : stage.theme.accentColor,
       event.bossActive ? 0.4 : 0.3
     );
-    this.shake(event.bossActive ? 150 : 100, event.bossActive ? 0.0045 : 0.0026);
+    const impactDecision = this.impact.request('heartbeat_impact', this.time.now);
+    if (impactDecision.allowCameraShake) {
+      this.shake(
+        event.bossActive ? 150 : 100,
+        event.bossActive ? 0.0045 : 0.0026,
+        true
+      );
+    }
     PlatformBridge.haptic(event.bossActive ? 'medium' : 'light');
 
     const distanceToSafe = Math.hypot(
@@ -2166,8 +2185,9 @@ export class GameScene extends Phaser.Scene {
     PlatformBridge.haptic('medium');
     this.cameras.main.flash(140, 255, 60, 100);
     const s = JUICE.shakeHurt;
-    this.shake(s.duration, s.intensity);
-    this.hitStop(this.impact.hitStopMs('critical_hit'));
+    const impactDecision = this.impact.request('player_hit', now);
+    if (impactDecision.allowCameraShake) this.shake(s.duration, s.intensity, true);
+    this.hitStop(impactDecision.hitStopMs);
     this.showPlayerImpactCue(e.x, e.y);
     const dx = e.x - this.player.x;
     const dy = e.y - this.player.y;
@@ -2337,7 +2357,8 @@ export class GameScene extends Phaser.Scene {
     this.vfx.legendary(this.player.x, this.player.y, COLORS.green);
     this.atmosphere.pulse(COLORS.green, 0.4);
     this.cameras.main.flash(180, 120, 255, 160);
-    this.shake(260, 0.009);
+    const decision = this.impact.request('legendary_pick', this.time.now);
+    if (decision.allowCameraShake) this.shake(260, 0.009, true);
     this.player.setMutationState(true, true, true);
     this.time.delayedCall(8_000, () => {
       if (!this.player.active) return;
@@ -2345,8 +2366,8 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private shake(duration: number, intensity: number): void {
-    if (this.impact.allowCameraShake(this.time.now)) {
+  private shake(duration: number, intensity: number, preGranted = false): void {
+    if (preGranted || this.impact.allowCameraShake(this.time.now)) {
       this.cameras.main.shake(duration, intensity);
     }
   }
