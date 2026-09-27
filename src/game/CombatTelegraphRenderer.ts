@@ -84,7 +84,7 @@ export function drawDirectionalCombatTelegraph(
 ): void {
   const dir = unit(dirX, dirY);
   const perp = { x: -dir.y, y: dir.x };
-  const pattern = COMBAT_TEGRAPH_PATTERN(level);
+  const pattern = COMBAT_TELEGRAPH_PATTERNS[level];
   const laneStart = Math.max(0, start);
   const laneEnd = Math.max(laneStart + 12, end);
 
@@ -140,6 +140,3 @@ export function drawDirectionalCombatTelegraph(
   graphics.fillCircle(dir.x * laneEnd, dir.y * laneEnd, level === 'critical' ? 5 : 4);
 }
 
-function COMBAT_TEGRAPH_PATTERN(level: CombatTelegraphLevel) {
-  return COMBAT_TELEGRAPH_PATTERNS[level];
-}
