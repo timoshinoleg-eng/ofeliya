@@ -53,6 +53,9 @@ jobs:
       - name: Impact feedback budget deterministic smoke
         run: npm run test:impact-budget
 
+      - name: Run identity and mastery deterministic smoke
+        run: npm run test:run-identity
+
       - name: Adaptive audio deterministic smoke
         run: npm run test:audio
 
