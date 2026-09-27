@@ -50,6 +50,7 @@ import { Player } from '../game/Player';
 import { Enemy } from '../game/Enemy';
 import { Bullet } from '../game/Bullet';
 import { Gem } from '../game/Gem';
+import { mergeRnaOverflowValue, pickRnaOverflowTarget } from '../game/RnaOverflow';
 import type { RunResult, RunSnapshot } from '../game/RunContracts';
 import { RunMilestones } from '../game/RunMilestones';
 import { RunState } from '../game/RunState';
@@ -2403,8 +2404,15 @@ export class GameScene extends Phaser.Scene {
       g.activate(this, x, y, value);
       return;
     }
-    const first = this.gems.getFirstAlive() as Gem | null;
-    if (first) first.value += value;
+
+    // The group is intentionally bounded. Once every slot is active, keep the newly earned RNA
+    // collectible by merging it into the nearest existing fragment and moving that fragment to
+    // this fresh drop position. The previous implementation accumulated overflow on an arbitrary
+    // old fragment, which could strand later rewards elsewhere on the map and stall progression.
+    const overflowTarget = pickRnaOverflowTarget(this.gems.getChildren() as Gem[], x, y);
+    if (!overflowTarget) return;
+    const mergedValue = mergeRnaOverflowValue(overflowTarget.value, value);
+    overflowTarget.activate(this, x, y, mergedValue);
   }
 
   private captureAchievements(runRecorded: boolean, showToast: boolean): void {
