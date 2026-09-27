@@ -59,6 +59,9 @@ jobs:
       - name: Combat telegraph language deterministic smoke
         run: npm run test:telegraphs
 
+      - name: Run identity and mastery deterministic smoke
+        run: npm run test:run-identity
+
       - name: Adaptive audio deterministic smoke
         run: npm run test:audio
 
