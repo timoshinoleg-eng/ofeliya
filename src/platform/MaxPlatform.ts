@@ -38,6 +38,8 @@ interface MaxWebAppGlobal {
   getViewportSize?: () => Promise<{ height: string; width: string }>;
   shareContent?: (data: MaxShareParams) => Promise<unknown>;
   shareMaxContent?: (data: MaxShareParams) => Promise<unknown>;
+  ready?: () => unknown;
+  disableVerticalSwipes?: () => unknown;
   BackButton?: MaxBackButton;
   HapticFeedback?: {
     impactOccurred?: (style: HapticStyle, options?: unknown) => unknown;
@@ -54,13 +56,31 @@ declare global {
 export class MaxPlatform implements PlatformAdapter {
   readonly kind = 'max' as const;
   private backHandler: (() => void) | null = null;
+  private hostInitialized = false;
 
   private get wa(): MaxWebAppGlobal | undefined {
     return typeof window !== 'undefined' ? window.WebApp : undefined;
   }
 
   get available(): boolean {
-    return typeof this.wa?.initData === 'string' && this.wa.initData.length > 0;
+    const available = typeof this.wa?.initData === 'string' && this.wa.initData.length > 0;
+    if (available) this.ensureHostInitialized();
+    return available;
+  }
+
+
+  private ensureHostInitialized(): void {
+    if (this.hostInitialized) return;
+    const wa = this.wa;
+    if (!wa) return;
+    try {
+      wa.ready?.();
+      wa.disableVerticalSwipes?.();
+      this.hostInitialized = true;
+    } catch {
+      // A partial/old bridge can expose initData before all optional methods are callable.
+      // Keep initialization retryable on the next facade access.
+    }
   }
 
   get platform(): string {
@@ -131,18 +151,26 @@ export class MaxPlatform implements PlatformAdapter {
     }
   }
 
-  shareResult(text: string, link?: string): Promise<boolean> {
-    // Prefer the in-MAX share sheet for challenge loops. shareContent remains the mobile fallback.
+  async shareResult(text: string, link?: string): Promise<boolean> {
+    // Prefer MAX-native sharing. Hub's production bridge proved that browser sharing is a useful
+    // desktop/partial-bridge fallback, so keep it platform-local instead of leaking into gameplay.
     const share = this.wa?.shareMaxContent ?? this.wa?.shareContent;
-    if (!share) return Promise.resolve(false);
-    const params: MaxShareParams = link ? { text, link } : { text };
+    if (share) {
+      const params: MaxShareParams = link ? { text, link } : { text };
+      try {
+        await share.call(this.wa, params);
+        return true;
+      } catch {
+        // Fall through to the browser share sheet.
+      }
+    }
+
+    if (typeof navigator === 'undefined' || !navigator.share) return false;
     try {
-      return share
-        .call(this.wa, params)
-        .then(() => true)
-        .catch(() => false);
+      await navigator.share(link ? { text, url: link } : { text });
+      return true;
     } catch {
-      return Promise.resolve(false);
+      return false;
     }
   }
 
