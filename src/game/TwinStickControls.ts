@@ -40,6 +40,7 @@ export class TwinStickControls {
     scene.input.on(Phaser.Input.Events.POINTER_MOVE, this.onMove, this);
     scene.input.on(Phaser.Input.Events.POINTER_UP, this.onUp, this);
     scene.input.on(Phaser.Input.Events.POINTER_UP_OUTSIDE, this.onUp, this);
+    scene.scale.on('resize', this.onResize, this);
     const resetOnFocusLoss = () => this.reset();
     const resetOnVisibilityLoss = () => {
       if (document.visibilityState === 'hidden') this.reset();
@@ -53,6 +54,7 @@ export class TwinStickControls {
       scene.input.off(Phaser.Input.Events.POINTER_MOVE, this.onMove, this);
       scene.input.off(Phaser.Input.Events.POINTER_UP, this.onUp, this);
       scene.input.off(Phaser.Input.Events.POINTER_UP_OUTSIDE, this.onUp, this);
+      scene.scale.off('resize', this.onResize, this);
       this.reset();
       scene.tweens.killTweensOf([
         this.move.base,
@@ -97,7 +99,14 @@ export class TwinStickControls {
 
     const role: StickRole = p.x < this.scene.scale.width / 2 ? 'move' : 'aim';
     const stick = role === 'move' ? this.move : this.aim;
-    if (stick.active) return;
+    const otherRole: StickRole = role === 'move' ? 'aim' : 'move';
+    const other = role === 'move' ? this.aim : this.move;
+
+    // Mobile WebViews may recycle Phaser pointer ids between gestures. If the same
+    // id is still latched on the opposite stick, release that stale ownership first.
+    if (other.active && other.pointerId === p.id) this.releaseImmediately(otherRole, other);
+    if (stick.active && stick.pointerId === p.id) this.releaseImmediately(role, stick);
+    else if (stick.active) return;
 
     stick.active = true;
     stick.pointerId = p.id;
@@ -148,6 +157,10 @@ export class TwinStickControls {
   reset(): void {
     this.releaseImmediately('move', this.move);
     this.releaseImmediately('aim', this.aim);
+  }
+
+  private onResize(): void {
+    this.reset();
   }
 
   private releaseImmediately(role: StickRole, stick: StickState): void {
