@@ -216,7 +216,7 @@ function mag(v) {
     const controls = ui.twinStick;
     controls.onDown({ id: 78, x: 95, y: 690 });
     controls.onMove({ id: 78, x: 135, y: 650 });
-    ui.scale.emit('resize');
+    ui.scale.resize(390, 800);
     return {
       moveActive: controls.move.active,
       aimActive: controls.aim.active,
@@ -527,7 +527,7 @@ function mag(v) {
     const joystick = ui.joystick;
     joystick.onDown({ id: 91, x: 110, y: 690 });
     joystick.onMove({ id: 91, x: 150, y: 650 });
-    ui.scale.emit('resize');
+    ui.scale.resize(390, 800);
     return {
       active: joystick.active,
       pointerId: joystick.pointerId,
