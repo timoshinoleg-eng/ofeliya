@@ -19,13 +19,18 @@ function walkTextFiles(root) {
   return out;
 }
 
+const negativeFixtureFiles = new Set([
+  'server/test.mjs',
+  'bot/smoke.mjs',
+]);
+
 const files = [
   'index.html',
   ...walkTextFiles('src'),
   ...walkTextFiles('server'),
   ...walkTextFiles('bot'),
   ...walkTextFiles('deploy'),
-];
+].filter((path) => !negativeFixtureFiles.has(path));
 
 const sources = Object.fromEntries(files.map((path) => [path, readFileSync(path, 'utf8')]));
 const combined = files.map((path) => `--- ${path} ---\n${sources[path]}`).join('\n');
