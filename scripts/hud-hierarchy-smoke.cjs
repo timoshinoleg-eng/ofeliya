@@ -474,6 +474,12 @@ function assertContainment(kind, label, contract) {
         gs.runState.stage.hp = 1_000_000;
         gs.runState.stage.maxHp = 1_000_000;
         const boss = gs.spawnEnemy('boss', gs.player.x + 120, gs.player.y, false);
+        if (!boss) throw new Error('failed to spawn isolated HUD boss');
+        // This contract measures HUD hierarchy only. A live boss may collide with the
+        // low-HP synthetic player on a loaded CI runner and turn the later Pause check
+        // into a game-over check, so remove combat motion/damage from this fixture.
+        boss.speed = 0;
+        boss.dmg = 0;
         gs.wave.boss = boss;
       });
       await page.waitForFunction(() => window.__game.scene.getScene('UI').bossLabel.visible === true, null, { timeout: 15000 });
