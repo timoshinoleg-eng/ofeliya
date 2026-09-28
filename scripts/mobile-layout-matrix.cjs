@@ -77,6 +77,39 @@ async function assertCompactResumeMenu(browser) {
   }
 
   await page.locator('#game').screenshot({ path: '/tmp/browser-smoke/03b-matrix-resume-menu-320x568.png' });
+
+  // MenuScene.onResize() restarts the same Phaser Scene instance. The layout guard must
+  // recognise each new display-list generation even when dimensions/text are identical.
+  for (let restart = 0; restart < 3; restart += 1) {
+    await page.evaluate(() => window.__game.scene.getScene('Menu').scene.restart());
+    await sleep(220);
+    const compactRestart = await page.evaluate(() => {
+      const scene = window.__game.scene.getScene('Menu');
+      const carrier = scene.children.getByName('ofeliya-menu-carrier');
+      const hook = scene.children.getByName('ofeliya-menu-hook');
+      const subtitle = scene.children.getByName('ofeliya-menu-subtitle');
+      const hookBounds = hook?.getBounds?.();
+      const subtitleBounds = subtitle?.getBounds?.();
+      return {
+        active: scene.sys.isActive(),
+        carrierExists: Boolean(carrier),
+        carrierVisible: carrier?.visible ?? null,
+        subtitleBelowHook:
+          Boolean(hookBounds && subtitleBounds) && hookBounds.bottom + 10 <= subtitleBounds.top,
+      };
+    });
+    if (
+      !compactRestart.active ||
+      !compactRestart.carrierExists ||
+      compactRestart.carrierVisible !== false ||
+      !compactRestart.subtitleBelowHook
+    ) {
+      throw new Error(
+        `menu restart ${restart + 1} did not re-apply compact layout: ${JSON.stringify(compactRestart)}`
+      );
+    }
+  }
+
   await ctx.close();
 }
 
@@ -287,6 +320,74 @@ async function assertCompactResumeMenu(browser) {
       throw new Error(`result ${size.width}x${size.height} failed: ${JSON.stringify(result)}`);
     }
 
+    if (size.width === 390 && size.height === 844) {
+      // Reproduce messenger rotation/viewport contraction while the result screen is open.
+      // The same result container must be laid out again for the new logical viewport.
+      await page.evaluate(() => window.__game.scale.resize(320, 568));
+      await sleep(220);
+      const resizedResult = await page.evaluate(() => {
+        const ui = window.__game.scene.getScene('UI');
+        const container = ui.children.list.find((obj) => obj?.name === 'ofeliya-result');
+        if (!container) return { missing: 'result container' };
+        const byName = (name) => container.list.find((obj) => obj?.name === name);
+        const names = [
+          'ofeliya-result-retry-label',
+          'ofeliya-result-share-label',
+          'ofeliya-result-menu-label',
+        ];
+        const expectedYs = [402, 456, 510];
+        const buttons = names.map((name, index) => {
+          const text = byName(name);
+          const bg = byName(name.replace('-label', '-bg'));
+          const tb = text?.getBounds?.();
+          const bb = bg?.getBounds?.();
+          return {
+            name,
+            y: text?.y ?? null,
+            expectedY: expectedYs[index],
+            textInside:
+              Boolean(tb && bb) &&
+              tb.left >= bb.left + 4 &&
+              tb.right <= bb.right - 4 &&
+              tb.top >= bb.top + 1 &&
+              tb.bottom <= bb.bottom - 1,
+            bgWidth: bg?.width ?? null,
+          };
+        });
+        const scrim = byName('ofeliya-result-scrim');
+        return {
+          scale: [ui.scale.width, ui.scale.height],
+          buttons,
+          scrim: scrim
+            ? {
+                x: scrim.x,
+                y: scrim.y,
+                width: scrim.displayWidth,
+                height: scrim.displayHeight,
+              }
+            : null,
+        };
+      });
+      if (
+        resizedResult.missing ||
+        resizedResult.scale?.[0] !== 320 ||
+        resizedResult.scale?.[1] !== 568 ||
+        resizedResult.buttons?.some(
+          (item) =>
+            Math.abs((item.y ?? -9999) - item.expectedY) > 1 ||
+            !item.textInside ||
+            (item.bgWidth ?? 9999) > 272
+        ) ||
+        !resizedResult.scrim ||
+        Math.abs(resizedResult.scrim.x - 160) > 1 ||
+        Math.abs(resizedResult.scrim.y - 284) > 1 ||
+        Math.abs(resizedResult.scrim.width - 320) > 1 ||
+        Math.abs(resizedResult.scrim.height - 568) > 1
+      ) {
+        throw new Error(`result resize 390x844 -> 320x568 failed: ${JSON.stringify(resizedResult)}`);
+      }
+    }
+
     if (size.width === 320 && size.height === 568) {
       await page.locator('#game').screenshot({ path: '/tmp/browser-smoke/04-matrix-result-320x568.png' });
     }
@@ -299,7 +400,7 @@ async function assertCompactResumeMenu(browser) {
 
   await assertCompactResumeMenu(browser);
   await browser.close();
-  console.log(`MAX mobile layout matrix: ok (${sizes.map((s) => `${s.width}x${s.height}`).join(', ')} + resume 320x568)`);
+  console.log(`MAX mobile layout matrix: ok (${sizes.map((s) => `${s.width}x${s.height}`).join(', ')} + restart-safe resume + result resize)`);
 })().catch((error) => {
   console.error(error.stack || error);
   process.exit(1);
