@@ -11,22 +11,17 @@
 
 ## Текущая задача
 
-- Ветка `feat/donor-quick-wins` (локально и на GitHub — `a131d7c`, 26.09.2026): донорские квик-вины —
-  онбординг-стейт-машина, daily streak, comprehension hints, сохранение подсказок при resume.
-- ВАЖНО: `origin/main` ушёл вперёд — `480c67b` (28.09, PR #150 «hardening: production integrity and
-  release safety», 8 фаз: run capabilities, score-store fsync, input lifecycle, layout cache,
-  release identity, deploy rollback, nginx headers, аудио-кэш + vendor chunk).
-  Локальный worktree `main` (@ `4aa1e9c`) отстаёт от remote.
-- Ближайшая цель: подтянуть `origin/main` в ветку (merge/rebase), прогнать канонический гейт,
-  разрешить конфликты с hardening-волной, затем приёмка и merge в `main`.
+- Ветка `feat/donor-quick-wins`: донорские квик-вины (онбординг, daily streak, comprehension hints) + система памяти пилота. Обновлена 28.09: merge `origin/main` (#139–#150) — коммит `45712e9` (запушен).
+- Канонический гейт на синхронизированной ветке пройден 28.09.2026: `test:challenge/save/stages/legendary/difficulty/rng/viewport/profile/startup` ✓, `release:check` ✓ (fixture), `build` ✓ («Stamped 45712e9»).
+- Ближайшая цель: тест-цикл B (OpenCode) + внешнее ревью ChatGPT → PR/приёмка ветки.
 - Ограничения: release-контракт MAX (публикационный билд только `npm run build:max`);
   не менять `Joystick`; renderer Phaser-only.
 
 ## Состояние на момент передачи
 
-- Версия: `0.4.1-rc.1` (по локальной копии; remote main уже содержит hardening #150).
-- Worktree: `ofeliya-audit` (main @ `4aa1e9c` — отстаёт от origin/main), `ofeliya-audit-fixes` (ветка @ `a131d7c` = remote).
-- Remote: `origin/main` @ `480c67b` (28.09), `origin/feat/donor-quick-wins` @ `a131d7c` (26.09).
+- Версия: `0.4.1-rc.1`.
+- Worktree: `ofeliya-audit` (main @ `480c67b` — синхронизирован), `ofeliya-audit-fixes` (ветка @ `45712e9` = main + память).
+- Remote: `origin/main` @ `480c67b` (28.09); `origin/feat/donor-quick-wins` @ `45712e9` (28.09, гейт пройден).
 - CI: `ci.yml` (build gate + browser gate), `release-visual-matrix.yml`, `deploy-cloudru.yml`.
 - Прод: Cloud.ru (см. `deploy/`: `deploy-cloudru.sh`, `compose.production.yml`).
 
@@ -34,12 +29,13 @@
 
 - Этап 0: старые копии проекта проверены и перенесены в архив `Documents\Archive\ofeliya-2026-09\` (ничего не удалялось; у старого клона в `Downloads\ofeliya` были несохранённые правки — сохранены как diff и копии файлов в архиве).
 - Этап 1: файлы памяти (`memory/`), `AGENTS.md` и `opencode.json` добавлены в репозиторий, ветка `feat/donor-quick-wins`.
-- Дальше: этап 3 — настройка HP (см. SETUP-CHECKLIST.md), затем этап 4 — сквозной цикл на приёмке ветки. Перед merge — подтянуть `origin/main` (#150) в ветку.
+- Этап 2 (Honor) — проверено 28.09: OmniRoute работает (живой тест ✓), комбо `OFELIYA-CODE` отвечает, скиллы gamedev установлены, context-mode v1.0.169 активен, Superpowers в проектном конфиге.
+- Этап 4 (начат 28.09): merge main → ветка `45712e9`; канонический гейт пройден. Дальше: тест-цикл B, ревью, PR; затем этап 3 — HP.
 
 ## Проверено / не проверено
 
 - Проверено: структура репо, ветки, конфиги, состав CI (по локальной копии от 28.09).
-- Не проверено: статус CI последних коммитов remote main (проверить перед merge);
+- Не проверено: статус CI обновлённой ветки на GitHub (после push `45712e9`);
   реальные MAX-устройства (внешний гейт VIR-16 не пройден).
 
 ## Режим проверки (для второго агента)
@@ -54,10 +50,10 @@
 
 ## Следующие шаги (в порядке приоритета)
 
-1. Синхронизировать worktrees с origin/main (`git fetch`; pull в worktree main; затем подтянуть main в активную ветку).
-2. Прогнать канонический гейт локально (`npm ci` + тесты из README) и проверить CI после слияния с #150.
-3. Ревью и merge `feat/donor-quick-wins` в `main`.
-4. Подготовить список для внешнего гейта RELEASE_VALIDATION §8 (реальные MAX Android/iOS).
+1. Интерактивный тест-цикл в OpenCode (SETUP-CHECKLIST, блок B) + внешнее ревью в ChatGPT Project → `memory/06_REVIEW.md`.
+2. Приёмка ветки: PR `feat/donor-quick-wins` (уже = main + память) после ревью.
+3. Внешний гейт `RELEASE_VALIDATION.md` §8 (реальные MAX Android/iOS) — 16 пунктов.
+4. Настройка HP по чек-листу (этап 3), затем первый цикл на «Днях и вещах».
 5. Продолжить балансировку по полным прогонам.
 
 ## Обязанности в конце сессии
