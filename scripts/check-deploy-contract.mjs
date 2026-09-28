@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 const read = (path) => readFileSync(path, 'utf8');
 const index = read('index.html');
 const client = read('src/systems/ScoreClient.ts');
+const sfx = read('src/systems/Sfx.ts');
 const botConfig = read('bot/config.mjs');
 const botRuntime = read('bot/runtime.mjs');
 const caddy = read('deploy/Caddyfile.ofeliya');
@@ -46,6 +47,11 @@ assert.match(botRuntime, /\/ofeliya\/bot\/webhook/, 'Ofeliya webhook path must b
 
 assert.match(nginx, /location \/api\/\s*\{[\s\S]*proxy_pass http:\/\/ofeliya-score:8787;/, 'nginx must proxy score API to score service');
 assert.match(nginx, /location = \/api\/ref\s*\{[\s\S]*limit_except GET/, 'legacy unauthenticated referral writes must be blocked in production');
+assert.match(nginx, /location \/audio\/\s*\{[\s\S]*max-age=31536000, immutable/, 'release-versioned audio must be immutable at nginx');
+assert.match(nginxContainerApps, /location \/ofeliya\/audio\/\s*\{[\s\S]*max-age=31536000, immutable/, 'container app path must preserve immutable audio caching');
+assert.match(sfx, /RELEASE_SHA/, 'audio requests must include immutable release identity');
+assert.match(sfx, /audioAssetUrl\(MANIFEST\[name\]\.file\)/, 'SFX fetches must use the release-versioned URL helper');
+assert.match(sfx, /audioAssetUrl\(track\)/, 'music fetches must use the release-versioned URL helper');
 assert.match(dockerfile, /mkdir -p \/app\/server\/data && chown -R node:node \/app\/server/, 'score image must create a node-writable persistent data mountpoint');
 assert.match(dockerfile, /CMD \["node", "server\/index\.mjs"\]/, 'score image must be runnable without a compose command override');
 assert.match(dockerfile, /server\/telegram-share\.mjs/, 'score image must package Telegram share runtime module');
