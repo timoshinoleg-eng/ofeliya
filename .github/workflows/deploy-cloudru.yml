@@ -91,7 +91,7 @@ jobs:
             ubuntu@176.108.246.251 \
             "deploy $RELEASE_SHA"
 
-      - name: Public HTTPS smoke
+      - name: Public HTTPS parity smoke
         shell: bash
         env:
           PUBLIC_URL: ${{ vars.CLOUDRU_OFELIYA_URL }}
@@ -106,15 +106,54 @@ jobs:
             https://*) ;;
             *) echo 'CLOUDRU_OFELIYA_URL must use HTTPS' >&2; exit 20 ;;
           esac
+
+          base="${PUBLIC_URL%/}"
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+
+          fetch() {
+            curl --fail --show-error --silent --location --retry 5 --retry-all-errors \
+              --max-time 20 "$1"
+          }
+
+          fetch "$base/" > "$tmp/index.html"
+          fetch "$base/release.json" > "$tmp/release.json"
+          fetch "$base/sw.js" > "$tmp/sw.js"
+          fetch "$base/runtime-config.js" > "$tmp/runtime-config.js"
           curl --fail --show-error --silent --location --retry 5 --retry-all-errors \
-            --max-time 20 "$PUBLIC_URL" >/dev/null
-          release_url="${PUBLIC_URL%/}/release.json"
-          release_payload="$(curl --fail --show-error --silent --location --retry 5 --retry-all-errors \
-            --max-time 20 "$release_url")"
-          expected="\"release\":\"$RELEASE_SHA\""
-          if [[ "$release_payload" != *"$expected"* ]]; then
-            echo "Public release mismatch: expected $RELEASE_SHA at $release_url" >&2
-            echo "Payload: $release_payload" >&2
-            exit 21
-          fi
-          printf 'Cloud.ru public smoke passed for %s at %s\n' "$RELEASE_SHA" "$PUBLIC_URL"
+            --max-time 20 -D "$tmp/headers.txt" -o /dev/null "$base/"
+
+          node - "$tmp/release.json" "$RELEASE_SHA" <<'NODE'
+          const fs = require('node:fs');
+          const [path, expected] = process.argv.slice(2);
+          const payload = JSON.parse(fs.readFileSync(path, 'utf8'));
+          if (payload.release !== expected) {
+            throw new Error(`release.json mismatch: expected ${expected}, got ${payload.release}`);
+          }
+          for (const key of ['indexSha256', 'serviceWorkerSha256', 'runtimeConfigSha256']) {
+            if (!/^[0-9a-f]{64}$/i.test(String(payload[key] || ''))) {
+              throw new Error(`release.json missing valid ${key}`);
+            }
+          }
+          NODE
+
+          release_index_sha="$(node -e "const x=require(process.argv[1]);process.stdout.write(x.indexSha256)" "$tmp/release.json")"
+          release_sw_sha="$(node -e "const x=require(process.argv[1]);process.stdout.write(x.serviceWorkerSha256)" "$tmp/release.json")"
+          release_runtime_sha="$(node -e "const x=require(process.argv[1]);process.stdout.write(x.runtimeConfigSha256)" "$tmp/release.json")"
+          actual_index_sha="$(sha256sum "$tmp/index.html" | awk '{print $1}')"
+          actual_sw_sha="$(sha256sum "$tmp/sw.js" | awk '{print $1}')"
+          actual_runtime_sha="$(sha256sum "$tmp/runtime-config.js" | awk '{print $1}')"
+
+          [[ "$actual_index_sha" == "$release_index_sha" ]] || { echo 'index.html hash mismatch' >&2; exit 21; }
+          [[ "$actual_sw_sha" == "$release_sw_sha" ]] || { echo 'sw.js hash mismatch' >&2; exit 22; }
+          [[ "$actual_runtime_sha" == "$release_runtime_sha" ]] || { echo 'runtime-config.js hash mismatch' >&2; exit 23; }
+          grep -Fq "ofeliya-$RELEASE_SHA" "$tmp/sw.js" || { echo 'sw.js release mismatch' >&2; exit 24; }
+          grep -Fq "ofeliya-$RELEASE_SHA" "$tmp/runtime-config.js" || { echo 'runtime-config release mismatch' >&2; exit 25; }
+
+          grep -iq '^content-security-policy:.*https://st.max.ru' "$tmp/headers.txt" || { echo 'MAX CSP missing' >&2; exit 26; }
+          grep -iq '^content-security-policy:.*frame-ancestors.*https://.*max.ru' "$tmp/headers.txt" || { echo 'MAX frame-ancestors missing' >&2; exit 27; }
+          grep -iq '^referrer-policy:[[:space:]]*strict-origin-when-cross-origin' "$tmp/headers.txt" || { echo 'Referrer-Policy missing' >&2; exit 28; }
+          grep -iq '^permissions-policy:.*camera=().*microphone=()' "$tmp/headers.txt" || { echo 'Permissions-Policy missing' >&2; exit 29; }
+          grep -iq '^strict-transport-security:.*max-age=' "$tmp/headers.txt" || { echo 'HSTS missing' >&2; exit 30; }
+
+          printf 'Cloud.ru public parity passed for %s at %s\n' "$RELEASE_SHA" "$PUBLIC_URL"
