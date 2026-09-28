@@ -4,9 +4,10 @@
 
 ## Сейчас (P0)
 
-- [x] Синхронизировать локальные worktree с origin/main — выполнено 28.09 (main @ 480c67b).
-- [ ] Подтянуть origin/main в `feat/donor-quick-wins` и проверить совместимость с hardening-волной #150 (input lifecycle, layout cache, аудио-кэш, bundle shape); разрешить конфликты.
-- [x] Пилот, этапы 0–1: архив копий (`Documents\Archive\ofeliya-2026-09`) и память в репозитории (28.09).
+- [x] Синхронизировать worktree с origin/main — выполнено 28.09 (main @ 480c67b).
+- [x] Подтянуть origin/main в `feat/donor-quick-wins` — merge `45712e9` (без конфликтов, запушено).
+- [x] Канонический гейт на синхронизированной ветке — пройден 28.09 (9 тестов + release:check + build).
+- [ ] Тест-цикл B в OpenCode + внешнее ревью ChatGPT → затем PR.
 - [ ] Внешний релиз-гейт: реальные MAX Android/iOS — 16 пунктов (`RELEASE_VALIDATION.md` §8).
 - [ ] Приёмка и merge `feat/donor-quick-wins` (онбординг, daily streak, comprehension hints).
 - [ ] Балансировка по полным реальным прогонам (9+ минут).

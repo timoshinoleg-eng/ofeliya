@@ -31,9 +31,9 @@
 - Ноут 1 (Honor): OpenCode (основной), Cline (запасной), Codex desktop.
 - Ноут 2 (HP): OpenCode (второй), Cline (запасной).
 - ChatGPT web: Project «Офелия» — внешний ревьюер (обычный чат, не Work).
-- Память: `memory/` в репозитории; контекст: плагин context-mode; доп. слой: cross-agent-memory MCP.
-- Пилот: этапы 0–2 выполнены 28.09.2026. Этап 0 — архив копий (`Documents\Archive\ofeliya-2026-09`). Этап 1 — память в репо. Этап 2 (Honor) — проверено: OmniRoute установлен и запущен (`omniroute serve`), OpenCode 1.18.32 настроен на комбо `omniroute/OFELIYA-CODE` (проверено живым запросом), gamedev-скиллы установлены глобально (~/.agents/skills, копия в ~/.config/opencode/skills), Superpowers подключён плагином в проектном opencode.json.
-- Дальше: этап 3 — HP (клон репо → `npm ci` → OpenCode; OmniRoute — локально или remote mode), затем этап 4 — сквозной цикл.
+- Память: `memory/` в репозитории; контекст: плагин context-mode (проверен: v1.0.169 отвечает в сессии); доп. слой: cross-agent-memory MCP.
+- Пилот, статус 28.09.2026: этап 0 — архив копий; этап 1 — память в репо; этап 2 (Honor) — OmniRoute сервер работает, OpenCode 1.18.32 → комбо `omniroute/OFELIYA-CODE` (живой тест ✓), скиллы gamedev 74+router (единый источник `~/.agents/skills`), Superpowers установлен плагином; этап 4 начат: ветка синхронизирована с main — merge `45712e9`; канонический гейт пройден (9 тестов + release:check + build ✓).
+- Дальше: тест-цикл B (OpenCode) + внешнее ревью ChatGPT → PR/приёмка; затем этап 3 — HP.
 
 ## Открытые вопросы / риски
 
