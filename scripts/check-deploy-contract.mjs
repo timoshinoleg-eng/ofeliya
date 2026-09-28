@@ -149,8 +149,12 @@ for (const marker of [
   'https://st.max.ru',
   'frame-ancestors',
 ]) {
-  assert.match(nginxSecurityHeaders, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\assert.match(caddy, /Strict-Transport-Security/, 'versioned edge config must enable HSTS');
-assert.doesNotMatch(caddy, /telegram\.org/, 'Telegram origins stay deferred until the Telegram production phase');')), `shared nginx headers must include ${marker}`);
+  assert.match(
+    nginxSecurityHeaders,
+    new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\  assert.match(nginxSecurityHeaders, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\assert.match(caddy, /Strict-Transport-Security/, 'versioned edge config must enable HSTS');
+assert.doesNotMatch(caddy, /telegram\.org/, 'Telegram origins stay deferred until the Telegram production phase');')), `shared nginx headers must include ${marker}`);')),
+    `shared nginx headers must include ${marker}`
+  );
 }
 assert.doesNotMatch(nginxSecurityHeaders, /telegram\.org/, 'nginx Telegram origins stay deferred');
 assert.doesNotMatch(caddy, /telegram\.org/, 'Telegram origins stay deferred until the Telegram production phase');
