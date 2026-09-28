@@ -284,22 +284,58 @@ function writeJsonAtomically(file, value) {
   }
 }
 
-function saveStore() {
-  writeJsonAtomically(STORE_FILE, store);
+const configuredStoreSaveDelayMs = Number.parseInt(process.env.STORE_SAVE_DELAY_MS ?? '', 10);
+const STORE_SAVE_DELAY_MS =
+  Number.isInteger(configuredStoreSaveDelayMs) && configuredStoreSaveDelayMs >= 0
+    ? configuredStoreSaveDelayMs
+    : 250;
+const STORE_SAVE_RETRY_MS = Math.max(250, STORE_SAVE_DELAY_MS);
+
+let storeSaveTimer = null;
+let storeDirty = false;
+let lastStoreFlushAt = 0;
+let lastStoreFlushError = null;
+
+export function flushStoreNow() {
+  if (storeSaveTimer) {
+    clearTimeout(storeSaveTimer);
+    storeSaveTimer = null;
+  }
+  if (!storeDirty) return false;
+  try {
+    writeJsonAtomically(STORE_FILE, store);
+    storeDirty = false;
+    lastStoreFlushAt = Date.now();
+    lastStoreFlushError = null;
+    return true;
+  } catch (error) {
+    lastStoreFlushError = error?.message ?? String(error);
+    throw error;
+  }
 }
 
-let bestEffortStoreTimer = null;
-function saveStoreBestEffort() {
-  if (bestEffortStoreTimer) return;
-  bestEffortStoreTimer = setTimeout(() => {
-    bestEffortStoreTimer = null;
+function scheduleStoreFlush(delayMs = STORE_SAVE_DELAY_MS) {
+  if (storeSaveTimer || !storeDirty) return;
+  storeSaveTimer = setTimeout(() => {
+    storeSaveTimer = null;
     try {
-      saveStore();
+      flushStoreNow();
     } catch (error) {
-      console.error('[store] best-effort save failed:', error?.message ?? error);
+      console.error('[store] scheduled save failed:', error?.message ?? error);
+      // Keep the dirty state and retry without coupling request latency to fsync.
+      scheduleStoreFlush(STORE_SAVE_RETRY_MS);
     }
-  }, 250);
-  bestEffortStoreTimer.unref?.();
+  }, delayMs);
+  storeSaveTimer.unref?.();
+}
+
+function saveStore() {
+  storeDirty = true;
+  scheduleStoreFlush();
+}
+
+function saveStoreBestEffort() {
+  saveStore();
 }
 
 function allowFixedWindow(map, key, limit, now = Date.now()) {
@@ -1142,6 +1178,11 @@ const server = createServer(async (req, res) => {
         analyticsEvents: store.analyticsEvents.length,
         runGrants: store.runGrants.length,
         dailyRuns: store.dailyRuns.length,
+        storePersistence: {
+          dirty: storeDirty,
+          healthy: lastStoreFlushError == null,
+          lastFlushAt: lastStoreFlushAt || null,
+        },
         rulesetVersion: CURRENT_RULESET_VERSION,
         campaignVersion: CURRENT_CAMPAIGN_VERSION,
       });
@@ -1886,6 +1927,36 @@ const server = createServer(async (req, res) => {
     return send(res, 500, { ok: false, error: e.message ?? 'server error' });
   }
 });
+
+function flushStoreOnClose() {
+  try {
+    flushStoreNow();
+  } catch (error) {
+    process.exitCode = 1;
+    console.error('[store] shutdown flush failed:', error?.message ?? error);
+  }
+}
+
+server.on('close', flushStoreOnClose);
+
+let shutdownStarted = false;
+function shutdown(signal) {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+  console.log(`[ofeliya-server] ${signal}: draining connections`);
+  flushStoreOnClose();
+  server.close(() => {
+    process.exit(process.exitCode ?? 0);
+  });
+  const forceExitTimer = setTimeout(() => {
+    console.error('[ofeliya-server] forced shutdown after drain timeout');
+    process.exit(1);
+  }, 5_000);
+  forceExitTimer.unref?.();
+}
+
+process.once('SIGTERM', () => shutdown('SIGTERM'));
+process.once('SIGINT', () => shutdown('SIGINT'));
 
 server.listen(PORT, () => {
   console.log(`[ofeliya-server] http://localhost:${PORT} (data: ${DATA_DIR})`);
