@@ -45,7 +45,8 @@ export class Gem extends Phaser.Physics.Arcade.Sprite {
       const speed = openingMutationPickup ? GEM.attractSpeed * 1.35 : GEM.attractSpeed;
       body.setVelocity((dx / d) * speed, (dy / d) * speed);
     } else if (body.velocity.lengthSq() > 1) {
-      body.setVelocity(body.velocity.x * 0.85, body.velocity.y * 0.85);
+      const driftDecay = Math.pow(0.85, delta / (1000 / 60));
+      body.setVelocity(body.velocity.x * driftDecay, body.velocity.y * driftDecay);
     }
   }
 
