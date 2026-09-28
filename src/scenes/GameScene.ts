@@ -94,6 +94,7 @@ import {
   type HostCellLysisEvent,
 } from '../systems/HostCellSystem';
 import { trackProductEvent, type ProductEvent, type ProductEventProps } from '../systems/AnalyticsClient';
+import { beginRunCapability } from '../systems/ScoreClient';
 import type { UIScene } from './UIScene';
 
 interface CoreMark {
@@ -274,6 +275,30 @@ export class GameScene extends Phaser.Scene {
     this.runState = new RunState(this.stageDirector.currentStage);
     if (resume) this.runState.restoreFromCheckpoint(resume.runState);
     this.resumed = resume !== null;
+
+    // A ranked Standard run must prove that the server observed its start. Request
+    // the capability here, after seed/control are final but before meaningful play.
+    // Gameplay never waits for the network: failure degrades to an unranked result.
+    this.registry.remove('runTokenGrant');
+    if (!this.resumed && !this.dailyRun && this.difficulty.id === 'standard') {
+      const grantSeed = this.runSeed;
+      const grantControlMode = this.controlMode;
+      void beginRunCapability(PlatformBridge, {
+        runSeed: grantSeed,
+        controlMode: grantControlMode,
+        difficultyId: this.difficulty.id,
+      }).then((grant) => {
+        if (
+          grant &&
+          !this.resumed &&
+          this.runSeed === grantSeed &&
+          this.controlMode === grantControlMode
+        ) {
+          this.registry.set('runTokenGrant', grant);
+        }
+      });
+    }
+
     this.firstRunComprehension = SaveSystem.get().runs === 0;
     this.hostCellsCompletedThisRun = resume ? this.runState.run.hostCellsInfected : 0;
     this.hostCellHintEventsShown = new Set();
