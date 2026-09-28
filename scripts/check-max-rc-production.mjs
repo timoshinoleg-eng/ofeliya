@@ -113,13 +113,18 @@ assert.match(serviceWorker, /ofeliya-__OFELIYA_RELEASE__/, 'service worker cache
 assert.match(releaseStamp, /dist\/release\.json/, 'release stamping must emit a public immutable release identity');
 assert.match(
   releaseStamp,
-  /process\.env\.VITE_RELEASE_SHA \|\| 'dev'/,
-  'bundle and post-build release stamping must use the same fallback'
+  /VITE_RELEASE_SHA must be an explicit 40-character git SHA/,
+  'post-build stamping must require an immutable release identity'
 );
 assert.doesNotMatch(
   releaseStamp,
-  /process\.env\.GITHUB_SHA|dev-\$\{pkg\.version/,
-  'post-build stamping must not invent a release identity that Vite did not compile'
+  /VITE_RELEASE_SHA \|\| ['"]dev['"]|process\.env\.GITHUB_SHA|dev-\$\{pkg\.version/,
+  'post-build stamping must not invent or silently downgrade release identity'
+);
+assert.match(
+  releaseSource,
+  /import\.meta\.env\.PROD[\s\S]*Production build requires VITE_RELEASE_SHA/,
+  'compiled production bundle must fail closed without the same release SHA'
 );
 assert.match(
   deployWorkflow,
