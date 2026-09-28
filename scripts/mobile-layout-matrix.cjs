@@ -332,7 +332,10 @@ async function assertCompactResumeMenu(browser) {
       // Reproduce messenger rotation/viewport contraction while the result screen is open.
       // The same result container must be laid out again for the new logical viewport.
       await page.evaluate(async () => {
-        window.__matrixViewport = { width: 320, height: 568 };
+        // Model the MAX bridge changing its authoritative viewport response. Replacing
+        // the bridge method directly avoids test-only closure state surviving across
+        // page/scene generations and exercises the exact production ViewportManager path.
+        window.WebApp.getViewportSize = async () => ({ width: '320', height: '568' });
         await window.__viewportManager.sync();
       });
       await sleep(220);
