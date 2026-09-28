@@ -500,7 +500,14 @@ function assertContainment(kind, label, contract) {
       await shoot(page, captureDir, '05-hud-320x568-boss.png');
       await page.evaluate(() => {
         const gs = window.__game.scene.getScene('Game');
+        const boss = gs.wave.boss;
+        if (boss?.active) boss.deactivateForStageReset();
         gs.wave.boss = null;
+        // The next assertion owns the Pause contract, not low-HP combat. Restore a
+        // safe fixture before emitting the real pause control so a loaded CI runner
+        // cannot legitimately reach game-over between the screenshot and pointerup.
+        gs.runState.stage.hp = 1_000;
+        gs.runState.stage.maxHp = 1_000;
       });
       await sleep(160);
       if (bossFailures.length) throw new Error(`boss HUD contract failed at ${label(size)}: ${JSON.stringify(bossFailures)}`);
