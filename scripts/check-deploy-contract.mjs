@@ -16,6 +16,8 @@ const serviceWorker = read('public/sw.js');
 const envExample = read('deploy/ofeliya.env.example');
 const deployScript = read('deploy/deploy-cloudru.sh');
 const main = read('src/main.ts');
+const deployWorkflow = read('.github/workflows/deploy-cloudru.yml');
+const stampRelease = read('scripts/stamp-release.mjs');
 
 const runtimePos = index.indexOf('./runtime-config.js');
 const maxBridgePos = index.indexOf('https://st.max.ru/js/max-web-app.js');
@@ -78,5 +80,31 @@ assert.match(runtimeConfig, /const release = 'ofeliya-[^']+';/, 'runtime config 
 assert.match(serviceWorker, /const VERSION = 'ofeliya-__OFELIYA_RELEASE__';/, 'service worker cache must be unique to the immutable release');
 assert.match(serviceWorker, /const CACHE_PREFIX = 'ofeliya-';/, 'service worker cache cleanup must be Ofeliya-scoped');
 assert.match(serviceWorker, /key\.startsWith\(CACHE_PREFIX\) && !key\.startsWith\(VERSION\)/, 'service worker must not delete caches owned by other apps on the same origin');
+
+assert.equal(
+  (dockerfile.match(/ARG VITE_TELEGRAM_APP_SHORT_NAME=/g) ?? []).length,
+  1,
+  'Telegram build arg must be declared exactly once'
+);
+assert.match(
+  stampRelease,
+  /VITE_RELEASE_SHA must be an explicit 40-character git SHA/,
+  'release stamping must fail closed without an immutable SHA'
+);
+assert.doesNotMatch(
+  stampRelease,
+  /VITE_RELEASE_SHA \|\| ['"]dev['"]/,
+  'release stamping must not silently fall back to dev'
+);
+for (const marker of ['indexSha256', 'serviceWorkerSha256', 'runtimeConfigSha256']) {
+  assert.match(stampRelease, new RegExp(marker), `release metadata must include ${marker}`);
+}
+assert.match(deployWorkflow, /Public HTTPS parity smoke/, 'deploy must run external parity verification');
+assert.match(deployWorkflow, /sha256sum "\$tmp\/index\.html"/, 'deploy must hash live index.html');
+assert.match(deployWorkflow, /sha256sum "\$tmp\/sw\.js"/, 'deploy must hash live service worker');
+assert.match(deployWorkflow, /sha256sum "\$tmp\/runtime-config\.js"/, 'deploy must hash live runtime config');
+assert.match(deployWorkflow, /strict-transport-security/, 'deploy must verify HSTS');
+assert.match(caddy, /Strict-Transport-Security/, 'versioned edge config must enable HSTS');
+assert.doesNotMatch(caddy, /telegram\.org/, 'Telegram origins stay deferred until the Telegram production phase');
 
 console.log('production deployment contract: ok');
