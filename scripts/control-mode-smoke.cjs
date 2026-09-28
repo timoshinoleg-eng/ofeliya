@@ -180,6 +180,59 @@ function mag(v) {
     throw new Error('twin-stick vectors did not reset on release: ' + JSON.stringify(released));
   }
 
+  // Pointer ids can be recycled by mobile WebViews. A stale move owner with the
+  // recycled id must be released before the same id is assigned to aim.
+  const recycledTwin = await page.evaluate(() => {
+    const ui = window.__game.scene.getScene('UI');
+    const controls = ui.twinStick;
+    controls.onDown({ id: 77, x: 95, y: 690 });
+    controls.onMove({ id: 77, x: 135, y: 650 });
+    controls.onDown({ id: 77, x: 300, y: 690 });
+    controls.onMove({ id: 77, x: 260, y: 625 });
+    const snapshot = {
+      moveActive: controls.move.active,
+      aimActive: controls.aim.active,
+      movePointerId: controls.move.pointerId,
+      aimPointerId: controls.aim.pointerId,
+      joy: ui.registry.get('joy'),
+      aimJoy: ui.registry.get('aimJoy'),
+    };
+    controls.reset();
+    return snapshot;
+  });
+  if (
+    recycledTwin.moveActive ||
+    !recycledTwin.aimActive ||
+    recycledTwin.aimPointerId !== 77 ||
+    mag(recycledTwin.joy) > 0.001 ||
+    mag(recycledTwin.aimJoy) < 0.2
+  ) {
+    throw new Error('twin-stick recycled pointer id stayed latched: ' + JSON.stringify(recycledTwin));
+  }
+
+  // A viewport resize while a floating stick is held must discard stale origins.
+  const resizedTwin = await page.evaluate(() => {
+    const ui = window.__game.scene.getScene('UI');
+    const controls = ui.twinStick;
+    controls.onDown({ id: 78, x: 95, y: 690 });
+    controls.onMove({ id: 78, x: 135, y: 650 });
+    ui.scale.emit('resize');
+    return {
+      moveActive: controls.move.active,
+      aimActive: controls.aim.active,
+      joy: ui.registry.get('joy'),
+      aimJoy: ui.registry.get('aimJoy'),
+    };
+  });
+  if (
+    resizedTwin.moveActive ||
+    resizedTwin.aimActive ||
+    mag(resizedTwin.joy) > 0.001 ||
+    mag(resizedTwin.aimJoy) > 0.001
+  ) {
+    throw new Error('twin-stick input survived viewport resize: ' + JSON.stringify(resizedTwin));
+  }
+
   // New movement-only two-thumb profile.
   await page.evaluate(() => localStorage.setItem('ofeliya_control_mode_v1', 'dual-move'));
   await page.reload({ waitUntil: 'domcontentloaded' });
@@ -300,6 +353,19 @@ function mag(v) {
   });
   if (mag(rightOnly.joy) < 0.35 || (rightOnly.joy?.x ?? 0) >= -0.2 || rightOnly.aimJoy !== undefined) {
     throw new Error('right dual-move thumb failed: ' + JSON.stringify(rightOnly));
+  }
+
+  const windowBlurResult = await page.evaluate(() => {
+    window.dispatchEvent(new Event('blur'));
+    const ui = window.__game.scene.getScene('UI');
+    return {
+      joy: ui.registry.get('joy'),
+      leftActive: ui.dualMove.left.active,
+      rightActive: ui.dualMove.right.active,
+    };
+  });
+  if (mag(windowBlurResult.joy) > 0.001 || windowBlurResult.leftActive || windowBlurResult.rightActive) {
+    throw new Error('dual-move input survived window blur: ' + JSON.stringify(windowBlurResult));
   }
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await page.waitForTimeout(70);
@@ -454,6 +520,30 @@ function mag(v) {
     legacy.aimJoy !== undefined
   ) {
     throw new Error('legacy one-hand path changed: ' + JSON.stringify(legacy));
+  }
+
+  const resizedOneHand = await page.evaluate(() => {
+    const ui = window.__game.scene.getScene('UI');
+    const joystick = ui.joystick;
+    joystick.onDown({ id: 91, x: 110, y: 690 });
+    joystick.onMove({ id: 91, x: 150, y: 650 });
+    ui.scale.emit('resize');
+    return {
+      active: joystick.active,
+      pointerId: joystick.pointerId,
+      joy: ui.registry.get('joy'),
+      baseVisible: joystick.base.visible,
+      knobVisible: joystick.knob.visible,
+    };
+  });
+  if (
+    resizedOneHand.active ||
+    resizedOneHand.pointerId !== -1 ||
+    mag(resizedOneHand.joy) > 0.001 ||
+    resizedOneHand.baseVisible ||
+    resizedOneHand.knobVisible
+  ) {
+    throw new Error('one-hand input survived viewport resize: ' + JSON.stringify(resizedOneHand));
   }
 
   if (errors.length) throw new Error('page errors: ' + errors.join(' | '));
