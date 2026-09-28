@@ -1,14 +1,14 @@
 # STATE — OFELIYA: STRAIN ZERO
 
-Обновлено: 2026-09-29 (пилот памяти; приёмка завершена). Только факты; решения — в `02_DECISIONS.md`.
+Обновлено: 2026-09-29 (пилот памяти; приёмка завершена; учтено второе внешнее мнение). Только факты; решения — в `02_DECISIONS.md`.
 
 ## Репозиторий
 
 - GitHub: `https://github.com/timoshinoleg-eng/ofeliya`
-- Ветки: `main`, `feat/donor-quick-wins` (активная приёмка пилота), `fix/audit-blockers`, `backup/audit-blockers-0ecbf3c`
-- Remote (29.09): `origin/main` @ `480c67b`; `origin/feat/donor-quick-wins` @ `f5e1790` + коммиты памяти 29.09.
-- Worktrees (локально): `…\work\ofeliya-audit` (main), `…\work\ofeliya-audit-fixes` (ветка @ `f5e1790` + память 29.09).
-- Приёмка: PR #151 (`dc71cb2`) + PR #152 (`2df55bb`, `06_REVIEW.md`) смержены 29.09; система памяти — в `main`.
+- Ветки: `main` (актуально); `feat/donor-quick-wins` @ `e5b6658` — историческая (не обновляется; актуальный код — в `main`); `fix/audit-blockers`, `backup/audit-blockers-0ecbf3c` — архив.
+- Remote (29.09, после приёмки): `origin/main` @ `808d866` (squash #151–#153); `origin/feat/donor-quick-wins` @ `e5b6658` (историческая).
+- Worktrees (локально): `…\work\ofeliya-audit` (main), `…\work\ofeliya-audit-fixes` — переведён на состояние `origin/main` (`808d866`); локальная ветка трекает `origin/main`.
+- Приёмка: PR #151 (`dc71cb2`), PR #152 (`2df55bb`, `06_REVIEW.md`), PR #153 (`808d866`, финал) смержены 29.09; пост-ревью правки — PR #154. Система памяти — в `main`.
 
 ## Продукт
 
