@@ -20,8 +20,21 @@ export interface ScoreSubmitResponse {
   dailyRunAccepted?: boolean;
 }
 
+export interface RunTokenGrant {
+  runId: string;
+  runToken: string;
+  runSeed: string;
+  controlMode: RunResult['controlMode'];
+  difficultyId: RunResult['difficultyId'];
+  rulesetVersion: number;
+  campaignVersion: number;
+  issuedAt: number;
+  expiresAt: number;
+}
+
 export interface ScoreSubmission {
   submissionId?: string;
+  runToken?: string;
   platform: 'max' | 'telegram' | 'browser';
   initData?: string;
   anonId?: string;
@@ -189,6 +202,69 @@ function scoreEndpoint(): string {
   return new URL('api/score', window.location.href).toString();
 }
 
+function runStartEndpoint(): string {
+  if (typeof window === 'undefined') return 'api/run/start';
+  return new URL('api/run/start', window.location.href).toString();
+}
+
+export async function beginRunCapability(
+  platform: PlatformAdapter,
+  run: Pick<RunResult, 'runSeed' | 'controlMode' | 'difficultyId'>
+): Promise<RunTokenGrant | null> {
+  if (
+    run.difficultyId !== 'standard' ||
+    (platform.kind !== 'max' && platform.kind !== 'telegram') ||
+    !platform.initData
+  ) {
+    return null;
+  }
+
+  const controller = new AbortController();
+  const timer = globalThis.setTimeout(() => controller.abort(), SCORE_TIMEOUT_MS);
+  try {
+    const response = await fetch(runStartEndpoint(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        platform: platform.kind,
+        initData: platform.initData,
+        run: {
+          rulesetVersion: SCORE_RULESET_VERSION,
+          campaignVersion: SCORE_CAMPAIGN_VERSION,
+          difficultyId: run.difficultyId,
+          runSeed: run.runSeed,
+          controlMode: run.controlMode,
+        },
+      }),
+      signal: controller.signal,
+      credentials: 'same-origin',
+    });
+    if (!response.ok) return null;
+    const body = await response.json() as { ok?: boolean; grant?: Partial<RunTokenGrant> };
+    const grant = body.grant;
+    if (
+      body.ok !== true ||
+      !grant ||
+      typeof grant.runId !== 'string' ||
+      typeof grant.runToken !== 'string' ||
+      grant.runSeed !== run.runSeed ||
+      grant.controlMode !== run.controlMode ||
+      grant.difficultyId !== run.difficultyId ||
+      grant.rulesetVersion !== SCORE_RULESET_VERSION ||
+      grant.campaignVersion !== SCORE_CAMPAIGN_VERSION ||
+      typeof grant.issuedAt !== 'number' ||
+      typeof grant.expiresAt !== 'number'
+    ) {
+      return null;
+    }
+    return grant as RunTokenGrant;
+  } catch {
+    return null;
+  } finally {
+    globalThis.clearTimeout(timer);
+  }
+}
+
 export function buildDailyScoreSubmission(
   result: RunResult,
   platform: PlatformAdapter,
@@ -251,7 +327,8 @@ async function postScoreSubmission(
 
 export async function submitRunScore(
   result: RunResult,
-  platform: PlatformAdapter
+  platform: PlatformAdapter,
+  runGrant?: RunTokenGrant | null
 ): Promise<ScoreSubmitResponse | null> {
   // Local checkpoint state is not server-authoritative. Never let a resumed Standard run
   // enter the canonical score submission path.
@@ -264,6 +341,17 @@ export async function submitRunScore(
     submission: { ...submission },
   };
   entry.submission.submissionId = entry.submissionId;
+  if (
+    runGrant &&
+    runGrant.runSeed === result.runSeed &&
+    runGrant.controlMode === result.controlMode &&
+    runGrant.difficultyId === result.difficultyId &&
+    runGrant.rulesetVersion === SCORE_RULESET_VERSION &&
+    runGrant.campaignVersion === SCORE_CAMPAIGN_VERSION &&
+    runGrant.expiresAt > Date.now()
+  ) {
+    entry.submission.runToken = runGrant.runToken;
+  }
   const outbox = readScoreOutbox();
   outbox.push(entry);
   writeScoreOutbox(outbox);
