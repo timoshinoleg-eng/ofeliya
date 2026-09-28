@@ -34,7 +34,12 @@ const DATA_DIR = mkdtempSync(join(tmpdir(), 'ofeliya-server-test-'));
 process.env.DATA_DIR = DATA_DIR;
 process.env.PORT = '0';
 
-const { server, compactDailyRunEntries, compactRunGrantEntries } = await import('./index.mjs');
+const {
+  server,
+  compactDailyRunEntries,
+  compactRunGrantEntries,
+  flushStoreNow,
+} = await import('./index.mjs');
 await new Promise((resolve) => server.once('listening', resolve));
 const BASE = `http://127.0.0.1:${server.address().port}`;
 
@@ -1553,15 +1558,64 @@ await ok('profile: повреждённый profiles.json блокирует з�
   }
 });
 
-await ok('score storage is durable before the successful HTTP response', async () => {
-  const user = { id: 616_616, first_name: 'Durable' };
-  const response = await fetch(`${BASE}/api/score`, {
-    method: 'POST', headers: PROFILE_HEADERS,
-    body: JSON.stringify({ platform: 'telegram', initData: signInitData(user, TG_TOKEN), payload: { win: false, timeMs: 120_000, kills: 12, level: 3, daily: false } }),
+await ok('Phase 2: score writes are debounced off the request path and close flushes pending state', async () => {
+  const debounceDataDir = mkdtempSync(join(tmpdir(), 'ofeliya-debounce-test-'));
+  const serverUrl = new URL('./index.mjs', import.meta.url).href;
+  const script = `
+import { existsSync, readFileSync } from 'node:fs';
+const { server } = await import(${JSON.stringify(serverUrl)});
+await new Promise((resolve) => server.once('listening', resolve));
+const base = 'http://127.0.0.1:' + server.address().port;
+const post = (id) => fetch(base + '/api/score', {
+  method:'POST',
+  headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({
+    platform:'browser',
+    anonId:id,
+    payload:{win:false,timeMs:120000,kills:12,level:3,daily:false}
+  })
+});
+const first = await post('debounce-user-0001');
+const second = await post('debounce-user-0002');
+const healthBeforeClose = await (await fetch(base + '/health')).json();
+const existedBeforeClose = existsSync(process.env.DATA_DIR + '/store.json');
+await new Promise((resolve) => server.close(resolve));
+const existedAfterClose = existsSync(process.env.DATA_DIR + '/store.json');
+const persisted = existedAfterClose
+  ? JSON.parse(readFileSync(process.env.DATA_DIR + '/store.json', 'utf8'))
+  : null;
+process.stdout.write('__DEBOUNCE__' + JSON.stringify({
+  statuses:[first.status, second.status],
+  existedBeforeClose,
+  existedAfterClose,
+  dirtyBeforeClose:healthBeforeClose.storePersistence?.dirty,
+  lastFlushBeforeClose:healthBeforeClose.storePersistence?.lastFlushAt,
+  scores:persisted?.scores?.length ?? -1
+}));
+`;
+  const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+    env: {
+      ...process.env,
+      PORT: '0',
+      DATA_DIR: debounceDataDir,
+      STORE_SAVE_DELAY_MS: '5000',
+      WRITE_RATE_LIMIT: '1000',
+    },
+    encoding: 'utf8',
+    timeout: 20_000,
   });
-  assert.equal(response.status, 200);
-  const persisted = JSON.parse(readFileSync(STORE_FILE, 'utf8'));
-  assert.ok(persisted.scores.some((score) => score.uid === '616616'));
+  try {
+    assert.equal(child.status, 0, child.stderr);
+    const result = JSON.parse(child.stdout.split('__DEBOUNCE__')[1]);
+    assert.deepEqual(result.statuses, [200, 200]);
+    assert.equal(result.existedBeforeClose, false);
+    assert.equal(result.dirtyBeforeClose, true);
+    assert.equal(result.lastFlushBeforeClose, null);
+    assert.equal(result.existedAfterClose, true);
+    assert.equal(result.scores, 2);
+  } finally {
+    rmSync(debounceDataDir, { recursive: true, force: true });
+  }
 });
 
 await ok('score submissionId retries return the same score without creating a duplicate', async () => {
@@ -1582,6 +1636,7 @@ await ok('score submissionId retries return the same score without creating a du
   assert.equal(retry.rank, first.rank);
   const altered = await submit({ ...requestBody, payload: { ...requestBody.payload, kills: 14 } });
   assert.equal(altered.status, 409);
+  flushStoreNow();
   const stored = JSON.parse(readFileSync(STORE_FILE, 'utf8')).scores;
   assert.equal(stored.filter((score) => score.submissionId === requestBody.submissionId).length, 1);
 });
@@ -1600,7 +1655,7 @@ await ok('profile: profiles.json переживает перезапись store
     }),
   });
   assert.equal(res.status, 200);
-  await new Promise((resolve) => setTimeout(resolve, 50)); // debounced saveStore (setImmediate)
+  flushStoreNow();
   const storeAfter = JSON.parse(readFileSync(STORE_FILE, 'utf8'));
   assert.equal('profiles' in storeAfter, false);
   assert.equal(readFileSync(PROFILES_FILE, 'utf8'), before);
@@ -1617,6 +1672,6 @@ await ok('profile: сохранённый ответ переживает пер
   assert.equal(parsed.profile.createdAt, aliceMigratedProfile.createdAt);
 });
 
-server.close();
+await new Promise((resolve) => server.close(resolve));
 rmSync(DATA_DIR, { recursive: true, force: true });
 console.log(`\n${passed} проверок пройдено${process.exitCode ? ' (Есть провалы!)' : ''}`);
