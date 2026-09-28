@@ -1965,7 +1965,12 @@ export class UIScene extends Phaser.Scene {
     const compact = H < 650;
     const c = this.add.container(0, 0).setName('ofeliya-result').setDepth(110);
 
-    c.add(this.add.rectangle(W / 2, H / 2, W, H, SCRIM.result.color, SCRIM.result.alpha).setInteractive());
+    c.add(
+      this.add
+        .rectangle(W / 2, H / 2, W, H, SCRIM.result.color, SCRIM.result.alpha)
+        .setName('ofeliya-result-scrim')
+        .setInteractive()
+    );
     if (res.win && this.textures.exists('cinematic-victory')) {
       c.add(
         this.add
