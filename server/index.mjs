@@ -186,7 +186,11 @@ const analyticsRateByActor = new Map();
 // a deliberately looser IP backstop. The 12x ratio avoids turning carrier-grade
 // NAT into a shared denial-of-service switch while still bounding floods.
 const WRITE_RATE_WINDOW_MS = 60_000;
-const WRITE_RATE_LIMIT = 20;
+const configuredWriteRateLimit = Number.parseInt(process.env.WRITE_RATE_LIMIT ?? '', 10);
+const WRITE_RATE_LIMIT =
+  Number.isInteger(configuredWriteRateLimit) && configuredWriteRateLimit > 0
+    ? configuredWriteRateLimit
+    : 20;
 const WRITE_IP_RATE_LIMIT = WRITE_RATE_LIMIT * 12;
 const writeRateByActor = new Map();
 const writeRateByIp = new Map();
