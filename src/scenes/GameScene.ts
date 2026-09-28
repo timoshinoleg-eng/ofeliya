@@ -482,8 +482,22 @@ export class GameScene extends Phaser.Scene {
     if (!resume && SaveSystem.get().runs === 0) this.showIntroHint();
 
     this.scale.on('resize', this.onResize, this);
+
+    // Mobile WebViews can discard a retained page without another animation frame.
+    // Persist the latest safe checkpoint synchronously while the document is still alive.
+    const flushLifecycleCheckpoint = (): void => {
+      this.saveCheckpointNow();
+    };
+    const flushHiddenCheckpoint = (): void => {
+      if (document.visibilityState === 'hidden') flushLifecycleCheckpoint();
+    };
+    window.addEventListener('pagehide', flushLifecycleCheckpoint);
+    document.addEventListener('visibilitychange', flushHiddenCheckpoint);
+
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.onResize, this);
+      window.removeEventListener('pagehide', flushLifecycleCheckpoint);
+      document.removeEventListener('visibilitychange', flushHiddenCheckpoint);
       PlatformBridge.setBackHandler(null);
 
       // Phaser has already begun shutting down scene plugins before user SHUTDOWN listeners run.
