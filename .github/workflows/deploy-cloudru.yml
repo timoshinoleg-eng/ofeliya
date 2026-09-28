@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ofeliya-cloudru-production
@@ -58,6 +59,32 @@ jobs:
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
+      - name: Require successful main CI for selected SHA
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+        run: |
+          set -Eeuo pipefail
+          runs="$(gh api --method GET             "repos/$GITHUB_REPOSITORY/actions/runs?branch=main&event=push&status=completed&per_page=100")"
+          RUNS_JSON="$runs" node - "$RELEASE_SHA" <<'NODE'
+          const data = JSON.parse(process.env.RUNS_JSON || '{}');
+          const expected = process.argv[2];
+          const match = (data.workflow_runs || []).find(
+            (run) =>
+              run.name === 'CI' &&
+              run.head_sha === expected &&
+              run.head_branch === 'main' &&
+              run.event === 'push' &&
+              run.conclusion === 'success'
+          );
+          if (!match) {
+            console.error(`Refusing deploy: no successful main CI run found for ${expected}`);
+            process.exit(1);
+          }
+          console.log(`Verified green CI run #${match.run_number} for ${expected}`);
+          NODE
+
       - name: Validate bastion SSH configuration
         shell: bash
         env:
@@ -77,7 +104,36 @@ jobs:
           chmod 600 ~/.ssh/cloudru_bastion
           ssh-keyscan -p 22 -H 176.108.246.251 >> ~/.ssh/known_hosts
 
+      - name: Capture current production release for rollback
+        id: previous
+        shell: bash
+        env:
+          PUBLIC_URL: ${{ vars.CLOUDRU_OFELIYA_URL }}
+        run: |
+          set -Eeuo pipefail
+          [[ "${PUBLIC_URL:-}" == https://* ]] || {
+            echo 'CLOUDRU_OFELIYA_URL must be configured as HTTPS before deployment' >&2
+            exit 20
+          }
+          release_url="${PUBLIC_URL%/}/release.json"
+          payload="$(curl --fail --show-error --silent --location --retry 5 --retry-all-errors             --max-time 20 "$release_url")"
+          previous="$(PAYLOAD="$payload" node - <<'NODE'
+          const payload = JSON.parse(process.env.PAYLOAD || '{}');
+          const release = String(payload.release || '').trim();
+          if (!/^[0-9a-f]{40}$/i.test(release)) process.exit(2);
+          process.stdout.write(release.toLowerCase());
+          NODE
+          )"
+          [[ "$previous" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "Cannot establish rollback release from $release_url" >&2
+            exit 21
+          }
+          echo "sha=$previous" >> "$GITHUB_OUTPUT"
+          printf 'Rollback target captured: %s\n' "$previous"
+
       - name: Deploy exact main SHA through restricted bastion
+        id: rollout
+        continue-on-error: true
         shell: bash
         env:
           RELEASE_SHA: ${{ steps.release.outputs.sha }}
@@ -91,7 +147,10 @@ jobs:
             ubuntu@176.108.246.251 \
             "deploy $RELEASE_SHA"
 
-      - name: Public HTTPS smoke
+      - name: Public HTTPS parity smoke
+        id: verify
+        if: steps.rollout.outcome == 'success'
+        continue-on-error: true
         shell: bash
         env:
           PUBLIC_URL: ${{ vars.CLOUDRU_OFELIYA_URL }}
@@ -106,15 +165,96 @@ jobs:
             https://*) ;;
             *) echo 'CLOUDRU_OFELIYA_URL must use HTTPS' >&2; exit 20 ;;
           esac
+
+          base="${PUBLIC_URL%/}"
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+
+          fetch() {
+            curl --fail --show-error --silent --location --retry 5 --retry-all-errors \
+              --max-time 20 "$1"
+          }
+
+          fetch "$base/" > "$tmp/index.html"
+          fetch "$base/release.json" > "$tmp/release.json"
+          fetch "$base/sw.js" > "$tmp/sw.js"
+          fetch "$base/runtime-config.js" > "$tmp/runtime-config.js"
           curl --fail --show-error --silent --location --retry 5 --retry-all-errors \
-            --max-time 20 "$PUBLIC_URL" >/dev/null
+            --max-time 20 -D "$tmp/headers.txt" -o /dev/null "$base/"
+
+          node - "$tmp/release.json" "$RELEASE_SHA" <<'NODE'
+          const fs = require('node:fs');
+          const [path, expected] = process.argv.slice(2);
+          const payload = JSON.parse(fs.readFileSync(path, 'utf8'));
+          if (payload.release !== expected) {
+            throw new Error(`release.json mismatch: expected ${expected}, got ${payload.release}`);
+          }
+          for (const key of ['indexSha256', 'serviceWorkerSha256', 'runtimeConfigSha256']) {
+            if (!/^[0-9a-f]{64}$/i.test(String(payload[key] || ''))) {
+              throw new Error(`release.json missing valid ${key}`);
+            }
+          }
+          NODE
+
+          release_index_sha="$(node -e "const x=require(process.argv[1]);process.stdout.write(x.indexSha256)" "$tmp/release.json")"
+          release_sw_sha="$(node -e "const x=require(process.argv[1]);process.stdout.write(x.serviceWorkerSha256)" "$tmp/release.json")"
+          release_runtime_sha="$(node -e "const x=require(process.argv[1]);process.stdout.write(x.runtimeConfigSha256)" "$tmp/release.json")"
+          actual_index_sha="$(sha256sum "$tmp/index.html" | awk '{print $1}')"
+          actual_sw_sha="$(sha256sum "$tmp/sw.js" | awk '{print $1}')"
+          actual_runtime_sha="$(sha256sum "$tmp/runtime-config.js" | awk '{print $1}')"
+
+          [[ "$actual_index_sha" == "$release_index_sha" ]] || { echo 'index.html hash mismatch' >&2; exit 21; }
+          [[ "$actual_sw_sha" == "$release_sw_sha" ]] || { echo 'sw.js hash mismatch' >&2; exit 22; }
+          [[ "$actual_runtime_sha" == "$release_runtime_sha" ]] || { echo 'runtime-config.js hash mismatch' >&2; exit 23; }
+          grep -Fq "ofeliya-$RELEASE_SHA" "$tmp/sw.js" || { echo 'sw.js release mismatch' >&2; exit 24; }
+          grep -Fq "ofeliya-$RELEASE_SHA" "$tmp/runtime-config.js" || { echo 'runtime-config release mismatch' >&2; exit 25; }
+
+          grep -iq '^content-security-policy:.*https://st.max.ru' "$tmp/headers.txt" || { echo 'MAX CSP missing' >&2; exit 26; }
+          grep -iq '^content-security-policy:.*frame-ancestors.*https://.*max.ru' "$tmp/headers.txt" || { echo 'MAX frame-ancestors missing' >&2; exit 27; }
+          grep -iq '^referrer-policy:[[:space:]]*strict-origin-when-cross-origin' "$tmp/headers.txt" || { echo 'Referrer-Policy missing' >&2; exit 28; }
+          grep -iq '^permissions-policy:.*camera=().*microphone=()' "$tmp/headers.txt" || { echo 'Permissions-Policy missing' >&2; exit 29; }
+          grep -iq '^strict-transport-security:.*max-age=' "$tmp/headers.txt" || { echo 'HSTS missing' >&2; exit 30; }
+
+          printf 'Cloud.ru public parity passed for %s at %s\n' "$RELEASE_SHA" "$PUBLIC_URL"
+
+      - name: Roll back failed release
+        if: steps.rollout.outcome == 'failure' || steps.verify.outcome == 'failure'
+        shell: bash
+        env:
+          PREVIOUS_SHA: ${{ steps.previous.outputs.sha }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$PREVIOUS_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo 'Rollback SHA is invalid; refusing an ambiguous rollback' >&2
+            exit 31
+          }
+          echo "Release failed; restoring $PREVIOUS_SHA"
+          ssh -i ~/.ssh/cloudru_bastion             -p 22             -o BatchMode=yes             -o IdentitiesOnly=yes             -o StrictHostKeyChecking=yes             ubuntu@176.108.246.251             "deploy $PREVIOUS_SHA"
+
+      - name: Verify rollback release
+        if: steps.rollout.outcome == 'failure' || steps.verify.outcome == 'failure'
+        shell: bash
+        env:
+          PUBLIC_URL: ${{ vars.CLOUDRU_OFELIYA_URL }}
+          PREVIOUS_SHA: ${{ steps.previous.outputs.sha }}
+        run: |
+          set -Eeuo pipefail
           release_url="${PUBLIC_URL%/}/release.json"
-          release_payload="$(curl --fail --show-error --silent --location --retry 5 --retry-all-errors \
-            --max-time 20 "$release_url")"
-          expected="\"release\":\"$RELEASE_SHA\""
-          if [[ "$release_payload" != *"$expected"* ]]; then
-            echo "Public release mismatch: expected $RELEASE_SHA at $release_url" >&2
-            echo "Payload: $release_payload" >&2
-            exit 21
-          fi
-          printf 'Cloud.ru public smoke passed for %s at %s\n' "$RELEASE_SHA" "$PUBLIC_URL"
+          for attempt in $(seq 1 8); do
+            payload="$(curl --fail --show-error --silent --location --max-time 20 "$release_url" || true)"
+            actual="$(PAYLOAD="$payload" node -e "try{const p=JSON.parse(process.env.PAYLOAD||'{}');process.stdout.write(String(p.release||''))}catch{}")"
+            if [[ "$actual" == "$PREVIOUS_SHA" ]]; then
+              printf 'Rollback verified at %s: %s\n' "$release_url" "$PREVIOUS_SHA"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Rollback verification failed: expected $PREVIOUS_SHA at $release_url" >&2
+          exit 32
+
+      - name: Fail deployment after rollback
+        if: steps.rollout.outcome == 'failure' || steps.verify.outcome == 'failure'
+        shell: bash
+        run: |
+          echo 'Deployment failed and rollback path was executed; keeping workflow red.' >&2
+          exit 1

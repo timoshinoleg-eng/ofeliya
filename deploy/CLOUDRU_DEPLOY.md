@@ -48,19 +48,15 @@ Do not switch bot ownership or webhook paths during a code deploy. Production re
 
 Workflow: `.github/workflows/deploy-cloudru.yml`.
 
-It is intentionally `workflow_dispatch` only until Cloud.ru production access has been verified. It deploys only a full immutable SHA already contained in `main`.
+The workflow is intentionally manual (`workflow_dispatch`) and deploys only a full immutable SHA already contained in `main`. Manual dispatch is not sufficient by itself: the selected SHA must also have a completed successful `CI` run from a `push` to `main`; red, cancelled, PR-only, or CI-unknown SHAs are rejected before SSH.
 
-Configure GitHub environment `cloudru-production` with:
+Production access goes through the restricted bastion command `deploy <SHA>`. Configure GitHub environment `cloudru-production` with:
 
-### Required secrets
+### Required secret
 
-- `CLOUDRU_DEPLOY_HOST` — public IP/DNS of the existing Cloud.ru VM;
-- `CLOUDRU_DEPLOY_USER` — SSH login;
-- `CLOUDRU_DEPLOY_SSH_KEY` — private SSH key accepted by that VM.
+- `CLOUDRU_BASTION_SSH_KEY` — private key accepted by the restricted production bastion.
 
-### Optional secret
-
-- `CLOUDRU_DEPLOY_PORT` — defaults to `22`.
+The workflow currently pins the established bastion endpoint `ubuntu@176.108.246.251:22`. The remote key is used only for the restricted `deploy <SHA>` command; application secrets stay in `/opt/ofeliya/.env` on the production host.
 
 ### Required repository/environment variable
 
@@ -86,9 +82,12 @@ The release `.env` is parsed as dotenv data, not shell-sourced. Values containin
 6. builds immutable `bot`, `score`, and `static` images;
 7. updates `score` and `static`, retrying their internal health probes;
 8. updates the dedicated bot last;
-9. the GitHub workflow performs an external HTTPS smoke against `CLOUDRU_OFELIYA_URL`.
+9. before changing production, the workflow captures the currently served 40-character SHA from `release.json` as the rollback target;
+10. the GitHub workflow verifies the selected SHA has a green `CI` push-run on `main`;
+11. after rollout, the workflow performs an external HTTPS parity smoke against `CLOUDRU_OFELIYA_URL`: `release.json`, `index.html`, `sw.js`, and `runtime-config.js` hashes/release markers must agree, and MAX CSP / Referrer-Policy / Permissions-Policy / HSTS must be present;
+12. if the SSH rollout or external parity smoke fails, the workflow immediately invokes the same restricted `deploy <SHA>` path with the captured previous SHA, verifies public `release.json` is back on that SHA, and then deliberately leaves the workflow red.
 
-If the public URL variable is absent or the HTTPS smoke fails, the workflow fails and must not be treated as a verified release.
+A release is verified only when rollout and public parity both pass. A red workflow that successfully rolled back is still a failed release and must be investigated before retrying.
 
 ## Composio / Cloud.ru control plane
 
@@ -96,11 +95,21 @@ The existing Cloud.ru bridge is `cloudru-mcp` (Cloudflare Worker, MCP endpoint `
 
 Use Composio for Cloud.ru control-plane verification (correct project, VM, public interface, VM state). Use the GitHub workflow + SSH for deterministic application rollout to the VM.
 
-## Post-deploy MAX gate
+## Rollback
 
-After the Cloud.ru public smoke passes:
+The normal rollback path is the same immutable deployment command used for a forward release: `deploy <previous-main-SHA>`. The GitHub workflow captures the currently live SHA before every rollout and performs this rollback automatically on rollout/parity failure.
 
-1. configure the Ofeliya MAX bot's Mini App URL to the Cloud.ru `/ofeliya/` URL;
-2. fully close and reopen the Mini App in MAX;
-3. verify real MAX viewport, renderer, audio, BackButton, haptics and challenge sharing;
-4. verify that the loaded release matches the expected release marker and not an old service-worker cache.
+For an operator-initiated rollback, dispatch the workflow with the known-good full 40-character SHA. The SHA must still satisfy the release-identity floor, be contained in `main`, and have a successful main CI run. Do not delete previous SHA-tagged images until the replacement release has passed public parity and the MAX real-device gate.
+
+## Post-deploy MAX real-device gate
+
+Automation cannot establish behavior inside the real MAX mobile client. After the Cloud.ru public parity smoke passes and before treating the release as MAX-review-ready:
+
+1. configure/confirm the Ofeliya MAX bot Mini App URL points to the Cloud.ru `/ofeliya/` URL;
+2. fully close and reopen the Mini App in the current MAX Android client;
+3. confirm the splash clears after `ready()`, vertical host swipes do not steal drag controls, and the viewport/safe layout survives rotation/resume;
+4. exercise one-hand, twin-stick, Pause/BackButton, audio after resume/video, haptics, and challenge sharing/share fallback;
+5. confirm the loaded release marker equals the deployed SHA and is not an old service-worker cache;
+6. record the device/MAX version and tested release SHA in the release notes or PR before MAX review.
+
+`ready()` and `disableVerticalSwipes()` are intentional shipped-SDK calls and must remain in the MAX adapter.

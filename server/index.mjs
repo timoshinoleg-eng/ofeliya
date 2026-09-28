@@ -181,6 +181,25 @@ const MAX_ANALYTICS_EVENTS = 20_000;
 const ANALYTICS_RATE_WINDOW_MS = 60_000;
 const ANALYTICS_RATE_LIMIT = 60;
 const analyticsRateByActor = new Map();
+
+// Production hardening: every state-changing surface gets an actor bucket plus
+// a deliberately looser IP backstop. The 12x ratio avoids turning carrier-grade
+// NAT into a shared denial-of-service switch while still bounding floods.
+const WRITE_RATE_WINDOW_MS = 60_000;
+const configuredWriteRateLimit = Number.parseInt(process.env.WRITE_RATE_LIMIT ?? '', 10);
+const WRITE_RATE_LIMIT =
+  Number.isInteger(configuredWriteRateLimit) && configuredWriteRateLimit > 0
+    ? configuredWriteRateLimit
+    : 20;
+const WRITE_IP_RATE_LIMIT = WRITE_RATE_LIMIT * 12;
+const writeRateByActor = new Map();
+const writeRateByIp = new Map();
+
+const MAX_RUN_GRANTS = 10_000;
+const RUN_GRANT_TTL_MS = 2 * 60 * 60 * 1000;
+const RUN_WALL_CLOCK_GRACE_MS = 15_000;
+const RUN_TOKEN_RE = /^[A-Za-z0-9_-]{32,64}$/;
+
 const MAX_DAILY_RUNS = 10_000;
 const DAILY_RUN_TTL_MS = 2 * 60 * 60 * 1000;
 const DAILY_RUN_GRACE_MS = 30 * 60 * 1000;
@@ -203,6 +222,7 @@ function emptyStore() {
     duelAttempts: [],
     duelEvents: [],
     analyticsEvents: [],
+    runGrants: [],
     dailyRuns: [],
   };
 }
@@ -219,7 +239,7 @@ function loadStore() {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error('store.json must contain an object; refusing to reset persisted data');
   }
-  const arrays = ['scores', 'refs', 'duels', 'duelAttempts', 'duelEvents', 'analyticsEvents', 'dailyRuns'];
+  const arrays = ['scores', 'refs', 'duels', 'duelAttempts', 'duelEvents', 'analyticsEvents', 'runGrants', 'dailyRuns'];
   for (const key of arrays) {
     if (parsed[key] != null && !Array.isArray(parsed[key])) {
       throw new Error(`store.json field ${key} is invalid; refusing to reset persisted data`);
@@ -236,6 +256,7 @@ function loadStore() {
     duelAttempts: parsed.duelAttempts ?? [],
     duelEvents: parsed.duelEvents ?? [],
     analyticsEvents: parsed.analyticsEvents ?? [],
+    runGrants: parsed.runGrants ?? [],
     dailyRuns: parsed.dailyRuns ?? [],
   };
 }
@@ -263,22 +284,88 @@ function writeJsonAtomically(file, value) {
   }
 }
 
-function saveStore() {
-  writeJsonAtomically(STORE_FILE, store);
+const configuredStoreSaveDelayMs = Number.parseInt(process.env.STORE_SAVE_DELAY_MS ?? '', 10);
+const STORE_SAVE_DELAY_MS =
+  Number.isInteger(configuredStoreSaveDelayMs) && configuredStoreSaveDelayMs >= 0
+    ? configuredStoreSaveDelayMs
+    : 250;
+const STORE_SAVE_RETRY_MS = Math.max(250, STORE_SAVE_DELAY_MS);
+
+let storeSaveTimer = null;
+let storeDirty = false;
+let lastStoreFlushAt = 0;
+let lastStoreFlushError = null;
+
+export function flushStoreNow() {
+  if (storeSaveTimer) {
+    clearTimeout(storeSaveTimer);
+    storeSaveTimer = null;
+  }
+  if (!storeDirty) return false;
+  try {
+    writeJsonAtomically(STORE_FILE, store);
+    storeDirty = false;
+    lastStoreFlushAt = Date.now();
+    lastStoreFlushError = null;
+    return true;
+  } catch (error) {
+    lastStoreFlushError = error?.message ?? String(error);
+    throw error;
+  }
 }
 
-let bestEffortStoreTimer = null;
-function saveStoreBestEffort() {
-  if (bestEffortStoreTimer) return;
-  bestEffortStoreTimer = setTimeout(() => {
-    bestEffortStoreTimer = null;
+function scheduleStoreFlush(delayMs = STORE_SAVE_DELAY_MS) {
+  if (storeSaveTimer || !storeDirty) return;
+  storeSaveTimer = setTimeout(() => {
+    storeSaveTimer = null;
     try {
-      saveStore();
+      flushStoreNow();
     } catch (error) {
-      console.error('[store] best-effort save failed:', error?.message ?? error);
+      console.error('[store] scheduled save failed:', error?.message ?? error);
+      // Keep the dirty state and retry without coupling request latency to fsync.
+      scheduleStoreFlush(STORE_SAVE_RETRY_MS);
     }
-  }, 250);
-  bestEffortStoreTimer.unref?.();
+  }, delayMs);
+  storeSaveTimer.unref?.();
+}
+
+function saveStore() {
+  storeDirty = true;
+  scheduleStoreFlush();
+}
+
+function saveStoreBestEffort() {
+  saveStore();
+}
+
+function allowFixedWindow(map, key, limit, now = Date.now()) {
+  const current = map.get(key);
+  if (!current || now - current.windowStart >= WRITE_RATE_WINDOW_MS) {
+    map.set(key, { windowStart: now, count: 1 });
+  } else {
+    if (current.count >= limit) return false;
+    current.count += 1;
+  }
+  if (map.size > 20_000) {
+    const oldest = map.keys().next().value;
+    if (oldest) map.delete(oldest);
+  }
+  return true;
+}
+
+function requestIp(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  const firstForwarded = Array.isArray(forwarded)
+    ? forwarded[0]
+    : String(forwarded ?? '').split(',')[0].trim();
+  const raw = firstForwarded || req.socket?.remoteAddress || 'unknown';
+  return raw.slice(0, 96);
+}
+
+function allowWriteRequest(req, scope, actor, now = Date.now()) {
+  if (!allowFixedWindow(writeRateByIp, scope + ':' + requestIp(req), WRITE_IP_RATE_LIMIT, now)) return false;
+  if (!actor) return true;
+  return allowFixedWindow(writeRateByActor, scope + ':' + actor, WRITE_RATE_LIMIT, now);
 }
 
 function analyticsActorHash(platform, uid) {
@@ -488,6 +575,100 @@ function verifyDuelIdentity(body) {
   const verified = validateInitData(body?.initData, token);
   if (!verified) return null;
   return { platform, uid: verified.uid };
+}
+
+function publicRunGrant(run) {
+  return {
+    runId: run.runId,
+    runToken: run.runToken,
+    runSeed: run.runSeed,
+    controlMode: run.controlMode,
+    difficultyId: run.difficultyId,
+    rulesetVersion: run.rulesetVersion,
+    campaignVersion: run.campaignVersion,
+    issuedAt: run.issuedAt,
+    expiresAt: run.expiresAt,
+  };
+}
+
+export function compactRunGrantEntries(runs, now = Date.now(), cap = MAX_RUN_GRANTS, reserve = 0) {
+  const active = runs.filter((run) => run.consumedAt == null && run.expiresAt > now);
+  return {
+    runs: active,
+    hasCapacity: active.length <= Math.max(0, cap - reserve),
+  };
+}
+
+function issueRunGrant(identity, spec, now = Date.now()) {
+  const existing = store.runGrants.find(
+    (run) =>
+      run.platform === identity.platform &&
+      run.uid === identity.uid &&
+      run.runSeed === spec.runSeed &&
+      run.controlMode === spec.controlMode &&
+      run.difficultyId === spec.difficultyId &&
+      run.rulesetVersion === spec.rulesetVersion &&
+      run.campaignVersion === spec.campaignVersion &&
+      run.consumedAt == null &&
+      run.expiresAt > now
+  );
+  if (existing) return { run: existing, reused: true, capacity: true };
+
+  const compacted = compactRunGrantEntries(store.runGrants, now, MAX_RUN_GRANTS, 1);
+  store.runGrants = compacted.runs;
+  if (!compacted.hasCapacity) return { run: null, reused: false, capacity: false };
+
+  const run = {
+    runId: randomBytes(12).toString('base64url'),
+    runToken: randomBytes(24).toString('base64url'),
+    platform: identity.platform,
+    uid: identity.uid,
+    runSeed: spec.runSeed,
+    controlMode: spec.controlMode,
+    difficultyId: spec.difficultyId,
+    rulesetVersion: spec.rulesetVersion,
+    campaignVersion: spec.campaignVersion,
+    issuedAt: now,
+    expiresAt: now + RUN_GRANT_TTL_MS,
+    consumedAt: null,
+  };
+  store.runGrants.push(run);
+  return { run, reused: false, capacity: true };
+}
+
+function resolveRunGrant(runToken, identity, contract, payload, now = Date.now()) {
+  if (typeof runToken !== 'string' || !RUN_TOKEN_RE.test(runToken)) {
+    return { ok: false, status: 422, error: 'run capability invalid' };
+  }
+  const run = store.runGrants.find((candidate) => candidate.runToken === runToken) ?? null;
+  if (!run) return { ok: false, status: 422, error: 'run capability not found' };
+  if (run.consumedAt != null) return { ok: false, status: 422, error: 'run capability already used' };
+  if (now >= run.expiresAt) return { ok: false, status: 410, error: 'run capability expired' };
+  if (run.platform !== identity.platform || run.uid !== identity.uid) {
+    return { ok: false, status: 403, error: 'run capability owner mismatch' };
+  }
+  if (
+    contract.legacy ||
+    contract.rulesetVersion !== run.rulesetVersion ||
+    contract.campaignVersion !== run.campaignVersion ||
+    contract.difficultyId !== run.difficultyId ||
+    contract.runSeed !== run.runSeed ||
+    contract.controlMode !== run.controlMode ||
+    payload.daily === true
+  ) {
+    return { ok: false, status: 422, error: 'run capability does not match score contract' };
+  }
+  const elapsedWallMs = Math.max(0, now - run.issuedAt);
+  if (payload.timeMs > elapsedWallMs + RUN_WALL_CLOCK_GRACE_MS) {
+    run.consumedAt = now;
+    return {
+      ok: false,
+      status: 422,
+      error: 'anti-cheat: run-time-exceeds-wall-clock',
+      consumed: true,
+    };
+  }
+  return { ok: true, run };
 }
 
 function newDuelId() {
@@ -995,7 +1176,13 @@ const server = createServer(async (req, res) => {
         duelAttempts: store.duelAttempts.length,
         duelEvents: store.duelEvents.length,
         analyticsEvents: store.analyticsEvents.length,
+        runGrants: store.runGrants.length,
         dailyRuns: store.dailyRuns.length,
+        storePersistence: {
+          dirty: storeDirty,
+          healthy: lastStoreFlushError == null,
+          lastFlushAt: lastStoreFlushAt || null,
+        },
         rulesetVersion: CURRENT_RULESET_VERSION,
         campaignVersion: CURRENT_CAMPAIGN_VERSION,
       });
@@ -1020,6 +1207,9 @@ const server = createServer(async (req, res) => {
       }
 
       const now = Date.now();
+      if (!allowWriteRequest(req, 'telegram-share', 'telegram:' + verified.uid, now)) {
+        return send(res, 429, { ok: false, error: 'write rate limited' });
+      }
       const shareKey = `telegram:${verified.uid}`;
       const previous = telegramShareLastAt.get(shareKey) ?? 0;
       if (now - previous < TELEGRAM_SHARE_COOLDOWN_MS) {
@@ -1061,6 +1251,9 @@ const server = createServer(async (req, res) => {
         return send(res, 403, { ok: false, error: 'analytics initData validation failed' });
       }
 
+      if (!allowWriteRequest(req, 'event', platform + ':' + verified.uid)) {
+        return send(res, 429, { ok: false, error: 'write rate limited' });
+      }
       const actor = analyticsActorHash(platform, verified.uid);
       if (!allowAnalyticsEvent(actor)) {
         return send(res, 429, { ok: false, error: 'analytics rate limited' });
@@ -1080,6 +1273,39 @@ const server = createServer(async (req, res) => {
       return send(res, 202, { ok: true });
     }
 
+    if (req.method === 'POST' && url.pathname === '/api/run/start') {
+      const body = await readBody(req);
+      const identity = verifyDuelIdentity(body);
+      if (!identity) {
+        return send(res, 403, { ok: false, error: 'verified messenger identity required' });
+      }
+      if (!allowWriteRequest(req, 'run-start', identity.platform + ':' + identity.uid)) {
+        return send(res, 429, { ok: false, error: 'write rate limited' });
+      }
+      const spec = body?.run;
+      if (
+        !spec ||
+        spec.rulesetVersion !== CURRENT_RULESET_VERSION ||
+        spec.campaignVersion !== CURRENT_CAMPAIGN_VERSION ||
+        spec.difficultyId !== 'standard' ||
+        typeof spec.runSeed !== 'string' ||
+        !RUN_SEED_RE.test(spec.runSeed) ||
+        !CONTROL_MODES.has(spec.controlMode)
+      ) {
+        return send(res, 422, { ok: false, error: 'ranked Standard run contract required' });
+      }
+      const issued = issueRunGrant(identity, spec);
+      if (!issued.capacity || !issued.run) {
+        return send(res, 503, { ok: false, error: 'run capability capacity temporarily unavailable' });
+      }
+      saveStore();
+      return send(res, issued.reused ? 200 : 201, {
+        ok: true,
+        reused: issued.reused,
+        grant: publicRunGrant(issued.run),
+      });
+    }
+
     if (req.method === 'POST' && url.pathname === '/api/daily/run') {
       const body = await readBody(req);
       const identity = verifyDuelIdentity(body);
@@ -1087,6 +1313,9 @@ const server = createServer(async (req, res) => {
         return send(res, 403, { ok: false, error: 'verified messenger identity required' });
       }
 
+      if (!allowWriteRequest(req, 'daily-run', identity.platform + ':' + identity.uid)) {
+        return send(res, 429, { ok: false, error: 'write rate limited' });
+      }
       const issued = issueDailyRun(identity);
       if (!issued.capacity || !issued.run) {
         return send(res, 503, { ok: false, error: 'daily run capacity temporarily unavailable' });
@@ -1103,6 +1332,9 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req);
       const identity = verifyDuelIdentity(body);
       if (!identity) return send(res, 403, { ok: false, error: 'verified messenger identity required' });
+      if (!allowWriteRequest(req, 'duel-create', identity.platform + ':' + identity.uid)) {
+        return send(res, 429, { ok: false, error: 'write rate limited' });
+      }
       const payload = body?.payload;
       if (!payload || typeof payload !== 'object') return send(res, 400, { ok: false, error: 'no payload' });
       if (payload.resumed === true) return send(res, 422, { ok: false, error: 'resumed run cannot create duel' });
@@ -1172,6 +1404,9 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req);
       const identity = verifyDuelIdentity(body);
       if (!identity) return send(res, 403, { ok: false, error: 'verified messenger identity required' });
+      if (!allowWriteRequest(req, 'duel-event', identity.platform + ':' + identity.uid)) {
+        return send(res, 429, { ok: false, error: 'write rate limited' });
+      }
       if (!['open', 'start', 'rematch'].includes(body?.event)) {
         return send(res, 400, { ok: false, error: 'bad duel event' });
       }
@@ -1189,6 +1424,9 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req);
       const identity = verifyDuelIdentity(body);
       if (!identity) return send(res, 403, { ok: false, error: 'verified messenger identity required' });
+      if (!allowWriteRequest(req, 'duel-attempt', identity.platform + ':' + identity.uid)) {
+        return send(res, 429, { ok: false, error: 'write rate limited' });
+      }
       const payload = body?.payload;
       if (!payload || typeof payload !== 'object') return send(res, 400, { ok: false, error: 'no payload' });
       if (payload.resumed === true) return send(res, 422, { ok: false, error: 'resumed duel attempt rejected' });
@@ -1288,6 +1526,10 @@ const server = createServer(async (req, res) => {
         verifiedStartParam = v.startParam;
       }
 
+      if (!allowWriteRequest(req, 'score', platform + ':' + uid)) {
+        return send(res, 429, { ok: false, error: 'write rate limited' });
+      }
+
       const parsedContract = parseScoreContract(payload);
       if (!parsedContract.ok) {
         return send(res, 422, { ok: false, error: `score-contract: ${parsedContract.error}` });
@@ -1383,6 +1625,23 @@ const server = createServer(async (req, res) => {
         }
       }
 
+      let runGrant = null;
+      if (!dailyRun && body.runToken != null) {
+        if (!verified || (platform !== 'telegram' && platform !== 'max')) {
+          return send(res, 403, { ok: false, error: 'verified messenger run identity required' });
+        }
+        const resolved = resolveRunGrant(body.runToken, { platform, uid }, contract, payload);
+        if (!resolved.ok) {
+          if (resolved.consumed) saveStore();
+          return send(res, resolved.status, { ok: false, error: resolved.error });
+        }
+        runGrant = resolved.run;
+      }
+
+      if (store.scores.length >= MAX_SCORES) {
+        return send(res, 503, { ok: false, error: 'score capacity temporarily unavailable' });
+      }
+
       const dateKey = dailyRun
         ? dailyRun.dateKey
         :
@@ -1401,7 +1660,7 @@ const server = createServer(async (req, res) => {
         level: Math.round(payload.level),
         ref: parseReferralRef(verifiedStartParam)?.token ?? null,
         verified,
-        ranked: verified && contract.rankedEligible,
+        ranked: verified && contract.rankedEligible && (runGrant != null || dailyRun != null),
         rulesetVersion: contract.rulesetVersion,
         campaignVersion: contract.campaignVersion,
         difficultyId: contract.difficultyId,
@@ -1418,8 +1677,8 @@ const server = createServer(async (req, res) => {
       };
 
       store.scores.push(record);
-      if (store.scores.length > MAX_SCORES) {
-        store.scores.splice(0, store.scores.length - MAX_SCORES);
+      if (runGrant) {
+        runGrant.consumedAt = record.ts;
       }
       if (dailyRun) {
         dailyRun.closedAt = record.ts;
@@ -1586,6 +1845,9 @@ const server = createServer(async (req, res) => {
       const identity = verifyMessengerProfileIdentity(body);
       if (!identity) return send(res, 403, { ok: false, error: 'verified messenger identity required' });
 
+      if (!allowWriteRequest(req, 'profile', identity.userKey)) {
+        return send(res, 429, { ok: false, error: 'write rate limited' });
+      }
       const outcome = await withProfileLock(identity.userKey, () => {
         let profile = profileStore.profiles[identity.userKey];
         if (!profile) {
@@ -1610,6 +1872,9 @@ const server = createServer(async (req, res) => {
       }
       const identity = verifyMessengerProfileIdentity(body);
       if (!identity) return send(res, 403, { ok: false, error: 'verified messenger identity required' });
+      if (!allowWriteRequest(req, 'profile-migrate', identity.userKey)) {
+        return send(res, 429, { ok: false, error: 'write rate limited' });
+      }
       const save = body?.save;
       if (!save || typeof save !== 'object' || Array.isArray(save)) {
         return send(res, 422, { ok: false, error: 'bad save' });
@@ -1662,6 +1927,36 @@ const server = createServer(async (req, res) => {
     return send(res, 500, { ok: false, error: e.message ?? 'server error' });
   }
 });
+
+function flushStoreOnClose() {
+  try {
+    flushStoreNow();
+  } catch (error) {
+    process.exitCode = 1;
+    console.error('[store] shutdown flush failed:', error?.message ?? error);
+  }
+}
+
+server.on('close', flushStoreOnClose);
+
+let shutdownStarted = false;
+function shutdown(signal) {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+  console.log(`[ofeliya-server] ${signal}: draining connections`);
+  flushStoreOnClose();
+  server.close(() => {
+    process.exit(process.exitCode ?? 0);
+  });
+  const forceExitTimer = setTimeout(() => {
+    console.error('[ofeliya-server] forced shutdown after drain timeout');
+    process.exit(1);
+  }, 5_000);
+  forceExitTimer.unref?.();
+}
+
+process.once('SIGTERM', () => shutdown('SIGTERM'));
+process.once('SIGINT', () => shutdown('SIGINT'));
 
 server.listen(PORT, () => {
   console.log(`[ofeliya-server] http://localhost:${PORT} (data: ${DATA_DIR})`);

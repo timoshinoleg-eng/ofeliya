@@ -5,10 +5,13 @@ import { readFileSync } from 'node:fs';
 const read = (path) => readFileSync(path, 'utf8');
 const index = read('index.html');
 const client = read('src/systems/ScoreClient.ts');
+const sfx = read('src/systems/Sfx.ts');
 const botConfig = read('bot/config.mjs');
 const botRuntime = read('bot/runtime.mjs');
 const caddy = read('deploy/Caddyfile.ofeliya');
 const nginx = read('deploy/nginx.conf');
+const nginxContainerApps = read('deploy/nginx.containerapps.conf');
+const nginxSecurityHeaders = read('deploy/nginx.security-headers.conf');
 const dockerfile = read('deploy/Dockerfile');
 const compose = read('deploy/compose.production.yml');
 const runtimeConfig = read('public/runtime-config.js');
@@ -16,6 +19,8 @@ const serviceWorker = read('public/sw.js');
 const envExample = read('deploy/ofeliya.env.example');
 const deployScript = read('deploy/deploy-cloudru.sh');
 const main = read('src/main.ts');
+const deployWorkflow = read('.github/workflows/deploy-cloudru.yml');
+const stampRelease = read('scripts/stamp-release.mjs');
 
 const runtimePos = index.indexOf('./runtime-config.js');
 const maxBridgePos = index.indexOf('https://st.max.ru/js/max-web-app.js');
@@ -42,6 +47,11 @@ assert.match(botRuntime, /\/ofeliya\/bot\/webhook/, 'Ofeliya webhook path must b
 
 assert.match(nginx, /location \/api\/\s*\{[\s\S]*proxy_pass http:\/\/ofeliya-score:8787;/, 'nginx must proxy score API to score service');
 assert.match(nginx, /location = \/api\/ref\s*\{[\s\S]*limit_except GET/, 'legacy unauthenticated referral writes must be blocked in production');
+assert.match(nginx, /location \/audio\/\s*\{[\s\S]*max-age=31536000, immutable/, 'release-versioned audio must be immutable at nginx');
+assert.match(nginxContainerApps, /location \/ofeliya\/audio\/\s*\{[\s\S]*max-age=31536000, immutable/, 'container app path must preserve immutable audio caching');
+assert.match(sfx, /RELEASE_SHA/, 'audio requests must include immutable release identity');
+assert.match(sfx, /audioAssetUrl\(MANIFEST\[name\]\.file\)/, 'SFX fetches must use the release-versioned URL helper');
+assert.match(sfx, /audioAssetUrl\(track\)/, 'music fetches must use the release-versioned URL helper');
 assert.match(dockerfile, /mkdir -p \/app\/server\/data && chown -R node:node \/app\/server/, 'score image must create a node-writable persistent data mountpoint');
 assert.match(dockerfile, /CMD \["node", "server\/index\.mjs"\]/, 'score image must be runnable without a compose command override');
 assert.match(dockerfile, /server\/telegram-share\.mjs/, 'score image must package Telegram share runtime module');
@@ -78,5 +88,80 @@ assert.match(runtimeConfig, /const release = 'ofeliya-[^']+';/, 'runtime config 
 assert.match(serviceWorker, /const VERSION = 'ofeliya-__OFELIYA_RELEASE__';/, 'service worker cache must be unique to the immutable release');
 assert.match(serviceWorker, /const CACHE_PREFIX = 'ofeliya-';/, 'service worker cache cleanup must be Ofeliya-scoped');
 assert.match(serviceWorker, /key\.startsWith\(CACHE_PREFIX\) && !key\.startsWith\(VERSION\)/, 'service worker must not delete caches owned by other apps on the same origin');
+
+assert.equal(
+  (dockerfile.match(/ARG VITE_TELEGRAM_APP_SHORT_NAME=/g) ?? []).length,
+  1,
+  'Telegram build arg must be declared exactly once'
+);
+assert.match(
+  stampRelease,
+  /VITE_RELEASE_SHA must be an explicit 40-character git SHA/,
+  'release stamping must fail closed without an immutable SHA'
+);
+assert.doesNotMatch(
+  stampRelease,
+  /VITE_RELEASE_SHA \|\| ['"]dev['"]/,
+  'release stamping must not silently fall back to dev'
+);
+for (const marker of ['indexSha256', 'serviceWorkerSha256', 'runtimeConfigSha256']) {
+  assert.match(stampRelease, new RegExp(marker), `release metadata must include ${marker}`);
+}
+assert.match(deployWorkflow, /Public HTTPS parity smoke/, 'deploy must run external parity verification');
+assert.match(deployWorkflow, /sha256sum "\$tmp\/index\.html"/, 'deploy must hash live index.html');
+assert.match(deployWorkflow, /sha256sum "\$tmp\/sw\.js"/, 'deploy must hash live service worker');
+assert.match(deployWorkflow, /sha256sum "\$tmp\/runtime-config\.js"/, 'deploy must hash live runtime config');
+assert.match(deployWorkflow, /strict-transport-security/, 'deploy must verify HSTS');
+assert.match(
+  deployWorkflow,
+  /Require successful main CI for selected SHA[\s\S]*run\.event === 'push'[\s\S]*run\.conclusion === 'success'/,
+  'manual deployment must still require a successful main push CI run'
+);
+assert.match(
+  deployWorkflow,
+  /Capture current production release for rollback[\s\S]*release\.json/,
+  'deployment must capture the currently live immutable rollback SHA'
+);
+assert.match(
+  deployWorkflow,
+  /Roll back failed release[\s\S]*"deploy \$PREVIOUS_SHA"/,
+  'failed rollout/parity must redeploy the captured previous SHA'
+);
+assert.match(
+  deployWorkflow,
+  /Verify rollback release[\s\S]*actual.*PREVIOUS_SHA/,
+  'rollback must be externally verified before the failed workflow exits'
+);
+assert.match(
+  deployWorkflow,
+  /Fail deployment after rollback/,
+  'rollback recovery must not turn a failed release green'
+);
+assert.match(caddy, /Strict-Transport-Security/, 'versioned edge config must enable HSTS');
+for (const [name, source] of [
+  ['nginx', nginx],
+  ['container-apps nginx', nginxContainerApps],
+]) {
+  assert.match(source, /server_tokens off;/, `${name} must suppress server version disclosure`);
+  const includes = source.match(/include \/etc\/nginx\/ofeliya-security-headers\.conf;/g) ?? [];
+  assert.ok(includes.length >= 5, `${name} must apply shared security headers to all public surfaces`);
+}
+for (const marker of [
+  'Strict-Transport-Security',
+  'X-Content-Type-Options',
+  'Referrer-Policy',
+  'Permissions-Policy',
+  'Content-Security-Policy',
+  'https://st.max.ru',
+  'frame-ancestors',
+]) {
+  assert.match(
+    nginxSecurityHeaders,
+    new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+    `shared nginx headers must include ${marker}`
+  );
+}
+assert.doesNotMatch(nginxSecurityHeaders, /telegram\.org/, 'nginx Telegram origins stay deferred');
+assert.doesNotMatch(caddy, /telegram\.org/, 'Telegram origins stay deferred until the Telegram production phase');
 
 console.log('production deployment contract: ok');

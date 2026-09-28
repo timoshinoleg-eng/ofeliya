@@ -23,12 +23,16 @@ async function assertCompactResumeMenu(browser) {
   await ctx.addInitScript(({ width, height }) => {
     localStorage.setItem('ofeliya_save_v1', JSON.stringify({ muted: true, runs: 1 }));
     sessionStorage.clear();
+    window.__matrixViewport = { width, height };
     window.WebApp = {
       platform: 'android',
       version: '26.20.0',
       initData: 'signed-resume-layout-matrix',
       initDataUnsafe: { user: { id: 42, first_name: 'Resume', last_name: 'Matrix' } },
-      getViewportSize: async () => ({ width: String(width), height: String(height) }),
+      getViewportSize: async () => ({
+        width: String(window.__matrixViewport.width),
+        height: String(window.__matrixViewport.height),
+      }),
       BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} },
       HapticFeedback: { impactOccurred() {}, notificationOccurred() {} },
     };
@@ -77,6 +81,39 @@ async function assertCompactResumeMenu(browser) {
   }
 
   await page.locator('#game').screenshot({ path: '/tmp/browser-smoke/03b-matrix-resume-menu-320x568.png' });
+
+  // MenuScene.onResize() restarts the same Phaser Scene instance. The layout guard must
+  // recognise each new display-list generation even when dimensions/text are identical.
+  for (let restart = 0; restart < 3; restart += 1) {
+    await page.evaluate(() => window.__game.scene.getScene('Menu').scene.restart());
+    await sleep(220);
+    const compactRestart = await page.evaluate(() => {
+      const scene = window.__game.scene.getScene('Menu');
+      const carrier = scene.children.getByName('ofeliya-menu-carrier');
+      const hook = scene.children.getByName('ofeliya-menu-hook');
+      const subtitle = scene.children.getByName('ofeliya-menu-subtitle');
+      const hookBounds = hook?.getBounds?.();
+      const subtitleBounds = subtitle?.getBounds?.();
+      return {
+        active: scene.sys.isActive(),
+        carrierExists: Boolean(carrier),
+        carrierVisible: carrier?.visible ?? null,
+        subtitleBelowHook:
+          Boolean(hookBounds && subtitleBounds) && hookBounds.bottom + 10 <= subtitleBounds.top,
+      };
+    });
+    if (
+      !compactRestart.active ||
+      !compactRestart.carrierExists ||
+      compactRestart.carrierVisible !== false ||
+      !compactRestart.subtitleBelowHook
+    ) {
+      throw new Error(
+        `menu restart ${restart + 1} did not re-apply compact layout: ${JSON.stringify(compactRestart)}`
+      );
+    }
+  }
+
   await ctx.close();
 }
 
@@ -97,7 +134,8 @@ async function assertCompactResumeMenu(browser) {
     await ctx.addInitScript(({ width, height }) => {
       localStorage.setItem('ofeliya_save_v1', JSON.stringify({ muted: true, runs: 1 }));
       sessionStorage.clear();
-      window.WebApp = {
+      window.__matrixViewport = { width, height };
+    window.WebApp = {
         platform: 'android',
         version: '26.20.0',
         initData: 'signed-layout-matrix',
@@ -105,7 +143,10 @@ async function assertCompactResumeMenu(browser) {
           user: { id: 42, first_name: 'QA', last_name: 'Matrix' },
           start_param: 'sz1_s_2n9c_26_4_9_l',
         },
-        getViewportSize: async () => ({ width: String(width), height: String(height) }),
+        getViewportSize: async () => ({
+        width: String(window.__matrixViewport.width),
+        height: String(window.__matrixViewport.height),
+      }),
         shareMaxContent: async () => {},
         BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} },
         HapticFeedback: { impactOccurred() {}, notificationOccurred() {} },
@@ -287,6 +328,89 @@ async function assertCompactResumeMenu(browser) {
       throw new Error(`result ${size.width}x${size.height} failed: ${JSON.stringify(result)}`);
     }
 
+    if (size.width === 390 && size.height === 844) {
+      // Reproduce messenger rotation/viewport contraction while the result screen is open.
+      // The same result container must be laid out again for the new logical viewport.
+      await page.evaluate(() => {
+        // A real MAX resize changes both the WebView's CSS viewport and the bridge's
+        // authoritative viewport response. Keep the bridge response ready before the
+        // browser resize signal so ViewportManager never observes a mixed generation.
+        window.__matrixViewport = { width: 320, height: 568 };
+        window.WebApp.getViewportSize = async () => ({ width: '320', height: '568' });
+      });
+      await page.setViewportSize({ width: 320, height: 568 });
+      await page.evaluate(async () => {
+        await window.__viewportManager.sync();
+      });
+      await page.waitForFunction(
+        () => window.__game.scale.width === 320 && window.__game.scale.height === 568,
+        null,
+        { timeout: 3000 }
+      );
+      await sleep(120);
+      const resizedResult = await page.evaluate(() => {
+        const ui = window.__game.scene.getScene('UI');
+        const container = ui.children.list.find((obj) => obj?.name === 'ofeliya-result');
+        if (!container) return { missing: 'result container' };
+        const byName = (name) => container.list.find((obj) => obj?.name === name);
+        const names = [
+          'ofeliya-result-retry-label',
+          'ofeliya-result-share-label',
+          'ofeliya-result-menu-label',
+        ];
+        const expectedYs = [402, 456, 510];
+        const buttons = names.map((name, index) => {
+          const text = byName(name);
+          const bg = byName(name.replace('-label', '-bg'));
+          const tb = text?.getBounds?.();
+          const bb = bg?.getBounds?.();
+          return {
+            name,
+            y: text?.y ?? null,
+            expectedY: expectedYs[index],
+            textInside:
+              Boolean(tb && bb) &&
+              tb.left >= bb.left + 4 &&
+              tb.right <= bb.right - 4 &&
+              tb.top >= bb.top + 1 &&
+              tb.bottom <= bb.bottom - 1,
+            bgWidth: bg?.width ?? null,
+          };
+        });
+        const scrim = byName('ofeliya-result-scrim');
+        return {
+          scale: [ui.scale.width, ui.scale.height],
+          buttons,
+          scrim: scrim
+            ? {
+                x: scrim.x,
+                y: scrim.y,
+                width: scrim.displayWidth,
+                height: scrim.displayHeight,
+              }
+            : null,
+        };
+      });
+      if (
+        resizedResult.missing ||
+        resizedResult.scale?.[0] !== 320 ||
+        resizedResult.scale?.[1] !== 568 ||
+        resizedResult.buttons?.some(
+          (item) =>
+            Math.abs((item.y ?? -9999) - item.expectedY) > 1 ||
+            !item.textInside ||
+            (item.bgWidth ?? 9999) > 272
+        ) ||
+        !resizedResult.scrim ||
+        Math.abs(resizedResult.scrim.x - 160) > 1 ||
+        Math.abs(resizedResult.scrim.y - 284) > 1 ||
+        Math.abs(resizedResult.scrim.width - 320) > 1 ||
+        Math.abs(resizedResult.scrim.height - 568) > 1
+      ) {
+        throw new Error(`result resize 390x844 -> 320x568 failed: ${JSON.stringify(resizedResult)}`);
+      }
+    }
+
     if (size.width === 320 && size.height === 568) {
       await page.locator('#game').screenshot({ path: '/tmp/browser-smoke/04-matrix-result-320x568.png' });
     }
@@ -299,7 +423,7 @@ async function assertCompactResumeMenu(browser) {
 
   await assertCompactResumeMenu(browser);
   await browser.close();
-  console.log(`MAX mobile layout matrix: ok (${sizes.map((s) => `${s.width}x${s.height}`).join(', ')} + resume 320x568)`);
+  console.log(`MAX mobile layout matrix: ok (${sizes.map((s) => `${s.width}x${s.height}`).join(', ')} + restart-safe resume + result resize)`);
 })().catch((error) => {
   console.error(error.stack || error);
   process.exit(1);

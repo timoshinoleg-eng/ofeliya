@@ -34,7 +34,12 @@ import {
 import { PlatformBridge } from '../platform';
 import { Sfx } from '../systems/Sfx';
 import { VideoInterstitial, type VideoInterstitialId } from '../systems/VideoInterstitial';
-import { submitDailyRunScoreDetailed, submitRunScore, type DailySubmitStatus } from '../systems/ScoreClient';
+import {
+  submitDailyRunScoreDetailed,
+  submitRunScore,
+  type DailySubmitStatus,
+  type RunTokenGrant,
+} from '../systems/ScoreClient';
 import { createFixedSeedDuel, submitDuelAttempt, trackDuelEvent } from '../systems/DuelClient';
 import { clearDailyIntent, readDailyIntent, resolveDailyResultBranch } from '../game/DailyRunIntent';
 import { OnboardingState, type OnboardingStepId } from '../systems/onboardingState';
@@ -1874,12 +1879,14 @@ export class UIScene extends Phaser.Scene {
       now: Date.now(),
     });
     const duelChallenge = this.registry.get('duelChallenge') as DuelChallengeSnapshot | null | undefined;
+    const runGrant =
+      (this.registry.get('runTokenGrant') as RunTokenGrant | null | undefined) ?? null;
     if (dailyBranch === 'daily' && dailyTicket) {
       this.preVideoDailyScore = submitDailyRunScoreDetailed(res, PlatformBridge, dailyTicket);
     } else if (dailyBranch === 'inactive' && duelChallenge) {
       this.preVideoDuelAttempt = submitDuelAttempt(duelChallenge.challengeId, res, PlatformBridge);
     } else if (dailyBranch === 'inactive' && !duelChallenge) {
-      this.preVideoScore = submitRunScore(res, PlatformBridge);
+      this.preVideoScore = submitRunScore(res, PlatformBridge, runGrant);
     }
     const id: VideoInterstitialId = res.win ? 'victory' : 'defeat';
     let rendered = false;
@@ -1958,7 +1965,12 @@ export class UIScene extends Phaser.Scene {
     const compact = H < 650;
     const c = this.add.container(0, 0).setName('ofeliya-result').setDepth(110);
 
-    c.add(this.add.rectangle(W / 2, H / 2, W, H, SCRIM.result.color, SCRIM.result.alpha).setInteractive());
+    c.add(
+      this.add
+        .rectangle(W / 2, H / 2, W, H, SCRIM.result.color, SCRIM.result.alpha)
+        .setName('ofeliya-result-scrim')
+        .setInteractive()
+    );
     if (res.win && this.textures.exists('cinematic-victory')) {
       c.add(
         this.add
@@ -2172,7 +2184,9 @@ export class UIScene extends Phaser.Scene {
         }
       });
     } else {
-      const submission = this.preVideoScore ?? submitRunScore(res, PlatformBridge);
+      const runGrant =
+        (this.registry.get('runTokenGrant') as RunTokenGrant | null | undefined) ?? null;
+      const submission = this.preVideoScore ?? submitRunScore(res, PlatformBridge, runGrant);
       this.preVideoScore = null;
       void submission.then((score) => {
         if (!scoreStatus.active) return;

@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
+
+function chromeExecutable() {
+  if (process.platform === 'win32') return undefined;
+  return ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(existsSync);
+}
 
 const server = await createServer({ server: { host: '127.0.0.1', port: 0 } });
 let browser;
@@ -8,7 +14,13 @@ let browser;
 try {
   await server.listen();
   const pageUrl = server.resolvedUrls.local[0];
-  browser = await chromium.launch({ headless: true });
+  const executablePath = chromeExecutable();
+  if (process.platform !== 'win32' && !executablePath) throw new Error('Chrome not found');
+  browser = await chromium.launch({
+    executablePath,
+    headless: true,
+    args: process.platform === 'win32' ? [] : ['--no-sandbox', '--disable-dev-shm-usage'],
+  });
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await context.route('https://st.max.ru/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/javascript', body: '' })

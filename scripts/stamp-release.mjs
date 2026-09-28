@@ -1,12 +1,16 @@
 import { readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 
 const TOKEN = '__OFELIYA_RELEASE__';
 const pkg = JSON.parse(readFileSync(resolve('package.json'), 'utf8'));
-// Vite compiles src/release.ts from VITE_RELEASE_SHA. Keep post-build stamping on the exact
-// same fallback so the bundle, service worker, runtime config and release.json can never disagree.
-const raw = String(process.env.VITE_RELEASE_SHA || 'dev').trim();
-const release = raw.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64) || 'dev';
+// Release identity is security/recovery metadata. Never silently stamp an ambiguous "dev"
+// build: callers must provide the exact immutable git SHA they intend to ship/test.
+const raw = String(process.env.VITE_RELEASE_SHA || '').trim();
+if (!/^[0-9a-f]{40}$/i.test(raw)) {
+  throw new Error('VITE_RELEASE_SHA must be an explicit 40-character git SHA');
+}
+const release = raw.toLowerCase();
 
 for (const relative of ['dist/sw.js', 'dist/runtime-config.js']) {
   const path = resolve(relative);
@@ -17,9 +21,18 @@ for (const relative of ['dist/sw.js', 'dist/runtime-config.js']) {
   writeFileSync(path, source.replaceAll(TOKEN, release));
 }
 
+const sha256 = (relative) =>
+  createHash('sha256').update(readFileSync(resolve(relative))).digest('hex');
+
 writeFileSync(
   resolve('dist/release.json'),
-  JSON.stringify({ release, version: String(pkg.version || 'unknown') }) + '\n'
+  JSON.stringify({
+    release,
+    version: String(pkg.version || 'unknown'),
+    indexSha256: sha256('dist/index.html'),
+    serviceWorkerSha256: sha256('dist/sw.js'),
+    runtimeConfigSha256: sha256('dist/runtime-config.js'),
+  }) + '\n'
 );
 
 console.log(`Stamped OFELIYA release ${release}`);

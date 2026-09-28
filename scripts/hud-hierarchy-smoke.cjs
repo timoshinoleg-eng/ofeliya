@@ -462,12 +462,24 @@ function assertContainment(kind, label, contract) {
       await shoot(page, captureDir, '05-hud-320x568-kills-5560.png');
       await setKills(page, 0);
 
-      // boss active + low HP
+      // boss active + low HP. Keep the procedural boss-reveal HUD transition, but
+      // remove the optional video interstitial from this HUD-only contract: the video is
+      // covered by video-interstitial-smoke and may legitimately pause Game for several seconds.
       await page.evaluate(() => {
         const gs = window.__game.scene.getScene('Game');
+        const ui = window.__game.scene.getScene('UI');
+        const showBossReveal = ui.showBossReveal.bind(ui);
+        ui.showBossReveal = (name, textureKey, accent) =>
+          showBossReveal(name, textureKey, accent, undefined);
         gs.runState.stage.hp = 1_000_000;
         gs.runState.stage.maxHp = 1_000_000;
         const boss = gs.spawnEnemy('boss', gs.player.x + 120, gs.player.y, false);
+        if (!boss) throw new Error('failed to spawn isolated HUD boss');
+        // This contract measures HUD hierarchy only. A live boss may collide with the
+        // low-HP synthetic player on a loaded CI runner and turn the later Pause check
+        // into a game-over check, so remove combat motion/damage from this fixture.
+        boss.speed = 0;
+        boss.dmg = 0;
         gs.wave.boss = boss;
       });
       await page.waitForFunction(() => window.__game.scene.getScene('UI').bossLabel.visible === true, null, { timeout: 15000 });
@@ -488,7 +500,14 @@ function assertContainment(kind, label, contract) {
       await shoot(page, captureDir, '05-hud-320x568-boss.png');
       await page.evaluate(() => {
         const gs = window.__game.scene.getScene('Game');
+        const boss = gs.wave.boss;
+        if (boss?.active) boss.deactivateForStageReset();
         gs.wave.boss = null;
+        // The next assertion owns the Pause contract, not low-HP combat. Restore a
+        // safe fixture before emitting the real pause control so a loaded CI runner
+        // cannot legitimately reach game-over between the screenshot and pointerup.
+        gs.runState.stage.hp = 1_000;
+        gs.runState.stage.maxHp = 1_000;
       });
       await sleep(160);
       if (bossFailures.length) throw new Error(`boss HUD contract failed at ${label(size)}: ${JSON.stringify(bossFailures)}`);

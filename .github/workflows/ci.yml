@@ -32,6 +32,12 @@ jobs:
       - name: Save migration compatibility smoke
         run: npm run test:save
 
+      - name: Onboarding state machine smoke
+        run: npm run test:onboarding
+
+      - name: Daily history deterministic smoke
+        run: npm run test:daily-history
+
       - name: Stage runtime contract smoke
         run: npm run test:stages
 
@@ -46,6 +52,9 @@ jobs:
 
       - name: Campaign pacing deterministic smoke
         run: npm run test:pacing
+
+      - name: Frame-rate decay deterministic smoke
+        run: node scripts/check-frame-rate-decay.mjs
 
       - name: Adaptive threat pacing deterministic smoke
         run: npm run test:threat
@@ -115,7 +124,12 @@ jobs:
         run: npm run release:check
 
       - name: Typecheck and build
+        env:
+          VITE_RELEASE_SHA: ${{ github.sha }}
         run: npm run build
+
+      - name: Production bundle shape
+        run: npm run test:bundle-shape
 
   browser-smoke:
     needs: build
@@ -149,6 +163,15 @@ jobs:
           for i in $(seq 1 40); do curl -fsS http://127.0.0.1:5173/ >/dev/null && exit 0; sleep .5; done
           cat /tmp/vite.log
           exit 1
+
+      - name: Full startup timeout contracts
+        run: npm run test:startup
+
+      - name: Non-blocking MAX bridge smoke
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/max-bridge-nonblocking-smoke.cjs
+
+      - name: Checkpoint resume browser smoke
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/checkpoint-resume-smoke.cjs
 
       - name: Music bed browser decode smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/music-bed-browser-smoke.cjs

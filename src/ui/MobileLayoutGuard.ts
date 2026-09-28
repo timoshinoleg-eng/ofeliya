@@ -1,7 +1,14 @@
 import Phaser from 'phaser';
 
-const menuSignatures = new WeakMap<Phaser.Scene, string>();
-const laidOutResults = new WeakSet<Phaser.GameObjects.Container>();
+type MenuLayoutState = {
+  anchor: Phaser.GameObjects.Text | null;
+  signature: string;
+};
+
+const menuLayouts = new WeakMap<Phaser.Scene, MenuLayoutState>();
+const subtitleBaseYs = new WeakMap<Phaser.GameObjects.Text, number>();
+const resultLayouts = new WeakMap<Phaser.GameObjects.Container, string>();
+const originalTexts = new WeakMap<Phaser.GameObjects.Text, string>();
 
 function textObjects(scene: Phaser.Scene): Phaser.GameObjects.Text[] {
   return scene.children.list.filter(
@@ -30,8 +37,13 @@ function guardMenu(scene: Phaser.Scene): void {
 
   const texts = textObjects(scene);
   const signature = menuSignature(scene, texts);
-  if (menuSignatures.get(scene) === signature) return;
-  menuSignatures.set(scene, signature);
+  const anchor = texts[0] ?? null;
+  const previousLayout = menuLayouts.get(scene);
+  if (previousLayout?.anchor === anchor && previousLayout.signature === signature) return;
+  // Phaser Scene.restart() reuses the Scene instance but recreates its display objects.
+  // Keep the first Text object identity in the cache so an identical restart signature
+  // still re-applies the compact layout to the new generation of children.
+  menuLayouts.set(scene, { anchor, signature });
 
   for (const text of texts) {
     if (Math.abs(text.originX - 0.5) > 0.01) continue;
@@ -50,7 +62,15 @@ function guardMenu(scene: Phaser.Scene): void {
   // The carrier greeting is useful context, not a release-critical control. On short MAX
   // viewports it competes with the challenge card, so omit it instead of shrinking every
   // important challenge label into unreadable text.
-  if (carrier && H < 680) carrier.setVisible(false);
+  if (carrier) carrier.setVisible(H >= 680);
+  if (subtitle) {
+    let baseY = subtitleBaseYs.get(subtitle);
+    if (baseY === undefined) {
+      baseY = subtitle.y;
+      subtitleBaseYs.set(subtitle, baseY);
+    }
+    subtitle.setY(baseY);
+  }
   if (hook && subtitle && H < 620) {
     const subtitleHalf = subtitle.getBounds().height / 2;
     subtitle.setY(hook.getBounds().bottom + 12 + subtitleHalf);
@@ -83,8 +103,7 @@ function resultContainer(scene: Phaser.Scene): Phaser.GameObjects.Container | nu
 
 function guardGameOver(scene: Phaser.Scene): void {
   const container = resultContainer(scene);
-  if (!container || laidOutResults.has(container)) return;
-  laidOutResults.add(container);
+  if (!container) return;
 
   const W = scene.scale.width;
   const H = scene.scale.height;
@@ -108,17 +127,30 @@ function guardGameOver(scene: Phaser.Scene): void {
   const menuButton = byName('ofeliya-result-menu-label');
 
   if (!title || !time || !stats || !retryButton || !shareButton || !menuButton) return;
-  const buttonLabels = [retryButton, shareButton, menuButton];
+  const signature = `${W}x${H}:${texts.map((text) => text.text).join('|')}`;
+  if (resultLayouts.get(container) === signature) return;
 
-  if (W < 420 && !title.text.includes('\n')) {
-    title.setText(title.text.replace(' ', '\n')).setAlign('center').setLineSpacing(0);
-  }
+  const buttonLabels = [retryButton, shareButton, menuButton];
+  const sourceText = (text: Phaser.GameObjects.Text): string => {
+    const existing = originalTexts.get(text);
+    if (existing !== undefined) return existing;
+    originalTexts.set(text, text.text);
+    return text.text;
+  };
+
+  const originalTitle = sourceText(title);
+  title
+    .setText(W < 420 ? originalTitle.replace(' ', '\n') : originalTitle)
+    .setAlign('center')
+    .setLineSpacing(0);
   fitToWidth(title, W - 32, 0.72);
   fitToWidth(time, W - 52, 0.72);
 
-  if (!stats.text.includes('\n')) {
-    stats.setText(stats.text.replace(/\s+·\s+/g, '\n')).setAlign('center').setLineSpacing(1);
-  }
+  const originalStats = sourceText(stats);
+  stats
+    .setText(originalStats.replace(/\s+·\s+/g, '\n'))
+    .setAlign('center')
+    .setLineSpacing(1);
   fitToWidth(stats, W - 44, 0.82);
 
   const titleY = Math.max(58, H * 0.1);
@@ -163,6 +195,9 @@ function guardGameOver(scene: Phaser.Scene): void {
     }
   }
 
+  const scrim = rectByName('ofeliya-result-scrim');
+  scrim?.setPosition(W / 2, H / 2).setDisplaySize(W, H);
+
   const buttonYs = [H - 166, H - 112, H - 58];
   const buttonRows = [
     { text: retryButton, bg: rectByName('ofeliya-result-retry-bg') },
@@ -173,9 +208,12 @@ function guardGameOver(scene: Phaser.Scene): void {
     const y = buttonYs[index];
     text.setPosition(W / 2, y);
     fitToWidth(text, Math.min(W - 78, 208), 0.68);
-    bg?.setPosition(W / 2, y);
-    if (bg && bg.width > W - 48) bg.setSize(W - 48, bg.height);
+    bg?.setPosition(W / 2, y).setSize(Math.min(230, W - 48), 46);
   });
+
+  // Store the post-layout signature. Async result text changes or a later resize will
+  // invalidate it naturally, while stable frames remain allocation-free.
+  resultLayouts.set(container, `${W}x${H}:${texts.map((text) => text.text).join('|')}`);
 }
 
 export function installMobileLayoutGuard(game: Phaser.Game): void {

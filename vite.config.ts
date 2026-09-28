@@ -6,6 +6,14 @@ export default defineConfig({
   base: './',
   build: {
     target: 'es2020',
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (/[/\\]node_modules[/\\]phaser[/\\]/.test(id)) return 'vendor-phaser';
+          return undefined;
+        },
+      },
+    },
     chunkSizeWarningLimit: 1500,
   },
   server: {
