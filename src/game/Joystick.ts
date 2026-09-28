@@ -40,6 +40,7 @@ export class Joystick {
     scene.input.on(Phaser.Input.Events.POINTER_MOVE, this.onMove, this);
     scene.input.on(Phaser.Input.Events.POINTER_UP, this.onUp, this);
     scene.input.on(Phaser.Input.Events.POINTER_UP_OUTSIDE, this.onUp, this);
+    scene.scale.on('resize', this.onResize, this);
     const resetOnFocusLoss = () => this.reset();
     const resetOnVisibilityLoss = () => {
       if (document.visibilityState === 'hidden') this.reset();
@@ -53,6 +54,7 @@ export class Joystick {
       scene.input.off(Phaser.Input.Events.POINTER_MOVE, this.onMove, this);
       scene.input.off(Phaser.Input.Events.POINTER_UP, this.onUp, this);
       scene.input.off(Phaser.Input.Events.POINTER_UP_OUTSIDE, this.onUp, this);
+      scene.scale.off('resize', this.onResize, this);
       this.reset();
       scene.tweens.killTweensOf([this.base, this.knob]);
       scene.registry.remove('joy');
@@ -93,6 +95,10 @@ export class Joystick {
     const ny = dy / this.radius;
     if (Math.hypot(nx, ny) < 0.11) this.publish(0, 0);
     else this.publish(nx, ny);
+  }
+
+  private onResize(): void {
+    this.reset();
   }
 
   reset(): void {
