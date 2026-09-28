@@ -31,8 +31,9 @@
 - Ноут 1 (Honor): OpenCode (основной), Cline (запасной), Codex desktop.
 - Ноут 2 (HP): OpenCode (второй), Cline (запасной).
 - ChatGPT web: Project «Офелия» — внешний ревьюер (обычный чат, не Work).
-- Память: `memory/` в репозитории; контекст: плагин context-mode; скиллы: `.agents/skills/`.
-- Пилот памяти: этап 0 (копии заархивированы в `Documents\Archive\ofeliya-2026-09`) и этап 1 (эта память в репо) — выполнены 28.09.2026; далее этап 2 — OmniRoute + OpenCode.
+- Память: `memory/` в репозитории; контекст: плагин context-mode; доп. слой: cross-agent-memory MCP.
+- Пилот: этапы 0–2 выполнены 28.09.2026. Этап 0 — архив копий (`Documents\Archive\ofeliya-2026-09`). Этап 1 — память в репо. Этап 2 (Honor) — проверено: OmniRoute установлен и запущен (`omniroute serve`), OpenCode 1.18.32 настроен на комбо `omniroute/OFELIYA-CODE` (проверено живым запросом), gamedev-скиллы установлены глобально (~/.agents/skills, копия в ~/.config/opencode/skills), Superpowers подключён плагином в проектном opencode.json.
+- Дальше: этап 3 — HP (клон репо → `npm ci` → OpenCode; OmniRoute — локально или remote mode), затем этап 4 — сквозной цикл.
 
 ## Открытые вопросы / риски
 

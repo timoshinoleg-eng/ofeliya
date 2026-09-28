@@ -41,6 +41,7 @@ OFELIYA: STRAIN ZERO — мобильный portrait roguelite-survivor для M
 - **Перед задачей:** прочитай `memory/00_HANDOFF.md` и `memory/01_STATE.md` (при сомнениях — `memory/02_DECISIONS.md`). Не переспрашивай то, что есть в файлах.
 - **После задачи:** обнови `memory/01_STATE.md` (факты), `memory/02_DECISIONS.md` (новые решения), `memory/03_BACKLOG.md`, перепиши `memory/00_HANDOFF.md` для следующего исполнителя.
 - Источник истины — файлы репозитория, а не история чата.
+- Дополнительный слой (если доступен MCP): `cross-agent-memory` — кросс-проектная память (`memory_brief`, `memory_search`, …; политика — `~/cross-agent-memory/MEMORY_PROTOCOL_LITE.md`). Для проектных фактов источник истины всё равно здесь, в файлах репо.
 
 ## Передача работы между агентами
 
