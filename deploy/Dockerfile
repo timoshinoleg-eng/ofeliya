@@ -50,6 +50,7 @@ RUN npm run build:max
 
 FROM nginx:alpine AS static
 COPY deploy/nginx.conf /etc/nginx/nginx.conf
+COPY deploy/nginx.security-headers.conf /etc/nginx/ofeliya-security-headers.conf
 COPY --from=build /app/dist/ /usr/share/nginx/html/
 USER nginx
 CMD ["nginx", "-c", "/etc/nginx/nginx.conf", "-g", "daemon off;"]
