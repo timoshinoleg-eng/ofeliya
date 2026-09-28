@@ -1,17 +1,30 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+
+function walkTextFiles(root) {
+  const out = [];
+  const visit = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name).replaceAll('\\', '/');
+      if (entry.isDirectory()) {
+        visit(path);
+      } else if (entry.isFile()) {
+        out.push(path);
+      }
+    }
+  };
+  visit(root);
+  return out;
+}
 
 const files = [
   'index.html',
-  'src/platform/MaxPlatform.ts',
-  'bot/config.mjs',
-  'bot/runtime.mjs',
-  'deploy/compose.production.yml',
-  'deploy/deploy-cloudru.sh',
-  'deploy/nginx.containerapps.conf',
-  'deploy/ofeliya.env.example',
-  'deploy/CLOUDRU_DEPLOY.md',
+  ...walkTextFiles('src'),
+  ...walkTextFiles('server'),
+  ...walkTextFiles('bot'),
+  ...walkTextFiles('deploy'),
 ];
 
 const sources = Object.fromEntries(files.map((path) => [path, readFileSync(path, 'utf8')]));
