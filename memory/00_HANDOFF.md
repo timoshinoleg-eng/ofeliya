@@ -1,4 +1,4 @@
-# HANDOFF — OFELIYA: STRAIN ZERO — 2026-09-28
+# HANDOFF — OFELIYA: STRAIN ZERO — 2026-09-29
 
 > Файл памяти (пилот). Прочитай меня и `01_STATE.md` перед задачей.
 > В конце сессии перепиши меня для следующего исполнителя.
@@ -11,50 +11,48 @@
 
 ## Текущая задача
 
-- Ветка `feat/donor-quick-wins`: донорские квик-вины (онбординг, daily streak, comprehension hints) + система памяти пилота. Обновлена 28.09: merge `origin/main` (#139–#150) — коммит `45712e9` (запушен).
-- Канонический гейт на синхронизированной ветке пройден 28.09.2026: `test:challenge/save/stages/legendary/difficulty/rng/viewport/profile/startup` ✓, `release:check` ✓ (fixture), `build` ✓ («Stamped 45712e9»).
-- Ближайшая цель: тест-цикл B (OpenCode) + внешнее ревью ChatGPT → PR/приёмка ветки.
-- Ограничения: release-контракт MAX (публикационный билд только `npm run build:max`);
-  не менять `Joystick`; renderer Phaser-only.
+- Приёмка пилота памяти: PR #151 (`feat/donor-quick-wins` → `main`). Ветка = main + система памяти
+  (`memory/`, `AGENTS.md`, `opencode.json`; +265 строк) — кода игры не касается; квик-вины уже в main (PR #137, `5b74f66`).
+- Ночь 28→29.09: **тест-цикл B (OpenCode) пройден полностью** — `ctx stats` ✓ (context-mode v1.0.169),
+  чтение памяти без пересказов ✓, два прохода ревью со сменой модели (OFELIYA-CODE → BACKGROUND-REVIEW,
+  контекст сессии сохранён) ✓, профильные smoke-тесты зелёные ✓.
+- Итог ревью: 3/3 подтверждено; коррекция — регрессии в `UIScene` нет; рекомендация перезаписать память выполнена.
+- Осталось до merge: внешнее ревью ChatGPT → `memory/06_REVIEW.md`, затем un-draft + merge PR #151.
 
 ## Состояние на момент передачи
 
+- Ветки: `feat/donor-quick-wins` = main + память (HEAD — см. PR #151, обновлён 29.09);
+  `origin/main` @ `480c67b`; `origin/feat/donor-quick-wins` @ `f5e1790` + коммиты памяти 29.09.
+- PR #151: draft (снимается после ChatGPT-ревью); CI зелёный: build ✓, browser-smoke ✓, production-contract ✓.
+- Тесты на HEAD ветки (29.09): `test:onboarding` ✓, `test:daily-history` ✓, `test:comprehension` ✓
+  (6 вьюпортов; включает resume-сценарий; прогон независимо повторил ревьюер).
 - Версия: `0.4.1-rc.1`.
-- Worktree: `ofeliya-audit` (main @ `480c67b` — синхронизирован), `ofeliya-audit-fixes` (ветка @ `45712e9` = main + память).
-- Remote: `origin/main` @ `480c67b` (28.09); `origin/feat/donor-quick-wins` @ `45712e9` (28.09, гейт пройден).
-- CI: `ci.yml` (build gate + browser gate), `release-visual-matrix.yml`, `deploy-cloudru.yml`.
-- Прод: Cloud.ru (см. `deploy/`: `deploy-cloudru.sh`, `compose.production.yml`).
 
-## Сделано в этой сессии (пилот памяти)
+## Сделано в этой сессии (28→29.09, ночь, Honor)
 
-- Этап 0: старые копии проекта проверены и перенесены в архив `Documents\Archive\ofeliya-2026-09\` (ничего не удалялось; у старого клона в `Downloads\ofeliya` были несохранённые правки — сохранены как diff и копии файлов в архиве).
-- Этап 1: файлы памяти (`memory/`), `AGENTS.md` и `opencode.json` добавлены в репозиторий, ветка `feat/donor-quick-wins`.
-- Этап 2 (Honor) — проверено 28.09: OmniRoute работает (живой тест ✓), комбо `OFELIYA-CODE` отвечает, скиллы gamedev установлены, context-mode v1.0.169 активен, Superpowers в проектном конфиге.
-- Этап 4 (начат 28.09): merge main → ветка `45712e9`; канонический гейт пройден. Дальше: тест-цикл B, ревью, PR; затем этап 3 — HP.
+- Тест-цикл B: OpenCode 1.18.33 + OmniRoute (комбо `OFELIYA-CODE`, ревью — `BACKGROUND-REVIEW`).
+- Прогон 1 (OFELIYA-CODE): ветка = только память; квик-вины в main; риски — устаревшая память (исправлено), untracked-каталоги (в бэклог).
+- Прогон 2 (BACKGROUND-REVIEW, та же сессия): 3/3 подтверждено + коррекция (UIScene не затронут; `44599e0` — GameScene + расширение comprehension-смоука).
+- Обновлены 4 файла памяти (этот, 01_STATE, 02_DECISIONS, 03_BACKLOG) + коммит.
 
 ## Проверено / не проверено
 
-- Проверено: структура репо, ветки, конфиги, состав CI (по локальной копии от 28.09).
-- Не проверено: статус CI обновлённой ветки на GitHub (после push `45712e9`);
-  реальные MAX-устройства (внешний гейт VIR-16 не пройден).
+- Проверено: состав ветки против main, смена модели с сохранением контекста, профильные smoke-тесты, CI PR.
+- Не проверено: внешнее ревью ChatGPT (шаг перед merge); merge в main; реальные MAX-устройства (VIR-16).
 
 ## Режим проверки (для второго агента)
 
-Перепроверь, не доверяя на слово:
-
-- изменения ветки `feat/donor-quick-wins` против списка квик-винов (онбординг / streak / hints) — есть ли регрессии?
-- проходят ли профильные smoke-тесты: `test:onboarding`, `test:daily-history`, `test:comprehension`;
-- сохраняются ли подсказки при resume (последний коммит заявлен как исправление именно этого).
-
-Формат ответа: подтверждено / опровергнуто / вопросы.
+- После merge: подтвердить, что в main появились `memory/*`, `AGENTS.md`, `opencode.json` (`git show --stat`).
+- Если трогаешь квик-вин код (onboarding / streak / hints): прогони три профильных смоука и проверь,
+  что сохранён resume-сценарий comprehension-смоука.
+- Открытые долги: `.gitignore` для служебных каталогов; Drive-зеркало памяти (блок A10a чек-листа).
 
 ## Следующие шаги (в порядке приоритета)
 
-1. Интерактивный тест-цикл в OpenCode (SETUP-CHECKLIST, блок B) + внешнее ревью в ChatGPT Project → `memory/06_REVIEW.md`.
-2. Приёмка ветки: PR `feat/donor-quick-wins` (уже = main + память) после ревью.
+1. Внешнее ревью ChatGPT (Project «Офелия», блок D) → `memory/06_REVIEW.md` → merge PR #151.
+2. Этап 3 (HP): блок A чек-листа — клон/пул, OmniRoute/Cline, `ctx stats`.
 3. Внешний гейт `RELEASE_VALIDATION.md` §8 (реальные MAX Android/iOS) — 16 пунктов.
-4. Настройка HP по чек-листу (этап 3), затем первый цикл на «Днях и вещах».
-5. Продолжить балансировку по полным прогонам.
+4. Балансировка по полным прогонам (9+ минут; Heart timing — только плейтест).
 
 ## Обязанности в конце сессии
 
