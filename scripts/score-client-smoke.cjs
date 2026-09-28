@@ -28,12 +28,45 @@ function browserDriver() {
     route.fulfill({ status: 200, contentType: 'application/javascript', body: '' })
   );
 
+  let runStartCaptured = null;
+  let runStartUrl = null;
+  let runStartCompleted = false;
+  await ctx.route('**/api/run/start', async (route) => {
+    const req = route.request();
+    runStartUrl = req.url();
+    runStartCaptured = JSON.parse(req.postData() || '{}');
+    const spec = runStartCaptured.run || {};
+    const now = Date.now();
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        reused: false,
+        grant: {
+          runId: 'phase1clientrun001',
+          runToken: 'phase1-client-run-token-000000000001',
+          runSeed: spec.runSeed,
+          controlMode: spec.controlMode,
+          difficultyId: spec.difficultyId,
+          rulesetVersion: spec.rulesetVersion,
+          campaignVersion: spec.campaignVersion,
+          issuedAt: now,
+          expiresAt: now + 2 * 60 * 60 * 1000,
+        },
+      }),
+    });
+    runStartCompleted = true;
+  });
+
   let captured = null;
   let requestUrl = null;
+  let scoreAfterRunStart = false;
   await ctx.route('**/api/score', async (route) => {
     const req = route.request();
     requestUrl = req.url();
     captured = JSON.parse(req.postData() || '{}');
+    scoreAfterRunStart = runStartCompleted;
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -78,6 +111,25 @@ function browserDriver() {
   await page.waitForFunction(
     () => window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI')
   );
+  await page.waitForFunction(
+    () => window.__game.registry.get('runTokenGrant')?.runToken === 'phase1-client-run-token-000000000001'
+  );
+
+  if (!runStartCaptured) throw new Error('run capability request was not sent at run start');
+  if (!runStartUrl || !runStartUrl.endsWith('/api/run/start')) {
+    throw new Error('run-start endpoint is not the relative api/run/start route: ' + runStartUrl);
+  }
+  if (
+    runStartCaptured.platform !== 'max' ||
+    runStartCaptured.initData !== 'signed-score-client-smoke' ||
+    runStartCaptured.run?.rulesetVersion !== 2 ||
+    runStartCaptured.run?.campaignVersion !== 2 ||
+    runStartCaptured.run?.difficultyId !== 'standard' ||
+    runStartCaptured.run?.runSeed !== 'score-client-seed' ||
+    runStartCaptured.run?.controlMode !== 'two-hand'
+  ) {
+    throw new Error('ranked run-start contract failed: ' + JSON.stringify(runStartCaptured));
+  }
 
   await page.evaluate(() => {
     const gs = window.__game.scene.getScene('Game');
@@ -111,9 +163,13 @@ function browserDriver() {
   if (
     captured.platform !== 'max' ||
     captured.initData !== 'signed-score-client-smoke' ||
-    captured.anonId != null
+    captured.anonId != null ||
+    captured.runToken !== 'phase1-client-run-token-000000000001'
   ) {
     throw new Error('trusted MAX score envelope failed: ' + JSON.stringify(captured));
+  }
+  if (!scoreAfterRunStart) {
+    throw new Error('score submission raced ahead of server-minted run capability');
   }
 
   const p = captured.payload || {};
