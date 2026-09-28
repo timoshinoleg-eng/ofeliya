@@ -98,6 +98,48 @@ assert.doesNotMatch(
   /VITE_RELEASE_SHA \|\| ['"]dev['"]/,
   'release stamping must not silently fall back to dev'
 );
+for (const marker of ['indexSha256', 'serviceWorkerSha256', 'runtimeConfigSha256']) {
+  assert.match(stampRelease, new RegExp(marker), `release metadata must include ${marker}`);
+}
+assert.match(deployWorkflow, /Public HTTPS parity smoke/, 'deploy must run external parity verification');
+assert.match(deployWorkflow, /sha256sum "\$tmp\/index\.html"/, 'deploy must hash live index.html');
+assert.match(deployWorkflow, /sha256sum "\$tmp\/sw\.js"/, 'deploy must hash live service worker');
+assert.match(deployWorkflow, /sha256sum "\$tmp\/runtime-config\.js"/, 'deploy must hash live runtime config');
+assert.match(deployWorkflow, /strict-transport-security/, 'deploy must verify HSTS');
+assert.match(
+  deployWorkflow,
+  /Require successful main CI for selected SHA[\s\S]*run\.event === 'push'[\s\S]*run\.conclusion === 'success'/,
+  'manual deployment must still require a successful main push CI run'
+);
+assert.match(
+  deployWorkflow,
+  /Capture current production release for rollback[\s\S]*release\.json/,
+  'deployment must capture the currently live immutable rollback SHA'
+);
+assert.match(
+  deployWorkflow,
+  /Roll back failed release[\s\S]*"deploy \$PREVIOUS_SHA"/,
+  'failed rollout/parity must redeploy the captured previous SHA'
+);
+assert.match(
+  deployWorkflow,
+  /Verify rollback release[\s\S]*actual.*PREVIOUS_SHA/,
+  'rollback must be externally verified before the failed workflow exits'
+);
+assert.match(
+  deployWorkflow,
+  /Fail deployment after rollback/,
+  'rollback recovery must not turn a failed release green'
+);
+assert.match(caddy, /Strict-Transport-Security/, 'versioned edge config must enable HSTS');
+for (const [name, source] of [
+  ['nginx', nginx],
+  ['container-apps nginx', nginxContainerApps],
+]) {
+  assert.match(source, /server_tokens off;/, `${name} must suppress server version disclosure`);
+  const includes = source.match(/include \/etc\/nginx\/ofeliya-security-headers\.conf;/g) ?? [];
+  assert.ok(includes.length >= 5, `${name} must apply shared security headers to all public surfaces`);
+}
 for (const marker of [
   'Strict-Transport-Security',
   'X-Content-Type-Options',
