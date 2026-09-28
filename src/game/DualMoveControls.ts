@@ -54,8 +54,16 @@ export class DualMoveControls {
     scene.input.on(Phaser.Input.Events.POINTER_UP, this.onUp, this);
     scene.input.on(Phaser.Input.Events.POINTER_UP_OUTSIDE, this.onUp, this);
     scene.scale.on('resize', this.onResize, this);
+    const resetOnFocusLoss = () => this.reset();
+    const resetOnVisibilityLoss = () => {
+      if (document.visibilityState === 'hidden') this.reset();
+    };
+    window.addEventListener('blur', resetOnFocusLoss);
+    document.addEventListener('visibilitychange', resetOnVisibilityLoss);
 
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      window.removeEventListener('blur', resetOnFocusLoss);
+      document.removeEventListener('visibilitychange', resetOnVisibilityLoss);
       scene.input.off(Phaser.Input.Events.POINTER_DOWN, this.onDown, this);
       scene.input.off(Phaser.Input.Events.POINTER_MOVE, this.onMove, this);
       scene.input.off(Phaser.Input.Events.POINTER_UP, this.onUp, this);
