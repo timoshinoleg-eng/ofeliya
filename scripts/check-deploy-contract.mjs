@@ -9,6 +9,8 @@ const botConfig = read('bot/config.mjs');
 const botRuntime = read('bot/runtime.mjs');
 const caddy = read('deploy/Caddyfile.ofeliya');
 const nginx = read('deploy/nginx.conf');
+const nginxContainerApps = read('deploy/nginx.containerapps.conf');
+const nginxSecurityHeaders = read('deploy/nginx.security-headers.conf');
 const dockerfile = read('deploy/Dockerfile');
 const compose = read('deploy/compose.production.yml');
 const runtimeConfig = read('public/runtime-config.js');
@@ -130,6 +132,27 @@ assert.match(
   'rollback recovery must not turn a failed release green'
 );
 assert.match(caddy, /Strict-Transport-Security/, 'versioned edge config must enable HSTS');
+for (const [name, source] of [
+  ['nginx', nginx],
+  ['container-apps nginx', nginxContainerApps],
+]) {
+  assert.match(source, /server_tokens off;/, `${name} must suppress server version disclosure`);
+  const includes = source.match(/include \/etc\/nginx\/ofeliya-security-headers\.conf;/g) ?? [];
+  assert.ok(includes.length >= 5, `${name} must apply shared security headers to all public surfaces`);
+}
+for (const marker of [
+  'Strict-Transport-Security',
+  'X-Content-Type-Options',
+  'Referrer-Policy',
+  'Permissions-Policy',
+  'Content-Security-Policy',
+  'https://st.max.ru',
+  'frame-ancestors',
+]) {
+  assert.match(nginxSecurityHeaders, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\assert.match(caddy, /Strict-Transport-Security/, 'versioned edge config must enable HSTS');
+assert.doesNotMatch(caddy, /telegram\.org/, 'Telegram origins stay deferred until the Telegram production phase');')), `shared nginx headers must include ${marker}`);
+}
+assert.doesNotMatch(nginxSecurityHeaders, /telegram\.org/, 'nginx Telegram origins stay deferred');
 assert.doesNotMatch(caddy, /telegram\.org/, 'Telegram origins stay deferred until the Telegram production phase');
 
 console.log('production deployment contract: ok');
