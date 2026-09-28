@@ -27,11 +27,14 @@ process.env.BOT_TOKEN = 'SHARED-MAX-TOKEN';
 process.env.MAX_BOT_TOKEN = MAX_TOKEN;
 process.env.VK_SECURE_KEY = VK_SECURE_KEY;
 process.env.FOUNDER_ELIGIBLE_IDS = 'telegram:111';
+// Keep the main integration suite away from production throttle thresholds.
+// Dedicated child-process regressions below exercise actor and IP limits explicitly.
+process.env.WRITE_RATE_LIMIT = '1000';
 const DATA_DIR = mkdtempSync(join(tmpdir(), 'ofeliya-server-test-'));
 process.env.DATA_DIR = DATA_DIR;
 process.env.PORT = '0';
 
-const { server, compactDailyRunEntries } = await import('./index.mjs');
+const { server, compactDailyRunEntries, compactRunGrantEntries } = await import('./index.mjs');
 await new Promise((resolve) => server.once('listening', resolve));
 const BASE = `http://127.0.0.1:${server.address().port}`;
 
@@ -167,7 +170,7 @@ await ok('GET /api/ruleset публикует текущий двухактны�
   assert.deepEqual(r.supportedRulesets, [1, 2]);
 });
 
-await ok('TG: валидный initData принимается', async () => {
+await ok('TG: валидный initData принимается, legacy без server run остаётся вне рейтинга', async () => {
   const r = await j(await fetch(`${BASE}/api/score`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -176,8 +179,8 @@ await ok('TG: валидный initData принимается', async () => {
     }),
   }));
   assert.equal(r.ok, true);
-  assert.equal(r.ranked, true);
-  assert.ok(r.rank !== null);
+  assert.equal(r.ranked, false);
+  assert.equal(r.rank, null);
 });
 
 await ok('TG: подделанный initData отклоняется (403)', async () => {
@@ -247,7 +250,168 @@ await ok('анти-чит: победа до появления босса не�
   assert.match((await j(res)).error, /win-time/);
 });
 
-await ok('ruleset v2: Standard campaign win принимается и ранжируется отдельно', async () => {
+await ok('Phase 1: exact forged Standard result without server start never enters ranked', async () => {
+  const attacker = { id: 44001, first_name: 'Forgery' };
+  const initData = signInitData(attacker, MAX_TOKEN);
+  const payload = {
+    rulesetVersion: 2,
+    campaignVersion: 2,
+    difficultyId: 'standard',
+    completionStage: 'heart',
+    runSeed: 'phase1-forged-001',
+    controlMode: 'dual-move',
+    bossesDefeated: 2,
+    boss1ClearMs: 300_000,
+    hostCellsInfected: 9,
+    win: true,
+    timeMs: 540_000,
+    kills: 16_200,
+    level: 100,
+    daily: false,
+  };
+  const response = await fetch(`${BASE}/api/score`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platform: 'max', initData, payload }),
+  });
+  assert.equal(response.status, 200);
+  const body = await j(response);
+  assert.equal(body.ok, true);
+  assert.equal(body.ranked, false);
+  assert.equal(body.rank, null);
+
+  const ranked = await j(await fetch(`${BASE}/api/top?period=all`));
+  assert.ok(
+    !ranked.top.some(
+      (row) => row.timeMs === 540_000 && row.kills === 16_200 && row.level === 100
+    )
+  );
+});
+
+await ok('Phase 1: run capability is identity/seed/control bound and exact start retry is idempotent', async () => {
+  const user = { id: 44002, first_name: 'Capability' };
+  const auth = { platform: 'max', initData: signInitData(user, MAX_TOKEN) };
+  const run = {
+    rulesetVersion: 2,
+    campaignVersion: 2,
+    difficultyId: 'standard',
+    runSeed: 'phase1-capability-001',
+    controlMode: 'two-hand',
+  };
+  const firstResponse = await fetch(`${BASE}/api/run/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...auth, run }),
+  });
+  assert.equal(firstResponse.status, 201);
+  const first = await j(firstResponse);
+  assert.equal(first.ok, true);
+  assert.equal(first.reused, false);
+  assert.match(first.grant.runToken, /^[A-Za-z0-9_-]{32,64}$/);
+  assert.equal(first.grant.runSeed, run.runSeed);
+  assert.equal(first.grant.controlMode, run.controlMode);
+  assert.ok(first.grant.expiresAt - first.grant.issuedAt >= 2 * 60 * 60 * 1000 - 1000);
+
+  const retryResponse = await fetch(`${BASE}/api/run/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...auth, run }),
+  });
+  assert.equal(retryResponse.status, 200);
+  const retry = await j(retryResponse);
+  assert.equal(retry.reused, true);
+  assert.equal(retry.grant.runId, first.grant.runId);
+  assert.equal(retry.grant.runToken, first.grant.runToken);
+});
+
+await ok('Phase 1: fresh capability cannot validate 9 minutes of play immediately and is single-use', async () => {
+  const user = { id: 44003, first_name: 'WallClock' };
+  const auth = { platform: 'max', initData: signInitData(user, MAX_TOKEN) };
+  const run = {
+    rulesetVersion: 2,
+    campaignVersion: 2,
+    difficultyId: 'standard',
+    runSeed: 'phase1-wallclock-001',
+    controlMode: 'dual-move',
+  };
+  const started = await j(await fetch(`${BASE}/api/run/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...auth, run }),
+  }));
+  const forgedPayload = {
+    rulesetVersion: 2,
+    campaignVersion: 2,
+    difficultyId: 'standard',
+    completionStage: 'heart',
+    runSeed: run.runSeed,
+    controlMode: run.controlMode,
+    bossesDefeated: 2,
+    boss1ClearMs: 300_000,
+    hostCellsInfected: 9,
+    win: true,
+    timeMs: 540_000,
+    kills: 16_200,
+    level: 100,
+    daily: false,
+  };
+  const forged = await fetch(`${BASE}/api/score`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...auth, runToken: started.grant.runToken, payload: forgedPayload }),
+  });
+  assert.equal(forged.status, 422);
+  assert.match((await j(forged)).error, /run-time-exceeds-wall-clock/);
+
+  const replay = await fetch(`${BASE}/api/score`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...auth, runToken: started.grant.runToken, payload: forgedPayload }),
+  });
+  assert.equal(replay.status, 422);
+  assert.match((await j(replay)).error, /already used/);
+});
+
+await ok('Phase 1: a genuine short Standard run with capability remains rankable', async () => {
+  const user = { id: 44004, first_name: 'Honest' };
+  const auth = { platform: 'max', initData: signInitData(user, MAX_TOKEN) };
+  const run = {
+    rulesetVersion: 2,
+    campaignVersion: 2,
+    difficultyId: 'standard',
+    runSeed: 'phase1-honest-001',
+    controlMode: 'one-hand',
+  };
+  const started = await j(await fetch(`${BASE}/api/run/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...auth, run }),
+  }));
+  const payload = {
+    ...campaignPayload({
+      seed: run.runSeed,
+      timeMs: 10_000,
+      controlMode: run.controlMode,
+      win: false,
+      completionStage: 'bloodstream',
+      bossesDefeated: 0,
+      boss1ClearMs: null,
+    }),
+    kills: 1,
+    level: 1,
+  };
+  const response = await fetch(`${BASE}/api/score`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...auth, runToken: started.grant.runToken, payload }),
+  });
+  assert.equal(response.status, 200);
+  const scored = await j(response);
+  assert.equal(scored.ranked, true);
+  assert.ok(scored.rank !== null);
+});
+
+await ok('ruleset v2: Standard без server-minted start сохраняется только как unranked shadow', async () => {
   const dora = { id: 444, first_name: 'Dora', username: 'dora' };
   const r = await j(await fetch(`${BASE}/api/score`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -273,15 +437,12 @@ await ok('ruleset v2: Standard campaign win принимается и ранжи
     }),
   }));
   assert.equal(r.ok, true);
-  assert.equal(r.ranked, true);
-  assert.equal(r.rank, 1);
-  assert.equal(r.rulesetVersion, 2);
-  const top = await j(await fetch(`${BASE}/api/top?period=all`));
-  assert.equal(top.rulesetVersion, 2);
-  assert.equal(top.top.length, 1);
-  assert.equal(top.top[0].difficultyId, 'standard');
-  assert.equal(top.top[0].completionStage, 'heart');
-  assert.equal(top.top[0].rulesetVersion, 2);
+  assert.equal(r.ranked, false);
+  assert.equal(r.rank, null);
+  const ranked = await j(await fetch(`${BASE}/api/top?period=all`));
+  assert.ok(!ranked.top.some((row) => row.timeMs === 560_000 && row.kills === 420));
+  const shadow = await j(await fetch(`${BASE}/api/top?period=all&includeUnverified=1`));
+  assert.ok(shadow.top.some((row) => row.timeMs === 560_000 && row.kills === 420));
 });
 
 await ok('ruleset v2: победа раньше 9:00 невозможна (422)', async () => {
@@ -768,6 +929,25 @@ await ok('Daily V2: capacity compaction preserves active tickets', async () => {
   assert.equal(full.runs.length, 2);
 });
 
+await ok('Phase 1: run capability compaction preserves only active unused grants', async () => {
+  const now = Date.now();
+  const active = [
+    { runId: 'run-active-1', consumedAt: null, expiresAt: now + 60_000 },
+    { runId: 'run-active-2', consumedAt: null, expiresAt: now + 60_000 },
+  ];
+  const stale = [
+    { runId: 'run-consumed', consumedAt: now - 1, expiresAt: now + 60_000 },
+    { runId: 'run-expired', consumedAt: null, expiresAt: now - 1 },
+  ];
+  const compacted = compactRunGrantEntries([...stale, ...active], now, 3, 1);
+  assert.equal(compacted.hasCapacity, true);
+  assert.deepEqual(compacted.runs.map((run) => run.runId).sort(), ['run-active-1', 'run-active-2']);
+
+  const full = compactRunGrantEntries(active, now, 2, 1);
+  assert.equal(full.hasCapacity, false);
+  assert.equal(full.runs.length, 2);
+});
+
 await ok('Daily V2: ticket нельзя использовать другой identity или seed', async () => {
   const aliceAuth = {
     platform: 'telegram',
@@ -954,7 +1134,7 @@ await ok('vk: числовой VK user id принимается (unverified)', 
   assert.ok(shadow.top.every((row) => !Object.hasOwn(row, 'uid')));
 });
 
-await ok('vk: валидный web_app_t → verified (общий топ)', async () => {
+await ok('vk: валидный web_app_t подтверждает identity, но legacy без capability не ранжируется', async () => {
   const user = { id: 77777, first_name: 'Vera', username: 'vera' };
   const webAppInit = makeWebAppT({ user: JSON.stringify(user), app: '123456' }, VK_SECURE_KEY);
   const r = await j(await fetch(`${BASE}/api/score`, {
@@ -965,11 +1145,13 @@ await ok('vk: валидный web_app_t → verified (общий топ)', asyn
     }),
   }));
   assert.equal(r.ok, true);
-  assert.equal(r.ranked, true);
-  assert.ok(r.rank !== null);
+  assert.equal(r.ranked, false);
+  assert.equal(r.rank, null);
   const top = await j(await fetch(`${BASE}/api/top?period=all&ruleset=legacy`));
-  assert.ok(top.top.some((t) => t.platform === 'vk'));
-  assert.ok(top.top.every((row) => !Object.hasOwn(row, 'uid')));
+  assert.ok(!top.top.some((t) => t.platform === 'vk'));
+  const shadow = await j(await fetch(`${BASE}/api/top?period=all&ruleset=legacy&includeUnverified=1`));
+  assert.ok(shadow.top.some((t) => t.platform === 'vk'));
+  assert.ok(shadow.top.every((row) => !Object.hasOwn(row, 'uid')));
 });
 
 await ok('vk: подделанный web_app_t → unverified (фолбэк на anonId)', async () => {
@@ -1058,6 +1240,85 @@ await ok('бот: parseStartParam — обычный start', async () => {
 });
 await ok('бот: parseStartParam — результат друга', async () => {
   assert.equal(parseStartParam('/start r_run_240w'), 'r_run_240w');
+});
+
+await ok('Phase 1: actor + IP write limits return 429 without a shared-CGNAT-sized actor bucket', async () => {
+  const rateDataDir = mkdtempSync(join(tmpdir(), 'ofeliya-rate-test-'));
+  const serverUrl = new URL('./index.mjs', import.meta.url).href;
+  const script = `
+const { server } = await import(${JSON.stringify(serverUrl)});
+await new Promise((resolve) => server.once('listening', resolve));
+const base = 'http://127.0.0.1:' + server.address().port;
+const payload = { win:false, timeMs:30000, kills:5, level:2, daily:false };
+const post = (anonId, ip) => fetch(base + '/api/score', {
+  method:'POST',
+  headers:{'Content-Type':'application/json','X-Forwarded-For':ip},
+  body:JSON.stringify({platform:'browser',anonId,payload})
+});
+const actorStatuses = [];
+actorStatuses.push((await post('actor-rate-0001','198.51.100.1')).status);
+actorStatuses.push((await post('actor-rate-0001','198.51.100.1')).status);
+const ipStatuses = [];
+for (let i=0;i<13;i++) ipStatuses.push((await post('ip-rate-' + String(i).padStart(8,'0'),'198.51.100.2')).status);
+server.close();
+process.stdout.write('__RATE__' + JSON.stringify({actorStatuses,ipStatuses}));
+`;
+  const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+    env: { ...process.env, PORT: '0', DATA_DIR: rateDataDir, WRITE_RATE_LIMIT: '1' },
+    encoding: 'utf8',
+    timeout: 20_000,
+  });
+  try {
+    assert.equal(child.status, 0, child.stderr);
+    const result = JSON.parse(child.stdout.split('__RATE__')[1]);
+    assert.deepEqual(result.actorStatuses, [200, 429]);
+    assert.deepEqual(result.ipStatuses.slice(0, 12), Array(12).fill(200));
+    assert.equal(result.ipStatuses[12], 429);
+  } finally {
+    rmSync(rateDataDir, { recursive: true, force: true });
+  }
+});
+
+await ok('Phase 1: full score capacity fails loud with 503 and never evicts old rows', async () => {
+  const capacityDataDir = mkdtempSync(join(tmpdir(), 'ofeliya-capacity-test-'));
+  const { writeFileSync: writeFileForCapacity } = await import('node:fs');
+  writeFileForCapacity(
+    join(capacityDataDir, 'store.json'),
+    JSON.stringify({ scores: Array.from({ length: 20_000 }, (_, i) => ({ scoreId: 'old-' + i })) })
+  );
+  const serverUrl = new URL('./index.mjs', import.meta.url).href;
+  const script = `
+const { server } = await import(${JSON.stringify(serverUrl)});
+await new Promise((resolve) => server.once('listening', resolve));
+const base = 'http://127.0.0.1:' + server.address().port;
+const response = await fetch(base + '/api/score', {
+  method:'POST',
+  headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({
+    platform:'browser',
+    anonId:'capacity-check-0001',
+    payload:{win:false,timeMs:30000,kills:5,level:2,daily:false}
+  })
+});
+const body = await response.json();
+const health = await (await fetch(base + '/health')).json();
+server.close();
+process.stdout.write('__CAPACITY__' + JSON.stringify({status:response.status,body,scores:health.scores}));
+`;
+  const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+    env: { ...process.env, PORT: '0', DATA_DIR: capacityDataDir, WRITE_RATE_LIMIT: '1000' },
+    encoding: 'utf8',
+    timeout: 20_000,
+  });
+  try {
+    assert.equal(child.status, 0, child.stderr);
+    const result = JSON.parse(child.stdout.split('__CAPACITY__')[1]);
+    assert.equal(result.status, 503);
+    assert.match(result.body.error, /capacity/);
+    assert.equal(result.scores, 20_000);
+  } finally {
+    rmSync(capacityDataDir, { recursive: true, force: true });
+  }
 });
 
 // ---------- профили (V1) ----------
