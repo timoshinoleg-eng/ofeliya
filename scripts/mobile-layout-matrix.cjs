@@ -331,14 +331,23 @@ async function assertCompactResumeMenu(browser) {
     if (size.width === 390 && size.height === 844) {
       // Reproduce messenger rotation/viewport contraction while the result screen is open.
       // The same result container must be laid out again for the new logical viewport.
-      await page.evaluate(async () => {
-        // Model the MAX bridge changing its authoritative viewport response. Replacing
-        // the bridge method directly avoids test-only closure state surviving across
-        // page/scene generations and exercises the exact production ViewportManager path.
+      await page.evaluate(() => {
+        // A real MAX resize changes both the WebView's CSS viewport and the bridge's
+        // authoritative viewport response. Keep the bridge response ready before the
+        // browser resize signal so ViewportManager never observes a mixed generation.
+        window.__matrixViewport = { width: 320, height: 568 };
         window.WebApp.getViewportSize = async () => ({ width: '320', height: '568' });
+      });
+      await page.setViewportSize({ width: 320, height: 568 });
+      await page.evaluate(async () => {
         await window.__viewportManager.sync();
       });
-      await sleep(220);
+      await page.waitForFunction(
+        () => window.__game.scale.width === 320 && window.__game.scale.height === 568,
+        null,
+        { timeout: 3000 }
+      );
+      await sleep(120);
       const resizedResult = await page.evaluate(() => {
         const ui = window.__game.scene.getScene('UI');
         const container = ui.children.list.find((obj) => obj?.name === 'ofeliya-result');
