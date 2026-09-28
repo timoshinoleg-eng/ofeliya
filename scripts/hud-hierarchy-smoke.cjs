@@ -462,9 +462,15 @@ function assertContainment(kind, label, contract) {
       await shoot(page, captureDir, '05-hud-320x568-kills-5560.png');
       await setKills(page, 0);
 
-      // boss active + low HP
+      // boss active + low HP. Keep the procedural boss-reveal HUD transition, but
+      // remove the optional video interstitial from this HUD-only contract: the video is
+      // covered by video-interstitial-smoke and may legitimately pause Game for several seconds.
       await page.evaluate(() => {
         const gs = window.__game.scene.getScene('Game');
+        const ui = window.__game.scene.getScene('UI');
+        const showBossReveal = ui.showBossReveal.bind(ui);
+        ui.showBossReveal = (name, textureKey, accent) =>
+          showBossReveal(name, textureKey, accent, undefined);
         gs.runState.stage.hp = 1_000_000;
         gs.runState.stage.maxHp = 1_000_000;
         const boss = gs.spawnEnemy('boss', gs.player.x + 120, gs.player.y, false);
