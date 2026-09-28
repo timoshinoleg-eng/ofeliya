@@ -87,12 +87,14 @@ import { VfxSystem } from '../systems/VfxSystem';
 import { EnemyHealthOverlay } from '../systems/EnemyHealthOverlay';
 import { VideoInterstitial } from '../systems/VideoInterstitial';
 import { PERFORMANCE } from '../systems/PerformanceProfile';
+import { RuntimeQualityGovernor } from '../systems/RuntimeQualityGovernor';
 import {
   HostCellSystem,
   type HostCellInteractionEvent,
   type HostCellLysisEvent,
 } from '../systems/HostCellSystem';
 import { trackProductEvent, type ProductEvent, type ProductEventProps } from '../systems/AnalyticsClient';
+import { beginRunCapability } from '../systems/ScoreClient';
 import type { UIScene } from './UIScene';
 
 interface CoreMark {
@@ -165,6 +167,8 @@ export class GameScene extends Phaser.Scene {
   private trailAcc = 0;
   private visualEnemyDensity = 0;
   private visualDensityRefreshAt = 0;
+  private runtimeQuality!: RuntimeQualityGovernor;
+  private runtimeQualityRegistryAt = 0;
   private keys: Record<string, Phaser.Input.Keyboard.Key> = {};
   private introHint: Phaser.GameObjects.Container | null = null;
   private transitionGeneration = 0;
@@ -259,6 +263,10 @@ export class GameScene extends Phaser.Scene {
     this.registry.set('controlMode', this.controlMode);
     this.registry.set('performanceTier', PERFORMANCE.tier);
     this.registry.set('performancePostFx', PERFORMANCE.postFx);
+    // Runtime tiers are relative to the static PerformanceProfile ceiling. A reduced device
+    // already allocates fewer ambient/VFX objects, so it must not be double-penalized on launch.
+    this.runtimeQuality = new RuntimeQualityGovernor();
+    this.runtimeQualityRegistryAt = 0;
 
     this.heartbeatPulse = new HeartbeatPulseDirector(
       heartbeatProfileForDifficulty(this.difficulty)
@@ -267,6 +275,30 @@ export class GameScene extends Phaser.Scene {
     this.runState = new RunState(this.stageDirector.currentStage);
     if (resume) this.runState.restoreFromCheckpoint(resume.runState);
     this.resumed = resume !== null;
+
+    // A ranked Standard run must prove that the server observed its start. Request
+    // the capability here, after seed/control are final but before meaningful play.
+    // Gameplay never waits for the network: failure degrades to an unranked result.
+    this.registry.remove('runTokenGrant');
+    if (!this.resumed && !this.dailyRun && this.difficulty.id === 'standard') {
+      const grantSeed = this.runSeed;
+      const grantControlMode = this.controlMode;
+      void beginRunCapability(PlatformBridge, {
+        runSeed: grantSeed,
+        controlMode: grantControlMode,
+        difficultyId: this.difficulty.id,
+      }).then((grant) => {
+        if (
+          grant &&
+          !this.resumed &&
+          this.runSeed === grantSeed &&
+          this.controlMode === grantControlMode
+        ) {
+          this.registry.set('runTokenGrant', grant);
+        }
+      });
+    }
+
     this.firstRunComprehension = SaveSystem.get().runs === 0;
     this.hostCellsCompletedThisRun = resume ? this.runState.run.hostCellsInfected : 0;
     this.hostCellHintEventsShown = new Set();
@@ -353,6 +385,7 @@ export class GameScene extends Phaser.Scene {
     this.enemies = this.physics.add.group({ classType: Enemy, maxSize: 260 });
     this.gems = this.physics.add.group({ classType: Gem, maxSize: 220 });
     this.vfx = new VfxSystem(this);
+    this.applyRuntimeQuality(this.time.now);
     this.enemyHealth = new EnemyHealthOverlay(this);
     this.hostCells = new HostCellSystem(
       this,
@@ -412,7 +445,8 @@ export class GameScene extends Phaser.Scene {
       this.stageDirector.currentStage,
       this.difficulty,
       () => this.gameplayRng.next('enemy-kind'),
-      () => this.gameplayRng.next('enemy-spawn')
+      () => this.gameplayRng.next('enemy-spawn'),
+      this.difficulty.id === 'strained' && !this.dailyRun
     );
     this.milestones = new RunMilestones(this);
     if (resume) this.restoreCheckpointRuntime(resume);
@@ -448,8 +482,22 @@ export class GameScene extends Phaser.Scene {
     if (!resume && SaveSystem.get().runs === 0) this.showIntroHint();
 
     this.scale.on('resize', this.onResize, this);
+
+    // Mobile WebViews can discard a retained page without another animation frame.
+    // Persist the latest safe checkpoint synchronously while the document is still alive.
+    const flushLifecycleCheckpoint = (): void => {
+      this.saveCheckpointNow();
+    };
+    const flushHiddenCheckpoint = (): void => {
+      if (document.visibilityState === 'hidden') flushLifecycleCheckpoint();
+    };
+    window.addEventListener('pagehide', flushLifecycleCheckpoint);
+    document.addEventListener('visibilitychange', flushHiddenCheckpoint);
+
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.onResize, this);
+      window.removeEventListener('pagehide', flushLifecycleCheckpoint);
+      document.removeEventListener('visibilitychange', flushHiddenCheckpoint);
       PlatformBridge.setBackHandler(null);
 
       // Phaser has already begun shutting down scene plugins before user SHUTDOWN listeners run.
@@ -470,7 +518,16 @@ export class GameScene extends Phaser.Scene {
       this.registry.remove('runResult');
       this.registry.remove('joy');
       this.registry.remove('aimJoy');
+      this.registry.remove('adaptiveThreat');
+      this.registry.remove('runtimeQuality');
     });
+  }
+
+  private applyRuntimeQuality(now: number): void {
+    const profile = this.runtimeQuality.profile;
+    this.vfx?.setRuntimeQualityScale(profile.particleScale);
+    this.atmosphere?.setRuntimeQualityScale(profile.ambientScale);
+    this.registry.set('runtimeQuality', this.runtimeQuality.getSnapshot(now));
   }
 
   private exitToMenu(): void {
@@ -493,6 +550,11 @@ export class GameScene extends Phaser.Scene {
       if (time < this.hitStopUntil) return;
       this.hitStopped = false;
       this.physics.world.resume();
+    }
+    const qualityChanged = this.runtimeQuality.recordFrame(delta, time);
+    if (qualityChanged || time >= this.runtimeQualityRegistryAt) {
+      this.runtimeQualityRegistryAt = time + 1_000;
+      this.applyRuntimeQuality(time);
     }
     this.runState.tick(delta);
     if (time >= this.visualDensityRefreshAt) {
@@ -564,6 +626,10 @@ export class GameScene extends Phaser.Scene {
     this.updateAdaptiveAudio(delta);
     this.updateHeartbeatSignature(stage, st.timeMs);
     this.wave.update(delta);
+    this.registry.set('adaptiveThreat', {
+      ...this.wave.debugAdaptiveThreatState,
+      pacingEnabled: this.difficulty.id === 'strained' && !this.dailyRun,
+    });
     this.enemyHealth.update(time);
     this.updateCardiacLineHazard(time);
     this.hostCells.update(time, delta, st.timeMs);
@@ -665,9 +731,13 @@ export class GameScene extends Phaser.Scene {
     this.vfx.kill(e.x, e.y, e.color, e.isBoss ? 'boss' : e.isElite ? 'elite' : 'normal');
     if (e.isElite && e.eliteModifier === 'volatile') this.triggerVolatileElite(e);
     if (e.isElite || e.isBoss) {
-      this.hitStop(this.impact.hitStopMs(e.isBoss ? 'boss_phase' : 'elite_death'));
-      const s = JUICE.shakeEliteKill;
-      this.shake(s.duration, s.intensity);
+      const decision = this.impact.request(
+        e.isBoss ? 'boss_phase' : 'elite_death',
+        this.time.now
+      );
+      this.hitStop(decision.hitStopMs);
+      const s = e.isBoss ? { duration: 400, intensity: 0.01 } : JUICE.shakeEliteKill;
+      if (decision.allowCameraShake) this.shake(s.duration, s.intensity, true);
     }
     if (e.xpValue > 0) {
       // The first readable pickup teaches the mutation loop immediately instead of requiring
@@ -678,7 +748,6 @@ export class GameScene extends Phaser.Scene {
     }
     if (e.isBoss && this.wave.boss === e) {
       this.wave.boss = null;
-      this.shake(400, 0.01);
       const defeatedStageId = this.stageDirector.currentStage.id;
       const ceremonyToken = ++this.transitionGeneration;
       this.awaitingChoice = false;
@@ -720,7 +789,9 @@ export class GameScene extends Phaser.Scene {
     const now = this.time.now;
     if (distance > radius || now < this.player.hurtUntil) return;
 
-    this.runState.stage.hp -= Math.max(6, enemy.dmg * 0.55);
+    const damage = Math.max(6, enemy.dmg * 0.55);
+    this.runState.stage.hp -= damage;
+    this.wave.recordPlayerDamage(damage, this.runState.stage.maxHp);
     this.runState.resetNoDamage();
     this.player.markHurt(now);
     Sfx.play('hurt');
@@ -991,6 +1062,11 @@ export class GameScene extends Phaser.Scene {
     Sfx.play('pickup');
     this.vfx.pickup(this.player.x, this.player.y);
     this.queuedLevels += this.runState.addXp(value);
+
+    // RNA pickup feedback is dispatched directly to the UI scene, while the main HUD reads the
+    // registry snapshot. Keep both views of progression atomic so a skipped/paused Game update
+    // cannot show "+RNA" feedback beside a stale RNA counter.
+    this.registry.set('run', this.snapshot());
     this.getUiScene()?.notifyRnaPickup(value);
     this.trackComprehensionOnce('first_rna_pickup', { value });
   }
@@ -1021,8 +1097,9 @@ export class GameScene extends Phaser.Scene {
       this.pendingLegendaryCeremony = def.legendaryId;
       this.vfx.legendary(this.player.x, this.player.y, COLORS.gold);
       this.atmosphere.pulse(COLORS.gold, 0.34);
-      this.shake(180, 0.004);
-      this.hitStop(this.impact.hitStopMs('legendary_pick'));
+      const decision = this.impact.request('legendary_pick', this.time.now);
+      if (decision.allowCameraShake) this.shake(180, 0.004, true);
+      this.hitStop(decision.hitStopMs);
       if (def.legendaryId === 'zero-point') this.zeroPointNextAt = this.time.now + 12_000;
     } else {
       this.runState.bump(id);
@@ -1085,7 +1162,8 @@ export class GameScene extends Phaser.Scene {
     const stage = this.stageDirector.currentStage;
     this.atmosphere.pulse(stage.theme.dangerColor, 0.22);
     this.vfx.legendary(boss.x, boss.y, stage.theme.dangerColor);
-    this.shake(220, 0.006);
+    const decision = this.impact.request('boss_phase', this.time.now);
+    if (decision.allowCameraShake) this.shake(220, 0.006, true);
     PlatformBridge.haptic('heavy');
   }
 
@@ -1113,13 +1191,22 @@ export class GameScene extends Phaser.Scene {
       onComplete: () => wave.destroy(),
     });
     this.atmosphere.pulse(COLORS.red, boss.bossPhase === 2 ? 0.24 : 0.16);
-    this.shake(boss.bossPhase === 2 ? 180 : 130, boss.bossPhase === 2 ? 0.006 : 0.004);
+    const now = this.time.now;
+    const impactDecision = this.impact.request('boss_impact', now);
+    if (impactDecision.allowCameraShake) {
+      this.shake(
+        boss.bossPhase === 2 ? 180 : 130,
+        boss.bossPhase === 2 ? 0.006 : 0.004,
+        true
+      );
+    }
 
     const distance = Math.hypot(this.player.x - boss.x, this.player.y - boss.y);
-    const now = this.time.now;
     if (distance > radius || now < this.player.hurtUntil) return;
 
-    this.runState.stage.hp -= Math.max(8, damage);
+    const appliedDamage = Math.max(8, damage);
+    this.runState.stage.hp -= appliedDamage;
+    this.wave.recordPlayerDamage(appliedDamage, this.runState.stage.maxHp);
     this.runState.resetNoDamage();
     this.player.markHurt(now);
     Sfx.play('hurt');
@@ -1267,7 +1354,9 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    this.runState.stage.hp -= hazard.damage * this.difficulty.bossDamageMultiplier;
+    const damage = hazard.damage * this.difficulty.bossDamageMultiplier;
+    this.runState.stage.hp -= damage;
+    this.wave.recordPlayerDamage(damage, this.runState.stage.maxHp);
     this.runState.resetNoDamage();
     this.player.markHurt(this.time.now);
     Sfx.play('hurt');
@@ -1358,7 +1447,14 @@ export class GameScene extends Phaser.Scene {
       event.bossActive ? stage.theme.dangerColor : stage.theme.accentColor,
       event.bossActive ? 0.4 : 0.3
     );
-    this.shake(event.bossActive ? 150 : 100, event.bossActive ? 0.0045 : 0.0026);
+    const impactDecision = this.impact.request('heartbeat_impact', this.time.now);
+    if (impactDecision.allowCameraShake) {
+      this.shake(
+        event.bossActive ? 150 : 100,
+        event.bossActive ? 0.0045 : 0.0026,
+        true
+      );
+    }
     PlatformBridge.haptic(event.bossActive ? 'medium' : 'light');
 
     const distanceToSafe = Math.hypot(
@@ -2147,14 +2243,16 @@ export class GameScene extends Phaser.Scene {
     const now = this.time.now;
     if (now < this.player.hurtUntil) return;
     this.runState.stage.hp -= e.dmg;
+    this.wave.recordPlayerDamage(e.dmg, this.runState.stage.maxHp);
     this.runState.resetNoDamage();
     this.player.markHurt(now);
     Sfx.play('hurt');
     PlatformBridge.haptic('medium');
     this.cameras.main.flash(140, 255, 60, 100);
     const s = JUICE.shakeHurt;
-    this.shake(s.duration, s.intensity);
-    this.hitStop(this.impact.hitStopMs('critical_hit'));
+    const impactDecision = this.impact.request('player_hit', now);
+    if (impactDecision.allowCameraShake) this.shake(s.duration, s.intensity, true);
+    this.hitStop(impactDecision.hitStopMs);
     this.showPlayerImpactCue(e.x, e.y);
     const dx = e.x - this.player.x;
     const dy = e.y - this.player.y;
@@ -2324,7 +2422,8 @@ export class GameScene extends Phaser.Scene {
     this.vfx.legendary(this.player.x, this.player.y, COLORS.green);
     this.atmosphere.pulse(COLORS.green, 0.4);
     this.cameras.main.flash(180, 120, 255, 160);
-    this.shake(260, 0.009);
+    const decision = this.impact.request('legendary_pick', this.time.now);
+    if (decision.allowCameraShake) this.shake(260, 0.009, true);
     this.player.setMutationState(true, true, true);
     this.time.delayedCall(8_000, () => {
       if (!this.player.active) return;
@@ -2332,8 +2431,8 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private shake(duration: number, intensity: number): void {
-    if (this.impact.allowCameraShake(this.time.now)) {
+  private shake(duration: number, intensity: number, preGranted = false): void {
+    if (preGranted || this.impact.allowCameraShake(this.time.now)) {
       this.cameras.main.shake(duration, intensity);
     }
   }

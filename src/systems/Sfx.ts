@@ -6,6 +6,7 @@
 // through `SfxAdaptiveSink`, so mute, user-gesture unlock and node ownership stay in one place.
 
 import { SaveSystem } from './SaveSystem';
+import { RELEASE_SHA } from '../release';
 import type { AdaptiveCueKind, HeartbeatCueKind } from './AdaptiveAudioDirector';
 
 export type SfxName =
@@ -14,6 +15,12 @@ export type SfxName =
 
 const THROTTLE_MS: Partial<Record<SfxName, number>> = { shoot: 70, hit: 55, pickup: 45 };
 const BASE: string = import.meta.env.BASE_URL || './';
+
+function audioAssetUrl(file: string): string {
+  const separator = file.includes('?') ? '&' : '?';
+  return `${BASE}${file}${separator}v=${encodeURIComponent(RELEASE_SHA)}`;
+}
+
 const MANIFEST: Record<SfxName, { file: string; vol: number }> = {
   shoot: { file: 'audio/sfx/shoot.ogg', vol: 0.5 },
   hit: { file: 'audio/sfx/hit.ogg', vol: 0.45 },
@@ -340,7 +347,7 @@ class SfxImpl {
     if (this.loading[name]) return this.loading[name] as Promise<AudioBuffer | null>;
     const ctx = this.ensure();
     if (!ctx) return Promise.resolve(null);
-    const p = fetch(BASE + MANIFEST[name].file)
+    const p = fetch(audioAssetUrl(MANIFEST[name].file))
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('HTTP ' + r.status))))
       .then((ab) => ctx.decodeAudioData(ab))
       .then((buf) => { this.buffers[name] = buf; return buf; })
@@ -522,7 +529,7 @@ class SfxImpl {
       const trackIndex = (preferredBed + offset) % MUSIC_TRACK_COUNT;
       const track = MUSIC_TRACKS[trackIndex] ?? MUSIC_TRACKS[0];
       try {
-        const response = await fetch(BASE + track, { signal: controller.signal });
+        const response = await fetch(audioAssetUrl(track), { signal: controller.signal });
         if (!response.ok) throw new Error('HTTP ' + response.status);
         const buffer = await ctx.decodeAudioData(await response.arrayBuffer());
         if (

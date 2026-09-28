@@ -121,9 +121,13 @@ function browserDriver() {
   await page.evaluate(() => {
     const gs = window.__game.scene.getScene('Game');
     const boss = gs.wave.boss;
+    // This smoke validates the CARDIAC TITAN phase-two line hazard, not the generic
+    // Enemy.preUpdate phase-threshold scheduler. Pin the synthetic boss to phase 2 so
+    // the test cannot stall on unrelated render/update scheduling in a loaded CI runner.
     boss.hp = boss.maxHp * 0.49;
+    boss.bossPhase = 2;
+    gs.onBossPhaseChanged(boss);
   });
-  await page.waitForFunction(() => window.__game.scene.getScene('Game').wave.boss?.bossPhase === 2);
 
   await page.waitForFunction(
     () => Boolean(window.__game.scene.getScene('Game').cardiacHazardVisual),

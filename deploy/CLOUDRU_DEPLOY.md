@@ -1,17 +1,17 @@
 # OFELIYA production on Cloud.ru VM
 
-OFELIYA production stays on the existing Cloud.ru VM / shared hub host. Render is not the production target.
+OFELIYA production runs on its own dedicated Cloud.ru VM `chatgpt-ofeliya-1`. Render and the legacy Chatbot24/Hub host are not production targets.
 
 ## Host layout
 
 - application checkout: `/opt/ofeliya/current` on the existing legacy-layout host (or `/opt/ofeliya` when that root is already a git checkout);
 - release env: `/opt/ofeliya/.env`;
 - base compose file: `deploy/compose.production.yml`; dedicated hosts may also keep untracked `deploy/compose.production.dedicated.local.yml` and `deploy/compose.caddy.yml`, which the deploy script auto-detects;
-- Compose project: `OFELIYA_COMPOSE_PROJECT`; legacy shared mode defaults to `ofeliya`, while the current dedicated host auto-detects project `deploy` from its local dedicated override;
-- shared-network alias: `OFELIYA_SHARED_NETWORK`; shared mode defaults to `quiz-battle_default`, while dedicated mode defaults to `<compose-project>_ofeliya` so the legacy logical network resolves to the dedicated project's real network;
+- Compose project: `OFELIYA_COMPOSE_PROJECT`; the current dedicated host uses project `deploy`;
+- external network: `OFELIYA_SHARED_NETWORK`; the current dedicated host uses `deploy_ofeliya` (the variable name is retained for deployment compatibility only);
 - public namespace: `/ofeliya/`;
-- MAX bot mode: `shared` by default; Ofeliya reuses the existing Quizika/Hub bot identity while Hub remains the sole webhook owner.
-- dedicated webhook `/ofeliya/bot/webhook` is only used when `OFELIYA_BOT_MODE=dedicated`.
+- MAX bot mode: `dedicated` only;
+- dedicated webhook: `/ofeliya/bot/webhook`.
 
 Do not publish OFELIYA under `/hub/*`. That route belongs to `timoshinoleg-eng/hub` and can make MAX open the wrong/legacy app.
 
@@ -31,7 +31,7 @@ Never commit the real `.env`, bot token, webhook secret, SSH key or legal/privat
 
 ## Caddy ingress
 
-The existing production Caddy host must include the contents of `deploy/Caddyfile.ofeliya` before any catch-all `handle` block. Keep the Hub block (`deploy/Caddyfile.hub` in the Hub repository) separate.
+The dedicated production Caddy host must include the contents of `deploy/Caddyfile.ofeliya` before any catch-all `handle` block. It must not import or depend on the Hub/Chatbot24 Caddy configuration.
 
 After a Caddy change, validate before reload using the host's existing Caddy installation. Do not replace the complete host Caddyfile from this repository.
 
@@ -40,27 +40,23 @@ The MAX Mini App URL must be the Cloud.ru-backed HTTPS URL ending in `/ofeliya/`
 
 ## MAX bot ownership
 
-`OFELIYA_BOT_MODE=shared` remains supported for a shared Hub host. The current separate `chatgpt-ofeliya-1` production VM runs `dedicated` and keeps its bot env in `/opt/ofeliya/.env`. In dedicated mode the deploy script never requires `/opt/hub/.env` and includes the host-local dedicated Compose/Caddy overrides when present.
+The current `chatgpt-ofeliya-1` production VM runs `OFELIYA_BOT_MODE=dedicated` and keeps all bot/runtime env in `/opt/ofeliya/.env`. Shared Hub/Chatbot24 bot ownership is retired and must fail closed.
 
-Do not switch bot ownership or webhook paths during a code deploy. Dedicated mode requires `/ofeliya/bot/webhook`; shared mode leaves Hub as the webhook owner.
+Do not switch bot ownership or webhook paths during a code deploy. Production requires `/ofeliya/bot/webhook` and the canonical Ofeliya bot identity from `PROJECT_IDENTITY.md`.
 
 ## GitHub production deployment
 
 Workflow: `.github/workflows/deploy-cloudru.yml`.
 
-It is intentionally `workflow_dispatch` only until Cloud.ru production access has been verified. It deploys only a full immutable SHA already contained in `main`.
+The workflow is intentionally manual (`workflow_dispatch`) and deploys only a full immutable SHA already contained in `main`. Manual dispatch is not sufficient by itself: the selected SHA must also have a completed successful `CI` run from a `push` to `main`; red, cancelled, PR-only, or CI-unknown SHAs are rejected before SSH.
 
-Configure GitHub environment `cloudru-production` with:
+Production access goes through the restricted bastion command `deploy <SHA>`. Configure GitHub environment `cloudru-production` with:
 
-### Required secrets
+### Required secret
 
-- `CLOUDRU_DEPLOY_HOST` — public IP/DNS of the existing Cloud.ru VM;
-- `CLOUDRU_DEPLOY_USER` — SSH login;
-- `CLOUDRU_DEPLOY_SSH_KEY` — private SSH key accepted by that VM.
+- `CLOUDRU_BASTION_SSH_KEY` — private key accepted by the restricted production bastion.
 
-### Optional secret
-
-- `CLOUDRU_DEPLOY_PORT` — defaults to `22`.
+The workflow currently pins the established bastion endpoint `ubuntu@176.108.246.251:22`. The remote key is used only for the restricted `deploy <SHA>` command; application secrets stay in `/opt/ofeliya/.env` on the production host.
 
 ### Required repository/environment variable
 
@@ -70,7 +66,7 @@ Configure GitHub environment `cloudru-production` with:
 
 - `CLOUDRU_OFELIYA_APP_DIR` — defaults to `/opt/ofeliya`;
 - `CLOUDRU_OFELIYA_COMPOSE_PROJECT` — explicit Compose project override; current dedicated production uses `deploy`;
-- `CLOUDRU_OFELIYA_SHARED_NETWORK` — explicit legacy-network alias override; current dedicated production uses `deploy_ofeliya`.
+- `CLOUDRU_OFELIYA_SHARED_NETWORK` — explicit external-network override; current dedicated production uses `deploy_ofeliya`.
 
 The release `.env` is parsed as dotenv data, not shell-sourced. Values containing spaces therefore do not need shell quoting, and a stale `OFELIYA_RELEASE` entry in the file cannot override the immutable SHA supplied by the workflow.
 
@@ -79,16 +75,19 @@ The release `.env` is parsed as dotenv data, not shell-sourced. Values containin
 `deploy/deploy-cloudru.sh` performs a fail-closed rollout:
 
 1. validates the immutable release SHA and parses production dotenv without executing it as shell;
-2. resolves shared vs dedicated bot mode plus the host's Compose project/network overrides;
+2. validates dedicated bot ownership plus the host's Compose project/network overrides;
 3. checks that the SHA belongs to `origin/main`;
 4. auto-includes the host-local dedicated Compose/Caddy overrides when present;
 5. validates the effective Compose config before changing running containers;
 6. builds immutable `bot`, `score`, and `static` images;
 7. updates `score` and `static`, retrying their internal health probes;
-8. updates the dedicated bot last (or keeps it stopped in shared mode);
-9. the GitHub workflow performs an external HTTPS smoke against `CLOUDRU_OFELIYA_URL`.
+8. updates the dedicated bot last;
+9. before changing production, the workflow captures the currently served 40-character SHA from `release.json` as the rollback target;
+10. the GitHub workflow verifies the selected SHA has a green `CI` push-run on `main`;
+11. after rollout, the workflow performs an external HTTPS parity smoke against `CLOUDRU_OFELIYA_URL`: `release.json`, `index.html`, `sw.js`, and `runtime-config.js` hashes/release markers must agree, and MAX CSP / Referrer-Policy / Permissions-Policy / HSTS must be present;
+12. if the SSH rollout or external parity smoke fails, the workflow immediately invokes the same restricted `deploy <SHA>` path with the captured previous SHA, verifies public `release.json` is back on that SHA, and then deliberately leaves the workflow red.
 
-If the public URL variable is absent or the HTTPS smoke fails, the workflow fails and must not be treated as a verified release.
+A release is verified only when rollout and public parity both pass. A red workflow that successfully rolled back is still a failed release and must be investigated before retrying.
 
 ## Composio / Cloud.ru control plane
 
@@ -96,11 +95,21 @@ The existing Cloud.ru bridge is `cloudru-mcp` (Cloudflare Worker, MCP endpoint `
 
 Use Composio for Cloud.ru control-plane verification (correct project, VM, public interface, VM state). Use the GitHub workflow + SSH for deterministic application rollout to the VM.
 
-## Post-deploy MAX gate
+## Rollback
 
-After the Cloud.ru public smoke passes:
+The normal rollback path is the same immutable deployment command used for a forward release: `deploy <previous-main-SHA>`. The GitHub workflow captures the currently live SHA before every rollout and performs this rollback automatically on rollout/parity failure.
 
-1. configure the Ofeliya MAX bot's Mini App URL to the Cloud.ru `/ofeliya/` URL;
-2. fully close and reopen the Mini App in MAX;
-3. verify real MAX viewport, renderer, audio, BackButton, haptics and challenge sharing;
-4. verify that the loaded release matches the expected release marker and not an old service-worker cache.
+For an operator-initiated rollback, dispatch the workflow with the known-good full 40-character SHA. The SHA must still satisfy the release-identity floor, be contained in `main`, and have a successful main CI run. Do not delete previous SHA-tagged images until the replacement release has passed public parity and the MAX real-device gate.
+
+## Post-deploy MAX real-device gate
+
+Automation cannot establish behavior inside the real MAX mobile client. After the Cloud.ru public parity smoke passes and before treating the release as MAX-review-ready:
+
+1. configure/confirm the Ofeliya MAX bot Mini App URL points to the Cloud.ru `/ofeliya/` URL;
+2. fully close and reopen the Mini App in the current MAX Android client;
+3. confirm the splash clears after `ready()`, vertical host swipes do not steal drag controls, and the viewport/safe layout survives rotation/resume;
+4. exercise one-hand, twin-stick, Pause/BackButton, audio after resume/video, haptics, and challenge sharing/share fallback;
+5. confirm the loaded release marker equals the deployed SHA and is not an old service-worker cache;
+6. record the device/MAX version and tested release SHA in the release notes or PR before MAX review.
+
+`ready()` and `disableVerticalSwipes()` are intentional shipped-SDK calls and must remain in the MAX adapter.

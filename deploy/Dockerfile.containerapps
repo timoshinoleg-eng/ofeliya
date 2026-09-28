@@ -36,6 +36,7 @@ LABEL org.opencontainers.image.source="https://github.com/timoshinoleg-eng/ofeli
 LABEL org.opencontainers.image.description="Ofeliya frontend for Cloud.ru Container Apps"
 COPY --from=build /app/dist/ /usr/share/nginx/html/
 COPY deploy/nginx.containerapps.conf /etc/nginx/nginx.conf
+COPY deploy/nginx.security-headers.conf /etc/nginx/ofeliya-security-headers.conf
 USER nginx
 EXPOSE 8080
 CMD ["nginx","-c","/etc/nginx/nginx.conf","-g","daemon off;"]

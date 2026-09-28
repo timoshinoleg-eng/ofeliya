@@ -15,6 +15,14 @@ import {
   PRIME_ATTACK_PACING,
   primeAttackPhasePacing,
 } from './BossPacing';
+import {
+  combatTelegraphCountdown,
+  combatTelegraphPulse,
+} from './CombatTelegraphLanguage';
+import {
+  drawDirectionalCombatTelegraph,
+  drawRadialCombatTelegraph,
+} from './CombatTelegraphRenderer';
 
 export type EnemyDamageSource = 'standard' | 'lysis';
 
@@ -325,8 +333,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       velocityY = (dy / d) * forwardSpeed * pursuitMul + (dx / d) * lateral + this.knockY;
     }
     (this.body as Phaser.Physics.Arcade.Body).setVelocity(velocityX, velocityY);
-    this.knockX *= 0.82;
-    this.knockY *= 0.82;
+    const knockDecay = Math.pow(0.82, delta / (1000 / 60));
+    this.knockX *= knockDecay;
+    this.knockY *= knockDecay;
 
     // Role motion is a second readability channel after silhouette:
     // antibody = drifting Y, T-killer = locked charge, macrophage = heavy membrane wobble.
@@ -435,25 +444,25 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (!this.bossTelegraph) this.bossTelegraph = this.scene.add.graphics().setDepth(8);
     const radius = primeAttackPhasePacing(this.bossPhase).radius;
     this.bossTelegraph.clear().setVisible(true).setPosition(this.x, this.y);
-    this.bossTelegraph.lineStyle(this.bossPhase === 2 ? 5 : 4, COLORS.red, 0.94);
-    this.bossTelegraph.strokeCircle(0, 0, radius);
-    this.bossTelegraph.lineStyle(2, COLORS.white, 0.62);
-    this.bossTelegraph.strokeCircle(0, 0, radius * 0.72);
-    this.bossTelegraph.lineStyle(1.5, COLORS.red, 0.42);
-    this.bossTelegraph.strokeCircle(0, 0, radius * 0.9);
-    this.bossTelegraph.fillStyle(COLORS.red, 0.075);
-    this.bossTelegraph.fillCircle(0, 0, radius);
+    drawRadialCombatTelegraph(
+      this.bossTelegraph,
+      radius,
+      'critical',
+      COLORS.red,
+      this.bossPhase === 2 ? 0.1 : 0.075
+    );
   }
 
   private updateBossPressureTelegraph(time: number): void {
     if (!this.bossTelegraph) return;
     const duration = Math.max(1, this.bossAttackUntil - this.bossAttackStartedAt);
     const progress = Phaser.Math.Clamp((time - this.bossAttackStartedAt) / duration, 0, 1);
+    const motion = combatTelegraphCountdown('critical', progress);
     this.bossTelegraph
       .setVisible(true)
       .setPosition(this.x, this.y)
-      .setScale(1.08 - progress * 0.08)
-      .setAlpha(0.42 + progress * 0.5);
+      .setScale(motion.scale)
+      .setAlpha(motion.alpha);
   }
 
   private updateRolePhase(
@@ -509,37 +518,37 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (this.kind === 'runner') {
       const laneStart = Math.max(18, this.radius + 5);
       const laneEnd = 154;
-      // A broad translucent lane survives phone downscaling; the bright center line keeps direction exact.
-      this.roleTelegraph.lineStyle(13, COLORS.cyan, 0.12);
-      this.roleTelegraph.beginPath();
-      this.roleTelegraph.moveTo(this.lockedDirX * laneStart, this.lockedDirY * laneStart);
-      this.roleTelegraph.lineTo(this.lockedDirX * laneEnd, this.lockedDirY * laneEnd);
-      this.roleTelegraph.strokePath();
-      this.roleTelegraph.lineStyle(3.2, COLORS.cyan, 0.92);
-      this.roleTelegraph.beginPath();
-      this.roleTelegraph.moveTo(this.lockedDirX * laneStart, this.lockedDirY * laneStart);
-      this.roleTelegraph.lineTo(this.lockedDirX * laneEnd, this.lockedDirY * laneEnd);
-      this.roleTelegraph.strokePath();
-      this.roleTelegraph.fillStyle(COLORS.white, 0.82);
-      this.roleTelegraph.fillCircle(this.lockedDirX * laneEnd, this.lockedDirY * laneEnd, 4.5);
-      this.roleTelegraph.lineStyle(1.8, COLORS.white, 0.68);
+      drawDirectionalCombatTelegraph(
+        this.roleTelegraph,
+        this.lockedDirX,
+        this.lockedDirY,
+        laneStart,
+        laneEnd,
+        'dangerous',
+        COLORS.cyan
+      );
+      // A compact origin marker separates "charge starts here" from projectile trails.
+      this.roleTelegraph.lineStyle(1.8, COLORS.white, 0.72);
       this.roleTelegraph.strokeCircle(0, 0, Math.max(19, this.radius + 8));
     } else {
-      this.roleTelegraph.lineStyle(3, COLORS.orange, 0.72);
-      this.roleTelegraph.strokeCircle(0, 0, Math.max(58, this.radius + 38));
-      this.roleTelegraph.lineStyle(1.5, COLORS.white, 0.42);
-      this.roleTelegraph.strokeCircle(0, 0, Math.max(42, this.radius + 22));
+      drawRadialCombatTelegraph(
+        this.roleTelegraph,
+        Math.max(58, this.radius + 38),
+        'dangerous',
+        COLORS.orange,
+        0.035
+      );
     }
   }
 
   private updateRoleTelegraph(time: number): void {
     if (!this.roleTelegraph) return;
-    const pulse = 0.72 + Math.sin(time * 0.025) * 0.2;
+    const motion = combatTelegraphPulse('dangerous', time);
     this.roleTelegraph
       .setVisible(true)
       .setPosition(this.x, this.y)
-      .setAlpha(pulse)
-      .setScale(0.94 + (1 - pulse) * 0.16);
+      .setAlpha(motion.alpha)
+      .setScale(motion.scale);
   }
 
   /** Hide pooled enemy presentation before the object is reused by another stage. */

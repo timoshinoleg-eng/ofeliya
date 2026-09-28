@@ -5,10 +5,13 @@ import { readFileSync } from 'node:fs';
 const read = (path) => readFileSync(path, 'utf8');
 const index = read('index.html');
 const client = read('src/systems/ScoreClient.ts');
+const sfx = read('src/systems/Sfx.ts');
 const botConfig = read('bot/config.mjs');
 const botRuntime = read('bot/runtime.mjs');
 const caddy = read('deploy/Caddyfile.ofeliya');
 const nginx = read('deploy/nginx.conf');
+const nginxContainerApps = read('deploy/nginx.containerapps.conf');
+const nginxSecurityHeaders = read('deploy/nginx.security-headers.conf');
 const dockerfile = read('deploy/Dockerfile');
 const compose = read('deploy/compose.production.yml');
 const runtimeConfig = read('public/runtime-config.js');
@@ -16,6 +19,8 @@ const serviceWorker = read('public/sw.js');
 const envExample = read('deploy/ofeliya.env.example');
 const deployScript = read('deploy/deploy-cloudru.sh');
 const main = read('src/main.ts');
+const deployWorkflow = read('.github/workflows/deploy-cloudru.yml');
+const stampRelease = read('scripts/stamp-release.mjs');
 
 const runtimePos = index.indexOf('./runtime-config.js');
 const maxBridgePos = index.indexOf('https://st.max.ru/js/max-web-app.js');
@@ -35,12 +40,18 @@ assert.ok(main.indexOf('await boot();') < main.lastIndexOf('retryPendingScores()
 assert.match(caddy, /handle_path \/ofeliya\/\*/, 'Caddy must strip /ofeliya/ before forwarding to static nginx');
 assert.match(caddy, /path \/ofeliya\/runtime-config\.js/, 'Caddy must expose runtime config under /ofeliya/');
 assert.doesNotMatch(caddy, /handle_path \/hub\/\*/, 'Ofeliya must not claim Hub production routes');
-assert.match(botConfig, /shared \? value\('HUB_BOT_USERNAME'\)/, 'shared mode may explicitly reuse the Hub bot username');
+assert.doesNotMatch(botConfig, /HUB_|BOT_TOKEN\)\s*:\s*''/, 'Ofeliya bot config must not inherit Hub/Chatbot24 identity');
 assert.doesNotMatch(botRuntime, /HUB_BOT_WEBHOOK_/, 'Ofeliya webhook config must not fall back to Hub settings');
+assert.match(botRuntime, /OFELIYA_BOT_MODE must be dedicated/, 'production must reject shared bot ownership');
 assert.match(botRuntime, /\/ofeliya\/bot\/webhook/, 'Ofeliya webhook path must be namespaced');
 
 assert.match(nginx, /location \/api\/\s*\{[\s\S]*proxy_pass http:\/\/ofeliya-score:8787;/, 'nginx must proxy score API to score service');
 assert.match(nginx, /location = \/api\/ref\s*\{[\s\S]*limit_except GET/, 'legacy unauthenticated referral writes must be blocked in production');
+assert.match(nginx, /location \/audio\/\s*\{[\s\S]*max-age=31536000, immutable/, 'release-versioned audio must be immutable at nginx');
+assert.match(nginxContainerApps, /location \/ofeliya\/audio\/\s*\{[\s\S]*max-age=31536000, immutable/, 'container app path must preserve immutable audio caching');
+assert.match(sfx, /RELEASE_SHA/, 'audio requests must include immutable release identity');
+assert.match(sfx, /audioAssetUrl\(MANIFEST\[name\]\.file\)/, 'SFX fetches must use the release-versioned URL helper');
+assert.match(sfx, /audioAssetUrl\(track\)/, 'music fetches must use the release-versioned URL helper');
 assert.match(dockerfile, /mkdir -p \/app\/server\/data && chown -R node:node \/app\/server/, 'score image must create a node-writable persistent data mountpoint');
 assert.match(dockerfile, /CMD \["node", "server\/index\.mjs"\]/, 'score image must be runnable without a compose command override');
 assert.match(dockerfile, /server\/telegram-share\.mjs/, 'score image must package Telegram share runtime module');
@@ -50,26 +61,107 @@ assert.match(compose, /image: ofeliya-runtime:\$\{OFELIYA_RELEASE:\?OFELIYA_RELE
 assert.match(compose, /image: ofeliya-static:\$\{OFELIYA_RELEASE:\?OFELIYA_RELEASE is required\}/, 'static image must use an explicit immutable release tag');
 assert.match(compose, /image: ofeliya-score:\$\{OFELIYA_RELEASE:\?OFELIYA_RELEASE is required\}/, 'score image must use an explicit immutable release tag');
 assert.match(compose, /OFELIYA_ENV_FILE:-\/opt\/ofeliya\/\.env/, 'production services must default to an Ofeliya-specific env file');
-assert.doesNotMatch(compose, /env_file:\s*\/opt\/hub\/\.env/, 'Ofeliya must not read Hub runtime secrets');
+assert.doesNotMatch(compose, /\/opt\/hub|HUB_BOT_/, 'Ofeliya must not read Hub runtime secrets');
 assert.match(compose, /VITE_MAX_BOT_USERNAME: \$\{OFELIYA_BOT_USERNAME:\?OFELIYA_BOT_USERNAME is required;/, 'client build must require an explicit Ofeliya bot username');
 assert.match(compose, /MAX_BOT_TOKEN=.*\$\$OFELIYA_MAX_BOT_TOKEN/, 'score service must verify MAX initData with the app-specific Ofeliya token');
 assert.match(compose, /OFELIYA_MAX_BOT_TOKEN: \$\{OFELIYA_MAX_BOT_TOKEN:-\}/, 'score container must receive the resolved verification token');
-const dedicatedMode = deployScript.match(/\n  dedicated\)([\s\S]*?)\n    ;;/)?.[1] ?? '';
-const sharedMode = deployScript.match(/\n  shared\)([\s\S]*?)\n    ;;/)?.[1] ?? '';
-assert.match(dedicatedMode, /OFELIYA_MAX_BOT_TOKEN="\$\{OFELIYA_MAX_BOT_TOKEN:-\$\{OFELIYA_BOT_TOKEN:-\}\}"/, 'dedicated mode may use its own bot token for MAX verification');
-assert.doesNotMatch(sharedMode, /OFELIYA_MAX_BOT_TOKEN/, 'shared mode must not use the Hub bot token for MAX verification');
+assert.match(
+  deployScript,
+  /OFELIYA_MAX_BOT_TOKEN="\$\{OFELIYA_MAX_BOT_TOKEN:-\$\{OFELIYA_BOT_TOKEN:-\}\}"/,
+  'dedicated deployment may use its own bot token for MAX verification'
+);
+assert.match(deployScript, /OFELIYA_BOT_MODE:-dedicated/, 'dedicated bot ownership must be the deployment default');
+assert.doesNotMatch(deployScript, /HUB_BOT_|\/opt\/hub/, 'deployment must not inherit Hub/Chatbot24 identity');
 assert.match(compose, /GAME_URL=.*\$\$OFELIYA_GAME_URL/, 'score service must publish Ofeliya links, not Hub links');
 assert.match(compose, /ofeliya-score-data:\/app\/server\/data/, 'score store must stay on a named persistent volume');
 assert.match(compose, /score:[\s\S]*healthcheck:[\s\S]*127\.0\.0\.1:8787\/health/, 'score service must expose a healthcheck');
 assert.match(compose, /static:[\s\S]*depends_on:[\s\S]*score:[\s\S]*condition: service_healthy/, 'static nginx must wait for a healthy score service');
-assert.match(compose, /external: true[\s\S]*OFELIYA_SHARED_NETWORK:-quiz-battle_default/, 'production services must join the explicitly configured external network');
+assert.match(compose, /external: true[\s\S]*OFELIYA_SHARED_NETWORK:\?OFELIYA_SHARED_NETWORK is required/, 'production services must require an explicitly configured Ofeliya network');
 
 assert.match(envExample, /OFELIYA_BOT_TOKEN=/, 'production env template must require a dedicated Ofeliya token');
 assert.match(envExample, /OFELIYA_MAX_BOT_TOKEN=/, 'production env template must require an app-specific MAX verification token');
-assert.match(envExample, /OFELIYA_GAME_URL=https:\/\/games\.example\.ru\/ofeliya\//, 'production env template must document the /ofeliya/ Mini App URL');
+assert.match(envExample, /OFELIYA_BOT_MODE=dedicated/, 'production env template must require dedicated bot ownership');
+assert.match(envExample, /OFELIYA_BOT_USERNAME=id402806822924_5_bot/, 'production env template must identify the canonical MAX bot');
+assert.match(envExample, /OFELIYA_GAME_URL=https:\/\/ofeliya\.freeveol\.dpdns\.org\/ofeliya\//, 'production env template must document the canonical Mini App URL');
+assert.doesNotMatch(envExample, /\/opt\/hub|quiz\.chatbot24\.su/, 'production env template must not reference legacy Hub/Chatbot24 infrastructure');
 assert.match(runtimeConfig, /const release = 'ofeliya-[^']+';/, 'runtime config must carry an explicit release id');
 assert.match(serviceWorker, /const VERSION = 'ofeliya-__OFELIYA_RELEASE__';/, 'service worker cache must be unique to the immutable release');
 assert.match(serviceWorker, /const CACHE_PREFIX = 'ofeliya-';/, 'service worker cache cleanup must be Ofeliya-scoped');
 assert.match(serviceWorker, /key\.startsWith\(CACHE_PREFIX\) && !key\.startsWith\(VERSION\)/, 'service worker must not delete caches owned by other apps on the same origin');
+
+assert.equal(
+  (dockerfile.match(/ARG VITE_TELEGRAM_APP_SHORT_NAME=/g) ?? []).length,
+  1,
+  'Telegram build arg must be declared exactly once'
+);
+assert.match(
+  stampRelease,
+  /VITE_RELEASE_SHA must be an explicit 40-character git SHA/,
+  'release stamping must fail closed without an immutable SHA'
+);
+assert.doesNotMatch(
+  stampRelease,
+  /VITE_RELEASE_SHA \|\| ['"]dev['"]/,
+  'release stamping must not silently fall back to dev'
+);
+for (const marker of ['indexSha256', 'serviceWorkerSha256', 'runtimeConfigSha256']) {
+  assert.match(stampRelease, new RegExp(marker), `release metadata must include ${marker}`);
+}
+assert.match(deployWorkflow, /Public HTTPS parity smoke/, 'deploy must run external parity verification');
+assert.match(deployWorkflow, /sha256sum "\$tmp\/index\.html"/, 'deploy must hash live index.html');
+assert.match(deployWorkflow, /sha256sum "\$tmp\/sw\.js"/, 'deploy must hash live service worker');
+assert.match(deployWorkflow, /sha256sum "\$tmp\/runtime-config\.js"/, 'deploy must hash live runtime config');
+assert.match(deployWorkflow, /strict-transport-security/, 'deploy must verify HSTS');
+assert.match(
+  deployWorkflow,
+  /Require successful main CI for selected SHA[\s\S]*run\.event === 'push'[\s\S]*run\.conclusion === 'success'/,
+  'manual deployment must still require a successful main push CI run'
+);
+assert.match(
+  deployWorkflow,
+  /Capture current production release for rollback[\s\S]*release\.json/,
+  'deployment must capture the currently live immutable rollback SHA'
+);
+assert.match(
+  deployWorkflow,
+  /Roll back failed release[\s\S]*"deploy \$PREVIOUS_SHA"/,
+  'failed rollout/parity must redeploy the captured previous SHA'
+);
+assert.match(
+  deployWorkflow,
+  /Verify rollback release[\s\S]*actual.*PREVIOUS_SHA/,
+  'rollback must be externally verified before the failed workflow exits'
+);
+assert.match(
+  deployWorkflow,
+  /Fail deployment after rollback/,
+  'rollback recovery must not turn a failed release green'
+);
+assert.match(caddy, /Strict-Transport-Security/, 'versioned edge config must enable HSTS');
+for (const [name, source] of [
+  ['nginx', nginx],
+  ['container-apps nginx', nginxContainerApps],
+]) {
+  assert.match(source, /server_tokens off;/, `${name} must suppress server version disclosure`);
+  const includes = source.match(/include \/etc\/nginx\/ofeliya-security-headers\.conf;/g) ?? [];
+  assert.ok(includes.length >= 5, `${name} must apply shared security headers to all public surfaces`);
+}
+for (const marker of [
+  'Strict-Transport-Security',
+  'X-Content-Type-Options',
+  'Referrer-Policy',
+  'Permissions-Policy',
+  'Content-Security-Policy',
+  'https://st.max.ru',
+  'frame-ancestors',
+]) {
+  assert.match(
+    nginxSecurityHeaders,
+    new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+    `shared nginx headers must include ${marker}`
+  );
+}
+assert.doesNotMatch(nginxSecurityHeaders, /telegram\.org/, 'nginx Telegram origins stay deferred');
+assert.doesNotMatch(caddy, /telegram\.org/, 'Telegram origins stay deferred until the Telegram production phase');
 
 console.log('production deployment contract: ok');

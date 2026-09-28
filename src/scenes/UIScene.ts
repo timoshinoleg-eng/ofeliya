@@ -16,6 +16,7 @@ import { BUTTON, SCRIM } from '../ui/tokens';
 import { HUD } from '../ui/hudTokens';
 import { getEvolutionDef } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
+import { assessRunIdentity } from '../game/RunIdentity';
 import { Joystick } from '../game/Joystick';
 import { DualMoveControls } from '../game/DualMoveControls';
 import { getLegendaryDefinition, type LegendaryId } from '../game/LegendarySystem';
@@ -33,7 +34,12 @@ import {
 import { PlatformBridge } from '../platform';
 import { Sfx } from '../systems/Sfx';
 import { VideoInterstitial, type VideoInterstitialId } from '../systems/VideoInterstitial';
-import { submitDailyRunScoreDetailed, submitRunScore, type DailySubmitStatus } from '../systems/ScoreClient';
+import {
+  submitDailyRunScoreDetailed,
+  submitRunScore,
+  type DailySubmitStatus,
+  type RunTokenGrant,
+} from '../systems/ScoreClient';
 import { createFixedSeedDuel, submitDuelAttempt, trackDuelEvent } from '../systems/DuelClient';
 import { clearDailyIntent, readDailyIntent, resolveDailyResultBranch } from '../game/DailyRunIntent';
 import { OnboardingState, type OnboardingStepId } from '../systems/onboardingState';
@@ -1873,12 +1879,14 @@ export class UIScene extends Phaser.Scene {
       now: Date.now(),
     });
     const duelChallenge = this.registry.get('duelChallenge') as DuelChallengeSnapshot | null | undefined;
+    const runGrant =
+      (this.registry.get('runTokenGrant') as RunTokenGrant | null | undefined) ?? null;
     if (dailyBranch === 'daily' && dailyTicket) {
       this.preVideoDailyScore = submitDailyRunScoreDetailed(res, PlatformBridge, dailyTicket);
     } else if (dailyBranch === 'inactive' && duelChallenge) {
       this.preVideoDuelAttempt = submitDuelAttempt(duelChallenge.challengeId, res, PlatformBridge);
     } else if (dailyBranch === 'inactive' && !duelChallenge) {
-      this.preVideoScore = submitRunScore(res, PlatformBridge);
+      this.preVideoScore = submitRunScore(res, PlatformBridge, runGrant);
     }
     const id: VideoInterstitialId = res.win ? 'victory' : 'defeat';
     let rendered = false;
@@ -1957,7 +1965,12 @@ export class UIScene extends Phaser.Scene {
     const compact = H < 650;
     const c = this.add.container(0, 0).setName('ofeliya-result').setDepth(110);
 
-    c.add(this.add.rectangle(W / 2, H / 2, W, H, SCRIM.result.color, SCRIM.result.alpha).setInteractive());
+    c.add(
+      this.add
+        .rectangle(W / 2, H / 2, W, H, SCRIM.result.color, SCRIM.result.alpha)
+        .setName('ofeliya-result-scrim')
+        .setInteractive()
+    );
     if (res.win && this.textures.exists('cinematic-victory')) {
       c.add(
         this.add
@@ -2052,25 +2065,24 @@ export class UIScene extends Phaser.Scene {
     );
 
     detailY += compact ? 23 : 27;
-    const bloodstreamBuild = res.stageBuilds.bloodstream
-      ? this.buildSummary(res.stageBuilds.bloodstream.stacks)
-      : '';
-    const heartBuild = res.stageBuilds.heart ? this.buildSummary(res.stageBuilds.heart.stacks) : '';
-    const stageBuildText = [
-      bloodstreamBuild ? `КРОВОТОК: ${bloodstreamBuild}` : '',
-      heartBuild ? `СЕРДЦЕ: ${heartBuild}` : '',
-    ]
-      .filter(Boolean)
-      .join('  →  ');
+    const runIdentity = assessRunIdentity(res);
+    const identitySignals =
+      runIdentity.signals.length > 0 ? runIdentity.signals.join(' · ') : 'базовая конфигурация';
     c.add(
       this.add
-        .text(W / 2, detailY, `ШТАММ: ${stageBuildText || this.buildSummary(res.stacks) || 'базовый штамм'}`, {
-          fontFamily: FONT,
-          fontSize: compact ? '9px' : '10px',
-          color: '#8f9ab7',
-          align: 'center',
-          wordWrap: { width: W - 42 },
-        })
+        .text(
+          W / 2,
+          detailY,
+          `ПРОФИЛЬ ШТАММА: ${runIdentity.shortLabel} · ${identitySignals}`,
+          {
+            fontFamily: FONT,
+            fontSize: compact ? '9px' : '10px',
+            fontStyle: runIdentity.focused ? 'bold' : 'normal',
+            color: runIdentity.focused ? '#b8f3ff' : '#8f9ab7',
+            align: 'center',
+            wordWrap: { width: W - 42 },
+          }
+        )
         .setOrigin(0.5)
         .setResolution(2)
     );
@@ -2172,7 +2184,9 @@ export class UIScene extends Phaser.Scene {
         }
       });
     } else {
-      const submission = this.preVideoScore ?? submitRunScore(res, PlatformBridge);
+      const runGrant =
+        (this.registry.get('runTokenGrant') as RunTokenGrant | null | undefined) ?? null;
+      const submission = this.preVideoScore ?? submitRunScore(res, PlatformBridge, runGrant);
       this.preVideoScore = null;
       void submission.then((score) => {
         if (!scoreStatus.active) return;
@@ -2319,6 +2333,7 @@ export class UIScene extends Phaser.Scene {
         res.legendaryIds.length > 0
           ? ` Легендарные: ${res.legendaryIds.map((id) => getLegendaryDefinition(id).title).join(', ')}.`
           : '';
+      const identityShare = ` Профиль штамма: ${runIdentity.label}.`;
       const modeShare = ranked
         ? ''
         : dailyIntent
@@ -2330,8 +2345,8 @@ export class UIScene extends Phaser.Scene {
               : ' Режим: НАПРЯЖЕНИЕ.';
       const dailySuffix = dailyIntent ? buildDailyShareSuffix({ timeMs: res.timeMs }) : '';
       const shareText = (res.win
-        ? `OFELIYA / STRAIN-0 завершила кампанию за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare}${legendaryShare}`
-        : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${evoShare}${legendaryShare}`
+        ? `OFELIYA / STRAIN-0 завершила кампанию за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${identityShare}${evoShare}${legendaryShare}`
+        : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${identityShare}${evoShare}${legendaryShare}`
       ).trim() + (dailySuffix ? `\n\n${dailySuffix}` : '');
 
       if (challengeTarget || legacyChallengeCreatable) {

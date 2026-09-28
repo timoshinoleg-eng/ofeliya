@@ -7,6 +7,7 @@ const index = read('index.html');
 const main = read('src/main.ts');
 const botConfig = read('bot/config.mjs');
 const botRuntime = read('bot/runtime.mjs');
+const maxPlatform = read('src/platform/MaxPlatform.ts');
 const caddy = read('deploy/Caddyfile.ofeliya');
 const compose = read('deploy/compose.production.yml');
 const deployScript = read('deploy/deploy-cloudru.sh');
@@ -25,7 +26,8 @@ assert.ok(runtimePos >= 0, 'index must load runtime-config.js');
 assert.ok(maxBridgePos > runtimePos, 'runtime config must run before MAX Bridge');
 assert.match(index, /OFELIYA: STRAIN ZERO/, 'release document must identify Strain Zero');
 assert.match(index, /ofeliya-strain-zero-main-qa[.]onrender[.]com/, 'legacy Render host must be detected');
-assert.match(index, /https:\/\/quiz[.]chatbot24[.]su\/ofeliya\//, 'legacy Render launch must move to Cloud.ru');
+assert.match(index, /https:\/\/ofeliya[.]freeveol[.]dpdns[.]org\/ofeliya\//, 'legacy Render launch must move to canonical Ofeliya production');
+assert.doesNotMatch(index, /quiz[.]chatbot24[.]su/, 'Ofeliya launch HTML must not reference the retired Chatbot24 host');
 assert.match(index, /target[.]hash = window[.]location[.]hash/, 'Render cutover must preserve MAX WebAppData fragment');
 assert.match(
   main,
@@ -47,25 +49,34 @@ assert.match(
 assert.match(releaseSource, /VITE_RELEASE_SHA/, 'client release identity must come from the build SHA');
 assert.match(caddy, /handle_path \/ofeliya\/\*/, 'Ofeliya must own /ofeliya/ namespace');
 assert.doesNotMatch(caddy, /handle_path \/hub\/\*/, 'Ofeliya must not claim Hub routes');
-assert.match(botConfig, /shared \? value\('HUB_BOT_USERNAME'\)/, 'shared mode may explicitly reuse the Hub bot username');
+assert.doesNotMatch(botConfig, /HUB_|BOT_TOKEN\)\s*:\s*''/, 'Ofeliya bot config must not inherit Hub/Chatbot24 identity');
 assert.doesNotMatch(botRuntime, /HUB_BOT_WEBHOOK_/, 'Ofeliya webhook config must never inherit Hub webhook settings');
-assert.match(botRuntime, /Shared MAX bot mode must not start/, 'shared mode must refuse a second webhook process');
+assert.match(botRuntime, /OFELIYA_BOT_MODE must be dedicated/, 'production must reject shared bot ownership');
 assert.match(botRuntime, /\/ofeliya\/bot\/webhook/, 'webhook must use Ofeliya namespace');
+assert.match(maxPlatform, /ready\?: \(\) => unknown/, 'MAX adapter must expose WebAppReady capability');
+assert.match(maxPlatform, /disableVerticalSwipes\?: \(\) => unknown/, 'MAX adapter must expose native swipe suppression');
+assert.match(maxPlatform, /wa\.ready\?\.\(\)/, 'MAX adapter must signal WebAppReady');
+assert.match(maxPlatform, /wa\.disableVerticalSwipes\?\.\(\)/, 'MAX adapter must disable shell vertical swipes');
+assert.match(maxPlatform, /navigator\.share/, 'MAX adapter must retain browser share fallback for partial bridges');
 assert.match(compose, /OFELIYA_ENV_FILE:-\/opt\/ofeliya\/\.env/, 'compose must use isolated Ofeliya env');
 assert.match(compose, /profiles: \["dedicated-bot"\]/, 'Ofeliya webhook service must be opt-in only');
-assert.match(compose, /OFELIYA_BOT_ENV_FILE:-\/opt\/hub\/\.env/, 'shared mode must read the existing Hub bot env explicitly');
+assert.doesNotMatch(compose, /\/opt\/hub|HUB_BOT_/, 'Ofeliya compose must never read Hub runtime secrets');
 
 assert.doesNotMatch(compose, /HUB_(?:EXTRA_CA_CERT|SHARED_NETWORK)/, 'compose must not depend on Hub env names');
 assert.match(compose, /OFELIYA_EXTRA_CA_CERT/, 'compose must use Ofeliya CA path variable');
 assert.match(compose, /OFELIYA_SHARED_NETWORK/, 'compose must use Ofeliya network variable');
 assert.match(deployScript, /COMPOSE_PROJECT="ofeliya"/, 'Cloud.ru rollout must pin Compose project to ofeliya');
-assert.match(deployScript, /BOT_MODE="\$\{OFELIYA_BOT_MODE:-shared\}"/, 'shared MAX bot mode must be the production default');
-assert.match(deployScript, /compose --profile dedicated-bot stop bot/, 'shared rollout must keep the Ofeliya webhook process stopped');
+assert.match(deployScript, /BOT_MODE="\$\{OFELIYA_BOT_MODE:-dedicated\}"/, 'dedicated Ofeliya bot mode must be the production default');
+assert.doesNotMatch(deployScript, /HUB_BOT_|\/opt\/hub/, 'rollout must not inherit Hub/Chatbot24 bot state');
+assert.match(deployScript, /compose --profile dedicated-bot up -d bot/, 'dedicated rollout must start the Ofeliya webhook process');
 
 assert.match(deployScript, /docker compose -p "\$\{COMPOSE_PROJECT\}"/, 'all rollout compose calls must use the pinned project');
 assert.match(deployScript, /APP_ROOT\}\/current/, 'legacy release layout must deploy through /opt/ofeliya/current');
-assert.match(envExample, /OFELIYA_SHARED_NETWORK=quiz-battle_default/, 'env example must declare shared network explicitly');
-assert.match(envExample, /OFELIYA_EXTRA_CA_CERT=\/opt\/quiz-battle\/certs\/ca-certificates\.crt/, 'env example must declare CA path explicitly');
+assert.match(envExample, /OFELIYA_BOT_MODE=dedicated/, 'env example must declare dedicated bot ownership');
+assert.match(envExample, /OFELIYA_BOT_USERNAME=id402806822924_5_bot/, 'env example must identify the canonical OFELIYA MAX bot');
+assert.match(envExample, /OFELIYA_GAME_URL=https:\/\/ofeliya\.freeveol\.dpdns\.org\/ofeliya\//, 'env example must identify canonical production URL');
+assert.match(envExample, /OFELIYA_SHARED_NETWORK=deploy_ofeliya/, 'env example must declare the dedicated Ofeliya network');
+assert.match(envExample, /OFELIYA_EXTRA_CA_CERT=\/opt\/ofeliya\/certs\/ca-certificates\.crt/, 'env example must use an Ofeliya-owned CA path');
 assert.match(compose, /VITE_MAX_BOT_NAME:\s*\$\{OFELIYA_BOT_USERNAME:\?/, 'Strain Zero bot name must be injected at build time');
 assert.match(
   compose,
@@ -102,13 +113,18 @@ assert.match(serviceWorker, /ofeliya-__OFELIYA_RELEASE__/, 'service worker cache
 assert.match(releaseStamp, /dist\/release\.json/, 'release stamping must emit a public immutable release identity');
 assert.match(
   releaseStamp,
-  /process\.env\.VITE_RELEASE_SHA \|\| 'dev'/,
-  'bundle and post-build release stamping must use the same fallback'
+  /VITE_RELEASE_SHA must be an explicit 40-character git SHA/,
+  'post-build stamping must require an immutable release identity'
 );
 assert.doesNotMatch(
   releaseStamp,
-  /process\.env\.GITHUB_SHA|dev-\$\{pkg\.version/,
-  'post-build stamping must not invent a release identity that Vite did not compile'
+  /VITE_RELEASE_SHA \|\| ['"]dev['"]|process\.env\.GITHUB_SHA|dev-\$\{pkg\.version/,
+  'post-build stamping must not invent or silently downgrade release identity'
+);
+assert.match(
+  releaseSource,
+  /import\.meta\.env\.PROD[\s\S]*Production build requires VITE_RELEASE_SHA/,
+  'compiled production bundle must fail closed without the same release SHA'
 );
 assert.match(
   deployWorkflow,
