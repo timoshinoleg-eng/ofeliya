@@ -333,8 +333,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       velocityY = (dy / d) * forwardSpeed * pursuitMul + (dx / d) * lateral + this.knockY;
     }
     (this.body as Phaser.Physics.Arcade.Body).setVelocity(velocityX, velocityY);
-    this.knockX *= 0.82;
-    this.knockY *= 0.82;
+    const knockDecay = Math.pow(0.82, delta / (1000 / 60));
+    this.knockX *= knockDecay;
+    this.knockY *= knockDecay;
 
     // Role motion is a second readability channel after silhouette:
     // antibody = drifting Y, T-killer = locked charge, macrophage = heavy membrane wobble.
