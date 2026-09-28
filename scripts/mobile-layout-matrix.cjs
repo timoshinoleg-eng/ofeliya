@@ -23,12 +23,16 @@ async function assertCompactResumeMenu(browser) {
   await ctx.addInitScript(({ width, height }) => {
     localStorage.setItem('ofeliya_save_v1', JSON.stringify({ muted: true, runs: 1 }));
     sessionStorage.clear();
+    window.__matrixViewport = { width, height };
     window.WebApp = {
       platform: 'android',
       version: '26.20.0',
       initData: 'signed-resume-layout-matrix',
       initDataUnsafe: { user: { id: 42, first_name: 'Resume', last_name: 'Matrix' } },
-      getViewportSize: async () => ({ width: String(width), height: String(height) }),
+      getViewportSize: async () => ({
+        width: String(window.__matrixViewport.width),
+        height: String(window.__matrixViewport.height),
+      }),
       BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} },
       HapticFeedback: { impactOccurred() {}, notificationOccurred() {} },
     };
@@ -130,7 +134,8 @@ async function assertCompactResumeMenu(browser) {
     await ctx.addInitScript(({ width, height }) => {
       localStorage.setItem('ofeliya_save_v1', JSON.stringify({ muted: true, runs: 1 }));
       sessionStorage.clear();
-      window.WebApp = {
+      window.__matrixViewport = { width, height };
+    window.WebApp = {
         platform: 'android',
         version: '26.20.0',
         initData: 'signed-layout-matrix',
@@ -138,7 +143,10 @@ async function assertCompactResumeMenu(browser) {
           user: { id: 42, first_name: 'QA', last_name: 'Matrix' },
           start_param: 'sz1_s_2n9c_26_4_9_l',
         },
-        getViewportSize: async () => ({ width: String(width), height: String(height) }),
+        getViewportSize: async () => ({
+        width: String(window.__matrixViewport.width),
+        height: String(window.__matrixViewport.height),
+      }),
         shareMaxContent: async () => {},
         BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} },
         HapticFeedback: { impactOccurred() {}, notificationOccurred() {} },
@@ -323,7 +331,10 @@ async function assertCompactResumeMenu(browser) {
     if (size.width === 390 && size.height === 844) {
       // Reproduce messenger rotation/viewport contraction while the result screen is open.
       // The same result container must be laid out again for the new logical viewport.
-      await page.evaluate(() => window.__game.scale.resize(320, 568));
+      await page.evaluate(async () => {
+        window.__matrixViewport = { width: 320, height: 568 };
+        await window.__viewportManager.sync();
+      });
       await sleep(220);
       const resizedResult = await page.evaluate(() => {
         const ui = window.__game.scene.getScene('UI');
