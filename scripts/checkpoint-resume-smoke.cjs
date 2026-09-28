@@ -134,6 +134,19 @@ async function startFresh(ctx, page, seed) {
     const fresh = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) || 'null'), KEY);
     assert(fresh?.schemaVersion === 1, 'fresh run did not create checkpoint', fresh);
 
+    const lifecycleFlush = await page.evaluate((key) => {
+      const gs = window.__game.scene.getScene('Game');
+      gs.runState.run.kills = 17;
+      gs.runState.stage.kills = 17;
+      window.dispatchEvent(new Event('pagehide'));
+      return JSON.parse(localStorage.getItem(key) || 'null');
+    }, KEY);
+    assert(
+      lifecycleFlush?.runState?.run?.kills === 17,
+      'pagehide did not flush the latest safe checkpoint',
+      lifecycleFlush
+    );
+
     const prepared = await page.evaluate((key) => {
       const game = window.__game;
       game.scene.pause('Game');
