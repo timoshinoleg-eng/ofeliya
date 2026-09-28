@@ -124,6 +124,8 @@ jobs:
         run: npm run release:check
 
       - name: Typecheck and build
+        env:
+          VITE_RELEASE_SHA: ${{ github.sha }}
         run: npm run build
 
   browser-smoke:
