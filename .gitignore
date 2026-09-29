@@ -13,3 +13,16 @@ dist/
 
 # отдельный продукт со своим репозиторием: github.com/timoshinoleg-eng/hub
 hub/
+.agents
+.cluster
+.openclaw-attachments
+.openclaw
+.opencode
+config
+handoff-system
+ofelia-pilot
+skills
+.finance-tool-capability.json
+.jw-proxy-capability.json
+.legal-proxy-capability.json
+.tyc-proxy-capability.json
