@@ -54,7 +54,7 @@ const DEPTH = 50;
 const ONBOARDING_COPY: Record<OnboardingStepId, { title: string; body: string }> = {
   move: { title: 'Шаг 1 / 5 — Движение', body: 'Веди джойстик, чтобы двигаться.' },
   autoAttack: { title: 'Шаг 2 / 5 — Автоогонь', body: 'Оружие стреляет само. Держись рядом с врагами.' },
-  pickup: { title: 'Шаг 3 / 5 — RNA', body: 'Собирай RNA после уничтожения иммунных клеток — это опыт для мутаций.' },
+  pickup: { title: 'Шаг 3 / 5 — РНК', body: 'Собирай РНК после уничтожения иммунных клеток — это опыт для мутаций.' },
   levelUp: { title: 'Шаг 4 / 5 — Мутация', body: 'Выбери мутацию, чтобы усилить штамм.' },
   infect: { title: 'Шаг 5 / 5 — Заражение', body: 'Иммунные клетки атакуют тебя. Крупную клетку-хозяина не стреляй: войди в неё и удерживай заражение до цитолиза.' },
 };
@@ -130,6 +130,9 @@ export class UIScene extends Phaser.Scene {
   private lastCombo = 0;
 
   private modal: Phaser.GameObjects.Container | null = null;
+  private modalViewport: { width: number; height: number } | null = null;
+  private resultOverlay: Phaser.GameObjects.Container | null = null;
+  private resultViewport: { width: number; height: number } | null = null;
   private transitionOverlay: Phaser.GameObjects.Container | null = null;
   private pauseOverlay: Phaser.GameObjects.Container | null = null;
   private manualPaused = false;
@@ -158,6 +161,9 @@ export class UIScene extends Phaser.Scene {
     this.overShown = false;
     this.uiBlocked = false;
     this.modal = null;
+    this.modalViewport = null;
+    this.resultOverlay = null;
+    this.resultViewport = null;
     this.transitionOverlay = null;
     this.pauseOverlay = null;
     this.manualPaused = false;
@@ -327,9 +333,9 @@ export class UIScene extends Phaser.Scene {
       this.joystick = new Joystick(this, () => this.uiBlocked);
     }
 
-    this.scale.on('resize', this.layout, this);
+    this.scale.on('resize', this.onUiResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      this.scale.off('resize', this.layout, this);
+      this.scale.off('resize', this.onUiResize, this);
       this.rnaPickupTimer = null;
       this.contextHintTimer = null;
       this.contextHintKey = null;
@@ -992,6 +998,36 @@ export class UIScene extends Phaser.Scene {
       .setWordWrapWidth(Math.min(W - 52, 332));
   }
 
+  private onUiResize(): void {
+    this.layout();
+    this.fitBlockingOverlay(this.modal, this.modalViewport, 'ofeliya-levelup-scrim');
+    this.fitBlockingOverlay(this.resultOverlay, this.resultViewport, 'ofeliya-result-scrim');
+  }
+
+  private fitBlockingOverlay(
+    container: Phaser.GameObjects.Container | null,
+    source: { width: number; height: number } | null,
+    scrimName: string
+  ): void {
+    if (!container?.active || !source || source.width <= 0 || source.height <= 0) return;
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const scale = Math.min(W / source.width, H / source.height);
+    const offsetX = (W - source.width * scale) / 2;
+    const offsetY = (H - source.height * scale) / 2;
+    container.setPosition(offsetX, offsetY).setScale(scale);
+
+    const scrim = container.getByName(scrimName) as Phaser.GameObjects.Rectangle | null;
+    if (!scrim) return;
+    const localW = W / scale;
+    const localH = H / scale;
+    scrim
+      .setPosition((W / 2 - offsetX) / scale, (H / 2 - offsetY) / scale)
+      .setSize(localW, localH)
+      .setDisplaySize(localW, localH);
+    if (scrim.input) scrim.setInteractive();
+  }
+
   private hudMetrics(W: number): {
     xpX: number;
     xpW: number;
@@ -1231,8 +1267,9 @@ export class UIScene extends Phaser.Scene {
     const legendaryReward = gs.legendaryRewardPending;
     const c = this.add.container(0, 0).setDepth(100);
     this.modal = c;
+    this.modalViewport = { width: W, height: H };
 
-    const dim = this.add.rectangle(W / 2, H / 2, W, H, SCRIM.levelUp.color, SCRIM.levelUp.alpha).setInteractive();
+    const dim = this.add.rectangle(W / 2, H / 2, W, H, SCRIM.levelUp.color, SCRIM.levelUp.alpha).setName('ofeliya-levelup-scrim').setInteractive();
     c.add(dim);
 
     const ring = this.add
@@ -1873,6 +1910,7 @@ export class UIScene extends Phaser.Scene {
   private hideModal(): void {
     this.modal?.destroy();
     this.modal = null;
+    this.modalViewport = null;
     this.modalOpen = false;
     this.uiBlocked = false;
     this.flushPendingBossReveal();
@@ -1987,6 +2025,8 @@ export class UIScene extends Phaser.Scene {
     const H = this.scale.height;
     const compact = H < 650;
     const c = this.add.container(0, 0).setName('ofeliya-result').setDepth(110);
+    this.resultOverlay = c;
+    this.resultViewport = { width: W, height: H };
 
     c.add(
       this.add
