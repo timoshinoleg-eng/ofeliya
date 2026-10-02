@@ -211,6 +211,7 @@ const PRODUCT_EVENTS = new Set([
   'first_mutation_opened', 'first_mutation_selected',
   'host_cell_approached', 'infection_started', 'infection_interrupted',
   'infection_resumed', 'first_lysis', 'second_host_cell_completed_without_hint',
+  'onboarding_step', 'onboarding_exit',
 ]);
 
 function emptyStore() {
