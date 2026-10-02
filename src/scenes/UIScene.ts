@@ -44,6 +44,7 @@ import { createFixedSeedDuel, submitDuelAttempt, trackDuelEvent } from '../syste
 import { clearDailyIntent, readDailyIntent, resolveDailyResultBranch } from '../game/DailyRunIntent';
 import { OnboardingState, type OnboardingStepId } from '../systems/onboardingState';
 import { buildDailyShareSuffix, recordDailyResult } from '../systems/DailyHistory';
+import { trackProductEvent } from '../systems/AnalyticsClient';
 import { SaveSystem } from '../systems/SaveSystem';
 import type { DailyRunTicket } from '../systems/DailyRunClient';
 import type { GameScene } from './GameScene';
@@ -53,9 +54,9 @@ const DEPTH = 50;
 const ONBOARDING_COPY: Record<OnboardingStepId, { title: string; body: string }> = {
   move: { title: 'Шаг 1 / 5 — Движение', body: 'Веди джойстик, чтобы двигаться.' },
   autoAttack: { title: 'Шаг 2 / 5 — Автоогонь', body: 'Оружие стреляет само. Держись рядом с врагами.' },
-  pickup: { title: 'Шаг 3 / 5 — Биомасса', body: 'Собери биомассу с уничтоженных врагов.' },
+  pickup: { title: 'Шаг 3 / 5 — RNA', body: 'Собирай RNA после уничтожения иммунных клеток — это опыт для мутаций.' },
   levelUp: { title: 'Шаг 4 / 5 — Мутация', body: 'Выбери мутацию, чтобы усилить штамм.' },
-  pause: { title: 'Шаг 5 / 5 — Пауза', body: 'Кнопка паузы в правом верхнем углу.' },
+  infect: { title: 'Шаг 5 / 5 — Заражение', body: 'Иммунные клетки атакуют тебя. Крупную клетку-хозяина не стреляй: войди в неё и удерживай заражение до цитолиза.' },
 };
 
 function compactHudNumber(value: number): string {
@@ -142,6 +143,7 @@ export class UIScene extends Phaser.Scene {
   private onboardingTitle: Phaser.GameObjects.Text | null = null;
   private onboardingBody: Phaser.GameObjects.Text | null = null;
   private onboardingLastXp = 0;
+  private onboardingLastHostCells = 0;
   private onboardingArmed = false;
 
   constructor() {
@@ -173,6 +175,7 @@ export class UIScene extends Phaser.Scene {
     this.onboardingTitle = null;
     this.onboardingBody = null;
     this.onboardingLastXp = 0;
+    this.onboardingLastHostCells = 0;
     this.onboardingArmed = false;
 
     const W = this.scale.width;
@@ -1030,20 +1033,34 @@ export class UIScene extends Phaser.Scene {
     this.onboarding = new OnboardingState();
     this.onboarding.start();
     this.onboardingLastXp = run.xp;
+    this.onboardingLastHostCells = run.hostCellsInfected;
   }
 
   private tickOnboarding(run: RunSnapshot): void {
     const ob = this.onboarding;
     if (!ob || !ob.active) return;
+    const beforeStep = ob.currentStep?.id ?? null;
     if (run.xp > this.onboardingLastXp) {
       ob.notifyPickup();
       this.onboardingLastXp = run.xp;
+    }
+    if (run.hostCellsInfected > this.onboardingLastHostCells) {
+      ob.notifyInfection();
+      this.onboardingLastHostCells = run.hostCellsInfected;
     }
     const gameLive = this.scene.isActive('Game') && !this.scene.isPaused('Game');
     if (gameLive) {
       const dt = Math.min(0.05, Math.max(0, this.game.loop.delta / 1000));
       const joy = this.registry.get('joy') as { x: number; y: number } | undefined;
       ob.tick(dt, joy);
+    }
+    const afterStep = ob.currentStep?.id ?? null;
+    if (beforeStep && beforeStep !== afterStep) {
+      void trackProductEvent('onboarding_step', PlatformBridge, {
+        step: beforeStep,
+        outcome: 'completed',
+        runTimeMs: Math.round(run.timeMs),
+      });
     }
     if (ob.completed) {
       this.persistOnboarding();
@@ -1091,6 +1108,13 @@ export class UIScene extends Phaser.Scene {
         .setResolution(2)
         .setInteractive({ useHandCursor: true });
       skip.on('pointerup', () => {
+        const step = this.onboarding?.currentStep?.id ?? 'unknown';
+        const run = this.registry.get('run') as RunSnapshot | undefined;
+        void trackProductEvent('onboarding_exit', PlatformBridge, {
+          reason: 'skip',
+          step,
+          runTimeMs: Math.round(run?.timeMs ?? 0),
+        });
         this.onboarding?.skip();
         this.persistOnboarding();
       });
@@ -1131,7 +1155,6 @@ export class UIScene extends Phaser.Scene {
     this.manualPaused = true;
     this.uiBlocked = true;
     this.suspendContextHint();
-    this.onboarding?.notifyPause();
     this.resetControls();
     this.scene.pause('Game');
     PlatformBridge.haptic('light');
@@ -2302,6 +2325,11 @@ export class UIScene extends Phaser.Scene {
     this.button(c, 'ЕЩЁ ОДИН ЦИКЛ', W / 2, y, true, () => {
       const gameScene = this.gs;
       if (!gameScene) return;
+      void trackProductEvent('replay', PlatformBridge, {
+        runSeed: res.runSeed,
+        priorResult: res.win ? 'win' : 'death',
+        timeMs: Math.round(res.timeMs),
+      });
       // Result Game is paused. Treat shutdown as a barrier: only start the fresh run after Phaser
       // has fully completed the old Game teardown. UI stays alive until that point, so the
       // SceneManager always has an active owner for the queued transition.
@@ -2358,7 +2386,10 @@ export class UIScene extends Phaser.Scene {
         void PlatformBridge.shareResult(legacyText, link ?? undefined).then((ok) => {
           if (!ok) {
             this.toast(c, 'Нативный шаринг недоступен в этом клиенте');
-          } else if (!link && PlatformBridge.kind === 'max') {
+          } else {
+            void trackProductEvent('share', PlatformBridge, { kind: 'challenge', runSeed: res.runSeed, daily: Boolean(dailyIntent) });
+          }
+          if (ok && !link && PlatformBridge.kind === 'max') {
             this.toast(c, 'Ссылка вызова не настроена');
           }
         });
@@ -2368,6 +2399,7 @@ export class UIScene extends Phaser.Scene {
       if (!duelCreatable) {
         void PlatformBridge.shareResult(shareText).then((ok) => {
           if (!ok) this.toast(c, 'Нативный шаринг недоступен в этом клиенте');
+          else void trackProductEvent('share', PlatformBridge, { kind: dailyIntent ? 'daily-result' : 'result', runSeed: res.runSeed, daily: Boolean(dailyIntent) });
         });
         return;
       }
@@ -2389,6 +2421,7 @@ export class UIScene extends Phaser.Scene {
           'Тот же забег, сложность СТАНДАРТ и управление. Сможешь пройти кампанию быстрее?';
         void PlatformBridge.shareResult(duelText, link).then((ok) => {
           this.toast(c, ok ? 'ДУЭЛЬ СОЗДАНА · ссылка готова' : 'Нативный шаринг недоступен в этом клиенте');
+          if (ok) void trackProductEvent('share', PlatformBridge, { kind: 'duel', runSeed: res.runSeed, daily: false });
         });
       });
     }, 'ofeliya-result-share');
