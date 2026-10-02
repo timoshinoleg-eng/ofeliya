@@ -15,6 +15,7 @@ export interface RunSnapshot {
   timeMs: number;
   stageTimeMs: number;
   kills: number;
+  hostCellsInfected: number;
   combo: number;
   bossHp: number;
   bossMax: number;
