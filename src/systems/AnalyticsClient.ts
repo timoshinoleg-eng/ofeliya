@@ -24,7 +24,9 @@ export type ProductEvent =
   | 'infection_interrupted'
   | 'infection_resumed'
   | 'first_lysis'
-  | 'second_host_cell_completed_without_hint';
+  | 'second_host_cell_completed_without_hint'
+  | 'onboarding_step'
+  | 'onboarding_exit';
 
 export type ProductEventProps = Record<string, string | number | boolean>;
 
