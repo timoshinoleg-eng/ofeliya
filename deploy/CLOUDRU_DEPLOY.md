@@ -140,6 +140,15 @@ checks fail if either messenger origin disappears.
 BotFather still has to point the Telegram Main Mini App to:
 `https://ofeliya.freeveol.dpdns.org/ofeliya/`.
 
+### Telegram API egress on Cloud.ru
+
+The current production VM resolves `api.telegram.org` to an address that is not reachable from
+its network, while `149.154.167.220:443` is reachable and presents the valid Telegram TLS endpoint.
+Telegram-enabled containers therefore receive an explicit `extra_hosts` mapping controlled by
+`OFELIYA_TELEGRAM_API_IP` (current fallback: `149.154.167.220`). Both the score service and
+the dedicated Telegram bot use the same mapping so prepared sharing, notifications, and long polling
+follow one egress path. Revalidate the address before removing or changing this override.
+
 ### Versioned Caddy edge sync
 
 The Cloud.ru host keeps the site label/TLS wrapper in local deploy/Caddyfile.dedicated, while
