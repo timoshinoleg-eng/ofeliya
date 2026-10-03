@@ -188,9 +188,12 @@ for local_file in "${DEDICATED_LOCAL_FILE}" "${CADDY_LOCAL_FILE}"; do
 done
 
 compose() {
+  # This deploy script may be delivered over stdin by a restricted SSH gateway.
+  # Never let docker compose inherit that stream or it can consume the remaining
+  # shell program and make a partial rollout look successful.
   docker compose -p "${COMPOSE_PROJECT}" \
     --env-file "${RELEASE_ENV_FILE}" \
-    "${compose_files[@]}" "$@"
+    "${compose_files[@]}" "$@" < /dev/null
 }
 
 retry() {
