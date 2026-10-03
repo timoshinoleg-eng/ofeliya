@@ -9,6 +9,8 @@ const pinned = telegramApiRequestOptions({
 assert.equal(pinned.host, '149.154.167.220');
 assert.equal(pinned.servername, 'api.telegram.org');
 assert.equal(pinned.headers.Host, 'api.telegram.org');
+assert.equal(pinned.minVersion, 'TLSv1.2');
+assert.equal(pinned.maxVersion, 'TLSv1.2');
 assert.equal(pinned.path, '/bot123:test/getMe');
 
 const direct = telegramApiRequestOptions({

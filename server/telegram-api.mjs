@@ -21,6 +21,8 @@ export function telegramApiRequestOptions({
     host: pinnedIp || TELEGRAM_HOST,
     port: 443,
     servername: TELEGRAM_HOST,
+    minVersion: 'TLSv1.2',
+    maxVersion: 'TLSv1.2',
     method: 'POST',
     path: '/bot' + token + '/' + method,
     headers: {
