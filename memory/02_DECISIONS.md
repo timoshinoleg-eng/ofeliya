@@ -27,5 +27,3 @@
 ## Versioned edge policy 03.10
 - Production Caddy site/TLS wrapper may stay host-local, but OFELIYA route/security policy must be rendered from versioned deploy/Caddyfile.ofeliya on every release.
 - Edge changes are validated before activation; reload failure restores the previous local dedicated file and fails the deployment.
-
-[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]

@@ -150,5 +150,3 @@ candidate with the running Caddy binary, updates the bind-mounted file in place,
 If validation or reload fails, the previous edge file is restored and the release fails closed.
 This keeps public CSP/security headers in lockstep with the immutable application release instead
 of leaving an old local edge policy active.
-
-[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]

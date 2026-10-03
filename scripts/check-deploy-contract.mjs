@@ -18,6 +18,7 @@ const runtimeConfig = read('public/runtime-config.js');
 const serviceWorker = read('public/sw.js');
 const envExample = read('deploy/ofeliya.env.example');
 const deployScript = read('deploy/deploy-cloudru.sh');
+const caddyRenderer = read('deploy/render-caddy-dedicated.sh');
 const main = read('src/main.ts');
 const deployWorkflow = read('.github/workflows/deploy-cloudru.yml');
 const stampRelease = read('scripts/stamp-release.mjs');
@@ -82,6 +83,12 @@ assert.match(deployScript, /TELEGRAM_ENABLED=0/, 'Telegram production wiring mus
 assert.match(deployScript, /Telegram wiring incomplete: TG_BOT_TOKEN is missing/, 'Telegram deploy must fail closed without its token');
 assert.match(deployScript, /Telegram wiring incomplete: VITE_TG_BOT_USERNAME is missing/, 'Telegram deploy must fail closed without its username');
 assert.match(deployScript, /--profile telegram up -d telegram-bot/, 'Telegram deploy must start its dedicated service when configured');
+assert.match(deployScript, /sync_caddy_edge\(\)/, 'deployment must synchronize the versioned Caddy edge policy');
+assert.match(deployScript, /caddy validate/, 'edge config must be validated before activation');
+assert.match(deployScript, /caddy reload/, 'validated edge config must be reloaded into the running Caddy service');
+assert.match(deployScript, /restoring previous edge config/, 'failed Caddy reload must restore the previous edge config');
+assert.match(caddyRenderer, /redir \/ \/ofeliya\/ 308/, 'dedicated renderer must preserve the canonical root redirect');
+
 assert.doesNotMatch(deployScript, /HUB_BOT_|\/opt\/hub/, 'deployment must not inherit Hub/Chatbot24 identity');
 assert.match(compose, /GAME_URL=.*\$\$OFELIYA_GAME_URL/, 'score service must publish Ofeliya links, not Hub links');
 assert.match(compose, /ofeliya-score-data:\/app\/server\/data/, 'score store must stay on a named persistent volume');
