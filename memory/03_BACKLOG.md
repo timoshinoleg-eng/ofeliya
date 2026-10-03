@@ -44,7 +44,7 @@
 - [x] Add Telegram WebApp SDK/Web origins to production CSP.
 - [x] Add dedicated optional Telegram bot service and fail-closed deploy wiring.
 - [x] Fix `/start <payload>` dispatch and add regression contract.
-- [ ] Supply dedicated `TG_BOT_TOKEN` and `VITE_TG_BOT_USERNAME` (plus optional Mini App short name).
+- [x] Dedicated Telegram bot identity supplied (`ofeliya_game_bot`); production secret staging pending final deploy gate.
 - [ ] Configure BotFather Main Mini App URL to `https://ofeliya.freeveol.dpdns.org/ofeliya/`.
 - [ ] Deploy Telegram-enabled main SHA and run real Telegram Android/iOS/Web acceptance.
 
@@ -52,4 +52,4 @@
 - [x] Diagnose #158 parity rollback: stale host-local Caddyfile.dedicated.
 - [x] Add deterministic dedicated-Caddy renderer and CI contract.
 - [x] Add validate/reload/restore edge synchronization to deployment.
-- [ ] Merge hotfix, redeploy Telegram-capable CSP, then continue BotFather/token wiring.
+- [x] Merge hotfix #159 and restore versioned Caddy rollout.\n- [x] Diagnose Cloud.ru Telegram API egress; add explicit reachable endpoint fallback.\n- [ ] Stage production Telegram secret/config after egress PR is green, then deploy and run real Telegram acceptance.
