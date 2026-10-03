@@ -30,6 +30,8 @@
       NODE_ENV: production
       TG_BOT_TOKEN: ${TG_BOT_TOKEN:-}
       GAME_URL: ${OFELIYA_TELEGRAM_GAME_URL:-}
+    extra_hosts:
+      - "api.telegram.org:${OFELIYA_TELEGRAM_API_IP:-149.154.167.220}"
     volumes:
       - ofeliya-score-data:/app/server/data
     restart: unless-stopped
@@ -87,6 +89,8 @@
       OFELIYA_MAX_BOT_TOKEN: ${OFELIYA_MAX_BOT_TOKEN:-}
     env_file:
       - ${OFELIYA_ENV_FILE:-/opt/ofeliya/.env}
+    extra_hosts:
+      - "api.telegram.org:${OFELIYA_TELEGRAM_API_IP:-149.154.167.220}"
     volumes:
       - ofeliya-score-data:/app/server/data
     restart: unless-stopped
