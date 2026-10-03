@@ -138,6 +138,67 @@ function browserDriver() {
     return ui.modalOpen && game.scene.isPaused('Game');
   });
 
+  // Regression: rotating/resizing while the mutation modal is open must keep every
+  // interactive choice inside the logical viewport and the scrim must still block it fully.
+  await page.evaluate(() => {
+    window.WebApp.getViewportSize = async () => ({ width: '568', height: '320' });
+  });
+  await page.setViewportSize({ width: 568, height: 320 });
+  await page.evaluate(async () => window.__viewportManager.sync());
+  await page.waitForFunction(
+    () => window.__game.scale.width === 568 && window.__game.scale.height === 320
+  );
+  const resizedModal = await page.evaluate(() => {
+    const ui = window.__game.scene.getScene('UI');
+    const root = ui.modal;
+    if (!root) return { missing: true };
+    const interactive = [];
+    for (const child of root.list ?? []) {
+      if (child?.input?.enabled && typeof child.getBounds === 'function') {
+        interactive.push(child.getBounds());
+      }
+      for (const nested of child?.list ?? []) {
+        if (nested?.input?.enabled && typeof nested.getBounds === 'function') {
+          interactive.push(nested.getBounds());
+        }
+      }
+    }
+    const scrim = root.getByName?.('ofeliya-levelup-scrim');
+    const sb = scrim?.getBounds?.();
+    return {
+      missing: false,
+      scale: [ui.scale.width, ui.scale.height],
+      interactive: interactive.map((b) => ({
+        left: b.left, right: b.right, top: b.top, bottom: b.bottom,
+      })),
+      scrim: sb ? { left: sb.left, right: sb.right, top: sb.top, bottom: sb.bottom } : null,
+    };
+  });
+  if (
+    resizedModal.missing ||
+    resizedModal.scale?.[0] !== 568 ||
+    resizedModal.scale?.[1] !== 320 ||
+    !resizedModal.scrim ||
+    resizedModal.scrim.left > 1 ||
+    resizedModal.scrim.top > 1 ||
+    resizedModal.scrim.right < 567 ||
+    resizedModal.scrim.bottom < 319 ||
+    resizedModal.interactive.some(
+      (b) => b.left < -1 || b.right > 569 || b.top < -1 || b.bottom > 321
+    )
+  ) {
+    throw new Error('level-up resize contract failed: ' + JSON.stringify(resizedModal));
+  }
+
+  await page.evaluate(() => {
+    window.WebApp.getViewportSize = async () => ({ width: '390', height: '844' });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(async () => window.__viewportManager.sync());
+  await page.waitForFunction(
+    () => window.__game.scale.width === 390 && window.__game.scale.height === 844
+  );
+
   const result = await page.evaluate(() => {
     const game = window.__game;
     const gs = game.scene.getScene('Game');

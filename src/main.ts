@@ -220,7 +220,12 @@ function installAppOpenTracking(): void {
       return;
     }
     sent = true;
-    void trackProductEvent('app_open', PlatformBridge, { release: RELEASE_MARKER });
+    const startParam = PlatformBridge.getStartParam();
+    const referralOpen = typeof startParam === 'string' && /^[tmbv]_[A-Za-z0-9-]{1,48}$/.test(startParam);
+    void trackProductEvent('app_open', PlatformBridge, { release: RELEASE_MARKER, referralOpen });
+    if (referralOpen) {
+      void trackProductEvent('referral', PlatformBridge, { action: 'open' });
+    }
   };
 
   // The MAX bridge is intentionally async. Install the listener before the first viewport wait

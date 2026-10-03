@@ -13,14 +13,14 @@
  *   2. autoAttack — accumulate gameplay time (no event required)
  *   3. pickup     — collect at least one biomass pickup (notified by UI)
  *   4. levelUp    — accept one mutation choice (notified by UI)
- *   5. pause      — open the pause menu (notified by UI)
+ *   5. infect     — complete one host-cell infection/lysis (notified by UI)
  *
  * The sequence advances when the per-step objective is met. Counters reset on
  * every transition. The host persists `tutorialDone` via SaveSystem when the
  * machine finishes or is skipped.
  */
 
-export type OnboardingStepId = 'move' | 'autoAttack' | 'pickup' | 'levelUp' | 'pause';
+export type OnboardingStepId = 'move' | 'autoAttack' | 'pickup' | 'levelUp' | 'infect';
 
 export interface OnboardingStep {
   id: OnboardingStepId;
@@ -39,7 +39,7 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
   { id: 'autoAttack', thresholdSeconds: 1.5 },
   { id: 'pickup', thresholdCount: 1 },
   { id: 'levelUp', thresholdCount: 1 },
-  { id: 'pause', thresholdCount: 1 },
+  { id: 'infect', thresholdCount: 1 },
 ];
 
 /** Deadband below which a move vector counts as "not moving". */
@@ -55,7 +55,7 @@ export class OnboardingState {
   private autoAttackSeconds = 0;
   private pickups = 0;
   private levelUps = 0;
-  private pauses = 0;
+  private infections = 0;
 
   /** Activate the state machine — call once when the player opts in. */
   start(): void {
@@ -85,7 +85,7 @@ export class OnboardingState {
     this.autoAttackSeconds = 0;
     this.pickups = 0;
     this.levelUps = 0;
-    this.pauses = 0;
+    this.infections = 0;
   }
 
   get currentStep(): OnboardingStep | null {
@@ -128,7 +128,7 @@ export class OnboardingState {
         this.advance();
       }
     }
-    // pickup/levelUp/pause wait for explicit notifications; tick is a no-op.
+    // pickup/levelUp/infect wait for explicit notifications; tick is a no-op.
   }
 
   /** Notify the machine that the player collected a biomass pickup. */
@@ -141,9 +141,9 @@ export class OnboardingState {
     if (!this.advanceIfCurrent('levelUp', () => (this.levelUps += 1))) return;
   }
 
-  /** Notify the machine that the player opened the pause menu. */
-  notifyPause(): void {
-    if (!this.advanceIfCurrent('pause', () => (this.pauses += 1))) return;
+  /** Notify the machine that the player completed one host-cell infection/lysis. */
+  notifyInfection(): void {
+    if (!this.advanceIfCurrent('infect', () => (this.infections += 1))) return;
   }
 
   private advanceIfCurrent(id: OnboardingStepId, bump: () => void): boolean {
@@ -152,7 +152,7 @@ export class OnboardingState {
     if (!step || step.id !== id) return false;
     bump();
     if (step.thresholdCount !== undefined) {
-      const count = id === 'pickup' ? this.pickups : id === 'levelUp' ? this.levelUps : this.pauses;
+      const count = id === 'pickup' ? this.pickups : id === 'levelUp' ? this.levelUps : this.infections;
       if (count >= step.thresholdCount) this.advance();
     }
     return true;

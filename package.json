@@ -56,7 +56,9 @@
     "test:telegraphs": "node scripts/check-combat-telegraph-language.mjs",
     "test:run-identity": "node scripts/check-run-identity.mjs",
     "test:isolation": "node scripts/check-project-isolation.mjs",
-    "test:bundle-shape": "node scripts/check-build-shape.mjs"
+    "test:bundle-shape": "node scripts/check-build-shape.mjs",
+    "analytics:funnel": "node scripts/analyze-product-funnel.mjs",
+    "test:mobile-evidence": "node scripts/check-mobile-acceptance-evidence.mjs"
   },
   "dependencies": {
     "@maxhub/max-bot-api": "^0.3.1",

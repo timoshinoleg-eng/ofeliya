@@ -52,6 +52,10 @@ try {
     buildAnalyticsSubmission('first_enemy_hit', platform('max', 'signed-max'), { kind: 'swarm' }),
     { platform: 'max', initData: 'signed-max', event: 'first_enemy_hit', props: { kind: 'swarm' } }
   );
+  assert.deepEqual(
+    buildAnalyticsSubmission('onboarding_step', platform('max', 'signed-max'), { step: 'move', outcome: 'completed' }),
+    { platform: 'max', initData: 'signed-max', event: 'onboarding_step', props: { step: 'move', outcome: 'completed' } }
+  );
   assert.equal(buildAnalyticsSubmission('app_open', platform('max', '')), null);
 
   assert.equal(

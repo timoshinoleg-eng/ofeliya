@@ -84,8 +84,12 @@ function browserDriver() {
         speedScale: 1,
         eliteModifier: modifier,
       });
+      enemy.body.updateBounds();
       results.push({
         modifier,
+        logicalRadius: enemy.radius,
+        sourceRadius: enemy.body.radius,
+        collisionRadius: enemy.body.halfWidth,
         expectedSignature,
         signature: enemy.eliteVisualSignature,
         markerVisible: Boolean(enemy.eliteMarker?.visible),
@@ -108,6 +112,8 @@ function browserDriver() {
   }
   for (const row of contract) {
     if (
+      Math.abs(row.logicalRadius - row.collisionRadius) > 1.01 ||
+      row.collisionRadius <= row.sourceRadius ||
       row.signature !== row.expectedSignature ||
       !row.markerVisible ||
       !row.coronaVisible ||

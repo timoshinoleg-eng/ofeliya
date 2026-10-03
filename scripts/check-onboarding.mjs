@@ -2,7 +2,7 @@
 // (donor: ricardo-foundry/canvas-vampire-survivors src/tutorial.js, MIT).
 //
 // Covers: hold-threshold movement step (incl. deadzone + stuck-input guard),
-// time-accumulated auto-attack step, event-notified pickup/level-up/pause
+// time-accumulated auto-attack step, event-notified pickup/level-up/infection
 // steps that ignore foreign notifications, finish/skip lifecycle, and counter
 // reset on restart.
 
@@ -80,13 +80,13 @@ try {
   assert(a.currentStep?.id === 'levelUp', 'pickup notify advances');
 
   // --- step 4: level-up ---
-  a.notifyPause();
-  assert(a.currentStep?.id === 'levelUp', 'pause notify ignored during the levelUp step');
+  a.notifyInfection();
+  assert(a.currentStep?.id === 'levelUp', 'infection notify ignored during the levelUp step');
   a.notifyLevelUp();
-  assert(a.currentStep?.id === 'pause', 'levelUp notify advances');
+  assert(a.currentStep?.id === 'infect', 'levelUp notify advances');
 
-  // --- step 5: pause completes the machine ---
-  a.notifyPause();
+  // --- step 5: host-cell infection completes the machine ---
+  a.notifyInfection();
   assert(a.completed === true && a.active === false, 'finishes after the last step');
   a.notifyPickup();
   assert(a.completed === true, 'notifications after finish are no-ops');

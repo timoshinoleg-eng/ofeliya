@@ -37,6 +37,7 @@ import { Sfx } from '../systems/Sfx';
 import { StartupTrace } from '../systems/StartupTrace';
 import { VideoInterstitial } from '../systems/VideoInterstitial';
 import { loadDuelChallenge, trackDuelEvent } from '../systems/DuelClient';
+import { trackProductEvent } from '../systems/AnalyticsClient';
 
 export class MenuScene extends Phaser.Scene {
   private codexOverlay: Phaser.GameObjects.Container | null = null;
@@ -904,6 +905,7 @@ export class MenuScene extends Phaser.Scene {
           platform: PlatformBridge,
         });
         if (status === 'ok') {
+          void trackProductEvent('daily', PlatformBridge, { action: 'launch' });
           this.socialHub?.destroy();
           this.scene.start('Game');
         }

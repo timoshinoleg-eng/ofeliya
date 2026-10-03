@@ -1,64 +1,54 @@
-# HANDOFF — OFELIYA: STRAIN ZERO — 2026-09-29
+# HANDOFF — OFELIYA: STRAIN ZERO — 2026-10-02
 
-> Файл памяти (пилот). Прочитай меня и `01_STATE.md` перед задачей.
-> В конце сессии перепиши меня для следующего исполнителя.
-
-## Инструкция для принимающего агента
-
-Ты продолжаешь работу над OFELIYA: STRAIN ZERO.
-До начала работы прочитай: этот файл + `01_STATE.md` (+ `02_DECISIONS.md` при сомнениях).
-Факты бери из файлов — не проси пересказывать проект заново.
+> Прочитай этот файл и `01_STATE.md` перед следующей задачей. Факты — из репозитория.
 
 ## Текущая задача
 
-- Приёмка пилота памяти: PR #151 (`feat/donor-quick-wins` → `main`). Ветка = main + система памяти
-  (`memory/`, `AGENTS.md`, `opencode.json`; +269 строк) — кода игры не касается; квик-вины уже в main (PR #137, `5b74f66`).
-- Ночь 28→29.09: **тест-цикл B (OpenCode) пройден полностью** — `ctx stats` ✓ (context-mode v1.0.169),
-  чтение памяти без пересказов ✓, два прохода ревью со сменой модели (OFELIYA-CODE → BACKGROUND-REVIEW,
-  контекст сессии сохранён) ✓, профильные smoke-тесты зелёные ✓.
-- Итог ревью: 3/3 подтверждено; коррекция — регрессии в `UIScene` нет; рекомендация перезаписать память выполнена.
-- ✅ Приёмка завершена 29.09: PR #151 + `06_REVIEW` (PR #152) смержены в main — система памяти в `main`.
+Product validation sprint по приоритетам P0–P2: закрыть инструменты реальной mobile acceptance, улучшить первые 60 секунд, сделать продуктовую воронку измеримой и подготовить Daily/referral validation.
 
-## Состояние на момент передачи
+## Исходная точка
 
-- `origin/main` @ `808d866` (squash #151–#153: система памяти + внешние ревью);
-  `origin/feat/donor-quick-wins` @ `e5b6658` — историческая ветка пилота (не обновляется).
-- Worktree `ofeliya-audit-fixes` синхронизирован с `origin/main` (локальная ветка трекает `origin/main`); новые задачи — от свежего `main` (squash: старые ветки не fast-forward).
-- PR #151: **смержен** (squash `dc71cb2`); PR #152 (`06_REVIEW.md`) — squash `2df55bb`; CI был зелёный: build ✓, browser-smoke ✓, production-contract ✓.
-- Тесты на HEAD ветки (29.09): `test:onboarding` ✓, `test:daily-history` ✓, `test:comprehension` ✓
-  (6 вьюпортов; включает resume-сценарий; прогон независимо повторил ревьюер).
-- Версия: `0.4.1-rc.1`.
+- `origin/main` перед работой: `4bce5a0bdfd996cbda4447d1eefdfbdb2c9531bc`.
+- Рабочая ветка: `feat/product-validation-funnel-20261002`.
+- Не путать automated/browser validation с реальной MAX Android/iOS приёмкой: real-device 16/16 пока НЕ пройден.
 
-## Сделано в этой сессии (28→29.09, ночь, Honor)
+## Реализовано 02.10
 
-- Тест-цикл B: OpenCode 1.18.33 + OmniRoute (комбо `OFELIYA-CODE`, ревью — `BACKGROUND-REVIEW`).
-- Прогон 1 (OFELIYA-CODE): ветка = только память; квик-вины в main; риски — устаревшая память (исправлено), untracked-каталоги (в бэклог).
-- Прогон 2 (BACKGROUND-REVIEW, та же сессия): 3/3 подтверждено + коррекция (UIScene не затронут; `44599e0` — GameScene + расширение comprehension-смоука).
-- Обновлены 4 файла памяти (этот, 01_STATE, 02_DECISIONS, 03_BACKLOG) + коммит.
-- Пост-ревью (второе внешнее мнение, `space-bunny-free`): актуализированы ссылки/метрики; worktree переведён на main — правки PR #154 (детали в `06_REVIEW.md`).
+- Tutorial core loop: движение → автоогонь → RNA → мутация → заражение клетки-хозяина; pause больше не tutorial-step.
+- UI получает `hostCellsInfected` в `RunSnapshot`, step 5 завершается фактическим заражением.
+- Добавлены `onboarding_step`/`onboarding_exit` и продуктовые milestone events: `run_start`, `run_60s`, `boss1`, `heart`, `win/death`, `replay`, успешный `share`, `daily`, referral open.
+- Ограничен retry аналитики: после одной повторной попытки событие помечается exhausted на текущий scene generation, чтобы persistent network failure не создавал запрос каждый frame.
+- `scripts/analyze-product-funnel.mjs` + `npm run analytics:funnel`: core funnel, onboarding timing/exits, D1, referral open → run_start.
+- `scripts/check-mobile-acceptance-evidence.mjs` + `npm run test:mobile-evidence`: строгий 16/16 evidence gate Android/iOS.
+- `docs/PRODUCT_VALIDATION_2026-10.md`: процедура P0/P1/P2 и критерии.
 
-## Проверено / не проверено
+## Проверено
 
-- Проверено: состав ветки против main, смена модели с сохранением контекста, профильные smoke-тесты, CI PR.
-- Не проверено: реальные MAX-устройства (VIR-16); ChatGPT-вариант внешнего ревью (отложен).
+- `test:onboarding` ✓
+- `test:analytics` ✓
+- `server:test` 68/68 ✓
+- `test:comprehension` ✓, 6 mobile viewport, текущая ветка на отдельном Vite :5194
+- `test:result-actions` ✓ + checkpoint-resume ✓ на текущей ветке
+- `test:daily-cta` ✓
+- `npx tsc --noEmit` ✓
+- production build ✓ при явном `VITE_RELEASE_SHA` base SHA; release guard без SHA ожидаемо fail-closed
+- funnel CLI и mobile evidence validator проверены synthetic fixtures; это НЕ реальные продуктовые данные/evidence.
 
-## Режим проверки (для второго агента)
+## Следующие обязательные шаги
 
-- После merge: подтвердить, что в main появились `memory/*`, `AGENTS.md`, `opencode.json` (`git show --stat`).
-- Если трогаешь квик-вин код (onboarding / streak / hints): прогони три профильных смоука и проверь,
-  что сохранён resume-сценарий comprehension-смоука.
-- Открытые долги: `.gitignore` для служебных каталогов; Drive-зеркало памяти (блок A10a чек-листа).
+1. Дождаться/зафиксировать `test:social-hub` текущего прогона, затем финальный diff/check.
+2. Commit/push ветки и PR в `main`; дождаться CI.
+3. На реальных MAX Android + iOS пройти 16/16 и приложить evidence artifact.
+4. Провести небольшой наблюдаемый playtest первых 60 секунд; после появления данных запустить `analytics:funnel` и посмотреть узкие места.
+5. Реальный Daily invite test: sender → recipient open → run_start → result.
+6. Только после этого оценивать P2 creative по attributable referral opens/started runs, а не просмотрам.
 
-## Следующие шаги (в порядке приоритета)
+## Важное окружение
 
-1. Приёмка завершена полностью (PR #151–#154 в main).
-2. Этап 3 (HP): блок A чек-листа — клон/пул, OmniRoute/Cline, `ctx stats`.
-3. Внешний гейт `RELEASE_VALIDATION.md` §8 (реальные MAX Android/iOS) — 16 пунктов.
-4. Балансировка по полным прогонам (9+ минут; Heart timing — только плейтест).
+На `chatgpt-ops-1` был старый чужой Vite на `:5173`; он давал ложный timeout/старое поведение. Для этой ветки использован отдельный Vite `http://127.0.0.1:5194/`. Не интерпретировать тесты против :5173 как состояние этой ветки.
 
-## Обязанности в конце сессии
-
-1. Обнови `01_STATE.md` — только факты.
-2. Допиши решения в `02_DECISIONS.md`.
-3. Обнови `03_BACKLOG.md` — вычеркни сделанное, добавь новое.
-4. Перепиши этот файл для следующего исполнителя.
+## 03.10 audit follow-up
+- Historical audit commit 53ff997 is far behind current work and must not be treated as current source of truth.
+- D1 elite hitbox was revalidated as a false positive and locked by runtime smoke.
+- D2 viewport resize for blocking level-up/result overlays has an implementation + regression coverage on PR #157 branch.
+- Remaining P0 is still real MAX Android/iOS acceptance evidence.

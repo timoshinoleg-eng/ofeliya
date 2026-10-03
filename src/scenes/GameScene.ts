@@ -132,6 +132,7 @@ export class GameScene extends Phaser.Scene {
   private pendingHostCellHints: Array<{ type: HostCellHintType; slotIndex: number }> = [];
   private comprehensionEventsSent = new Set<ProductEvent>();
   private comprehensionEventsInFlight = new Set<ProductEvent>();
+  private comprehensionEventsExhausted = new Set<ProductEvent>();
   private comprehensionRetryCounts = new Map<ProductEvent, number>();
   private comprehensionGeneration = 0;
   private bullets!: Phaser.Physics.Arcade.Group;
@@ -305,6 +306,7 @@ export class GameScene extends Phaser.Scene {
     this.hostCellSlotsWithHint = new Set();
     this.pendingHostCellHints = [];
     this.comprehensionGeneration += 1;
+    this.comprehensionEventsExhausted.clear();
     if (!resume) this.clearComprehensionPresentationState();
     this.restoreComprehensionPresentationState();
     this.checkpointAccMs = 0;
@@ -470,6 +472,14 @@ export class GameScene extends Phaser.Scene {
     this.registry.set('runResult', null);
     this.registry.set('run', this.snapshot());
     this.saveCheckpointNow();
+    if (!resume) {
+      this.trackComprehensionOnce('run_start', {
+        runSeed: this.runSeed,
+        daily: this.dailyRun,
+        difficulty: this.difficulty.id,
+        controlMode: this.controlMode,
+      });
+    }
 
     // Stage 4 videos are lazy: never requested before an active run exists.
     VideoInterstitial.preload('defeat');
@@ -557,6 +567,14 @@ export class GameScene extends Phaser.Scene {
       this.applyRuntimeQuality(time);
     }
     this.runState.tick(delta);
+    if (!this.resumed && this.runState.run.timeMs >= 60_000) {
+      this.trackComprehensionOnce('run_60s', {
+        runSeed: this.runSeed,
+        timeMs: Math.round(this.runState.run.timeMs),
+        kills: this.runState.run.kills,
+        level: this.runState.stage.level,
+      });
+    }
     if (time >= this.visualDensityRefreshAt) {
       this.visualDensityRefreshAt = time + 90;
       this.visualEnemyDensity = this.enemies.countActive(true);
@@ -1894,7 +1912,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private trackComprehensionOnce(event: ProductEvent, props: ProductEventProps = {}): void {
-    if (this.comprehensionEventsSent.has(event) || this.comprehensionEventsInFlight.has(event)) return;
+    if (
+      this.comprehensionEventsSent.has(event) ||
+      this.comprehensionEventsInFlight.has(event) ||
+      this.comprehensionEventsExhausted.has(event)
+    ) return;
     const generation = this.comprehensionGeneration;
     this.comprehensionEventsInFlight.add(event);
     void trackProductEvent(event, PlatformBridge, props).then((delivered) => {
@@ -1907,7 +1929,11 @@ export class GameScene extends Phaser.Scene {
         return;
       }
       const retries = this.comprehensionRetryCounts.get(event) ?? 0;
-      if (retries >= 1) return;
+      if (retries >= 1) {
+        this.comprehensionEventsExhausted.add(event);
+        this.comprehensionRetryCounts.delete(event);
+        return;
+      }
       this.comprehensionRetryCounts.set(event, retries + 1);
       if (!this.scene.isActive('Game') && !this.scene.isPaused('Game')) return;
       this.time.delayedCall(900, () => {
@@ -1931,6 +1957,12 @@ export class GameScene extends Phaser.Scene {
           this.heartbeatPulse.reset();
           this.wave.startStage(event.stage);
           this.audio.setStage(event.stage.order, event.stage.theme.heartbeatMs);
+          if (event.stage.id === 'heart') {
+            this.trackComprehensionOnce('heart', {
+              runSeed: this.runSeed,
+              timeMs: Math.round(this.runState.run.timeMs),
+            });
+          }
           break;
         case 'milestone':
           this.milestones.show(event.milestone);
@@ -1962,6 +1994,12 @@ export class GameScene extends Phaser.Scene {
           break;
         }
         case 'boss-defeated':
+          if (event.stage.id === 'bloodstream') {
+            this.trackComprehensionOnce('boss1', {
+              runSeed: this.runSeed,
+              timeMs: Math.round(this.runState.run.timeMs),
+            });
+          }
           // Kill VFX/hit-stop are emitted by onEnemyDied; the director event owns lifecycle only.
           break;
         case 'stage-transition-requested':
@@ -2036,6 +2074,15 @@ export class GameScene extends Phaser.Scene {
       records,
     };
     this.registry.set('runResult', result);
+    void trackProductEvent(win ? 'win' : 'death', PlatformBridge, {
+      runSeed: this.runSeed,
+      timeMs: Math.round(run.timeMs),
+      stage: stage.id,
+      kills: run.kills,
+      hostCellsInfected: run.hostCellsInfected,
+      resumed: this.resumed,
+      daily: this.dailyRun,
+    });
     this.audio.onRunEnd(win);
     Sfx.play(win ? 'victory' : 'gameover');
     PlatformBridge.notify(win ? 'success' : 'error');
@@ -2576,6 +2623,7 @@ export class GameScene extends Phaser.Scene {
       timeMs: run.timeMs,
       stageTimeMs: stageProgress.timeMs,
       kills: run.kills,
+      hostCellsInfected: run.hostCellsInfected,
       combo: stageProgress.combo,
       bossHp: this.wave.boss?.hp ?? 0,
       bossMax: this.wave.boss?.maxHp ?? 0,
