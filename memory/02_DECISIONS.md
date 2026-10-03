@@ -27,3 +27,7 @@
 ## Versioned edge policy 03.10
 - Production Caddy site/TLS wrapper may stay host-local, but OFELIYA route/security policy must be rendered from versioned deploy/Caddyfile.ofeliya on every release.
 - Edge changes are validated before activation; reload failure restores the previous local dedicated file and fails the deployment.
+
+## Telegram TLS egress 04.10
+- Keep certificate verification and SNI for `api.telegram.org`; do not disable TLS verification to work around Cloud.ru egress.
+- Scope TLS 1.2 forcing to Telegram Bot API requests only. Do not change global Node TLS settings because MAX/VK and unrelated HTTPS traffic do not need this workaround.

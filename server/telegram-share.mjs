@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { telegramApiJson } from './telegram-api.mjs';
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org';
 const MAX_TEXT = 3000;
@@ -42,26 +43,39 @@ export async function saveTelegramPreparedMessage({
   userId,
   text,
   link,
-  fetchImpl = globalThis.fetch,
+  fetchImpl = null,
 }) {
-  if (!token || !/^\d+$/.test(String(userId ?? '')) || typeof fetchImpl !== 'function') return null;
+  if (!token || !/^\d+$/.test(String(userId ?? ''))) return null;
+  if (fetchImpl != null && typeof fetchImpl !== 'function') return null;
   const result = buildPreparedShareResult(text, link);
   if (!result) return null;
 
-  const response = await fetchImpl(`${TELEGRAM_API_BASE}/bot${token}/savePreparedInlineMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      user_id: Number(userId),
-      result,
-      allow_user_chats: true,
-      allow_group_chats: true,
-      allow_channel_chats: true,
-      allow_bot_chats: false,
-    }),
-  });
-  const body = await response.json().catch(() => null);
-  if (!response.ok || body?.ok !== true || typeof body?.result?.id !== 'string') return null;
+  const params = {
+    user_id: Number(userId),
+    result,
+    allow_user_chats: true,
+    allow_group_chats: true,
+    allow_channel_chats: true,
+    allow_bot_chats: false,
+  };
+
+  let responseOk = false;
+  let body = null;
+  if (fetchImpl) {
+    const response = await fetchImpl(`${TELEGRAM_API_BASE}/bot${token}/savePreparedInlineMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    responseOk = response.ok;
+    body = await response.json().catch(() => null);
+  } else {
+    const response = await telegramApiJson({ token, method: 'savePreparedInlineMessage', params });
+    responseOk = response.ok;
+    body = response.body;
+  }
+
+  if (!responseOk || body?.ok !== true || typeof body?.result?.id !== 'string') return null;
   return {
     id: body.result.id,
     expirationDate:

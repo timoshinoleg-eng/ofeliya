@@ -53,3 +53,9 @@
 - [x] Add deterministic dedicated-Caddy renderer and CI contract.
 - [x] Add validate/reload/restore edge synchronization to deployment.
 - [x] Merge hotfix #159 and restore versioned Caddy rollout.\n- [x] Diagnose Cloud.ru Telegram API egress; add explicit reachable endpoint fallback.\n- [ ] Stage production Telegram secret/config after egress PR is green, then deploy and run real Telegram acceptance.
+
+## Telegram API egress 04.10
+- [x] Pin reachable Telegram API IP in production Compose.
+- [x] Verify TLS certificate for `api.telegram.org` on the fallback IP.
+- [x] Add Telegram-only TLS 1.2 HTTPS transport for Bot API calls.
+- [ ] Deploy the transport fix and verify live long polling, menu button, `/start`, prepared sharing, and referral notification path.

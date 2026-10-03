@@ -65,3 +65,8 @@
 ## Telegram edge rollout fix 03.10
 - First production rollout of #158 correctly failed public parity and rolled application containers back to 56476c0: nginx had Telegram CSP, but local Caddyfile.dedicated remained MAX-only.
 - Hotfix branch fix/telegram-edge-caddy-rollout versions the edge route policy through a renderer and safe Caddy validate/reload path with local-config restoration on failure.
+
+## Telegram API transport 04.10
+- Cloud.ru production can TCP-connect to Telegram fallback `149.154.167.220`, but Node TLS 1.3 handshakes time out; TLS 1.2 succeeds with normal certificate validation for `api.telegram.org`.
+- Telegram Bot API traffic is isolated behind `server/telegram-api.mjs`, using SNI/Host `api.telegram.org`, the configured fallback IP, and TLS 1.2.
+- Long polling, prepared sharing, and referral notifications use the same transport; MAX/VK transports are unchanged.

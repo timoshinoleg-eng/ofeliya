@@ -19,6 +19,7 @@
 import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { telegramApiJson } from './telegram-api.mjs';
 
 const TG_TOKEN = process.env.TG_BOT_TOKEN ?? '';
 const GAME_URL = process.env.GAME_URL ?? '';
@@ -51,13 +52,14 @@ function saveUsers() {
 
 // ---------- Bot API ----------
 async function api(method, params = {}) {
-  const res = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/${method}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+  const response = await telegramApiJson({
+    token: TG_TOKEN,
+    method,
+    params,
+    timeoutMs: method === 'getUpdates' ? 60_000 : 10_000,
   });
-  const data = await res.json().catch(() => ({}));
-  if (!data.ok) throw new Error(`tg ${method}: ${data.description ?? res.status}`);
+  const data = response.body ?? {};
+  if (!response.ok || !data.ok) throw new Error(`tg ${method}: ${data.description ?? response.status}`);
   return data.result;
 }
 

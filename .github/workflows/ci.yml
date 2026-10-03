@@ -83,6 +83,9 @@ jobs:
       - name: Telegram bot command contract
         run: npm run test:telegram-bot
 
+      - name: Telegram API TLS transport contract
+        run: npm run test:telegram-api
+
       - name: Caddy edge rollout contract
         run: npm run test:caddy-edge
 

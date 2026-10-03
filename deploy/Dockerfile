@@ -13,6 +13,7 @@ ENV NODE_ENV=production
 RUN mkdir -p /app/server/data && chown -R node:node /app/server
 COPY --chown=node:node server/index.mjs ./server/index.mjs
 COPY --chown=node:node server/telegram-share.mjs ./server/telegram-share.mjs
+COPY --chown=node:node server/telegram-api.mjs ./server/telegram-api.mjs
 USER node
 CMD ["node", "server/index.mjs"]
 
@@ -21,6 +22,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 RUN mkdir -p /app/server/data && chown -R node:node /app/server
 COPY --chown=node:node server/bot.mjs ./server/bot.mjs
+COPY --chown=node:node server/telegram-api.mjs ./server/telegram-api.mjs
 USER node
 CMD ["node", "server/bot.mjs"]
 
