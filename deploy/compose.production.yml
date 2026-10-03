@@ -19,6 +19,24 @@
       quiz-battle:
         aliases: [ofeliya-bot]
 
+  telegram-bot:
+    profiles: ["telegram"]
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: telegram-bot
+    image: ofeliya-telegram-bot:${OFELIYA_RELEASE:?OFELIYA_RELEASE is required}
+    environment:
+      NODE_ENV: production
+      TG_BOT_TOKEN: ${TG_BOT_TOKEN:-}
+      GAME_URL: ${OFELIYA_TELEGRAM_GAME_URL:-}
+    volumes:
+      - ofeliya-score-data:/app/server/data
+    restart: unless-stopped
+    networks:
+      quiz-battle:
+        aliases: [ofeliya-telegram-bot]
+
   static:
     build:
       context: ..

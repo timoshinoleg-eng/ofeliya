@@ -211,6 +211,8 @@ jobs:
 
           grep -iq '^content-security-policy:.*https://st.max.ru' "$tmp/headers.txt" || { echo 'MAX CSP missing' >&2; exit 26; }
           grep -iq '^content-security-policy:.*frame-ancestors.*https://.*max.ru' "$tmp/headers.txt" || { echo 'MAX frame-ancestors missing' >&2; exit 27; }
+          grep -iq '^content-security-policy:.*https://telegram.org' "$tmp/headers.txt" || { echo 'Telegram SDK CSP missing' >&2; exit 31; }
+          grep -iq '^content-security-policy:.*frame-ancestors.*https://web.telegram.org' "$tmp/headers.txt" || { echo 'Telegram frame-ancestors missing' >&2; exit 32; }
           grep -iq '^referrer-policy:[[:space:]]*strict-origin-when-cross-origin' "$tmp/headers.txt" || { echo 'Referrer-Policy missing' >&2; exit 28; }
           grep -iq '^permissions-policy:.*camera=().*microphone=()' "$tmp/headers.txt" || { echo 'Permissions-Policy missing' >&2; exit 29; }
           grep -iq '^strict-transport-security:.*max-age=' "$tmp/headers.txt" || { echo 'HSTS missing' >&2; exit 30; }

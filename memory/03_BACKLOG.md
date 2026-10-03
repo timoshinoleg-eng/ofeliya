@@ -39,3 +39,11 @@
 - [x] Fix D2 resize with blocking UI: level-up/result overlays now fit the new viewport and scrims remain full-screen; level-up runtime smoke passed.
 - [ ] Keep D3 suspended-audio burst as a real-device acceptance check; do not refactor audio without reproduction.
 - [ ] Complete real MAX Android/iOS 16/16 evidence gate; browser smoke does not close P0.
+
+## Telegram release
+- [x] Add Telegram WebApp SDK/Web origins to production CSP.
+- [x] Add dedicated optional Telegram bot service and fail-closed deploy wiring.
+- [x] Fix `/start <payload>` dispatch and add regression contract.
+- [ ] Supply dedicated `TG_BOT_TOKEN` and `VITE_TG_BOT_USERNAME` (plus optional Mini App short name).
+- [ ] Configure BotFather Main Mini App URL to `https://ofeliya.freeveol.dpdns.org/ofeliya/`.
+- [ ] Deploy Telegram-enabled main SHA and run real Telegram Android/iOS/Web acceptance.

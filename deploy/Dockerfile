@@ -16,6 +16,14 @@ COPY --chown=node:node server/telegram-share.mjs ./server/telegram-share.mjs
 USER node
 CMD ["node", "server/index.mjs"]
 
+FROM node:22-alpine AS telegram-bot
+WORKDIR /app
+ENV NODE_ENV=production
+RUN mkdir -p /app/server/data && chown -R node:node /app/server
+COPY --chown=node:node server/bot.mjs ./server/bot.mjs
+USER node
+CMD ["node", "server/bot.mjs"]
+
 # Keep frontend build after runtime/score so Docker's legacy builder can
 # target backend images without executing the MAX release gate first.
 FROM node:22-alpine AS build

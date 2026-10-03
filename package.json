@@ -58,7 +58,8 @@
     "test:isolation": "node scripts/check-project-isolation.mjs",
     "test:bundle-shape": "node scripts/check-build-shape.mjs",
     "analytics:funnel": "node scripts/analyze-product-funnel.mjs",
-    "test:mobile-evidence": "node scripts/check-mobile-acceptance-evidence.mjs"
+    "test:mobile-evidence": "node scripts/check-mobile-acceptance-evidence.mjs",
+    "test:telegram-bot": "node scripts/check-telegram-bot.mjs"
   },
   "dependencies": {
     "@maxhub/max-bot-api": "^0.3.1",
