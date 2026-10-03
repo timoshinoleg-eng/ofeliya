@@ -2,6 +2,7 @@ import https from 'node:https';
 
 const TELEGRAM_HOST = 'api.telegram.org';
 const MAX_RESPONSE_BYTES = 1024 * 1024;
+const TELEGRAM_AGENT = new https.Agent({ keepAlive: true, timeout: 70_000 });
 
 function safeApiIp(value) {
   if (typeof value !== 'string' || value.trim() === '') return '';
@@ -23,6 +24,7 @@ export function telegramApiRequestOptions({
     servername: TELEGRAM_HOST,
     minVersion: 'TLSv1.2',
     maxVersion: 'TLSv1.2',
+    agent: TELEGRAM_AGENT,
     method: 'POST',
     path: '/bot' + token + '/' + method,
     headers: {
