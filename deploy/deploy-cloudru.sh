@@ -273,5 +273,3 @@ sync_caddy_edge
 compose ps
 printf 'OFELIYA deployed on Cloud.ru at SHA %s (project=%s bot_mode=%s telegram=%s network=%s)\n' \
   "${OFELIYA_RELEASE}" "${COMPOSE_PROJECT}" "${BOT_MODE}" "${TELEGRAM_ENABLED}" "${OFELIYA_SHARED_NETWORK}"
-
-[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]

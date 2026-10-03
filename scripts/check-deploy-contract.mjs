@@ -185,5 +185,3 @@ assert.match(caddy, /https:\/\/telegram\.org/, 'edge CSP must allow the Telegram
 assert.match(caddy, /https:\/\/web\.telegram\.org/, 'edge frame-ancestors must allow Telegram Web');
 
 console.log('production deployment contract: ok');
-
-[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]

@@ -53,5 +53,3 @@
 - [x] Add deterministic dedicated-Caddy renderer and CI contract.
 - [x] Add validate/reload/restore edge synchronization to deployment.
 - [ ] Merge hotfix, redeploy Telegram-capable CSP, then continue BotFather/token wiring.
-
-[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]

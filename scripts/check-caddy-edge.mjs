@@ -36,5 +36,3 @@ assert.match(deploy, /restoring previous edge config/);
 assert.match(deploy, /cat "\$\{backup\}" > "\$\{dedicated_file\}"/);
 
 console.log('Caddy edge render/reload contract: ok');
-
-[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]

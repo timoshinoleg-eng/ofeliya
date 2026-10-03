@@ -20,5 +20,3 @@ printf '%s {\n' "$host"
 printf '\tredir / /ofeliya/ 308\n'
 sed 's/^/\t/' "$fragment"
 printf '}\n'
-
-[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
