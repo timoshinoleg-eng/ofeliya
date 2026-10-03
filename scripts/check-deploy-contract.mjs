@@ -85,6 +85,11 @@ assert.match(deployScript, /TELEGRAM_ENABLED=0/, 'Telegram production wiring mus
 assert.match(deployScript, /Telegram wiring incomplete: TG_BOT_TOKEN is missing/, 'Telegram deploy must fail closed without its token');
 assert.match(deployScript, /Telegram wiring incomplete: VITE_TG_BOT_USERNAME is missing/, 'Telegram deploy must fail closed without its username');
 assert.match(deployScript, /--profile telegram up -d telegram-bot/, 'Telegram deploy must start its dedicated service when configured');
+assert.match(
+  deployScript,
+  /docker compose -p[\s\S]*"\$\{compose_files\[@\]\}" "\$@" < \/dev\/null/,
+  'compose must not consume streamed deploy stdin'
+);
 assert.match(deployScript, /OFELIYA_TELEGRAM_API_IP/, 'Telegram deploy must validate an explicit API egress endpoint');
 assert.match(envExample, /OFELIYA_TELEGRAM_API_IP=149\.154\.167\.220/, 'env template must document the current Cloud.ru Telegram API fallback');
 assert.match(deployScript, /sync_caddy_edge\(\)/, 'deployment must synchronize the versioned Caddy edge policy');
