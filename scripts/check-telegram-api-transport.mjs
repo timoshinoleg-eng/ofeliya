@@ -11,6 +11,8 @@ assert.equal(pinned.servername, 'api.telegram.org');
 assert.equal(pinned.headers.Host, 'api.telegram.org');
 assert.equal(pinned.minVersion, 'TLSv1.2');
 assert.equal(pinned.maxVersion, 'TLSv1.2');
+assert.notEqual(pinned.agent, undefined);
+assert.equal(pinned.agent.options.timeout, 70_000);
 assert.equal(pinned.path, '/bot123:test/getMe');
 
 const direct = telegramApiRequestOptions({
