@@ -92,6 +92,11 @@ if [[ -n "${TG_BOT_TOKEN:-}${VITE_TG_BOT_USERNAME:-}${VITE_TELEGRAM_APP_SHORT_NA
     echo "OFELIYA_TELEGRAM_GAME_URL must use https://t.me/" >&2
     exit 3
   }
+  export OFELIYA_TELEGRAM_API_IP="${OFELIYA_TELEGRAM_API_IP:-149.154.167.220}"
+  [[ "${OFELIYA_TELEGRAM_API_IP}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || {
+    echo "OFELIYA_TELEGRAM_API_IP must be an IPv4 address" >&2
+    exit 3
+  }
 fi
 
 DEDICATED_LOCAL_FILE="deploy/compose.production.dedicated.local.yml"
