@@ -42,6 +42,21 @@ if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
   process.exit(1);
 }
 
+const telegramBot = valueOf('VITE_TG_BOT_USERNAME');
+const telegramShortName = valueOf('VITE_TELEGRAM_APP_SHORT_NAME');
+if (telegramBot && !/^[A-Za-z0-9_]{1,64}$/.test(telegramBot)) {
+  console.error('VITE_TG_BOT_USERNAME must contain only A-Z a-z 0-9 _ and omit @');
+  process.exit(1);
+}
+if (telegramShortName && !telegramBot) {
+  console.error('VITE_TELEGRAM_APP_SHORT_NAME requires VITE_TG_BOT_USERNAME');
+  process.exit(1);
+}
+if (telegramShortName && !/^[A-Za-z0-9_]{1,64}$/.test(telegramShortName)) {
+  console.error('VITE_TELEGRAM_APP_SHORT_NAME must contain only A-Z a-z 0-9 _');
+  process.exit(1);
+}
+
 const releaseSha = valueOf('VITE_RELEASE_SHA');
 if (!/^[0-9a-f]{40}$/i.test(releaseSha)) {
   console.error('VITE_RELEASE_SHA must be a full 40-character Git commit SHA');

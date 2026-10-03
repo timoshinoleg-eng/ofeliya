@@ -60,6 +60,13 @@ assert.match(dockerfile, /mkdir -p \/app\/certs && chown node:node \/app\/certs/
 assert.match(compose, /image: ofeliya-runtime:\$\{OFELIYA_RELEASE:\?OFELIYA_RELEASE is required\}/, 'bot image must use an explicit immutable release tag');
 assert.match(compose, /image: ofeliya-static:\$\{OFELIYA_RELEASE:\?OFELIYA_RELEASE is required\}/, 'static image must use an explicit immutable release tag');
 assert.match(compose, /image: ofeliya-score:\$\{OFELIYA_RELEASE:\?OFELIYA_RELEASE is required\}/, 'score image must use an explicit immutable release tag');
+assert.match(compose, /telegram-bot:[\s\S]*profiles: \["telegram"\]/, 'Telegram bot service must be opt-in via its own profile');
+assert.match(compose, /image: ofeliya-telegram-bot:\$\{OFELIYA_RELEASE:\?OFELIYA_RELEASE is required\}/, 'Telegram bot image must use the immutable release tag');
+assert.match(compose, /telegram-bot:[\s\S]*ofeliya-score-data:\/app\/server\/data/, 'Telegram bot must share the persistent referral/user data volume');
+assert.match(compose, /telegram-bot:[\s\S]*TG_BOT_TOKEN: \$\{TG_BOT_TOKEN:-\}/, 'Telegram bot must receive only its dedicated token explicitly');
+const telegramService = compose.match(/  telegram-bot:[\s\S]*?\n  static:/)?.[0] ?? '';
+assert.doesNotMatch(telegramService, /env_file:/, 'Telegram bot must not inherit unrelated MAX secrets from the shared env file');
+assert.match(dockerfile, /FROM node:22-alpine AS telegram-bot[\s\S]*server\/bot\.mjs/, 'Dockerfile must package the dedicated Telegram long-polling bot');
 assert.match(compose, /OFELIYA_ENV_FILE:-\/opt\/ofeliya\/\.env/, 'production services must default to an Ofeliya-specific env file');
 assert.doesNotMatch(compose, /\/opt\/hub|HUB_BOT_/, 'Ofeliya must not read Hub runtime secrets');
 assert.match(compose, /VITE_MAX_BOT_USERNAME: \$\{OFELIYA_BOT_USERNAME:\?OFELIYA_BOT_USERNAME is required;/, 'client build must require an explicit Ofeliya bot username');
@@ -71,6 +78,10 @@ assert.match(
   'dedicated deployment may use its own bot token for MAX verification'
 );
 assert.match(deployScript, /OFELIYA_BOT_MODE:-dedicated/, 'dedicated bot ownership must be the deployment default');
+assert.match(deployScript, /TELEGRAM_ENABLED=0/, 'Telegram production wiring must be explicitly gated');
+assert.match(deployScript, /Telegram wiring incomplete: TG_BOT_TOKEN is missing/, 'Telegram deploy must fail closed without its token');
+assert.match(deployScript, /Telegram wiring incomplete: VITE_TG_BOT_USERNAME is missing/, 'Telegram deploy must fail closed without its username');
+assert.match(deployScript, /--profile telegram up -d telegram-bot/, 'Telegram deploy must start its dedicated service when configured');
 assert.doesNotMatch(deployScript, /HUB_BOT_|\/opt\/hub/, 'deployment must not inherit Hub/Chatbot24 identity');
 assert.match(compose, /GAME_URL=.*\$\$OFELIYA_GAME_URL/, 'score service must publish Ofeliya links, not Hub links');
 assert.match(compose, /ofeliya-score-data:\/app\/server\/data/, 'score store must stay on a named persistent volume');
@@ -161,7 +172,9 @@ for (const marker of [
     `shared nginx headers must include ${marker}`
   );
 }
-assert.doesNotMatch(nginxSecurityHeaders, /telegram\.org/, 'nginx Telegram origins stay deferred');
-assert.doesNotMatch(caddy, /telegram\.org/, 'Telegram origins stay deferred until the Telegram production phase');
+assert.match(nginxSecurityHeaders, /https:\/\/telegram\.org/, 'nginx CSP must allow the Telegram WebApp SDK');
+assert.match(nginxSecurityHeaders, /https:\/\/web\.telegram\.org/, 'nginx frame-ancestors must allow Telegram Web');
+assert.match(caddy, /https:\/\/telegram\.org/, 'edge CSP must allow the Telegram WebApp SDK');
+assert.match(caddy, /https:\/\/web\.telegram\.org/, 'edge frame-ancestors must allow Telegram Web');
 
 console.log('production deployment contract: ok');

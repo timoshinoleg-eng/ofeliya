@@ -52,3 +52,8 @@ Product validation sprint по приоритетам P0–P2: закрыть и
 - D1 elite hitbox was revalidated as a false positive and locked by runtime smoke.
 - D2 viewport resize for blocking level-up/result overlays has an implementation + regression coverage on PR #157 branch.
 - Remaining P0 is still real MAX Android/iOS acceptance evidence.
+
+## Telegram production pass 03.10
+- Work is on `feat/telegram-production-wiring` from main `56476c0`.
+- Production wiring can be merged/deployed safely in MAX-only mode; Telegram service is enabled only when dedicated Telegram env is present.
+- Remaining external inputs: dedicated Telegram bot token/username and BotFather Main Mini App configuration, followed by real Telegram acceptance.

@@ -80,6 +80,9 @@ jobs:
       - name: Telegram runtime contract smoke
         run: npm run test:telegram-runtime
 
+      - name: Telegram bot command contract
+        run: npm run test:telegram-bot
+
       - name: Social client contract smoke
         run: npm run test:social
 
@@ -116,6 +119,8 @@ jobs:
       - name: MAX release config gate smoke
         env:
           VITE_MAX_BOT_NAME: ofeliya_ci_bot
+          VITE_TG_BOT_USERNAME: ofeliya_ci_tg_bot
+          VITE_TELEGRAM_APP_SHORT_NAME: strain_zero
           VITE_DEVELOPER_LEGAL_NAME: CI Test Developer
           VITE_DEVELOPER_REGISTRATION: CI-REG-1
           VITE_DEVELOPER_ADDRESS: CI Test Address

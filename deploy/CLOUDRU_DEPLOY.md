@@ -113,3 +113,29 @@ Automation cannot establish behavior inside the real MAX mobile client. After th
 6. record the device/MAX version and tested release SHA in the release notes or PR before MAX review.
 
 `ready()` and `disableVerticalSwipes()` are intentional shipped-SDK calls and must remain in the MAX adapter.
+
+## Telegram production wiring
+
+Telegram is optional for MAX-only releases. It becomes enabled automatically when Telegram
+release values are present in `/opt/ofeliya/.env`.
+
+Required together:
+
+- `TG_BOT_TOKEN` — dedicated Telegram bot token (never a MAX/Chatbot24 token);
+- `VITE_TG_BOT_USERNAME` — Telegram bot username without `@`.
+
+Optional:
+
+- `VITE_TELEGRAM_APP_SHORT_NAME` — direct Mini App short name from BotFather;
+- `OFELIYA_TELEGRAM_GAME_URL` — explicit `https://t.me/...` launch URL. If omitted, deployment
+  derives a Main Mini App link from the username/short name.
+
+When Telegram is configured, deployment builds/starts the separate `telegram-bot` Compose profile.
+The score service and Telegram bot share only `ofeliya-score-data` so referral/user state remains
+consistent. MAX webhook ownership and credentials remain isolated.
+
+The public CSP allows both the MAX bridge and Telegram WebApp SDK/Web embedding. Release parity
+checks fail if either messenger origin disappears.
+
+BotFather still has to point the Telegram Main Mini App to:
+`https://ofeliya.freeveol.dpdns.org/ofeliya/`.

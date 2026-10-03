@@ -118,10 +118,10 @@ export async function pollOnce() {
     if (!msg) continue;
     try {
       if (msg.text && msg.text.startsWith('/')) {
-        const [cmdRaw, ...rest] = msg.text.split(' ');
+        const [cmdRaw] = msg.text.split(' ');
         const cmd = cmdRaw.replace(/@.+$/, ''); // /start@mybot → /start
         if (cmd === '/start') {
-          await handleStart(msg, parseStartParam(`/${rest.join(' ')}`));
+          await handleStart(msg, parseStartParam(msg.text));
         } else if (cmd === '/help') {
           if (msg.chat?.id != null) {
             await api('sendMessage', {
