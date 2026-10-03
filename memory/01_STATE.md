@@ -49,3 +49,9 @@
 - Баланс полных прогонов и Heart timing — только через плейтест (CI не решает).
 - Термика/перформанс на целевых телефонах — внешний гейт.
 - PR #151/#152: merge выполнены; CI был зелёный (build/browser-smoke/production-contract).
+
+## Audit revalidation 03.10
+- Rechecked v2 audit findings D1/D2 against the current PR #157 branch, not historical commit 53ff997.
+- D1 (elite collision radius) is a false positive: Phaser Arcade setCircle() uses source pixels and scales the actual body; runtime smoke now asserts collisionRadius ~= Enemy.radius for elite scale 1.45.
+- D2 (blocking overlays on viewport rotation/resize) is fixed in UIScene: level-up and result overlays retain their source viewport, scale into the new viewport, and expand the scrim to cover it.
+- Regression coverage: mutation-choice smoke checks 390x844 -> 568x320 with an open level-up modal; existing mobile-layout matrix checks result resize. Real Android/iOS MAX acceptance is still required.

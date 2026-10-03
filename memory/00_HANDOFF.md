@@ -46,3 +46,9 @@ Product validation sprint по приоритетам P0–P2: закрыть и
 ## Важное окружение
 
 На `chatgpt-ops-1` был старый чужой Vite на `:5173`; он давал ложный timeout/старое поведение. Для этой ветки использован отдельный Vite `http://127.0.0.1:5194/`. Не интерпретировать тесты против :5173 как состояние этой ветки.
+
+## 03.10 audit follow-up
+- Historical audit commit 53ff997 is far behind current work and must not be treated as current source of truth.
+- D1 elite hitbox was revalidated as a false positive and locked by runtime smoke.
+- D2 viewport resize for blocking level-up/result overlays has an implementation + regression coverage on PR #157 branch.
+- Remaining P0 is still real MAX Android/iOS acceptance evidence.

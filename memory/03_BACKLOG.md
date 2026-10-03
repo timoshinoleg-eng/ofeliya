@@ -34,3 +34,8 @@
 - Третий орган / дополнительный акт кампании; сложность выше Strained; крупная экспансия Legendary;
   постоянная stat-прокачка; широкая внешняя арт/аудио-пайплайн; крупный рефакторинг или смена рендера.
 
+## Audit follow-up 03.10
+- [x] Revalidate D1 elite hitbox: false positive; Phaser scales the Arcade circle from source pixels. Added runtime regression assertion.
+- [x] Fix D2 resize with blocking UI: level-up/result overlays now fit the new viewport and scrims remain full-screen; level-up runtime smoke passed.
+- [ ] Keep D3 suspended-audio burst as a real-device acceptance check; do not refactor audio without reproduction.
+- [ ] Complete real MAX Android/iOS 16/16 evidence gate; browser smoke does not close P0.
