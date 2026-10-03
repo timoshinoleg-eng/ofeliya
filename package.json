@@ -60,7 +60,8 @@
     "analytics:funnel": "node scripts/analyze-product-funnel.mjs",
     "test:mobile-evidence": "node scripts/check-mobile-acceptance-evidence.mjs",
     "test:telegram-bot": "node scripts/check-telegram-bot.mjs",
-    "test:caddy-edge": "node scripts/check-caddy-edge.mjs"
+    "test:caddy-edge": "node scripts/check-caddy-edge.mjs",
+    "test:telegram-api": "node scripts/check-telegram-api-transport.mjs"
   },
   "dependencies": {
     "@maxhub/max-bot-api": "^0.3.1",

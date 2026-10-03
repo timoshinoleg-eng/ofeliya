@@ -22,6 +22,7 @@ import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, wr
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { saveTelegramPreparedMessage } from './telegram-share.mjs';
+import { telegramApiJson } from './telegram-api.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT ?? 8787);
@@ -815,11 +816,11 @@ async function notifyReferrer(ref) {
     .filter(Boolean)
     .join('\n');
   try {
-    await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: fromUid, text, disable_web_page_preview: true }),
-      signal: AbortSignal.timeout(5_000),
+    await telegramApiJson({
+      token: TG_TOKEN,
+      method: 'sendMessage',
+      params: { chat_id: fromUid, text, disable_web_page_preview: true },
+      timeoutMs: 5_000,
     });
   } catch {
     /* push — best effort, не трогаем ответ клиенту */
