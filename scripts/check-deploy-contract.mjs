@@ -65,6 +65,8 @@ assert.match(compose, /telegram-bot:[\s\S]*profiles: \["telegram"\]/, 'Telegram 
 assert.match(compose, /image: ofeliya-telegram-bot:\$\{OFELIYA_RELEASE:\?OFELIYA_RELEASE is required\}/, 'Telegram bot image must use the immutable release tag');
 assert.match(compose, /telegram-bot:[\s\S]*ofeliya-score-data:\/app\/server\/data/, 'Telegram bot must share the persistent referral/user data volume');
 assert.match(compose, /telegram-bot:[\s\S]*TG_BOT_TOKEN: \$\{TG_BOT_TOKEN:-\}/, 'Telegram bot must receive only its dedicated token explicitly');
+assert.match(compose, /telegram-bot:[\s\S]*api\.telegram\.org:\$\{OFELIYA_TELEGRAM_API_IP:-149\.154\.167\.220\}/, 'Telegram bot must pin the reachable Telegram API endpoint');
+assert.match(compose, /score:[\s\S]*api\.telegram\.org:\$\{OFELIYA_TELEGRAM_API_IP:-149\.154\.167\.220\}/, 'score service must use the same Telegram API endpoint for prepared sharing');
 const telegramService = compose.match(/  telegram-bot:[\s\S]*?\n  static:/)?.[0] ?? '';
 assert.doesNotMatch(telegramService, /env_file:/, 'Telegram bot must not inherit unrelated MAX secrets from the shared env file');
 assert.match(dockerfile, /FROM node:22-alpine AS telegram-bot[\s\S]*server\/bot\.mjs/, 'Dockerfile must package the dedicated Telegram long-polling bot');
@@ -83,6 +85,8 @@ assert.match(deployScript, /TELEGRAM_ENABLED=0/, 'Telegram production wiring mus
 assert.match(deployScript, /Telegram wiring incomplete: TG_BOT_TOKEN is missing/, 'Telegram deploy must fail closed without its token');
 assert.match(deployScript, /Telegram wiring incomplete: VITE_TG_BOT_USERNAME is missing/, 'Telegram deploy must fail closed without its username');
 assert.match(deployScript, /--profile telegram up -d telegram-bot/, 'Telegram deploy must start its dedicated service when configured');
+assert.match(deployScript, /OFELIYA_TELEGRAM_API_IP/, 'Telegram deploy must validate an explicit API egress endpoint');
+assert.match(envExample, /OFELIYA_TELEGRAM_API_IP=149\.154\.167\.220/, 'env template must document the current Cloud.ru Telegram API fallback');
 assert.match(deployScript, /sync_caddy_edge\(\)/, 'deployment must synchronize the versioned Caddy edge policy');
 assert.match(deployScript, /caddy validate/, 'edge config must be validated before activation');
 assert.match(deployScript, /caddy reload/, 'validated edge config must be reloaded into the running Caddy service');
