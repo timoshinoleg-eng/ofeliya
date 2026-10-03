@@ -83,6 +83,9 @@ jobs:
       - name: Telegram bot command contract
         run: npm run test:telegram-bot
 
+      - name: Caddy edge rollout contract
+        run: npm run test:caddy-edge
+
       - name: Social client contract smoke
         run: npm run test:social
 

@@ -166,11 +166,19 @@ export OFELIYA_RELEASE
 export OFELIYA_ENV_FILE="${RELEASE_ENV_FILE}"
 
 compose_files=(-f deploy/compose.production.yml)
+CADDY_COMPOSE_PATH=""
 for local_file in "${DEDICATED_LOCAL_FILE}" "${CADDY_LOCAL_FILE}"; do
+  selected_file=""
   if [[ -f "${CHECKOUT_DIR}/${local_file}" ]]; then
-    compose_files+=(-f "${CHECKOUT_DIR}/${local_file}")
+    selected_file="${CHECKOUT_DIR}/${local_file}"
   elif [[ "${CHECKOUT_DIR}" != "${APP_ROOT}" && -f "${APP_ROOT}/${local_file}" ]]; then
-    compose_files+=(-f "${APP_ROOT}/${local_file}")
+    selected_file="${APP_ROOT}/${local_file}"
+  fi
+  if [[ -n "${selected_file}" ]]; then
+    compose_files+=(-f "${selected_file}")
+    if [[ "${local_file}" == "${CADDY_LOCAL_FILE}" ]]; then
+      CADDY_COMPOSE_PATH="${selected_file}"
+    fi
   fi
 done
 
@@ -189,6 +197,57 @@ retry() {
     if (( i == attempts )); then return 1; fi
     sleep "${delay}"
   done
+}
+
+sync_caddy_edge() {
+  [[ -n "${CADDY_COMPOSE_PATH}" ]] || return 0
+
+  [[ "${OFELIYA_BOT_WEBHOOK_DOMAIN}" == https://* ]] || {
+    echo "OFELIYA_BOT_WEBHOOK_DOMAIN must use https:// for Caddy rendering" >&2
+    return 1
+  }
+  local edge_host="${OFELIYA_BOT_WEBHOOK_DOMAIN#https://}"
+  edge_host="${edge_host%%/*}"
+
+  local caddy_dir dedicated_file candidate backup caddy_id
+  caddy_dir="$(dirname "${CADDY_COMPOSE_PATH}")"
+  dedicated_file="${caddy_dir}/Caddyfile.dedicated"
+  [[ -f "${dedicated_file}" ]] || {
+    echo "Dedicated Caddyfile missing: ${dedicated_file}" >&2
+    return 1
+  }
+
+  candidate="$(mktemp)"
+  backup="$(mktemp)"
+
+  sh deploy/render-caddy-dedicated.sh "${edge_host}" deploy/Caddyfile.ofeliya > "${candidate}"
+  cp "${dedicated_file}" "${backup}"
+
+  caddy_id="$(compose ps -q caddy)"
+  [[ -n "${caddy_id}" ]] || {
+    echo "Caddy service is not running; refusing an unverified edge update" >&2
+    rm -f "${candidate}" "${backup}"
+    return 1
+  }
+
+  docker cp "${candidate}" "${caddy_id}:/tmp/ofeliya-Caddyfile.candidate"
+  if ! docker exec "${caddy_id}" caddy validate       --config /tmp/ofeliya-Caddyfile.candidate --adapter caddyfile; then
+    rm -f "${candidate}" "${backup}"
+    return 1
+  fi
+
+  # Preserve the bind-mounted inode so the running container sees the new file immediately.
+  cat "${candidate}" > "${dedicated_file}"
+  if ! docker exec "${caddy_id}" caddy reload       --config /etc/caddy/Caddyfile --adapter caddyfile; then
+    echo "Caddy reload failed; restoring previous edge config" >&2
+    cat "${backup}" > "${dedicated_file}"
+    docker exec "${caddy_id}" caddy reload       --config /etc/caddy/Caddyfile --adapter caddyfile || true
+    rm -f "${candidate}" "${backup}"
+    return 1
+  fi
+
+  rm -f "${candidate}" "${backup}"
+  echo "Caddy edge synced from versioned deploy/Caddyfile.ofeliya"
 }
 
 compose config --quiet
@@ -210,6 +269,7 @@ else
   compose --profile telegram rm -f telegram-bot >/dev/null 2>&1 || true
 fi
 
+sync_caddy_edge
 compose ps
 printf 'OFELIYA deployed on Cloud.ru at SHA %s (project=%s bot_mode=%s telegram=%s network=%s)\n' \
   "${OFELIYA_RELEASE}" "${COMPOSE_PROJECT}" "${BOT_MODE}" "${TELEGRAM_ENABLED}" "${OFELIYA_SHARED_NETWORK}"
