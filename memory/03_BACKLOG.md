@@ -47,3 +47,11 @@
 - [ ] Supply dedicated `TG_BOT_TOKEN` and `VITE_TG_BOT_USERNAME` (plus optional Mini App short name).
 - [ ] Configure BotFather Main Mini App URL to `https://ofeliya.freeveol.dpdns.org/ofeliya/`.
 - [ ] Deploy Telegram-enabled main SHA and run real Telegram Android/iOS/Web acceptance.
+
+## Telegram edge rollout
+- [x] Diagnose #158 parity rollback: stale host-local Caddyfile.dedicated.
+- [x] Add deterministic dedicated-Caddy renderer and CI contract.
+- [x] Add validate/reload/restore edge synchronization to deployment.
+- [ ] Merge hotfix, redeploy Telegram-capable CSP, then continue BotFather/token wiring.
+
+[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]

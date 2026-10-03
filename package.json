@@ -59,7 +59,8 @@
     "test:bundle-shape": "node scripts/check-build-shape.mjs",
     "analytics:funnel": "node scripts/analyze-product-funnel.mjs",
     "test:mobile-evidence": "node scripts/check-mobile-acceptance-evidence.mjs",
-    "test:telegram-bot": "node scripts/check-telegram-bot.mjs"
+    "test:telegram-bot": "node scripts/check-telegram-bot.mjs",
+    "test:caddy-edge": "node scripts/check-caddy-edge.mjs"
   },
   "dependencies": {
     "@maxhub/max-bot-api": "^0.3.1",
@@ -71,3 +72,5 @@
     "vite": "^6.0.7"
   }
 }
+
+[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]

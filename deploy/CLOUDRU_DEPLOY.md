@@ -139,3 +139,16 @@ checks fail if either messenger origin disappears.
 
 BotFather still has to point the Telegram Main Mini App to:
 `https://ofeliya.freeveol.dpdns.org/ofeliya/`.
+
+### Versioned Caddy edge sync
+
+The Cloud.ru host keeps the site label/TLS wrapper in local deploy/Caddyfile.dedicated, while
+the route/security policy is versioned as deploy/Caddyfile.ofeliya.
+
+Every deployment now renders the local dedicated file from the selected release, validates the
+candidate with the running Caddy binary, updates the bind-mounted file in place, and reloads Caddy.
+If validation or reload fails, the previous edge file is restored and the release fails closed.
+This keeps public CSP/security headers in lockstep with the immutable application release instead
+of leaving an old local edge policy active.
+
+[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
