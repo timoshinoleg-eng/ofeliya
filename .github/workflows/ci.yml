@@ -83,6 +83,9 @@ jobs:
       - name: Telegram bot command contract
         run: npm run test:telegram-bot
 
+      - name: Caddy edge rollout contract
+        run: npm run test:caddy-edge
+
       - name: Social client contract smoke
         run: npm run test:social
 
@@ -399,3 +402,5 @@ jobs:
 
       - name: Validate nginx config
         run: docker run --rm --add-host ofeliya-score:127.0.0.1 ofeliya-static:strain-zero-ci nginx -t -c /etc/nginx/nginx.conf
+
+[executed on device: chatgpt-ops-1 (ca22b74b-ed01-4519-b9df-03edbe57a1ba)]
