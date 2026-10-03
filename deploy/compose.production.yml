@@ -36,8 +36,8 @@
       - ofeliya-score-data:/app/server/data
     restart: unless-stopped
     networks:
-      quiz-battle:
-        aliases: [ofeliya-telegram-bot]
+      telegram-egress:
+        gw_priority: 1
 
   static:
     build:
@@ -97,6 +97,8 @@
     networks:
       quiz-battle:
         aliases: [ofeliya-score]
+      telegram-egress:
+        gw_priority: 1
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
@@ -105,6 +107,10 @@
       start_period: 5s
 
 networks:
+  telegram-egress:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: "1400"
   quiz-battle:
     # Historical Compose key only. The external network itself is Ofeliya-owned.
     external: true
