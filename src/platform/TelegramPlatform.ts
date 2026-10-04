@@ -32,6 +32,7 @@ interface TelegramWebApp {
   ready?: () => void;
   expand?: () => void;
   shareMessage?: (messageId: string, callback?: (success: boolean) => void) => void;
+  openTelegramLink?: (url: string) => void;
 }
 
 declare global {
@@ -152,6 +153,20 @@ export class TelegramPlatform implements PlatformAdapter {
     }
   }
 
+  private shareViaTelegramLink(text: string, link?: string): boolean {
+    const openTelegramLink = this.wa?.openTelegramLink;
+    if (!openTelegramLink || !link) return false;
+    try {
+      const shareUrl = new URL('https://t.me/share/url');
+      shareUrl.searchParams.set('url', link);
+      shareUrl.searchParams.set('text', text);
+      openTelegramLink(shareUrl.toString());
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async shareResult(text: string, link?: string): Promise<boolean> {
     const shareMessage = this.wa?.shareMessage;
     if (shareMessage) {
@@ -176,6 +191,8 @@ export class TelegramPlatform implements PlatformAdapter {
         }
       }
     }
+
+    if (this.shareViaTelegramLink(text, link)) return true;
 
     if (typeof navigator === 'undefined' || !navigator.share) return false;
     try {

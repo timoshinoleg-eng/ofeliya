@@ -53,3 +53,11 @@
 - [x] Add deterministic dedicated-Caddy renderer and CI contract.
 - [x] Add validate/reload/restore edge synchronization to deployment.
 - [x] Merge hotfix #159 and restore versioned Caddy rollout.\n- [x] Diagnose Cloud.ru Telegram API egress; add explicit reachable endpoint fallback.\n- [ ] Stage production Telegram secret/config after egress PR is green, then deploy and run real Telegram acceptance.
+
+## Telegram webhook release
+- [x] Add authenticated /api/telegram/webhook route and inline Bot API response.
+- [x] Add webhook/polling deploy mode and fail-closed webhook secret validation.
+- [x] Add fast client-side t.me/share/url fallback when outbound prepared-share is disabled.
+- [ ] Merge/deploy webhook branch.
+- [ ] Register webhook/menu button/commands through a network path that can reach Telegram Bot API.
+- [ ] Verify real Telegram /start -> Web App -> initData -> run -> score and challenge share.

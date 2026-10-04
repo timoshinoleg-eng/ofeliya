@@ -14,6 +14,7 @@ RUN mkdir -p /app/server/data && chown -R node:node /app/server
 COPY --chown=node:node server/index.mjs ./server/index.mjs
 COPY --chown=node:node server/telegram-share.mjs ./server/telegram-share.mjs
 COPY --chown=node:node server/telegram-api.mjs ./server/telegram-api.mjs
+COPY --chown=node:node server/telegram-webhook.mjs ./server/telegram-webhook.mjs
 USER node
 CMD ["node", "server/index.mjs"]
 

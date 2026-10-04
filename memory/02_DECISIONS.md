@@ -27,3 +27,8 @@
 ## Versioned edge policy 03.10
 - Production Caddy site/TLS wrapper may stay host-local, but OFELIYA route/security policy must be rendered from versioned deploy/Caddyfile.ofeliya on every release.
 - Edge changes are validated before activation; reload failure restores the previous local dedicated file and fails the deployment.
+
+## Telegram Bot API mode 04.10
+- Cloud.ru production default is webhook, not long polling, because outbound Telegram API routing is not sufficiently reliable.
+- Keep long polling as an explicit fallback mode only for hosts with verified outbound Telegram API connectivity.
+- Never disable Telegram TLS verification. Webhook authenticity is independently protected by TG_WEBHOOK_SECRET.

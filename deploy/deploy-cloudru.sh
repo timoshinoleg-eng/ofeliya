@@ -69,6 +69,8 @@ export OFELIYA_MAX_BOT_TOKEN="${OFELIYA_MAX_BOT_TOKEN:-${OFELIYA_BOT_TOKEN:-}}"
 # Telegram stays optional for MAX-only releases, but becomes fail-closed once any
 # Telegram release value is configured.
 TELEGRAM_ENABLED=0
+TELEGRAM_BOT_MODE="${OFELIYA_TELEGRAM_BOT_MODE:-webhook}"
+TELEGRAM_OUTBOUND_ENABLED="${OFELIYA_TELEGRAM_OUTBOUND_ENABLED:-}"
 if [[ -n "${TG_BOT_TOKEN:-}${VITE_TG_BOT_USERNAME:-}${VITE_TELEGRAM_APP_SHORT_NAME:-}${OFELIYA_TELEGRAM_GAME_URL:-}" ]]; then
   TELEGRAM_ENABLED=1
   [[ -n "${TG_BOT_TOKEN:-}" ]] || { echo "Telegram wiring incomplete: TG_BOT_TOKEN is missing" >&2; exit 3; }
@@ -97,6 +99,25 @@ if [[ -n "${TG_BOT_TOKEN:-}${VITE_TG_BOT_USERNAME:-}${VITE_TELEGRAM_APP_SHORT_NA
     echo "OFELIYA_TELEGRAM_API_IP must be an IPv4 address" >&2
     exit 3
   }
+  [[ "${TELEGRAM_BOT_MODE}" == webhook || "${TELEGRAM_BOT_MODE}" == polling ]] || {
+    echo "OFELIYA_TELEGRAM_BOT_MODE must be webhook or polling" >&2
+    exit 3
+  }
+  if [[ -z "${TELEGRAM_OUTBOUND_ENABLED}" ]]; then
+    [[ "${TELEGRAM_BOT_MODE}" == webhook ]] && TELEGRAM_OUTBOUND_ENABLED=0 || TELEGRAM_OUTBOUND_ENABLED=1
+  fi
+  [[ "${TELEGRAM_OUTBOUND_ENABLED}" == 0 || "${TELEGRAM_OUTBOUND_ENABLED}" == 1 ]] || {
+    echo "OFELIYA_TELEGRAM_OUTBOUND_ENABLED must be 0 or 1" >&2
+    exit 3
+  }
+  if [[ "${TELEGRAM_BOT_MODE}" == webhook ]]; then
+    [[ "${TG_WEBHOOK_SECRET:-}" =~ ^[A-Za-z0-9_-]{16,256}$ ]] || {
+      echo "TG_WEBHOOK_SECRET must be 16-256 characters from A-Z a-z 0-9 _ -" >&2
+      exit 3
+    }
+  fi
+  export OFELIYA_TELEGRAM_BOT_MODE="${TELEGRAM_BOT_MODE}"
+  export OFELIYA_TELEGRAM_OUTBOUND_ENABLED="${TELEGRAM_OUTBOUND_ENABLED}"
 fi
 
 DEDICATED_LOCAL_FILE="deploy/compose.production.dedicated.local.yml"
@@ -260,7 +281,7 @@ sync_caddy_edge() {
 
 compose config --quiet
 build_services=(score static bot)
-if (( TELEGRAM_ENABLED )); then
+if (( TELEGRAM_ENABLED )) && [[ "${TELEGRAM_BOT_MODE}" == polling ]]; then
   build_services+=(telegram-bot)
 fi
 compose build "${build_services[@]}"
@@ -270,7 +291,7 @@ retry 12 2 compose exec -T static wget -q -O /dev/null http://127.0.0.1:8080/
 retry 12 2 compose exec -T score node -e "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 compose --profile dedicated-bot up -d bot
-if (( TELEGRAM_ENABLED )); then
+if (( TELEGRAM_ENABLED )) && [[ "${TELEGRAM_BOT_MODE}" == polling ]]; then
   compose --profile telegram up -d telegram-bot
 else
   compose --profile telegram stop telegram-bot >/dev/null 2>&1 || true
@@ -279,5 +300,5 @@ fi
 
 sync_caddy_edge
 compose ps
-printf 'OFELIYA deployed on Cloud.ru at SHA %s (project=%s bot_mode=%s telegram=%s network=%s)\n' \
-  "${OFELIYA_RELEASE}" "${COMPOSE_PROJECT}" "${BOT_MODE}" "${TELEGRAM_ENABLED}" "${OFELIYA_SHARED_NETWORK}"
+printf 'OFELIYA deployed on Cloud.ru at SHA %s (project=%s bot_mode=%s telegram=%s telegram_mode=%s outbound=%s network=%s)\n' \
+  "${OFELIYA_RELEASE}" "${COMPOSE_PROJECT}" "${BOT_MODE}" "${TELEGRAM_ENABLED}" "${TELEGRAM_BOT_MODE}" "${TELEGRAM_OUTBOUND_ENABLED:-0}" "${OFELIYA_SHARED_NETWORK}"

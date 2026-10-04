@@ -23,11 +23,14 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { saveTelegramPreparedMessage } from './telegram-share.mjs';
 import { telegramApiJson } from './telegram-api.mjs';
+import { buildTelegramWebhookMethod, telegramWebhookSecretMatches } from './telegram-webhook.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT ?? 8787);
 const DATA_DIR = process.env.DATA_DIR ?? join(ROOT, 'server', 'data');
 const TG_TOKEN = process.env.TG_BOT_TOKEN ?? '';
+const TG_WEBHOOK_SECRET = process.env.TG_WEBHOOK_SECRET ?? '';
+const TG_OUTBOUND_ENABLED = process.env.OFELIYA_TELEGRAM_OUTBOUND_ENABLED !== '0';
 // MAX initData не содержит app audience. A shared bot token would authenticate
 // launch data from every Mini App attached to that bot, so fail closed without
 // the dedicated application token.
@@ -804,7 +807,7 @@ function duelAttemptStats(challengeId, identity) {
  * числовой MAX id нельзя ошибочно отправить как Telegram chat_id.
  */
 async function notifyReferrer(ref) {
-  if (!TG_TOKEN || !ref || ref.platform !== 'telegram') return;
+  if (!TG_OUTBOUND_ENABLED || !TG_TOKEN || !ref || ref.platform !== 'telegram') return;
   const fromUid = ref.uid;
   if (!/^\d+$/.test(fromUid)) return;
   const text = [
@@ -1201,11 +1204,24 @@ const server = createServer(async (req, res) => {
       });
     }
 
+    if (req.method === 'POST' && url.pathname === '/api/telegram/webhook') {
+      const providedSecret = req.headers['x-telegram-bot-api-secret-token'];
+      if (!telegramWebhookSecretMatches(TG_WEBHOOK_SECRET, providedSecret)) {
+        return send(res, 403, { ok: false, error: 'invalid Telegram webhook secret' });
+      }
+      const update = await readBody(req);
+      const method = buildTelegramWebhookMethod(update, { gameUrl: GAME_URL });
+      return send(res, 200, method ?? { ok: true });
+    }
+
     if (req.method === 'POST' && url.pathname === '/api/telegram/share') {
       const body = await readBody(req);
       const verified = validateInitData(body?.initData, TG_TOKEN);
       if (!verified) {
         return send(res, 403, { ok: false, error: 'verified Telegram identity required' });
+      }
+      if (!TG_OUTBOUND_ENABLED) {
+        return send(res, 503, { ok: false, error: 'Telegram prepared share unavailable' });
       }
 
       const now = Date.now();
