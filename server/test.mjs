@@ -109,6 +109,18 @@ function campaignPayload({
 }
 
 const j = (r) => r.json();
+// The HTTP server runs in this process; control its clock without real-time sleeps.
+async function withServerClock(fn) {
+  const realNow = Date.now;
+  let now = realNow();
+  Date.now = () => now;
+  try {
+    return await fn((elapsedMs) => { now += elapsedMs; });
+  } finally {
+    Date.now = realNow;
+  }
+}
+
 let passed = 0;
 function ok(name, fn) {
   return Promise.resolve()
@@ -857,7 +869,7 @@ await ok('топ: лучший результат на юзера + более �
   assert.ok(top.top.every((row) => !Object.hasOwn(row, 'uid')));
 });
 
-await ok('Daily V2: сервер выдаёт identity-bound ticket и переиспользует незакрытый', async () => {
+await ok('Daily V2: сервер выдаёт identity-bound ticket и переиспользует незакрытый', async () => withServerClock(async (advanceClock) => {
   const auth = {
     platform: 'telegram',
     initData: signInitData(ALICE, TG_TOKEN),
@@ -888,6 +900,8 @@ await ok('Daily V2: сервер выдаёт identity-bound ticket и пере�
   assert.equal(second.ticket.runId, first.ticket.runId);
   assert.equal(second.ticket.runSeed, first.ticket.runSeed);
 
+  // A 600s result is allowed after 585s plus the same 15s grace as ordinary ranked runs.
+  advanceClock(585_000);
   const scoreResponse = await fetch(`${BASE}/api/score`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -950,7 +964,107 @@ await ok('Daily V2: сервер выдаёт identity-bound ticket и пере�
   }));
   assert.notEqual(next.ticket.runId, first.ticket.runId);
   assert.equal(next.ticket.runSeed, first.ticket.runSeed);
-});
+}));
+
+await ok('Daily V2: instant forged long result is rejected and closes ticket without a score', async () => withServerClock(async () => {
+  const auth = {
+    platform: 'max',
+    initData: signInitData({ id: 44005, first_name: 'DailyWallClock' }, MAX_TOKEN),
+  };
+  const issued = await fetch(`${BASE}/api/daily/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(auth),
+  });
+  assert.equal(issued.status, 201);
+  const { ticket } = await j(issued);
+  assert.equal(ticket.issuedAt, Date.now());
+  const scoresBefore = (await j(await fetch(`${BASE}/health`))).scores;
+  const requestBody = {
+    ...auth,
+    submissionId: 'daily-wallclock-forged-0001',
+    issuedAt: ticket.issuedAt - 540_000,
+    payload: {
+      ...campaignPayload({ seed: ticket.runSeed, timeMs: 540_000 }),
+      daily: true,
+      dailyRunId: ticket.runId,
+      issuedAt: ticket.issuedAt - 540_000,
+    },
+  };
+  const submit = (body) => fetch(`${BASE}/api/score`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const forged = await submit(requestBody);
+  assert.equal(forged.status, 422);
+  assert.deepEqual(await j(forged), { ok: false, error: 'anti-cheat: run-time-exceeds-wall-clock' });
+  assert.equal((await j(await fetch(`${BASE}/health`))).scores, scoresBefore);
+
+  // Rejection consumes the ticket like an ordinary capability, without successful idempotency metadata.
+  flushStoreNow();
+  const { readFileSync: readDailyStore } = await import('node:fs');
+  const persisted = JSON.parse(readDailyStore(join(DATA_DIR, 'store.json'), 'utf8'));
+  const rejected = persisted.dailyRuns.find((run) => run.runId === ticket.runId);
+  assert.equal(rejected.closedAt, ticket.issuedAt);
+  assert.equal(rejected.submissionId, undefined);
+  assert.equal(rejected.submissionHash, undefined);
+  assert.equal(rejected.scoreId, undefined);
+  assert.ok(!persisted.scores.some((score) => score.dailyRunId === ticket.runId));
+
+  const retry = await submit(requestBody);
+  assert.equal(retry.status, 409);
+  assert.deepEqual(await j(retry), { ok: false, error: 'daily run already closed' });
+  const corrected = await submit({
+    ...requestBody,
+    payload: {
+      ...campaignPayload({ seed: ticket.runSeed, timeMs: 10_000, win: false }),
+      kills: 1,
+      level: 1,
+      daily: true,
+      dailyRunId: ticket.runId,
+    },
+  });
+  assert.equal(corrected.status, 409);
+  assert.equal((await j(await fetch(`${BASE}/health`))).scores, scoresBefore);
+  const next = await fetch(`${BASE}/api/daily/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(auth),
+  });
+  assert.equal(next.status, 201);
+  assert.notEqual((await j(next)).ticket.runId, ticket.runId);
+}));
+
+await ok('Daily V2: elapsed wall-clock plus grace rejects even a 1ms excess', async () => withServerClock(async (advanceClock) => {
+  const auth = {
+    platform: 'telegram',
+    initData: signInitData({ id: 44006, first_name: 'DailyBoundary' }, TG_TOKEN),
+  };
+  const issued = await fetch(`${BASE}/api/daily/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(auth),
+  });
+  assert.equal(issued.status, 201);
+  const { ticket } = await j(issued);
+  advanceClock(525_000);
+  const response = await fetch(`${BASE}/api/score`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...auth,
+      submissionId: 'daily-wallclock-boundary-0001',
+      payload: {
+        ...campaignPayload({ seed: ticket.runSeed, timeMs: 540_001 }),
+        daily: true,
+        dailyRunId: ticket.runId,
+      },
+    }),
+  });
+  assert.equal(response.status, 422);
+  assert.deepEqual(await j(response), { ok: false, error: 'anti-cheat: run-time-exceeds-wall-clock' });
+}));
 
 await ok('Daily V2: ruleset v2 daily без ticket отклоняется', async () => {
   const response = await fetch(`${BASE}/api/score`, {

@@ -207,6 +207,7 @@ const RUN_TOKEN_RE = /^[A-Za-z0-9_-]{32,64}$/;
 const MAX_DAILY_RUNS = 10_000;
 const DAILY_RUN_TTL_MS = 2 * 60 * 60 * 1000;
 const DAILY_RUN_GRACE_MS = 30 * 60 * 1000;
+const DAILY_RUN_WALL_CLOCK_GRACE_MS = RUN_WALL_CLOCK_GRACE_MS;
 const DAILY_RUN_ID_RE = /^[A-Za-z0-9_-]{16,32}$/;
 const PRODUCT_EVENTS = new Set([
   'app_open', 'run_start', 'run_60s', 'boss1', 'heart', 'death',
@@ -1601,7 +1602,8 @@ const server = createServer(async (req, res) => {
           }
           return send(res, 409, { ok: false, error: 'daily run already closed' });
         }
-        if (Date.now() >= dailyRun.expiresAt) {
+        const now = Date.now();
+        if (now >= dailyRun.expiresAt) {
           return send(res, 410, { ok: false, error: 'daily run expired' });
         }
         if (
@@ -1613,6 +1615,13 @@ const server = createServer(async (req, res) => {
           contract.runSeed !== dailyRun.runSeed
         ) {
           return send(res, 422, { ok: false, error: 'dailyRunId does not match score contract' });
+        }
+        const elapsedWallMs = Math.max(0, now - dailyRun.issuedAt);
+        if (payload.timeMs > elapsedWallMs + DAILY_RUN_WALL_CLOCK_GRACE_MS) {
+          // Consume invalid tickets like ordinary run capabilities, without recording a score.
+          dailyRun.closedAt = now;
+          saveStore();
+          return send(res, 422, { ok: false, error: 'anti-cheat: run-time-exceeds-wall-clock' });
         }
       }
 
