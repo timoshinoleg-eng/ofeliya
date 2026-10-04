@@ -189,8 +189,14 @@ await ok('telegram prepared share fails fast when outbound Bot API is disabled',
 });
 
 await ok('GET /health', async () => {
-  const r = await j(await fetch(`${BASE}/health`));
+  const response = await fetch(`${BASE}/health`);
+  assert.equal(response.status, 200);
+  const r = await j(response);
   assert.equal(r.ok, true);
+  assert.deepEqual(r.scoreCapacity, {
+    limit: 20_000, remaining: 20_000, trustedReserve: 2_000,
+    unverifiedRemaining: 18_000, ready: true,
+  });
   assert.equal(r.rulesetVersion, 2);
   assert.equal(r.campaignVersion, 2);
 });
@@ -1452,46 +1458,171 @@ process.stdout.write('__RATE__' + JSON.stringify({actorStatuses,ipStatuses}));
   }
 });
 
-await ok('Phase 1: full score capacity fails loud with 503 and never evicts old rows', async () => {
+// Exercise the production-size limits without thousands of HTTP requests or timers.
+async function withScoreCapacity(initialCount, scenario) {
   const capacityDataDir = mkdtempSync(join(tmpdir(), 'ofeliya-capacity-test-'));
   const { writeFileSync: writeFileForCapacity } = await import('node:fs');
   writeFileForCapacity(
     join(capacityDataDir, 'store.json'),
-    JSON.stringify({ scores: Array.from({ length: 20_000 }, (_, i) => ({ scoreId: 'old-' + i })) })
+    JSON.stringify({ scores: Array.from({ length: initialCount }, (_, i) => ({
+      scoreId: 'old-' + i, platform: i % 2 ? 'browser' : 'max', uid: 'old-user-' + i,
+      verified: i % 2 === 0, ranked: i % 2 === 0, rulesetVersion: 1,
+    })) })
   );
   const serverUrl = new URL('./index.mjs', import.meta.url).href;
   const script = `
-const { server } = await import(${JSON.stringify(serverUrl)});
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+const file = process.env.DATA_DIR + '/store.json';
+const originals = JSON.parse(readFileSync(file, 'utf8')).scores;
+const { server, flushStoreNow } = await import(${JSON.stringify(serverUrl)});
 await new Promise((resolve) => server.once('listening', resolve));
 const base = 'http://127.0.0.1:' + server.address().port;
-const response = await fetch(base + '/api/score', {
-  method:'POST',
-  headers:{'Content-Type':'application/json'},
-  body:JSON.stringify({
-    platform:'browser',
-    anonId:'capacity-check-0001',
-    payload:{win:false,timeMs:30000,kills:5,level:2,daily:false}
-  })
-});
-const body = await response.json();
-const health = await (await fetch(base + '/health')).json();
-server.close();
-process.stdout.write('__CAPACITY__' + JSON.stringify({status:response.status,body,scores:health.scores}));
-`;
-  const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
-    env: { ...process.env, PORT: '0', DATA_DIR: capacityDataDir, WRITE_RATE_LIMIT: '1000' },
-    encoding: 'utf8',
-    timeout: 20_000,
+const post = async (path, body) => {
+  const response = await fetch(base + path, {
+    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body),
   });
+  return {status: response.status, body: await response.json()};
+};
+const health = async () => {
+  const response = await fetch(base + '/health');
+  return {status: response.status, httpOk: response.ok, body: await response.json()};
+};
+const browser = {
+  platform: 'browser', anonId: 'capacity-browser-0001', submissionId: 'capacity-browser-submit-0001',
+  payload: {win:false,timeMs:1000,kills:5,level:2,daily:false},
+};
+const makeVerified = async (platform) => {
+  const initData = platform === 'max'
+    ? ${JSON.stringify(signInitData(ALICE, MAX_TOKEN))}
+    : ${JSON.stringify(signInitData(BOB, TG_TOKEN))};
+  const run = {
+    rulesetVersion:2,campaignVersion:2,difficultyId:'standard',
+    runSeed:'capacity-' + platform,controlMode:'one-hand',
+  };
+  const start = await post('/api/run/start', {platform,initData,run});
+  assert.equal(start.status, 201);
+  return {
+    platform,initData,runToken:start.body.grant.runToken,submissionId:'capacity-verified-' + platform,
+    payload:{...run,win:false,timeMs:1000,kills:5,level:2,daily:false,
+      completionStage:'bloodstream',bossesDefeated:0,boss1ClearMs:null,hostCellsInfected:0},
+  };
+};
+try {
+  ${scenario}
+} finally {
+  await new Promise((resolve) => server.close(resolve));
+}
+const persisted = JSON.parse(readFileSync(file, 'utf8'));
+assert.deepEqual(persisted.scores.slice(0, originals.length), originals, 'existing rows must remain unchanged');
+process.stdout.write('__CAPACITY_OK__');
+`;
   try {
-    assert.equal(child.status, 0, child.stderr);
-    const result = JSON.parse(child.stdout.split('__CAPACITY__')[1]);
-    assert.equal(result.status, 503);
-    assert.match(result.body.error, /capacity/);
-    assert.equal(result.scores, 20_000);
+    const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      env: { ...process.env, PORT: '0', DATA_DIR: capacityDataDir, WRITE_RATE_LIMIT: '1000' },
+      encoding: 'utf8', timeout: 20_000,
+    });
+    assert.equal(child.status, 0, child.stderr || child.error?.message);
+    assert.ok(child.stdout.includes('__CAPACITY_OK__'));
   } finally {
     rmSync(capacityDataDir, { recursive: true, force: true });
   }
+}
+
+await ok('R02: unverified writes stop at the trusted reserve; MAX/TG ranked writes still succeed without eviction', async () => {
+  await withScoreCapacity(17_999, `
+const first = await post('/api/score', browser);
+assert.equal(first.status, 200);
+const rejected = await post('/api/score', {...browser, submissionId:'capacity-browser-submit-0002'});
+assert.equal(rejected.status, 503);
+assert.match(rejected.body.error, /unverified.*capacity/);
+// Unverified VK must not bypass the reserve by claiming a different platform/identity.
+const vk = await post('/api/score', {platform:'vk',anonId:'42',payload:browser.payload});
+assert.equal(vk.status, 503);
+const retry = await post('/api/score', browser);
+assert.equal(retry.status, 200);
+assert.equal(retry.body.scoreId, first.body.scoreId);
+const reserved = await health();
+assert.equal(reserved.status, 200);
+assert.equal(reserved.body.ok, true);
+assert.equal(reserved.body.scores, 18000);
+assert.deepEqual(reserved.body.scoreCapacity, {
+  limit:20000,remaining:2000,trustedReserve:2000,unverifiedRemaining:0,ready:true,
+});
+for (const platform of ['max','telegram']) {
+  const admitted = await post('/api/score', await makeVerified(platform));
+  assert.equal(admitted.status, 200);
+  assert.equal(admitted.body.ranked, true);
+  assert.ok(admitted.body.rank > 0);
+}
+const after = await health();
+assert.equal(after.status, 200);
+assert.equal(after.body.scores, 18002);
+assert.equal(after.body.scoreCapacity.remaining, 1998);
+const top = await (await fetch(base + '/api/top')).json();
+assert.deepEqual(top.top.map(row => row.platform).sort(), ['max','telegram']);
+`);
+});
+
+await ok('R02: browser cannot take the last slot; final trusted write makes health non-green and retries remain idempotent', async () => {
+  await withScoreCapacity(19_999, `
+const rejected = await post('/api/score', browser);
+assert.equal(rejected.status, 503);
+assert.equal((await health()).body.scores, 19999);
+assert.equal((await health()).status, 200);
+const verified = await makeVerified('max');
+const admitted = await post('/api/score', verified);
+assert.equal(admitted.status, 200);
+assert.equal(admitted.body.ranked, true);
+const exhausted = await health();
+assert.equal(exhausted.status, 503);
+assert.equal(exhausted.httpOk, false, 'existing Docker/deploy r.ok checks must fail');
+assert.equal(exhausted.body.ok, false);
+assert.equal(exhausted.body.scores, 20000);
+assert.deepEqual(exhausted.body.scoreCapacity, {
+  limit:20000,remaining:0,trustedReserve:2000,unverifiedRemaining:0,ready:false,
+});
+const retry = await post('/api/score', verified);
+assert.equal(retry.status, 200);
+assert.equal(retry.body.scoreId, admitted.body.scoreId);
+const deniedVerified = await post('/api/score', await makeVerified('telegram'));
+assert.equal(deniedVerified.status, 503);
+assert.match(deniedVerified.body.error, /capacity/);
+assert.equal((await health()).body.scores, 20000);
+`);
+});
+
+await ok('R02: persisted full score capacity starts unhealthy, fails loud, and never evicts rows or consumes valid grants/tickets', async () => {
+  await withScoreCapacity(20_000, `
+const exhausted = await health();
+assert.equal(exhausted.status, 503);
+assert.equal(exhausted.httpOk, false);
+assert.equal(exhausted.body.ok, false);
+assert.equal(exhausted.body.scoreCapacity.ready, false);
+assert.equal(exhausted.body.scoreCapacity.remaining, 0);
+const verified = await makeVerified('telegram');
+for (const request of [browser, verified]) {
+  const denied = await post('/api/score', request);
+  assert.equal(denied.status, 503);
+  assert.match(denied.body.error, /capacity/);
+}
+const daily = await post('/api/daily/run', {platform:verified.platform,initData:verified.initData});
+assert.equal(daily.status, 201);
+const deniedDaily = await post('/api/score', {
+  ...verified,submissionId:'capacity-daily-submit-0001',
+  payload:{...verified.payload,daily:true,dailyRunId:daily.body.ticket.runId,runSeed:daily.body.ticket.runSeed},
+});
+assert.equal(deniedDaily.status, 503);
+assert.match(deniedDaily.body.error, /capacity/);
+assert.equal((await health()).body.scores, 20000);
+// Persist the new capabilities and verify capacity rejection has not consumed them.
+flushStoreNow();
+const stored = JSON.parse(readFileSync(file, 'utf8'));
+assert.equal(stored.runGrants.length, 1);
+assert.equal(stored.runGrants[0].consumedAt, null);
+assert.equal(stored.dailyRuns.length, 1);
+assert.equal(stored.dailyRuns[0].closedAt, null);
+`);
 });
 
 // ---------- профили (V1) ----------
