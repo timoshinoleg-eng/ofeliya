@@ -65,3 +65,9 @@
 ## Telegram edge rollout fix 03.10
 - First production rollout of #158 correctly failed public parity and rolled application containers back to 56476c0: nginx had Telegram CSP, but local Caddyfile.dedicated remained MAX-only.
 - Hotfix branch fix/telegram-edge-caddy-rollout versions the edge route policy through a renderer and safe Caddy validate/reload path with local-config restoration on failure.
+
+## Telegram webhook production fallback 04.10
+- Cloud.ru Docker outbound TLS to Telegram Bot API is unreliable even with the reachable pinned IP; do not treat an Up long-poll container as acceptance.
+- Production path now supports Telegram webhook at /api/telegram/webhook with X-Telegram-Bot-Api-Secret-Token validation.
+- Webhook responses return inline sendMessage methods with a Web App launch button, so /start and /help require no outbound Telegram API call.
+- When outbound Bot API is disabled, prepared-share fails locally and the client falls back to t.me/share/url without a 3.5s timeout.

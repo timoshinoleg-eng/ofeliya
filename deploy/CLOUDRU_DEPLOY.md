@@ -159,3 +159,26 @@ candidate with the running Caddy binary, updates the bind-mounted file in place,
 If validation or reload fails, the previous edge file is restored and the release fails closed.
 This keeps public CSP/security headers in lockstep with the immutable application release instead
 of leaving an old local edge policy active.
+
+### Telegram webhook fallback
+
+Cloud.ru outbound connectivity to Telegram Bot API is not reliable enough for production long
+polling: the host can intermittently reach the pinned Telegram endpoint while Docker-originated
+TLS requests can blackhole. Production therefore defaults to webhook mode.
+
+Set:
+- OFELIYA_TELEGRAM_BOT_MODE=webhook
+- OFELIYA_TELEGRAM_OUTBOUND_ENABLED=0
+- TG_WEBHOOK_SECRET=<random 16-256 chars using A-Z a-z 0-9 _ - >
+
+Register Telegram webhook URL:
+https://ofeliya.freeveol.dpdns.org/ofeliya/api/telegram/webhook
+
+Telegram sends X-Telegram-Bot-Api-Secret-Token and the score server rejects requests that do not
+match TG_WEBHOOK_SECRET. The webhook response uses Telegram's inline Bot API method response, so
+/start and /help do not require any outbound Bot API connection from Cloud.ru.
+
+When outbound Bot API is disabled, /api/telegram/share returns 503 immediately and the Telegram
+client falls back to https://t.me/share/url instead of waiting for the prepared-message API.
+Long polling remains available only with OFELIYA_TELEGRAM_BOT_MODE=polling for environments where
+outbound Bot API connectivity is verified.

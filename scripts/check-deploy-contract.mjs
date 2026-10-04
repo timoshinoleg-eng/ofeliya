@@ -91,6 +91,10 @@ assert.match(
   'compose must not consume streamed deploy stdin'
 );
 assert.match(deployScript, /OFELIYA_TELEGRAM_API_IP/, 'Telegram deploy must validate an explicit API egress endpoint');
+assert.match(deployScript, /OFELIYA_TELEGRAM_BOT_MODE/, 'Telegram deploy must support an explicit webhook or polling mode');
+assert.match(deployScript, /TG_WEBHOOK_SECRET must be 16-256/, 'Telegram webhook mode must fail closed without a valid webhook secret');
+assert.match(deployScript, /OFELIYA_TELEGRAM_OUTBOUND_ENABLED/, 'Telegram deploy must explicitly gate outbound Bot API features');
+assert.match(deployScript, /TELEGRAM_BOT_MODE.*polling/, 'long-polling container must start only in polling mode');
 assert.match(envExample, /OFELIYA_TELEGRAM_API_IP=149\.154\.167\.220/, 'env template must document the current Cloud.ru Telegram API fallback');
 assert.match(deployScript, /sync_caddy_edge\(\)/, 'deployment must synchronize the versioned Caddy edge policy');
 assert.match(deployScript, /caddy validate/, 'edge config must be validated before activation');

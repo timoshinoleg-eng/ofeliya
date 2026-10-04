@@ -22,6 +22,9 @@ const VK_SECURE_KEY = 'test-vk-secure-key-123';
 process.env.TZ = new Date().getUTCHours() < 10 ? 'America/Adak' : 'Pacific/Kiritimati';
 
 process.env.TG_BOT_TOKEN = TG_TOKEN;
+process.env.TG_WEBHOOK_SECRET = 'telegram_webhook_secret_test_2026';
+process.env.OFELIYA_TELEGRAM_OUTBOUND_ENABLED = '0';
+process.env.GAME_URL = 'https://ofeliya.example/ofeliya/';
 // MAX authentication must use the dedicated app token, not the shared bot token.
 process.env.BOT_TOKEN = 'SHARED-MAX-TOKEN';
 process.env.MAX_BOT_TOKEN = MAX_TOKEN;
@@ -121,6 +124,57 @@ function ok(name, fn) {
 }
 
 console.log('ofeliya-server tests');
+
+await ok('telegram webhook rejects an invalid secret', async () => {
+  const res = await fetch(BASE + '/api/telegram/webhook', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Telegram-Bot-Api-Secret-Token': 'wrong-secret-value',
+    },
+    body: JSON.stringify({ update_id: 1 }),
+  });
+  assert.equal(res.status, 403);
+});
+
+await ok('telegram webhook returns inline sendMessage with Web App launch', async () => {
+  const res = await fetch(BASE + '/api/telegram/webhook', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Telegram-Bot-Api-Secret-Token': process.env.TG_WEBHOOK_SECRET,
+    },
+    body: JSON.stringify({
+      update_id: 2,
+      message: {
+        message_id: 7,
+        chat: { id: 4242, type: 'private' },
+        from: { id: 4242, first_name: 'Telegram' },
+        text: '/start',
+      },
+    }),
+  });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.method, 'sendMessage');
+  assert.equal(body.chat_id, 4242);
+  assert.equal(body.reply_markup.inline_keyboard[0][0].text, 'Играть');
+  assert.equal(body.reply_markup.inline_keyboard[0][0].web_app.url, process.env.GAME_URL);
+});
+
+await ok('telegram prepared share fails fast when outbound Bot API is disabled', async () => {
+  const res = await fetch(BASE + '/api/telegram/share', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      initData: signInitData(ALICE, TG_TOKEN),
+      text: 'OFELIYA result',
+      link: 'https://t.me/ofeliya_game_bot?startapp=test',
+    }),
+  });
+  assert.equal(res.status, 503);
+  assert.match((await res.json()).error, /unavailable/);
+});
 
 await ok('GET /health', async () => {
   const r = await j(await fetch(`${BASE}/health`));
