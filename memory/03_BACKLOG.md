@@ -1,6 +1,9 @@
 # BACKLOG — OFELIYA: STRAIN ZERO
 
-Обновлено: 2026-10-02. Отмечайте сделанное галочкой; новые пункты добавляйте сюда, а не в чат.
+Обновлено: 2026-10-05. Отмечайте сделанное галочкой; новые пункты добавляйте сюда, а не в чат.
+
+## Deploy CI payload fix (05.10)
+- [ ] Root review and publish `fix/deploy-ci-payload-20261005`; confirm the deploy workflow can validate a large Actions runs response without placing it in an environment variable. No deploy performed by this task.
 
 ## Сейчас (P0)
 

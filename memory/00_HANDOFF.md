@@ -1,3 +1,20 @@
+# HANDOFF — deploy CI payload fix, 05.10.2026
+
+Branch `fix/deploy-ci-payload-20261005` starts from main `42b9f30a3feb8f219faf41014f0bfdd6bf27b5dd`. The deploy run `37362076056` failed before bastion access: exporting the GitHub Actions runs response as `RUNS_JSON` exceeded Linux `MAX_ARG_STRLEN`, causing Node spawn exit 126 (`Argument list too long`).
+
+Changed only `.github/workflows/deploy-cloudru.yml` successful-main-CI validation: save `gh api` response to a `mktemp` file, register EXIT cleanup, and have the existing inline Node validator read it through `fs.readFileSync`. Preserve all five checks (`name=CI`, exact `head_sha`, `head_branch=main`, `event=push`, `conclusion=success`) and fail closed for malformed JSON/no match. Local regression proof executes the actual inline Node body with a >128 KiB fixture and confirms wrong name/SHA/branch/event/conclusion all reject.
+
+No deploy, browser, push, merge, or gate bypass. Review and publish remain with root. This task requires only the deploy workflow file plus the four memory files; keep commits separate for code and memory.
+
+## Verification
+
+- `node work/deploy-ci-payload-regression.cjs` — exit 0; executes the extracted inline Node body from the workflow against a 407,765-byte valid fixture (accept), wrong workflow name/SHA/branch/event/conclusion (reject), and malformed JSON (reject).
+- `git diff --check` — exit 0.
+- The regression harness was temporary and removed after execution; no test framework or workflow gate was added.
+- Code commit: `75dc7d4b78c6368556905805116f7951806b539e`; memory is committed separately afterward. No deploy, push, or merge.
+
+---
+
 # HANDOFF — release closure, 05.10.2026
 
 Ограниченный release closure выполнен в отдельном checkout поверх `1d6bb37`. Кодовые коммиты:
