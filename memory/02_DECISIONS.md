@@ -91,3 +91,5 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - For every card, find its own effect, plate, description, and footer under that card's container. Do not reuse global text matches across cards; this can make duplicate footer labels hide per-card defects.
 - The expanded-height assertion must follow the same geometry as production: proposed stack top below measured subtitle bottom plus gap, and stack bottom above viewport bottom margin. Also assert card-to-card separation and visible-text viewport bounds.
 - Keep failures visible. Syntax/static checks do not establish browser layout correctness; root browser run and independent review remain required.
+
+- First browser run for the expanded probe passed 87/88: all single and two-choice pair scenarios passed; only the synthetic three-card fixture at 320x480 overlapped the subtitle. Move that fixture to 320x520 so the compact stack can fit while the expanded proposal fails the lower viewport guard; await rerun and independent review. This is a fixture-boundary correction, not a production layout change or weakened assertion.

@@ -15,7 +15,7 @@ const cases = [
   { width: 360, height: 640 },
   { width: 390, height: 740 },
 ];
-const shortPortrait = { width: 320, height: 480 };
+const shortPortrait = { width: 320, height: 520 };
 
 function makeLegendaryChoice(choice, suffix = '') {
   return {

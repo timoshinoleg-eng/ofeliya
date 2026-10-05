@@ -142,5 +142,5 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 
 ## 2026-10-05: многокарточный Legendary probe
 - `scripts/legendary-layout-probe.cjs` обновлён в `a4fd334f1f1b319d5a6016026a6689ef757eaceb`.
-- Оставлены одиночные карточки; добавлены 15 distinct pairs actual Legendary definitions на viewports 320x568, 360x640, 390x740, synthetic three-Legendary layout fixture на этих размерах и guard fixture на 320x480.
-- Per-card checks локализованы в родительском Phaser container. Browser verification ещё не выполнена; см. `00_HANDOFF.md`. Не считать расширенное покрытие пройденным до фактического запуска и независимого review.
+- Оставлены одиночные карточки; добавлены 15 distinct pairs actual Legendary definitions на viewports 320x568, 360x640, 390x740, synthetic three-Legendary layout fixture на этих размерах и guard fixture на 320x520.
+- Per-card checks локализованы в родительском Phaser container. Первый browser run: 87/88; single и pair cases прошли. Один synthetic-three 320x480 failure вызван subtitle overlap на стрессовом fixture; его скорректировали до 320x520 для проверки compact-fit / expanded-no-fit guard. Итоговый повторный run и независимое review pending.
