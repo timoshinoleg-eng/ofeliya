@@ -75,3 +75,8 @@ Product validation sprint по приоритетам P0–P2: закрыть и
 - Code/assets commit `dc7fc8ed8d9a00f9f5c7f77937fe45c529be97c1`; Play 400/700 assets and OFL/provenance are included. The game is unchanged unless `VITE_TYPOGRAPHY_EXPERIMENT=play`; system body stack remains current. Standalone specimen: `experiments/typography/index.html`.
 - Checks passed: `npx tsc --noEmit`, `npm run test:startup`, Vite builds with and without experiment flag. No browser screenshot or actual MAX device review is claimed.
 - Next: root agent runs visual checks from `outputs/typography-experiment.md`, especially title fit, Russian/Ё glyphs, 320px width, and zero Play requests in default Network. Do not merge/deploy or flip default before separate product review.
+
+## Repair update 2026-10-05
+- Latest local repair commit: `7e1c9bae15d35ab355c15e05e16567501f6c8d3b`. `config.ts` has no `import.meta`; browser boot calls the opt-in font setter. Release visual workflow sets `VITE_RELEASE_SHA` to `github.sha` for the normal build/stamp.
+- Red-to-green `npm run test:save`; typecheck and default/Play stamped builds passed. Nonbrowser package checks 40/41; missing real `artifacts/mobile-acceptance.json` is the only remaining nonbrowser gate and must stay unclaimed.
+- Root must rerun browser checks and CI against this SHA. Do not push from this worker.

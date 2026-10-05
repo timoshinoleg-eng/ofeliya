@@ -78,3 +78,9 @@
 - [x] Add branch-only Play 400/700 Cyrillic specimen and opt-in Vite selection.
 - [ ] Root review the specimen/game in browser at compact mobile widths; verify default Network makes no Play requests.
 - [ ] Make a separate explicit product decision before applying any typography change in production.
+
+## Typography CI follow-up
+- [x] Keep font config compatible with CommonJS migration transpilation.
+- [x] Supply commit SHA in release visual matrix build environment.
+- [ ] Root rerun browser visual checks and fresh branch CI; push only after checking the new SHA.
+- [ ] Real Android/iOS evidence remains a separate external gate.

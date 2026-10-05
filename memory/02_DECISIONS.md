@@ -48,3 +48,7 @@
 ## Cyrillic typography experiment 05.10
 - Preserve the existing Chakra Petch display face and native system UI body stack as default. A reversible Play trial may be enabled only with `VITE_TYPOGRAPHY_EXPERIMENT=play`.
 - Keep font selection behind runtime/build configuration with a fallback, ship source/license provenance with the font files, and keep comparison specimens isolated from gameplay flow until browser review and a product decision.
+
+## Typography CI correction 05.10
+- `src/game/config.ts` must stay free of `import.meta` because compatibility smoke gates compile it as CommonJS. The browser entrypoint may read Vite environment flags and call a plain config setter before startup font waits and scenes.
+- Release visual matrix must pass a real `VITE_RELEASE_SHA` to the standard build/stamp path; do not weaken release validation to accommodate QA builds.
