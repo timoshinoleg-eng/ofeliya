@@ -126,4 +126,4 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - [x] Assert per-card fixtures and bounds, card separation, measured subtitle gap, fit-guard decision, and visible-text viewport containment.
 - [x] Initial root browser run: 87/88 passed; singles and all two-card pairs passed. One synthetic-three 320x480 failure was caused by subtitle overlap in the stress fixture.
 - [x] Root rerun with guard fixture at 320x520: 88/88 passed (24 singles, 60 pairs, 3 synthetic-three, 1 guard); short guard stayed at 124px with 9px subtitle gap and no overflow.
-- [ ] Cline independent diff review and Linux CI; no real-device acceptance claim.
+- [ ] Cline independent diff review and Linux CI rerun. First Linux attempt failed before layout checks because default URL was 5197 instead of CI port 5173 (connection refused at `work/multicard-linux-plain.log:190`); probe fallback is corrected. No real-device acceptance claim.

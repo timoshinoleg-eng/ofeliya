@@ -1,5 +1,5 @@
 // Focused manual browser probe. Run against this checkout's Vite server with
-// OFELIYA_URL=http://127.0.0.1:5197/ node scripts/legendary-layout-probe.cjs
+// Override OFELIYA_URL for a non-default local Vite port, e.g. 5197.
 const fs = require('fs');
 
 function browserDriver() {
@@ -44,7 +44,7 @@ function makeLegendaryChoice(choice, suffix = '') {
         };
       }, size);
       const page = await ctx.newPage();
-      await page.goto(process.env.OFELIYA_URL || 'http://127.0.0.1:5197/', { waitUntil: 'domcontentloaded' });
+      await page.goto(process.env.OFELIYA_URL || 'http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
       await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
       await page.waitForFunction(() => window.__game.scene.isActive('UI') &&
