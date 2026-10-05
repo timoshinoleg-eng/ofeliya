@@ -172,6 +172,14 @@ OFELIYA's daily runs are server-authoritative (DailyRunClient + DailyRunIntent).
 Virus, immune cells, host cells, bloodstream background, mutation icons and gameplay VFX are generated
 by project code at runtime/build time and do not depend on copied external raster/sprite artwork.
 
+## Play font experiment
+
+- Font: Play, regular 400 and bold 700, from Google Fonts (`ofl/play`, SIL Open Font License 1.1).
+- Upstream source: [Google Fonts Play directory](https://github.com/google/fonts/tree/main/ofl/play); served font files: `https://fonts.gstatic.com/s/play/v21/6aez4K2oVqwIjtI.ttf` (400) and `https://fonts.gstatic.com/s/play/v21/6ae84K2oVqwItm4TOpc.ttf` (700).
+- Local files: `public/fonts/play-400.woff2`, `public/fonts/play-700.woff2`; unmodified upstream TTFs were converted to WOFF2 for this opt-in experiment.
+- License copy: `public/fonts/OFL-Play.txt`. Both weights include Russian Cyrillic including Ё/ё.
+- The font is requested by the game only when `VITE_TYPOGRAPHY_EXPERIMENT=play`; default mode retains the existing Chakra Petch/system UI fonts.
+
 ## Release rule
 
 Any new third-party binary asset must add, in the same change:

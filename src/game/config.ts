@@ -21,7 +21,11 @@ export const COLORS = {
   virus: 0xff4fb5,
 };
 
-export const FONT = "'Chakra Petch', Arial, sans-serif";
+const PLAY_TYPOGRAPHY_EXPERIMENT = import.meta.env.VITE_TYPOGRAPHY_EXPERIMENT === 'play';
+
+export const FONT = PLAY_TYPOGRAPHY_EXPERIMENT
+  ? "'Play', 'Chakra Petch', Arial, sans-serif"
+  : "'Chakra Petch', Arial, sans-serif";
 
 export const UI_FONT = "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif";
 
