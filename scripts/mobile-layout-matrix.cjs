@@ -1,8 +1,16 @@
 const fs = require('fs');
-const { chromium } = require('playwright-core');
+const path = require('path');
 
-const chrome = ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(fs.existsSync);
-if (!chrome) throw new Error('Chrome not found');
+const { chromium } = process.platform === 'win32' ? require('playwright') : require('playwright-core');
+
+const chrome = process.platform === 'win32'
+  ? undefined
+  : ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(fs.existsSync);
+if (process.platform !== 'win32' && !chrome) throw new Error('Chrome not found');
+const appUrl = process.env.OFELIYA_URL || 'http://127.0.0.1:5173/';
+const captureDir = process.platform === 'win32'
+  ? path.join(process.cwd(), '.tmp-browser-smoke')
+  : '/tmp/browser-smoke';
 
 const sizes = [
   { width: 320, height: 568 },
@@ -21,7 +29,7 @@ async function assertCompactResumeMenu(browser) {
     route.fulfill({ status: 200, contentType: 'application/javascript', body: '' })
   );
   await ctx.addInitScript(({ width, height }) => {
-    localStorage.setItem('ofeliya_save_v1', JSON.stringify({ muted: true, runs: 1 }));
+    localStorage.setItem('ofeliya_save_v1', JSON.stringify({ muted: true, runs: 1, tutorialDone: true }));
     sessionStorage.clear();
     window.__matrixViewport = { width, height };
     window.WebApp = {
@@ -39,10 +47,25 @@ async function assertCompactResumeMenu(browser) {
   }, size);
 
   const page = await ctx.newPage();
-  await page.goto('http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
+  await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
   await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
-  await page.waitForFunction(() => window.__game.scene.isActive('Game'));
+  await page.waitForFunction(() =>
+    window.__game.scene.isActive('Game') || window.__game.scene.isPaused('Game')
+  );
+  await page.evaluate(() => {
+    const game = window.__game;
+    const gs = game.scene.getScene('Game');
+    const ui = game.scene.getScene('UI');
+    // An automatic first-frame level-up can pause the Game before Playwright
+    // observes an active frame. It is unrelated to the resume-menu fixture.
+    gs.awaitingChoice = false;
+    gs.pendingChoices = [];
+    gs.queuedLevels = 0;
+    ui.hideModal();
+    if (game.scene.isPaused('Game')) game.scene.resume('Game');
+    if (!gs.saveCheckpointNow()) throw new Error('resume-menu fixture did not save a checkpoint');
+  });
   await sleep(120);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
@@ -80,7 +103,7 @@ async function assertCompactResumeMenu(browser) {
     throw new Error(`resume menu 320x568 overlap: ${JSON.stringify(layout)}`);
   }
 
-  await page.locator('#game').screenshot({ path: '/tmp/browser-smoke/03b-matrix-resume-menu-320x568.png' });
+  await page.locator('#game').screenshot({ path: path.join(captureDir, '03b-matrix-resume-menu-320x568.png') });
 
   // MenuScene.onResize() restarts the same Phaser Scene instance. The layout guard must
   // recognise each new display-list generation even when dimensions/text are identical.
@@ -122,9 +145,9 @@ async function assertCompactResumeMenu(browser) {
   const browser = await chromium.launch({
     executablePath: chrome,
     headless: true,
-    args: ['--no-sandbox', '--disable-dev-shm-usage'],
+    args: process.platform === 'win32' ? [] : ['--no-sandbox', '--disable-dev-shm-usage'],
   });
-  fs.mkdirSync('/tmp/browser-smoke', { recursive: true });
+  fs.mkdirSync(captureDir, { recursive: true });
 
   for (const size of sizes) {
     const ctx = await browser.newContext({ viewport: size, deviceScaleFactor: 1 });
@@ -132,7 +155,7 @@ async function assertCompactResumeMenu(browser) {
       route.fulfill({ status: 200, contentType: 'application/javascript', body: '' })
     );
     await ctx.addInitScript(({ width, height }) => {
-      localStorage.setItem('ofeliya_save_v1', JSON.stringify({ muted: true, runs: 1 }));
+      localStorage.setItem('ofeliya_save_v1', JSON.stringify({ muted: true, runs: 1, tutorialDone: true }));
       sessionStorage.clear();
       window.__matrixViewport = { width, height };
     window.WebApp = {
@@ -156,18 +179,19 @@ async function assertCompactResumeMenu(browser) {
     const page = await ctx.newPage();
     const pageErrors = [];
     page.on('pageerror', (error) => pageErrors.push(String(error)));
-    await page.goto('http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
+    await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
     await sleep(180);
 
-    const menu = await page.evaluate(({ width, height }) => {
+    const menu = await page.evaluate(async ({ width, height }) => {
+      const { visibleTextBounds } = await import('/scripts/visible-text-bounds.js');
       const game = window.__game;
       const scene = game.scene.getScene('Menu');
-      const texts = scene.children.list.filter((obj) => typeof obj.text === 'string');
-      const visible = texts.filter(
-        (obj) => obj.visible !== false && (obj.alpha ?? 1) > 0.01 && typeof obj.getBounds === 'function'
-      );
+      const measured = visibleTextBounds(scene);
+      const texts = measured.map(({ object }) => object);
+      const visible = texts;
       const overflow = visible
+        .filter((obj) => !measured.find((entry) => entry.object === obj).masked)
         .map((obj) => ({ text: obj.text, bounds: obj.getBounds() }))
         .filter(({ bounds }) => bounds.left < 1 || bounds.right > width - 1 || bounds.top < 1 || bounds.bottom > height - 1)
         .map(({ text, bounds }) => ({ text, left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom }));
@@ -256,13 +280,23 @@ async function assertCompactResumeMenu(browser) {
     }
 
     if (size.width === 320 && size.height === 568) {
-      await page.locator('#game').screenshot({ path: '/tmp/browser-smoke/03-matrix-menu-320x568.png' });
+      await page.locator('#game').screenshot({ path: path.join(captureDir, '03-matrix-menu-320x568.png') });
     }
 
     await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
-    await page.waitForFunction(() => window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI'));
+    await page.waitForFunction(() =>
+      window.__game.scene.isActive('UI') &&
+      (window.__game.scene.isActive('Game') || window.__game.scene.isPaused('Game'))
+    );
     await page.evaluate(() => {
-      const gs = window.__game.scene.getScene('Game');
+      const game = window.__game;
+      const gs = game.scene.getScene('Game');
+      const ui = game.scene.getScene('UI');
+      gs.awaitingChoice = false;
+      gs.pendingChoices = [];
+      gs.queuedLevels = 0;
+      ui.hideModal();
+      if (game.scene.isPaused('Game')) game.scene.resume('Game');
       gs.runState.run.timeMs = 130000;
       gs.runState.run.kills = 90;
       gs.runState.run.hostCellsInfected = 5;
@@ -273,7 +307,8 @@ async function assertCompactResumeMenu(browser) {
     });
     await sleep(180);
 
-    const result = await page.evaluate(({ width, height, buttonLabels }) => {
+    const result = await page.evaluate(async ({ width, height, buttonLabels }) => {
+      const { visibleTextBounds } = await import('/scripts/visible-text-bounds.js');
       const ui = window.__game.scene.getScene('UI');
       const normalize = (value) => String(value ?? '').replace(/\n/g, ' ');
       const container = ui.children.list.find(
@@ -283,11 +318,11 @@ async function assertCompactResumeMenu(browser) {
       );
       if (!container) return { missing: 'result container' };
 
-      const texts = container.list.filter((obj) => typeof obj.text === 'string');
-      const visible = texts.filter(
-        (obj) => obj.visible !== false && (obj.alpha ?? 1) > 0.01 && typeof obj.getBounds === 'function'
-      );
+      const measured = visibleTextBounds(container);
+      const texts = measured.map(({ object }) => object);
+      const visible = texts;
       const overflow = visible
+        .filter((obj) => !measured.find((entry) => entry.object === obj).masked)
         .map((obj) => ({ text: obj.text, bounds: obj.getBounds() }))
         .filter(({ bounds }) => bounds.left < 1 || bounds.right > width - 1 || bounds.top < 1 || bounds.bottom > height - 1)
         .map(({ text, bounds }) => ({ text, left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom }));
@@ -412,7 +447,7 @@ async function assertCompactResumeMenu(browser) {
     }
 
     if (size.width === 320 && size.height === 568) {
-      await page.locator('#game').screenshot({ path: '/tmp/browser-smoke/04-matrix-result-320x568.png' });
+      await page.locator('#game').screenshot({ path: path.join(captureDir, '04-matrix-result-320x568.png') });
     }
 
     if (pageErrors.length) {

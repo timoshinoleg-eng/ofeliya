@@ -10,6 +10,8 @@
     "test:save": "node scripts/check-save-migration.mjs",
     "test:stages": "node scripts/check-stages.mjs",
     "test:legendary": "node scripts/check-legendary.mjs",
+    "test:legendary-layout": "node scripts/legendary-layout-probe.cjs",
+    "test:layout-diagnostics": "node tests/visible-text-bounds.mjs",
     "test:difficulty": "node scripts/check-difficulty.mjs",
     "test:rng": "node scripts/check-rng.mjs && node scripts/check-checkpoint.mjs",
     "test:checkpoint": "node scripts/check-checkpoint.mjs",
