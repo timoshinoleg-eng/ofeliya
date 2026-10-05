@@ -124,6 +124,8 @@ try {
     'build summary is sorted by stack desc and capped at 5'
   );
   assert.equal(copy.formatBuildSummary({}), '', 'empty stacks yield an empty summary');
+  assert.equal(copy.formatBuildSummary({ hp: 3, dmg: 3, orbit: 3 }),
+    'КАПСИД 3 · ШИПЫ 3 · СПУТНИКИ 3', 'equal stack counts retain insertion order');
 
   // 5. Control modes: full vs compact variants, exhaustive over supported modes.
   assert.deepEqual(Object.keys(control.CONTROL_MODE_COPY).sort(), [...MODES].sort());
