@@ -24,6 +24,7 @@ const SCOPED_FILES = [
   'src/game/StageDefinitions.ts',
   'src/game/DifficultyProfile.ts',
   'src/game/ControlMode.ts',
+  'src/game/UiCopy.ts',
   'src/game/AchievementSystem.ts',
   'src/scenes/MenuScene.ts',
   'src/scenes/UIScene.ts',

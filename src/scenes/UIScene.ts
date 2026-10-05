@@ -25,12 +25,16 @@ import { readControlMode, type ControlMode } from '../game/ControlMode';
 import type { RunResult, RunSnapshot } from '../game/RunContracts';
 import {
   EVOLUTION_NAMES,
-  UPGRADE_FAMILY_LABELS,
   UPGRADES,
   getUpgradeProgress,
   type EvolutionId,
   type UpgradeDef,
 } from '../game/UpgradeSystem';
+import {
+  MUTATION_CARD_HEADERS,
+  formatBuildSummary,
+  mutationCardHeader,
+} from '../game/UiCopy';
 import { PlatformBridge } from '../platform';
 import { Sfx } from '../systems/Sfx';
 import { VideoInterstitial, type VideoInterstitialId } from '../systems/VideoInterstitial';
@@ -1400,11 +1404,7 @@ export class UIScene extends Phaser.Scene {
 
       const tx = legendary && !hasIcon ? -cw / 2 + 18 : -cw / 2 + 73;
       const right = cw / 2 - 14;
-      const family = legendary
-        ? 'ЛЕГЕНДАРНАЯ МУТАЦИЯ'
-        : evolution
-          ? 'КРИТИЧЕСКАЯ МУТАЦИЯ'
-          : `${UPGRADE_FAMILY_LABELS[def.family]} · ${def.rarity === 'rare' ? 'РЕДКИЙ' : 'СТАНДАРТ'}`;
+      const family = mutationCardHeader(def);
       card.add(
         this.add
           .text(tx, -ch / 2 + 8, family, {
@@ -1675,7 +1675,7 @@ export class UIScene extends Phaser.Scene {
     c.add(emblem);
 
     const label = this.add
-      .text(W / 2, H * 0.2, 'ЛЕГЕНДАРНАЯ МУТАЦИЯ', {
+      .text(W / 2, H * 0.2, MUTATION_CARD_HEADERS.legendary, {
         fontFamily: FONT,
         fontSize: compact ? '15px' : '18px',
         fontStyle: 'bold',
@@ -1828,7 +1828,7 @@ export class UIScene extends Phaser.Scene {
 
     c.add(
       this.add
-        .text(W / 2, H * 0.21, 'КРИТИЧЕСКАЯ МУТАЦИЯ', {
+        .text(W / 2, H * 0.21, MUTATION_CARD_HEADERS.evolution, {
           fontFamily: FONT,
           fontSize: '18px',
           fontStyle: 'bold',
@@ -2471,27 +2471,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   private buildSummary(stacks: Record<string, number>): string {
-    const labels: Record<string, string> = {
-      dmg: 'ШИПЫ',
-      rate: 'РЕПЛИКАЦИЯ',
-      multi: 'КОПИИ',
-      pierce: 'ПРОБИТИЕ',
-      speed: 'СКОРОСТЬ',
-      hp: 'КАПСИД',
-      magnet: 'МАГНИТ',
-      orbit: 'СПУТНИКИ',
-      nova: 'ИМПУЛЬС',
-      regen: 'РЕГЕН.',
-      infect: 'ЗАРАЖЕНИЕ',
-      lysis: 'ЦИТОЛИЗ',
-      factory: 'ФАБРИКА',
-    };
-    return Object.entries(stacks)
-      .filter(([id, n]) => n > 0 && UPGRADES.some((u) => u.id === id))
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([id, n]) => `${labels[id] ?? id.toUpperCase()} ${n}`)
-      .join(' · ');
+    return formatBuildSummary(stacks);
   }
 
   private button(

@@ -9,8 +9,11 @@ import { LEGENDARIES } from '../game/LegendarySystem';
 import { STAGES } from '../game/StageDefinitions';
 import { EVOLUTION_NAMES, type EvolutionId } from '../game/UpgradeSystem';
 import {
+  controlModeCompactDescription,
+  controlModeCompactLabel,
   controlModeDescription,
   controlModeLabel,
+  controlModeTinyHint,
   nextControlMode,
   readControlMode,
   writeControlMode,
@@ -518,18 +521,8 @@ export class MenuScene extends Phaser.Scene {
       .setDepth(6);
     let startHint: Phaser.GameObjects.Text | null = null;
     const renderControlMode = () => {
-      const splitControlValue =
-        selectedControlMode === 'one-hand'
-          ? 'ОДНА РУКА'
-          : selectedControlMode === 'two-hand'
-            ? 'ДВЕ РУКИ'
-            : 'ДВА СТИКА';
-      const splitControlDescription =
-        selectedControlMode === 'one-hand'
-          ? 'АВТОАТАКА · одно касание'
-          : selectedControlMode === 'two-hand'
-            ? 'ПРИЦЕЛ · справа атака'
-            : 'оба стика · автоатака';
+      const splitControlValue = controlModeCompactLabel(selectedControlMode);
+      const splitControlDescription = controlModeCompactDescription(selectedControlMode);
       if (duelLoading) {
         controlText.setText('ЗАГРУЗКА ДУЭЛИ');
         controlDesc.setText(H < 650 ? 'фиксировано' : splitSelectors ? 'режим придёт из вызова' : 'режим придёт\nиз снимка вызова');
@@ -540,7 +533,7 @@ export class MenuScene extends Phaser.Scene {
         controlText.setText(splitSelectors ? `${splitControlValue}  ›` : `${controlModeLabel(selectedControlMode)}  ›`);
         controlDesc.setText(
           H < 650
-            ? selectedControlMode === 'two-hand' ? 'прицел' : 'автоатака'
+            ? controlModeTinyHint(selectedControlMode)
             : splitSelectors ? splitControlDescription : controlModeDescription(selectedControlMode)
         );
       }
