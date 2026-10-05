@@ -82,7 +82,7 @@ const cases = [
             return { left: b.left, right: b.right, top: b.top, bottom: b.bottom, width: b.width, height: b.height };
           };
           const text = textObjects.find((obj) => obj.text === ui.gs.pendingChoices[0].name);
-          const plate = text?.parentContainer?.list.find((obj) => obj.type === 'Rectangle' && obj.width > 100 && obj.height <= 32 && Math.abs(obj.y - text.y) < 1);
+          const plate = text?.parentContainer?.list.find((obj) => obj.type === 'Rectangle' && obj.width > 100 && obj.height <= 44 && Math.abs(obj.y - text.y) < 1);
           const lineCount = text?.getWrappedText(text.text).length ?? null;
           const maxLines = text?.style.maxLines ?? null;
           const overflow = measured

@@ -1446,26 +1446,26 @@ export class UIScene extends Phaser.Scene {
           .setResolution(2)
       );
 
-      const effectY = ch / 2 - (compact ? 37 : 44);
+      const effectText = this.add.text(tx + 8, 0, def.name, {
+        fontFamily: UI_FONT,
+        fontSize: compact ? '11px' : '12px',
+        fontStyle: '700',
+        color: legendary || evolution ? '#fff1ac' : def.rarity === 'rare' ? '#ddd0ff' : '#9ef1ff',
+        align: 'left',
+        lineSpacing: -1,
+        maxLines: legendary ? 3 : 2,
+        wordWrap: { width: Math.max(92, effectW - 16), useAdvancedWrap: true },
+      });
+      const effectNeedsThirdLine = compact && legendary && effectText.getWrappedText(def.name).length > 2;
+      effectText.setMaxLines(effectNeedsThirdLine ? 3 : 2);
+      // Keep the third compact Legendary line inside its badge without enlarging every reward card.
+      const effectY = ch / 2 - (compact ? (effectNeedsThirdLine ? 31 : 37) : 44);
+      const effectPlateHeight = compact ? (effectNeedsThirdLine ? 42 : 30) : 32;
       const effectPlate = this.add
-        .rectangle(tx + effectW / 2, effectY, effectW, compact ? 30 : 32, accent, 0.11)
+        .rectangle(tx + effectW / 2, effectY, effectW, effectPlateHeight, accent, 0.11)
         .setStrokeStyle(1, accent, 0.3);
       card.add(effectPlate);
-      card.add(
-        this.add
-          .text(tx + 8, effectY, def.name, {
-            fontFamily: UI_FONT,
-            fontSize: compact ? '11px' : '12px',
-            fontStyle: '700',
-            color: legendary || evolution ? '#fff1ac' : def.rarity === 'rare' ? '#ddd0ff' : '#9ef1ff',
-            align: 'left',
-            lineSpacing: -1,
-            maxLines: 2,
-            wordWrap: { width: Math.max(92, effectW - 16), useAdvancedWrap: true },
-          })
-          .setOrigin(0, 0.5)
-          .setResolution(2)
-      );
+      card.add(effectText.setPosition(tx + 8, effectY).setOrigin(0, 0.5).setResolution(2));
 
       if (def.showProgress !== false && def.max <= 8) {
         const pg = this.add.graphics();
