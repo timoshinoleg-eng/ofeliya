@@ -2,6 +2,9 @@
 
 Обновлено: 2026-10-05. Отмечайте сделанное галочкой; новые пункты добавляйте сюда, а не в чат.
 
+## Control-mode browser smoke (06.10)
+- [ ] Root review/publish `fix/control-smoke-preconditions-20261006` and rerun full main CI; focused browser smoke passed locally.
+
 ## Deploy CI payload fix (05.10)
 - [x] PR #173 merged the file-backed deploy CI payload fix; target branch inherits it from main `b174b40`.
 - [x] PR #174 merged targeted CI lookup and Ubuntu 22.04 pin; target branch inherits it from main `18e6f05`.

@@ -1,3 +1,15 @@
+# HANDOFF — control smoke gameplay precondition, 06.10.2026
+
+Branch `fix/control-smoke-preconditions-20261006` starts at main `3a048680feadb43b7254624b933561c72d24a318`. Reproduced the failed recycled pointer test with CI-equivalent Vite legal config and WebApp/storage stubs. At the fixture point the original app had active scenes `[UI]`, Game paused, and UI `uiBlocked=true`, `modalOpen=true`, modal present with three stacked mutation choice groups; transition/game-over/manual-pause flags were false. `TwinStickControls.onDown` correctly no-ops while blocked. The fixture had not isolated live progression before invoking synthetic pointer IDs.
+
+Only `scripts/control-mode-smoke.cjs` changes: a helper replaces the test Game instance's `update` with a no-op before starting Game, keeping Game and UI active while freezing gameplay progression. It captures and asserts an unblocked, modal-free UI state for twin-stick, dual-move, and one-hand starts. Phaser source shows `SceneManager` captures `scene.update` after `create()` returns but before emitting CREATE, so assigning it in a create listener is too late; final helper assigns before scene start. Production code is unchanged.
+
+Focused browser smoke passed on the local configured Vite server: `control modes + dual-move multitouch browser smoke: ok`. Existing recycled-ID, actual CDP multitouch, resize, pause/resume, transition and modal blocking assertions remain. Independent reviewer approved the final diff.
+
+Code commit: `b18d5b1494d2e2886fca904016dbcce1625dd2ab`. No push, PR, full CI, or deploy. Root owns publication and CI follow-up.
+
+---
+
 # HANDOFF — standalone deploy compatibility policy, 05.10.2026
 
 Branch `fix/deploy-standalone-policy-20261005` starts at main `18e6f05680da86780cdc7bba253975ccf6776c72` (PR #174). Cloud.ru run `37370394631` passed runner acquisition and the CI/release floor. Rollout then failed with exit 127 because the bastion extracts selected `deploy-cloudru.sh` to `/tmp`; it attempted to source sibling `/tmp/check-compatible-release.sh`. Automatic rollback to compatible live SHA `edb1b9a...` succeeded and public `release.json` confirmed the rollback.
