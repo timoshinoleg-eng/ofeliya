@@ -1,5 +1,5 @@
 // Focused manual browser probe. Run against this checkout's Vite server with
-// OFELIYA_URL=http://127.0.0.1:5194/ node scripts/legendary-layout-probe.cjs
+// OFELIYA_URL=http://127.0.0.1:5197/ node scripts/legendary-layout-probe.cjs
 const fs = require('fs');
 
 function browserDriver() {
@@ -15,13 +15,22 @@ const cases = [
   { width: 360, height: 640 },
   { width: 390, height: 740 },
 ];
+const shortPortrait = { width: 320, height: 480 };
+
+function makeLegendaryChoice(choice, suffix = '') {
+  return {
+    id: `layout-${choice.id}${suffix}`, shortName: choice.title, name: choice.effect,
+    desc: choice.desc, max: 1, family: choice.family, rarity: 'legendary',
+    kind: 'legendary', legendaryId: choice.id, showProgress: false, apply: () => {},
+  };
+}
 
 (async () => {
   const { chromium, executablePath } = browserDriver();
   const browser = await chromium.launch({ executablePath, headless: true, args: process.platform === 'win32' ? [] : ['--no-sandbox', '--disable-dev-shm-usage'] });
   const reports = [];
   try {
-    for (const size of cases) {
+    for (const size of [...cases, shortPortrait]) {
       const ctx = await browser.newContext({ viewport: size, deviceScaleFactor: 1 });
       await ctx.route('https://st.max.ru/**', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: '' }));
       await ctx.addInitScript(({ width, height }) => {
@@ -35,22 +44,34 @@ const cases = [
         };
       }, size);
       const page = await ctx.newPage();
-      await page.goto(process.env.OFELIYA_URL || 'http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
+      await page.goto(process.env.OFELIYA_URL || 'http://127.0.0.1:5197/', { waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
       await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
-      // First-run onboarding can pause Game behind an overlay before this probe
-      // installs its own choice. UI must be running; Game may be active or paused.
-      await page.waitForFunction(() =>
-        window.__game.scene.isActive('UI') &&
-        (window.__game.scene.isActive('Game') || window.__game.scene.isPaused('Game'))
-      );
+      await page.waitForFunction(() => window.__game.scene.isActive('UI') &&
+        (window.__game.scene.isActive('Game') || window.__game.scene.isPaused('Game')));
       const definitions = await page.evaluate(async () => {
-        // The live bundle exposes the same source module to Vite in development mode.
         const module = await import('/src/game/LegendarySystem.ts');
         return module.LEGENDARIES.map(({ id, title, effect, desc, family }) => ({ id, title, effect, desc, family }));
       });
-      for (const def of definitions) {
-        await page.evaluate((choice) => {
+
+      const scenarios = [];
+      for (const def of definitions) scenarios.push({ kind: 'single', choices: [def], reward: true });
+      for (let i = 0; i < definitions.length; i++) {
+        for (let j = i + 1; j < definitions.length; j++) {
+          scenarios.push({ kind: 'trophy-pair', choices: [definitions[i], definitions[j]], reward: true });
+        }
+      }
+      if (size.height !== shortPortrait.height) {
+        // Layout robustness fixture only: the guaranteed trophy path offers two choices.
+        scenarios.push({ kind: 'synthetic-three-legendary', choices: [definitions[0], definitions[1], definitions[2]], reward: true });
+      } else {
+        scenarios.push({ kind: 'short-portrait-three-legendary-guard', choices: [definitions[0], definitions[1], definitions[2]], reward: true, expectCompact: true });
+      }
+
+      for (let scenarioIndex = 0; scenarioIndex < scenarios.length; scenarioIndex++) {
+        const scenario = scenarios[scenarioIndex];
+        const choices = scenario.choices.map((choice, index) => makeLegendaryChoice(choice, `-${scenarioIndex}-${index}`));
+        await page.evaluate(({ choices, reward }) => {
           const gs = window.__game.scene.getScene('Game');
           const ui = window.__game.scene.getScene('UI');
           ui.modal?.destroy(true);
@@ -61,55 +82,67 @@ const cases = [
           gs.runState.stage.maxHp = 1_000_000;
           gs.nextFireAt = Number.MAX_SAFE_INTEGER;
           gs.queuedLevels = 0;
-          gs.legendaryRewardPending = true;
-          gs.pendingChoices = [{
-            id: 'layout-' + choice.id, shortName: choice.title, name: choice.effect,
-            desc: choice.desc, max: 1, family: choice.family, rarity: 'legendary',
-            kind: 'legendary', legendaryId: choice.id, showProgress: false,
-            apply: () => {},
-          }];
+          gs.legendaryRewardPending = reward;
+          gs.pendingChoices = choices;
           gs.awaitingChoice = true;
-        }, def);
+        }, { choices, reward: scenario.reward });
         await page.waitForFunction(() => window.__game.scene.getScene('UI').modalOpen);
-        const report = await page.evaluate(async ({ id, width, height }) => {
+        const report = await page.evaluate(async ({ kind, width, height, expected, expectCompact }) => {
           const { visibleTextBounds } = await import('/scripts/visible-text-bounds.js');
           const ui = window.__game.scene.getScene('UI');
           const root = ui.modal;
           const measured = visibleTextBounds(root);
-          const textObjects = measured.map(({ object }) => object);
           const bounds = (obj) => {
             const b = obj.getBounds();
             return { left: b.left, right: b.right, top: b.top, bottom: b.bottom, width: b.width, height: b.height };
           };
           const intersects = (a, b) => a.left < b.right - 0.5 && a.right > b.left + 0.5 && a.top < b.bottom - 0.5 && a.bottom > b.top + 0.5;
-          const text = textObjects.find((obj) => obj.text === ui.gs.pendingChoices[0].name);
-          const description = textObjects.find((obj) => obj.text === ui.gs.pendingChoices[0].desc);
-          const footer = textObjects.find((obj) => obj.text === 'ИЗМЕНИТЬ ПРАВИЛА ЗАБЕГА');
-          const cardBackground = text?.parentContainer?.list.find((obj) => obj.type === 'Rectangle' && obj.width > 100 && obj.height > 100);
-          const plate = text?.parentContainer?.list.find((obj) => obj.type === 'Rectangle' && obj.width > 100 && obj.height <= 44 && Math.abs(obj.y - text.y) < 1);
-          const lineCount = text?.getWrappedText(text.text).length ?? null;
-          const maxLines = text?.style.maxLines ?? null;
-          const effectBounds = text ? bounds(text) : null;
-          const overlaps = effectBounds
-            ? [
+          const texts = measured.map(({ object }) => object);
+          const subtitle = texts.find((obj) => obj.text.includes('выбери мутацию для СЕРДЦА'));
+          const cards = root.list.filter((obj) => obj.type === 'Container' &&
+            obj.list?.some((child) => child.type === 'Rectangle' && child.width > 100 && child.height > 100));
+          const cardReports = cards.map((card) => {
+            const cardText = visibleTextBounds(card).filter(({ masked }) => !masked).map(({ object }) => object);
+            const bg = card.list.find((obj) => obj.type === 'Rectangle' && obj.width > 100 && obj.height > 100);
+            const effect = cardText.find((obj) => expected.some((choice) => choice.name === obj.text));
+            const expectedChoice = expected.find((choice) => choice.name === effect?.text);
+            const description = expectedChoice && cardText.find((obj) => obj.text === expectedChoice.desc);
+            const footer = cardText.find((obj) => obj.text === 'ИЗМЕНИТЬ ПРАВИЛА ЗАБЕГА');
+            const plate = effect && card.list.find((obj) => obj.type === 'Rectangle' && obj.width > 100 && obj.height <= 44 && Math.abs(obj.y - effect.y) < 1);
+            const effectBounds = effect ? bounds(effect) : null;
+            return {
+              background: bg ? bounds(bg) : null,
+              effect: effect ? { text: effect.text, linesNeeded: effect.getWrappedText(effect.text).length, maxLines: effect.style.maxLines, bounds: effectBounds } : null,
+              plate: plate ? bounds(plate) : null,
+              description: description ? bounds(description) : null,
+              footer: footer ? bounds(footer) : null,
+              effectOverlaps: effectBounds ? [
                 !description ? 'missing description' : intersects(effectBounds, bounds(description)) ? 'description' : null,
                 !footer ? 'missing footer' : intersects(effectBounds, bounds(footer)) ? 'footer' : null,
-              ].filter(Boolean)
-            : ['missing effect'];
-          const overflow = measured
-            .filter(({ masked, bounds: b }) => !masked && (b.left < 1 || b.right > width - 1 || b.top < 1 || b.bottom > height - 1))
+                !plate ? 'missing plate' : effectBounds.top < bounds(plate).top + 1 || effectBounds.bottom > bounds(plate).bottom - 1 ? 'outside plate' : null,
+              ].filter(Boolean) : ['missing effect'],
+            };
+          });
+          const cardIntersections = [];
+          for (let i = 0; i < cardReports.length; i++) for (let j = i + 1; j < cardReports.length; j++) {
+            if (cardReports[i].background && cardReports[j].background && intersects(cardReports[i].background, cardReports[j].background)) cardIntersections.push([i, j]);
+          }
+          const overflow = measured.filter(({ masked, bounds: b }) => !masked &&
+            (b.left < 1 || b.right > width - 1 || b.top < 1 || b.bottom > height - 1))
             .map(({ object, bounds: b }) => ({ text: object.text, bounds: b }));
+          const actualHeight = cardReports[0]?.background?.height ?? null;
+          const subtitleBounds = subtitle ? bounds(subtitle) : null;
+          const allChoicesFound = expected.every((choice) => cardReports.some((card) => card.effect?.text === choice.name));
           return {
-            id, width, height, textCount: textObjects.length,
-            effect: text ? { text: text.text, linesNeeded: lineCount, maxLines, bounds: effectBounds } : null,
-            cardHeight: cardBackground?.height ?? null,
-            descriptionBounds: description ? bounds(description) : null,
-            footerBounds: footer ? bounds(footer) : null,
-            overlaps,
-            plate: plate ? bounds(plate) : null,
+            kind, width, height, expectedCards: expected.length, actualCards: cards.length,
+            allChoicesFound, actualHeight, expectedCompact: !!expectCompact,
+            subtitleBounds,
+            cards: cardReports,
+            cardIntersections,
+            subtitleGap: cardReports.map(({ background }) => background && subtitleBounds ? background.top - subtitleBounds.bottom : null),
             overflow,
           };
-        }, { ...size, id: def.id });
+        }, { kind: scenario.kind, ...size, expected: choices, expectCompact: scenario.expectCompact });
         reports.push(report);
       }
       await ctx.close();
@@ -118,12 +151,21 @@ const cases = [
     await browser.close();
   }
   console.log(JSON.stringify(reports, null, 2));
-  const failures = reports.filter((r) =>
-    !r.effect || !r.plate || r.overlaps.length || r.overflow.length ||
-    r.effect.linesNeeded > r.effect.maxLines ||
-    (r.effect.linesNeeded > 2 && r.cardHeight !== 136) ||
-    r.effect.bounds.top < r.plate.top + 1 || r.effect.bounds.bottom > r.plate.bottom - 1
-  );
+  const failures = reports.filter((r) => {
+    const expandedTotal = r.expectedCards * 136 + (r.expectedCards - 1) * 9;
+    const center = r.height * 0.59;
+    const proposedTop = center - expandedTotal / 2;
+    const proposedBottom = center + expandedTotal / 2;
+    const expandedFits = proposedTop >= r.subtitleBounds?.bottom + 9 && proposedBottom <= r.height - 9;
+    return !r.subtitleBounds || r.actualCards !== r.expectedCards || !r.allChoicesFound ||
+      r.cardIntersections.length > 0 || r.overflow.length > 0 ||
+      r.cards.some((card) => !card.background || !card.effect || !card.plate || card.effectOverlaps.length ||
+        card.effect.linesNeeded > card.effect.maxLines ||
+        (card.effect.linesNeeded > 2 && card.background.height !== 136)) ||
+      r.subtitleGap.some((gap) => gap == null || gap < 8.5) ||
+      (r.height < 650 && r.actualHeight !== (expandedFits ? 136 : 124)) ||
+      (r.expectedCompact && expandedFits);
+  });
   if (failures.length) {
     console.error(`Legendary layout probe found ${failures.length} failing cases`);
     process.exitCode = 1;
