@@ -1,3 +1,46 @@
+# HANDOFF — release closure, 05.10.2026
+
+Ограниченный release closure выполнен в отдельном checkout поверх `1d6bb37`. Единственный кодовый
+коммит: `a32b3f2`.
+
+## Что сделано
+
+`.github/workflows/release-visual-matrix.yml`: build step имел только `VITE_RELEASE_MATRIX_QA=1`, и
+`scripts/stamp-release.mjs` падал с `VITE_RELEASE_SHA must be an explicit 40-character git SHA`.
+Добавлена одна строка `VITE_RELEASE_SHA: ${{ github.sha }}` — тот же источник, что уже использует
+`ci.yml`. Минимальный фикс, тот же дефект, что PR169 чинит в шрифтовой ветке.
+
+`RELEASE_VALIDATION.md` и `README.md`: документированный список `npm run` теперь явно назван quick
+check subset, авторитетный полный гейт — `.github/workflows/ci.yml` (плюс visual matrix workflow).
+Зафиксировано, что зелёный CI не означает приёмку на реальных MAX/iOS/Telegram клиентах.
+Задокументирован `npm run test:mobile-evidence -- PATH`: 16 обязательных id, пять обязательных полей
+на запись, и отдельно — требования, которые валидатор не проверяет и которые остаются ручными
+(BackButton, haptics, audio unlock, restart-циклы, boss pacing, Heart timing, twin-stick ergonomics,
+реальные legal values, trusted score с подписанным `initData`). Прежняя ручная матрица §8 не тронута.
+
+`.gitignore`: ровно одно правило `artifacts/mobile-acceptance.json`. Проверено, что
+`artifacts/other.json` остаётся видимым; tracked assets не удалялись.
+
+## Проверки (локально, фактические exit statuses)
+
+- `npm ci` — 0
+- `git diff --check` — 0
+- `npm run test:tokens` — 0 (`ui tokens contract: ok`)
+- `npm run build` при `VITE_RELEASE_MATRIX_QA=1` и `VITE_RELEASE_SHA=$(git rev-parse HEAD)` — 0,
+  `Stamped OFELIYA release 1d6bb3789326fe6ffe937c14ae9facb6a7062225`
+
+`test:mobile-evidence` не запускался: реальных device evidence нет, и подделывать их нельзя.
+
+## Что дальше
+
+Coordinator/Cline/Hoplite — независимое ревью `a32b3f2` (не Codex reviewer), максимум две итерации
+правок. Push/merge/deploy не выполнялись.
+
+Остаётся непроверенным: сам Release Visual Matrix workflow на GitHub (нужны Ubuntu + Playwright),
+реальные MAX Android/iOS 16/16, Telegram launch/referral/Daily, public `release.json` exact SHA.
+
+---
+
 # HANDOFF — делегированные UI-доработки, 05.10.2026
 
 Ветка refactor/ui-copy-layout-followup-20261005 собрана поверх PR168 HEAD4f65c4f. PR168 остаётся отдельным remediation пакетом, его CI прошёл; merge/deploy не выполнены.

@@ -119,6 +119,16 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - Focused probe JSON now includes effect, description, and footer bounds and rejects missing fixture text or intersections. Root's Windows 18-case verification passed on this change. Typecheck plus Legendary, mutation-copy, and token checks passed. Focused Linux CI is pending; earlier Linux result showed description overlap.
 - Code commit `29457d658e309ee87fadffd30c565528a11d6405`; root workflow-order commit `04392af` runs the focused layout gate early. Root is handling push and Linux CI.
 
+## Release closure: visual matrix stamp + gate documentation (05.10)
+
+- Отдельный bounded checkout поверх `1d6bb37` (ветка release closure). Коммит `a32b3f2`.
+- Подтверждённый дефект: `.github/workflows/release-visual-matrix.yml` задавал `VITE_RELEASE_MATRIX_QA=1`, но не `VITE_RELEASE_SHA`, поэтому `scripts/stamp-release.mjs` падал со `VITE_RELEASE_SHA must be an explicit 40-character git SHA`. Добавлена строка `VITE_RELEASE_SHA: ${{ github.sha }}` — тот же источник, что и в `ci.yml`.
+- Документация: `RELEASE_VALIDATION.md` и `README.md` теперь различают документированный quick check list (подмножество) и авторитетный полный гейт (`.github/workflows/ci.yml` + visual matrix workflow). Явно зафиксировано, что зелёный CI не означает приёмку на реальных MAX/iOS/Telegram клиентах.
+- Задокументирован `npm run test:mobile-evidence -- PATH`: 16 обязательных id (8 Android + 8 iOS), пять обязательных полей на запись, и перечень требований, которые валидатор НЕ проверяет и которые остаются ручными (BackButton, haptics, audio unlock, restart-циклы, boss pacing, Heart timing, twin-stick ergonomics, реальные legal values, trusted score с подписанным `initData`). Существующая ручная матрица §8 не изменена.
+- `.gitignore`: добавлено ровно одно правило `artifacts/mobile-acceptance.json`. Проверено, что `artifacts/other.json` остаётся видимым для git; tracked paths под `artifacts/` отсутствуют.
+- Локальные проверки: `npm ci` 0; `git diff --check` 0; `npm run test:tokens` 0 (`ui tokens contract: ok`); `npm run build` при `VITE_RELEASE_MATRIX_QA=1` и `VITE_RELEASE_SHA=$(git rev-parse HEAD)` — 0, `Stamped OFELIYA release 1d6bb37...`. Валидатор evidence не запускался: реальных device evidence нет.
+- Реальные MAX Android/iOS 16/16, Telegram launch/referral/Daily и public `release.json` exact SHA остаются неподтверждёнными. Push/merge/deploy не выполнялись.
+
 ## Viewport-guarded Legendary card expansion (05.10)
 - Final code commit `c01019f0708d9740cfc7a3f84da29bba149eed55` only selects 136px compact Legendary cards when the proposed full stack fits below the measured subtitle plus one card gap and above the bottom one-gap margin. Otherwise compact cards stay at the original 124px and their effects stay capped at two lines. At 320x568 the three-card stack fits; at 568x320 it does not expand.
 - Probe emits card, effect, description, and footer bounds and asserts full text, required fixtures, panel containment, and no effect/description/footer intersection. Root reports the supplemental 18-case two-reward probe passed across 320x568, 568x320, and 390x740 on the fit guard. Typecheck and static Legendary/copy/token checks passed. Focused Linux run `37293956036` passed the earlier description-spacing version; root owns the final Linux run after this viewport guard.
