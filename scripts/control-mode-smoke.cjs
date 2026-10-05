@@ -43,6 +43,42 @@ async function readMenuMode(page) {
   });
 }
 
+async function startGameForInputSmoke(page) {
+  await page.evaluate(() => {
+    const game = window.__game;
+    const gameScene = game.scene.getScene('Game');
+    // Keep live gameplay from opening level-up modals during synthetic input routing.
+    // Phaser captures Scene.update after create(), so replace it before the scene starts.
+    // Game and UI stay active; the UI scene still handles real control input.
+    gameScene.update = () => {};
+    game.scene.getScene('Menu').scene.start('Game');
+  });
+  await page.waitForFunction(() =>
+    window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI')
+  );
+  const state = await page.evaluate(() => {
+    const game = window.__game;
+    const ui = game.scene.getScene('UI');
+    return {
+      gamePaused: game.scene.isPaused('Game'),
+      gameActive: game.scene.isActive('Game'),
+      uiActive: game.scene.isActive('UI'),
+      uiBlocked: ui.uiBlocked,
+      modalOpen: ui.modalOpen,
+      modalExists: Boolean(ui.modal),
+      transitionOverlay: Boolean(ui.transitionOverlay),
+      overShown: ui.overShown,
+      manualPaused: ui.manualPaused,
+    };
+  });
+  if (
+    !state.gameActive || state.gamePaused || !state.uiActive || state.uiBlocked || state.modalOpen ||
+    state.modalExists || state.transitionOverlay || state.overShown || state.manualPaused
+  ) {
+    throw new Error('control input fixture is blocked: ' + JSON.stringify(state));
+  }
+}
+
 function mag(v) {
   return Math.hypot(v?.x ?? 0, v?.y ?? 0);
 }
@@ -117,10 +153,7 @@ function mag(v) {
 
   // Return to the established twin-stick path and prove it behaves exactly as before.
   await tapControlSelector(page);
-  await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
-  await page.waitForFunction(
-    () => window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI')
-  );
+  await startGameForInputSmoke(page);
 
   const routed = await page.evaluate(() => {
     const ui = window.__game.scene.getScene('UI');
@@ -237,10 +270,7 @@ function mag(v) {
   await page.evaluate(() => localStorage.setItem('ofeliya_control_mode_v1', 'dual-move'));
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
-  await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
-  await page.waitForFunction(
-    () => window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI')
-  );
+  await startGameForInputSmoke(page);
 
   const dual = await page.evaluate(() => {
     const ui = window.__game.scene.getScene('UI');
@@ -497,10 +527,7 @@ function mag(v) {
   await page.evaluate(() => localStorage.setItem('ofeliya_control_mode_v1', 'one-hand'));
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
-  await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
-  await page.waitForFunction(
-    () => window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI')
-  );
+  await startGameForInputSmoke(page);
 
   const legacy = await page.evaluate(() => {
     const ui = window.__game.scene.getScene('UI');
