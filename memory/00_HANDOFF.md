@@ -89,3 +89,9 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - Current code: `c01019f0708d9740cfc7a3f84da29bba149eed55`. Expansion to 136px requires the proposed full card stack to fit between measured subtitle bottom plus 9px gap and viewport bottom minus 9px. Otherwise 124px compact cards and the prior two-line Legendary effect limit remain.
 - Root reports 18/18 supplemental browser cases passed over 320x568, 568x320, 390x740 with one/two-card sets. Probe includes card/effect/description/footer bounds and required fixture assertions.
 - Local typecheck and Legendary/copy/token checks passed before the final probe-only addition; `node --check` and diff whitespace check passed afterward. Root must rerun focused Linux CI on final candidate before push. Landscape redesign remains a separate backlog item.
+
+## Многокарточный Legendary layout probe (05.10)
+- Текущий focused probe расширен в коммите `a4fd334f1f1b319d5a6016026a6689ef757eaceb`: прежние single-card cases сохранены; добавлены все 15 пар разных реальных Legendary definitions на трёх исходных viewport, synthetic three-Legendary robustness fixture и отдельный short-portrait guard 320x480.
+- Synthetic три Legendary — тестовая нагрузка layout, не утверждение о trophy-контракте: реальный гарантированный trophy предлагает две карты (`guaranteedLegendaryChoices(..., 2)`).
+- Измерения и проверки теперь собираются для каждой карточки из её собственного контейнера: соответствие каждого выбора, effect/plate/description/footer, stack intersections, gap под subtitle, viewport overflow и совпадение расширения с fit guard.
+- На этом шаге browser не запускался; coordinator выполняет browser run и независимое ревью. `node --check` и `git diff --check` прошли. Возможные browser failures должны быть зарегистрированы, не обходиться ослаблением assertions.

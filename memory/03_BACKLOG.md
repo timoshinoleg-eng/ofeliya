@@ -119,3 +119,9 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - [ ] Verify the Release Visual Matrix workflow actually goes green on GitHub after the env fix — it was never confirmed green locally, since that job needs Ubuntu + Playwright.
 - [ ] Remaining report findings stay backlog, out of this bounded scope: no redesign of docs structure, no validator semantics change, no fabricated evidence.
 - [ ] Unchanged external gates: real MAX Android/iOS 16/16, Telegram launch/referral/Daily, public `release.json` exact SHA.
+
+## Multi-card Legendary layout regression coverage (05.10)
+- [x] Preserve existing single-card Legendary cases and add all distinct two-definition pairs across the three existing viewports.
+- [x] Add a clearly labelled synthetic three-Legendary stress case and a 320x480 short-portrait non-expansion guard.
+- [x] Assert per-card fixtures and bounds, card separation, measured subtitle gap, fit-guard decision, and visible-text viewport containment.
+- [ ] Root browser run and Cline independent diff review on `a4fd334f1f1b319d5a6016026a6689ef757eaceb`; record any real failures without relaxing assertions or changing production layout under this probe task.

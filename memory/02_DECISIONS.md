@@ -85,3 +85,9 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - Document `npm run test:mobile-evidence -- PATH` with its 16 required check ids and the five required per-check fields, and separately list the manual requirements it does not cover. Keep the existing 16-point manual matrix unchanged and complete.
 - Describe the validator by what it enforces, not by a total row count. It iterates only its own `required` array, so 16 is the mandatory minimum; extra `checks[]` rows are permitted and uninspected, and a `pass` does not certify them. `testedAt` is validated with `Date.parse`, so ISO 8601 is a readability recommendation rather than an enforced format. Never write "exactly 16" or "checks only these" for a validator with that shape.
 - Real-device acceptance evidence lives outside the repository in external release-evidence storage; the repo records only the path or URL. Gitignore the single local convenience file `artifacts/mobile-acceptance.json` rather than the whole `artifacts/` directory, so no unrelated artifact is silently hidden or removed.
+
+## Probe coverage contract: multi-card Legendary
+- Keep actual trophy coverage tied to the production contract of two guaranteed Legendary choices. A three-Legendary fixture is explicitly synthetic stress coverage and must not be described as a reachable trophy offer.
+- For every card, find its own effect, plate, description, and footer under that card's container. Do not reuse global text matches across cards; this can make duplicate footer labels hide per-card defects.
+- The expanded-height assertion must follow the same geometry as production: proposed stack top below measured subtitle bottom plus gap, and stack bottom above viewport bottom margin. Also assert card-to-card separation and visible-text viewport bounds.
+- Keep failures visible. Syntax/static checks do not establish browser layout correctness; root browser run and independent review remain required.

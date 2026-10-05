@@ -139,3 +139,8 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 ## Viewport-guarded Legendary card expansion (05.10)
 - Final code commit `c01019f0708d9740cfc7a3f84da29bba149eed55` only selects 136px compact Legendary cards when the proposed full stack fits below the measured subtitle plus one card gap and above the bottom one-gap margin. Otherwise compact cards stay at the original 124px and their effects stay capped at two lines. At 320x568 the three-card stack fits; at 568x320 it does not expand.
 - Probe emits card, effect, description, and footer bounds and asserts full text, required fixtures, panel containment, and no effect/description/footer intersection. Root reports the supplemental 18-case two-reward probe passed across 320x568, 568x320, and 390x740 on the fit guard. Typecheck and static Legendary/copy/token checks passed. Focused Linux run `37293956036` passed the earlier description-spacing version; root owns the final Linux run after this viewport guard.
+
+## 2026-10-05: многокарточный Legendary probe
+- `scripts/legendary-layout-probe.cjs` обновлён в `a4fd334f1f1b319d5a6016026a6689ef757eaceb`.
+- Оставлены одиночные карточки; добавлены 15 distinct pairs actual Legendary definitions на viewports 320x568, 360x640, 390x740, synthetic three-Legendary layout fixture на этих размерах и guard fixture на 320x480.
+- Per-card checks локализованы в родительском Phaser container. Browser verification ещё не выполнена; см. `00_HANDOFF.md`. Не считать расширенное покрытие пройденным до фактического запуска и независимого review.
