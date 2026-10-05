@@ -3,6 +3,8 @@
 Формат: `[дата] Решение — причина. Статус.`
 Перенесённые решения помечены источником (документы репо). Новые решения добавляются сюда после каждой сессии.
 
+- [2026-10-06] The control-mode smoke freezes only the Game instance update before startup and asserts UI unblocked/modal-free state before synthetic pointer routing — the original failure was a valid `uiBlocked` rejection during automatic mutation choices, not a TwinStick production defect. Production unchanged; reviewer approved; root owns CI follow-up.
+
 - [2026-10-05] The deploy script loads its compatibility gate from fetched `origin/main` rather than a sibling path — the bastion executes an extracted standalone script from `/tmp`; keep helper policy centralized, fail closed on missing/empty policy, and retain all SHA/floor guards. Review/PR and fresh main CI pending.
 
 - [2026-10-05] Deployment CI lookup uses the workflow-specific `ci.yml` runs endpoint filtered by exact SHA and run identity, with a pinned Ubuntu 22.04 runner and bounded diagnostic summaries — the prior broad runs query did not yield the independently verified exact-SHA green run; root cause remains unproven. Retain all fail-closed predicates. Review/publish pending.

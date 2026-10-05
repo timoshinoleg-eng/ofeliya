@@ -2,6 +2,12 @@
 
 Обновлено: 2026-10-05. Только факты; решения — в `02_DECISIONS.md`.
 
+## Control smoke precondition (06.10)
+
+- Main `3a04868` browser smoke failed the synthetic recycled pointer test while a live level-up mutation modal had `uiBlocked=true`; both down callbacks correctly rejected input, leaving ids `-1` and vectors zero.
+- Test-only Game update freeze is installed before scene start for all three control modes; active UI is explicitly required to be modal-free and unblocked.
+- Focused `control-mode-smoke.cjs` passed locally; production code was not changed.
+
 ## Standalone deploy compatibility policy (05.10)
 
 - Production run `37370394631` reached the server, passed CI/release floors, then failed because a helper sibling was absent from the selected script extraction directory `/tmp`; automatic rollback to `edb1b9a...` succeeded and public release marker confirmed it.
