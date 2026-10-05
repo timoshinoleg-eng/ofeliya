@@ -188,6 +188,9 @@ jobs:
           cat /tmp/vite.log
           exit 1
 
+      - name: Legendary nested-text layout across compact viewports
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:legendary-layout
+
       - name: Full startup timeout contracts
         run: npm run test:startup
 
@@ -244,9 +247,6 @@ jobs:
 
       - name: Legendary runtime browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/legendary-runtime-smoke.cjs
-
-      - name: Legendary nested-text layout across compact viewports
-        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:legendary-layout
 
       - name: Legendary cinematic ceremony browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/legendary-ceremony-smoke.cjs
