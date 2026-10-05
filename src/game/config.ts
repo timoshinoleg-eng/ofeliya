@@ -21,11 +21,14 @@ export const COLORS = {
   virus: 0xff4fb5,
 };
 
-const PLAY_TYPOGRAPHY_EXPERIMENT = import.meta.env.VITE_TYPOGRAPHY_EXPERIMENT === 'play';
+export let FONT = "'Chakra Petch', Arial, sans-serif";
 
-export const FONT = PLAY_TYPOGRAPHY_EXPERIMENT
-  ? "'Play', 'Chakra Petch', Arial, sans-serif"
-  : "'Chakra Petch', Arial, sans-serif";
+/** Called by browser boot before font loading and Phaser scene construction. */
+export function setPlayTypographyExperiment(enabled: boolean): void {
+  FONT = enabled
+    ? "'Play', 'Chakra Petch', Arial, sans-serif"
+    : "'Chakra Petch', Arial, sans-serif";
+}
 
 export const UI_FONT = "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif";
 

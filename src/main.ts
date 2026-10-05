@@ -11,6 +11,7 @@ import { ensureTelegramBridge } from './platform/TelegramBridgeLoader';
 import { trackProductEvent } from './systems/AnalyticsClient';
 import { retryPendingDailySubmission } from './systems/ScoreClient';
 import { RELEASE_MARKER, RELEASE_SHA, RELEASE_SHORT } from './release';
+import { setPlayTypographyExperiment } from './game/config';
 
 declare global {
   interface Window {
@@ -264,6 +265,7 @@ function installAppOpenTracking(): void {
 
 async function boot(): Promise<void> {
   StartupTrace.mark('boot.start');
+  setPlayTypographyExperiment(import.meta.env.VITE_TYPOGRAPHY_EXPERIMENT === 'play');
   StartupTrace.setMeta('platformInitial', PlatformBridge.kind);
   StartupTrace.setMeta('platformVersion', PlatformBridge.version || '');
   const host = document.getElementById('game');
