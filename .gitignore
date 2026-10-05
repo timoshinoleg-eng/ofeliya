@@ -3,6 +3,9 @@ dist/
 *.local
 .DS_Store
 
+# локальный real-device acceptance JSON (внешнее evidence хранилище, не коммитится)
+artifacts/mobile-acceptance.json
+
 # клон пакета игр (временный)
 .tmp-pack/
 .tmp-comprehension-smoke/
