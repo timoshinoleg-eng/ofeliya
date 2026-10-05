@@ -83,3 +83,42 @@
 - Проверки: server75, outbox24, новые release4/onboarding/rollback/server-policy/renderedCompose; браузер score/comprehension6viewport. Полный локальный набор43гейта: первый startup5.124s при параллельной браузерной нагрузке и Caddy sh ENOENT; serial startup и Caddy с GitBash PATH прошли. Исходные failures сохранены в evidence.
 - Cloud creation недоступен аккаунту; пользователь разрешил local. Deploy/merge не выполнены. Публичный release.json недоступен; текущая productionSHA НЕ подтверждена. Real-device MAX Android/iOS16/16 остаётся открытым.
 - Анализ второго вложения: WOFF2 валиден, кириллица отсутствует. Не считать разрешённые словарём ФОРМА МУТАЦИИ/MAX ИЛИ TG/СТАНДАРТ ошибками; предложить небольшой кириллический typography trial, затем RU catalog; fullEN i18n после продуктового решения.
+
+
+## 2026-10-05: делегированные UI follow-up
+
+Ветка refactor/ui-copy-layout-followup-20261005 собрана поверх PR168 HEAD4f65c4f. PR168 остаётся отдельным remediation пакетом, его CI прошёл; merge/deploy не выполнены.
+
+Space Bunny через OpenCode (opencode/space-bunny-free) создал типизированные варианты control labels и каталог rarity/build-summary: исходный code7a7d08e, здесь cherry-pickd63b80c. Существующие RU strings и поведение сохранены; full/compact/tiny намеренно различаются. Upgrade-id completeness контролируется runtime контрактом, не исчерпывающим TS union.
+
+GPT-6 Sol создал рекурсивный диагностический collector для видимого текста в Container и18Legendary regression cases: исходныйcodeea086d1, здесь4f5cbfc. Production UI/Legendary layout не переделывался: actualPhaser18cases без overflow, max2lines. Matrix fixture теперь учитывает автоматический startuplevel-up pause и проверяет checkpointsave явно.
+
+GPT-6 Luna независимо проверил обе задачи; no functional findings. Coordinator подключил новые Node/browser gates кCI и закрепил равные stackcounts в golden test. Browser suite budget15мин вместо10 из-за дополнительной18-case проверки, пороги assertions не увеличены.
+
+Локальная отдельная приёмка: catalog/language/tsc; layout diagnostics; Legendary18/18; mobile matrix320x568,360x640,360x760,390x844,412x915 + restart-safe resume/result resize. Итоговый CI этой ветки нужно смотреть по headSHA draftPR, не переносить результат PR168.
+
+Шрифтовой prototype находится отдельно в PR169: opt-inPlay400/700, no productiondefaultflip. CI обнаружил import.meta/CommonJS regression и отсутствие releaseSHA в visualworkflow; автор исправляет отдельно. Не считать старый Play CI зелёным.
+
+Текущее второе мнение: MAX ИЛИ TG прямо разрешён languageBible100; PR168 меняетUIScene;452/419 без методики не новый замер; T-КИЛЛЕР/T-КЛЕТКИ действительно расходятся вproductBible. Имена/редкости/юридические тексты/fulli18n не изменять без продуктового решения.
+
+Внешние релиз-гейты: реальные MAX Android/iOS16/16, TG launch/referral/Daily и publicrelease.json exactSHA остаются неподтверждёнными. Не выполнять merge/deploy автоматически.
+
+## Legendary compact-card clipping fix (05.10)
+
+- Linux layout evidence at 320x568 showed three Legendary effect strings wrapping to three lines while UIScene capped the badge text at two. `UIScene.ts` now measures wrapping and grants a third line only to a compact Legendary effect that needs it; its plate expands to 42px and shifts upward to center y=21, ending at y=42 before the footer starts at y=43; card height stays 124px. Other card effects keep their prior 2-line limit and plate size. Copy and `UiCopy` imports are unchanged.
+- Focused layout probe now accepts the bounded 42px effect plate while still comparing actual text bounds against it. Root reports the 18-case Windows browser probe passed on this exact working diff. Local typecheck, `test:legendary`, `test:mutation-copy`, and `test:tokens` passed.
+- Code commits `340f38b7f8f2be2fc9be49c6b06cf49d45151d2e` and overlap correction `997b6eee2403505e1a416fd5d2755496c30728e`; root owns final probe rerun and full branch CI. No push/merge/deploy here.
+
+
+## Final Legendary geometry and probe guard
+- Corrected candidate `997b6eee2403505e1a416fd5d2755496c30728e` supersedes the earlier center-y=31 version, which overlapped the footer. The compact three-line panel is now center-y=21, bounds y=0..42; the Legendary footer begins y=43. Probe now requires description/footer fixtures and rejects text-bound intersections.
+- Root reports the browser 18-case check plus desc/footer intersections pass on the corrected geometry. The stricter fixture-presence probe guard was added afterward; root should rerun it against final HEAD before push. No push from this worker.
+
+## Compact Legendary description spacing follow-up (05.10)
+- After Linux showed effect/description overlap, compact Legendary reward cards now use height 136px (other compact level-up cards remain 124px). At 320x568, three cards span y=122..548. The effect plate remains 42px high at local y=6..48; footer starts local y=49, and description moves up to local y=-22. No effect font-size, copy, or gameplay changes.
+- Focused probe JSON now includes effect, description, and footer bounds and rejects missing fixture text or intersections. Root's Windows 18-case verification passed on this change. Typecheck plus Legendary, mutation-copy, and token checks passed. Focused Linux CI is pending; earlier Linux result showed description overlap.
+- Code commit `29457d658e309ee87fadffd30c565528a11d6405`; root workflow-order commit `04392af` runs the focused layout gate early. Root is handling push and Linux CI.
+
+## Viewport-guarded Legendary card expansion (05.10)
+- Final code commit `c01019f0708d9740cfc7a3f84da29bba149eed55` only selects 136px compact Legendary cards when the proposed full stack fits below the measured subtitle plus one card gap and above the bottom one-gap margin. Otherwise compact cards stay at the original 124px and their effects stay capped at two lines. At 320x568 the three-card stack fits; at 568x320 it does not expand.
+- Probe emits card, effect, description, and footer bounds and asserts full text, required fixtures, panel containment, and no effect/description/footer intersection. Root reports the supplemental 18-case two-reward probe passed across 320x568, 568x320, and 390x740 on the fit guard. Typecheck and static Legendary/copy/token checks passed. Focused Linux run `37293956036` passed the earlier description-spacing version; root owns the final Linux run after this viewport guard.

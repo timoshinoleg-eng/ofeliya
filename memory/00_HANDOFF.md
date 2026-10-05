@@ -1,71 +1,37 @@
-# HANDOFF — OFELIYA: STRAIN ZERO — 2026-10-02
+# HANDOFF — делегированные UI-доработки, 05.10.2026
 
-> Прочитай этот файл и `01_STATE.md` перед следующей задачей. Факты — из репозитория.
+Ветка refactor/ui-copy-layout-followup-20261005 собрана поверх PR168 HEAD4f65c4f. PR168 остаётся отдельным remediation пакетом, его CI прошёл; merge/deploy не выполнены.
 
-## Текущая задача
+Space Bunny через OpenCode (opencode/space-bunny-free) создал типизированные варианты control labels и каталог rarity/build-summary: исходный code7a7d08e, здесь cherry-pickd63b80c. Существующие RU strings и поведение сохранены; full/compact/tiny намеренно различаются. Upgrade-id completeness контролируется runtime контрактом, не исчерпывающим TS union.
 
-Product validation sprint по приоритетам P0–P2: закрыть инструменты реальной mobile acceptance, улучшить первые 60 секунд, сделать продуктовую воронку измеримой и подготовить Daily/referral validation.
+GPT-6 Sol создал рекурсивный диагностический collector для видимого текста в Container и18Legendary regression cases: исходныйcodeea086d1, здесь4f5cbfc. Production UI/Legendary layout не переделывался: actualPhaser18cases без overflow, max2lines. Matrix fixture теперь учитывает автоматический startuplevel-up pause и проверяет checkpointsave явно.
 
-## Исходная точка
+GPT-6 Luna независимо проверил обе задачи; no functional findings. Coordinator подключил новые Node/browser gates кCI и закрепил равные stackcounts в golden test. Browser suite budget15мин вместо10 из-за дополнительной18-case проверки, пороги assertions не увеличены.
 
-- `origin/main` перед работой: `4bce5a0bdfd996cbda4447d1eefdfbdb2c9531bc`.
-- Рабочая ветка: `feat/product-validation-funnel-20261002`.
-- Не путать automated/browser validation с реальной MAX Android/iOS приёмкой: real-device 16/16 пока НЕ пройден.
+Локальная отдельная приёмка: catalog/language/tsc; layout diagnostics; Legendary18/18; mobile matrix320x568,360x640,360x760,390x844,412x915 + restart-safe resume/result resize. Итоговый CI этой ветки нужно смотреть по headSHA draftPR, не переносить результат PR168.
 
-## Реализовано 02.10
+Шрифтовой prototype находится отдельно в PR169: opt-inPlay400/700, no productiondefaultflip. CI обнаружил import.meta/CommonJS regression и отсутствие releaseSHA в visualworkflow; автор исправляет отдельно. Не считать старый Play CI зелёным.
 
-- Tutorial core loop: движение → автоогонь → RNA → мутация → заражение клетки-хозяина; pause больше не tutorial-step.
-- UI получает `hostCellsInfected` в `RunSnapshot`, step 5 завершается фактическим заражением.
-- Добавлены `onboarding_step`/`onboarding_exit` и продуктовые milestone events: `run_start`, `run_60s`, `boss1`, `heart`, `win/death`, `replay`, успешный `share`, `daily`, referral open.
-- Ограничен retry аналитики: после одной повторной попытки событие помечается exhausted на текущий scene generation, чтобы persistent network failure не создавал запрос каждый frame.
-- `scripts/analyze-product-funnel.mjs` + `npm run analytics:funnel`: core funnel, onboarding timing/exits, D1, referral open → run_start.
-- `scripts/check-mobile-acceptance-evidence.mjs` + `npm run test:mobile-evidence`: строгий 16/16 evidence gate Android/iOS.
-- `docs/PRODUCT_VALIDATION_2026-10.md`: процедура P0/P1/P2 и критерии.
+Текущее второе мнение: MAX ИЛИ TG прямо разрешён languageBible100; PR168 меняетUIScene;452/419 без методики не новый замер; T-КИЛЛЕР/T-КЛЕТКИ действительно расходятся вproductBible. Имена/редкости/юридические тексты/fulli18n не изменять без продуктового решения.
 
-## Проверено
+Внешние релиз-гейты: реальные MAX Android/iOS16/16, TG launch/referral/Daily и publicrelease.json exactSHA остаются неподтверждёнными. Не выполнять merge/deploy автоматически.
 
-- `test:onboarding` ✓
-- `test:analytics` ✓
-- `server:test` 68/68 ✓
-- `test:comprehension` ✓, 6 mobile viewport, текущая ветка на отдельном Vite :5194
-- `test:result-actions` ✓ + checkpoint-resume ✓ на текущей ветке
-- `test:daily-cta` ✓
-- `npx tsc --noEmit` ✓
-- production build ✓ при явном `VITE_RELEASE_SHA` base SHA; release guard без SHA ожидаемо fail-closed
-- funnel CLI и mobile evidence validator проверены synthetic fixtures; это НЕ реальные продуктовые данные/evidence.
-
-## Следующие обязательные шаги
-
-1. Дождаться/зафиксировать `test:social-hub` текущего прогона, затем финальный diff/check.
-2. Commit/push ветки и PR в `main`; дождаться CI.
-3. На реальных MAX Android + iOS пройти 16/16 и приложить evidence artifact.
-4. Провести небольшой наблюдаемый playtest первых 60 секунд; после появления данных запустить `analytics:funnel` и посмотреть узкие места.
-5. Реальный Daily invite test: sender → recipient open → run_start → result.
-6. Только после этого оценивать P2 creative по attributable referral opens/started runs, а не просмотрам.
-
-## Важное окружение
-
-На `chatgpt-ops-1` был старый чужой Vite на `:5173`; он давал ложный timeout/старое поведение. Для этой ветки использован отдельный Vite `http://127.0.0.1:5194/`. Не интерпретировать тесты против :5173 как состояние этой ветки.
-
-## 03.10 audit follow-up
-- Historical audit commit 53ff997 is far behind current work and must not be treated as current source of truth.
-- D1 elite hitbox was revalidated as a false positive and locked by runtime smoke.
-- D2 viewport resize for blocking level-up/result overlays has an implementation + regression coverage on PR #157 branch.
-- Remaining P0 is still real MAX Android/iOS acceptance evidence.
-
-## Telegram production pass 03.10
-- Work is on `feat/telegram-production-wiring` from main `56476c0`.
-- Production wiring can be merged/deployed safely in MAX-only mode; Telegram service is enabled only when dedicated Telegram env is present.
-- Remaining external inputs: dedicated Telegram bot token/username and BotFather Main Mini App configuration, followed by real Telegram acceptance.
+## Handoff: compact Legendary effect panel
+- Branch `refactor/ui-copy-layout-followup-20261005`, base `f71d2bb`. Fix commits: `340f38b7f8f2be2fc9be49c6b06cf49d45151d2e`, corrected geometry/probe `997b6eee2403505e1a416fd5d2755496c30728e6`.
+- For actual compact Legendary text wrapping beyond 2 lines, card effect text is allowed 3 lines and its badge grows from 30 to 42px and shifts upward to center y=21, ending at y=42 before the footer at y=43. All other effects retain the two-line/30px compact treatment. No copy, gameplay behavior, or UiCopy integration changed.
+- Root reports its 18-case Windows browser probe and description/footer intersection checks passed on the corrected geometry; the final probe also fails if either text fixture is absent. Local `npx tsc --noEmit`, `npm run test:legendary`, `npm run test:mutation-copy`, and `npm run test:tokens` passed.
+- Next: root runs any required CI/final integration checks against the committed SHA. Do not push, merge, or deploy from this worker.
 
 
-## 2026-10-05: продолжение Sol6.1 remediation
+## Final overlap correction
+- Current code candidate is `997b6eee2403505e1a416fd5d2755496c30728e`. Third-line badge shifted upward to center y=21; 42px panel ends y=42, before footer y=43. The earlier y=31 candidate was superseded due footer overlap.
+- Probe asserts complete wrapped text fits the panel and does not intersect description/footer; missing description/footer is a failure. Root must rerun the final assertion guard and branch CI before push.
 
-- Основа origin/main edb1b9a (Telegram webhook), ветка fix/sol61-review-remediation-20261005. Восстановлены R01/R02 и незавершённый R03 из отдельного checkout без изменения исходного каталога.
-- R01 wall clock Daily; R02 резерв verified capacity; R03 ID-aware ordinary outbox; R04 reload отложен до завершения Game (internal game reference, production без QA hook).
-- R05 outbound defaultoff + explicit Compose env; R06 webhook-compatible SHA floor в workflow/select/rollback и direct deploy; R07 shared polling/webhook direct-link payload и group-safe кнопки.
-- R08 onboarding completion callback; R09 analytics actor60/min; R10 credentials scrub+7dayTTL обоих outboxes.
-- Независимое GPT-6.1 Sol ревью дополнительно выявило Daily409 blocking, смену uid внутри одной платформы и ack-before-durable. Исправлены terminal Daily409, exact-ID Daily settlement, local ownerId replay guard, fresh-user Daily slot supersession и synchronous atomic flush score/run/start/daily/run до non5xx ответа. Unknown legacy ordinary entries не replay: истекают поTTL, предотвращая присвоение чужому пользователю.
-- Проверки: server75, outbox24, новые release4/onboarding/rollback/server-policy/renderedCompose; браузер score/comprehension6viewport. Полный локальный набор43гейта: первый startup5.124s при параллельной браузерной нагрузке и Caddy sh ENOENT; serial startup и Caddy с GitBash PATH прошли. Исходные failures сохранены в evidence.
-- Cloud creation недоступен аккаунту; пользователь разрешил local. Deploy/merge не выполнены. Публичный release.json недоступен; текущая productionSHA НЕ подтверждена. Real-device MAX Android/iOS16/16 остаётся открытым.
-- Анализ второго вложения: WOFF2 валиден, кириллица отсутствует. Не считать разрешённые словарём ФОРМА МУТАЦИИ/MAX ИЛИ TG/СТАНДАРТ ошибками; предложить небольшой кириллический typography trial, затем RU catalog; fullEN i18n после продуктового решения.
+## Current compact Legendary candidate
+- Final code candidate `29457d658e309ee87fadffd30c565528a11d6405`: compact Legendary cards are 136px high. Effect plate remains 42px, local y=6..48; description origin shifts to -22 and footer begins y=49. Three cards span y=122..548 at 320x568. Probe reports and asserts effect/description/footer bounds.
+- Root reports Windows browser 18/18 passed. TypeScript, `test:legendary`, `test:mutation-copy`, and `test:tokens` passed. Linux focused CI is pending following earlier 3-case desc-overlap failures; root pushes the candidate and owns that CI. No worker push/merge/deploy.
+
+## Final viewport guard handoff
+- Current code: `c01019f0708d9740cfc7a3f84da29bba149eed55`. Expansion to 136px requires the proposed full card stack to fit between measured subtitle bottom plus 9px gap and viewport bottom minus 9px. Otherwise 124px compact cards and the prior two-line Legendary effect limit remain.
+- Root reports 18/18 supplemental browser cases passed over 320x568, 568x320, 390x740 with one/two-card sets. Probe includes card/effect/description/footer bounds and required fixture assertions.
+- Local typecheck and Legendary/copy/token checks passed before the final probe-only addition; `node --check` and diff whitespace check passed afterward. Root must rerun focused Linux CI on final candidate before push. Landscape redesign remains a separate backlog item.

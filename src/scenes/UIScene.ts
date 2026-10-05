@@ -25,12 +25,16 @@ import { readControlMode, type ControlMode } from '../game/ControlMode';
 import type { RunResult, RunSnapshot } from '../game/RunContracts';
 import {
   EVOLUTION_NAMES,
-  UPGRADE_FAMILY_LABELS,
   UPGRADES,
   getUpgradeProgress,
   type EvolutionId,
   type UpgradeDef,
 } from '../game/UpgradeSystem';
+import {
+  MUTATION_CARD_HEADERS,
+  formatBuildSummary,
+  mutationCardHeader,
+} from '../game/UiCopy';
 import { PlatformBridge } from '../platform';
 import { Sfx } from '../systems/Sfx';
 import { VideoInterstitial, type VideoInterstitialId } from '../systems/VideoInterstitial';
@@ -1306,15 +1310,14 @@ export class UIScene extends Phaser.Scene {
     c.add(titleT);
     titleT.setScale(0.7);
     this.tweens.add({ targets: titleT, scale: 1, duration: 260, ease: 'Back.Out' });
-    c.add(
-      this.add
-        .text(
-          W / 2,
-          titleY + (compact ? 39 : 46),
-          legendaryReward
-            ? 'ИММУННЫЙ ПРАЙМ подавлен · выбери мутацию для СЕРДЦА'
-            : 'МУТАЦИЯ ' + gs.runState.stage.level + ' · выбери карту',
-          {
+    const subtitle = this.add
+      .text(
+        W / 2,
+        titleY + (compact ? 39 : 46),
+        legendaryReward
+          ? 'ИММУННЫЙ ПРАЙМ подавлен · выбери мутацию для СЕРДЦА'
+          : 'МУТАЦИЯ ' + gs.runState.stage.level + ' · выбери карту',
+        {
           fontFamily: UI_FONT,
           fontSize: compact ? '13px' : '15px',
           fontStyle: '650',
@@ -1322,18 +1325,27 @@ export class UIScene extends Phaser.Scene {
           align: 'center',
           wordWrap: { width: W - 44, useAdvancedWrap: true },
           lineSpacing: 2,
-          }
-        )
-        .setOrigin(0.5)
-        .setResolution(2)
-    );
+        }
+      )
+      .setOrigin(0.5)
+      .setResolution(2);
+    c.add(subtitle);
 
     const cards = gs.pendingChoices;
     const cw = Math.min(W - 16, 374);
-    const ch = compact ? 124 : 148;
     const gap = compact ? 9 : 11;
-    const totalH = cards.length * ch + (cards.length - 1) * gap;
     const blockCenter = compact ? H * 0.59 : H * 0.57;
+    const expandedCardHeight = 136;
+    const expandedTotalH = cards.length * expandedCardHeight + (cards.length - 1) * gap;
+    const expandedTop = blockCenter - expandedTotalH / 2;
+    const expandedBottom = blockCenter + expandedTotalH / 2;
+    const expandedStackFits =
+      compact &&
+      legendaryReward &&
+      expandedTop >= subtitle.getBounds().bottom + gap &&
+      expandedBottom <= H - gap;
+    const ch = compact ? (expandedStackFits ? expandedCardHeight : 124) : 148;
+    const totalH = cards.length * ch + (cards.length - 1) * gap;
     let y = blockCenter - totalH / 2 + ch / 2;
 
     cards.forEach((def: UpgradeDef, cardIndex: number) => {
@@ -1400,11 +1412,7 @@ export class UIScene extends Phaser.Scene {
 
       const tx = legendary && !hasIcon ? -cw / 2 + 18 : -cw / 2 + 73;
       const right = cw / 2 - 14;
-      const family = legendary
-        ? 'ЛЕГЕНДАРНАЯ МУТАЦИЯ'
-        : evolution
-          ? 'КРИТИЧЕСКАЯ МУТАЦИЯ'
-          : `${UPGRADE_FAMILY_LABELS[def.family]} · ${def.rarity === 'rare' ? 'РЕДКИЙ' : 'СТАНДАРТ'}`;
+      const family = mutationCardHeader(def);
       card.add(
         this.add
           .text(tx, -ch / 2 + 8, family, {
@@ -1446,26 +1454,27 @@ export class UIScene extends Phaser.Scene {
           .setResolution(2)
       );
 
-      const effectY = ch / 2 - (compact ? 37 : 44);
+      const effectText = this.add.text(tx + 8, 0, def.name, {
+        fontFamily: UI_FONT,
+        fontSize: compact ? '11px' : '12px',
+        fontStyle: '700',
+        color: legendary || evolution ? '#fff1ac' : def.rarity === 'rare' ? '#ddd0ff' : '#9ef1ff',
+        align: 'left',
+        lineSpacing: -1,
+        maxLines: legendary && ch === expandedCardHeight ? 3 : 2,
+        wordWrap: { width: Math.max(92, effectW - 16), useAdvancedWrap: true },
+      });
+      const effectNeedsThirdLine =
+        compact && legendary && ch === expandedCardHeight && effectText.getWrappedText(def.name).length > 2;
+      effectText.setMaxLines(effectNeedsThirdLine ? 3 : 2);
+      // Keep the third compact Legendary line inside its badge and above the per-card footer.
+      const effectY = ch / 2 - (compact ? (effectNeedsThirdLine ? 41 : 37) : 44);
+      const effectPlateHeight = compact ? (effectNeedsThirdLine ? 42 : 30) : 32;
       const effectPlate = this.add
-        .rectangle(tx + effectW / 2, effectY, effectW, compact ? 30 : 32, accent, 0.11)
+        .rectangle(tx + effectW / 2, effectY, effectW, effectPlateHeight, accent, 0.11)
         .setStrokeStyle(1, accent, 0.3);
       card.add(effectPlate);
-      card.add(
-        this.add
-          .text(tx + 8, effectY, def.name, {
-            fontFamily: UI_FONT,
-            fontSize: compact ? '11px' : '12px',
-            fontStyle: '700',
-            color: legendary || evolution ? '#fff1ac' : def.rarity === 'rare' ? '#ddd0ff' : '#9ef1ff',
-            align: 'left',
-            lineSpacing: -1,
-            maxLines: 2,
-            wordWrap: { width: Math.max(92, effectW - 16), useAdvancedWrap: true },
-          })
-          .setOrigin(0, 0.5)
-          .setResolution(2)
-      );
+      card.add(effectText.setPosition(tx + 8, effectY).setOrigin(0, 0.5).setResolution(2));
 
       if (def.showProgress !== false && def.max <= 8) {
         const pg = this.add.graphics();
@@ -1675,7 +1684,7 @@ export class UIScene extends Phaser.Scene {
     c.add(emblem);
 
     const label = this.add
-      .text(W / 2, H * 0.2, 'ЛЕГЕНДАРНАЯ МУТАЦИЯ', {
+      .text(W / 2, H * 0.2, MUTATION_CARD_HEADERS.legendary, {
         fontFamily: FONT,
         fontSize: compact ? '15px' : '18px',
         fontStyle: 'bold',
@@ -1828,7 +1837,7 @@ export class UIScene extends Phaser.Scene {
 
     c.add(
       this.add
-        .text(W / 2, H * 0.21, 'КРИТИЧЕСКАЯ МУТАЦИЯ', {
+        .text(W / 2, H * 0.21, MUTATION_CARD_HEADERS.evolution, {
           fontFamily: FONT,
           fontSize: '18px',
           fontStyle: 'bold',
@@ -2471,27 +2480,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   private buildSummary(stacks: Record<string, number>): string {
-    const labels: Record<string, string> = {
-      dmg: 'ШИПЫ',
-      rate: 'РЕПЛИКАЦИЯ',
-      multi: 'КОПИИ',
-      pierce: 'ПРОБИТИЕ',
-      speed: 'СКОРОСТЬ',
-      hp: 'КАПСИД',
-      magnet: 'МАГНИТ',
-      orbit: 'СПУТНИКИ',
-      nova: 'ИМПУЛЬС',
-      regen: 'РЕГЕН.',
-      infect: 'ЗАРАЖЕНИЕ',
-      lysis: 'ЦИТОЛИЗ',
-      factory: 'ФАБРИКА',
-    };
-    return Object.entries(stacks)
-      .filter(([id, n]) => n > 0 && UPGRADES.some((u) => u.id === id))
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([id, n]) => `${labels[id] ?? id.toUpperCase()} ${n}`)
-      .join(' · ');
+    return formatBuildSummary(stacks);
   }
 
   private button(

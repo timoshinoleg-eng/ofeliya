@@ -32,6 +32,12 @@ jobs:
       - name: Save migration compatibility smoke
         run: npm run test:save
 
+      - name: RU copy catalog contract
+        run: npm run test:ui-copy
+
+      - name: Recursive visible-text diagnostic contract
+        run: npm run test:layout-diagnostics
+
       - name: Onboarding state machine smoke
         run: npm run test:onboarding
 
@@ -151,7 +157,8 @@ jobs:
   browser-smoke:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # The additional 18 Legendary layout cases need headroom beyond the existing suite.
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -180,6 +187,9 @@ jobs:
           for i in $(seq 1 40); do curl -fsS http://127.0.0.1:5173/ >/dev/null && exit 0; sleep .5; done
           cat /tmp/vite.log
           exit 1
+
+      - name: Legendary nested-text layout across compact viewports
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:legendary-layout
 
       - name: Full startup timeout contracts
         run: npm run test:startup
