@@ -26,3 +26,7 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 ## Final overlap correction
 - Current code candidate is `997b6eee2403505e1a416fd5d2755496c30728e`. Third-line badge shifted upward to center y=21; 42px panel ends y=42, before footer y=43. The earlier y=31 candidate was superseded due footer overlap.
 - Probe asserts complete wrapped text fits the panel and does not intersect description/footer; missing description/footer is a failure. Root must rerun the final assertion guard and branch CI before push.
+
+## Current compact Legendary candidate
+- Final code candidate `29457d658e309ee87fadffd30c565528a11d6405`: compact Legendary cards are 136px high. Effect plate remains 42px, local y=6..48; description origin shifts to -22 and footer begins y=49. Three cards span y=122..548 at 320x568. Probe reports and asserts effect/description/footer bounds.
+- Root reports Windows browser 18/18 passed. TypeScript, `test:legendary`, `test:mutation-copy`, and `test:tokens` passed. Linux focused CI is pending following earlier 3-case desc-overlap failures; root pushes the candidate and owns that CI. No worker push/merge/deploy.

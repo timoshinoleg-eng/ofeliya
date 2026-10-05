@@ -113,3 +113,8 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 ## Final Legendary geometry and probe guard
 - Corrected candidate `997b6eee2403505e1a416fd5d2755496c30728e` supersedes the earlier center-y=31 version, which overlapped the footer. The compact three-line panel is now center-y=21, bounds y=0..42; the Legendary footer begins y=43. Probe now requires description/footer fixtures and rejects text-bound intersections.
 - Root reports the browser 18-case check plus desc/footer intersections pass on the corrected geometry. The stricter fixture-presence probe guard was added afterward; root should rerun it against final HEAD before push. No push from this worker.
+
+## Compact Legendary description spacing follow-up (05.10)
+- After Linux showed effect/description overlap, compact Legendary reward cards now use height 136px (other compact level-up cards remain 124px). At 320x568, three cards span y=122..548. The effect plate remains 42px high at local y=6..48; footer starts local y=49, and description moves up to local y=-22. No effect font-size, copy, or gameplay changes.
+- Focused probe JSON now includes effect, description, and footer bounds and rejects missing fixture text or intersections. Root's Windows 18-case verification passed on this change. Typecheck plus Legendary, mutation-copy, and token checks passed. Focused Linux CI is pending; earlier Linux result showed description overlap.
+- Code commit `29457d658e309ee87fadffd30c565528a11d6405`; root workflow-order commit `04392af` runs the focused layout gate early. Root is handling push and Linux CI.

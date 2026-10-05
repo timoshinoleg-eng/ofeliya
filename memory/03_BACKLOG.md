@@ -100,3 +100,8 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 
 
 - [ ] Root rerun final focused Legendary probe with mandatory desc/footer fixture checks on `997b6eee2403505e1a416fd5d2755496c30728e` before push.
+
+## Compact Legendary spacing CI
+- [x] Add 12px to compact Legendary reward card height only; keep three-card 320x568 stack within y=122..548.
+- [x] Include effect/description/footer bounds in focused probe JSON and fail on missing fixtures/intersections.
+- [ ] Linux focused regression after run37293956036 reported effect/description overlap; verify the 136px card correction on final candidate `29457d658e309ee87fadffd30c565528a11d6405`.
