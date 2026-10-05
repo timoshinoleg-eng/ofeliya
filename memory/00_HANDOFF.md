@@ -69,3 +69,14 @@ Product validation sprint по приоритетам P0–P2: закрыть и
 - Проверки: server75, outbox24, новые release4/onboarding/rollback/server-policy/renderedCompose; браузер score/comprehension6viewport. Полный локальный набор43гейта: первый startup5.124s при параллельной браузерной нагрузке и Caddy sh ENOENT; serial startup и Caddy с GitBash PATH прошли. Исходные failures сохранены в evidence.
 - Cloud creation недоступен аккаунту; пользователь разрешил local. Deploy/merge не выполнены. Публичный release.json недоступен; текущая productionSHA НЕ подтверждена. Real-device MAX Android/iOS16/16 остаётся открытым.
 - Анализ второго вложения: WOFF2 валиден, кириллица отсутствует. Не считать разрешённые словарём ФОРМА МУТАЦИИ/MAX ИЛИ TG/СТАНДАРТ ошибками; предложить небольшой кириллический typography trial, затем RU catalog; fullEN i18n после продуктового решения.
+
+## 2026-10-05 typography experiment handoff
+- Isolated checkout `work/ofeliya-typography`, branch `experiment/cyrillic-typography-20261005`, base `4f65c4fa19132283776e6b5dab19cc1fcc583abc`.
+- Code/assets commit `dc7fc8ed8d9a00f9f5c7f77937fe45c529be97c1`; Play 400/700 assets and OFL/provenance are included. The game is unchanged unless `VITE_TYPOGRAPHY_EXPERIMENT=play`; system body stack remains current. Standalone specimen: `experiments/typography/index.html`.
+- Checks passed: `npx tsc --noEmit`, `npm run test:startup`, Vite builds with and without experiment flag. No browser screenshot or actual MAX device review is claimed.
+- Next: root agent runs visual checks from `outputs/typography-experiment.md`, especially title fit, Russian/Ё glyphs, 320px width, and zero Play requests in default Network. Do not merge/deploy or flip default before separate product review.
+
+## Repair update 2026-10-05
+- Latest local repair commit: `7e1c9bae15d35ab355c15e05e16567501f6c8d3b`. `config.ts` has no `import.meta`; browser boot calls the opt-in font setter. Release visual workflow sets `VITE_RELEASE_SHA` to `github.sha` for the normal build/stamp.
+- Red-to-green `npm run test:save`; typecheck and default/Play stamped builds passed. Nonbrowser package checks 40/41; missing real `artifacts/mobile-acceptance.json` is the only remaining nonbrowser gate and must stay unclaimed.
+- Root must rerun browser checks and CI against this SHA. Do not push from this worker.

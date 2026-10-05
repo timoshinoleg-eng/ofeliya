@@ -31,6 +31,7 @@ jobs:
 
       - name: Build production QA bundle
         env:
+          VITE_RELEASE_SHA: ${{ github.sha }}
           VITE_RELEASE_MATRIX_QA: '1'
         run: npm run build
 
