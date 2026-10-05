@@ -30,7 +30,7 @@ const PORT = Number(process.env.PORT ?? 8787);
 const DATA_DIR = process.env.DATA_DIR ?? join(ROOT, 'server', 'data');
 const TG_TOKEN = process.env.TG_BOT_TOKEN ?? '';
 const TG_WEBHOOK_SECRET = process.env.TG_WEBHOOK_SECRET ?? '';
-const TG_OUTBOUND_ENABLED = process.env.OFELIYA_TELEGRAM_OUTBOUND_ENABLED !== '0';
+const TG_OUTBOUND_ENABLED = process.env.OFELIYA_TELEGRAM_OUTBOUND_ENABLED === '1';
 // MAX initData не содержит app audience. A shared bot token would authenticate
 // launch data from every Mini App attached to that bot, so fail closed without
 // the dedicated application token.
@@ -180,6 +180,9 @@ function parseScoreContract(payload) {
 mkdirSync(DATA_DIR, { recursive: true });
 const STORE_FILE = join(DATA_DIR, 'store.json');
 const MAX_SCORES = 20_000;
+// Once only this reserve remains, admit verified identities only. Existing rows,
+// including stores already over the threshold, are never evicted to make room.
+const TRUSTED_SCORE_RESERVE = 2_000;
 const MAX_REFS = 10_000;
 const MAX_ANALYTICS_EVENTS = 20_000;
 const ANALYTICS_RATE_WINDOW_MS = 60_000;
@@ -195,7 +198,6 @@ const WRITE_RATE_LIMIT =
   Number.isInteger(configuredWriteRateLimit) && configuredWriteRateLimit > 0
     ? configuredWriteRateLimit
     : 20;
-const WRITE_IP_RATE_LIMIT = WRITE_RATE_LIMIT * 12;
 const writeRateByActor = new Map();
 const writeRateByIp = new Map();
 
@@ -207,6 +209,7 @@ const RUN_TOKEN_RE = /^[A-Za-z0-9_-]{32,64}$/;
 const MAX_DAILY_RUNS = 10_000;
 const DAILY_RUN_TTL_MS = 2 * 60 * 60 * 1000;
 const DAILY_RUN_GRACE_MS = 30 * 60 * 1000;
+const DAILY_RUN_WALL_CLOCK_GRACE_MS = RUN_WALL_CLOCK_GRACE_MS;
 const DAILY_RUN_ID_RE = /^[A-Za-z0-9_-]{16,32}$/;
 const PRODUCT_EVENTS = new Set([
   'app_open', 'run_start', 'run_60s', 'boss1', 'heart', 'death',
@@ -267,6 +270,17 @@ function loadStore() {
 }
 
 let store = loadStore();
+function scoreCapacity() {
+  const remaining = Math.max(0, MAX_SCORES - store.scores.length);
+  return {
+    limit: MAX_SCORES,
+    remaining,
+    trustedReserve: TRUSTED_SCORE_RESERVE,
+    unverifiedRemaining: Math.max(0, remaining - TRUSTED_SCORE_RESERVE),
+    ready: remaining > 0,
+  };
+}
+
 function writeJsonAtomically(file, value) {
   const tmp = `${file}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
   let fd;
@@ -367,10 +381,10 @@ function requestIp(req) {
   return raw.slice(0, 96);
 }
 
-function allowWriteRequest(req, scope, actor, now = Date.now()) {
-  if (!allowFixedWindow(writeRateByIp, scope + ':' + requestIp(req), WRITE_IP_RATE_LIMIT, now)) return false;
+function allowWriteRequest(req, scope, actor, now = Date.now(), actorLimit = WRITE_RATE_LIMIT) {
+  if (!allowFixedWindow(writeRateByIp, scope + ':' + requestIp(req), actorLimit * 12, now)) return false;
   if (!actor) return true;
-  return allowFixedWindow(writeRateByActor, scope + ':' + actor, WRITE_RATE_LIMIT, now);
+  return allowFixedWindow(writeRateByActor, scope + ':' + actor, actorLimit, now);
 }
 
 function analyticsActorHash(platform, uid) {
@@ -1123,6 +1137,11 @@ function verifyMessengerProfileIdentity(body) {
 
 // ---------- HTTP ----------
 function send(res, code, obj) {
+  // Acknowledged scores and issued/consumed capabilities must survive process exit.
+  // Analytics retains debounced persistence; disk errors reach the request's500 path.
+  const path = res.req?.url?.split('?')[0];
+  if (code < 500 && res.req?.method === 'POST' &&
+      ['/api/score', '/api/run/start', '/api/daily/run'].includes(path)) flushStoreNow();
   const body = JSON.stringify(obj);
   res.writeHead(code, {
     'Content-Type': 'application/json',
@@ -1173,10 +1192,12 @@ const server = createServer(async (req, res) => {
 
   try {
     if (req.method === 'GET' && url.pathname === '/health') {
-      return send(res, 200, {
-        ok: true,
+      const capacity = scoreCapacity();
+      return send(res, capacity.ready ? 200 : 503, {
+        ok: capacity.ready,
         app: 'ofeliya-server',
         scores: store.scores.length,
+        scoreCapacity: capacity,
         duels: store.duels.length,
         duelAttempts: store.duelAttempts.length,
         duelEvents: store.duelEvents.length,
@@ -1269,7 +1290,7 @@ const server = createServer(async (req, res) => {
         return send(res, 403, { ok: false, error: 'analytics initData validation failed' });
       }
 
-      if (!allowWriteRequest(req, 'event', platform + ':' + verified.uid)) {
+      if (!allowWriteRequest(req, 'event', platform + ':' + verified.uid, Date.now(), ANALYTICS_RATE_LIMIT)) {
         return send(res, 429, { ok: false, error: 'write rate limited' });
       }
       const actor = analyticsActorHash(platform, verified.uid);
@@ -1601,7 +1622,8 @@ const server = createServer(async (req, res) => {
           }
           return send(res, 409, { ok: false, error: 'daily run already closed' });
         }
-        if (Date.now() >= dailyRun.expiresAt) {
+        const now = Date.now();
+        if (now >= dailyRun.expiresAt) {
           return send(res, 410, { ok: false, error: 'daily run expired' });
         }
         if (
@@ -1613,6 +1635,13 @@ const server = createServer(async (req, res) => {
           contract.runSeed !== dailyRun.runSeed
         ) {
           return send(res, 422, { ok: false, error: 'dailyRunId does not match score contract' });
+        }
+        const elapsedWallMs = Math.max(0, now - dailyRun.issuedAt);
+        if (payload.timeMs > elapsedWallMs + DAILY_RUN_WALL_CLOCK_GRACE_MS) {
+          // Consume invalid tickets like ordinary run capabilities, without recording a score.
+          dailyRun.closedAt = now;
+          saveStore();
+          return send(res, 422, { ok: false, error: 'anti-cheat: run-time-exceeds-wall-clock' });
         }
       }
 
@@ -1656,8 +1685,12 @@ const server = createServer(async (req, res) => {
         runGrant = resolved.run;
       }
 
-      if (store.scores.length >= MAX_SCORES) {
+      const capacity = scoreCapacity();
+      if (!capacity.ready) {
         return send(res, 503, { ok: false, error: 'score capacity temporarily unavailable' });
+      }
+      if (!verified && capacity.unverifiedRemaining === 0) {
+        return send(res, 503, { ok: false, error: 'unverified score capacity reserved for verified submissions' });
       }
 
       const dateKey = dailyRun

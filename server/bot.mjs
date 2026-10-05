@@ -20,6 +20,7 @@ import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { telegramApiJson } from './telegram-api.mjs';
+import { buildTelegramWebhookMethod, parseTelegramStartParam } from './telegram-webhook.mjs';
 
 const TG_TOKEN = process.env.TG_BOT_TOKEN ?? '';
 const GAME_URL = process.env.GAME_URL ?? '';
@@ -66,9 +67,7 @@ async function api(method, params = {}) {
 }
 
 export function parseStartParam(text) {
-  if (typeof text !== 'string') return null;
-  const p = text.split(' ').slice(1).join(' ').trim();
-  return p.length > 0 ? p : null;
+  return parseTelegramStartParam(text);
 }
 
 const REPLY_GAME = GAME_URL
@@ -78,7 +77,6 @@ const REPLY_GAME = GAME_URL
 async function handleStart(msg, param) {
   const uid = String(msg.from?.id ?? '');
   const first = msg.from?.first_name ?? 'игрок';
-  const isNew = !users[uid];
   if (uid) {
     users[uid] = {
       chatId: uid,
@@ -87,22 +85,10 @@ async function handleStart(msg, param) {
     };
     saveUsers();
   }
-  let reply;
-  if (param && param.startsWith('ref_')) {
-    reply = `Привет, ${first}! 👋\nДруг позвал тебя в OFELIYA — на первом забеге получишь бонус: +1 HP и рывк быстрее.\n\n${REPLY_GAME}`;
-  } else if (param) {
-    reply = `Привет, ${first}! ${REPLY_GAME}`;
-  } else {
-    reply = isNew
-      ? `Привет, ${first}! Это бот OFELIYA.\n\n${REPLY_GAME}\n\nКак пригласить друга: на экране «Итоги» — кнопка ПРИГЛАСИТЬ.`
-      : REPLY_GAME;
-  }
-  if (msg.chat?.id != null) {
-    await api('sendMessage', {
-      chat_id: msg.chat.id,
-      text: reply,
-      disable_web_page_preview: true,
-    }).catch((e) => console.error('[bot] sendMessage failed:', e.message));
+  const method = buildTelegramWebhookMethod({ message: msg }, { gameUrl: GAME_URL });
+  if (method) {
+    const { method: apiMethod, ...params } = method;
+    await api(apiMethod, params).catch((e) => console.error('[bot] sendMessage failed:', e.message));
   }
 }
 
@@ -128,10 +114,8 @@ export async function pollOnce() {
           await handleStart(msg, parseStartParam(msg.text));
         } else if (cmd === '/help') {
           if (msg.chat?.id != null) {
-            await api('sendMessage', {
-              chat_id: msg.chat.id,
-              text: '⚡️ OFELIYA\n\nКоманды:\n/start — играть\n/start ref_<id> — по приглашению друга (бонус на первый забег)\n/help — помощь',
-            }).catch(() => {});
+            const { method, ...params } = buildTelegramWebhookMethod({ message: msg }, { gameUrl: GAME_URL });
+            await api(method, params).catch(() => {});
           }
         }
       } else {

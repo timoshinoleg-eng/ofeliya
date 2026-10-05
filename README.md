@@ -135,6 +135,14 @@ Ranked contract относится к Standard; Strained mastery остаётс�
 Challenge payload остаётся только недоверенным социальным контекстом и не заменяет серверную
 валидацию результата.
 
+Score storage ограничено 20 000 строками. Последние 2 000 мест зарезервированы для verified
+identity: browser/unverified VK получают `503` уже при 18 000 строках, verified-записи — при
+20 000. Существующие строки не удаляются. Повтор принятого `submissionId` остаётся идемпотентным
+даже при заполнении. `/health` возвращает `503` и `ok=false`, когда свободных мест для verified
+score writes больше нет; существующие Docker/deploy-проверки HTTP status видят это как unhealthy.
+`scoreCapacity` содержит `limit`, `remaining`, `trustedReserve`, `unverifiedRemaining`, `ready` без
+пользовательских данных. Заполнение только unverified-доступной части не делает health unhealthy.
+
 ## Основной игровой цикл
 
 - первые секунды: ближайшие антитела, первая RNA и ранняя mutation;

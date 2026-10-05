@@ -57,6 +57,7 @@ jobs:
             echo "Refusing deploy: $sha predates verifiable release identity ($release_identity_floor)" >&2
             exit 4
           fi
+          bash deploy/check-compatible-release.sh "$sha"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
       - name: Require successful main CI for selected SHA
@@ -128,6 +129,8 @@ jobs:
             echo "Cannot establish rollback release from $release_url" >&2
             exit 21
           }
+          # Refuse rollout BEFORE it can strand Telegram without a safe rollback.
+          bash deploy/check-compatible-release.sh "$previous"
           echo "sha=$previous" >> "$GITHUB_OUTPUT"
           printf 'Rollback target captured: %s\n' "$previous"
 
@@ -230,6 +233,7 @@ jobs:
             echo 'Rollback SHA is invalid; refusing an ambiguous rollback' >&2
             exit 31
           }
+          bash deploy/check-compatible-release.sh "$PREVIOUS_SHA"
           echo "Release failed; restoring $PREVIOUS_SHA"
           ssh -i ~/.ssh/cloudru_bastion             -p 22             -o BatchMode=yes             -o IdentitiesOnly=yes             -o StrictHostKeyChecking=yes             ubuntu@176.108.246.251             "deploy $PREVIOUS_SHA"
 

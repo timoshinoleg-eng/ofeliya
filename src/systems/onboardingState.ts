@@ -46,6 +46,7 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
 const MOVE_DEADZONE = 0.05;
 
 export class OnboardingState {
+  constructor(private readonly onStepCompleted?: (step: OnboardingStepId) => void) {}
   active = false;
   completed = false;
   skipped = false;
@@ -96,8 +97,10 @@ export class OnboardingState {
   /** Advance to the next step, finishing after the last. Returns new step id or null. */
   advance(): OnboardingStepId | null {
     if (!this.active) return null;
+    const completedStep = this.currentStep?.id;
     this.stepIndex += 1;
     this.resetCounters();
+    if (completedStep) this.onStepCompleted?.(completedStep);
     if (this.stepIndex >= ONBOARDING_STEPS.length) {
       this.finish();
       return null;

@@ -106,6 +106,8 @@ assert.doesNotMatch(deployScript, /HUB_BOT_|\/opt\/hub/, 'deployment must not in
 assert.match(compose, /GAME_URL=.*\$\$OFELIYA_GAME_URL/, 'score service must publish Ofeliya links, not Hub links');
 assert.match(compose, /ofeliya-score-data:\/app\/server\/data/, 'score store must stay on a named persistent volume');
 assert.match(compose, /score:[\s\S]*healthcheck:[\s\S]*127\.0\.0\.1:8787\/health/, 'score service must expose a healthcheck');
+assert.match(compose, /127\.0\.0\.1:8787\/health'\)\.then\(r=>process\.exit\(r\.ok\?0:1\)\)/, 'score healthcheck must fail on HTTP 503 when trusted score capacity is exhausted');
+assert.match(deployScript, /127\.0\.0\.1:8787\/health'\)\.then\(r=>process\.exit\(r\.ok\?0:1\)\)/, 'deployment readiness must fail on HTTP 503 when trusted score capacity is exhausted');
 assert.match(compose, /static:[\s\S]*depends_on:[\s\S]*score:[\s\S]*condition: service_healthy/, 'static nginx must wait for a healthy score service');
 assert.match(compose, /external: true[\s\S]*OFELIYA_SHARED_NETWORK:\?OFELIYA_SHARED_NETWORK is required/, 'production services must require an explicitly configured Ofeliya network');
 

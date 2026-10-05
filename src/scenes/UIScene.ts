@@ -1066,7 +1066,14 @@ export class UIScene extends Phaser.Scene {
     if (SaveSystem.get().tutorialDone) return;
     if (readDailyIntent(this.registry) !== null) return;
     if (this.registry.get('duelChallenge')) return;
-    this.onboarding = new OnboardingState();
+    this.onboarding = new OnboardingState((step) => {
+      const currentRun = this.registry.get('run') as RunSnapshot | undefined;
+      void trackProductEvent('onboarding_step', PlatformBridge, {
+        step,
+        outcome: 'completed',
+        runTimeMs: Math.round(currentRun?.timeMs ?? 0),
+      });
+    });
     this.onboarding.start();
     this.onboardingLastXp = run.xp;
     this.onboardingLastHostCells = run.hostCellsInfected;
@@ -1075,7 +1082,6 @@ export class UIScene extends Phaser.Scene {
   private tickOnboarding(run: RunSnapshot): void {
     const ob = this.onboarding;
     if (!ob || !ob.active) return;
-    const beforeStep = ob.currentStep?.id ?? null;
     if (run.xp > this.onboardingLastXp) {
       ob.notifyPickup();
       this.onboardingLastXp = run.xp;
@@ -1089,14 +1095,6 @@ export class UIScene extends Phaser.Scene {
       const dt = Math.min(0.05, Math.max(0, this.game.loop.delta / 1000));
       const joy = this.registry.get('joy') as { x: number; y: number } | undefined;
       ob.tick(dt, joy);
-    }
-    const afterStep = ob.currentStep?.id ?? null;
-    if (beforeStep && beforeStep !== afterStep) {
-      void trackProductEvent('onboarding_step', PlatformBridge, {
-        step: beforeStep,
-        outcome: 'completed',
-        runTimeMs: Math.round(run.timeMs),
-      });
     }
     if (ob.completed) {
       this.persistOnboarding();
