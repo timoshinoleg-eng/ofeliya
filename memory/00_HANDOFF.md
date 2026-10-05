@@ -30,3 +30,8 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 ## Current compact Legendary candidate
 - Final code candidate `29457d658e309ee87fadffd30c565528a11d6405`: compact Legendary cards are 136px high. Effect plate remains 42px, local y=6..48; description origin shifts to -22 and footer begins y=49. Three cards span y=122..548 at 320x568. Probe reports and asserts effect/description/footer bounds.
 - Root reports Windows browser 18/18 passed. TypeScript, `test:legendary`, `test:mutation-copy`, and `test:tokens` passed. Linux focused CI is pending following earlier 3-case desc-overlap failures; root pushes the candidate and owns that CI. No worker push/merge/deploy.
+
+## Final viewport guard handoff
+- Current code: `c01019f0708d9740cfc7a3f84da29bba149eed55`. Expansion to 136px requires the proposed full card stack to fit between measured subtitle bottom plus 9px gap and viewport bottom minus 9px. Otherwise 124px compact cards and the prior two-line Legendary effect limit remain.
+- Root reports 18/18 supplemental browser cases passed over 320x568, 568x320, 390x740 with one/two-card sets. Probe includes card/effect/description/footer bounds and required fixture assertions.
+- Local typecheck and Legendary/copy/token checks passed before the final probe-only addition; `node --check` and diff whitespace check passed afterward. Root must rerun focused Linux CI on final candidate before push. Landscape redesign remains a separate backlog item.

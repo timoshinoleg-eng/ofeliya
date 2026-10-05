@@ -105,3 +105,6 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - [x] Add 12px to compact Legendary reward card height only; keep three-card 320x568 stack within y=122..548.
 - [x] Include effect/description/footer bounds in focused probe JSON and fail on missing fixtures/intersections.
 - [ ] Linux focused regression after run37293956036 reported effect/description overlap; verify the 136px card correction on final candidate `29457d658e309ee87fadffd30c565528a11d6405`.
+
+- [ ] Re-run focused Linux Legendary CI after commit `c01019f0708d9740cfc7a3f84da29bba149eed55`; latest Linux pass predates its viewport-fit guard.
+- [ ] Track compact landscape Legendary panel density/layout separately; viewport-fit guard preserves the original 124px card treatment when expansion cannot fit and does not claim a full landscape redesign.
