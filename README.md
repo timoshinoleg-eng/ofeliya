@@ -310,8 +310,9 @@ npm run test:mobile-evidence -- /path/to/mobile-acceptance.json
 этот путь добавлен в `.gitignore`, поэтому для неприватных evidence указывайте путь явно.
 
 Каждый элемент `checks[]` обязан содержать `id`, `status: "pass"`, `device`, `clientVersion`,
-`testedAt` (разбираемая ISO дата/время) и `evidence` (ссылка на video/screenshot/log).
-Валидатор требует ровно **16** id — по 8 на Android и iOS:
+`testedAt` (любое значение даты/времени, которое принимает `Date.parse`; ISO 8601 рекомендуется для
+читаемости, но не является требованием) и `evidence` (ссылка на video/screenshot/log).
+Валидатор требует **16** обязательных id — по 8 на Android и iOS:
 
 ```text
 android-launch            android-first-run     android-full-run      android-background-resume
@@ -320,7 +321,8 @@ ios-launch                ios-first-run         ios-full-run          ios-backgr
 ios-restart               ios-share             ios-daily-invite      ios-viewport
 ```
 
-Валидатор проверяет только эти 16 id и пять полей. Остальные требования матрицы остаются
+Валидатор проверяет эти 16 обязательных id и пять полей. Дополнительные строки в `checks[]`
+разрешены и просто не проверяются, поэтому `pass` их не подтверждает. Остальные требования матрицы остаются
 ручными: native BackButton, haptics, audio unlock, повторные menu/run/restart циклы, pacing обеих
 boss phase fights, Heart safe-pocket timing с one-hand управлением, twin-stick ergonomics без
 movement/aim cross-talk, реальные developer/legal/support значения и trusted score с настоящим

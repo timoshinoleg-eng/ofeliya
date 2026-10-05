@@ -207,8 +207,9 @@ The path argument is required in practice. The script defaults to
 git-ignored, so pass an explicit path when validating evidence you do not want committed.
 
 Each entry in `checks[]` must carry `id`, `status: "pass"`, `device`, `clientVersion`, `testedAt`
-(parseable ISO date/time) and `evidence` (video/screenshot/log reference). The validator requires
-these **16** ids — 8 Android and 8 iOS:
+(any date/time value that `Date.parse` accepts; ISO 8601 is recommended for readability but is not
+what is enforced) and `evidence` (video/screenshot/log reference). The validator requires these
+**16** ids — 8 Android and 8 iOS:
 
 ```text
 android-launch            android-first-run     android-full-run      android-background-resume
@@ -217,7 +218,8 @@ ios-launch                ios-first-run         ios-full-run          ios-backgr
 ios-restart               ios-share             ios-daily-invite      ios-viewport
 ```
 
-The validator checks exactly those 16 ids and those five fields per check. It does **not** check the
+The validator checks those 16 required ids and those five fields per check. Extra rows in `checks[]`
+are allowed and are simply not inspected, so a `pass` does not certify them. It does **not** check the
 remaining manual requirements, which stay manual:
 
 - native BackButton overlay/run-state exit with no stale listeners;
@@ -230,8 +232,9 @@ remaining manual requirements, which stay manual:
 - real developer/legal/support values matching the verified MAX profile;
 - trusted score submission with real signed MAX `initData`.
 
-A green `test:mobile-evidence` run proves the 16 recorded rows are well formed. It does not prove
-the underlying behavior, and it is never a substitute for items 3–16 of the manual matrix above.
+A green `test:mobile-evidence` run proves those 16 required rows are well formed. It does not prove
+the underlying behavior, says nothing about any additional rows, and is never a substitute for
+items 3–16 of the manual matrix above.
 
 Evidence storage: keep the JSON and its referenced recordings outside the repository, in whatever
 external release-evidence store the team uses, and record only the path/URL. The convenience default
