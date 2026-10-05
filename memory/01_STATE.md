@@ -2,6 +2,12 @@
 
 Обновлено: 2026-10-05. Только факты; решения — в `02_DECISIONS.md`.
 
+## Standalone deploy compatibility policy (05.10)
+
+- Production run `37370394631` reached the server, passed CI/release floors, then failed because a helper sibling was absent from the selected script extraction directory `/tmp`; automatic rollback to `edb1b9a...` succeeded and public release marker confirmed it.
+- `deploy/deploy-cloudru.sh` now reads the compatibility helper from fetched `origin/main` into a variable, rejects failed, empty, or whitespace-only loads, and pipes the policy to `bash -s`; no dependency on script location remains.
+- The three CI jobs use `ubuntu-22.04`. Existing rollback contract test now executes the actual deploy guard for valid, old, invalid, missing-helper, and empty-helper cases.
+
 ## Targeted deploy CI lookup (05.10)
 
 - Deploy job now uses `ubuntu-22.04` and requests workflow-specific `ci.yml` runs filtered by exact release SHA, main branch, push event, completed status, and up to 100 results.

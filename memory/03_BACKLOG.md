@@ -4,7 +4,8 @@
 
 ## Deploy CI payload fix (05.10)
 - [x] PR #173 merged the file-backed deploy CI payload fix; target branch inherits it from main `b174b40`.
-- [ ] Root review and publish `fix/deploy-targeted-ci-20261005`; retry the existing green release SHA after merge, under the normal deployment gates. No deploy performed by this task.
+- [x] PR #174 merged targeted CI lookup and Ubuntu 22.04 pin; target branch inherits it from main `18e6f05`.
+- [ ] Root review/PR for `fix/deploy-standalone-policy-20261005`, then wait for full main CI at the new SHA before deployment retry. No deploy performed by this task.
 
 ## Сейчас (P0)
 

@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 : "${OFELIYA_RELEASE:?OFELIYA_RELEASE must be an immutable git SHA}"
 
 APP_ROOT="${OFELIYA_APP_DIR:-/opt/ofeliya}"
@@ -181,7 +179,12 @@ git remote set-url origin "${REPO_URL}"
 git fetch --prune origin main
 git cat-file -e "${OFELIYA_RELEASE}^{commit}"
 # Use the current trusted checkout's policy before checking out an older release.
-bash "${SCRIPT_DIR}/check-compatible-release.sh" "${OFELIYA_RELEASE}"
+compatibility_policy="$(git show origin/main:deploy/check-compatible-release.sh)"
+[[ -n "${compatibility_policy//[[:space:]]/}" ]] || {
+  echo 'Cannot load current release compatibility policy; refusing deployment' >&2
+  exit 4
+}
+bash -s -- "${OFELIYA_RELEASE}" <<< "${compatibility_policy}"
 
 if ! git merge-base --is-ancestor "${OFELIYA_RELEASE}" origin/main; then
   echo "Refusing deploy: ${OFELIYA_RELEASE} is not contained in origin/main" >&2
