@@ -85,6 +85,7 @@ const cases = [
           const text = textObjects.find((obj) => obj.text === ui.gs.pendingChoices[0].name);
           const description = textObjects.find((obj) => obj.text === ui.gs.pendingChoices[0].desc);
           const footer = textObjects.find((obj) => obj.text === 'ИЗМЕНИТЬ ПРАВИЛА ЗАБЕГА');
+          const cardBackground = text?.parentContainer?.list.find((obj) => obj.type === 'Rectangle' && obj.width > 100 && obj.height > 100);
           const plate = text?.parentContainer?.list.find((obj) => obj.type === 'Rectangle' && obj.width > 100 && obj.height <= 44 && Math.abs(obj.y - text.y) < 1);
           const lineCount = text?.getWrappedText(text.text).length ?? null;
           const maxLines = text?.style.maxLines ?? null;
@@ -101,6 +102,7 @@ const cases = [
           return {
             id, width, height, textCount: textObjects.length,
             effect: text ? { text: text.text, linesNeeded: lineCount, maxLines, bounds: effectBounds } : null,
+            cardHeight: cardBackground?.height ?? null,
             descriptionBounds: description ? bounds(description) : null,
             footerBounds: footer ? bounds(footer) : null,
             overlaps,
@@ -119,6 +121,7 @@ const cases = [
   const failures = reports.filter((r) =>
     !r.effect || !r.plate || r.overlaps.length || r.overflow.length ||
     r.effect.linesNeeded > r.effect.maxLines ||
+    (r.effect.linesNeeded > 2 && r.cardHeight !== 136) ||
     r.effect.bounds.top < r.plate.top + 1 || r.effect.bounds.bottom > r.plate.bottom - 1
   );
   if (failures.length) {

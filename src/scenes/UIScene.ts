@@ -1310,15 +1310,14 @@ export class UIScene extends Phaser.Scene {
     c.add(titleT);
     titleT.setScale(0.7);
     this.tweens.add({ targets: titleT, scale: 1, duration: 260, ease: 'Back.Out' });
-    c.add(
-      this.add
-        .text(
-          W / 2,
-          titleY + (compact ? 39 : 46),
-          legendaryReward
-            ? 'ИММУННЫЙ ПРАЙМ подавлен · выбери мутацию для СЕРДЦА'
-            : 'МУТАЦИЯ ' + gs.runState.stage.level + ' · выбери карту',
-          {
+    const subtitle = this.add
+      .text(
+        W / 2,
+        titleY + (compact ? 39 : 46),
+        legendaryReward
+          ? 'ИММУННЫЙ ПРАЙМ подавлен · выбери мутацию для СЕРДЦА'
+          : 'МУТАЦИЯ ' + gs.runState.stage.level + ' · выбери карту',
+        {
           fontFamily: UI_FONT,
           fontSize: compact ? '13px' : '15px',
           fontStyle: '650',
@@ -1326,18 +1325,27 @@ export class UIScene extends Phaser.Scene {
           align: 'center',
           wordWrap: { width: W - 44, useAdvancedWrap: true },
           lineSpacing: 2,
-          }
-        )
-        .setOrigin(0.5)
-        .setResolution(2)
-    );
+        }
+      )
+      .setOrigin(0.5)
+      .setResolution(2);
+    c.add(subtitle);
 
     const cards = gs.pendingChoices;
     const cw = Math.min(W - 16, 374);
-    const ch = compact ? (legendaryReward ? 136 : 124) : 148;
     const gap = compact ? 9 : 11;
-    const totalH = cards.length * ch + (cards.length - 1) * gap;
     const blockCenter = compact ? H * 0.59 : H * 0.57;
+    const expandedCardHeight = 136;
+    const expandedTotalH = cards.length * expandedCardHeight + (cards.length - 1) * gap;
+    const expandedTop = blockCenter - expandedTotalH / 2;
+    const expandedBottom = blockCenter + expandedTotalH / 2;
+    const expandedStackFits =
+      compact &&
+      legendaryReward &&
+      expandedTop >= subtitle.getBounds().bottom + gap &&
+      expandedBottom <= H - gap;
+    const ch = compact ? (expandedStackFits ? expandedCardHeight : 124) : 148;
+    const totalH = cards.length * ch + (cards.length - 1) * gap;
     let y = blockCenter - totalH / 2 + ch / 2;
 
     cards.forEach((def: UpgradeDef, cardIndex: number) => {
@@ -1453,10 +1461,11 @@ export class UIScene extends Phaser.Scene {
         color: legendary || evolution ? '#fff1ac' : def.rarity === 'rare' ? '#ddd0ff' : '#9ef1ff',
         align: 'left',
         lineSpacing: -1,
-        maxLines: legendary ? 3 : 2,
+        maxLines: legendary && ch === expandedCardHeight ? 3 : 2,
         wordWrap: { width: Math.max(92, effectW - 16), useAdvancedWrap: true },
       });
-      const effectNeedsThirdLine = compact && legendary && effectText.getWrappedText(def.name).length > 2;
+      const effectNeedsThirdLine =
+        compact && legendary && ch === expandedCardHeight && effectText.getWrappedText(def.name).length > 2;
       effectText.setMaxLines(effectNeedsThirdLine ? 3 : 2);
       // Keep the third compact Legendary line inside its badge and above the per-card footer.
       const effectY = ch / 2 - (compact ? (effectNeedsThirdLine ? 41 : 37) : 44);
