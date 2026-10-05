@@ -87,6 +87,8 @@ function makeLegendaryChoice(choice, suffix = '') {
           gs.awaitingChoice = true;
         }, { choices, reward: scenario.reward });
         await page.waitForFunction(() => window.__game.scene.getScene('UI').modalOpen);
+        // Let the modal entrance tweens settle before taking geometry snapshots.
+        await page.waitForTimeout(600);
         const report = await page.evaluate(async ({ kind, width, height, expected, expectCompact }) => {
           const { visibleTextBounds } = await import('/scripts/visible-text-bounds.js');
           const ui = window.__game.scene.getScene('UI');
@@ -112,6 +114,7 @@ function makeLegendaryChoice(choice, suffix = '') {
             const effectBounds = effect ? bounds(effect) : null;
             return {
               background: bg ? bounds(bg) : null,
+              cardHeight: bg?.height ?? null,
               effect: effect ? { text: effect.text, linesNeeded: effect.getWrappedText(effect.text).length, maxLines: effect.style.maxLines, bounds: effectBounds } : null,
               plate: plate ? bounds(plate) : null,
               description: description ? bounds(description) : null,
@@ -130,7 +133,7 @@ function makeLegendaryChoice(choice, suffix = '') {
           const overflow = measured.filter(({ masked, bounds: b }) => !masked &&
             (b.left < 1 || b.right > width - 1 || b.top < 1 || b.bottom > height - 1))
             .map(({ object, bounds: b }) => ({ text: object.text, bounds: b }));
-          const actualHeight = cardReports[0]?.background?.height ?? null;
+          const actualHeight = cardReports[0]?.cardHeight ?? null;
           const subtitleBounds = subtitle ? bounds(subtitle) : null;
           const allChoicesFound = expected.every((choice) => cardReports.some((card) => card.effect?.text === choice.name));
           return {
@@ -161,7 +164,7 @@ function makeLegendaryChoice(choice, suffix = '') {
       r.cardIntersections.length > 0 || r.overflow.length > 0 ||
       r.cards.some((card) => !card.background || !card.effect || !card.plate || card.effectOverlaps.length ||
         card.effect.linesNeeded > card.effect.maxLines ||
-        (card.effect.linesNeeded > 2 && card.background.height !== 136)) ||
+        (card.effect.linesNeeded > 2 && card.cardHeight !== 136)) ||
       r.subtitleGap.some((gap) => gap == null || gap < 8.5) ||
       (r.height < 650 && r.actualHeight !== (expandedFits ? 136 : 124)) ||
       (r.expectedCompact && expandedFits);
