@@ -21,7 +21,7 @@ function makeLegendaryChoice(choice, suffix = '') {
   return {
     id: `layout-${choice.id}${suffix}`, shortName: choice.title, name: choice.effect,
     desc: choice.desc, max: 1, family: choice.family, rarity: 'legendary',
-    kind: 'legendary', legendaryId: choice.id, showProgress: false, apply: () => {},
+    kind: 'legendary', legendaryId: choice.id, showProgress: false,
   };
 }
 
@@ -83,7 +83,7 @@ function makeLegendaryChoice(choice, suffix = '') {
           gs.nextFireAt = Number.MAX_SAFE_INTEGER;
           gs.queuedLevels = 0;
           gs.legendaryRewardPending = reward;
-          gs.pendingChoices = choices;
+          gs.pendingChoices = choices.map((choice) => ({ ...choice, apply: () => {} }));
           gs.awaitingChoice = true;
         }, { choices, reward: scenario.reward });
         await page.waitForFunction(() => window.__game.scene.getScene('UI').modalOpen);
