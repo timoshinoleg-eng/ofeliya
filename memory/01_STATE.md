@@ -129,6 +129,13 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - Локальные проверки: `npm ci` 0; `git diff --check` 0; `npm run test:tokens` 0 (`ui tokens contract: ok`); `npm run build` при `VITE_RELEASE_MATRIX_QA=1` и `VITE_RELEASE_SHA=$(git rev-parse HEAD)` — 0, `Stamped OFELIYA release 1d6bb37...`. Валидатор evidence не запускался: реальных device evidence нет.
 - Реальные MAX Android/iOS 16/16, Telegram launch/referral/Daily и public `release.json` exact SHA остаются неподтверждёнными. Push/merge/deploy не выполнялись.
 
+## Уточнение описания mobile-evidence валидатора (05.10)
+
+- Коммит `d976778`, только README.md и RELEASE_VALIDATION.md. Семантика валидатора не менялась.
+- Первая формулировка была неточной в двух местах. Проверено чтением `scripts/check-mobile-acceptance-evidence.mjs` и запуском на синтетических fixture: exit 0 при 16 обязательных id; exit 0 при тех же 16 плюс две дополнительные строки; exit 0 при `testedAt: "October 5, 2026"`; exit 1 при 15 обязательных id (даже с лишней строкой); exit 1 при `testedAt: "not-a-date"`.
+- Итог: 16 id — это обязательный минимум, а не точное и исчерпывающее число. Валидатор итерирует только по своему массиву `required`, поэтому дополнительные строки `checks[]` разрешены и не инспектируются — `pass` их не подтверждает.
+- `testedAt` проверяется через `Date.parse`, то есть принимается любое разбираемое значение даты/времени; ISO 8601 рекомендуется для читаемости, но не является требованием.
+
 ## Viewport-guarded Legendary card expansion (05.10)
 - Final code commit `c01019f0708d9740cfc7a3f84da29bba149eed55` only selects 136px compact Legendary cards when the proposed full stack fits below the measured subtitle plus one card gap and above the bottom one-gap margin. Otherwise compact cards stay at the original 124px and their effects stay capped at two lines. At 320x568 the three-card stack fits; at 568x320 it does not expand.
 - Probe emits card, effect, description, and footer bounds and asserts full text, required fixtures, panel containment, and no effect/description/footer intersection. Root reports the supplemental 18-case two-reward probe passed across 320x568, 568x320, and 390x740 on the fit guard. Typecheck and static Legendary/copy/token checks passed. Focused Linux run `37293956036` passed the earlier description-spacing version; root owns the final Linux run after this viewport guard.
