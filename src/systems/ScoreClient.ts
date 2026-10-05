@@ -125,6 +125,12 @@ function writeScoreOutbox(entries: DailyScoreOutboxEntry[]): void {
   }
 }
 
+function removeScoreOutboxEntry(submissionId: string): void {
+  // Read and write synchronously in this page's JS turn. Never write the pre-fetch
+  // snapshot: submit/retry may have appended or removed entries during the await.
+  writeScoreOutbox(readScoreOutbox().filter((entry) => entry.submissionId !== submissionId));
+}
+
 function localDateKey(date = new Date()): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -286,9 +292,13 @@ export function buildDailyScoreSubmission(
   return submission;
 }
 
+type ScorePostOutcome =
+  | { status: 'accepted'; response: ScoreSubmitResponse }
+  | { status: 'rejected' | 'retry' };
+
 async function postScoreSubmission(
   submission: ScoreSubmission
-): Promise<ScoreSubmitResponse | null> {
+): Promise<ScorePostOutcome> {
   const controller = new AbortController();
   const timer = globalThis.setTimeout(() => controller.abort(), SCORE_TIMEOUT_MS);
   try {
@@ -299,7 +309,12 @@ async function postScoreSubmission(
       signal: controller.signal,
       credentials: 'same-origin',
     });
-    if (!response.ok) return null;
+    // These statuses reject this exact score permanently (ID conflict, expired
+    // capability, invalid contract). Capacity 503 and other failures remain retryable.
+    if (response.status === 409 || response.status === 410 || response.status === 422) {
+      return { status: 'rejected' };
+    }
+    if (!response.ok) return { status: 'retry' };
     const body = (await response.json()) as Partial<ScoreSubmitResponse>;
     if (
       body.ok !== true ||
@@ -307,19 +322,22 @@ async function postScoreSubmission(
       typeof body.rulesetVersion !== 'number' ||
       typeof body.campaignVersion !== 'number'
     ) {
-      return null;
+      return { status: 'retry' };
     }
     return {
-      ok: true,
-      rank: typeof body.rank === 'number' ? body.rank : null,
-      ranked: body.ranked,
-      rulesetVersion: body.rulesetVersion,
-      campaignVersion: body.campaignVersion,
-      dailyRunAccepted:
-        typeof body.dailyRunAccepted === 'boolean' ? body.dailyRunAccepted : undefined,
+      status: 'accepted',
+      response: {
+        ok: true,
+        rank: typeof body.rank === 'number' ? body.rank : null,
+        ranked: body.ranked,
+        rulesetVersion: body.rulesetVersion,
+        campaignVersion: body.campaignVersion,
+        dailyRunAccepted:
+          typeof body.dailyRunAccepted === 'boolean' ? body.dailyRunAccepted : undefined,
+      },
     };
   } catch {
-    return null;
+    return { status: 'retry' };
   } finally {
     globalThis.clearTimeout(timer);
   }
@@ -355,9 +373,9 @@ export async function submitRunScore(
   const outbox = readScoreOutbox();
   outbox.push(entry);
   writeScoreOutbox(outbox);
-  const response = await postScoreSubmission(entry.submission);
-  if (response) writeScoreOutbox(readScoreOutbox().filter((item) => item.submissionId !== entry.submissionId));
-  return response;
+  const outcome = await postScoreSubmission(entry.submission);
+  if (outcome.status !== 'retry') removeScoreOutboxEntry(entry.submissionId);
+  return outcome.status === 'accepted' ? outcome.response : null;
 }
 
 /**
@@ -486,24 +504,20 @@ export async function retryPendingDailySubmission(platform: PlatformAdapter): Pr
 
 async function retryPendingScoreSubmissions(platform: PlatformAdapter): Promise<void> {
   const pending = readScoreOutbox();
-  if (!pending.length) return;
-  const remaining: DailyScoreOutboxEntry[] = [];
-  for (let index = 0; index < pending.length; index += 1) {
-    const entry = pending[index];
-    if (entry.submission.platform !== 'browser') {
-      if (entry.submission.platform !== platform.kind || !platform.initData) {
-        remaining.push(entry);
+  for (const entry of pending) {
+    // Another submission/retry can settle an entry or evict it at the queue bound.
+    if (!readScoreOutbox().some((item) => item.submissionId === entry.submissionId)) continue;
+    const submission = { ...entry.submission, submissionId: entry.submissionId };
+    if (submission.platform !== 'browser') {
+      if (submission.platform !== platform.kind || !platform.initData) {
         continue;
       }
-      entry.submission.initData = platform.initData;
+      submission.initData = platform.initData;
     }
-    const response = await postScoreSubmission(entry.submission);
-    if (!response) {
-      remaining.push(...pending.slice(index));
-      break;
-    }
+    const outcome = await postScoreSubmission(submission);
+    if (outcome.status === 'retry') break;
+    removeScoreOutboxEntry(entry.submissionId);
   }
-  writeScoreOutbox(remaining);
 }
 
 async function submitDailySubmissionBody(submission: ScoreSubmission): Promise<'accepted' | 'expired' | 'rejected' | 'retry'> {
