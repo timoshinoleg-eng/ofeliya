@@ -30,7 +30,7 @@ const PORT = Number(process.env.PORT ?? 8787);
 const DATA_DIR = process.env.DATA_DIR ?? join(ROOT, 'server', 'data');
 const TG_TOKEN = process.env.TG_BOT_TOKEN ?? '';
 const TG_WEBHOOK_SECRET = process.env.TG_WEBHOOK_SECRET ?? '';
-const TG_OUTBOUND_ENABLED = process.env.OFELIYA_TELEGRAM_OUTBOUND_ENABLED !== '0';
+const TG_OUTBOUND_ENABLED = process.env.OFELIYA_TELEGRAM_OUTBOUND_ENABLED === '1';
 // MAX initData не содержит app audience. A shared bot token would authenticate
 // launch data from every Mini App attached to that bot, so fail closed without
 // the dedicated application token.
@@ -198,7 +198,6 @@ const WRITE_RATE_LIMIT =
   Number.isInteger(configuredWriteRateLimit) && configuredWriteRateLimit > 0
     ? configuredWriteRateLimit
     : 20;
-const WRITE_IP_RATE_LIMIT = WRITE_RATE_LIMIT * 12;
 const writeRateByActor = new Map();
 const writeRateByIp = new Map();
 
@@ -382,10 +381,10 @@ function requestIp(req) {
   return raw.slice(0, 96);
 }
 
-function allowWriteRequest(req, scope, actor, now = Date.now()) {
-  if (!allowFixedWindow(writeRateByIp, scope + ':' + requestIp(req), WRITE_IP_RATE_LIMIT, now)) return false;
+function allowWriteRequest(req, scope, actor, now = Date.now(), actorLimit = WRITE_RATE_LIMIT) {
+  if (!allowFixedWindow(writeRateByIp, scope + ':' + requestIp(req), actorLimit * 12, now)) return false;
   if (!actor) return true;
-  return allowFixedWindow(writeRateByActor, scope + ':' + actor, WRITE_RATE_LIMIT, now);
+  return allowFixedWindow(writeRateByActor, scope + ':' + actor, actorLimit, now);
 }
 
 function analyticsActorHash(platform, uid) {
@@ -1138,6 +1137,11 @@ function verifyMessengerProfileIdentity(body) {
 
 // ---------- HTTP ----------
 function send(res, code, obj) {
+  // Acknowledged scores and issued/consumed capabilities must survive process exit.
+  // Analytics retains debounced persistence; disk errors reach the request's500 path.
+  const path = res.req?.url?.split('?')[0];
+  if (code < 500 && res.req?.method === 'POST' &&
+      ['/api/score', '/api/run/start', '/api/daily/run'].includes(path)) flushStoreNow();
   const body = JSON.stringify(obj);
   res.writeHead(code, {
     'Content-Type': 'application/json',
@@ -1286,7 +1290,7 @@ const server = createServer(async (req, res) => {
         return send(res, 403, { ok: false, error: 'analytics initData validation failed' });
       }
 
-      if (!allowWriteRequest(req, 'event', platform + ':' + verified.uid)) {
+      if (!allowWriteRequest(req, 'event', platform + ':' + verified.uid, Date.now(), ANALYTICS_RATE_LIMIT)) {
         return send(res, 429, { ok: false, error: 'write rate limited' });
       }
       const actor = analyticsActorHash(platform, verified.uid);

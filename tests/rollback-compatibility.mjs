@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { readFileSync, existsSync } from 'node:fs';
+
+const workflow = readFileSync('.github/workflows/deploy-cloudru.yml', 'utf8');
+const select = workflow.slice(workflow.indexOf('# Public SHA verification'), workflow.indexOf('echo "sha=$sha"'));
+const capture = workflow.slice(workflow.indexOf('[[ "$previous" =~'), workflow.indexOf('echo "sha=$previous"'));
+const bash = process.platform === 'win32'
+  ? ['C:/Users/Имярек/Tools/PortableGit/bin/bash.exe', 'C:/Program Files/Git/bin/bash.exe'].find(existsSync)
+  : 'bash';
+assert.ok(bash, 'Git Bash required for actual workflow policy execution');
+const old = 'e57b5e8';
+const current = 'edb1b9a706f019e37a1ef148a55f07faaf2c1f59';
+const git = (ref) => spawnSync('git', ['rev-parse', ref], { encoding: 'utf8' }).stdout.trim();
+for (const [name, script, key] of [['selected release', select, 'sha'], ['captured rollback', capture, 'previous']]) {
+  for (const [sha, allowed] of [[git(old), false], [current, true]]) {
+    const child = spawnSync(bash, ['-c', 'set -Eeuo pipefail\n' + script], {
+      env: { ...process.env, [key]: sha, release_url: 'https://example.test/release.json' }, encoding: 'utf8', timeout: 10000,
+    });
+    assert.equal(child.status === 0, allowed, `${name} must reject pre-webhook SHA before rollout: ${child.stderr}`);
+  }
+}
+console.log('executed deployment/rollback compatibility policy: ok');

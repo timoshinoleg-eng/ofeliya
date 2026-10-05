@@ -98,6 +98,12 @@ jobs:
       - name: Daily V2 client contract smoke
         run: npm run test:daily-v2
 
+      - name: Score outbox concurrency and credential hygiene
+        run: npm run test:score-outbox
+
+      - name: Release refresh preserves active runs
+        run: npm run test:release-refresh
+
       - name: Daily CTA atomicity contract
         run: npm run test:daily-cta
 
@@ -320,6 +326,15 @@ jobs:
 
       - name: Score server tests
         run: npm run server:test
+
+      - name: Production default event and outbound budgets
+        run: npm run test:server-policy
+
+      - name: Rendered Telegram container policy
+        run: npm run test:telegram-compose
+
+      - name: Telegram compatible deploy and rollback
+        run: npm run test:rollback
 
       - name: MAX bot smoke
         run: npm run smoke:bot

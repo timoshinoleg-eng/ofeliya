@@ -10,6 +10,7 @@ const SCORE_OUTBOX_KEY = 'ofeliya_score_outbox_v1';
 const DAILY_OUTBOX_KEY = 'ofeliya_daily_score_outbox_v1';
 const SCORE_TIMEOUT_MS = 2500;
 const MAX_SCORE_OUTBOX_ENTRIES = 8;
+const MAX_OUTBOX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface ScoreSubmitResponse {
   ok: boolean;
@@ -61,6 +62,27 @@ export interface ScoreSubmission {
 interface DailyScoreOutboxEntry {
   submissionId: string;
   submission: ScoreSubmission;
+  queuedAt?: number;
+  ownerId?: string;
+}
+
+// Local replay ownership is a routing guard, never server authorization.
+function platformOwnerId(platform: PlatformAdapter): string | undefined {
+  const id = platform.getUser?.()?.id;
+  return id == null ? undefined : String(id);
+}
+
+function removeDailyOutboxEntry(submissionId: string): void {
+  if (readDailyOutbox()?.submissionId === submissionId) writeDailyOutbox(null);
+}
+
+function persistentEntry(entry: DailyScoreOutboxEntry): DailyScoreOutboxEntry {
+  const { initData: _launchCredential, ...submission } = entry.submission;
+  return { ...entry, submission, queuedAt: entry.queuedAt ?? Date.now() };
+}
+
+function outboxEntryExpired(entry: DailyScoreOutboxEntry): boolean {
+  return typeof entry.queuedAt === 'number' && Date.now() - entry.queuedAt > MAX_OUTBOX_AGE_MS;
 }
 
 function createSubmissionId(): string {
@@ -85,7 +107,13 @@ function readDailyOutbox(): DailyScoreOutboxEntry | null {
       parsed && typeof parsed.submissionId === 'string' &&
       parsed.submission && typeof parsed.submission === 'object' &&
       parsed.submission.payload?.dailyRunId
-    ) return parsed as DailyScoreOutboxEntry;
+    ) {
+      if (outboxEntryExpired(parsed)) { writeDailyOutbox(null); return null; }
+      const sanitized = persistentEntry(parsed as DailyScoreOutboxEntry);
+      // Migration also scrubs credentials written by releases before this fix.
+      writeDailyOutbox(sanitized);
+      return sanitized;
+    }
   } catch {
     // Ignore malformed local data; the daily ticket will be rejected safely by the server.
   }
@@ -95,7 +123,7 @@ function readDailyOutbox(): DailyScoreOutboxEntry | null {
 function writeDailyOutbox(entry: DailyScoreOutboxEntry | null): void {
   if (typeof localStorage === 'undefined') return;
   try {
-    if (entry) localStorage.setItem(DAILY_OUTBOX_KEY, JSON.stringify(entry));
+    if (entry) localStorage.setItem(DAILY_OUTBOX_KEY, JSON.stringify(persistentEntry(entry)));
     else localStorage.removeItem(DAILY_OUTBOX_KEY);
   } catch {
     // The current page still attempts the submission; retry is unavailable in restricted storage.
@@ -106,9 +134,12 @@ function readScoreOutbox(): DailyScoreOutboxEntry[] {
   if (typeof localStorage === 'undefined') return [];
   try {
     const parsed = JSON.parse(localStorage.getItem(SCORE_OUTBOX_KEY) ?? '[]');
-    return Array.isArray(parsed)
-      ? parsed.filter((entry) => typeof entry?.submissionId === 'string' && entry.submission?.payload)
+    const sanitized = Array.isArray(parsed)
+      ? parsed.filter((entry) => typeof entry?.submissionId === 'string' && entry.submission?.payload && !outboxEntryExpired(entry))
+        .map(persistentEntry)
       : [];
+    writeScoreOutbox(sanitized);
+    return sanitized;
   } catch {
     return [];
   }
@@ -117,7 +148,7 @@ function readScoreOutbox(): DailyScoreOutboxEntry[] {
 function writeScoreOutbox(entries: DailyScoreOutboxEntry[]): void {
   if (typeof localStorage === 'undefined') return;
   try {
-    const bounded = entries.slice(-MAX_SCORE_OUTBOX_ENTRIES);
+    const bounded = entries.slice(-MAX_SCORE_OUTBOX_ENTRIES).map(persistentEntry);
     if (bounded.length) localStorage.setItem(SCORE_OUTBOX_KEY, JSON.stringify(bounded));
     else localStorage.removeItem(SCORE_OUTBOX_KEY);
   } catch {
@@ -356,6 +387,7 @@ export async function submitRunScore(
   if (submission.platform !== 'browser' && !submission.initData) return null;
   const entry: DailyScoreOutboxEntry = {
     submissionId: createSubmissionId(),
+    ownerId: platformOwnerId(platform),
     submission: { ...submission },
   };
   entry.submission.submissionId = entry.submissionId;
@@ -406,12 +438,19 @@ export async function submitDailyRunScoreDetailed(
   // Precondition unmet (resumed / seed mismatch / no messenger identity): no request at all.
   if (!submission) return { response: null, status: 'unavailable' };
 
-  const previous = readDailyOutbox();
+  let previous = readDailyOutbox();
+  // The single Daily slot cannot reassign an old/unknown owner's result or block
+  // a new account's run. An explicit new submission supersedes that local slot.
+  if (previous && (previous.submission.platform !== submission.platform || previous.ownerId == null || previous.ownerId !== platformOwnerId(platform))) {
+    removeDailyOutboxEntry(previous.submissionId);
+    previous = null;
+  }
   if (previous && previous.submission.payload.dailyRunId !== ticket.runId) {
     return { response: null, status: 'network' };
   }
   const entry = previous ?? {
     submissionId: createSubmissionId(),
+    ownerId: platformOwnerId(platform),
     submission: { ...submission },
   };
   entry.submission.initData = platform.initData;
@@ -430,15 +469,15 @@ export async function submitDailyRunScoreDetailed(
     });
     if (response.status === 403) return { response: null, status: 'denied' };
     if (response.status === 409) {
-      writeDailyOutbox(null);
+      removeDailyOutboxEntry(entry.submissionId);
       return { response: null, status: 'closed' };
     }
     if (response.status === 410) {
-      writeDailyOutbox(null);
+      removeDailyOutboxEntry(entry.submissionId);
       return { response: null, status: 'expired' };
     }
     if (response.status === 422) {
-      writeDailyOutbox(null);
+      removeDailyOutboxEntry(entry.submissionId);
       return { response: null, status: 'rejected' };
     }
     if (!response.ok) return { response: null, status: 'http' };
@@ -466,7 +505,7 @@ export async function submitDailyRunScoreDetailed(
         typeof body.dailyRunAccepted === 'boolean' ? body.dailyRunAccepted : undefined,
     };
     if (normalized.dailyRunAccepted !== true) return { response: null, status: 'rejected' };
-    writeDailyOutbox(null);
+    removeDailyOutboxEntry(entry.submissionId);
     return { response: normalized, status: 'ok' };
   } catch {
     return { response: null, status: 'network' };
@@ -482,6 +521,7 @@ export async function retryPendingDailySubmission(platform: PlatformAdapter): Pr
     dailyEntry &&
     (platform.kind === 'max' || platform.kind === 'telegram') &&
     dailyEntry.submission.platform === platform.kind &&
+    dailyEntry.ownerId != null && dailyEntry.ownerId === platformOwnerId(platform) &&
     platform.initData
   ) {
     const submission = {
@@ -491,7 +531,7 @@ export async function retryPendingDailySubmission(platform: PlatformAdapter): Pr
     };
     const result = await submitDailySubmissionBody(submission);
     if (result === 'accepted' || result === 'expired' || result === 'rejected') {
-      writeDailyOutbox(null);
+      removeDailyOutboxEntry(dailyEntry.submissionId);
     } else {
       // If the network is unhealthy, do not immediately spend more timeout budget
       // replaying lower-priority ordinary scores.
@@ -509,7 +549,8 @@ async function retryPendingScoreSubmissions(platform: PlatformAdapter): Promise<
     if (!readScoreOutbox().some((item) => item.submissionId === entry.submissionId)) continue;
     const submission = { ...entry.submission, submissionId: entry.submissionId };
     if (submission.platform !== 'browser') {
-      if (submission.platform !== platform.kind || !platform.initData) {
+      if (submission.platform !== platform.kind || !platform.initData ||
+          entry.ownerId == null || entry.ownerId !== platformOwnerId(platform)) {
         continue;
       }
       submission.initData = platform.initData;
@@ -532,7 +573,7 @@ async function submitDailySubmissionBody(submission: ScoreSubmission): Promise<'
       credentials: 'same-origin',
     });
     if (response.status === 410) return 'expired';
-    if (response.status === 422) return 'rejected';
+    if (response.status === 409 || response.status === 422) return 'rejected';
     if (!response.ok) return 'retry';
     const body = await response.json() as Partial<ScoreSubmitResponse>;
     return body.ok === true && body.dailyRunAccepted === true ? 'accepted' : 'retry';

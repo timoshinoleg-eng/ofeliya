@@ -1857,7 +1857,7 @@ await ok('profile: повреждённый profiles.json блокирует з�
   }
 });
 
-await ok('Phase 2: score writes are debounced off the request path and close flushes pending state', async () => {
+await ok('score acknowledgements are durable before close despite background save delay', async () => {
   const debounceDataDir = mkdtempSync(join(tmpdir(), 'ofeliya-debounce-test-'));
   const serverUrl = new URL('./index.mjs', import.meta.url).href;
   const script = `
@@ -1907,9 +1907,9 @@ process.stdout.write('__DEBOUNCE__' + JSON.stringify({
     assert.equal(child.status, 0, child.stderr);
     const result = JSON.parse(child.stdout.split('__DEBOUNCE__')[1]);
     assert.deepEqual(result.statuses, [200, 200]);
-    assert.equal(result.existedBeforeClose, false);
-    assert.equal(result.dirtyBeforeClose, true);
-    assert.equal(result.lastFlushBeforeClose, null);
+    assert.equal(result.existedBeforeClose, true);
+    assert.equal(result.dirtyBeforeClose, false);
+    assert.equal(typeof result.lastFlushBeforeClose, 'number');
     assert.equal(result.existedAfterClose, true);
     assert.equal(result.scores, 2);
   } finally {

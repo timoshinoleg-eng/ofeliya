@@ -24,6 +24,15 @@ const FONT_READY_TIMEOUT_MS = 700;
 const RELEASE_REFRESH_KEY = 'ofeliya_release_refresh_v1';
 const RELEASE_CHECK_TIMEOUT_MS = 1200;
 let releaseCheckInFlight: Promise<boolean> | null = null;
+let releaseRefreshPending = false;
+let releaseGuardGame: Phaser.Game | null = null;
+
+function hasActiveRun(): boolean {
+  const scenes = releaseGuardGame?.scene;
+  return Boolean(scenes && (
+    scenes.isActive('Game') || scenes.isPaused('Game') || scenes.isSleeping('Game')
+  ));
+}
 
 async function clearOfeliyaCaches(): Promise<void> {
   if (!('caches' in window)) return;
@@ -60,18 +69,28 @@ async function ensureCurrentRelease(): Promise<boolean> {
       if (!/^[0-9a-f]{40}$/i.test(serverRelease)) return false;
 
       if (serverRelease === RELEASE_SHA) {
+        releaseRefreshPending = false;
         sessionStorage.removeItem(RELEASE_REFRESH_KEY);
         return false;
       }
 
       StartupTrace.setMeta('releaseMismatch', `${RELEASE_SHORT}->${serverRelease.slice(0, 7)}`);
+      // Daily has no checkpoint. Paused/modal/result states still own the run;
+      // update only after Game is stopped, leaving the player time to share results.
+      releaseRefreshPending = true;
+      if (hasActiveRun()) return false;
 
       // One attempt per target SHA avoids a reload loop if a host unexpectedly serves
       // mismatched assets. The release query also gives MAX a distinct launch URL.
-      if (sessionStorage.getItem(RELEASE_REFRESH_KEY) === serverRelease) return false;
-      sessionStorage.setItem(RELEASE_REFRESH_KEY, serverRelease);
-
+      if (sessionStorage.getItem(RELEASE_REFRESH_KEY) === serverRelease) {
+        releaseRefreshPending = false;
+        return false;
+      }
       await clearOfeliyaCaches();
+      // A player can start a run while cache deletion awaits the browser.
+      if (hasActiveRun()) return false;
+      sessionStorage.setItem(RELEASE_REFRESH_KEY, serverRelease);
+      releaseRefreshPending = false;
 
       const next = new URL(window.location.href);
       next.searchParams.set('release', serverRelease.slice(0, 7));
@@ -94,6 +113,9 @@ function installReleaseResumeGuard(): void {
   };
   document.addEventListener('visibilitychange', check);
   window.addEventListener('pageshow', () => void ensureCurrentRelease());
+  window.setInterval(() => {
+    if (releaseRefreshPending && !hasActiveRun()) check();
+  }, 15000);
 }
 
 const CANVAS_FALLBACK_KEY = 'ofeliya_canvas_fallback_v2';
@@ -310,6 +332,7 @@ async function boot(): Promise<void> {
     throw error;
   }
 
+  releaseGuardGame = game;
   installWebGLRecovery(game);
   installMobileLayoutGuard(game);
   viewport.attachGame(game);

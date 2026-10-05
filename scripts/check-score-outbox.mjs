@@ -44,7 +44,7 @@ try {
     '--target', 'ES2020', '--module', 'commonjs', '--moduleResolution', 'node',
     '--rootDir', 'src', '--outDir', temp, '--skipLibCheck', 'true', '--esModuleInterop', 'true',
   ], { stdio: 'inherit' });
-  const { submitRunScore, retryPendingDailySubmission } = require(join(temp, 'systems/ScoreClient.js'));
+  const { submitRunScore, submitDailyRunScoreDetailed, retryPendingDailySubmission } = require(join(temp, 'systems/ScoreClient.js'));
   global.localStorage = {
     getItem: (key) => local.get(key) ?? null,
     setItem: (key, value) => local.set(key, value),
@@ -167,12 +167,50 @@ try {
   });
 
   for (const kind of ['max', 'telegram']) {
+    await test(`${kind} credentials travel on the wire but never persist in either outbox`, async () => {
+      local.clear();
+      const requests = [];
+      global.fetch = async (_url, options) => {
+        requests.push(JSON.parse(options.body));
+        return response(503);
+      };
+      const messenger = { kind, initData: 'raw-private-launch-credential' };
+      await submitRunScore(result, messenger);
+      assert.equal(requests[0].initData, messenger.initData);
+      assert.equal(queue()[0].submission.initData, undefined);
+      const ticket = { runId: 'dailyRun_123456789', runSeed: result.runSeed, dateKey: '2026-10-05', issuedAt: Date.now(), expiresAt: Date.now() + 3600000 };
+      await submitDailyRunScoreDetailed(result, messenger, ticket);
+      assert.equal(requests[1].initData, messenger.initData);
+      const dailyKey = 'ofeliya_daily_score_outbox_v1';
+      assert.equal(JSON.parse(local.get(dailyKey)).submission.initData, undefined);
+      // Old releases already persisted credentials. Startup must scrub them even
+      // when current platform cannot replay that messenger queue.
+      for (const storageKey of [key, dailyKey]) {
+        const stored = JSON.parse(local.get(storageKey));
+        const entry = Array.isArray(stored) ? stored[0] : stored;
+        entry.submission.initData = 'legacy-private-credential';
+        local.set(storageKey, JSON.stringify(stored));
+      }
+      await retryPendingDailySubmission({ kind: 'browser' });
+      assert.ok([...local.values()].every((value) => !value.includes('private-credential')));
+      // Expired offline entries must not persist indefinitely.
+      for (const storageKey of [key, dailyKey]) {
+        const stored = JSON.parse(local.get(storageKey));
+        const entry = Array.isArray(stored) ? stored[0] : stored;
+        entry.queuedAt = Date.now() - 8 * 86400000;
+        local.set(storageKey, JSON.stringify(stored));
+      }
+      await retryPendingDailySubmission({ kind: 'browser' });
+      assert.deepEqual(queue(), []);
+      assert.equal(local.has(dailyKey), false);
+    });
     await test(`${kind} replay refreshes initData and preserves mismatched identity`, async () => {
       seed('messenger', 'browser');
       const entries = queue();
       entries[0].submission.platform = kind;
       entries[0].submission.initData = 'stale-init';
       entries[0].submission.runToken = 'existing-run-token';
+      entries[0].ownerId = '101';
       local.set(key, JSON.stringify(entries));
       const requests = [];
       global.fetch = async (_url, options) => {
@@ -182,13 +220,50 @@ try {
       await retryPendingDailySubmission({ kind: 'browser' });
       assert.deepEqual(ids(), ['outbox-submission-messenger']);
       assert.equal(requests.length, 1);
-      await retryPendingDailySubmission({ kind, initData: 'fresh-init' });
+      await retryPendingDailySubmission({ kind, initData: 'other-user', getUser: () => ({ id: 102 }) });
+      assert.equal(requests.length, 1, 'same platform different user must not replay');
+      await retryPendingDailySubmission({ kind, initData: 'fresh-init', getUser: () => ({ id: 101 }) });
       assert.equal(requests[1].initData, 'fresh-init');
       assert.equal(requests[1].runToken, 'existing-run-token');
       assert.equal(requests[1].submissionId, entries[0].submissionId);
       assert.deepEqual(queue(), []);
     });
   }
+  await test('Daily terminal409 releases ordinary replay and overlapping Daily removal is exact', async () => {
+    seed('ordinary');
+    const dailyKey = 'ofeliya_daily_score_outbox_v1';
+    local.set(dailyKey, JSON.stringify({ submissionId: 'daily-old', ownerId: '101', submission: { platform: 'telegram', payload: { dailyRunId: 'daily-old' } } }));
+    const calls = [];
+    global.fetch = async (_url, options) => { const body = JSON.parse(options.body); calls.push(body.submissionId); return response(body.payload.dailyRunId ? 409 : 200); };
+    await retryPendingDailySubmission({ kind: 'telegram', initData: 'fresh', getUser: () => ({ id: 101 }) });
+    assert.deepEqual(calls, ['daily-old', 'outbox-submission-ordinary']);
+    assert.equal(local.has(dailyKey), false);
+    assert.deepEqual(queue(), []);
+  });
+  await test('fresh Daily submission supersedes legacy unknown or other-account slot', async () => {
+    for (const ownerId of [undefined, '100', '101']) {
+      local.clear();
+      const dailyKey = 'ofeliya_daily_score_outbox_v1';
+      local.set(dailyKey, JSON.stringify({submissionId:'old-slot',ownerId,submission:{platform:ownerId === '101' ? 'max' : 'telegram',payload:{dailyRunId:'old-ticket'}}}));
+      const requests=[];
+      global.fetch = async (_url,options) => {requests.push(JSON.parse(options.body));return response(503);};
+      const ticket = {runId:'new-ticket',runSeed:result.runSeed,dateKey:'2026-10-05',issuedAt:Date.now(),expiresAt:Date.now()+3600000};
+      await submitDailyRunScoreDetailed(result,{kind:'telegram',initData:'fresh',getUser:()=>({id:101})},ticket);
+      assert.equal(requests.length,1);
+      const stored=JSON.parse(local.get(dailyKey));
+      assert.equal(stored.ownerId,'101');
+      assert.equal(stored.submission.payload.dailyRunId,'new-ticket');
+    }
+  });
+  await test('completed Daily retry cannot remove a replacement appended while awaiting response', async () => {
+    local.clear();const dailyKey='ofeliya_daily_score_outbox_v1';
+    local.set(dailyKey,JSON.stringify({submissionId:'old',ownerId:'101',submission:{platform:'telegram',payload:{dailyRunId:'old'}}}));
+    const gate=deferred();global.fetch=()=>gate.promise;
+    const retry=retryPendingDailySubmission({kind:'telegram',initData:'fresh',getUser:()=>({id:101})});
+    const replacement={submissionId:'new',ownerId:'101',submission:{platform:'telegram',payload:{dailyRunId:'new'}}};
+    local.set(dailyKey,JSON.stringify(replacement));gate.resolve(response(409));await retry;
+    assert.equal(JSON.parse(local.get(dailyKey)).submissionId,'new');
+  });
 } finally {
   rmSync(temp, { recursive: true, force: true });
 }
