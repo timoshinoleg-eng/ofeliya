@@ -81,16 +81,27 @@ const cases = [
             const b = obj.getBounds();
             return { left: b.left, right: b.right, top: b.top, bottom: b.bottom, width: b.width, height: b.height };
           };
+          const intersects = (a, b) => a.left < b.right - 0.5 && a.right > b.left + 0.5 && a.top < b.bottom - 0.5 && a.bottom > b.top + 0.5;
           const text = textObjects.find((obj) => obj.text === ui.gs.pendingChoices[0].name);
+          const description = textObjects.find((obj) => obj.text === ui.gs.pendingChoices[0].desc);
+          const footer = textObjects.find((obj) => obj.text === 'ИЗМЕНИТЬ ПРАВИЛА ЗАБЕГА');
           const plate = text?.parentContainer?.list.find((obj) => obj.type === 'Rectangle' && obj.width > 100 && obj.height <= 44 && Math.abs(obj.y - text.y) < 1);
           const lineCount = text?.getWrappedText(text.text).length ?? null;
           const maxLines = text?.style.maxLines ?? null;
+          const effectBounds = text ? bounds(text) : null;
+          const overlaps = effectBounds
+            ? [
+                !description ? 'missing description' : intersects(effectBounds, bounds(description)) ? 'description' : null,
+                !footer ? 'missing footer' : intersects(effectBounds, bounds(footer)) ? 'footer' : null,
+              ].filter(Boolean)
+            : ['missing effect'];
           const overflow = measured
             .filter(({ masked, bounds: b }) => !masked && (b.left < 1 || b.right > width - 1 || b.top < 1 || b.bottom > height - 1))
             .map(({ object, bounds: b }) => ({ text: object.text, bounds: b }));
           return {
             id, width, height, textCount: textObjects.length,
-            effect: text ? { text: text.text, linesNeeded: lineCount, maxLines, bounds: bounds(text) } : null,
+            effect: text ? { text: text.text, linesNeeded: lineCount, maxLines, bounds: effectBounds } : null,
+            overlaps,
             plate: plate ? bounds(plate) : null,
             overflow,
           };
@@ -104,7 +115,7 @@ const cases = [
   }
   console.log(JSON.stringify(reports, null, 2));
   const failures = reports.filter((r) =>
-    !r.effect || !r.plate || r.overflow.length ||
+    !r.effect || !r.plate || r.overlaps.length || r.overflow.length ||
     r.effect.linesNeeded > r.effect.maxLines ||
     r.effect.bounds.top < r.plate.top + 1 || r.effect.bounds.bottom > r.plate.bottom - 1
   );

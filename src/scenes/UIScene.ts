@@ -1458,8 +1458,8 @@ export class UIScene extends Phaser.Scene {
       });
       const effectNeedsThirdLine = compact && legendary && effectText.getWrappedText(def.name).length > 2;
       effectText.setMaxLines(effectNeedsThirdLine ? 3 : 2);
-      // Keep the third compact Legendary line inside its badge without enlarging every reward card.
-      const effectY = ch / 2 - (compact ? (effectNeedsThirdLine ? 31 : 37) : 44);
+      // Keep the third compact Legendary line inside its badge and above the per-card footer.
+      const effectY = ch / 2 - (compact ? (effectNeedsThirdLine ? 41 : 37) : 44);
       const effectPlateHeight = compact ? (effectNeedsThirdLine ? 42 : 30) : 32;
       const effectPlate = this.add
         .rectangle(tx + effectW / 2, effectY, effectW, effectPlateHeight, accent, 0.11)
