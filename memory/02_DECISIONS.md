@@ -3,6 +3,8 @@
 Формат: `[дата] Решение — причина. Статус.`
 Перенесённые решения помечены источником (документы репо). Новые решения добавляются сюда после каждой сессии.
 
+- [2026-10-05] The deploy script loads its compatibility gate from fetched `origin/main` rather than a sibling path — the bastion executes an extracted standalone script from `/tmp`; keep helper policy centralized, fail closed on missing/empty policy, and retain all SHA/floor guards. Review/PR and fresh main CI pending.
+
 - [2026-10-05] Deployment CI lookup uses the workflow-specific `ci.yml` runs endpoint filtered by exact SHA and run identity, with a pinned Ubuntu 22.04 runner and bounded diagnostic summaries — the prior broad runs query did not yield the independently verified exact-SHA green run; root cause remains unproven. Retain all fail-closed predicates. Review/publish pending.
 
 - [2026-10-05] Deploy CI reads the Actions runs payload from a temporary file, not an environment variable — large responses exceed Linux argument/environment limits before Node starts; retain all five successful-main-CI identity criteria and fail closed. Implemented in `fix/deploy-ci-payload-20261005`; review/publish by root pending.

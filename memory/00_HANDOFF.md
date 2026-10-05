@@ -1,3 +1,20 @@
+# HANDOFF — standalone deploy compatibility policy, 05.10.2026
+
+Branch `fix/deploy-standalone-policy-20261005` starts at main `18e6f05680da86780cdc7bba253975ccf6776c72` (PR #174). Cloud.ru run `37370394631` passed runner acquisition and the CI/release floor. Rollout then failed with exit 127 because the bastion extracts selected `deploy-cloudru.sh` to `/tmp`; it attempted to source sibling `/tmp/check-compatible-release.sh`. Automatic rollback to compatible live SHA `edb1b9a...` succeeded and public `release.json` confirmed the rollback.
+
+`deploy/deploy-cloudru.sh` now loads `deploy/check-compatible-release.sh` from fetched `origin/main` into a variable, rejects failed, empty, or whitespace-only payloads, and runs it through `bash -s -- "$OFELIYA_RELEASE"`; it no longer depends on `SCRIPT_DIR`. `set -e` makes failed `git show` fail closed. Compatibility floor/ancestry logic remains in the helper. All three jobs in `.github/workflows/ci.yml` are pinned to `ubuntu-22.04` after repeated hosted runner acquisition failures.
+
+Extended existing `tests/rollback-compatibility.mjs` to extract and execute the actual guard with `SCRIPT_DIR` pointing at a nonexistent `/tmp` path. It verifies current-floor accept, old SHA reject, invalid SHA reject, missing helper reject, empty helper reject, and whitespace-only helper reject.
+
+## Verification
+
+- `npm run test:rollback` — exit 0.
+- `git diff --check` — exit 0.
+- Code commit: `99726d19d16e48ac0d5d7de98ffe4086afc5952a`; memory is committed separately afterward.
+- No server, Docker, deployment, browser, push, or merge. Root review/PR and a new full main CI run are required before retrying deployment; old release `42b9` cannot include this fix.
+
+---
+
 # HANDOFF — targeted deploy CI lookup, 05.10.2026
 
 Branch `fix/deploy-targeted-ci-20261005` starts at main `b174b40b2e2cceb7104d98ceed126c54e9b28cb8` (PR #173 includes the prior temp-file fix). Two deploy/main-CI attempts were cancelled after 15 minutes because hosted runners did not acquire either job. The prior list-runs lookup also produced no CI match while exact-SHA API/local validation showed green run `37360675706` for `42b9f30a3feb8f219faf41014f0bfdd6bf27b5dd`; cause of the prior lookup mismatch was not established.
