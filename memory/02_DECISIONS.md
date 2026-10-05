@@ -66,3 +66,5 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 
 ## Legendary card wrapping at 320px (05.10)
 - Allocate room by measured copy wrapping at the actual card width: allow 3 lines and a bounded taller panel only for compact Legendary effects that need line 3. Keep fixed card height, preserve the copy, and leave other cards at existing 2-line limits. Do not globally shrink UI typography to solve this edge case.
+
+- Three-line panel uses center-y=21 to clear the Legendary footer at y=43; center-y=31 was rejected after review showed overlap. Focused probe fails on missing description/footer or any intersection.

@@ -1,4 +1,4 @@
-﻿# BACKLOG — OFELIYA: STRAIN ZERO
+# BACKLOG — OFELIYA: STRAIN ZERO
 
 Обновлено: 2026-10-02. Отмечайте сделанное галочкой; новые пункты добавляйте сюда, а не в чат.
 
@@ -96,4 +96,7 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 ## Compact Legendary card clipping
 - [x] Fix the three Legendary effect panels proven clipped at 320x568 with a bounded conditional third line.
 - [x] Update the focused layout probe to identify the expanded panel and keep its text-containment assertion.
-- [ ] Root rerun full branch CI/browser review from commit `340f38b7f8f2be2fc9be49c6b06cf49d45151d2e`; no release action is included.
+- [ ] Root rerun full branch CI/browser review from commit `997b6eee2403505e1a416fd5d2755496c30728e`; no release action is included.
+
+
+- [ ] Root rerun final focused Legendary probe with mandatory desc/footer fixture checks on `997b6eee2403505e1a416fd5d2755496c30728e` before push.

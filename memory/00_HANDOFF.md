@@ -17,7 +17,12 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 Внешние релиз-гейты: реальные MAX Android/iOS16/16, TG launch/referral/Daily и publicrelease.json exactSHA остаются неподтверждёнными. Не выполнять merge/deploy автоматически.
 
 ## Handoff: compact Legendary effect panel
-- Branch `refactor/ui-copy-layout-followup-20261005`, base `f71d2bb`. Fix commit: `340f38b7f8f2be2fc9be49c6b06cf49d45151d2e`.
-- For actual compact Legendary text wrapping beyond 2 lines, card effect text is allowed 3 lines and its badge grows from 30 to 42px, shifted down within the existing fixed card. All other effects retain the two-line/30px compact treatment. No copy, gameplay behavior, or UiCopy integration changed.
-- Root reports its 18-case Windows browser probe passed on the same diff. Local `npx tsc --noEmit`, `npm run test:legendary`, `npm run test:mutation-copy`, and `npm run test:tokens` passed.
+- Branch `refactor/ui-copy-layout-followup-20261005`, base `f71d2bb`. Fix commits: `340f38b7f8f2be2fc9be49c6b06cf49d45151d2e`, corrected geometry/probe `997b6eee2403505e1a416fd5d2755496c30728e6`.
+- For actual compact Legendary text wrapping beyond 2 lines, card effect text is allowed 3 lines and its badge grows from 30 to 42px and shifts upward to center y=21, ending at y=42 before the footer at y=43. All other effects retain the two-line/30px compact treatment. No copy, gameplay behavior, or UiCopy integration changed.
+- Root reports its 18-case Windows browser probe and description/footer intersection checks passed on the corrected geometry; the final probe also fails if either text fixture is absent. Local `npx tsc --noEmit`, `npm run test:legendary`, `npm run test:mutation-copy`, and `npm run test:tokens` passed.
 - Next: root runs any required CI/final integration checks against the committed SHA. Do not push, merge, or deploy from this worker.
+
+
+## Final overlap correction
+- Current code candidate is `997b6eee2403505e1a416fd5d2755496c30728e`. Third-line badge shifted upward to center y=21; 42px panel ends y=42, before footer y=43. The earlier y=31 candidate was superseded due footer overlap.
+- Probe asserts complete wrapped text fits the panel and does not intersect description/footer; missing description/footer is a failure. Root must rerun the final assertion guard and branch CI before push.

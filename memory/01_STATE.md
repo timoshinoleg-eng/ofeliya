@@ -105,6 +105,11 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 
 ## Legendary compact-card clipping fix (05.10)
 
-- Linux layout evidence at 320x568 showed three Legendary effect strings wrapping to three lines while UIScene capped the badge text at two. `UIScene.ts` now measures wrapping and grants a third line only to a compact Legendary effect that needs it; its plate expands to 42px and is recentered within the unchanged 124px card. Other card effects keep their prior 2-line limit and plate size. Copy and `UiCopy` imports are unchanged.
+- Linux layout evidence at 320x568 showed three Legendary effect strings wrapping to three lines while UIScene capped the badge text at two. `UIScene.ts` now measures wrapping and grants a third line only to a compact Legendary effect that needs it; its plate expands to 42px and shifts upward to center y=21, ending at y=42 before the footer starts at y=43; card height stays 124px. Other card effects keep their prior 2-line limit and plate size. Copy and `UiCopy` imports are unchanged.
 - Focused layout probe now accepts the bounded 42px effect plate while still comparing actual text bounds against it. Root reports the 18-case Windows browser probe passed on this exact working diff. Local typecheck, `test:legendary`, `test:mutation-copy`, and `test:tokens` passed.
-- Code commit `340f38b7f8f2be2fc9be49c6b06cf49d45151d2e`; root owns full branch CI and final browser rerun. No push/merge/deploy here.
+- Code commits `340f38b7f8f2be2fc9be49c6b06cf49d45151d2e` and overlap correction `997b6eee2403505e1a416fd5d2755496c30728e`; root owns final probe rerun and full branch CI. No push/merge/deploy here.
+
+
+## Final Legendary geometry and probe guard
+- Corrected candidate `997b6eee2403505e1a416fd5d2755496c30728e` supersedes the earlier center-y=31 version, which overlapped the footer. The compact three-line panel is now center-y=21, bounds y=0..42; the Legendary footer begins y=43. Probe now requires description/footer fixtures and rejects text-bound intersections.
+- Root reports the browser 18-case check plus desc/footer intersections pass on the corrected geometry. The stricter fixture-presence probe guard was added afterward; root should rerun it against final HEAD before push. No push from this worker.
