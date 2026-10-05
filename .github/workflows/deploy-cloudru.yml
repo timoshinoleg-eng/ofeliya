@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     environment: cloudru-production
     timeout-minutes: 30
     steps:
@@ -69,12 +69,19 @@ jobs:
           set -Eeuo pipefail
           runs_file="$(mktemp)"
           trap 'rm -f "$runs_file"' EXIT
-          gh api --method GET             "repos/$GITHUB_REPOSITORY/actions/runs?branch=main&event=push&status=completed&per_page=100" > "$runs_file"
+          gh api --method GET \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" \
+            -f head_sha="$RELEASE_SHA" \
+            -f branch=main \
+            -f event=push \
+            -f status=completed \
+            -f per_page=100 > "$runs_file"
           node - "$RELEASE_SHA" "$runs_file" <<'NODE'
           const fs = require('node:fs');
           const data = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
           const expected = process.argv[2];
-          const match = (data.workflow_runs || []).find(
+          const runs = Array.isArray(data.workflow_runs) ? data.workflow_runs : [];
+          const match = runs.find(
             (run) =>
               run.name === 'CI' &&
               run.head_sha === expected &&
@@ -83,6 +90,16 @@ jobs:
               run.conclusion === 'success'
           );
           if (!match) {
+            const candidates = runs
+              .filter((run) => run.head_sha === expected)
+              .slice(0, 5)
+              .map(({ run_number, name, head_sha, head_branch, event, status, conclusion }) =>
+                ({ run_number, name, head_sha, head_branch, event, status, conclusion })
+              );
+            console.error(
+              `CI lookup returned ${runs.length} runs (API total: ${data.total_count ?? 'unknown'}); ` +
+              `same-SHA candidates (up to 5): ${JSON.stringify(candidates)}`
+            );
             console.error(`Refusing deploy: no successful main CI run found for ${expected}`);
             process.exit(1);
           }
