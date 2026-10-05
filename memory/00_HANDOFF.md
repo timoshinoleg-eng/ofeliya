@@ -15,3 +15,9 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 Текущее второе мнение: MAX ИЛИ TG прямо разрешён languageBible100; PR168 меняетUIScene;452/419 без методики не новый замер; T-КИЛЛЕР/T-КЛЕТКИ действительно расходятся вproductBible. Имена/редкости/юридические тексты/fulli18n не изменять без продуктового решения.
 
 Внешние релиз-гейты: реальные MAX Android/iOS16/16, TG launch/referral/Daily и publicrelease.json exactSHA остаются неподтверждёнными. Не выполнять merge/deploy автоматически.
+
+## Handoff: compact Legendary effect panel
+- Branch `refactor/ui-copy-layout-followup-20261005`, base `f71d2bb`. Fix commit: `340f38b7f8f2be2fc9be49c6b06cf49d45151d2e`.
+- For actual compact Legendary text wrapping beyond 2 lines, card effect text is allowed 3 lines and its badge grows from 30 to 42px, shifted down within the existing fixed card. All other effects retain the two-line/30px compact treatment. No copy, gameplay behavior, or UiCopy integration changed.
+- Root reports its 18-case Windows browser probe passed on the same diff. Local `npx tsc --noEmit`, `npm run test:legendary`, `npm run test:mutation-copy`, and `npm run test:tokens` passed.
+- Next: root runs any required CI/final integration checks against the committed SHA. Do not push, merge, or deploy from this worker.

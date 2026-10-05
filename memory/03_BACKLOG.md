@@ -92,3 +92,8 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 Текущее второе мнение: MAX ИЛИ TG прямо разрешён languageBible100; PR168 меняетUIScene;452/419 без методики не новый замер; T-КИЛЛЕР/T-КЛЕТКИ действительно расходятся вproductBible. Имена/редкости/юридические тексты/fulli18n не изменять без продуктового решения.
 
 Внешние релиз-гейты: реальные MAX Android/iOS16/16, TG launch/referral/Daily и publicrelease.json exactSHA остаются неподтверждёнными. Не выполнять merge/deploy автоматически.
+
+## Compact Legendary card clipping
+- [x] Fix the three Legendary effect panels proven clipped at 320x568 with a bounded conditional third line.
+- [x] Update the focused layout probe to identify the expanded panel and keep its text-containment assertion.
+- [ ] Root rerun full branch CI/browser review from commit `340f38b7f8f2be2fc9be49c6b06cf49d45151d2e`; no release action is included.

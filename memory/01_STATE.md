@@ -102,3 +102,9 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 Текущее второе мнение: MAX ИЛИ TG прямо разрешён languageBible100; PR168 меняетUIScene;452/419 без методики не новый замер; T-КИЛЛЕР/T-КЛЕТКИ действительно расходятся вproductBible. Имена/редкости/юридические тексты/fulli18n не изменять без продуктового решения.
 
 Внешние релиз-гейты: реальные MAX Android/iOS16/16, TG launch/referral/Daily и publicrelease.json exactSHA остаются неподтверждёнными. Не выполнять merge/deploy автоматически.
+
+## Legendary compact-card clipping fix (05.10)
+
+- Linux layout evidence at 320x568 showed three Legendary effect strings wrapping to three lines while UIScene capped the badge text at two. `UIScene.ts` now measures wrapping and grants a third line only to a compact Legendary effect that needs it; its plate expands to 42px and is recentered within the unchanged 124px card. Other card effects keep their prior 2-line limit and plate size. Copy and `UiCopy` imports are unchanged.
+- Focused layout probe now accepts the bounded 42px effect plate while still comparing actual text bounds against it. Root reports the 18-case Windows browser probe passed on this exact working diff. Local typecheck, `test:legendary`, `test:mutation-copy`, and `test:tokens` passed.
+- Code commit `340f38b7f8f2be2fc9be49c6b06cf49d45151d2e`; root owns full branch CI and final browser rerun. No push/merge/deploy here.
