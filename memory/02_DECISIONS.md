@@ -75,3 +75,13 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 
 ## Viewport gate for compact Legendary expansion
 - Increase compact Legendary card height only when the proposed entire stack clears the actual subtitle bounds plus the card gap and stays above the viewport bottom margin. This preserves the portrait 320x568 fix while denying expansion when the group cannot fit, including short landscape.
+
+## Release workflow stamp guard (05.10)
+- Every workflow that runs `npm run build` must pass an explicit 40-character `VITE_RELEASE_SHA`. `scripts/stamp-release.mjs` deliberately throws rather than stamping an ambiguous dev build, so a missing env is a build failure, not a silent fallback. The Release Visual Matrix workflow was the one remaining build step without it; it now uses `${{ github.sha }}`, matching the `ci.yml` build gate. Do not relax the stamp guard to make a workflow pass.
+
+## Release documentation honesty (05.10)
+- The documented `npm run` lists in `README.md` and `RELEASE_VALIDATION.md` are an explicitly labelled quick check subset, not the release gate. `.github/workflows/ci.yml` is the authoritative complete gate; on divergence `ci.yml` wins. Do not present a local short-list run as release validation.
+- State plainly in the release docs that passing CI does not imply real MAX Android/iOS or Telegram acceptance: automated gates run against a mocked MAX bridge in a desktop browser and cannot produce native client behavior, real signed `initData`, real haptics/audio unlock, real restart lifecycles, real deployment values, or real network/thermal conditions.
+- Document `npm run test:mobile-evidence -- PATH` with its 16 required check ids and the five required per-check fields, and separately list the manual requirements it does not cover. Keep the existing 16-point manual matrix unchanged and complete.
+- Describe the validator by what it enforces, not by a total row count. It iterates only its own `required` array, so 16 is the mandatory minimum; extra `checks[]` rows are permitted and uninspected, and a `pass` does not certify them. `testedAt` is validated with `Date.parse`, so ISO 8601 is a readability recommendation rather than an enforced format. Never write "exactly 16" or "checks only these" for a validator with that shape.
+- Real-device acceptance evidence lives outside the repository in external release-evidence storage; the repo records only the path or URL. Gitignore the single local convenience file `artifacts/mobile-acceptance.json` rather than the whole `artifacts/` directory, so no unrelated artifact is silently hidden or removed.

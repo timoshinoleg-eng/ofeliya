@@ -1,8 +1,10 @@
 # OFELIYA: STRAIN ZERO — Release Validation
 
-Updated: 2026-09-20
+Updated: 2026-10-05
 
 This document separates automated evidence from the remaining real-device MAX gate. A green GitHub Action is not treated as proof that native MAX Android/iOS behavior, network conditions or device performance are correct.
+
+**Passing CI is necessary and not sufficient.** It never implies real MAX Android/iOS acceptance, Telegram client acceptance, or that a release has been accepted for publication. Those remain external gates that only real devices, real deployment values and real signed `initData` can settle (sections 8 and 9).
 
 ## 1. Current release contract
 
@@ -27,6 +29,15 @@ Live product systems include:
 The canonical gameplay/design contract is `STRAIN_ZERO_PRODUCT_BIBLE.md`.
 
 ## 2. Canonical automated build gate
+
+The list below is a **documented quick check list**. It is the short set a developer runs locally
+before opening a PR. It is deliberately not the full gate: it does not contain every contract that CI
+runs.
+
+The **authoritative complete gate** is the CI workflow itself, `.github/workflows/ci.yml`
+(`build` + `browser-smoke` + `production-contract` jobs, plus `.github/workflows/release-visual-matrix.yml`
+for the dense visual matrix). When the two disagree, `ci.yml` is the source of truth. Do not treat a
+passing run of the short list below as release validation.
 
 Node.js 22 application contract:
 
@@ -55,6 +66,18 @@ These checks cover:
 - startup renderer contract;
 - mandatory MAX/legal release configuration;
 - TypeScript typecheck and Vite production build.
+
+The quick list is a subset. `ci.yml` additionally runs pacing, threat director, impact budget,
+runtime quality governor, combat telegraph language, run identity/mastery, adaptive audio, Telegram
+share/runtime/bot/API, Caddy edge, social client, analytics client, Daily V2, score outbox, release
+refresh, Daily CTA, profile client, founder badge, player language, UI copy catalog, visible-text
+layout diagnostics, onboarding, Daily history, no-damage streaks, fixed-seed duel, UI token contract,
+frame-rate decay and production bundle shape. Those are not optional and are not covered by the
+short list above.
+
+Note for CI maintenance: both workflows call `npm run build`, which ends in
+`scripts/stamp-release.mjs`. That script deliberately refuses to stamp a bundle unless
+`VITE_RELEASE_SHA` holds an explicit 40-character SHA. Any workflow that builds must pass it.
 
 ## 3. Browser / MAX-mock gate
 
@@ -145,6 +168,12 @@ A green production-contract job proves repository/deployment consistency, not th
 
 Before a public release candidate is considered fully validated, test the real MAX clients.
 
+**Passing CI does not imply real MAX/iOS/Telegram acceptance.** The automated gates run against a
+mocked MAX bridge in a desktop browser; they cannot produce native client behavior, real signed
+`initData`, real haptic/audio-unlock behavior, real lifecycle restarts, real deployment values, or
+real network/thermal conditions. Telegram client acceptance is a separate, later release QA track
+and is not covered by any CI job here.
+
 Required manual matrix:
 
 1. Android MAX cold launch -> playable portrait viewport/safe area.
@@ -163,6 +192,54 @@ Required manual matrix:
 14. Twin-stick aim-priority is usable without accidental movement/aim cross-talk.
 15. Real developer/legal/support values match the verified MAX profile.
 16. Trusted score submission succeeds with real signed MAX initData.
+
+### 8.1 Machine-checkable evidence file
+
+The launch/first-run/full-run/resume/restart/share/daily-invite/viewport portion of the matrix is
+recorded as one JSON document and validated by a repo script:
+
+```bash
+npm run test:mobile-evidence -- /path/to/mobile-acceptance.json
+```
+
+The path argument is required in practice. The script defaults to
+`artifacts/mobile-acceptance.json` when no argument is given, and that default path is
+git-ignored, so pass an explicit path when validating evidence you do not want committed.
+
+Each entry in `checks[]` must carry `id`, `status: "pass"`, `device`, `clientVersion`, `testedAt`
+(any date/time value that `Date.parse` accepts; ISO 8601 is recommended for readability but is not
+what is enforced) and `evidence` (video/screenshot/log reference). The validator requires these
+**16** ids — 8 Android and 8 iOS:
+
+```text
+android-launch            android-first-run     android-full-run      android-background-resume
+android-restart           android-share         android-daily-invite  android-viewport
+ios-launch                ios-first-run         ios-full-run          ios-background-resume
+ios-restart               ios-share             ios-daily-invite      ios-viewport
+```
+
+The validator checks those 16 required ids and those five fields per check. Extra rows in `checks[]`
+are allowed and are simply not inspected, so a `pass` does not certify them. It does **not** check the
+remaining manual requirements, which stay manual:
+
+- native BackButton overlay/run-state exit with no stale listeners;
+- haptics behavior on supported/unsupported devices;
+- audio unlock after the first permitted interaction;
+- repeated menu/run/restart cycles without lifecycle degradation;
+- IMMUNE PRIME and CARDIAC TITAN phase pacing and boss feel;
+- Heart safe-pocket timing with one-hand controls;
+- twin-stick aim-priority ergonomics without movement/aim cross-talk;
+- real developer/legal/support values matching the verified MAX profile;
+- trusted score submission with real signed MAX `initData`.
+
+A green `test:mobile-evidence` run proves those 16 required rows are well formed. It does not prove
+the underlying behavior, says nothing about any additional rows, and is never a substitute for
+items 3–16 of the manual matrix above.
+
+Evidence storage: keep the JSON and its referenced recordings outside the repository, in whatever
+external release-evidence store the team uses, and record only the path/URL. The convenience default
+`/artifacts/mobile-acceptance.json` is ignored on purpose so a local run cannot be committed by
+accident; it is not the canonical location of release evidence.
 
 ## 9. Current product risks that CI cannot settle
 

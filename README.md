@@ -227,7 +227,15 @@ SFX/music грузятся лениво. Асинхронная загрузка
 
 ## Canonical quality gate
 
-PR CI выполняет два независимых job.
+Ниже — **документированный quick check list** для локальной работы перед PR. Это сокращённый
+набор, а не весь гейт: он не содержит всех контрактов, которые прогоняет CI.
+
+Авторитетный полный гейт — сам CI workflow: `.github/workflows/ci.yml` (`build`, `browser-smoke`,
+`production-contract`) плюс `.github/workflows/release-visual-matrix.yml` для dense visual matrix.
+Если список ниже расходится с `ci.yml`, источник истины — `ci.yml`. Зелёный прогон короткого
+списка не является release-валидацией.
+
+PR CI выполняет три независимых job.
 
 Build gate:
 
@@ -268,6 +276,12 @@ host cell и partially infected host cell. Browser smoke сохраняет PNG 
 
 ## Что ещё обязательно перед публичным релизом
 
+**Зелёный CI не означает, что релиз принят на реальных MAX/iOS/Telegram клиентах.**
+Автоматические гейты работают против mocked MAX bridge в desktop-браузере: они не воспроизводят
+нативное поведение клиента, реальный подписанный `initData`, реальные haptics/audio unlock,
+реальные restart-циклы, реальные deployment values и реальные network/thermal условия. Telegram
+release QA — отдельный более поздний трек, не покрытый ни одним CI job здесь.
+
 Автоматический MAX mock не заменяет реальный клиент. `VIR-16` должен пройти на настоящем MAX
 Android/iOS RC с реальными deployment values:
 
@@ -283,4 +297,38 @@ Android/iOS RC с реальными deployment values:
 - обе boss phase fights;
 - dense late-run combat/FPS/thermal behavior.
 
-Зелёный CI не заменяет real-device acceptance в настоящем MAX client.
+### Machine-checkable часть приёмки
+
+Часть матрицы (launch / first-run / full-run / resume / restart / share / daily-invite / viewport)
+пишется одним JSON-документом и проверяется скриптом репозитория:
+
+```bash
+npm run test:mobile-evidence -- /path/to/mobile-acceptance.json
+```
+
+Путь передаётся аргументом. Без аргумента скрипт берёт `artifacts/mobile-acceptance.json`;
+этот путь добавлен в `.gitignore`, поэтому для неприватных evidence указывайте путь явно.
+
+Каждый элемент `checks[]` обязан содержать `id`, `status: "pass"`, `device`, `clientVersion`,
+`testedAt` (любое значение даты/времени, которое принимает `Date.parse`; ISO 8601 рекомендуется для
+читаемости, но не является требованием) и `evidence` (ссылка на video/screenshot/log).
+Валидатор требует **16** обязательных id — по 8 на Android и iOS:
+
+```text
+android-launch            android-first-run     android-full-run      android-background-resume
+android-restart           android-share         android-daily-invite  android-viewport
+ios-launch                ios-first-run         ios-full-run          ios-background-resume
+ios-restart               ios-share             ios-daily-invite      ios-viewport
+```
+
+Валидатор проверяет эти 16 обязательных id и пять полей. Дополнительные строки в `checks[]`
+разрешены и просто не проверяются, поэтому `pass` их не подтверждает. Остальные требования матрицы остаются
+ручными: native BackButton, haptics, audio unlock, повторные menu/run/restart циклы, pacing обеих
+boss phase fights, Heart safe-pocket timing с one-hand управлением, twin-stick ergonomics без
+movement/aim cross-talk, реальные developer/legal/support значения и trusted score с настоящим
+подписанным `initData`.
+
+Зелёный `test:mobile-evidence` доказывает корректность формы записей, а не поведения, и не
+заменяет real-device acceptance в настоящем MAX client. Храните JSON и записи к нему вне
+репозитория, во внешнем хранилище release-evidence; в репозитории фиксируйте только путь или URL.
+Подробности — в [`RELEASE_VALIDATION.md`](./RELEASE_VALIDATION.md), раздел 8.

@@ -108,3 +108,14 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 
 - [ ] Re-run focused Linux Legendary CI after commit `c01019f0708d9740cfc7a3f84da29bba149eed55`; latest Linux pass predates its viewport-fit guard.
 - [ ] Track compact landscape Legendary panel density/layout separately; viewport-fit guard preserves the original 124px card treatment when expansion cannot fit and does not claim a full landscape redesign.
+
+## Release closure (05.10)
+- [x] Add `VITE_RELEASE_SHA: ${{ github.sha }}` to the Release Visual Matrix build step (`a32b3f2`) so `stamp-release.mjs` stops aborting that workflow.
+- [x] Label the documented `npm run` lists as a quick check subset and name `.github/workflows/ci.yml` as the authoritative gate in `README.md` and `RELEASE_VALIDATION.md`.
+- [x] Document `npm run test:mobile-evidence -- PATH`, its 16 required check ids, required fields, the manual requirements it does not cover, and external evidence storage.
+- [x] Gitignore only `artifacts/mobile-acceptance.json`.
+- [x] Correct the two inaccurate validator claims in README/RELEASE_VALIDATION: 16 is the mandatory minimum, extra `checks[]` rows are permitted and uninspected, and `testedAt` is validated by `Date.parse` rather than strict ISO (`d976778`). Documentation only; validator semantics unchanged.
+- [ ] Coordinator/Cline/Hoplite independent review of `a32b3f2`; at most two fix iterations. No Codex reviewer.
+- [ ] Verify the Release Visual Matrix workflow actually goes green on GitHub after the env fix — it was never confirmed green locally, since that job needs Ubuntu + Playwright.
+- [ ] Remaining report findings stay backlog, out of this bounded scope: no redesign of docs structure, no validator semantics change, no fabricated evidence.
+- [ ] Unchanged external gates: real MAX Android/iOS 16/16, Telegram launch/referral/Daily, public `release.json` exact SHA.

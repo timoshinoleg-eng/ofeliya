@@ -32,6 +32,9 @@ jobs:
       - name: Build production QA bundle
         env:
           VITE_RELEASE_MATRIX_QA: '1'
+          # scripts/stamp-release.mjs refuses to stamp a build without an explicit
+          # 40-character release SHA; reuse the same source as the CI build gate.
+          VITE_RELEASE_SHA: ${{ github.sha }}
         run: npm run build
 
       - name: Install browser driver and image metrics
