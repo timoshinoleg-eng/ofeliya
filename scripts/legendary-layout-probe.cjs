@@ -101,6 +101,8 @@ const cases = [
           return {
             id, width, height, textCount: textObjects.length,
             effect: text ? { text: text.text, linesNeeded: lineCount, maxLines, bounds: effectBounds } : null,
+            descriptionBounds: description ? bounds(description) : null,
+            footerBounds: footer ? bounds(footer) : null,
             overlaps,
             plate: plate ? bounds(plate) : null,
             overflow,

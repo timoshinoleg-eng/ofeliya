@@ -1334,7 +1334,7 @@ export class UIScene extends Phaser.Scene {
 
     const cards = gs.pendingChoices;
     const cw = Math.min(W - 16, 374);
-    const ch = compact ? 124 : 148;
+    const ch = compact ? (legendaryReward ? 136 : 124) : 148;
     const gap = compact ? 9 : 11;
     const totalH = cards.length * ch + (cards.length - 1) * gap;
     const blockCenter = compact ? H * 0.59 : H * 0.57;
