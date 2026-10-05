@@ -99,3 +99,11 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 ## Probe CI URL correction (05.10)
 - Linux CI failed before layout assertions because the probe's default URL had been changed to local port 5197; the workflow starts Vite on 5173. Log evidence: work/multicard-linux-plain.log, line 190, connection refused.
 - Restored the default to http://127.0.0.1:5173/; retain OFELIYA_URL override for local non-default ports such as 5197. This is test integration configuration, not a layout failure. Linux CI rerun remains pending.
+
+## Linux probe content-specific fixture follow-up (05.10)
+- После восстановления default port Linux browser probe выполнил тесты: 87/88 прошли. Все real Legendary singles/pairs и остальные сценарии прошли; единственный отказ — synthetic three-card short-height guard 320x520: одна Legendary definition требует 3 строки, но compact 124px карточка корректно допускает только 2. Лог: work/multicard-linux-plain2.log.
+- Это не дефект реального trophy-контракта: guaranteed trophy предлагает 2 карточки. Короткий guard теперь использует три synthetic choices с эффектами, укладывающимися в compact 2-line limit, чтобы изолировать height decision. Длинный synthetic three-card stress остаётся на остальных высотах. Assertions неизменны; rerun pending.
+
+## Linux short-guard fixture boundary (05.10)
+- After the CI-port correction, Linux ran 88 probe cases: 87 passed, including all 15 actual Legendary pairs at each viewport, singles, and the other synthetic cases. The remaining short synthetic three-card guard at 320x520 selected one effect requiring 3 lines; compact 124px cards intentionally cap that effect at 2 lines. Evidence: `work/multicard-linux-plain2.log`.
+- This is an unreachable synthetic content/height combination, not a production trophy failure: the guaranteed trophy offers two Legendary choices. The known long-effect three-card stress remains at taller heights. The short-viewport guard now uses definitions 0, 2, and 3, whose effects fit the compact two-line limit, to isolate the viewport-height decision. All 15 real pairs remain covered at 320x520. No assertions or production UI were weakened/changed; rerun pending.

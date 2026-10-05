@@ -65,7 +65,9 @@ function makeLegendaryChoice(choice, suffix = '') {
         // Layout robustness fixture only: the guaranteed trophy path offers two choices.
         scenarios.push({ kind: 'synthetic-three-legendary', choices: [definitions[0], definitions[1], definitions[2]], reward: true });
       } else {
-        scenarios.push({ kind: 'short-portrait-three-legendary-guard', choices: [definitions[0], definitions[1], definitions[2]], reward: true, expectCompact: true });
+        // Isolate the height guard with short effects that fit the compact 2-line limit.
+        // This is synthetic UI coverage, not a three-choice trophy contract.
+        scenarios.push({ kind: 'short-portrait-three-legendary-guard', choices: [definitions[0], definitions[2], definitions[3]], reward: true, expectCompact: true });
       }
 
       for (let scenarioIndex = 0; scenarioIndex < scenarios.length; scenarioIndex++) {
