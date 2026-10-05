@@ -2,6 +2,12 @@
 
 Обновлено: 2026-10-05. Только факты; решения — в `02_DECISIONS.md`.
 
+## Targeted deploy CI lookup (05.10)
+
+- Deploy job now uses `ubuntu-22.04` and requests workflow-specific `ci.yml` runs filtered by exact release SHA, main branch, push event, completed status, and up to 100 results.
+- The inline validator retains all five acceptance predicates; missing matches report counts and up to five same-SHA run identity/status summaries.
+- Root reported hosted runner acquisition failures for prior deploy/main-CI attempts; exact-SHA CI run `37360675706` was independently confirmed green for main SHA `42b9f30a3feb8f219faf41014f0bfdd6bf27b5dd`.
+
 ## Deploy workflow payload (05.10)
 
 - Branch `fix/deploy-ci-payload-20261005` is based on main `42b9f30a3feb8f219faf41014f0bfdd6bf27b5dd`.

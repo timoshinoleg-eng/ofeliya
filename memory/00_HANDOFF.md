@@ -1,3 +1,19 @@
+# HANDOFF — targeted deploy CI lookup, 05.10.2026
+
+Branch `fix/deploy-targeted-ci-20261005` starts at main `b174b40b2e2cceb7104d98ceed126c54e9b28cb8` (PR #173 includes the prior temp-file fix). Two deploy/main-CI attempts were cancelled after 15 minutes because hosted runners did not acquire either job. The prior list-runs lookup also produced no CI match while exact-SHA API/local validation showed green run `37360675706` for `42b9f30a3feb8f219faf41014f0bfdd6bf27b5dd`; cause of the prior lookup mismatch was not established.
+
+This branch changes only `.github/workflows/deploy-cloudru.yml`: pin deploy job to `ubuntu-22.04`; query `actions/workflows/ci.yml/runs` filtered by exact `head_sha`, `branch=main`, `event=push`, `status=completed`, `per_page=100`; keep the temp-file flow and all five Node acceptance predicates (`name=CI`, exact SHA, main, push, success). On no match, log returned/total counts and up to five same-SHA candidates with identity/status fields only. No secrets or arbitrary payload fields are logged. No gates are weakened.
+
+## Verification
+
+- Extracted actual inline Node validator with 407,805-byte fixture: positive accepted; wrong name/SHA/branch/event/conclusion and malformed JSON rejected. Wrong-name case also verified count/candidate diagnostic and no payload noise field leakage.
+- `npm run test:rollback` — exit 0 (`executed deployment/rollback compatibility policy: ok`).
+- `git diff --check` — exit 0.
+- Workflow commit: `01734497d4a53691ea6e20762af8cef439bb9381`; memory is committed separately afterward.
+- No deploy, push, or merge. Root review/publish and retry of existing green release SHA remain pending.
+
+---
+
 # HANDOFF — deploy CI payload fix, 05.10.2026
 
 Branch `fix/deploy-ci-payload-20261005` starts from main `42b9f30a3feb8f219faf41014f0bfdd6bf27b5dd`. The deploy run `37362076056` failed before bastion access: exporting the GitHub Actions runs response as `RUNS_JSON` exceeded Linux `MAX_ARG_STRLEN`, causing Node spawn exit 126 (`Argument list too long`).

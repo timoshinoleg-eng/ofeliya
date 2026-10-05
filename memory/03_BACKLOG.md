@@ -3,7 +3,8 @@
 Обновлено: 2026-10-05. Отмечайте сделанное галочкой; новые пункты добавляйте сюда, а не в чат.
 
 ## Deploy CI payload fix (05.10)
-- [ ] Root review and publish `fix/deploy-ci-payload-20261005`; confirm the deploy workflow can validate a large Actions runs response without placing it in an environment variable. No deploy performed by this task.
+- [x] PR #173 merged the file-backed deploy CI payload fix; target branch inherits it from main `b174b40`.
+- [ ] Root review and publish `fix/deploy-targeted-ci-20261005`; retry the existing green release SHA after merge, under the normal deployment gates. No deploy performed by this task.
 
 ## Сейчас (P0)
 

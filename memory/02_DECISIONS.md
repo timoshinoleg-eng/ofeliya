@@ -3,6 +3,8 @@
 Формат: `[дата] Решение — причина. Статус.`
 Перенесённые решения помечены источником (документы репо). Новые решения добавляются сюда после каждой сессии.
 
+- [2026-10-05] Deployment CI lookup uses the workflow-specific `ci.yml` runs endpoint filtered by exact SHA and run identity, with a pinned Ubuntu 22.04 runner and bounded diagnostic summaries — the prior broad runs query did not yield the independently verified exact-SHA green run; root cause remains unproven. Retain all fail-closed predicates. Review/publish pending.
+
 - [2026-10-05] Deploy CI reads the Actions runs payload from a temporary file, not an environment variable — large responses exceed Linux argument/environment limits before Node starts; retain all five successful-main-CI identity criteria and fail closed. Implemented in `fix/deploy-ci-payload-20261005`; review/publish by root pending.
 
 - [2026-09-20] Исторические спринт-документы — не источник истины; при конфликте правят `STRAIN_ZERO_PRODUCT_BIBLE.md` и `ARCHITECTURE_NOTES.md`. Причина: устаревшие планы создавали ложные требования. Действует. *(источник: PLAN.md)*
