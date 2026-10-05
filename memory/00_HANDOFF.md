@@ -89,3 +89,25 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - Current code: `c01019f0708d9740cfc7a3f84da29bba149eed55`. Expansion to 136px requires the proposed full card stack to fit between measured subtitle bottom plus 9px gap and viewport bottom minus 9px. Otherwise 124px compact cards and the prior two-line Legendary effect limit remain.
 - Root reports 18/18 supplemental browser cases passed over 320x568, 568x320, 390x740 with one/two-card sets. Probe includes card/effect/description/footer bounds and required fixture assertions.
 - Local typecheck and Legendary/copy/token checks passed before the final probe-only addition; `node --check` and diff whitespace check passed afterward. Root must rerun focused Linux CI on final candidate before push. Landscape redesign remains a separate backlog item.
+
+## Многокарточный Legendary layout probe (05.10)
+- Текущий focused probe расширен в коммите `a4fd334f1f1b319d5a6016026a6689ef757eaceb`: прежние single-card cases сохранены; добавлены все 15 пар разных реальных Legendary definitions на трёх исходных viewport, synthetic three-Legendary robustness fixture и отдельный short-portrait guard 320x520.
+- Synthetic три Legendary — тестовая нагрузка layout, не утверждение о trophy-контракте: реальный гарантированный trophy предлагает две карты (`guaranteedLegendaryChoices(..., 2)`).
+- Измерения и проверки теперь собираются для каждой карточки из её собственного контейнера: соответствие каждого выбора, effect/plate/description/footer, stack intersections, gap под subtitle, viewport overflow и совпадение расширения с fit guard.
+- Первый browser run завершился 87/88: все single и двухкарточные пары прошли; единственный провал — синтетические три Legendary на 320x480, где карточки пересекались с subtitle. Это недостижимый trophy-сценарий и непригодная геометрия стресс-fixture, не доказанный дефект production-пути. Fixture перемещён на 320x520: там 124px stack должен помещаться под subtitle, а предлагаемая 136px stack обязана не пройти нижний viewport guard. Повторный browser run прошёл 88/88: 24 single cases, 60 пары, 3 synthetic-three и 1 short-portrait guard. На 320x520 карточки остались 124px, subtitle gap 9px, overflow отсутствует. Независимое ревью ещё выполняется; Linux CI и реальные устройства не подтверждены. `node --check` и `git diff --check` прошли.
+
+## Probe CI URL correction (05.10)
+- Linux CI failed before layout assertions because the probe's default URL had been changed to local port 5197; the workflow starts Vite on 5173. Log evidence: work/multicard-linux-plain.log, line 190, connection refused.
+- Restored the default to http://127.0.0.1:5173/; retain OFELIYA_URL override for local non-default ports such as 5197. This is test integration configuration, not a layout failure. Linux CI rerun remains pending.
+
+## Linux probe content-specific fixture follow-up (05.10)
+- После восстановления default port Linux browser probe выполнил тесты: 87/88 прошли. Все real Legendary singles/pairs и остальные сценарии прошли; единственный отказ — synthetic three-card short-height guard 320x520: одна Legendary definition требует 3 строки, но compact 124px карточка корректно допускает только 2. Лог: work/multicard-linux-plain2.log.
+- Это не дефект реального trophy-контракта: guaranteed trophy предлагает 2 карточки. Короткий guard теперь использует три synthetic choices с эффектами, укладывающимися в compact 2-line limit, чтобы изолировать height decision. Длинный synthetic three-card stress остаётся на остальных высотах. Assertions неизменны; rerun pending.
+
+## Linux short-guard fixture boundary (05.10)
+- After the CI-port correction, Linux ran 88 probe cases: 87 passed, including all 15 actual Legendary pairs at each viewport, singles, and the other synthetic cases. The remaining short synthetic three-card guard at 320x520 selected one effect requiring 3 lines; compact 124px cards intentionally cap that effect at 2 lines. Evidence: `work/multicard-linux-plain2.log`.
+- This is an unreachable synthetic content/height combination, not a production trophy failure: the guaranteed trophy offers two Legendary choices. The known long-effect three-card stress remains at taller heights. The short-viewport guard now uses definitions 0, 2, and 5, whose effects fit the compact two-line limit, to isolate the viewport-height decision. All 15 real pairs remain covered at 320x520. No assertions or production UI were weakened/changed; rerun pending.
+
+## Short guard fixture correction (05.10)
+- The Linux rerun showed the short-portrait guard still failed because Legendary definition index 3 also needs three wrapped lines. Linux measured the six single-definition line counts as `[2,3,2,3,3,2]`; log: `work/multicard-linux-plain2.log`.
+- The guard now selects indices 0, 2, and 5, the measured two-line definitions; index 5 is the last-life-saving Legendary. This isolates the height-fit behavior using observed wrapping, not string length. All other scenarios stay unchanged. Latest Linux result remains 87/88; rerun pending. No production changes or assertion reductions.

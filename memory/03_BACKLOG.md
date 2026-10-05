@@ -119,3 +119,15 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - [ ] Verify the Release Visual Matrix workflow actually goes green on GitHub after the env fix — it was never confirmed green locally, since that job needs Ubuntu + Playwright.
 - [ ] Remaining report findings stay backlog, out of this bounded scope: no redesign of docs structure, no validator semantics change, no fabricated evidence.
 - [ ] Unchanged external gates: real MAX Android/iOS 16/16, Telegram launch/referral/Daily, public `release.json` exact SHA.
+
+## Multi-card Legendary layout regression coverage (05.10)
+- [x] Preserve existing single-card Legendary cases and add all distinct two-definition pairs across the three existing viewports.
+- [x] Add a clearly labelled synthetic three-Legendary stress case and a 320x520 short-portrait non-expansion guard.
+- [x] Assert per-card fixtures and bounds, card separation, measured subtitle gap, fit-guard decision, and visible-text viewport containment.
+- [x] Initial root browser run: 87/88 passed; singles and all two-card pairs passed. One synthetic-three 320x480 failure was caused by subtitle overlap in the stress fixture.
+- [x] Root rerun with guard fixture at 320x520: 88/88 passed (24 singles, 60 pairs, 3 synthetic-three, 1 guard); short guard stayed at 124px with 9px subtitle gap and no overflow.
+- Linux rerun after URL correction: 87/88; the first revised short guard still failed because definition index 3 wraps to three lines. Linux measured all six as `[2,3,2,3,3,2]`; latest fixture correction uses indices 0, 2, and 5. See `work/multicard-linux-plain2.log`; rerun pending.
+- [x] Linux probe ran after URL correction: 87/88; all 15 real Legendary pairs across all viewports passed. The only failure was the short synthetic-three guard selecting a 3-line effect against the intended 2-line compact cap on 124px cards (`work/multicard-linux-plain2.log`). This is an unreachable stress content limit, not a trophy defect (trophy offers two). Long-content three-card stress stays on taller heights.
+- [ ] Rerun with the short guard using three two-line effects (definitions 0, 2, 5); keep all 15 actual pairs at 320x520 and leave assertions/production UI unchanged. Independent review approved this bounded fixture adjustment. No real-device acceptance claim.
+- [x] Linux measurement found short-guard definition index 3 also wraps to 3 lines; measured six single wrap counts are `[2,3,2,3,3,2]` (`work/multicard-linux-plain2.log`).
+- [ ] Rerun short guard with measured two-line definitions 0, 2, and 5 (index 5 is last-life-saving Legendary); all other cases remain unchanged. Latest Linux is 87/88; do not claim pass until rerun.
