@@ -3,6 +3,8 @@
 Формат: `[дата] Решение — причина. Статус.`
 Перенесённые решения помечены источником (документы репо). Новые решения добавляются сюда после каждой сессии.
 
+- [2026-10-05] Deploy CI reads the Actions runs payload from a temporary file, not an environment variable — large responses exceed Linux argument/environment limits before Node starts; retain all five successful-main-CI identity criteria and fail closed. Implemented in `fix/deploy-ci-payload-20261005`; review/publish by root pending.
+
 - [2026-09-20] Исторические спринт-документы — не источник истины; при конфликте правят `STRAIN_ZERO_PRODUCT_BIBLE.md` и `ARCHITECTURE_NOTES.md`. Причина: устаревшие планы создавали ложные требования. Действует. *(источник: PLAN.md)*
 - [2026-09-20] Кампания двухактовая: КРОВОТОК → IMMUNE PRIME → СЕРДЦЕ → CARDIAC TITAN; старый концепт 3–5 минут не использовать. Действует. *(источник: PLAN.md)*
 - [ранее] Renderer остаётся Phaser-only — без GSAP / Matter.js / tsParticles / второго рендера. Причина: мобильная производительность и предсказуемость. Действует. *(источник: ARCHITECTURE_NOTES.md)*

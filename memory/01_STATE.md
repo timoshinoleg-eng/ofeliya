@@ -1,6 +1,12 @@
 # STATE — OFELIYA: STRAIN ZERO
 
-Обновлено: 2026-10-02. Только факты; решения — в `02_DECISIONS.md`.
+Обновлено: 2026-10-05. Только факты; решения — в `02_DECISIONS.md`.
+
+## Deploy workflow payload (05.10)
+
+- Branch `fix/deploy-ci-payload-20261005` is based on main `42b9f30a3feb8f219faf41014f0bfdd6bf27b5dd`.
+- Deploy run `37362076056` failed before bastion access because the large Actions runs JSON was passed as an environment variable, exceeding Linux `MAX_ARG_STRLEN` and preventing Node startup (exit 126).
+- The successful-main-CI workflow step now reads its JSON payload from a temporary file while preserving its five run identity checks and fail-closed behavior.
 
 ## Репозиторий
 
