@@ -65,9 +65,9 @@ function makeLegendaryChoice(choice, suffix = '') {
         // Layout robustness fixture only: the guaranteed trophy path offers two choices.
         scenarios.push({ kind: 'synthetic-three-legendary', choices: [definitions[0], definitions[1], definitions[2]], reward: true });
       } else {
-        // Isolate the height guard with short effects that fit the compact 2-line limit.
-        // This is synthetic UI coverage, not a three-choice trophy contract.
-        scenarios.push({ kind: 'short-portrait-three-legendary-guard', choices: [definitions[0], definitions[2], definitions[3]], reward: true, expectCompact: true });
+        // Linux measured line counts [2,3,2,3,3,2]; choose only measured 2-line definitions.
+        // Index 5 is the last-life-saving Legendary. Synthetic UI coverage, not a trophy contract.
+        scenarios.push({ kind: 'short-portrait-three-legendary-guard', choices: [definitions[0], definitions[2], definitions[5]], reward: true, expectCompact: true });
       }
 
       for (let scenarioIndex = 0; scenarioIndex < scenarios.length; scenarioIndex++) {
