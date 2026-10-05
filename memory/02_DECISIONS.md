@@ -44,3 +44,7 @@
 - Проверки: server75, outbox24, новые release4/onboarding/rollback/server-policy/renderedCompose; браузер score/comprehension6viewport. Полный локальный набор43гейта: первый startup5.124s при параллельной браузерной нагрузке и Caddy sh ENOENT; serial startup и Caddy с GitBash PATH прошли. Исходные failures сохранены в evidence.
 - Cloud creation недоступен аккаунту; пользователь разрешил local. Deploy/merge не выполнены. Публичный release.json недоступен; текущая productionSHA НЕ подтверждена. Real-device MAX Android/iOS16/16 остаётся открытым.
 - Анализ второго вложения: WOFF2 валиден, кириллица отсутствует. Не считать разрешённые словарём ФОРМА МУТАЦИИ/MAX ИЛИ TG/СТАНДАРТ ошибками; предложить небольшой кириллический typography trial, затем RU catalog; fullEN i18n после продуктового решения.
+
+## Cyrillic typography experiment 05.10
+- Preserve the existing Chakra Petch display face and native system UI body stack as default. A reversible Play trial may be enabled only with `VITE_TYPOGRAPHY_EXPERIMENT=play`.
+- Keep font selection behind runtime/build configuration with a fallback, ship source/license provenance with the font files, and keep comparison specimens isolated from gameplay flow until browser review and a product decision.

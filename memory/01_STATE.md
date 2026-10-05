@@ -83,3 +83,9 @@
 - Проверки: server75, outbox24, новые release4/onboarding/rollback/server-policy/renderedCompose; браузер score/comprehension6viewport. Полный локальный набор43гейта: первый startup5.124s при параллельной браузерной нагрузке и Caddy sh ENOENT; serial startup и Caddy с GitBash PATH прошли. Исходные failures сохранены в evidence.
 - Cloud creation недоступен аккаунту; пользователь разрешил local. Deploy/merge не выполнены. Публичный release.json недоступен; текущая productionSHA НЕ подтверждена. Real-device MAX Android/iOS16/16 остаётся открытым.
 - Анализ второго вложения: WOFF2 валиден, кириллица отсутствует. Не считать разрешённые словарём ФОРМА МУТАЦИИ/MAX ИЛИ TG/СТАНДАРТ ошибками; предложить небольшой кириллический typography trial, затем RU catalog; fullEN i18n после продуктового решения.
+
+## Cyrillic typography experiment (branch-only, 05.10)
+
+- Branch `experiment/cyrillic-typography-20261005` from `4f65c4fa`; code/assets commit `dc7fc8e` adds Play 400/700 WOFF2, OFL notice, and an isolated specimen page. `VITE_TYPOGRAPHY_EXPERIMENT=play` opts game display text into Play; the no-flag Chakra Petch display and system UI body stacks remain exact. Play is absent from the default font wait; font wait remains capped at 700 ms.
+- FontTools confirmed all Russian glyphs including Ё/ё in both files. TypeScript, startup font/viewport/renderer checks, and Vite builds with and without the experiment flag passed. Browser/device appearance and default network absence still require root review; no production flip, merge, or deploy.
+- User-facing record: `outputs/typography-experiment.md`.
