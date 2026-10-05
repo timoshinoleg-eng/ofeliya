@@ -125,4 +125,5 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - [x] Add a clearly labelled synthetic three-Legendary stress case and a 320x520 short-portrait non-expansion guard.
 - [x] Assert per-card fixtures and bounds, card separation, measured subtitle gap, fit-guard decision, and visible-text viewport containment.
 - [x] Initial root browser run: 87/88 passed; singles and all two-card pairs passed. One synthetic-three 320x480 failure was caused by subtitle overlap in the stress fixture.
-- [ ] Root rerun with guard fixture at 320x520 and Cline independent diff review; keep assertions intact and record outcome.
+- [x] Root rerun with guard fixture at 320x520: 88/88 passed (24 singles, 60 pairs, 3 synthetic-three, 1 guard); short guard stayed at 124px with 9px subtitle gap and no overflow.
+- [ ] Cline independent diff review and Linux CI; no real-device acceptance claim.
