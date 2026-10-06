@@ -1,3 +1,9 @@
+## PR/QA continuation (06.10.2026)
+
+- User authorized next delivery phase; origin/main remains d7797bc with no new commits relative to the reviewed branch base.
+- Draft PR/full GitHub CI and exact-SHA QA packaging are the current scope; production release and actual newcomer observations remain separate.
+- Prior local focused verification remains valid for unchanged code; full current CI status must be read from GitHub, not inferred.
+
 ## Comprehension evidence (06.10.2026)
 
 - Local feature branch from main d7797bc; client now emits run-scoped comprehension metadata without gameplay RNG.

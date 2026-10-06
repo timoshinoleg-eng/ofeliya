@@ -1,3 +1,5 @@
+- [2026-10-06] Continue the completed change through draft PR/full CI and an explicitly marked local QA bundle — user said continue, code is already independently reviewed; preserve review boundary before merge/deploy and avoid counting local browser as real MAX acceptance.
+
 - [2026-10-06] Correlate comprehension with a separate WebCrypto analyticsRunId and runTimeMs, stored in existing presentation state — seed is shared by repeated attempts and server receipt order is unreliable. Missing/invalid resume context remains uncorrelated; telemetry is best effort and does not change checkpoint schema.
 - [2026-10-06] All-run comprehension chain ends at first lysis; second-cell-without-hint uses firstRun=true only — production emits that milestone only for newcomers. Include start-only attempts; missing delivery is not proof of misunderstanding.
 - [2026-10-06] Reuse actual partial Space Bunny helper and project analytics/HMAC/harness after live Gateway full coding tasks failed — do not count catalog availability as generation success, configure paid routes or copy irrelevant donor systems. No further Astra calls after explicit user preference.

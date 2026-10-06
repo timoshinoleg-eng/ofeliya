@@ -1,3 +1,11 @@
+# HANDOFF — PR and QA delivery continuation, 06.10.2026
+
+User authorized continuation after completed local implementation. Main rechecked: d7797bc, no drift/conflict; reviewed code/test snapshot 3b3c817, docs-only followups d874bcf. Branch feat/comprehension-report is being delivered as a draft PR against main; verify live checks for its exact current HEAD before integration. Root coordinates GitHub full CI; native Sol runs local non-browser gates. Existing AutoGLM policy rejection remains in force, so local browser uses Playwright. No new Astra calls.
+
+QA build uses explicit test identity/configuration and is for local browser familiarization; it cannot prove signed MAX telemetry or real sharing. Candidate marker must match the delivered commit. Evidence and next steps are in outputs/ofeliya-delivery.md outside repo; do not mistake historical no-push notes below for live PR state. Do not merge/deploy on the strength of local smoke; real phone acceptance and 5–8 newcomer sessions remain pending.
+
+---
+
 # HANDOFF — comprehension evidence, 06.10.2026
 
 Branch `feat/comprehension-report`, isolated clone, base main `d7797bc67bbda063d2fc3de68026101b0b061121`. Adds presentation-only analytics run identity, occurrence-time metadata and stable retry props; conservative resume when local storage context is absent/invalid. Score, RNG, balance, checkpoint schema and joystick unchanged.

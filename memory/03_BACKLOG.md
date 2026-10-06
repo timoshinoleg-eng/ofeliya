@@ -1,3 +1,9 @@
+## PR/QA delivery follow-up (06.10.2026)
+
+- [ ] Read exact-head full CI for feat/comprehension-report draft PR; resolve actual regressions before integration.
+- [ ] Real MAX phone/share acceptance on the approved candidate before release; local QA archive only supports browser familiarization.
+- [ ] 5–8 observed newcomer sessions using the prepared protocol, then select at most three evidence-based changes.
+
 ## Comprehension evidence phase (06.10.2026)
 
 - [x] Implement run context, retry metadata and comprehension report on local feature branch.
