@@ -6,7 +6,7 @@ Funnel report now aggregates correlated comprehension milestones. All-run chain 
 
 Space Bunny supplied a partial AnalyticsRunId helper, adopted and hardened by native Luna after external full coding tasks failed. Independent GPT-5.6 Sol reviews corrected cohort eligibility. Relaywake/poke-survivors inspected at pinned commits; no suitable analytics module found. Existing project code and tests reused. No further Astra calls after user steering.
 
-Local analytics/context/delivery/RNG tests and typecheck/build passed. Final browser smoke passed at 3b3c817 on six viewports (320x568 through 412x915), including acknowledged postresume identity and 503→202 retry with identical occurrence-time props and unchanged RNG. Whole-branch independent review is tracked below. Real 5–8 newcomer MAX/phone sessions remain pending; protocol and blank CSV prepared. No push, PR, merge or deploy. Public release marker timed out; base GitHub workflow success is not current production proof.
+Local analytics/context/delivery/RNG tests and typecheck/build passed. Final browser smoke passed at 3b3c817 on six viewports (320x568 through 412x915), including acknowledged postresume identity and 503→202 retry with identical occurrence-time props and unchanged RNG. Whole-branch independent GPT-5.6 Sol review d7797bc..3b3c817 confirmed no material correctness findings; README wording clarified that crypto-unavailable telemetry omits the ID. Subsequent commits only update documentation. Real 5–8 newcomer MAX/phone sessions remain pending; protocol and blank CSV prepared. No push, PR, merge or deploy. Public release marker timed out; base GitHub workflow success is not current production proof.
 
 ---
 

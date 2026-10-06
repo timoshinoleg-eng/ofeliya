@@ -70,7 +70,8 @@ npm run test:analytics-funnel
 npm run test:analytics-delivery
 ```
 
-Новые one-shot события понимания содержат `analyticsRunId`, `runTimeMs`, `firstRun` и `release`.
+Новые one-shot события понимания содержат `runTimeMs`, `firstRun` и `release`;
+`analyticsRunId` добавляется при доступном WebCrypto.
 Идентификатор относится к одной попытке, не к seed; игровой RNG и ranked-контракт не меняются.
 Порядок событий определяется игровым временем, а серверный `ts` обозначает время приёма.
 Старые и частичные записи без идентификатора/времени остаются некоррелируемыми.
