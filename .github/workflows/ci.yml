@@ -101,6 +101,12 @@ jobs:
       - name: Analytics client contract smoke
         run: npm run test:analytics
 
+      - name: Comprehension analytics report fixtures
+        run: npm run test:analytics-funnel
+
+      - name: Signed analytics persistence and report integration
+        run: npm run test:analytics-delivery
+
       - name: Daily V2 client contract smoke
         run: npm run test:daily-v2
 
