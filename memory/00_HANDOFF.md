@@ -1,3 +1,15 @@
+# HANDOFF — comprehension evidence, 06.10.2026
+
+Branch `feat/comprehension-report`, isolated clone, base main `d7797bc67bbda063d2fc3de68026101b0b061121`. Adds presentation-only analytics run identity, occurrence-time metadata and stable retry props; conservative resume when local storage context is absent/invalid. Score, RNG, balance, checkpoint schema and joystick unchanged.
+
+Funnel report now aggregates correlated comprehension milestones. All-run chain ends at first lysis; second-cell-without-hint chain uses only firstRun=true eligible runs, including start-only attempts in denominators. Legacy/malformed/missing context is reported separately. Signed MAX/TG requests are tested through the real API and persisted store into the real CLI.
+
+Space Bunny supplied a partial AnalyticsRunId helper, adopted and hardened by native Luna after external full coding tasks failed. Independent GPT-5.6 Sol reviews corrected cohort eligibility. Relaywake/poke-survivors inspected at pinned commits; no suitable analytics module found. Existing project code and tests reused. No further Astra calls after user steering.
+
+Local analytics/context/delivery/RNG tests and typecheck/build passed. Final browser smoke passed at 3b3c817 on six viewports (320x568 through 412x915), including acknowledged postresume identity and 503→202 retry with identical occurrence-time props and unchanged RNG. Whole-branch independent review is tracked below. Real 5–8 newcomer MAX/phone sessions remain pending; protocol and blank CSV prepared. No push, PR, merge or deploy. Public release marker timed out; base GitHub workflow success is not current production proof.
+
+---
+
 # HANDOFF — control smoke gameplay precondition, 06.10.2026
 
 Branch `fix/control-smoke-preconditions-20261006` starts at main `3a048680feadb43b7254624b933561c72d24a318`. Reproduced the failed recycled pointer test with CI-equivalent Vite legal config and WebApp/storage stubs. At the fixture point the original app had active scenes `[UI]`, Game paused, and UI `uiBlocked=true`, `modalOpen=true`, modal present with three stacked mutation choice groups; transition/game-over/manual-pause flags were false. `TwinStickControls.onDown` correctly no-ops while blocked. The fixture had not isolated live progression before invoking synthetic pointer IDs.

@@ -1,3 +1,13 @@
+## Comprehension evidence phase (06.10.2026)
+
+- [x] Implement run context, retry metadata and comprehension report on local feature branch.
+- [x] Add real signed delivery/persisted-store/CLI fixtures and npm/CI integration.
+- [x] Prepare 5–8 newcomer protocol, blank session table and pinned donor audit.
+- [ ] Review/publish feature branch and run canonical full CI before release; no publication in this task.
+- [ ] Conduct 5–8 real newcomer MAX phone sessions on an exact build SHA; record observed actions/explanations/help separately.
+- [ ] Select three gameplay/UI changes from observed evidence; reroll/new enemies/chat ranking remain candidates.
+- [ ] Verify actual production release marker and MAX Android/iOS acceptance independently of local tests.
+
 # BACKLOG — OFELIYA: STRAIN ZERO
 
 Обновлено: 2026-10-05. Отмечайте сделанное галочкой; новые пункты добавляйте сюда, а не в чат.
