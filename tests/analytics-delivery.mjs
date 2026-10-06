@@ -118,11 +118,13 @@ try {
   assert.match(report.stdout, /contextual runs=2\b/);
   assert.match(report.stdout, /legacy\/partial uncorrelated rows=0\b/);
   assert.match(report.stdout, /malformed-context rows=0\b/);
-  assert.match(report.stdout, /All contextual runs: run_start observed=2/);
+  assert.match(report.stdout, /All contextual runs \(approach → lysis; second-cell step is first-run-only\): run_start observed=2/);
   assert.match(report.stdout, /observed ordered through infection_started: 2\/2/);
   assert.match(report.stdout, /observed ordered through first_lysis: 1\/2/);
-  assert.match(report.stdout, /fully observed chain: 1\/2/);
-  assert.match(report.stdout, /First-run subset: run_start observed=1/);
+  assert.match(report.stdout, /fully observed approach-to-lysis chain: 1\/2/);
+  assert.match(report.stdout, /Eligible first-run subset \(four-step chain\): run_start observed=1/);
+  assert.match(report.stdout, /observed ordered through second_host_cell_completed_without_hint: 1\/1/);
+  assert.match(report.stdout, /fully observed four-step chain: 1\/1/);
   assert.match(report.stdout, /median first-lysis game time from run_start: 4000 ms/);
   for (const platform of ['max', 'telegram']) {
     for (const privateValue of [String(users[platform].id), users[platform].first_name,
