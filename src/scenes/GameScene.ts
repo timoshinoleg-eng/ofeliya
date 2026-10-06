@@ -94,6 +94,9 @@ import {
   type HostCellLysisEvent,
 } from '../systems/HostCellSystem';
 import { trackProductEvent, type ProductEvent, type ProductEventProps } from '../systems/AnalyticsClient';
+import { createAnalyticsRunId, isAnalyticsRunId } from '../systems/AnalyticsRunId';
+import { buildComprehensionEventProps, restoreAnalyticsRunId } from '../systems/ComprehensionRunContext';
+import { RELEASE_SHA } from '../release';
 import { beginRunCapability } from '../systems/ScoreClient';
 import type { UIScene } from './UIScene';
 
@@ -108,6 +111,7 @@ type HostCellHintType = 'approach' | 'enter' | 'exit';
 
 interface ComprehensionPresentationState {
   runSeed: string;
+  analyticsRunId?: string;
   events: ProductEvent[];
   hostCellHints: HostCellHintType[];
   hostCellSlotsWithHint: number[];
@@ -135,6 +139,7 @@ export class GameScene extends Phaser.Scene {
   private comprehensionEventsExhausted = new Set<ProductEvent>();
   private comprehensionRetryCounts = new Map<ProductEvent, number>();
   private comprehensionGeneration = 0;
+  private analyticsRunId: string | null = null;
   private bullets!: Phaser.Physics.Arcade.Group;
   private enemies!: Phaser.Physics.Arcade.Group;
   private gems!: Phaser.Physics.Arcade.Group;
@@ -252,6 +257,7 @@ export class GameScene extends Phaser.Scene {
     this.runSeed = this.gameplayRng.seed;
     this.registry.set('runSeed', this.runSeed);
     this.registry.remove('runSeedOverride');
+    this.analyticsRunId = resume ? null : createAnalyticsRunId();
     // Separate seeded RNG: the phase-two boss hazard must never shift checkpointed gameplay streams.
     // Boss phases are not resumable checkpoints, so this director can reset safely with the scene.
     this.cardiacHazardRng = new RunRng(`${this.runSeed}-cardiac-hazard`);
@@ -277,8 +283,26 @@ export class GameScene extends Phaser.Scene {
     if (resume) this.runState.restoreFromCheckpoint(resume.runState);
     this.resumed = resume !== null;
 
+    this.firstRunComprehension = SaveSystem.get().runs === 0;
+    this.hostCellsCompletedThisRun = resume ? this.runState.run.hostCellsInfected : 0;
+    this.hostCellHintEventsShown = new Set();
+    this.hostCellSlotsWithHint = new Set();
+    this.pendingHostCellHints = [];
+    this.comprehensionEventsSent = new Set<ProductEvent>();
+    this.comprehensionEventsInFlight = new Set<ProductEvent>();
+    this.comprehensionRetryCounts = new Map<ProductEvent, number>();
+    this.comprehensionGeneration += 1;
+    this.comprehensionEventsExhausted.clear();
+    if (resume) {
+      this.restoreComprehensionPresentationState();
+    } else {
+      // A new attempt never reads the previous presentation state, even if storage removal
+      // fails. Same-seed attempts must not inherit a stale id, dedupe set, or hint state.
+      this.clearComprehensionPresentationState();
+      this.persistComprehensionPresentationState();
+    }
     // A ranked Standard run must prove that the server observed its start. Request
-    // the capability here, after seed/control are final but before meaningful play.
+    // the capability only after fresh-run correlation state has been persisted.
     // Gameplay never waits for the network: failure degrades to an unranked result.
     this.registry.remove('runTokenGrant');
     if (!this.resumed && !this.dailyRun && this.difficulty.id === 'standard') {
@@ -299,16 +323,6 @@ export class GameScene extends Phaser.Scene {
         }
       });
     }
-
-    this.firstRunComprehension = SaveSystem.get().runs === 0;
-    this.hostCellsCompletedThisRun = resume ? this.runState.run.hostCellsInfected : 0;
-    this.hostCellHintEventsShown = new Set();
-    this.hostCellSlotsWithHint = new Set();
-    this.pendingHostCellHints = [];
-    this.comprehensionGeneration += 1;
-    this.comprehensionEventsExhausted.clear();
-    if (!resume) this.clearComprehensionPresentationState();
-    this.restoreComprehensionPresentationState();
     this.checkpointAccMs = 0;
     // Adaptive audio foundation: one deterministic bed per run plus danger-driven tension layers.
     // The director only observes gameplay; StageDirector keeps lifecycle authority.
@@ -1847,6 +1861,13 @@ export class GameScene extends Phaser.Scene {
         localStorage.removeItem(COMPREHENSION_STATE_KEY);
         return;
       }
+      if (this.resumed) {
+        this.analyticsRunId = restoreAnalyticsRunId(
+          this.runSeed,
+          stored.runSeed,
+          stored.analyticsRunId
+        );
+      }
       if (Array.isArray(stored.events)) {
         for (const event of stored.events) {
           if (typeof event === 'string') this.comprehensionEventsSent.add(event as ProductEvent);
@@ -1892,6 +1913,7 @@ export class GameScene extends Phaser.Scene {
     try {
       const state: ComprehensionPresentationState = {
         runSeed: this.runSeed,
+        ...(isAnalyticsRunId(this.analyticsRunId) ? { analyticsRunId: this.analyticsRunId } : {}),
         events: [...this.comprehensionEventsSent],
         hostCellHints: [...this.hostCellHintEventsShown],
         hostCellSlotsWithHint: [...this.hostCellSlotsWithHint],
@@ -1911,15 +1933,25 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private trackComprehensionOnce(event: ProductEvent, props: ProductEventProps = {}): void {
+  private trackComprehensionOnce(
+    event: ProductEvent,
+    props: ProductEventProps = {},
+    capturedProps?: ProductEventProps
+  ): void {
     if (
       this.comprehensionEventsSent.has(event) ||
       this.comprehensionEventsInFlight.has(event) ||
       this.comprehensionEventsExhausted.has(event)
     ) return;
     const generation = this.comprehensionGeneration;
+    const eventProps = capturedProps ?? buildComprehensionEventProps(props, {
+      analyticsRunId: this.analyticsRunId,
+      runTimeMs: this.runState.run.timeMs,
+      firstRun: this.firstRunComprehension,
+      release: RELEASE_SHA,
+    });
     this.comprehensionEventsInFlight.add(event);
-    void trackProductEvent(event, PlatformBridge, props).then((delivered) => {
+    void trackProductEvent(event, PlatformBridge, eventProps).then((delivered) => {
       if (generation !== this.comprehensionGeneration) return;
       this.comprehensionEventsInFlight.delete(event);
       if (delivered) {
@@ -1937,7 +1969,7 @@ export class GameScene extends Phaser.Scene {
       this.comprehensionRetryCounts.set(event, retries + 1);
       if (!this.scene.isActive('Game') && !this.scene.isPaused('Game')) return;
       this.time.delayedCall(900, () => {
-        if (generation === this.comprehensionGeneration) this.trackComprehensionOnce(event, props);
+        if (generation === this.comprehensionGeneration) this.trackComprehensionOnce(event, props, eventProps);
       });
     });
   }

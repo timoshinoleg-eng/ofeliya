@@ -1,3 +1,17 @@
+## PR/QA continuation (06.10.2026)
+
+- User authorized next delivery phase; origin/main remains d7797bc with no new commits relative to the reviewed branch base.
+- Draft PR/full GitHub CI and exact-SHA QA packaging are the current scope; production release and actual newcomer observations remain separate.
+- Prior local focused verification remains valid for unchanged code; full current CI status must be read from GitHub, not inferred.
+
+## Comprehension evidence (06.10.2026)
+
+- Local feature branch from main d7797bc; client now emits run-scoped comprehension metadata without gameplay RNG.
+- Report uses occurrence time, explicit denominators, firstRun eligibility and separate uncorrelated diagnostics. Old rows cannot establish same-run chains.
+- Real signed API → persisted store → report fixtures pass; run identity/resume/bounds helpers and RNG/checkpoint regressions pass. Typecheck and test-configured build passed at e349c55.
+- Browser smoke adds resume delivery acknowledgement and stable retry occurrence-time/RNG proof; final execution tracked in current handoff.
+- Actual newcomer/device sessions and release acceptance remain pending. Local changes have not been published.
+
 # STATE — OFELIYA: STRAIN ZERO
 
 Обновлено: 2026-10-05. Только факты; решения — в `02_DECISIONS.md`.
