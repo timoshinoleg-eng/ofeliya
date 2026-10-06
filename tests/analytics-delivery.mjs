@@ -90,7 +90,8 @@ try {
   }
 
   const { flushStoreNow } = await import('../server/index.mjs');
-  assert.equal(flushStoreNow(), true, 'accepted events must cause a disk flush');
+  flushStoreNow();
+  assert.equal(flushStoreNow(), false, 'a clean store flush should be a no-op');
   const storeFile = join(dataDir, 'store.json');
   const rawStore = readFileSync(storeFile, 'utf8');
   const rows = JSON.parse(rawStore).analyticsEvents;

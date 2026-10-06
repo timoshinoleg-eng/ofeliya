@@ -22,6 +22,33 @@ const VIEWPORTS = [
   { width: 412, height: 915 },
 ];
 const captureDir = path.join(process.cwd(), '.tmp-comprehension-smoke');
+const runTelemetryNames = new Set([
+  'run_start', 'first_enemy_hit', 'first_enemy_kill', 'first_rna_pickup',
+  'first_mutation_opened', 'first_mutation_selected', 'host_cell_approached',
+  'infection_started', 'infection_interrupted', 'infection_resumed',
+  'first_lysis', 'second_host_cell_completed_without_hint',
+]);
+
+function assertRunTelemetry(entries, expectedFirstRun, label) {
+  const runEntries = entries.filter((entry) => runTelemetryNames.has(entry.event));
+  assert.ok(runEntries.length > 0, `${label}: no run telemetry was captured`);
+  for (const { event, props } of runEntries) {
+    assert.ok(props && typeof props === 'object' && !Array.isArray(props), `${label}/${event}: props missing`);
+    assert.ok(Object.keys(props).length <= 8, `${label}/${event}: server eight-field limit exceeded`);
+    assert.deepEqual(Object.keys(props).slice(0, 4),
+      ['analyticsRunId', 'runTimeMs', 'firstRun', 'release'],
+      `${label}/${event}: run metadata must precede domain fields`);
+    assert.match(props.analyticsRunId, /^[a-zA-Z0-9_-]{8,80}$/, `${label}/${event}: invalid run id`);
+    assert.ok(Number.isFinite(props.runTimeMs) && props.runTimeMs >= 0,
+      `${label}/${event}: invalid game time`);
+    assert.equal(props.firstRun, expectedFirstRun, `${label}/${event}: wrong firstRun cohort`);
+    assert.ok(typeof props.release === 'string' && props.release.length > 0 && props.release.length <= 80,
+      `${label}/${event}: invalid release`);
+  }
+  const ids = new Set(runEntries.map((entry) => entry.props.analyticsRunId));
+  assert.equal(ids.size, 1, `${label}: events from one attempt have different run ids`);
+  return [...ids][0];
+}
 
 async function prepareContext(context, runs) {
   await context.route('https://st.max.ru/**', (route) =>
@@ -525,6 +552,7 @@ async function bootGame(page) {
       assert.equal(eventCounts[event], 1, `${event} count was ${eventCounts[event] ?? 0}, expected one`);
     }
     assert.ok(events.every((entry) => !('x' in (entry.props || {})) && !('y' in (entry.props || {}))), 'comprehension telemetry contains coordinates');
+    const firstRunId = assertRunTelemetry(events, true, 'fresh first run');
     assert.deepEqual(pageErrors, [], `browser errors: ${pageErrors.join('\n')}`);
 
     const returning = await browser.newContext({ viewport: { width: 390, height: 740 }, deviceScaleFactor: 1 });
@@ -570,6 +598,8 @@ async function bootGame(page) {
       0,
       'returning run emitted first-run-only second Host Cell comprehension event'
     );
+    const returningRunId = assertRunTelemetry(returningEvents, false, 'returning run');
+    assert.notEqual(returningRunId, firstRunId, 'separate attempts reused one analytics run id');
     await returning.close();
 
     const resumeContext = await browser.newContext({ viewport: { width: 390, height: 740 }, deviceScaleFactor: 1 });
@@ -628,6 +658,11 @@ async function bootGame(page) {
     assert.equal(resumeFixture.saved, true, 'first-run checkpoint was not saved for resume regression');
     assert.ok(resumeFixture.checkpoint, 'resume regression checkpoint missing');
     assert.equal(resumeFixture.presentation?.runSeed, resumeFixture.checkpoint.runSeed, 'presentation state is not bound to checkpoint seed');
+    assert.match(resumeFixture.presentation?.analyticsRunId, /^[a-zA-Z0-9_-]{8,80}$/,
+      'checkpoint presentation state lacks an opaque analytics run id');
+    assert.equal(assertRunTelemetry(resumeEvents, true, 'before checkpoint resume'),
+      resumeFixture.presentation.analyticsRunId,
+      'checkpoint persisted a different run id than the emitted events');
     assert.ok(resumeFixture.presentation?.events?.includes('first_enemy_hit'), 'first-hit telemetry guard was not persisted after successful delivery');
     assert.equal(resumeFixture.presentation?.hostCellHints?.includes('approach'), false, 'approach hint was consumed before its display duration completed');
     assert.deepEqual(
@@ -670,6 +705,7 @@ async function bootGame(page) {
         resumed: gs.resumed,
         firstRunComprehension: gs.firstRunComprehension,
         firstHitRemembered: gs.comprehensionEventsSent.has('first_enemy_hit'),
+        analyticsRunId: JSON.parse(localStorage.getItem('ofeliya_comprehension_v1') || 'null')?.analyticsRunId,
         pending: gs.pendingHostCellHints.map((hint) => hint.type),
         visibleHint: ui.contextHintText?.text ?? '',
         hintVisible: Boolean(ui.contextHintContainer?.visible),
@@ -678,6 +714,8 @@ async function bootGame(page) {
     await resumePage.waitForTimeout(250);
     assert.equal(resumedFirstRun.resumed, true, 'checkpoint regression did not resume the run');
     assert.equal(resumedFirstRun.firstRunComprehension, true, 'first-run teaching was disabled by checkpoint resume');
+    assert.equal(resumedFirstRun.analyticsRunId, resumeFixture.presentation.analyticsRunId,
+      'checkpoint resume changed the analytics run id');
     assert.equal(resumedFirstRun.firstHitRemembered, true, 'first-hit dedupe state was not restored');
     assert.deepEqual(resumedFirstRun.pending, ['approach', 'enter'], 'resume lost the interrupted Host Cell hint queue');
     assert.equal(resumedFirstRun.hintVisible, true, 'resume did not replay the interrupted Host Cell hint');
@@ -777,6 +815,13 @@ async function bootGame(page) {
       return { saved, presentation };
     });
     assert.equal(hintedSecondCellSaved.saved, true, 'second-cell contextual-hint checkpoint was not saved');
+    assert.equal(hintedSecondCellSaved.presentation?.analyticsRunId, resumeFixture.presentation.analyticsRunId,
+      'later checkpoint changed the analytics run id');
+    assert.equal(assertRunTelemetry(resumeEvents, true, 'after checkpoint resume'),
+      resumeFixture.presentation.analyticsRunId,
+      'post-resume events used a different analytics run id');
+    assert.ok(resumeEvents.some((entry) => entry.event === 'infection_interrupted'),
+      'resume fixture did not emit a new event to prove run-id continuity');
     assert.ok(
       hintedSecondCellSaved.presentation?.pendingHostCellHints?.some(
         (hint) => hint.type === 'exit' && hint.slotIndex === 1
