@@ -101,6 +101,9 @@ jobs:
       - name: Analytics client contract smoke
         run: npm run test:analytics
 
+      - name: Comprehension run identity and metadata contract
+        run: npm run test:comprehension-context
+
       - name: Comprehension analytics report fixtures
         run: npm run test:analytics-funnel
 

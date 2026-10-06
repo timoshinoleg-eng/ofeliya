@@ -42,6 +42,7 @@
     "test:social": "node scripts/check-social-client.mjs",
     "test:social-hub": "node scripts/social-hub-smoke.cjs",
     "test:analytics": "node scripts/check-analytics-client.mjs",
+    "test:comprehension-context": "node tests/comprehension-run-context.mjs",
     "test:analytics-funnel": "node tests/product-funnel.mjs",
     "test:analytics-delivery": "node tests/analytics-delivery.mjs",
     "test:daily-v2": "node scripts/check-daily-v2.mjs",
