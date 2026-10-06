@@ -817,11 +817,14 @@ async function bootGame(page) {
     assert.equal(hintedSecondCellSaved.saved, true, 'second-cell contextual-hint checkpoint was not saved');
     assert.equal(hintedSecondCellSaved.presentation?.analyticsRunId, resumeFixture.presentation.analyticsRunId,
       'later checkpoint changed the analytics run id');
+    await resumePage.waitForFunction(() =>
+      window.__game.scene.getScene('Game').comprehensionEventsSent.has('infection_interrupted'),
+    null, { timeout: 10000 });
+    assert.ok(resumeEvents.some((entry) => entry.event === 'infection_interrupted'),
+      'resume fixture did not emit a new event to prove run-id continuity');
     assert.equal(assertRunTelemetry(resumeEvents, true, 'after checkpoint resume'),
       resumeFixture.presentation.analyticsRunId,
       'post-resume events used a different analytics run id');
-    assert.ok(resumeEvents.some((entry) => entry.event === 'infection_interrupted'),
-      'resume fixture did not emit a new event to prove run-id continuity');
     assert.ok(
       hintedSecondCellSaved.presentation?.pendingHostCellHints?.some(
         (hint) => hint.type === 'exit' && hint.slotIndex === 1
