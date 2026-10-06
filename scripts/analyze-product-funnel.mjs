@@ -175,11 +175,12 @@ console.log(`Unique identifiable actors across comprehension events: ${uniqueEve
 console.log(`Context coverage: contextual rows=${comprehensionRows.length - legacyRows - malformedRows}; legacy/partial uncorrelated rows=${legacyRows}; malformed/invalid rows=${malformedRows}`);
 
 const chain = ['host_cell_approached', 'infection_started', 'first_lysis', 'second_host_cell_completed_without_hint'];
+const startToLysisChain = chain.slice(0, 3);
 
-function chainDepth(run, runStart) {
+function chainDepth(run, runStart, milestones) {
   let previous = runStart;
   let depth = 0;
-  for (const name of chain) {
+  for (const name of milestones) {
     const time = run.events.get(name);
     if (time == null || time < previous) break;
     previous = time;
@@ -187,16 +188,16 @@ function chainDepth(run, runStart) {
   }
   return depth;
 }
-function summarizeRuns(selected, label) {
+function summarizeRuns(selected, label, milestones, completionLabel) {
   const anchored = selected.filter((run) => run.start != null);
-  const depths = anchored.map((run) => chainDepth(run, run.start));
+  const depths = anchored.map((run) => chainDepth(run, run.start, milestones));
   const denominator = anchored.length;
   console.log(`${label}: run_start observed=${denominator}; missing run_start=${selected.length - denominator}; firstRun unknown=${selected.filter((run) => run.firstRunUnknown || run.firstRuns.size !== 1).length}; firstRun conflicts=${selected.filter((run) => run.firstRuns.size > 1).length}`);
-  for (let depth = 1; depth <= chain.length; depth += 1) {
+  for (let depth = 1; depth <= milestones.length; depth += 1) {
     const count = depths.filter((value) => value >= depth).length;
-    console.log(`  observed ordered through ${chain[depth - 1]}: ${count}/${denominator}${denominator ? ` (${(count / denominator * 100).toFixed(1)}%)` : ''}`);
+    console.log(`  observed ordered through ${milestones[depth - 1]}: ${count}/${denominator}${denominator ? ` (${(count / denominator * 100).toFixed(1)}%)` : ''}`);
   }
-  const complete = anchored.filter((run) => chainDepth(run, run.start) === chain.length);
+  const complete = anchored.filter((run) => chainDepth(run, run.start, milestones) === milestones.length);
   const times = anchored
     .filter((run) => run.events.has('first_lysis') && run.events.get('first_lysis') >= run.start)
     .map((run) => run.events.get('first_lysis') - run.start)
@@ -204,17 +205,17 @@ function summarizeRuns(selected, label) {
   const median = times.length
     ? (times.length % 2 ? times[(times.length - 1) / 2] : (times[times.length / 2 - 1] + times[times.length / 2]) / 2)
     : null;
-  console.log(`  fully observed chain: ${complete.length}/${denominator}${denominator ? ` (${(complete.length / denominator * 100).toFixed(1)}%)` : ''}; missing milestones remain unknown, not failures`);
+  console.log(`  fully observed ${completionLabel}: ${complete.length}/${denominator}${denominator ? ` (${(complete.length / denominator * 100).toFixed(1)}%)` : ''}; missing milestones remain unknown, not failures`);
   console.log(`  median first-lysis game time from run_start: ${median == null ? '—' : `${median} ms`} (n=${times.length} runs with both timestamps; denominator is not all starts)`);
 }
 
 console.log(`Run sequencing: order uses runTimeMs (equal times allowed), never receipt timestamps; runs with absent run_start=${runs.size - [...runs.values()].filter((run) => run.start != null).length}; incomplete/ambiguous milestone observations are unknown`);
-summarizeRuns([...runs.values()], '  All contextual runs');
+summarizeRuns([...runs.values()], '  All contextual runs (approach → lysis; second-cell step is first-run-only)', startToLysisChain, 'approach-to-lysis chain');
 const firstRunRuns = [...runs.values()].filter((run) => !run.firstRunUnknown && run.firstRuns.size === 1 && run.firstRuns.has(true));
 const returningRuns = [...runs.values()].filter((run) => !run.firstRunUnknown && run.firstRuns.size === 1 && run.firstRuns.has(false));
 const unknownRuns = [...runs.values()].filter((run) => run.firstRunUnknown || run.firstRuns.size !== 1);
 console.log(`First-run metadata subset: firstRun=true runs=${firstRunRuns.length}; firstRun=false runs=${returningRuns.length}; unknown/conflicting runs=${unknownRuns.length}`);
-summarizeRuns(firstRunRuns, '  First-run subset');
+summarizeRuns(firstRunRuns, '  Eligible first-run subset (four-step chain)', chain, 'four-step chain');
 
 for (const name of ['infection_interrupted', 'infection_resumed']) {
   const rowActors = actorsByEvent.get(name).size;
