@@ -885,6 +885,59 @@ async function bootGame(page) {
     );
     await resumeContext.close();
 
+    const retryContext = await browser.newContext({ viewport: { width: 390, height: 740 }, deviceScaleFactor: 1 });
+    await prepareContext(retryContext, 1);
+    const retryRequests = [];
+    await retryContext.route('**/api/event', async (route) => {
+      let submission;
+      try { submission = JSON.parse(route.request().postData() || '{}'); } catch {}
+      if (submission?.event === 'infection_resumed') retryRequests.push(submission);
+      await route.fulfill({
+        status: submission?.event === 'infection_resumed' && retryRequests.length === 1 ? 503 : 202,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: submission?.event !== 'infection_resumed' || retryRequests.length > 1 }),
+      });
+    });
+    const retryPage = await retryContext.newPage();
+    await bootGame(retryPage);
+    const rngBeforeRetry = await retryPage.evaluate(() => {
+      const gs = window.__game.scene.getScene('Game');
+      const originalDelayedCall = gs.time.delayedCall.bind(gs.time);
+      gs.time.delayedCall = (delay, callback, ...args) => {
+        if (delay === 900) {
+          window.__comprehensionRetryCallback = callback;
+          return { remove() {} };
+        }
+        return originalDelayedCall(delay, callback, ...args);
+      };
+      gs.runState.run.timeMs = 12345;
+      const rng = gs.gameplayRng.snapshot();
+      gs.trackComprehensionOnce('infection_resumed', { progress: 0.375 });
+      return rng;
+    });
+    await retryPage.waitForFunction(() => typeof window.__comprehensionRetryCallback === 'function',
+      null, { timeout: 10000 });
+    assert.equal(retryRequests.length, 1, 'the first occurrence was not delivered exactly once');
+    await retryPage.evaluate(() => {
+      const gs = window.__game.scene.getScene('Game');
+      gs.runState.run.timeMs = 98765;
+      window.__comprehensionRetryCallback();
+    });
+    await retryPage.waitForFunction(() =>
+      window.__game.scene.getScene('Game').comprehensionEventsSent.has('infection_resumed'),
+    null, { timeout: 10000 });
+    assert.equal(retryRequests.length, 2, 'one failed delivery did not produce exactly one retry');
+    assert.deepEqual(retryRequests[1].props, retryRequests[0].props,
+      'retry changed occurrence-time metadata or original domain props');
+    assert.equal(retryRequests[0].props.runTimeMs, 12345, 'event time was not captured at occurrence');
+    assert.equal(retryRequests[0].props.progress, 0.375, 'retry lost the original domain value');
+    assertRunTelemetry(retryRequests, false, 'delivery retry');
+    const rngAfterRetry = await retryPage.evaluate(() =>
+      window.__game.scene.getScene('Game').gameplayRng.snapshot()
+    );
+    assert.deepEqual(rngAfterRetry, rngBeforeRetry, 'telemetry delivery changed gameplay RNG streams');
+    await retryContext.close();
+
     await context.close();
     console.log(`gameplay comprehension browser smoke: ok (${VIEWPORTS.map(({ width, height }) => `${width}x${height}`).join(', ')})`);
   } finally {
