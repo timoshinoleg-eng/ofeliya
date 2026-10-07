@@ -204,3 +204,10 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - With root-authorized browser follow-up, actual Chromium Canvas startup available1335ms/missing1102ms/stalled2501ms/Android-UA stalled2673ms, all unchanged6000ms gate. Stalled modes each requested exactly7distinct assets, no retries; Android config default6 and Boot loader7 explicitly confirmed. Private extended copy of root startup test remains untracked for coordinator import.
 - Elite fixture now compares actual halfWidth/halfHeight to floor(sourceWorldRadiusX/Y), matching Phaser Body.setCircle/updateBounds; logical tolerance1.01, markers/signatures/centers unchanged. Actual elite script passed against own Vite server with only URL substituted in temporary copy. No physics production changes.
 - Typecheck, core16/16, nonbrowser startup-renderer, viewport/tokens/impact-budget and whitespace passed after fix. No push/merge/deploy. Root still owns full geometry/controls/matrix/scoped review and external device gates.
+
+## VO06 Menu/HUD follow-up — 07.10.2026
+- [x] Decorative Menu framing/halo and illuminated selector edges; HUD retained bar highlights/hairline implemented8d8d9cd.
+- [x] Worker typecheck/tokens/ui-copy/layout-diagnostics/language1584/viewport/Legendary-impact-VFX smoke/whitespace passed.
+- [ ] Coordinator integrate code/memory commits, frozen independent Task6 scoped review and any review fixes.
+- [ ] Coordinator actual portrait/compact menu/HUD/Legendary/modal-control browser acceptance, screenshots, retained-object/tween teardown. Worker did not run browser.
+- [ ] Task7 integrated acceptance/build/review/PR; real MAX Android/iOS16/16 and Telegram external gates remain open. No merge/deploy performed.

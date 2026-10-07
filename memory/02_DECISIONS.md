@@ -168,3 +168,9 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - With root-authorized browser follow-up, actual Chromium Canvas startup available1335ms/missing1102ms/stalled2501ms/Android-UA stalled2673ms, all unchanged6000ms gate. Stalled modes each requested exactly7distinct assets, no retries; Android config default6 and Boot loader7 explicitly confirmed. Private extended copy of root startup test remains untracked for coordinator import.
 - Elite fixture now compares actual halfWidth/halfHeight to floor(sourceWorldRadiusX/Y), matching Phaser Body.setCircle/updateBounds; logical tolerance1.01, markers/signatures/centers unchanged. Actual elite script passed against own Vite server with only URL substituted in temporary copy. No physics production changes.
 - Typecheck, core16/16, nonbrowser startup-renderer, viewport/tokens/impact-budget and whitespace passed after fix. No push/merge/deploy. Root still owns full geometry/controls/matrix/scoped review and external device gates.
+
+## VO06 restrained framing decisions — 07.10.2026
+- Reuse existing BORDER/PANEL/ROLE tokens without modifying frozen recipes. Specimen radius=min(82,H*.105) keeps circular decoration below title/copy; low-alpha warm plate and pink halo are behind hero, with fixed geometry and alpha-only animation.
+- Add panel illumination as static noninteractive hairlines inside existing selector bounds; preserve every text/touch callback and launch-once guard.
+- Draw highlights inside the retained XP/HP/boss Graphics (3px side inset,2px top inset,2px height), so existing hide/pulse/cinematic handling applies automatically. Leave fill/text updates immediate and geometry unchanged.
+- No new implementation-mirroring test for cosmetic decoration. Existing non-browser contracts establish unrelated token/copy/math stability; root actual Phaser acceptance must assess visible layout, teardown and pixel quality.

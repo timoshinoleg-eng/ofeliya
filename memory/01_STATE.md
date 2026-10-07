@@ -232,3 +232,9 @@ The next Linux run exposed that short-guard index 3 also wraps to three lines. M
 - With root-authorized browser follow-up, actual Chromium Canvas startup available1335ms/missing1102ms/stalled2501ms/Android-UA stalled2673ms, all unchanged6000ms gate. Stalled modes each requested exactly7distinct assets, no retries; Android config default6 and Boot loader7 explicitly confirmed. Private extended copy of root startup test remains untracked for coordinator import.
 - Elite fixture now compares actual halfWidth/halfHeight to floor(sourceWorldRadiusX/Y), matching Phaser Body.setCircle/updateBounds; logical tolerance1.01, markers/signatures/centers unchanged. Actual elite script passed against own Vite server with only URL substituted in temporary copy. No physics production changes.
 - Typecheck, core16/16, nonbrowser startup-renderer, viewport/tokens/impact-budget and whitespace passed after fix. No push/merge/deploy. Root still owns full geometry/controls/matrix/scoped review and external device gates.
+
+## VO06 Menu/HUD finish — 07.10.2026
+- Branch `visual/vo06-ui-20261007`, base20f3b48; decorative implementation8d8d9cd changes only MenuScene/UIScene.
+- Menu retains two specimen Graphics/one alpha tween and two static noninteractive selector edges behind existing text/hero/input. HUD90px plate gains a hairline; highlights reuse existing fill Graphics and inherit visibility/fades/pulses.
+- Existing health/RNA text/fill timing, launch-once guard, callbacks and input/text geometry remain unchanged. No package/token/gameplay changes.
+- Worker passed typecheck, tokens, ui-copy, layout-diagnostics, language1584, viewport, Legendary/impact/VFX smoke and whitespace. No browser evidence provided; coordinator owns browser and scoped review.
