@@ -182,3 +182,9 @@ The next Linux run exposed that short-guard index 3 also wraps to three lines. M
 - Local startup, viewport, control modes/CDP multitouch, layout diagnostics, typecheck, ordinary + QA builds, tokens, runtime-quality, challenge, language checks passed. Builds stamped base SHA, not new code HEAD. Full commands/intermediate failures/warnings in docs/visual-overhaul/VO01_VALIDATION.md.
 - Separate npm ci created ordinary local node_modules (Phaser 3.90.0), not a shared junction. npm/esbuild/git sandbox failures required approved escalation retries. No gate weakening or config/auth/route/skill changes.
 - Kimi invalid API key artifact excluded; independent review coordinator-owned and pending. Local work/ evidence, .vo01-npm-cache and failed Kimi artifact intentionally untracked. No full CI/device acceptance/publication.
+
+## VO01 Kimi fix round1 — 07.10.2026
+- c231d60ebcf5748b9a2a2d2c5bbf99ca39adaa5a addresses F1-F5, F6/F8/F10. Successful text-only Kimi review now committed as docs/visual-overhaul/VO01_KIMI_REVIEW.md; old invalid-key artifact overwritten. External credential recovery was coordinator work; no auth touched here.
+- Missing-scene runtime test observed null.cameras RED then GREEN. QA matrix 6/6, ordinary production static hook absence and runtime opacity, typecheck and builds passed. Actual commands/failures in VO01_VALIDATION.md. Builds stamped preceding 6204e33, not c231d60.
+- Nested test objects destroyed; progression freeze remains fixture-only. Visible handler dispatch is not hidden transition. RESIZE intrinsic=CSS assertions pin current baseline, no HiDPI enabled.
+- Original pipeline coordinator owns branch import/review/acceptance and broader plan. No additional workers, publication, configs/auth/routing changes; local cache/evidence excluded.
