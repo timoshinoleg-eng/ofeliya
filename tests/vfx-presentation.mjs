@@ -113,6 +113,95 @@ test('runtime reduction bounds existing and future decoration then shutdown canc
   f.vfx.destroy(); f.vfx.pickup(0, 0); f.vfx.legendary(0, 0);
   assert.equal(f.circles.filter(c => !c.dead).length, 0);
 });
+test('runtime reduction sheds ordinary circles before six mixed important effects', () => {
+  const f = fixture();
+  // Important effects are deliberately older than ordinary ones: blindly removing
+  // the first entries during reduction would lose the singularity response.
+  f.vfx.singularity(10, 20, 80);
+  const important = [...f.circles];
+  for (let i = 0; i < 6; i++) f.vfx.pickup(i, 0);
+  const ordinary = f.circles.slice(3);
+  f.vfx.legendary(30, 40);
+  important.push(...f.circles.slice(9));
+  f.vfx.kill(50, 60, COLORS.red, 'boss');
+  important.push(f.circles.at(-1));
+  assert.equal(f.circles.length, 12);
+  assert.equal(important.length, 6);
+  assert.equal(ordinary.length, 6);
+
+  f.vfx.setRuntimeQualityScale(.45);
+  assert.ok(ordinary.every(circle => circle.dead && !circle.visible));
+  assert.ok(important.every(circle => !circle.dead && circle.visible));
+  assert.equal(f.circles.filter(circle => !circle.dead).length, 6);
+  assert.ok(f.tweens.every(tween => !ordinary.includes(tween.targets)));
+  f.vfx.destroy();
+});
+test('preemption cancels old tween and stale completion cannot release its replacement', () => {
+  const f = fixture();
+  for (let i = 0; i < 9; i++) f.vfx.pickup(i, 0);
+  f.vfx.singularity(90, 80, 100);
+  const replaced = f.circles[0];
+  const oldTween = f.tweens.find(tween => tween.targets === replaced);
+  f.vfx.legendary(150, 160);
+  const currentTween = f.tweens.find(tween => tween.targets === replaced);
+  assert.ok(currentTween && currentTween !== oldTween);
+  assert.ok(!f.tweens.includes(oldTween));
+  assert.equal(replaced.x, 150);
+  assert.equal(replaced.y, 160);
+
+  // Inject a late callback even though cancellation removed its tween, checking
+  // our generation guard independently of the scene adapter's cancellation.
+  oldTween.onComplete();
+  assert.equal(replaced.visible, true);
+  assert.ok(f.tweens.includes(currentTween));
+  // Free four other entries so a new ordinary pickup is eligible. If the stale
+  // callback cleared active state, it would steal the still-visible replacement.
+  for (const tween of f.tweens.filter(tween => tween.targets !== replaced).slice(0, 4)) {
+    tween.onComplete();
+  }
+  f.vfx.pickup(7, 8);
+  assert.equal(replaced.x, 150);
+  assert.equal(replaced.y, 160);
+  assert.equal(replaced.visible, true);
+  currentTween.onComplete();
+  assert.equal(replaced.visible, false);
+  f.vfx.destroy();
+});
+test('far palette colors and a genuine nearest tie choose valid deterministic frames', () => {
+  const { combatParticleFrame } = load('src/game/StrainZeroTextures.ts');
+  const cases = [
+    [0x000000, 'spark-blood', 'chip-blood'],
+    [0xffffff, 'spark-white', 'chip-white'],
+    // RGB(242,246,244) has hand-checked squared distances 237 to both
+    // white(255,244,236) and immune(232,250,255); all others exceed 10,000.
+    // White occurs first in the public palette and wins this genuine tie.
+    [0xf2f6f4, 'spark-white', 'chip-white'],
+  ];
+  for (const [color, spark, chip] of cases) {
+    for (let i = 0; i < 10; i++) {
+      assert.equal(combatParticleFrame(color), spark);
+      assert.equal(combatParticleFrame(color, 'chip'), chip);
+    }
+  }
+});
+test('hit spray still spends particle tokens when the ordinary circle pool is saturated', () => {
+  const f = fixture();
+  for (let i = 0; i < 9; i++) f.vfx.pickup(i, 0);
+  const before = [...f.circles];
+  f.vfx.hit(100, 80, COLORS.red, { x: 1, y: 0 }, 20);
+  assert.deepEqual(f.circles, before);
+  assert.equal(f.circles.filter(circle => circle.visible).length, 9);
+  assert.equal(f.tweens.length, 9);
+  assert.equal(f.particles[1].emitted.length, 1);
+  assert.equal(f.particles[1].emitted[0].count, 3);
+  assert.equal(f.particles[1].emitted[0].frame, 'spark-red');
+  const total = () => f.particles.flatMap(p => p.emitted).reduce((sum, e) => sum + e.count, 0);
+  assert.equal(total(), 30); // Nine 3-particle pickups plus one 3-particle contact.
+  for (let i = 0; i < 80; i++) f.vfx.kill(0, 0, COLORS.cyan);
+  assert.equal(total(), 280); // The same sustained particle pool still preserves 70 tokens.
+  assert.deepEqual(f.circles, before);
+  f.vfx.destroy();
+});
 test('static reduced tier protects two slots and never exceeds six retained decorations', () => {
   const previous = { ...PERFORMANCE };
   Object.assign(PERFORMANCE, { tier: 'reduced', vfxScale: .58, combatParticleBudget: 150, burstParticleBudget: 220 });
