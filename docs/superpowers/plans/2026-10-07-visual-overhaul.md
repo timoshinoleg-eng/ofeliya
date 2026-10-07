@@ -67,12 +67,12 @@
 **Files:** `src/systems/Sfx.ts`, `src/systems/audioMixMath.ts`, focused audio graph/normalization tests, `ARCHITECTURE_NOTES.md`.
 **Interfaces:** Preserve all Sfx public calls. Pure normalization/trim math and optional readonly diagnostics expose no identity. Existing AdaptiveAudioDirector keeps deterministic bed and duck behavior.
 
-- [ ] Test silence/invalid peak handling, bounded normalization, gain composition, hidden context and late-load stop races.
-- [ ] Use per-bed trims [.47,.37,.71,1.14,2,.32,.5], master .8/music .65 starting values. Scan decoded samples once with trim min(12,.63/peak), silent trim1.
-- [ ] Role gains: shoot .12, hit .16, pickup .28, click .20, levelup .50, hurt .55, nova .48, elite .50, boss .60, gameover/victory .58. Preserve existing event throttles.
-- [ ] Add one master compressor (-8dB, knee6, ratio4, attack .003, release .12), distinct bed trim node, authoritative visibility suspension and safe diagnostics; preserve retry/cancellation/mute logic.
-- [ ] Run `test:audio`, new focused tests, `test:save`, `test:rng`, typecheck; root renders an actual-sample busy mix and checks finite/clipping bounds.
-- [ ] Commit code/docs and memory; scoped review before Task 5.
+- [x] Test silence/invalid peak handling, bounded normalization, gain composition, hidden context and late-load stop races.
+- [x] Use per-bed trims [.47,.37,.71,1.14,2,.32,.5], master .8/music .65 starting values. Scan decoded samples once with trim min(12,.63/peak), silent trim1.
+- [x] Role gains: shoot .12, hit .16, pickup .28, click .20, levelup .50, hurt .55, nova .48, elite .50, boss .60, gameover/victory .58. Preserve existing event throttles.
+- [x] Add one master compressor (-8dB, knee6, ratio4, attack .003, release .12), distinct bed trim node, authoritative visibility suspension and safe diagnostics; preserve retry/cancellation/mute logic.
+- [x] Run `test:audio`, new focused tests, `test:save`, `test:rng`, typecheck; root renders an actual-sample busy mix and checks finite/clipping bounds.
+- [x] Commit code/docs and memory; scoped review before Task 5.
 
 ### Task 5: Core art and animation
 
