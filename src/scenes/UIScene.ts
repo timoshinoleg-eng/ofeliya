@@ -12,7 +12,7 @@ import {
   type DuelChallengeSnapshot,
 } from '../game/Duel';
 import { COLORS, COMBO, FONT, JUICE, UI_FONT, UI_TEXT, fmtTime } from '../game/config';
-import { BUTTON, SCRIM } from '../ui/tokens';
+import { BORDER, BUTTON, ROLE, SCRIM } from '../ui/tokens';
 import { HUD } from '../ui/hudTokens';
 import { getEvolutionDef } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
@@ -192,6 +192,7 @@ export class UIScene extends Phaser.Scene {
 
     this.hudBackdrop = this.add
       .rectangle(W / 2, 50, W - 12, 90, 0x05070f, HUD.plateAlpha)
+      .setStrokeStyle(BORDER.hair, ROLE.faction.immune, 0.22)
       .setDepth(DEPTH - 2);
     this.xpBack = this.add.graphics().setDepth(DEPTH);
     this.xpFill = this.add.graphics().setDepth(DEPTH + 1);
@@ -375,6 +376,7 @@ export class UIScene extends Phaser.Scene {
       if (xf > 0) {
         this.xpFill.fillStyle(COLORS.magenta, 1);
         this.xpFill.fillRoundedRect(m.xpX, HUD.row.xpY, Math.max(m.xpW * xf, 10), HUD.row.xpH, 5);
+        this.drawBarHighlight(this.xpFill, m.xpX, HUD.row.xpY, Math.max(m.xpW * xf, 10));
       }
 
       this.timerText.setText(fmtTime(run.timeMs));
@@ -415,6 +417,7 @@ export class UIScene extends Phaser.Scene {
       if (hf > 0) {
         this.hpFill.fillStyle(hf > 0.35 ? COLORS.green : HUD.lowHp, 1);
         this.hpFill.fillRoundedRect(bx, HUD.row.hpY, Math.max(bw * hf, 10), HUD.row.hpH, 6);
+        this.drawBarHighlight(this.hpFill, bx, HUD.row.hpY, Math.max(bw * hf, 10));
       }
       this.hpText.setText(`${Math.ceil(Math.max(0, run.hp))} / ${run.maxHp}`);
 
@@ -443,6 +446,8 @@ export class UIScene extends Phaser.Scene {
           HUD.row.bossBarH,
           4
         );
+        this.drawBarHighlight(this.bossFill, m.bossX, HUD.row.bossBarY,
+          Math.max(m.bossW * Phaser.Math.Clamp(run.bossHp / run.bossMax, 0, 1), 8));
       }
     }
 
@@ -951,6 +956,13 @@ export class UIScene extends Phaser.Scene {
     }
     this.hideModal();
     if (this.scene.isPaused('Game')) this.scene.resume('Game');
+  }
+
+  // Reuse each retained fill Graphics so highlights inherit its visibility,
+  // RNA pulse and cinematic fades. Authoritative bar/text updates stay immediate.
+  private drawBarHighlight(fill: Phaser.GameObjects.Graphics, x: number, y: number, width: number): void {
+    fill.fillStyle(ROLE.faction.neutral, 0.32);
+    fill.fillRoundedRect(x + 3, y + 2, width - 6, 2, 1);
   }
 
   private setHudCinematicAlpha(alpha: number): void {
