@@ -9,6 +9,7 @@ fs.mkdirSync(OUTPUT,{recursive:true});
 (async()=>{
  const browser=await chromium.launch({executablePath,headless:true,args:['--no-sandbox','--enable-webgl','--use-angle=swiftshader']});
  const results=[];
+ try {
  for(const renderer of ['webgl','canvas']){
   const ctx=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true});
   await ctx.route('https://st.max.ru/**',route=>route.fulfill({status:200,contentType:'application/javascript',body:''}));
@@ -46,7 +47,7 @@ fs.mkdirSync(OUTPUT,{recursive:true});
   if(errors.length)throw Error(errors.join('\n'));
   results.push({renderer,rows});await ctx.close();
  }
- await browser.close();
+ } finally { await browser.close(); }
  const output=path.join(OUTPUT,'world-geometry.json');
  fs.writeFileSync(output,JSON.stringify(results,null,2)+'\n');
  {
