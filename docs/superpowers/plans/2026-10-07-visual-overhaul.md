@@ -43,24 +43,24 @@
 **Files:** `src/systems/VfxSystem.ts`, `src/game/StrainZeroTextures.ts`, presentation call sites in `src/scenes/GameScene.ts`, focused `tests/vfx-presentation.mjs` and/or existing impact smoke.
 **Interfaces:** Existing `hit(x,y,color)` and `kill(x,y,color,importance)` stay compatible; optional contact direction and victim radius can be added. Consumers continue existing VfxBudget and ImpactDirector policy.
 
-- [ ] Add a focused test for baked color frame selection, shared particle budget, decorative cap and teardown.
-- [ ] Capture RED, then add colored spark/chip atlas frames and short directed contact sprays; keep four retained emitters.
-- [ ] Bound rings/other decorative shapes, reserve high-priority feedback; improve ordinary hit visibility without screen shake spam.
-- [ ] Pass existing bullet direction and death radius without changing damage/knockback/event order. Do not enlarge projectile sources in this task.
-- [ ] Run `test:impact-budget`, `test:runtime-quality`, `test:telegraphs`, new contracts and `npx tsc --noEmit`; root runs browser acceptance.
-- [ ] Commit explicit files and separate four-file memory handoff; scoped independent review and fixes before Task 3.
+- [x] Add a focused test for baked color frame selection, shared particle budget, decorative cap and teardown.
+- [x] Capture RED, then add colored spark/chip atlas frames and short directed contact sprays; keep four retained emitters.
+- [x] Bound rings/other decorative shapes, reserve high-priority feedback; improve ordinary hit visibility without screen shake spam.
+- [x] Pass existing bullet direction and death radius without changing damage/knockback/event order. Do not enlarge projectile sources in this task.
+- [x] Run `test:impact-budget`, `test:runtime-quality`, `test:telegraphs`, new contracts and `npx tsc --noEmit`; root runs browser acceptance.
+- [x] Commit explicit files and separate four-file memory handoff; scoped independent review and fixes before Task 3.
 
 ### Task 3: Organ atmosphere
 
 **Files:** `src/systems/AtmosphereSystem.ts`, atmosphere textures only in `src/game/StrainZeroTextures.ts`, pure `src/systems/atmosphereMath.ts`, focused tests.
 **Interfaces:** Existing constructor, `setStage`, `update`, `resize`, runtime quality and destroy APIs stay compatible; pure heartbeat/decay helpers may be exported for testing.
 
-- [ ] Test separated Heart beat peaks, frame-rate-independent overlay decay and bounded retained objects.
-- [ ] Keep full14/4/24 and reduced8/2/12 pools. Assign RBC depth bands full8/4/2, reduced4/3/1 with deep/mid/near parallax and depth below gameplay.
-- [ ] Bake broad dark warm vessel flow and coherent oblique Heart fibres; use alpha-limited near cells. Preserve available bands during quality changes and Heart selection.
-- [ ] Replace transient atmosphere flash allocations with one retained overlay, depth -6, alpha ceiling .075; fix delayed second visual heartbeat without altering real heartbeat timing.
-- [ ] Run focused tests, `test:stages`, `test:runtime-quality`, typecheck; root compares dense WebGL/Canvas screenshots.
-- [ ] Commit code and memory; scoped review before Task 4.
+- [x] Test separated Heart beat peaks, frame-rate-independent overlay decay and bounded retained objects.
+- [x] Keep full14/4/24 and reduced8/2/12 pools. Assign RBC depth bands full8/4/2, reduced4/3/1 with deep/mid/near parallax and depth below gameplay.
+- [x] Bake broad dark warm vessel flow and coherent oblique Heart fibres; use alpha-limited near cells. Preserve available bands during quality changes and Heart selection.
+- [x] Replace transient atmosphere flash allocations with one retained overlay, depth -6, alpha ceiling .075; fix delayed second visual heartbeat without altering real heartbeat timing.
+- [x] Run focused tests, `test:stages`, `test:runtime-quality`, typecheck; root compares dense WebGL/Canvas screenshots.
+- [x] Commit code and memory; scoped review before Task 4.
 
 ### Task 4: Audible audio mix
 
