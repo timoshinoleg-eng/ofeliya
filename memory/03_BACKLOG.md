@@ -178,3 +178,12 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - [ ] Coordinator real Phaser WebGL/Canvas dense full/reduced screenshots, Heart valley/second peak, compact resize/stage reset/shutdown QA. Worker adapter tests are not raster/GPU evidence.
 - [ ] Coordinator integrates focused atmosphere command into final branch acceptance; no scoped npm/CI wiring added.
 - [ ] Task5 actor/host high-resolution backing compensation; host shadow source unchanged in Task3. Full final branch build/CI and real MAX Android/iOS/Telegram gates remain open.
+
+
+## VO04 audible mix follow-up — 07.10.2026
+- [x] Audible master/music/bed/SFX mix, normalization caching, compressor, authoritative visibility and immutable safe diagnostics in `5c53377`.
+- [x] Focused17/17 production TS math/graph lifecycle contracts; required audio/save/RNG+checkpoint/typecheck/whitespace checks passed.
+- [ ] Root integrate code/memory commits and run independent frozen Task4 diff review; worker remains available for scoped fixes.
+- [ ] Root actual seven-CC0-bed OfflineAudioContext busy sample rendering using production math; establish finite/clipping bounds and audibility evidence separately from boundary tests.
+- [ ] Root integration/Phaser QA and final task gates; scoped test command is `node tests/audio-mix.mjs` with no package/CI wiring changes.
+- [ ] Task5 high-resolution actor/host backing compensation; final build/CI and real MAX Android/iOS/Telegram external acceptance remain open. No deploy/merge performed.
