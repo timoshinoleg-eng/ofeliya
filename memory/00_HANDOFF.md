@@ -1,16 +1,17 @@
-# HANDOFF — VO01 Kimi fix round1, 07.10.2026
+# HANDOFF — VO02 combat presentation, 07.10.2026
 
-Branch: visual/vo-01-render-clarity-20261007.
-Original base d7797bc67bbda063d2fc3de68026101b0b061121; previous task HEAD 6204e3362908294dc32923d57b274b5ce2ee0c77.
-Fix1 code/tests/review-doc commit: c231d60ebcf5748b9a2a2d2c5bbf99ca39adaa5a.
+Branch: visual/vo02-combat-20261007. Base: a4d20d1e8a869789009668b00f11574d4fdeec9a.
+Code/tests: ddbe943 (full SHA available via git rev-parse). This worker executed Task2 only in its isolated worktree; no push, browser, delegation, merge or deployment.
 
-Successful independent Kimi frozen-diff review copied from ../vo01-kimi-review.md to docs/visual-overhaul/VO01_KIMI_REVIEW.md, replacing the invalid-key failure artifact. Source/copy SHA256 match 57543FBC305272CBCF564E534F50802F4AD2045A22C23CA3AC1E2232D2C89EF2. Kimi did not run tools/tests; review is text evidence only. No credential/auth operations performed in fix1.
+Four emitters use one baked 200x40/20-frame palette atlas; death chips/sparks split one VfxBudget grant. Optional contact direction/radius preserve existing hit/kill callers. Only the two GameScene presentation calls changed; bullet velocity is reused without changing damage/knockback/event order, death radius is presentation-only. All actor/projectile texture recipes and dimensions, Joystick, score/gameplay, ImpactDirector, VfxBudget and postFX policy remain unchanged.
 
-F1 missing-scene guard has focused actual Phaser runtime RED (null.cameras) then GREEN. F2 ordinary production static JS bundle assertion plus behavioral opacity pass; releaseMatrixQa is build-time import.meta.env.VITE_RELEASE_MATRIX_QA === '1', host is validated #game. F3 pre-start progression freeze/physics isolation deliberately retained throughout test context for dimensions/input only; nested Text/container cleaned up immediately. F4 scene pause/resume + already-visible visibility-handler dispatch, no hidden transition. F5 intrinsic assertions explicitly pin current Phaser3.90 RESIZE baseline, not real HiDPI. F6 constants annotated, F8 platform tmpdir, F10 existing startup completion marker instead of fixed wait.
+All VfxSystem Circle decorations use retained full12/reduced6 pool with ordinary reserve3/2 and important preemption. Runtime reduction trims; completed entries hide and reset on reuse; scene shutdown/explicit destroy cancel tweens and reclaim resources idempotently. Ordinary hits remain throttled, use directed surface sparks and a short local membrane ring, no new camera channel.
 
-Fix1 focused checks passed: missing-scenes GREEN, QA renderer WebGL/Canvas x DPR1/2/3 6/6, typecheck, QA and ordinary production builds, static/behavioral ordinary opacity, node syntax and diff whitespace. Exact commands/exits in docs/visual-overhaul/VO01_VALIDATION.md. Builds stamped pre-fix HEAD 6204e33, not fix commit SHA. Prior baseline tests belong to prior candidate, not rerun in fix1.
+Verification: node tests/vfx-presentation.mjs 8/8; npm run test:impact-budget; npm run test:runtime-quality; npm run test:telegraphs; npx tsc --noEmit; git diff --check all exit0. Initial six contract cases failed on expected missing behavior before production changes. The focused test uses production code at scene/Canvas-recipe boundaries with adapter objects and real EventEmitter3, not actual rasterization; no pixel/performance claim. There is no aggregate npm test script in this repository. Root owns broader suite/integrated final acceptance.
+
+Report: .superpowers/sdd/2026-10-07-visual-overhaul/task-2-report.md (local ignored orchestration artifact).
 
 ## Режим проверки
-Pipeline coordinator imports this branch and owns broader plan and acceptance. Validate fix1 c231d60 against Kimi F1-F5; answer подтверждено / опровергнуто / вопросы. No other agents launched. Kimi authentication blocker is historical and resolved externally; final candidate rereview/acceptance remains coordinator-owned.
+Root imports the commits and runs real Phaser impact and WebGL/Canvas100/150/200 x full/reduced browser matrix, inspecting screenshots/contact colors/readability and teardown. Root owns independent Kimi frozen diff review of the full Task2 range from a4d20d1. Answer подтверждено / опровергнуто / вопросы. Worker remains available for scoped fixes; no independent review is claimed here.
 
-Concerns unchanged: slow bridge CI fixture latency, real nonzero safe areas, hidden/OS/MAX resume, all modes x DPR, Linux full CI, actual devices and GPU/sharpness acceptance not covered. No resolution/gameplay/input/Canvas change; no config/skills/auth/routing change, push/merge/deploy. Local cache/work evidence untracked, no credentials/cache/evidence committed. Coordinator requested report ../vo01-fix1.md contains exact code and memory SHAs/tests/concerns.
+Unknown event colors select nearest RGB palette frame; exact listed palette colors keep their semantics. High-priority saturation replaces oldest feedback instead of allocating more circles. Full Linux branch CI/build and real MAX Android/iOS/Telegram acceptance remain open. No new npm script/CI wiring in scoped task; coordinator can call new focused test directly during final acceptance.

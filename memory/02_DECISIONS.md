@@ -121,3 +121,11 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - Preserve pre-start update freeze based on validated control-smoke lifecycle; narrow dimensions/input evidence, no progression/performance claim. Destroy nested Text/container before later samples.
 - Scene pause/resume plus already-visible handler dispatch only; no actual hidden transition acceptance. Intrinsic size expectations explicitly baseline-specific.
 - Successful Kimi text-only review supersedes failed invocation artifact; coordinator owns final acceptance.
+
+
+## VO02 combat decisions — 07.10.2026
+- Use baked palette atlas frames instead of tint or TextureSource.resolution compensation: Phaser3.90 Canvas particles ignore tint/resolution. Preserve all gameplay art/source dimensions for Task5.
+- Retain exactly four emitters; two death silhouettes split one existing VfxBudget grant rather than taking independent full requests. Nearest RGB palette preserves unlisted event colors approximately; known colors map exactly. Particle RNG remains Phaser cosmetic RNG, no gameplay RNG use.
+- Retain a lazy circle pool full12/reduced6, reserves3/2 for important feedback. Preemption cancels prior tweens, resets circle geometry/style/transforms and guards late completion by generation. If all slots are important, newest important feedback replaces oldest. Gameplay warning geometry lives outside VfxSystem and is unaffected.
+- Keep ordinary hit feedback local and globally throttled; surface spray and short contact ring improve legibility without camera shake. Do not alter hitStop/ImpactDirector policy.
+- Focused tests execute production TS modules with rendering-boundary adapters and real EventEmitter3; they establish calls/policy/recipes, not pixel parity or real-phone performance. Root-owned browser and Kimi review are still required.

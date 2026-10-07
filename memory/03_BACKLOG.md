@@ -153,3 +153,12 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - [x] F1-F5 and requested F6/F8/F10 addressed in c231d60ebcf5748b9a2a2d2c5bbf99ca39adaa5a; focused missing-scenes/QA matrix/production opacity/typecheck passed.
 - [ ] Coordinator rereview/accept fix1 and import branch into original pipeline; broader plan remains coordinator-owned.
 - [ ] Full Linux CI, slow bridge resize latency, real nonzero safe areas/hidden resume/devices/GPU remain unverified; do not promote local focused evidence to acceptance.
+
+
+## VO02 combat follow-up — 07.10.2026
+- [x] Baked Canvas/WebGL particle frame palette, single death budget grant, directed membrane hits and retained decoration pool implemented in `ddbe943`.
+- [x] Focused RED then GREEN8/8; impact budget/runtime quality/telegraphs/typecheck/whitespace checks passed locally.
+- [ ] Coordinator real Phaser impact/Canvas/WebGL visual matrix against VO02 candidate; inspect actual frame colors and contact readability under100/150/200 enemies.
+- [ ] Coordinator independent Kimi frozen task-range review (`a4d20d1..VO02_HEAD`), scoped fix/re-review before Task3.
+- [ ] Coordinator integrate `node tests/vfx-presentation.mjs` into final acceptance commands as appropriate; no new npm script/CI wiring was included in this scoped task.
+- [ ] Full branch CI/build and real MAX Android/iOS/Telegram gates remain pending; focused Node adapter checks are not pixel/performance acceptance.
