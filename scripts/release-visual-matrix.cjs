@@ -287,6 +287,8 @@ async function openCase(browser, spec) {
       }
       gs.tweens.pauseAll();
       gs.hostCells.update(1000, 0, 0);
+      // New sprites queue a depth sort; apply it before recording the actual draw order.
+      gs.children.depthSort();
     };
     window.__releaseMatrixInputs = () => ({
       cosmeticSeed: '4f46454c',
