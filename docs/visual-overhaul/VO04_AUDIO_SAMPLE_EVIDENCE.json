@@ -1,0 +1,157 @@
+{
+  "normalization": {
+    "shoot": 7.132164087103036,
+    "hit": 6.455323720207924,
+    "pickup": 7.390654777476243,
+    "levelup": 4.788651684375153,
+    "hurt": 4.602931028626225,
+    "click": 3.5372831350280065,
+    "nova": 6.40905792107181,
+    "elite": 6.082323191496662,
+    "boss": 6.667762907986364,
+    "gameover": 2.593414464695319,
+    "victory": 3.910294789496456
+  },
+  "rows": [
+    {
+      "index": 0,
+      "bed": "loop0.ogg",
+      "revised": false,
+      "trim": 1,
+      "peak": 0.2295999974012375,
+      "rms": 0.05563194345293985,
+      "clippedSamples": 0,
+      "sampleCount": 576000
+    },
+    {
+      "index": 0,
+      "bed": "loop0.ogg",
+      "revised": true,
+      "trim": 0.4699999988079071,
+      "peak": 0.8280478715896606,
+      "rms": 0.2116588466327109,
+      "clippedSamples": 0,
+      "sampleCount": 576000
+    },
+    {
+      "index": 1,
+      "bed": "loop1.ogg",
+      "revised": false,
+      "trim": 1,
+      "peak": 0.2653301954269409,
+      "rms": 0.05330060197052578,
+      "clippedSamples": 0,
+      "sampleCount": 576000
+    },
+    {
+      "index": 1,
+      "bed": "loop1.ogg",
+      "revised": true,
+      "trim": 0.3700000047683716,
+      "peak": 0.8392760753631592,
+      "rms": 0.20335548550662474,
+      "clippedSamples": 0,
+      "sampleCount": 576000
+    },
+    {
+      "index": 2,
+      "bed": "loop2.ogg",
+      "revised": false,
+      "trim": 1,
+      "peak": 0.21181254088878632,
+      "rms": 0.03778045195857186,
+      "clippedSamples": 0,
+      "sampleCount": 576000
+    },
+    {
+      "index": 2,
+      "bed": "loop2.ogg",
+      "revised": true,
+      "trim": 0.7099999785423279,
+      "peak": 0.8270172476768494,
+      "rms": 0.20480401914958427,
+      "clippedSamples": 0,
+      "sampleCount": 576000
+    },
+    {
+      "index": 3,
+      "bed": "loop3.mp3",
+      "revised": false,
+      "trim": 1,
+      "peak": 0.18747788667678833,
+      "rms": 0.035637519970736796,
+      "clippedSamples": 0,
+      "sampleCount": 576000
+    },
+    {
+      "index": 3,
+      "bed": "loop3.mp3",
+      "revised": true,
+      "trim": 1.1399999856948853,
+      "peak": 0.80809485912323,
+      "rms": 0.21586707529619653,
+      "clippedSamples": 0,
+      "sampleCount": 576000
+    },
+    {
+      "index": 4,
+      "bed": "loop4.mp3",
+      "revised": false,
+      "trim": 1,
+      "peak": 0.16620559990406036,
+      "rms": 0.028070599245608154,
+      "clippedSamples": 0,
+      "sampleCount": 576000
+    },
+    {
+      "index": 4,
+      "bed": "loop4.mp3",
+      "revised": true,
+      "trim": 2,
+      "peak": 0.8208151459693909,
+      "rms": 0.19626906971134878,
+      "clippedSamples": 0,
+      "sampleCount": 576000
+    },
+    {
+      "index": 5,
+      "bed": "loop5.mp3",
+      "revised": false,
+      "trim": 1,
+      "peak": 0.27769944071769714,
+      "rms": 0.06894143392362652,
+      "clippedSamples": 0,
+      "sampleCount": 576000
+    },
+    {
+      "index": 5,
+      "bed": "loop5.mp3",
+      "revised": true,
+      "trim": 0.3199999928474426,
+      "peak": 0.8361558318138123,
+      "rms": 0.2086601387925128,
+      "clippedSamples": 0,
+      "sampleCount": 576000
+    },
+    {
+      "index": 6,
+      "bed": "loop6.mp3",
+      "revised": false,
+      "trim": 1,
+      "peak": 0.20004414021968842,
+      "rms": 0.04254389607042455,
+      "clippedSamples": 0,
+      "sampleCount": 576000
+    },
+    {
+      "index": 6,
+      "bed": "loop6.mp3",
+      "revised": true,
+      "trim": 0.5,
+      "peak": 0.8464943766593933,
+      "rms": 0.203880217906412,
+      "clippedSamples": 0,
+      "sampleCount": 576000
+    }
+  ]
+}
