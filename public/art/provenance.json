@@ -1,0 +1,56 @@
+{
+  "date": "2026-10-07",
+  "origin": "OpenAI image generation, project-directed original game art",
+  "derivative": "bounded WebP, transparent padding, quality90 alpha100",
+  "assets": [
+    {
+      "key": "virus-player",
+      "file": "virus-player.webp",
+      "size": 256,
+      "source": "exec-d6d11253-adb6-45ae-8c42-5cf67d316243.png",
+      "sha256": "ce52b9750ae3a1087e5f3879c6e91a1bfbde2a9f66f56013410229c61051ede0"
+    },
+    {
+      "key": "immune-antibody",
+      "file": "immune-antibody.webp",
+      "size": 256,
+      "source": "exec-07adc96b-b5f4-4a70-8e4b-04453d09a94c.png",
+      "sha256": "38515abf3372b154ae04ec0ad24bd98bcd24a22ee4da69ebcb0bf4854145d800"
+    },
+    {
+      "key": "immune-tcell",
+      "file": "immune-tcell.webp",
+      "size": 256,
+      "source": "exec-ab9c272e-5ac1-4171-a2e5-621226ef318f.png",
+      "sha256": "b42c2cc02dedf9c03ba892f29ecd4614f1c9fd695ab743eee12295e69b79c8ba"
+    },
+    {
+      "key": "immune-macrophage",
+      "file": "immune-macrophage.webp",
+      "size": 256,
+      "source": "exec-bf5c9577-6b42-4105-a4cf-4626b383ef40.png",
+      "sha256": "a7b694a6d45744a07a033e6476753726f70d05e453946566315e088a80b396ed"
+    },
+    {
+      "key": "immune-prime",
+      "file": "immune-prime.webp",
+      "size": 384,
+      "source": "exec-629a059c-845c-4a81-92fc-e6f4a9d46096.png",
+      "sha256": "d2891294350c477777e81b4263c744ab89d7ab40059fe5e4ebd9ecb700ad3cdb"
+    },
+    {
+      "key": "cardiac-titan",
+      "file": "cardiac-titan.webp",
+      "size": 384,
+      "source": "exec-c15a55ae-0e93-4641-99f0-30ab6cebda8b.png",
+      "sha256": "2a9d8cb25b881624305eba0f97a66d2ab6abd46750ef0a20f5a0515ec044c869"
+    },
+    {
+      "key": "host-cell-shadow",
+      "file": "host-cell-shadow.webp",
+      "size": 384,
+      "source": "exec-98aa99e4-a58f-4d4b-aa61-b1aee408cc72.png",
+      "sha256": "ec4d3a2e1f35772665faf18106377d321fd1795d8552098668192b0200db4c8f"
+    }
+  ]
+}

@@ -76,10 +76,11 @@
 
 ### Task 5: Core art and animation
 
-**Files:** `public/art/`, `src/scenes/BootScene.ts`, `src/game/StrainZeroTextures.ts`, `src/game/Player.ts`, `src/game/Enemy.ts`, existing hero scale call sites in Menu/Game, `src/game/ArtMetrics.ts` if useful, geometry tests, `THIRD_PARTY_NOTICES.md`.
+**Files:** `public/art/`, `src/scenes/BootScene.ts`, `src/game/StrainZeroTextures.ts`, `src/game/Player.ts`, `src/game/Enemy.ts`, host image scale consumers in `src/systems/HostCellSystem.ts` and `src/systems/AtmosphereSystem.ts`, existing hero scale call sites in Menu/Game, `src/game/ArtMetrics.ts` if useful, geometry tests, `THIRD_PARTY_NOTICES.md`.
 **Interfaces:** Preserve canonical gameplay texture keys. Load under distinct raw keys, bake bounded highres backing, remove raw GPU textures after use; fallback is procedural. One central logical-size/factor mapping owns compensation.
 
-- [ ] Record source-to-asset provenance and package transparent generated hero/antibody plus available core immune artwork in bounded derivatives.
+- [x] Record source-to-asset provenance and package seven transparent generated assets: hero, antibody, T-killer, macrophage, two bosses and healthy host cell. Files total approximately247KB before HTTP compression; integration follows below.
+- [ ] Preserve logical dimensions for all seven canonical keys, including non-square T-killer44x40. Compensate host images in ambient and interactive pools, preserving infection overlays/rings/manual interaction radius and checkpoint restoration. Do not change projectile or RNA source dimensions.
 - [ ] Test actual display/body bounds and centers across hero breathing, ordinary/elite enemies, role recycling and organ reset; do not merely assert raw body.radius.
 - [ ] Add preload raw keys/per-key texture guards; highres bake with scale/circle-offset compensation at every affected consumer. No unsafe TextureSource.resolution shortcut.
 - [ ] Keep mutation/elite/boss telegraphs and timings. Improve membranes and restrained highlights; add only cosmetic animation that does not change body transforms.
