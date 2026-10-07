@@ -162,3 +162,10 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - [ ] Coordinator independent Kimi frozen task-range review (`a4d20d1..VO02_HEAD`), scoped fix/re-review before Task3.
 - [ ] Coordinator integrate `node tests/vfx-presentation.mjs` into final acceptance commands as appropriate; no new npm script/CI wiring was included in this scoped task.
 - [ ] Full branch CI/build and real MAX Android/iOS/Telegram gates remain pending; focused Node adapter checks are not pixel/performance acceptance.
+
+
+## VO02 Kimi fix1 backlog — 07.10.2026
+- [x] Coordinator reported scoped Kimi code PASS/no Critical; all four Important nonblocking test gaps addressed in 04f56f7.
+- [x] Focused 12/12 and four meaningful mutation checks; required typecheck/impact/runtime/telegraph checks passed.
+- [ ] Coordinator import test+memory commits and rereview/accept the four coverage fixes. Existing production behavior is unchanged; earlier full task browser evidence need not be represented as a worker run.
+- [ ] Root real Phaser matrix/impact acceptance and full final branch gates remain coordinator-owned; real MAX Android/iOS/Telegram external gates remain open.

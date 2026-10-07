@@ -129,3 +129,10 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - Retain a lazy circle pool full12/reduced6, reserves3/2 for important feedback. Preemption cancels prior tweens, resets circle geometry/style/transforms and guards late completion by generation. If all slots are important, newest important feedback replaces oldest. Gameplay warning geometry lives outside VfxSystem and is unaffected.
 - Keep ordinary hit feedback local and globally throttled; surface spray and short contact ring improve legibility without camera shake. Do not alter hitStop/ImpactDirector policy.
 - Focused tests execute production TS modules with rendering-boundary adapters and real EventEmitter3; they establish calls/policy/recipes, not pixel parity or real-phone performance. Root-owned browser and Kimi review are still required.
+
+
+## VO02 Kimi fix1 coverage decisions — 07.10.2026
+- Resolve reviewer test gaps with boundary tests, no speculative production rewrite. Existing sort `Number(false)-Number(true)` correctly puts ordinary entries before important; Q2 interpretation does not warrant changing it.
+- Exercise a stale callback despite cancellation, then permit new ordinary traffic to prove replacement remains active through public allocation behavior. Assert current completion releases visibility normally.
+- Tie fixture is literal RGB(242,246,244): hand-checked squared distances 237 to white/immune, all other palette distances > 10,000. Expect white as first declaration-order tie winner, with both spark/chip frames; no duplicate nearest-color loop in tests.
+- Mutation verification modifies production source strings only in the temporary loader memory, never tracked source: wrong shedding, absent serial guard, <= tie update and disabled ordinary cap each fail the corresponding new case. Regression additions passed existing code; do not describe their mutation RED as preimplementation feature RED.
