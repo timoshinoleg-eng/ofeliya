@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { renderSnapshot } from './systems/RenderSnapshot';
 import { ViewportManager } from './platform/ViewportManager';
 import { BootScene } from './scenes/BootScene';
 import { MenuScene } from './scenes/MenuScene';
@@ -16,6 +17,7 @@ declare global {
   interface Window {
     __game?: Phaser.Game;
     __viewportManager?: ViewportManager;
+    __renderSnapshot?: () => ReturnType<typeof renderSnapshot>;
   }
 }
 
@@ -347,6 +349,7 @@ async function boot(): Promise<void> {
   if (import.meta.env.DEV || releaseMatrixQa) {
     window.__game = game;
     window.__viewportManager = viewport;
+    window.__renderSnapshot = () => renderSnapshot(game, host);
   }
 
   if (
