@@ -9,6 +9,7 @@ export function renderSnapshot(game: Phaser.Game, host: HTMLElement) {
   const gl = renderer instanceof Phaser.Renderer.WebGL.WebGLRenderer ? renderer.gl : null;
   const scenes = ['Menu', 'Game', 'UI'].map((key) => {
     const scene = game.scene.getScene(key);
+    if (!scene) return { key, active: false, paused: false, camera: null, texts: [] };
     const camera = scene.cameras?.main;
     const texts: Array<{
       bounds: ReturnType<typeof bounds>; resolution: number;

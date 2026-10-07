@@ -77,7 +77,66 @@ Text может иметь style resolution 2 и source resolution 1, internal c
 пять snapshot фаз на набор). Они не коммитятся; PNG — финальный fixture, не paired
 before/after benchmark и не подтверждение sharpness. npm cache также не коммитится.
 
-Kimi review **blocked**: `VO01_KIMI_REVIEW.md` — failed invocation invalid API key,
-не ревью/доказательство и исключён из коммита. Independent review у координатора.
+На первом этапе Kimi review был **blocked**: прежний `VO01_KIMI_REVIEW.md` содержал
+failed invocation invalid API key и был исключён из коммита. В fix1 он заменён
+успешным независимым текстовым review (см. ниже). Independent acceptance у координатора.
 Полный CI, Linux browser matrix, реальные MAX Android/iOS/Telegram, GPU performance,
 release env и deploy/public release parity не проверены. Push/merge/deploy не выполнялись.
+
+## Kimi fix round1
+
+Источник: внешний `../vo01-kimi-review.md`, точная копия сохранена в
+`VO01_KIMI_REVIEW.md` взамен failed artifact. Это независимое ревью frozen diff:
+Kimi не запускал tools/tests и не инспектировал checkout; не считать его runtime evidence.
+
+- F1: guard перед доступом к отсутствующей сцене возвращает пустой record
+  `{ key, active:false, paused:false, camera:null, texts:[] }`. Focused browser test
+  удаляет UI/Game/Menu из реального Phaser SceneManager. До fix — exit 1 с
+  `Cannot read properties of null (reading 'cameras')`; после — GREEN.
+- F2 / Q1: `releaseMatrixQa` определён в `src/main.ts` как build-time
+  `import.meta.env.VITE_RELEASE_MATRIX_QA === '1'`; gate — `import.meta.env.DEV || releaseMatrixQa`.
+  Vite заменяет env при build. Ordinary production здесь означает PROD build без QA=1;
+  QA production — отдельная тестовая сборка с QA=1, не обычный release.
+  Opacity test теперь сначала проверяет отсутствие строки `__renderSnapshot` во всех
+  `dist/assets/*.js`, затем проверяет отсутствие трёх hooks в браузере с debug=1.
+- Q2: `host` — результат `document.getElementById('game')` в boot(); отсутствие host
+  вызывает явную ошибку до Phaser создания. Тот же host передан ViewportManager/Phaser parent.
+- F3: pre-start update freeze и physics pause оставлены только в тестовом QA context
+  для dimensions/input assertions. Это валидный вывод прежнего control-smoke расследования:
+  Phaser захватывает update до CREATE, восстановление live progression разрушило бы
+  fixture isolation. Nested container и Text уничтожаются в finally сразу после assertion;
+  subsequent snapshots не содержат этого тестового текста. Live gameplay/performance не проверяются.
+- F4: resume — настоящий scene.pause/scene.resume плюс synthetic dispatch visibilitychange
+  при уже visible document (теперь asserted). Это visible-handler smoke; hidden transition,
+  OS background/foreground и настоящий MAX resume не покрыты.
+- F5: intrinsic=CSS assertion снабжён комментарием, что фиксирует текущий Phaser 3.90
+  RESIZE baseline; будущий framebuffer HiDPI дизайн должен осознанно изменить тест.
+- F6: numeric renderer constants документированы (Phaser 3.90 CANVAS=1, WEBGL=2).
+- F8: default artifacts — platform `os.tmpdir()/browser-smoke`, env override сохранён.
+- F10: opacity readiness использует существующий sessionStorage startup completed marker
+  после Menu visible и rendered frames вместо фиксированного timeout.
+
+Остаточные concerns: Q4 slow bridge/CI latency не моделируется (resize fixture immediate);
+F7 nonzero device safe-area не покрыта; Windows browser install остаётся prerequisite.
+Полного CI, hidden transitions, всех modes×DPR, реального HiDPI, MAX/device performance
+или окончательной acceptance этот fix не доказывает. Координатор импортирует ветку и ведёт общий план.
+
+### Fix1 actual evidence
+
+| Команда (PowerShell env перед запуском) | Exit / результат |
+|---|---|
+| `npm run preview -- --host 127.0.0.1 --port 4173 --strictPort` | server ready; завершён после проверок |
+| `node tests/render-snapshot-missing-scenes.mjs` до guard, прежний QA build | 1, ожидаемый null.cameras RED |
+| `node node_modules/typescript/bin/tsc --noEmit` | 0, два запуска |
+| `VITE_RELEASE_MATRIX_QA=1 VITE_RELEASE_SHA=6204e3362908294dc32923d57b274b5ce2ee0c77 npm run build` | 0 |
+| `node tests/render-snapshot-missing-scenes.mjs` после QA rebuild | 0, missing-scene GREEN |
+| `OFELIYA_URL=http://127.0.0.1:4173/ OFELIYA_ARTIFACTS=work/vo01-fix1-qa node scripts/renderer-smoke.cjs` | 0, QA matrix 6/6 |
+| `VITE_RELEASE_MATRIX_QA=0 VITE_RELEASE_SHA=6204e3362908294dc32923d57b274b5ce2ee0c77 npm run build` | 0, ordinary production |
+| `node tests/render-snapshot-opacity.mjs` | 0: hook string отсутствует во всех JS chunks; hooks undefined после deterministic startup completion |
+| `node --check scripts/renderer-smoke.cjs`, `node --check tests/render-snapshot-opacity.mjs`, `node --check tests/render-snapshot-missing-scenes.mjs`, `git diff --check` | каждый 0 |
+| `Copy-Item ../vo01-kimi-review.md docs/visual-overhaul/VO01_KIMI_REVIEW.md`, `Get-FileHash` двух файлов | 0; одинаковый SHA256 57543FBC305272CBCF564E534F50802F4AD2045A22C23CA3AC1E2232D2C89EF2 |
+
+Build warnings остались прежними (runtime-config script, Chakra Petch unresolved references).
+Browser/build и Git metadata используют approved escalation, как в первом этапе.
+Новых auth/config/routing операций не было; dependency install не повторялся.
+Сборки stamped pre-fix HEAD 6204e33, не новый fix code SHA. Артефакты остаются локальными.
