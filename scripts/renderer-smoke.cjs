@@ -1,5 +1,7 @@
 const fs = require('fs');
 const assert = require('node:assert/strict');
+const { tmpdir } = require('node:os');
+const { join } = require('node:path');
 const { chromium } = require('playwright-core');
 
 const chrome = ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(fs.existsSync);
@@ -54,6 +56,8 @@ async function openRenderer(browser, renderer, dpr) {
     });
     assert.equal(snapshot.dpr, dpr);
     const { width, height } = snapshot.host;
+    // Pins Phaser 3.90 RESIZE's current intrinsic=CSS baseline, not real HiDPI.
+    // A future framebuffer-density design must deliberately revise this expectation.
     assert.deepEqual(snapshot.canvas.intrinsic, { width, height });
     assert.equal(snapshot.canvas.bounds.width, width);
     assert.equal(snapshot.canvas.bounds.height, height);
@@ -112,6 +116,7 @@ async function openRenderer(browser, renderer, dpr) {
   });
 
   if (renderer === 'webgl') {
+    // Phaser 3.90 constants: WEBGL=2, CANVAS=1; constructor names are minified.
     if (state.rendererType !== 2) {
       throw new Error(`WebGL path did not boot WebGL: ${JSON.stringify(state)}`);
     }
@@ -131,6 +136,9 @@ async function openRenderer(browser, renderer, dpr) {
 
   await page.evaluate(() => {
     const game = window.__game;
+    // Fixture-only: retain progression freeze for this entire QA context. Phaser captures
+    // update before CREATE; restoring it later would invalidate the control-smoke isolation.
+    // Game/resize/resume samples certify dimensions/input only, not live progression.
     game.scene.getScene('Game').update = () => {};
     game.scene.getScene('Menu').scene.start('Game');
   });
@@ -142,9 +150,13 @@ async function openRenderer(browser, renderer, dpr) {
     const scene = game.scene.getScene('Game');
     scene.physics.pause(); // isolate camera/input checks from live collision shake
     const text = scene.add.text(10, 10, 'QA nested').setResolution(2);
-    scene.children.sendToBack(scene.add.container(0, 0, [text]));
-    const nested = window.__renderSnapshot().scenes.find((s) => s.key === 'Game').texts[0];
-    if (!nested || nested.resolution !== (game.renderer.type === 1 ? 1 : 2)) throw new Error('nested Text Canvas guard sample missing');
+    const container = scene.add.container(0, 0, [text]);
+    scene.children.sendToBack(container);
+    try {
+      const nested = window.__renderSnapshot().scenes.find((s) => s.key === 'Game').texts[0];
+      // Phaser 3.90 CANVAS=1; WebGL text retains the requested resolution=2.
+      if (!nested || nested.resolution !== (game.renderer.type === 1 ? 1 : 2)) throw new Error('nested Text Canvas guard sample missing');
+    } finally { container.destroy(); text.destroy(); }
   });
   await sample('game');
   for (const viewport of [{ width: 320, height: 568 }, { width: 412, height: 915 }]) {
@@ -157,13 +169,15 @@ async function openRenderer(browser, renderer, dpr) {
   await page.evaluate(() => {
     window.__game.scene.pause('Game');
     window.__game.scene.resume('Game');
+    // Already-visible handler dispatch; does not emulate hidden -> visible or OS resume.
+    if (document.visibilityState !== 'visible') throw new Error('visible handler fixture required');
     document.dispatchEvent(new Event('visibilitychange'));
   });
   await sleep(250);
   await sample('resume');
   if (errors.length) throw new Error(`${renderer} page errors: ${errors.join(' | ')}`);
 
-  const artifacts = process.env.OFELIYA_ARTIFACTS || '/tmp/browser-smoke';
+  const artifacts = process.env.OFELIYA_ARTIFACTS || join(tmpdir(), 'browser-smoke');
   fs.mkdirSync(artifacts, { recursive: true });
   fs.writeFileSync(`${artifacts}/render-${renderer}-dpr${dpr}.json`, JSON.stringify(samples, null, 2));
   await page.locator('#game').screenshot({
