@@ -43,3 +43,5 @@ Focused tests are wired into CI; ordinary production opacity remains a separatel
 ## Final matrix recovery
 
 Cloud Chromium153/SwiftShader produced partial captures but twice hit the existing30s locator screenshot stability wait; no thresholds were changed. HONOR ran final integrated7f4cb4f in the native configured Chromium with only the Unix executable path replaced in an untracked temporary driver copy. The missing pngjs test dependency was installed in a separate tooling directory, not the project manifest. All12captures and metric comparisons passed. Numerical evidence is retained in FINAL_MATRIX_EVIDENCE_20261007.json. Root inspected final native Canvas/full200 capture and final compact menu; this establishes controlled raster/density parity, not mobile gameplay performance.
+
+Publication branch: `visual/recovered-overhaul-20261007`. Updating the older remote `visual/overhaul-20261007` was rejected as non-fast-forward; it was left intact. A fresh recovery branch carries the tested final tree and evidence without overwriting that history.

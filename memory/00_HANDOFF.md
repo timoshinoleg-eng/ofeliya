@@ -1,6 +1,6 @@
 # HANDOFF — recovered visual overhaul, 7 October 2026
 
-Branch `visual/overhaul-20261007`, original base main `d7797bc67bbda063d2fc3de68026101b0b061121`. Work recovered from saved commits after local Codex usage-limit interruption. Tasks1–6 implemented, independent reviewPASS; final runtime evidence and PR recorded in `docs/visual-overhaul/VALIDATION_20261007.md` and `PROGRESS_20261007.md`. These supersede isolated worker handoffs.
+Published recovery branch `visual/recovered-overhaul-20261007` (local integration history was `visual/overhaul-20261007`), original base main `d7797bc67bbda063d2fc3de68026101b0b061121`. Work recovered from saved commits after local Codex usage-limit interruption. Tasks1–6 implemented, independent reviewPASS; final runtime evidence and PR recorded in `docs/visual-overhaul/VALIDATION_20261007.md` and `PROGRESS_20261007.md`. These supersede isolated worker handoffs.
 
 Combat colored atlases and directed contact effects remain budgeted; organ atmosphere retains its pools and one delayed pulse overlay; audio uses cached decoded normalization, seven-bed trims and one compressor with authoritative visibility/mute/stop guards. Seven generated core assets use bounded4x backing with explicit scale/body compensation. Optional art retries0, per-file1800ms timeout and at least7parallel downloads keep fallback bounded. Menu/HUD additions are retained noninteractive decoration. Joystick/platform/score/gameplay contracts untouched.
 
