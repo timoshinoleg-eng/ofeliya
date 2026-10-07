@@ -3,6 +3,36 @@ import { COLORS } from './config';
 
 type Ctx = CanvasRenderingContext2D;
 
+/** Baked palette gives Canvas the same event colors as WebGL, without particle tint. */
+export const COMBAT_PARTICLE_PALETTE = {
+  white: COLORS.white,
+  cyan: COLORS.cyan,
+  green: COLORS.green,
+  magenta: COLORS.magenta,
+  gold: COLORS.gold,
+  red: COLORS.red,
+  purple: COLORS.purple,
+  orange: COLORS.orange,
+  blood: COLORS.blood,
+  immune: COLORS.immune,
+} as const;
+
+export function combatParticleFrame(color: number, kind: 'spark' | 'chip' = 'spark'): string {
+  let nearest = 'white';
+  let distance = Infinity;
+  for (const [name, candidate] of Object.entries(COMBAT_PARTICLE_PALETTE)) {
+    const dr = ((color >> 16) & 255) - ((candidate >> 16) & 255);
+    const dg = ((color >> 8) & 255) - ((candidate >> 8) & 255);
+    const db = (color & 255) - (candidate & 255);
+    const score = dr * dr + dg * dg + db * db;
+    if (score < distance) {
+      distance = score;
+      nearest = name;
+    }
+  }
+  return `${kind}-${nearest}`;
+}
+
 /**
  * STRAIN ZERO visual language v2.
  *
@@ -511,6 +541,40 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, 14, 14);
   });
+
+  // One small atlas, two silhouettes per palette entry. Frame dimensions are source pixels;
+  // the Canvas particle renderer does not compensate TextureSource.resolution.
+  const palette = Object.entries(COMBAT_PARTICLE_PALETTE);
+  const cell = 20;
+  const atlas = scene.textures.createCanvas('combat-particles', cell * palette.length, cell * 2);
+  if (atlas) {
+    const ctx = atlas.getContext();
+    ctx.clearRect(0, 0, cell * palette.length, cell * 2);
+    palette.forEach(([name, color], i) => {
+      const hex = `#${color.toString(16).padStart(6, '0')}`;
+      const x = i * cell;
+      const glow = ctx.createRadialGradient(x + 10, 10, 0, x + 10, 10, 7);
+      glow.addColorStop(0, '#fff4ec');
+      glow.addColorStop(0.24, hex);
+      glow.addColorStop(0.6, rgba(hex, 0.65));
+      glow.addColorStop(1, rgba(hex, 0));
+      ctx.fillStyle = glow;
+      ctx.fillRect(x, 0, cell, cell);
+      ctx.strokeStyle = hex;
+      ctx.lineCap = 'round';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(x + 3, 33);
+      ctx.quadraticCurveTo(x + 9, 24, x + 17, 30);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,244,236,0.8)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+      atlas.add(`spark-${name}`, 0, x, 0, cell, cell);
+      atlas.add(`chip-${name}`, 0, x, cell, cell, cell);
+    });
+    atlas.refresh();
+  }
 
   // Critical mutation emblems are generated even before the UI adopts them; this keeps the art
   // contract explicit and lets menus/results use the same symbols later.

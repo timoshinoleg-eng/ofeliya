@@ -746,7 +746,9 @@ export class GameScene extends Phaser.Scene {
       boss: e.isBoss,
     });
     this.captureAchievements(false, true);
-    this.vfx.kill(e.x, e.y, e.color, e.isBoss ? 'boss' : e.isElite ? 'elite' : 'normal');
+    this.vfx.kill(
+      e.x, e.y, e.color, e.isBoss ? 'boss' : e.isElite ? 'elite' : 'normal', undefined, e.radius
+    );
     if (e.isElite && e.eliteModifier === 'volatile') this.triggerVolatileElite(e);
     if (e.isElite || e.isBoss) {
       const decision = this.impact.request(
@@ -2274,7 +2276,9 @@ export class GameScene extends Phaser.Scene {
       damage *= 1.35;
     }
     const rhythmBurst = this.consumeMyocardialRhythm();
-    this.vfx.hit(e.x, e.y, b.prism ? COLORS.gold : e.color);
+    this.vfx.hit(
+      e.x, e.y, b.prism ? COLORS.gold : e.color, { x: bv.x / vm, y: bv.y / vm }, e.radius
+    );
     const dealtDamage = e.takeDamage(damage, (bv.x / vm) * 130, (bv.y / vm) * 130);
     Sfx.play('hit');
     this.showDamage(e.x, e.y, dealtDamage);
