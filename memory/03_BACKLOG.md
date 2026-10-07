@@ -211,3 +211,7 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - [ ] Coordinator integrate code/memory commits, frozen independent Task6 scoped review and any review fixes.
 - [ ] Coordinator actual portrait/compact menu/HUD/Legendary/modal-control browser acceptance, screenshots, retained-object/tween teardown. Worker did not run browser.
 - [ ] Task7 integrated acceptance/build/review/PR; real MAX Android/iOS16/16 and Telegram external gates remain open. No merge/deploy performed.
+
+## 2026-10-07: Post-overhaul release work
+
+Check hosted PRCI; collect realMAX Android/iOS16-point and Telegram audio-unlock/performance evidence. Track existing fallback-font compactHUD overlap (LinuxDejaVu reproduces baseline; nativeHONOR gatepassed). FullHiDPI renderer experiment and optional music-track/trim array maintenance guard remain separate followups. No current production merge/deploy authorization inferred.

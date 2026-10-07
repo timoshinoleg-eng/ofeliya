@@ -174,3 +174,7 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - Add panel illumination as static noninteractive hairlines inside existing selector bounds; preserve every text/touch callback and launch-once guard.
 - Draw highlights inside the retained XP/HP/boss Graphics (3px side inset,2px top inset,2px height), so existing hide/pulse/cinematic handling applies automatically. Leave fill/text updates immediate and geometry unchanged.
 - No new implementation-mirroring test for cosmetic decoration. Existing non-browser contracts establish unrelated token/copy/math stability; root actual Phaser acceptance must assess visible layout, teardown and pixel quality.
+
+## 2026-10-07: Recovery and acceptance decisions
+
+Preserve saved implementations rather than restart. Disable optional-art retries only while queueing and restore prior policy. Freeze live progression in density-capture fixture, preserving Sprite.preUpdate/rendering and all assertions. Isolate font900ms gate from optional art; separate real artstartup6sec evidence. Keep general1xcanvas and compensated4xart; a fullHiDPI renderer is outside this contained presentation change.

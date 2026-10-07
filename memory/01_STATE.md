@@ -238,3 +238,7 @@ The next Linux run exposed that short-guard index 3 also wraps to three lines. M
 - Menu retains two specimen Graphics/one alpha tween and two static noninteractive selector edges behind existing text/hero/input. HUD90px plate gains a hairline; highlights reuse existing fill Graphics and inherit visibility/fades/pulses.
 - Existing health/RNA text/fill timing, launch-once guard, callbacks and input/text geometry remain unchanged. No package/token/gameplay changes.
 - Worker passed typecheck, tokens, ui-copy, layout-diagnostics, language1584, viewport, Legendary/impact/VFX smoke and whitespace. No browser evidence provided; coordinator owns browser and scoped review.
+
+## 2026-10-07: Recovered visual overhaul integration
+
+Tasks1–6 recovered/completed; seven generated local core assets, bounded art fallback, compensated geometry and Menu/HUD finish integrated. Final evidence/reviews in docs/visual-overhaul/VALIDATION_20261007.md. NativeHONOR HUD, rollback and Compose passed; real-device MAX/Telegram acceptance remains open. No merge/deploy.
