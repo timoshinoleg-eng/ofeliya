@@ -177,6 +177,13 @@ async function openCase(browser, spec) {
     // physics.pause alone cannot prevent Game.update from spawning additional host cells.
     const gs = window.__game.scene.getScene('Game');
     gs.update = () => {};
+    const sampledSprites = new WeakSet();
+    window.__releaseMatrixPrepareSprite = object => {
+      if (typeof object.preUpdate !== 'function' || sampledSprites.has(object)) return;
+      const preUpdate = object.preUpdate;
+      object.preUpdate = function () { preUpdate.call(this, 1000, 0); };
+      sampledSprites.add(object);
+    };
     const create = gs.create;
     gs.create = function () {
       // Gameplay already has a run seed, but Phaser FloatBetween uses global Math.random
@@ -196,9 +203,7 @@ async function openCase(browser, spec) {
       // Keep production Sprite animation code, but sample one shared 1000ms pose. Live
       // RAF time made slower WebGL reach windup while Canvas captured pursuit instead.
       for (const object of this.children.list) {
-        if (typeof object.preUpdate !== 'function') continue;
-        const preUpdate = object.preUpdate;
-        object.preUpdate = function () { preUpdate.call(this, 1000, 0); };
+        window.__releaseMatrixPrepareSprite(object);
       }
     };
     window.__game.scene.getScene('Menu').scene.start('Game');
@@ -274,8 +279,11 @@ async function openCase(browser, spec) {
       // Include actual production windup telegraphs, not an artificially quiet scene.
       for (const object of gs.children.list) {
         if (!object.active || typeof object.preUpdate !== 'function') continue;
-        object.preUpdate();
-        object.preUpdate();
+        // Groups allocate sprites lazily after create(); each new member needs the same
+        // wrapper before the next RAF, and explicit arguments also protect this sample.
+        window.__releaseMatrixPrepareSprite(object);
+        object.preUpdate(1000, 0);
+        object.preUpdate(1000, 0);
       }
       gs.tweens.pauseAll();
       gs.hostCells.update(1000, 0, 0);
@@ -393,12 +401,26 @@ async function openCase(browser, spec) {
 
     await page.waitForTimeout(90);
     const visualInputs = await page.evaluate(() => window.__releaseMatrixInputs());
+    const assertFiniteInputs = inputs => {
+      const visit = value => {
+        if (typeof value === 'number' && !Number.isFinite(value)) {
+          throw new Error('controlled matrix inputs contain a non-finite number');
+        }
+        if (value && typeof value === 'object') Object.values(value).forEach(visit);
+      };
+      visit(inputs);
+      if (!inputs.sprites.every(([, ...transform]) => transform.every(Number.isFinite))) {
+        throw new Error('controlled matrix sprite transform is missing or non-finite');
+      }
+    };
+    assertFiniteInputs(visualInputs);
     if (!visualInputs.roles.some(([, visible]) => visible)) {
       throw new Error('controlled matrix pose must retain dangerous role telegraphs');
     }
     const file = `${spec.renderer}-${spec.tier}-${density}.png`;
     await page.locator('#game').screenshot({ path: path.join(CAPTURE_DIR, file) });
     const capturedInputs = await page.evaluate(() => window.__releaseMatrixInputs());
+    assertFiniteInputs(capturedInputs);
     if (JSON.stringify(visualInputs) !== JSON.stringify(capturedInputs)) {
       throw new Error(`visual inputs changed during ${spec.renderer}/${spec.tier}/${density} capture`);
     }
