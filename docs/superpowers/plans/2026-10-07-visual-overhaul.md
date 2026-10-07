@@ -82,9 +82,9 @@
 - [x] Record source-to-asset provenance and package seven transparent generated assets: hero, antibody, T-killer, macrophage, two bosses and healthy host cell. Files total approximately247KB before HTTP compression; integration follows below.
 - [ ] Preserve logical dimensions for all seven canonical keys, including non-square T-killer44x40. Compensate host images in ambient and interactive pools, preserving infection overlays/rings/manual interaction radius and checkpoint restoration. Do not change projectile or RNA source dimensions.
 - [ ] Test actual display/body bounds and centers across hero breathing, ordinary/elite enemies, role recycling and organ reset; do not merely assert raw body.radius.
-- [ ] Add preload raw keys/per-key texture guards; highres bake with scale/circle-offset compensation at every affected consumer. No unsafe TextureSource.resolution shortcut.
+- [ ] Add preload raw keys/per-key texture guards with bounded image XHR timeout1800ms and procedural fallback on unavailable/stalled art; highres bake with scale/circle-offset compensation at every affected consumer. No unsafe TextureSource.resolution shortcut.
 - [ ] Keep mutation/elite/boss telegraphs and timings. Improve membranes and restrained highlights; add only cosmetic animation that does not change body transforms.
-- [ ] Test missing-image fallback and required texture completeness; run startup, viewport, impact, tokens, typecheck and root-owned controls/elite/visual matrix.
+- [ ] Test missing/stalled-image fallback and required texture completeness without blocking Menu startup; run startup, viewport, impact, tokens, typecheck and root-owned controls/elite/visual matrix.
 - [ ] Commit assets/code/tests/provenance and memory; scoped review before Task 6.
 
 ### Task 6: Menu and HUD finish
