@@ -242,3 +242,7 @@ The next Linux run exposed that short-guard index 3 also wraps to three lines. M
 ## 2026-10-07: Recovered visual overhaul integration
 
 Tasks1–6 recovered/completed; seven generated local core assets, bounded art fallback, compensated geometry and Menu/HUD finish integrated. Final evidence/reviews in docs/visual-overhaul/VALIDATION_20261007.md. NativeHONOR HUD, rollback and Compose passed; real-device MAX/Telegram acceptance remains open. No merge/deploy.
+
+## Hosted CI fixture recovery
+
+PR179 created. Initial hosted failures investigated: Node22 hardware selected reduced in an implicit-full VFX test; uncontrolled RAF phases/random cosmetic placement caused QA parity flakiness; global ring spy included new16px hit ring after lysis108/150. Test-only fixes preserve production behavior and all thresholds. Independent reviews PASS after lazy-sprite and deferred-depth-sort corrections. Native production QA12 cases PASS; comprehension all6viewports PASS. Latest combined head hosted rerun pending. Original failures retained in CI_FIXTURE_REVIEW_20261007.md. No merge/deploy.

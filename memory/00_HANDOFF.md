@@ -9,3 +9,7 @@ Actual76Phaser geometry rows match pre-art baseline, DPR1/2/3WebGL/Canvas passed
 ## Режим проверки
 
 Review branch against base using retained final Kimi and fresh code-review reports. Do not repeat Tasks1–6. Confirm hosted CI on PR and real MAX Android/iOS16-point plus Telegram/audio-unlock/device performance before any production decision. No merge or production deployment has been done or inferred. General Retina/HiDPI rendering remains a separate renderer experiment; this pass improves art detail with current1xcanvas.
+
+## Authoritative CI recovery checkpoint
+
+Draft PR179: https://github.com/timoshinoleg-eng/ofeliya/pull/179. Publication branch remains visual/recovered-overhaul-20261007. Test-only CI corrections now include4c82850 full fixture override, b9156e2/9722866 seeded shared real animation pose,195ef0e pending draw-order settlement and5b71c63 lysis-only ring capture. Root native QA12-cell production matrix and six-viewport comprehension PASS, independently reviewed. See CI_FIXTURE_REVIEW_20261007.md and CI_MATRIX_EVIDENCE_20261007.json. Full latest-head hosted rerun is pending. Native integration-resumed contains latest commits because cloud execution transport became unavailable during QA. Fetch the publication branch before further work; preserve saved cloud worktrees and old visual/overhaul history. Do not repeat implemented Tasks1-6. No merge/deploy; real-device gates and generalHiDPI remain open.

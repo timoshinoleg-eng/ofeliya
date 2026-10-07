@@ -215,3 +215,11 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 ## 2026-10-07: Post-overhaul release work
 
 Check hosted PRCI; collect realMAX Android/iOS16-point and Telegram audio-unlock/performance evidence. Track existing fallback-font compactHUD overlap (LinuxDejaVu reproduces baseline; nativeHONOR gatepassed). FullHiDPI renderer experiment and optional music-track/trim array maintenance guard remain separate followups. No current production merge/deploy authorization inferred.
+
+## Current CI checkpoint
+
+- [x] Restore interrupted visual work and create draft PR179.
+- [x] Investigate initial hosted CI failures and review test-only fixture fixes.
+- [x] Native production QA12-cell matrix and six-viewport comprehension acceptance.
+- [ ] Confirm full hosted CI on latest combined PR head before concluding PR validation.
+- [ ] Real MAX Android/iOS16-point, Telegram audio unlock/device performance and separate generalHiDPI renderer follow-up remain open. No merge/deploy.

@@ -178,3 +178,7 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 ## 2026-10-07: Recovery and acceptance decisions
 
 Preserve saved implementations rather than restart. Disable optional-art retries only while queueing and restore prior policy. Freeze live progression in density-capture fixture, preserving Sprite.preUpdate/rendering and all assertions. Isolate font900ms gate from optional art; separate real artstartup6sec evidence. Keep general1xcanvas and compensated4xart; a fullHiDPI renderer is outside this contained presentation change.
+
+## Hosted CI determinism decisions
+
+Use real production tier override before test modules load, restoring global storage descriptor. Sample real production animation at shared1000ms, seed only creation cosmetics and restore Math.random. Prepare lazy group sprites idempotently; explicitly apply existing depthSort before exact ordered input snapshots. Require finite poses, retained windup telegraphs, before/after stability and same-tier renderer input equality; preserve raster thresholds. Scope lysis-radius spy to actual lysis rather than unrelated hit rings; assert complete108/150 array and original damage bounds. These are fixture corrections, not gameplay/rendering changes.
