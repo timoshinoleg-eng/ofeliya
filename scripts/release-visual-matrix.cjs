@@ -172,6 +172,10 @@ async function openCase(browser, spec) {
   }
   await page.evaluate(() => {
     window.__game.registry.set('runSeedOverride', 'release-matrix-seed');
+    // Phaser captures Scene.update after create(), so freeze live progression before startup.
+    // Sprite.preUpdate and rendering remain active for actor animation and density captures;
+    // physics.pause alone cannot prevent Game.update from spawning additional host cells.
+    window.__game.scene.getScene('Game').update = () => {};
     window.__game.scene.getScene('Menu').scene.start('Game');
   });
   await page.waitForFunction(
