@@ -187,3 +187,12 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - [ ] Root actual seven-CC0-bed OfflineAudioContext busy sample rendering using production math; establish finite/clipping bounds and audibility evidence separately from boundary tests.
 - [ ] Root integration/Phaser QA and final task gates; scoped test command is `node tests/audio-mix.mjs` with no package/CI wiring changes.
 - [ ] Task5 high-resolution actor/host backing compensation; final build/CI and real MAX Android/iOS/Telegram external acceptance remain open. No deploy/merge performed.
+
+
+## VO05 core art recovery follow-up — 07.10.2026
+- [x] Recovered saved `fdacc92` core art integration and inherited `346638d` seven generated assets/provenance without regenerating them.
+- [x] Verification coverage `3de91b7`: core-art15/15; typecheck, viewport/tokens/impact-budget/runtime-quality/telegraphs/startup-renderer, VFX12/12, atmosphere9/9, save/RNG/checkpoint/stages and whitespace.
+- [x] Preserve original untracked timeout-mutant, confirm one targeted finite-XHR assertion fails under1800->0 mutation.
+- [ ] Coordinator frozen Task5 scoped review and cherry-pick coverage/memory; implementation `fdacc92` remains unchanged.
+- [ ] Coordinator actual browser missing/stalled-image fallback/startup, Phaser body/display/centers across WebGL/Canvas, controls/elite/visual matrix and screenshots; worker adapters do not close these gates.
+- [ ] Task6 menu/HUD finish, final branch build/CI, real MAX Android/iOS16/16 and Telegram external acceptance. No merge/deploy performed.

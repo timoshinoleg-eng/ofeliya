@@ -216,3 +216,11 @@ The next Linux run exposed that short-guard index 3 also wraps to three lines. M
 - Visibility flag retained before context creation, document hidden fallback, source/resume guards and pending-resume resuspension. Existing abort/request-ID cancellation and gesture retries retained; resume called synchronously within gesture stack. Adaptive transient tones now reclaim on run teardown as well as ended; SFX unaffected by stopMusic.
 - Immutable identity-free diagnostics distinguish wanted/loading/actually-playing and decoded actual fallback index from requested deterministic selection; generic error text avoids raw URL/error payloads.
 - Focused17/17 production TS math/WebAudio boundary contracts passed; initial13/14 expected RED plus existing throttle PASS. Required audio/save/RNG+checkpoint/typecheck/whitespace checks exit0. Existing npm http-proxy warning persists; no package/lock changes. Worker performed no browser, sample DSP rendering, subagents or independent review; root owns those acceptance steps.
+
+
+## VO05 recovered core art verification — 07.10.2026
+- Saved implementation `fdacc92` retained unchanged on `visual/vo05-art-20261007`; existing generated seven-WebP asset/provenance commit `346638d` is in ancestor history.
+- Seven canonical bounded4x backings share ArtMetrics compensation; raw images bake then release after refresh. Boot missing-key preload timeout1800ms and procedural fallback retain logical geometry; all hero/enemy/host scale consumers compensate backing factor. Noncore projectile/RNA/organ/combat sources are unchanged.
+- Recovery coverage `3de91b7` adds individual canonical preload guards, production Boot.create fallback ordering for no/partial raw results, and seven exact provenance/hash checks. Core art15/15, typecheck, viewport/tokens/impact-budget/runtime-quality/telegraphs, nonbrowser startup-renderer, VFX12/12, atmosphere9/9, save/RNG+checkpoint/stages and whitespace passed.
+- Existing untracked timeout-mutant file retained untouched; it intentionally fails finite-XHR timeout assertion after1800->0 mutation (other11original cases pass). No package/lock/CI changes and no production rewrite required.
+- Actual stalled-XHR/engine physics and raster/browser controls/elite/matrix remain root-owned. No browser, push/merge/deploy; final build/CI and real-device MAX/TG gates remain open.

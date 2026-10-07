@@ -153,3 +153,10 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - Visibility owns suspension even before AudioContext exists; also check document.hidden because director binds its listener after bedStart and teardown calls setSuspended(false). Never resume/spawn while hidden; cache legitimate hidden decode for visible restart. Recheck visibility after asynchronous resume to prevent pending resume overriding hide.
 - Call ctx.resume() inside the gesture callback stack; deduplicate its pending promise and rearm one listener per event after failure. Keep manual pause from suspending shared UI audio. Stop outstanding adaptive layer tones on run teardown while leaving SFX transient cleanup on ended.
 - Focused WebAudio adapter must distinguish scheduled oscillator stop from immediate teardown; otherwise live-node lifecycle assertions are vacuous. Restart tests assert bio plus four live layer oscillators before explicit cleanup. Browser/sample/device acceptance remains coordinator-owned.
+
+
+## VO05 core art recovery decisions — 07.10.2026
+- Resume saved `fdacc92` rather than repeat asset generation or replace stable implementation. Keep canonical logical metrics and bounded4x backing explicit; do not use TextureSource.resolution to compensate sprite/body geometry.
+- Extend coverage at Boot loader/canonical-key and create-sequencing boundaries; validate generated asset byte hashes against recorded provenance. XHR completion and Phaser body rounding require separate actual browser acceptance.
+- Retain intentional untracked `.vo05-mutant.mjs` unchanged; its finite-timeout failure is coverage evidence, not a tracked feature or failing production gate. Coverage additions were green on existing implementation; no claim of new feature RED.
+- Keep recovered changes scoped to Task5 tests/memory; no unnecessary source rewrite, package/CI wiring, browser operation or deployment. Coordinator owns root integration/scoped review and actual Phaser checks.
