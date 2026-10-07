@@ -19,8 +19,21 @@ function load(path) {
   new Function('require', 'module', 'exports', code)(localRequire, module, module.exports);
   cache.set(path, module.exports); return module.exports;
 }
+// Node exposes navigator on CI too; runner core count must not choose the test's
+// tier. Use the real production override before config.ts can cache the profile.
+const storageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+let PERFORMANCE;
+try {
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
+    getItem: key => key === 'ofeliya_performance_tier' ? 'full' : null,
+  } });
+  ({ PERFORMANCE } = load('src/systems/PerformanceProfile.ts'));
+} finally {
+  if (storageDescriptor) Object.defineProperty(globalThis, 'localStorage', storageDescriptor);
+  else delete globalThis.localStorage;
+}
+assert.equal(PERFORMANCE.tier, 'full', 'full-tier contracts require an explicit full profile');
 const { COLORS } = load('src/game/config.ts');
-const { PERFORMANCE } = load('src/systems/PerformanceProfile.ts');
 const { VfxSystem } = load('src/systems/VfxSystem.ts');
 function fixture() {
   const particles = [], circles = [], tweens = [];
