@@ -107,3 +107,10 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - Linux run of the expanded browser probe passed 87/88 after fixing the fallback port. All 15 real definition pairs across every tested viewport, including 320x520, passed. The only failure was the synthetic three-choice short-height fixture: one 3-line effect met the intended 2-line cap on 124px compact cards. This is an unreachable synthetic content/layout combination (trophy contract is two choices), while the longer 3-card stress case remains at taller heights. Use only 2-line effects in the 320x520 guard to isolate height-fit logic; keep all 15 actual pairs there. No production UI change and no relaxed assertion. Rerun pending.
 
 - Linux wrap measurements showed the previous 320x520 short guard still included a 3-line effect: definition index 3. The six measured counts are `[2,3,2,3,3,2]`. Use indices 0, 2, and 5 for this guard; index 5 is the last-life-saving Legendary. Base the selection on measured wrapping, not inferred string length. Keep all other scenarios/assertions unchanged; latest Linux status is 87/88 and rerun is pending.
+
+## VO-01 decisions — 07.10.2026
+- Diagnostics only, no overall DPR/framebuffer multiplier. Use existing DEV/release-matrix-QA gate and detached on-demand readback, never timers or history.
+- Snapshot fixed Menu/Game/UI scope, bounded recursive visible Text sampling, numeric geometry/resolution only; no content/identity/user fields.
+- Phaser Text style.resolution and TextureSource.resolution are independent observed facts. Production renderer tests use numeric renderer.type because constructor names are minified.
+- Browser fixture freezes Game.update before start and pauses physics after ready to isolate logical camera mapping from collision shake. Production controls/gameplay stay untouched; existing multitouch suite is separate evidence.
+- Kimi failed invocation is not a review. Coordinator owns frozen candidate review; no other workers, push, merge or deploy.

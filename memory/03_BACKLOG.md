@@ -139,3 +139,11 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - [ ] Rerun with the short guard using three two-line effects (definitions 0, 2, 5); keep all 15 actual pairs at 320x520 and leave assertions/production UI unchanged. Independent review approved this bounded fixture adjustment. No real-device acceptance claim.
 - [x] Linux measurement found short-guard definition index 3 also wraps to 3 lines; measured six single wrap counts are `[2,3,2,3,3,2]` (`work/multicard-linux-plain2.log`).
 - [ ] Rerun short guard with measured two-line definitions 0, 2, and 5 (index 5 is last-life-saving Legendary); all other cases remain unchanged. Latest Linux is 87/88; do not claim pass until rerun.
+
+## VO-01 follow-up — 07.10.2026
+- [x] Runtime RED before implementation; bounded DEV/QA snapshot and dimensions/input browser assertions.
+- [x] Local DEV + QA production renderer 6/6, ordinary production opacity, focused existing checks and builds. Evidence and failures: docs/visual-overhaul/VO01_VALIDATION.md.
+- [ ] Coordinator independent review of 582723032b060f690eb59dac933c60834d0969a2. Kimi blocked by invalid API key; failed artifact must not be committed or treated as evidence.
+- [ ] Run full Linux CI against the final candidate when authorized; current local builds stamped base d7797bc, not final HEAD.
+- [ ] Real MAX Android/iOS/Telegram touch, safe areas, resume and GPU/sharpness acceptance remain external gates.
+- [ ] Separate architecture/design for any future overall HiDPI; VO-01 deliberately does not change rendering resolution.

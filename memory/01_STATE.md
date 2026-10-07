@@ -174,3 +174,11 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - This is a stress-fixture content limit, not evidence of a trophy issue: the actual guaranteed trophy offers two cards. The taller synthetic long-effect stress case remains; the short guard now chooses definitions 0, 2, and 5, with effects fitting within two lines, while retaining all actual pairs at 320x520. Browser rerun and independent review pending. Linux build/test suite and device acceptance are not claimed passed.
 
 The next Linux run exposed that short-guard index 3 also wraps to three lines. Measured wrap counts for the six definitions are `[2,3,2,3,3,2]`; the fixture now selects indices 0, 2, and 5 (index 5 is the last-life-saving Legendary), all measured at two lines. The 320x520 guard isolates height fitting; no Linux pass is claimed until rerun.
+
+## VO-01 diagnostics-first — 07.10.2026
+- Branch visual/vo-01-render-clarity-20261007, base d7797bc67bbda063d2fc3de68026101b0b061121, code/tests/docs 582723032b060f690eb59dac933c60834d0969a2.
+- Runtime RED observed: Menu ready, __renderSnapshot undefined. Added bounded on-demand snapshot under existing DEV/QA gate; ordinary production runtime opacity passed.
+- DEV and QA production browser 6/6 each: WebGL/Canvas DPR1/2/3, Menu/Game/two resizes/resume; local buffer remains CSS/logical size, no general HiDPI enabled. Text style/source resolutions recorded independently.
+- Local startup, viewport, control modes/CDP multitouch, layout diagnostics, typecheck, ordinary + QA builds, tokens, runtime-quality, challenge, language checks passed. Builds stamped base SHA, not new code HEAD. Full commands/intermediate failures/warnings in docs/visual-overhaul/VO01_VALIDATION.md.
+- Separate npm ci created ordinary local node_modules (Phaser 3.90.0), not a shared junction. npm/esbuild/git sandbox failures required approved escalation retries. No gate weakening or config/auth/route/skill changes.
+- Kimi invalid API key artifact excluded; independent review coordinator-owned and pending. Local work/ evidence, .vo01-npm-cache and failed Kimi artifact intentionally untracked. No full CI/device acceptance/publication.
