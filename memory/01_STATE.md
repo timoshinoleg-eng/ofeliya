@@ -224,3 +224,11 @@ The next Linux run exposed that short-guard index 3 also wraps to three lines. M
 - Recovery coverage `3de91b7` adds individual canonical preload guards, production Boot.create fallback ordering for no/partial raw results, and seven exact provenance/hash checks. Core art15/15, typecheck, viewport/tokens/impact-budget/runtime-quality/telegraphs, nonbrowser startup-renderer, VFX12/12, atmosphere9/9, save/RNG+checkpoint/stages and whitespace passed.
 - Existing untracked timeout-mutant file retained untouched; it intentionally fails finite-XHR timeout assertion after1800->0 mutation (other11original cases pass). No package/lock/CI changes and no production rewrite required.
 - Actual stalled-XHR/engine physics and raster/browser controls/elite/matrix remain root-owned. No browser, push/merge/deploy; final build/CI and real-device MAX/TG gates remain open.
+
+
+## VO05 stalled-art follow-up — 07.10.2026
+- Root actual-browser regression exposed >6000ms stalled startup. Phaser3.90 Loader defaults maxRetries2; File.onError reloads twice, creating3x1800ms windows. Desktop parallel32; Android parallel6 can additionally batch seven assets.
+- `9dc9650` sets optional-art retries0 while queueing (restores prior value in finally for unrelated future files) and Boot concurrency max(existing,7). Per-file1800ms timeout unchanged. Core art contract now16/16 includes retry capture/restore and Android6/desktop32 batching policy.
+- With root-authorized browser follow-up, actual Chromium Canvas startup available1335ms/missing1102ms/stalled2501ms/Android-UA stalled2673ms, all unchanged6000ms gate. Stalled modes each requested exactly7distinct assets, no retries; Android config default6 and Boot loader7 explicitly confirmed. Private extended copy of root startup test remains untracked for coordinator import.
+- Elite fixture now compares actual halfWidth/halfHeight to floor(sourceWorldRadiusX/Y), matching Phaser Body.setCircle/updateBounds; logical tolerance1.01, markers/signatures/centers unchanged. Actual elite script passed against own Vite server with only URL substituted in temporary copy. No physics production changes.
+- Typecheck, core16/16, nonbrowser startup-renderer, viewport/tokens/impact-budget and whitespace passed after fix. No push/merge/deploy. Root still owns full geometry/controls/matrix/scoped review and external device gates.
