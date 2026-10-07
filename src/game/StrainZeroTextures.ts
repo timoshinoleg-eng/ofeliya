@@ -680,75 +680,59 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
   });
 
   // ---------------------------------------------------------------------------
-  // PLASMA BACKDROP — baked capillary flow, no shader required.
+  // PLASMA BACKDROP — periodic warm capillary flow baked once, no shader/blur required.
   // ---------------------------------------------------------------------------
   const plasma = scene.textures.createCanvas('blood-plasma', 256, 256);
   if (plasma) {
     const ctx = plasma.getContext();
     const bg = ctx.createLinearGradient(0, 0, 0, 256);
-    bg.addColorStop(0, '#16070f');
-    bg.addColorStop(0.5, '#250a14');
-    bg.addColorStop(1, '#16070f');
+    bg.addColorStop(0, '#18090f');
+    bg.addColorStop(0.5, '#260d15');
+    bg.addColorStop(1, '#18090f');
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, 256, 256);
 
-    for (let i = 0; i < 7; i++) {
-      const y = 18 + i * 38;
-      ctx.strokeStyle = i % 2
-        ? 'rgba(255,71,96,0.035)'
-        : 'rgba(255,126,145,0.025)';
-      ctx.lineWidth = 12 + (i % 3) * 7;
-      ctx.beginPath();
-      ctx.moveTo(-20, y);
-      ctx.bezierCurveTo(62, y - 25, 194, y + 25, 276, y);
-      ctx.stroke();
-      ctx.strokeStyle = 'rgba(255,150,164,0.035)';
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
-    }
-
-    for (let i = 0; i < 22; i++) {
-      const x = (i * 83 + 17) % 256;
-      const y = (i * 47 + 29) % 256;
-      const r = 7 + ((i * 13) % 23);
-      for (const ox of [-256, 0, 256]) {
-        ctx.beginPath();
-        ctx.arc(x + ox, y, r, 0, Math.PI * 2);
-        ctx.strokeStyle = i % 4 === 0 ? 'rgba(255,92,119,0.065)' : 'rgba(185,44,66,0.038)';
-        ctx.lineWidth = 1 + (i % 2) * 0.6;
-        ctx.stroke();
+    // Smooth periodic lanes wrap across both tile axes; broad dark walls and warm
+    // central plasma read as a vessel instead of unrelated small background rings.
+    for (let i = 0; i < 4; i++) {
+      for (const wrapY of [-256, 0, 256]) {
+        const trace = () => {
+          ctx.beginPath();
+          for (let x = 0; x <= 256; x += 8) {
+            const y = i * 64 + wrapY + 13 * Math.sin(x * Math.PI * 2 / 256);
+            if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          }
+        };
+        trace(); ctx.strokeStyle = 'rgba(6,2,6,0.3)'; ctx.lineWidth = 46; ctx.stroke();
+        trace(); ctx.strokeStyle = 'rgba(171,52,53,0.12)'; ctx.lineWidth = 30; ctx.stroke();
+        trace(); ctx.strokeStyle = 'rgba(255,151,102,0.055)'; ctx.lineWidth = 15; ctx.stroke();
       }
     }
-
-    for (let i = 0; i < 42; i++) {
-      const x = (i * 37 + 11) % 256;
-      const y = (i * 71 + 5) % 256;
-      const a = 0.018 + (i % 4) * 0.008;
-      ctx.fillStyle = `rgba(255,190,199,${a})`;
+    for (let i = 0; i < 24; i++) {
+      ctx.fillStyle = `rgba(255,185,151,${0.022 + (i % 3) * 0.008})`;
       ctx.beginPath();
-      ctx.arc(x, y, 0.8 + (i % 3) * 0.45, 0, Math.PI * 2);
+      ctx.arc((i * 37 + 11) % 256, (i * 71 + 5) % 256, 0.8 + (i % 3) * 0.4, 0, Math.PI * 2);
       ctx.fill();
     }
-
-    const sheen = ctx.createLinearGradient(0, 0, 0, 256);
-    sheen.addColorStop(0, 'rgba(255,97,128,0.025)');
-    sheen.addColorStop(0.5, 'rgba(0,0,0,0)');
-    sheen.addColorStop(1, 'rgba(255,97,128,0.025)');
-    ctx.fillStyle = sheen;
-    ctx.fillRect(0, 0, 256, 256);
     plasma.refresh();
   }
 
   const heartPlasma = scene.textures.createCanvas('heart-plasma', 256, 256);
   if (heartPlasma) {
     const ctx = heartPlasma.getContext();
-    const bg = ctx.createLinearGradient(0, 0, 256, 256);
-    bg.addColorStop(0, '#19060d'); bg.addColorStop(0.55, '#3a0d18'); bg.addColorStop(1, '#14040b');
+    const bg = ctx.createLinearGradient(0, 0, 0, 256);
+    bg.addColorStop(0, '#1b080d'); bg.addColorStop(0.5, '#300e15'); bg.addColorStop(1, '#1b080d');
     ctx.fillStyle = bg; ctx.fillRect(0, 0, 256, 256);
-    for (let i = 0; i < 10; i++) {
-      const y = 8 + i * 28; ctx.strokeStyle = i % 2 ? 'rgba(255,91,72,0.09)' : 'rgba(255,179,107,0.055)';
-      ctx.lineWidth = 8 + (i % 3) * 5; ctx.beginPath(); ctx.moveTo(-30, y);
-      ctx.bezierCurveTo(55, y - 18, 180, y + 18, 286, y - 4); ctx.stroke();
+    // 0.5 slope shifts 128px per tile: exactly four 32px fibre lanes, seamless on X.
+    for (let i = -5; i < 9; i++) {
+      ctx.beginPath();
+      for (let x = 0; x <= 256; x += 8) {
+        const y = i * 32 + x * 0.5 + Math.sin(x * Math.PI * 2 / 256) * 3;
+        if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = 'rgba(7,2,5,0.26)'; ctx.lineWidth = 26; ctx.stroke();
+      ctx.strokeStyle = 'rgba(210,73,55,0.085)'; ctx.lineWidth = 17; ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,163,93,0.04)'; ctx.lineWidth = 4; ctx.stroke();
     }
     heartPlasma.refresh();
   }
@@ -756,10 +740,23 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
   const cardiacFiber = scene.textures.createCanvas('cardiac-fiber', 256, 256);
   if (cardiacFiber) {
     const ctx = cardiacFiber.getContext(); ctx.clearRect(0, 0, 256, 256);
-    for (let i = -3; i < 12; i++) {
-      const y = i * 30; ctx.strokeStyle = i % 2 ? 'rgba(255,126,92,0.16)' : 'rgba(255,195,115,0.1)';
-      ctx.lineWidth = 5 + (i % 3 + 3) % 3; ctx.beginPath(); ctx.moveTo(-30, y + 28);
-      ctx.bezierCurveTo(65, y - 8, 170, y + 52, 286, y + 12); ctx.stroke();
+    for (let i = -5; i < 9; i++) {
+      const trace = (offset: number) => {
+        ctx.beginPath();
+        for (let x = 0; x <= 256; x += 8) {
+          const y = i * 32 + x * 0.5 + Math.sin(x * Math.PI * 2 / 256) * 3 + offset;
+          if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+      };
+      trace(0); ctx.strokeStyle = 'rgba(116,34,36,0.22)'; ctx.lineWidth = 20; ctx.stroke();
+      trace(-4); ctx.strokeStyle = 'rgba(255,126,82,0.16)'; ctx.lineWidth = 7; ctx.stroke();
+      trace(-7); ctx.strokeStyle = 'rgba(255,195,115,0.12)'; ctx.lineWidth = 1.4; ctx.stroke();
+      // Subtle transverse sarcomere marks follow the same muscle-fibre direction.
+      for (let x = 16; x < 256; x += 32) {
+        const y = i * 32 + x * 0.5 + Math.sin(x * Math.PI * 2 / 256) * 3;
+        ctx.beginPath(); ctx.moveTo(x - 3, y + 6); ctx.lineTo(x + 3, y - 6);
+        ctx.strokeStyle = 'rgba(255,163,101,0.075)'; ctx.lineWidth = 1; ctx.stroke();
+      }
     }
     cardiacFiber.refresh();
   }

@@ -3,6 +3,13 @@ import { COLORS } from '../game/config';
 import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
 import type { StageDefinition } from '../game/StageDefinitions';
 import { PERFORMANCE } from './PerformanceProfile';
+import { decayAtmospherePulse, heartBeatEnvelope, visibleAtmosphereBands } from './atmosphereMath';
+
+const RBC_BANDS = [
+  { depth: -26, scale: [0.55, 0.85], alpha: [0.16, 0.24], parallax: [0.025, 0.045] },
+  { depth: -14, scale: [0.95, 1.4], alpha: [0.23, 0.34], parallax: [0.07, 0.10] },
+  { depth: -8, scale: [1.6, 2.1], alpha: [0.08, 0.14], parallax: [0.14, 0.18] },
+] as const;
 
 interface AmbientCell {
   image: Phaser.GameObjects.Image;
@@ -14,6 +21,7 @@ interface AmbientCell {
   rotationSpeed: number;
   alpha: number;
   parallax: number;
+  band?: number;
 }
 
 interface PlasmaParticle {
@@ -34,6 +42,7 @@ export class AtmosphereSystem {
   private readonly scene: Phaser.Scene;
   private readonly plasma: Phaser.GameObjects.TileSprite;
   private readonly structure: Phaser.GameObjects.TileSprite;
+  private readonly pulseOverlay: Phaser.GameObjects.Rectangle;
   private readonly erythrocytes: AmbientCell[] = [];
   private readonly hostCells: AmbientCell[] = [];
   private readonly particles: PlasmaParticle[] = [];
@@ -45,6 +54,11 @@ export class AtmosphereSystem {
   private phaseBoost = 0;
   private stage: StageDefinition | null = null;
   private runtimeQualityScale = 1;
+  private pulseAlpha = 0;
+  private secondBeatMs: number | null = null;
+  private secondBeatColor = COLORS.immune;
+  private secondBeatStrength = 0;
+  private destroyed = false;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -67,16 +81,28 @@ export class AtmosphereSystem {
       .setAlpha(0)
       .setVisible(false);
 
-    // Mid/deep erythrocytes: enough to sell a bloodstream while remaining cheap on mobile.
+    this.pulseOverlay = scene.add
+      .rectangle(0, 0, this.width, this.height, COLORS.immune, 1)
+      .setOrigin(0)
+      .setScrollFactor(0)
+      .setDepth(-6)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setAlpha(0)
+      .setVisible(false);
+
+    // All three bands sit below gameplay, including the larger low-opacity near cells.
+    const bandCounts = PERFORMANCE.ambientErythrocytes === 8 ? [4, 3, 1] : [8, 4, 2];
     for (let i = 0; i < PERFORMANCE.ambientErythrocytes; i++) {
       const x = Phaser.Math.FloatBetween(-40, this.width + 40);
       const y = Phaser.Math.FloatBetween(-40, this.height + 40);
-      const alpha = Phaser.Math.FloatBetween(0.12, 0.31);
-      const scale = Phaser.Math.FloatBetween(0.58, 1.38);
+      const band = i < bandCounts[0] ? 0 : i < bandCounts[0] + bandCounts[1] ? 1 : 2;
+      const profile = RBC_BANDS[band];
+      const alpha = Phaser.Math.FloatBetween(profile.alpha[0], profile.alpha[1]);
+      const scale = Phaser.Math.FloatBetween(profile.scale[0], profile.scale[1]);
       const image = scene.add
         .image(x, y, 'erythrocyte')
         .setScrollFactor(0)
-        .setDepth(i % 4 === 0 ? -12 : -24)
+        .setDepth(profile.depth)
         .setScale(scale)
         .setAlpha(alpha)
         .setRotation(Phaser.Math.FloatBetween(-Math.PI, Math.PI));
@@ -89,7 +115,8 @@ export class AtmosphereSystem {
         phase: Phaser.Math.FloatBetween(0, Math.PI * 2),
         rotationSpeed: Phaser.Math.FloatBetween(-0.08, 0.08),
         alpha,
-        parallax: Phaser.Math.FloatBetween(0.02, 0.065),
+        parallax: Phaser.Math.FloatBetween(profile.parallax[0], profile.parallax[1]),
+        band,
       });
     }
 
@@ -144,9 +171,14 @@ export class AtmosphereSystem {
     const cam = scene.cameras.main;
     this.lastCamX = cam.scrollX;
     this.lastCamY = cam.scrollY;
+    this.scene.events.once('shutdown', this.destroy, this);
   }
 
   setStage(stage: StageDefinition): void {
+    if (this.destroyed) return;
+    this.secondBeatMs = null;
+    this.pulseAlpha = 0;
+    this.pulseOverlay.setAlpha(0).setVisible(false);
     this.stage = stage;
     this.plasma.setTexture(stage.theme.plasmaTexture).clearTint();
     const heart = stage.theme.ambientProfile === 'heart';
@@ -160,6 +192,8 @@ export class AtmosphereSystem {
   }
 
   update(time: number, delta: number, stageTimeMs: number, stageDurationMs: number): void {
+    if (this.destroyed) return;
+    this.updatePulse(delta);
     const cam = this.scene.cameras.main;
     const camDx = cam.scrollX - this.lastCamX;
     const camDy = cam.scrollY - this.lastCamY;
@@ -173,7 +207,7 @@ export class AtmosphereSystem {
     const heart = stage?.theme.ambientProfile === 'heart';
     const beatEvery = stage?.theme.heartbeatMs ?? 0;
     const beatPhase = heart && beatEvery > 0 ? (stageTimeMs % beatEvery) / beatEvery : 1;
-    const beat = heart ? Math.max(Math.exp(-beatPhase * 14), Math.exp(-Math.max(0, beatPhase - 0.22) * 18) * 0.52) : 0;
+    const beat = heart ? heartBeatEnvelope(beatPhase) : 0;
 
     const flow = (heart ? 0.72 : 1) + progress * (heart ? 0.42 : 0.65) + beat * 0.32;
     this.plasma.tilePositionX = cam.scrollX * 0.7 - time * (heart ? 0.004 : 0.007) * flow;
@@ -218,12 +252,12 @@ export class AtmosphereSystem {
         .setAlpha(p.alpha * (0.82 + Math.sin(time * 0.0013 + p.phase) * 0.18 + response * 0.18));
     }
 
-    this.phaseBoost *= Math.pow(0.2, dt);
+    this.phaseBoost *= Math.pow(0.2, Math.max(0, Number.isFinite(delta) ? delta : 0) / 1000);
   }
 
   /** Runtime governor may only reduce decorative objects; gameplay telegraphs are separate. */
   setRuntimeQualityScale(scale: number): void {
-    if (!Number.isFinite(scale)) return;
+    if (this.destroyed || !Number.isFinite(scale)) return;
     this.runtimeQualityScale = Phaser.Math.Clamp(scale, 0.45, 1);
     this.applyRuntimeVisibility();
   }
@@ -233,38 +267,52 @@ export class AtmosphereSystem {
   }
 
   pulse(color = COLORS.immune, strength = 0.22): void {
-    this.phaseBoost = Math.max(this.phaseBoost, strength);
-    const flash = this.scene.add
-      .rectangle(0, 0, this.width, this.height, color, 0.06 + strength * 0.1)
-      .setOrigin(0)
-      .setScrollFactor(0)
-      .setDepth(-6)
-      .setBlendMode(Phaser.BlendModes.ADD);
-    this.scene.tweens.add({
-      targets: flash,
-      alpha: 0,
-      duration: 420,
-      ease: 'Quad.Out',
-      onComplete: () => flash.destroy(),
-    });
+    if (this.destroyed || !Number.isFinite(strength)) return;
+    const boundedStrength = Phaser.Math.Clamp(strength, 0, 1.3);
+    this.phaseBoost = Math.max(this.phaseBoost, boundedStrength);
+    this.pulseAlpha = Math.max(this.pulseAlpha, Math.min(0.075, 0.06 + boundedStrength * 0.1));
+    this.pulseOverlay.setFillStyle(color, 1).setAlpha(this.pulseAlpha).setVisible(true);
   }
 
   heartbeatPulse(color: number, strength = 0.32): void {
+    if (this.destroyed || !Number.isFinite(strength)) return;
     this.pulse(color, strength);
-    this.scene.time.delayedCall(190, () => {
-      if (!this.scene.sys.isActive()) return;
-      this.pulse(color, strength * 0.68);
-    });
+    // Latest heartbeat owns the one pending second visual pulse; no timer/tween allocation.
+    this.secondBeatMs = 190;
+    this.secondBeatColor = color;
+    this.secondBeatStrength = Phaser.Math.Clamp(strength, 0, 1.3) * 0.68;
+  }
+
+  private updatePulse(delta: number): void {
+    const elapsed = Number.isFinite(delta) ? Math.max(0, delta) : 0;
+    if (this.secondBeatMs !== null && elapsed >= this.secondBeatMs) {
+      const afterSecond = elapsed - this.secondBeatMs;
+      this.pulseAlpha = decayAtmospherePulse(this.pulseAlpha, this.secondBeatMs);
+      this.secondBeatMs = null;
+      this.pulse(this.secondBeatColor, this.secondBeatStrength);
+      this.pulseAlpha = decayAtmospherePulse(this.pulseAlpha, afterSecond);
+    } else {
+      if (this.secondBeatMs !== null) this.secondBeatMs -= elapsed;
+      this.pulseAlpha = decayAtmospherePulse(this.pulseAlpha, elapsed);
+    }
+    this.pulseOverlay.setAlpha(this.pulseAlpha).setVisible(this.pulseAlpha > 0.0001);
   }
 
   resize(): void {
+    if (this.destroyed) return;
     this.width = this.scene.scale.width;
     this.height = this.scene.scale.height;
     this.plasma.setSize(this.width, this.height);
     this.structure.setSize(this.width, this.height);
+    this.pulseOverlay.setSize(this.width, this.height);
   }
 
   destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    this.secondBeatMs = null;
+    this.scene.events.off('shutdown', this.destroy, this);
+    this.pulseOverlay.destroy();
     this.plasma.destroy();
     this.structure.destroy();
     for (const c of this.erythrocytes) c.image.destroy();
@@ -279,12 +327,16 @@ export class AtmosphereSystem {
     const heart = this.stage?.theme.ambientProfile === 'heart';
     const visibleCount = (length: number) =>
       Math.max(1, Math.min(length, Math.ceil(length * this.runtimeQualityScale)));
-    const erythrocyteLimit = visibleCount(this.erythrocytes.length);
+    const available = RBC_BANDS.map((_, band) => this.erythrocytes.filter(cell => cell.band === band).length);
+    const runtimeBudget = visibleCount(this.erythrocytes.length);
+    const bandLimits = visibleAtmosphereBands(available, heart ? Math.ceil(runtimeBudget / 2) : runtimeBudget);
+    const seen = [0, 0, 0];
     const hostCellLimit = visibleCount(this.hostCells.length);
     const particleLimit = visibleCount(this.particles.length);
 
-    this.erythrocytes.forEach((cell, index) => {
-      cell.image.setVisible(index < erythrocyteLimit && (!heart || index % 4 === 0));
+    this.erythrocytes.forEach(cell => {
+      const band = cell.band!;
+      cell.image.setVisible(seen[band]++ < bandLimits[band]);
     });
     this.hostCells.forEach((cell, index) => {
       cell.image.setVisible(index < hostCellLimit && (!heart || index % 3 === 0));
