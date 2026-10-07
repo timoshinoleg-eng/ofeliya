@@ -8,6 +8,10 @@
 import { SaveSystem } from './SaveSystem';
 import { RELEASE_SHA } from '../release';
 import type { AdaptiveCueKind, HeartbeatCueKind } from './AdaptiveAudioDirector';
+import {
+  MASTER_GAIN, MUSIC_GAIN, MUSIC_BED_TRIMS, SFX_ROLE_GAINS,
+  scanNormalizationTrim, musicGainForDuck,
+} from './audioMixMath';
 
 export type SfxName =
   | 'shoot' | 'hit' | 'pickup' | 'levelup' | 'hurt' | 'click'
@@ -21,18 +25,18 @@ function audioAssetUrl(file: string): string {
   return `${BASE}${file}${separator}v=${encodeURIComponent(RELEASE_SHA)}`;
 }
 
-const MANIFEST: Record<SfxName, { file: string; vol: number }> = {
-  shoot: { file: 'audio/sfx/shoot.ogg', vol: 0.5 },
-  hit: { file: 'audio/sfx/hit.ogg', vol: 0.45 },
-  pickup: { file: 'audio/sfx/pickup.ogg', vol: 0.5 },
-  levelup: { file: 'audio/sfx/levelup.ogg', vol: 0.7 },
-  hurt: { file: 'audio/sfx/hurt.ogg', vol: 0.7 },
-  click: { file: 'audio/sfx/click.ogg', vol: 0.6 },
-  nova: { file: 'audio/sfx/nova.ogg', vol: 0.7 },
-  elite: { file: 'audio/sfx/elite.ogg', vol: 0.7 },
-  boss: { file: 'audio/sfx/boss.ogg', vol: 0.8 },
-  gameover: { file: 'audio/sfx/gameover.ogg', vol: 0.8 },
-  victory: { file: 'audio/sfx/victory.ogg', vol: 0.8 },
+const MANIFEST: Record<SfxName, { file: string }> = {
+  shoot: { file: 'audio/sfx/shoot.ogg' },
+  hit: { file: 'audio/sfx/hit.ogg' },
+  pickup: { file: 'audio/sfx/pickup.ogg' },
+  levelup: { file: 'audio/sfx/levelup.ogg' },
+  hurt: { file: 'audio/sfx/hurt.ogg' },
+  click: { file: 'audio/sfx/click.ogg' },
+  nova: { file: 'audio/sfx/nova.ogg' },
+  elite: { file: 'audio/sfx/elite.ogg' },
+  boss: { file: 'audio/sfx/boss.ogg' },
+  gameover: { file: 'audio/sfx/gameover.ogg' },
+  victory: { file: 'audio/sfx/victory.ogg' },
 };
 const MUSIC_TRACKS = [
   'audio/music/loop0.ogg', 'audio/music/loop1.ogg', 'audio/music/loop2.ogg',
@@ -42,7 +46,6 @@ const MUSIC_TRACKS = [
 /** Licensed bed count, consumed by the adaptive director for deterministic bed selection. */
 export const MUSIC_TRACK_COUNT = MUSIC_TRACKS.length;
 
-const MUSIC_BASE_GAIN = 0.35;
 const MUSIC_TENSION_MIN_HZ = 2_500;
 const MUSIC_TENSION_MAX_HZ = 14_000;
 /** Neutral openness used when no director is driving the bus (mute/unmute, run teardown). */
@@ -51,20 +54,26 @@ const MUSIC_TENSION_NEUTRAL = 0.12;
 class SfxImpl {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  private compressor: DynamicsCompressorNode | null = null;
   private sfxGain: GainNode | null = null;
   private musicGain: GainNode | null = null;
+  /** Licensed bed loudness correction only; adaptive ducking remains on musicGain. */
+  private bedTrim: GainNode | null = null;
   /** Lowpass that the adaptive director opens as danger rises. */
   private musicFilter: BiquadFilterNode | null = null;
-  /** Procedural layer bus (stingers, heartbeat, bio) — shares the music tension filter. */
+  /** Procedural stingers/heartbeat share the filter; the retained bio pulse feeds master. */
   private layerBus: GainNode | null = null;
   private lastAt: Partial<Record<SfxName, number>> = {};
   private buffers: Partial<Record<SfxName, AudioBuffer>> = {};
+  private bufferTrims: Partial<Record<SfxName, number>> = {};
   private loading: Partial<Record<SfxName, Promise<AudioBuffer | null>>> = {};
   private musicSrc: AudioBufferSourceNode | null = null;
   private musicBuf: AudioBuffer | null = null;
   private musicAbort: AbortController | null = null;
   private musicRequestId = 0;
   private musicWanted = false;
+  /** Retained even before context creation; hidden pages must never be gesture-resumed. */
+  private suspended = typeof document !== 'undefined' && document.hidden === true;
   /** Deduplicates WebAudio resume attempts across SFX/music during WebView lifecycle changes. */
   private audioResume: Promise<boolean> | null = null;
   /** One-shot user-gesture retry used when MAX/Android suspends WebAudio around video playback. */
@@ -72,7 +81,9 @@ class SfxImpl {
   private lastMusicError: string | null = null;
   /** Deterministic bed index. Replaces the previous per-lifecycle `Math.random()` track pick. */
   private bedIndex = 0;
+  private actualBedIndex: number | null = null;
   private musicTension = MUSIC_TENSION_NEUTRAL;
+  private layerTones = new Set<() => void>();
 
   // One persistent oscillator is cheaper than spawning heartbeat nodes every beat. Gain remains
   // virtually silent between pulses; setRunIntensity only schedules a short envelope.
@@ -162,14 +173,13 @@ class SfxImpl {
     const ctx = this.ctx;
     const gain = this.musicGain;
     if (!ctx || !gain) return;
-    const d = Math.max(0, Math.min(1, Number.isFinite(depth) ? depth : 0));
     const hold = Number.isFinite(holdMs) ? Math.max(0, holdMs) / 1000 : 0;
-    const target = Math.max(0.02, MUSIC_BASE_GAIN * (1 - d));
+    const target = musicGainForDuck(depth);
     const t = ctx.currentTime;
     try {
       gain.gain.cancelScheduledValues(t);
       gain.gain.setTargetAtTime(target, t, 0.08);
-      gain.gain.setTargetAtTime(MUSIC_BASE_GAIN, t + Math.max(0.05, hold), 0.35);
+      gain.gain.setTargetAtTime(MUSIC_GAIN, t + Math.max(0.05, hold), 0.35);
     } catch {
       /* Node already released during teardown. */
     }
@@ -181,7 +191,7 @@ class SfxImpl {
     if (!ctx || !gain) return;
     try {
       gain.gain.cancelScheduledValues(ctx.currentTime);
-      gain.gain.setValueAtTime(MUSIC_BASE_GAIN, ctx.currentTime);
+      gain.gain.setValueAtTime(MUSIC_GAIN, ctx.currentTime);
     } catch {
       /* no-op */
     }
@@ -189,9 +199,12 @@ class SfxImpl {
 
   /** Document-visibility suspend. A visible WebView also retries a blocked music bed. */
   setSuspended(suspended: boolean): void {
+    this.suspended = suspended;
+    // A director teardown may call false while the document is still hidden.
+    if (this.isSuspended()) this.disarmMusicUnlockRetry();
     const ctx = this.ctx;
     if (!ctx) return;
-    if (suspended) {
+    if (this.isSuspended()) {
       try {
         void ctx.suspend().catch(() => {});
       } catch {
@@ -200,8 +213,8 @@ class SfxImpl {
       return;
     }
     void this.resumeAudioContext().then((running) => {
-      if (!this.musicWanted || this.muted) return;
-      if (running) this.spawnMusic();
+      if (!this.musicWanted || this.muted || this.isSuspended()) return;
+      if (running) { this.ensureBioAmbience(); this.startMusic(); }
       else this.armMusicUnlockRetry();
     });
   }
@@ -221,10 +234,35 @@ class SfxImpl {
     // A bed change only happens at run start, so a clean restart is correct and cheap.
     this.stopCurrentMusicSource();
     this.musicBuf = null;
+    this.actualBedIndex = null;
     this.cancelMusicLoad();
   }
 
-  private applyGain(): void { if (this.master) this.master.gain.value = this.muted ? 0 : 0.5; }
+  private applyGain(): void { if (this.master) this.master.gain.value = this.muted ? 0 : MASTER_GAIN; }
+
+  private isSuspended(): boolean {
+    return this.suspended || (typeof document !== 'undefined' && document.hidden === true);
+  }
+
+  /** Safe, immutable mix/lifecycle snapshot; no platform identity or raw exception text. */
+  get debugAudioState() {
+    return Object.freeze({
+      contextState: this.ctx?.state ?? 'unavailable',
+      muted: this.muted,
+      suspended: this.isSuspended(),
+      musicWanted: this.musicWanted,
+      loading: this.musicAbort !== null,
+      playing: this.musicSrc !== null && this.ctx?.state === 'running' && !this.muted && !this.isSuspended(),
+      actualBedIndex: this.actualBedIndex,
+      gains: Object.freeze({
+        master: this.master?.gain.value ?? (this.muted ? 0 : MASTER_GAIN),
+        music: this.musicGain?.gain.value ?? MUSIC_GAIN,
+        bedTrim: this.bedTrim?.gain.value ?? 1,
+        sfx: this.sfxGain?.gain.value ?? 1,
+      }),
+      lastLoadError: this.lastMusicError,
+    });
+  }
 
   private ensure(): AudioContext | null {
     if (!this.ctx) {
@@ -233,8 +271,15 @@ class SfxImpl {
       try {
         this.ctx = new AC();
         this.master = this.ctx.createGain();
-        this.master.gain.value = this.muted ? 0 : 0.5;
-        this.master.connect(this.ctx.destination);
+        this.master.gain.value = this.muted ? 0 : MASTER_GAIN;
+        this.compressor = this.ctx.createDynamicsCompressor();
+        this.compressor.threshold.value = -8;
+        this.compressor.knee.value = 6;
+        this.compressor.ratio.value = 4;
+        this.compressor.attack.value = 0.003;
+        this.compressor.release.value = 0.12;
+        this.master.connect(this.compressor);
+        this.compressor.connect(this.ctx.destination);
         this.sfxGain = this.ctx.createGain();
         this.sfxGain.gain.value = 1;
         this.sfxGain.connect(this.master);
@@ -249,15 +294,20 @@ class SfxImpl {
         this.musicFilter.connect(this.master);
 
         this.musicGain = this.ctx.createGain();
-        this.musicGain.gain.value = MUSIC_BASE_GAIN;
+        this.musicGain.gain.value = MUSIC_GAIN;
         this.musicGain.connect(this.musicFilter);
+
+        this.bedTrim = this.ctx.createGain();
+        this.bedTrim.gain.value = 1;
+        this.bedTrim.connect(this.musicGain);
 
         this.layerBus = this.ctx.createGain();
         this.layerBus.gain.value = 1;
         this.layerBus.connect(this.musicFilter);
+        if (this.isSuspended()) void this.ctx.suspend().catch(() => {});
       } catch { return null; }
     }
-    if (this.ctx.state === 'suspended') void this.resumeAudioContext();
+    if (this.ctx.state === 'suspended' && !this.isSuspended()) void this.resumeAudioContext();
     return this.ctx;
   }
 
@@ -268,13 +318,21 @@ class SfxImpl {
    */
   private resumeAudioContext(): Promise<boolean> {
     const ctx = this.ctx;
-    if (!ctx || ctx.state === 'closed') return Promise.resolve(false);
+    if (!ctx || ctx.state === 'closed' || this.isSuspended()) return Promise.resolve(false);
     if (ctx.state === 'running') return Promise.resolve(true);
     if (this.audioResume) return this.audioResume;
 
-    const pending = Promise.resolve()
-      .then(() => ctx.resume())
-      .then(() => ctx.state === 'running')
+    // Call resume inside the gesture stack, rather than defer it to a microtask.
+    let resume: Promise<void>;
+    try { resume = ctx.resume(); } catch { return Promise.resolve(false); }
+    const pending = resume
+      .then(async () => {
+        if (this.isSuspended()) {
+          await ctx.suspend();
+          return false;
+        }
+        return ctx.state === 'running';
+      })
       .catch(() => false);
     this.audioResume = pending;
     void pending.finally(() => {
@@ -288,11 +346,11 @@ class SfxImpl {
    * of leaving music permanently silent while procedural SFX continue to work.
    */
   private armMusicUnlockRetry(): void {
-    if (this.musicUnlockHandler || !this.musicWanted || this.muted || typeof window === 'undefined') return;
+    if (this.musicUnlockHandler || !this.musicWanted || this.muted || this.isSuspended() || typeof window === 'undefined') return;
     const retry = (): void => {
       this.disarmMusicUnlockRetry();
       void this.resumeAudioContext().then((running) => {
-        if (!this.musicWanted || this.muted) return;
+        if (!this.musicWanted || this.muted || this.isSuspended()) return;
         if (running) this.spawnMusic();
         else this.armMusicUnlockRetry();
       });
@@ -313,7 +371,7 @@ class SfxImpl {
   }
 
   private ensureBioAmbience(): void {
-    if (this.bioOsc || this.muted || !this.musicWanted) return;
+    if (this.bioOsc || this.muted || !this.musicWanted || this.isSuspended()) return;
     const ctx = this.ensure();
     if (!ctx || !this.master) return;
     try {
@@ -350,7 +408,11 @@ class SfxImpl {
     const p = fetch(audioAssetUrl(MANIFEST[name].file))
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('HTTP ' + r.status))))
       .then((ab) => ctx.decodeAudioData(ab))
-      .then((buf) => { this.buffers[name] = buf; return buf; })
+      .then((buf) => {
+        this.bufferTrims[name] = scanNormalizationTrim(buf);
+        this.buffers[name] = buf;
+        return buf;
+      })
       .catch(() => null);
     this.loading[name] = p;
     void p.then(() => { if (this.loading[name] === p) delete this.loading[name]; });
@@ -358,7 +420,7 @@ class SfxImpl {
   }
 
   private playBuf(buf: AudioBuffer, out: GainNode, vol: number): void {
-    const ctx = this.ctx; if (!ctx) return;
+    const ctx = this.ctx; if (!ctx || this.muted || this.isSuspended() || ctx.state !== 'running') return;
     const src = ctx.createBufferSource();
     const gain = ctx.createGain();
     src.buffer = buf;
@@ -398,13 +460,13 @@ class SfxImpl {
   }
 
   play(name: SfxName): void {
-    if (this.muted) return;
+    if (this.muted || this.isSuspended()) return;
     const gap = THROTTLE_MS[name];
     if (gap) { const now = performance.now(); const last = this.lastAt[name] ?? -1e9;
       if (now - last < gap) return; this.lastAt[name] = now; }
     const buf = this.buffers[name];
     if (buf && this.ctx && this.sfxGain && this.ctx.state === 'running') {
-      this.playBuf(buf, this.sfxGain, MANIFEST[name].vol); return;
+      this.playBuf(buf, this.sfxGain, SFX_ROLE_GAINS[name] * (this.bufferTrims[name] ?? 1)); return;
     }
     if (!this.loading[name]) void this.load(name);
     this.fallback(name);
@@ -427,7 +489,7 @@ class SfxImpl {
     delay: number,
     out: AudioNode | null
   ): void {
-    const ctx = this.ensure(); if (!ctx || !out) return;
+    const ctx = this.ensure(); if (!ctx || !out || this.muted || this.isSuspended() || ctx.state !== 'running') return;
     const t0 = ctx.currentTime + delay;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -438,11 +500,18 @@ class SfxImpl {
     gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     osc.connect(gain);
     gain.connect(out);
-    osc.onended = () => {
+    const cleanup = (): void => {
       try { osc.disconnect(); } catch { /* no-op */ }
       try { gain.disconnect(); } catch { /* no-op */ }
       osc.onended = null;
+      this.layerTones.delete(stop);
     };
+    const stop = (): void => {
+      try { osc.stop(); } catch { /* already stopped */ }
+      cleanup();
+    };
+    osc.onended = cleanup;
+    if (out !== this.sfxGain) this.layerTones.add(stop);
     osc.start(t0);
     osc.stop(t0 + dur + 0.02);
   }
@@ -522,7 +591,6 @@ class SfxImpl {
     controller: AbortController
   ): Promise<void> {
     const preferredBed = this.bedIndex;
-    let lastError: unknown = null;
 
     for (let offset = 0; offset < MUSIC_TRACK_COUNT; offset += 1) {
       if (controller.signal.aborted || requestId !== this.musicRequestId) return;
@@ -544,18 +612,19 @@ class SfxImpl {
             fallbackBed: trackIndex,
           });
         }
-        this.bedIndex = trackIndex;
+        this.actualBedIndex = trackIndex;
+        if (this.bedTrim) this.bedTrim.gain.value = MUSIC_BED_TRIMS[trackIndex];
         this.musicBuf = buffer;
         this.lastMusicError = null;
         this.spawnMusic();
         return;
-      } catch (error) {
+      } catch {
         if (controller.signal.aborted || requestId !== this.musicRequestId) return;
-        lastError = error;
       }
     }
 
-    this.lastMusicError = lastError instanceof Error ? lastError.message : String(lastError ?? 'unknown');
+    // Diagnostics must not leak arbitrary URL/query/error payloads from the environment.
+    this.lastMusicError = 'Unable to decode a licensed music bed';
     console.warn('[OFELIYA audio] unable to load any licensed music bed', {
       preferredBed,
       error: this.lastMusicError,
@@ -563,10 +632,10 @@ class SfxImpl {
   }
 
   private spawnMusic(): void {
-    if (!this.musicWanted || this.muted || !this.ctx || !this.musicBuf || !this.musicGain || this.musicSrc) return;
+    if (!this.musicWanted || this.muted || this.isSuspended() || !this.ctx || !this.musicBuf || !this.bedTrim || this.musicSrc) return;
     if (this.ctx.state !== 'running') {
       void this.resumeAudioContext().then((running) => {
-        if (!this.musicWanted || this.muted || this.musicSrc) return;
+        if (!this.musicWanted || this.muted || this.isSuspended() || this.musicSrc) return;
         if (running) this.spawnMusic();
         else this.armMusicUnlockRetry();
       });
@@ -576,7 +645,8 @@ class SfxImpl {
     const src = this.ctx.createBufferSource();
     src.buffer = this.musicBuf;
     src.loop = true;
-    src.connect(this.musicGain);
+    this.bedTrim.gain.value = this.actualBedIndex === null ? 1 : MUSIC_BED_TRIMS[this.actualBedIndex];
+    src.connect(this.bedTrim);
     src.start();
     this.musicSrc = src;
   }
@@ -593,8 +663,11 @@ class SfxImpl {
     this.disarmMusicUnlockRetry();
     this.cancelMusicLoad();
     this.musicBuf = null;
+    this.actualBedIndex = null;
+    if (this.bedTrim) this.bedTrim.gain.value = 1;
     this.lastMusicError = null;
     this.stopBioAmbience();
+    for (const stop of this.layerTones) stop();
     this.setBioCadence(0);
     this.stopCurrentMusicSource();
     this.resetMusicDuck();

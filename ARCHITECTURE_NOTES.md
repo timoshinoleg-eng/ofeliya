@@ -18,7 +18,7 @@ Current contract: post control-mode, Legendary, difficulty, Heart timing, infect
 - `TwinStickControls` is a separate optional two-hand profile: left movement, right aim-priority, automatic fire.
 - `ControlMode` persists control selection independently of save progression.
 - `VfxSystem` owns bounded combat emitters; `AtmosphereSystem` owns preallocated ambient presentation.
-- `Sfx` owns the single game `AudioContext`, mute state, user-gesture unlock and the whole audio graph (`master`, SFX bus, music bed, music tension filter, procedural layer bus).
+- `Sfx` owns the single game `AudioContext`, mute state, user-gesture unlock and the whole audio graph (master compressor, SFX bus, music bed trim, music tension filter, procedural layer bus and retained bio oscillator).
 - `AdaptiveAudioDirector` is an audio **observer**: it consumes `StageDirector`/`HeartbeatPulseDirector` events plus a throttled danger snapshot and decides *when* the mix changes. It never owns lifecycle state, gameplay values or the audio graph.
 - `adaptiveAudioMath` is the pure, Phaser-free/WebAudio-free mood model (danger blend, asymmetric smoothing, hysteresis, deterministic bed choice). It is unit-tested in plain Node by `npm run test:audio`.
 - `SfxAdaptiveSink` is the only bridge between the director and `Sfx`, which keeps the director testable with a fake sink.
@@ -167,6 +167,36 @@ V1 replaces "one random licensed loop per lifecycle plus a bio pulse driven by s
 
 The run's danger snapshot is published to `registry['adaptiveAudio']` for on-device debugging.
 
+The audible mix uses pure `audioMixMath` policy: master gain .8 and music gain .65;
+seven licensed bed trims [.47, .37, .71, 1.14, 2, .32, .5]. Each decoded SFX scans
+all channels once and caches `min(12, .63 / peak)` (silence/invalid samples use1).
+SFX role gains replace the old manifest coefficients: shoot .12, hit .16, pickup .28,
+click .20, levelup .50, hurt .55, nova .48, elite .50, boss .60, gameover/victory .58.
+Existing shoot/hit/pickup throttles and director duck/filter/cue decisions are unchanged.
+
+Graph routing is `bed source -> bed trim -> music gain (duck) -> lowpass -> master`,
+`stingers/heartbeat -> layer bus -> lowpass -> master`,
+`SFX source -> role gain * cached normalization -> SFX bus -> master`, and
+`bio oscillator -> pulse envelope -> master`. Master feeds one compressor then destination:
+threshold -8 dB, knee6 dB, ratio4, attack .003s, release .12s. Bed trim never affects
+procedural layers or gets overwritten by duck automation; bio bypasses the tension filter.
+
+Visibility suspension is retained before AudioContext creation and checked at every
+resume/source boundary, including pending resume completion and late decode. The actual
+document hidden state also wins over a director teardown's `setSuspended(false)`.
+Decoded hidden beds may cache but cannot spawn until visible. Abort + request IDs still
+reject stopped/muted/superseded loads. A blocked resume keeps one gesture retry per event
+type, removed on successful start, mute, hide or stop. Manual pause keeps the shared context
+available for UI click sounds. Run teardown stops/disconnects bed, bio and outstanding
+procedural layer tones; ended callbacks reclaim every transient source/gain pair.
+
+`Sfx.debugAudioState` returns an immutable identity-free snapshot of context state, mute,
+visibility, music wanted/loading/actually playing, decoded actual fallback bed index (null
+before successful decode), gains and bounded load error text. It is separate from the
+director's requested deterministic bed and is not gameplay state. Focused
+`node tests/audio-mix.mjs` executes production math and Sfx through a WebAudio I/O adapter;
+actual-sample rendering and device audibility remain separate acceptance evidence.
+
 ## Pools / caps
 
 - Bullets: 160.
@@ -176,7 +206,7 @@ The run's danger snapshot is published to `registry['adaptiveAudio']` for on-dev
 - Damage text and trails are fixed pools.
 - Ambient particles are preallocated.
 - Combat VFX uses pre-created emitters and a global budget.
-- Long-lived audio nodes are bounded: one `AudioContext`, one music filter, one layer bus, one bio oscillator. Stingers/heartbeat are transient oscillators disconnected on `ended`.
+- Long-lived audio nodes are bounded: one `AudioContext`, one master compressor, one music filter, retained master/SFX/music/bed-trim/layer gains and at most one bio oscillator. Stingers/heartbeat are transient oscillators disconnected on `ended` or run teardown; SFX source/gain pairs disconnect on `ended`.
 
 ## Quality gates
 
