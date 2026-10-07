@@ -136,3 +136,11 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - Exercise a stale callback despite cancellation, then permit new ordinary traffic to prove replacement remains active through public allocation behavior. Assert current completion releases visibility normally.
 - Tie fixture is literal RGB(242,246,244): hand-checked squared distances 237 to white/immune, all other palette distances > 10,000. Expect white as first declaration-order tie winner, with both spark/chip frames; no duplicate nearest-color loop in tests.
 - Mutation verification modifies production source strings only in the temporary loader memory, never tracked source: wrong shedding, absent serial guard, <= tie update and disabled ordinary cap each fail the corresponding new case. Regression additions passed existing code; do not describe their mutation RED as preimplementation feature RED.
+
+
+## VO03 organ atmosphere decisions — 07.10.2026
+- Keep logical background256px geometry and existing keys. Bake periodic sine flow and0.5-slope Heart fibres; broad warm detail stays below gameplay without postFX. Leave actor, host shadow and combat atlas dimensions/recipes to their existing owners.
+- Allocate all three RBC bands at construction (full8/4/2, reduced4/3/1). Proportional visible budget preserves at least one per available band; Heart uses ceil(runtimeBudget/2), subject to the same three-band floor, preventing quality/stage switches from removing near depth.
+- Retain one pulse Rectangle behind gameplay. Clamp composite alpha<=.075 and decay by actual elapsed milliseconds, separate from movement's50ms clamp. Split elapsed time at pending190ms second beat to preserve overlay decay with large frame intervals; store only latest pending numeric schedule and cancel on stage/reset/shutdown.
+- Separate the cosmetic Heart envelope from authoritative heartbeat logic: first exp(-phase*14), second absent beforephase.22 then .52*exp(-(phase-.22)*18). Do not alter real heartbeat, director or AI timers.
+- Focused test adapters record Phaser/Canvas calls while production logic and real EventEmitter3 execute. Four in-memory source mutations verify gate/decay/band/cancellation coverage. Root browser screenshots/independent review remain separate evidence.
