@@ -77,6 +77,9 @@ jobs:
       - name: Run identity and mastery deterministic smoke
         run: npm run test:run-identity
 
+      - name: Presentation art, VFX, atmosphere and audio regressions
+        run: npm run test:presentation
+
       - name: Adaptive audio deterministic smoke
         run: npm run test:audio
 
@@ -194,6 +197,9 @@ jobs:
       - name: Full startup timeout contracts
         run: npm run test:startup
 
+      - name: Optional art missing and stalled startup fallback
+        run: npm run test:art-startup
+
       - name: Non-blocking MAX bridge smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/max-bridge-nonblocking-smoke.cjs
 
@@ -244,6 +250,12 @@ jobs:
 
       - name: High-DPI WebGL and Canvas fallback smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/renderer-smoke.cjs
+
+      - name: Art world display and body geometry
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/art-world-geometry-smoke.cjs
+
+      - name: Renderer diagnostics with missing scenes
+        run: OFELIYA_URL=http://127.0.0.1:5173/ node tests/render-snapshot-missing-scenes.mjs
 
       - name: Legendary runtime browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/legendary-runtime-smoke.cjs

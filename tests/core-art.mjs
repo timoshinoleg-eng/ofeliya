@@ -107,17 +107,19 @@ function methodBody(path, name) {
 }
 test('Menu host and hero keep the original large portraits and tween endpoints', () => {
  const { artScale } = load('src/game/ArtMetrics.ts');
+ const { ROLE, BORDER, PANEL } = load('src/ui/tokens.ts');
  const source = readFileSync('src/scenes/MenuScene.ts', 'utf8');
  const body = source.slice(source.indexOf('    const host ='), source.indexOf('    const titleY ='));
  for (const H of [568, 844]) {
   const f = fixture(); bake(f);
-  new Function('W', 'H', 'artScale', body).call(f.scene, 390, H, artScale);
-  const [host, hero] = f.objects;
+  new Function('W', 'H', 'artScale', 'ROLE', 'BORDER', 'PANEL', body).call(f.scene, 390, H, artScale, ROLE, BORDER, PANEL);
+  const host = f.objects.find(o => o.texture?.key === 'host-cell-shadow');
+  const hero = f.objects.find(o => o.texture?.key === 'virus-player');
   const hostScale = H < 650 ? 1.1 : 1.4, heroScale = H < 650 ? 1.8 : 2.15;
   assert.equal(host.displayWidth, 112 * hostScale);
   assert.equal(hero.displayWidth, 56 * heroScale);
-  assert.ok(Math.abs(f.tweens[0].scale * host.width - 112 * hostScale * 1.07) < 1e-9);
-  assert.ok(Math.abs(f.tweens[2].scale * hero.width - 56 * heroScale * 1.06) < 1e-9);
+  assert.ok(Math.abs(f.tweens.find(t => t.targets === host && t.scale !== undefined).scale * host.width - 112 * hostScale * 1.07) < 1e-9);
+  assert.ok(Math.abs(f.tweens.find(t => t.targets === hero && t.scale !== undefined).scale * hero.width - 56 * heroScale * 1.06) < 1e-9);
  }
 });
 test('Game trail initial/fade endpoints and organ reset retain their world footprint', () => {

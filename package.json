@@ -69,7 +69,9 @@
     "test:mobile-evidence": "node scripts/check-mobile-acceptance-evidence.mjs",
     "test:telegram-bot": "node scripts/check-telegram-bot.mjs",
     "test:caddy-edge": "node scripts/check-caddy-edge.mjs",
-    "test:telegram-api": "node scripts/check-telegram-api-transport.mjs"
+    "test:telegram-api": "node scripts/check-telegram-api-transport.mjs",
+    "test:presentation": "node tests/core-art.mjs && node tests/vfx-presentation.mjs && node tests/atmosphere-presentation.mjs && node tests/audio-mix.mjs",
+    "test:art-startup": "node tests/startup-art-fallback.mjs"
   },
   "dependencies": {
     "@maxhub/max-bot-api": "^0.3.1",
