@@ -1,0 +1,692 @@
+[
+  {
+    "renderer": "webgl",
+    "rows": [
+      {
+        "label": "player-0",
+        "displayWidth": 50.4,
+        "displayHeight": 50.4,
+        "worldBodyWidth": 23.400000000000002,
+        "worldBodyHeight": 23.400000000000002,
+        "centerOffsetX": -0.6999999999999886,
+        "centerOffsetY": -0.6999999999999886
+      },
+      {
+        "label": "player-200",
+        "displayWidth": 51.56760041211431,
+        "displayHeight": 51.56760041211431,
+        "worldBodyWidth": 23.94210019133879,
+        "worldBodyHeight": 23.94210019133879,
+        "centerOffsetX": -0.9710500956693977,
+        "centerOffsetY": -0.9710500956693977
+      },
+      {
+        "label": "player-600",
+        "displayWidth": 51.31309445845376,
+        "displayHeight": 51.31309445845376,
+        "worldBodyWidth": 23.82393671285353,
+        "worldBodyHeight": 23.82393671285353,
+        "centerOffsetX": -0.9119683564267689,
+        "centerOffsetY": -0.9119683564267689
+      },
+      {
+        "label": "player-1200",
+        "displayWidth": 48.91539599987079,
+        "displayHeight": 48.91539599987079,
+        "worldBodyWidth": 22.710719571368582,
+        "worldBodyHeight": 22.710719571368582,
+        "centerOffsetX": -0.3553597856842998,
+        "centerOffsetY": -0.3553597856842998
+      },
+      {
+        "label": "swarm-false-null-activate",
+        "displayWidth": 38,
+        "displayHeight": 38,
+        "worldBodyWidth": 22,
+        "worldBodyHeight": 22,
+        "centerOffsetX": 0,
+        "centerOffsetY": 0
+      },
+      {
+        "label": "swarm-false-null-200",
+        "displayWidth": 38,
+        "displayHeight": 38,
+        "worldBodyWidth": 22,
+        "worldBodyHeight": 22,
+        "centerOffsetX": 0,
+        "centerOffsetY": 0
+      },
+      {
+        "label": "swarm-false-null-600",
+        "displayWidth": 38,
+        "displayHeight": 38,
+        "worldBodyWidth": 22,
+        "worldBodyHeight": 22,
+        "centerOffsetX": 0,
+        "centerOffsetY": 0
+      },
+      {
+        "label": "swarm-false-null-1200",
+        "displayWidth": 38,
+        "displayHeight": 38,
+        "worldBodyWidth": 22,
+        "worldBodyHeight": 22,
+        "centerOffsetX": 0,
+        "centerOffsetY": 0
+      },
+      {
+        "label": "swarm-true-null-activate",
+        "displayWidth": 55.1,
+        "displayHeight": 55.1,
+        "worldBodyWidth": 31.9,
+        "worldBodyHeight": 31.9,
+        "centerOffsetX": -0.9500000000000455,
+        "centerOffsetY": -0.9500000000000455
+      },
+      {
+        "label": "swarm-true-null-200",
+        "displayWidth": 55.1,
+        "displayHeight": 55.1,
+        "worldBodyWidth": 31.9,
+        "worldBodyHeight": 31.9,
+        "centerOffsetX": -0.9500000000000455,
+        "centerOffsetY": -0.9500000000000455
+      },
+      {
+        "label": "swarm-true-null-600",
+        "displayWidth": 55.1,
+        "displayHeight": 55.1,
+        "worldBodyWidth": 31.9,
+        "worldBodyHeight": 31.9,
+        "centerOffsetX": -0.9500000000000455,
+        "centerOffsetY": -0.9500000000000455
+      },
+      {
+        "label": "swarm-true-null-1200",
+        "displayWidth": 55.1,
+        "displayHeight": 55.1,
+        "worldBodyWidth": 31.9,
+        "worldBodyHeight": 31.9,
+        "centerOffsetX": -0.9500000000000455,
+        "centerOffsetY": -0.9500000000000455
+      },
+      {
+        "label": "runner-false-null-activate",
+        "displayWidth": 44,
+        "displayHeight": 40,
+        "worldBodyWidth": 20,
+        "worldBodyHeight": 20,
+        "centerOffsetX": 0,
+        "centerOffsetY": 0
+      },
+      {
+        "label": "runner-false-null-200",
+        "displayWidth": 42.5842340704764,
+        "displayHeight": 41.28705993593055,
+        "worldBodyWidth": 19.35647003203473,
+        "worldBodyHeight": 20.643529967965275,
+        "centerOffsetX": -0.678235016017311,
+        "centerOffsetY": -0.32176498398268905
+      },
+      {
+        "label": "runner-false-null-600",
+        "displayWidth": 43.27247014094636,
+        "displayHeight": 40.66139078095786,
+        "worldBodyWidth": 19.669304609521074,
+        "worldBodyHeight": 20.33069539047893,
+        "centerOffsetX": -0.8346523047605388,
+        "centerOffsetY": -0.16534769523946125
+      },
+      {
+        "label": "runner-false-null-1200",
+        "displayWidth": 42.4801500404942,
+        "displayHeight": 41.381681781368904,
+        "worldBodyWidth": 19.309159109315544,
+        "worldBodyHeight": 20.690840890684452,
+        "centerOffsetX": -0.6545795546577438,
+        "centerOffsetY": -0.34542044534225624
+      },
+      {
+        "label": "runner-true-null-activate",
+        "displayWidth": 63.8,
+        "displayHeight": 58,
+        "worldBodyWidth": 29,
+        "worldBodyHeight": 29,
+        "centerOffsetX": -0.5,
+        "centerOffsetY": -0.5
+      },
+      {
+        "label": "runner-true-null-200",
+        "displayWidth": 61.747139402190776,
+        "displayHeight": 59.8662369070993,
+        "worldBodyWidth": 28.066881546450354,
+        "worldBodyHeight": 29.93311845354965,
+        "centerOffsetX": -0.03344077322515204,
+        "centerOffsetY": -0.966559226774848
+      },
+      {
+        "label": "runner-true-null-600",
+        "displayWidth": 62.745081704372225,
+        "displayHeight": 58.95901663238889,
+        "worldBodyWidth": 28.52049168380556,
+        "worldBodyHeight": 29.479508316194444,
+        "centerOffsetX": -0.2602458419028153,
+        "centerOffsetY": -0.7397541580971847
+      },
+      {
+        "label": "runner-true-null-1200",
+        "displayWidth": 61.59621755871659,
+        "displayHeight": 60.00343858298491,
+        "worldBodyWidth": 27.99828070850754,
+        "worldBodyHeight": 30.001719291492456,
+        "centerOffsetX": -0.9991403542537682,
+        "centerOffsetY": -0.000859645746231763
+      },
+      {
+        "label": "brute-false-null-activate",
+        "displayWidth": 62,
+        "displayHeight": 62,
+        "worldBodyWidth": 26,
+        "worldBodyHeight": 26,
+        "centerOffsetX": 0,
+        "centerOffsetY": 0
+      },
+      {
+        "label": "brute-false-null-200",
+        "displayWidth": 63.018329228014125,
+        "displayHeight": 60.99812621327305,
+        "worldBodyWidth": 26.427041289167214,
+        "worldBodyHeight": 25.579859379759668,
+        "centerOffsetX": -0.213520644583582,
+        "centerOffsetY": -0.7899296898798411
+      },
+      {
+        "label": "brute-false-null-600",
+        "displayWidth": 63.458132362853654,
+        "displayHeight": 60.57537240491108,
+        "worldBodyWidth": 26.611474861841856,
+        "worldBodyHeight": 25.40257552464013,
+        "centerOffsetX": -0.30573743092088534,
+        "centerOffsetY": -0.7012877623200211
+      },
+      {
+        "label": "brute-false-null-1200",
+        "displayWidth": 61.15676727812148,
+        "displayHeight": 62.85485925897151,
+        "worldBodyWidth": 25.646386277921913,
+        "worldBodyHeight": 26.35848936666547,
+        "centerOffsetX": -0.8231931389609599,
+        "centerOffsetY": -0.17924468333274035
+      },
+      {
+        "label": "brute-true-null-activate",
+        "displayWidth": 89.89999999999999,
+        "displayHeight": 89.89999999999999,
+        "worldBodyWidth": 37.699999999999996,
+        "worldBodyHeight": 37.699999999999996,
+        "centerOffsetX": -0.8500000000000227,
+        "centerOffsetY": -0.8500000000000227
+      },
+      {
+        "label": "brute-true-null-200",
+        "displayWidth": 91.37657738062047,
+        "displayHeight": 88.44728300924594,
+        "worldBodyWidth": 38.31920986929246,
+        "worldBodyHeight": 37.09079610065152,
+        "centerOffsetX": -0.1596049346462678,
+        "centerOffsetY": -0.5453980503257299
+      },
+      {
+        "label": "brute-true-null-600",
+        "displayWidth": 92.0142919261378,
+        "displayHeight": 87.83428998712107,
+        "worldBodyWidth": 38.58663854967069,
+        "worldBodyHeight": 36.83373451072819,
+        "centerOffsetX": -0.29331927483531217,
+        "centerOffsetY": -0.41686725536408176
+      },
+      {
+        "label": "brute-true-null-1200",
+        "displayWidth": 88.67731255327615,
+        "displayHeight": 91.13954592550868,
+        "worldBodyWidth": 37.18726010298677,
+        "worldBodyHeight": 38.21980958166493,
+        "centerOffsetX": -0.5936300514933919,
+        "centerOffsetY": -0.10990479083250193
+      },
+      {
+        "label": "boss-false-immune-prime-activate",
+        "displayWidth": 94,
+        "displayHeight": 94,
+        "worldBodyWidth": 50,
+        "worldBodyHeight": 50,
+        "centerOffsetX": 0,
+        "centerOffsetY": 0
+      },
+      {
+        "label": "boss-false-immune-prime-200",
+        "displayWidth": 95.01045468678515,
+        "displayHeight": 95.01045468678515,
+        "worldBodyWidth": 50.537475897226145,
+        "worldBodyHeight": 50.537475897226145,
+        "centerOffsetX": -0.2687379486130794,
+        "centerOffsetY": -0.2687379486130794
+      },
+      {
+        "label": "boss-false-immune-prime-600",
+        "displayWidth": 95.58988014147558,
+        "displayHeight": 95.58988014147558,
+        "worldBodyWidth": 50.845680926316795,
+        "worldBodyHeight": 50.845680926316795,
+        "centerOffsetX": -0.4228404631584226,
+        "centerOffsetY": -0.4228404631584226
+      },
+      {
+        "label": "boss-false-immune-prime-1200",
+        "displayWidth": 92.91204612844479,
+        "displayHeight": 92.91204612844479,
+        "worldBodyWidth": 49.42130113215148,
+        "worldBodyHeight": 49.42130113215148,
+        "centerOffsetX": -0.7106505660757421,
+        "centerOffsetY": -0.7106505660757421
+      },
+      {
+        "label": "boss-false-cardiac-titan-activate",
+        "displayWidth": 108,
+        "displayHeight": 108,
+        "worldBodyWidth": 50,
+        "worldBodyHeight": 50,
+        "centerOffsetX": 0,
+        "centerOffsetY": 0
+      },
+      {
+        "label": "boss-false-cardiac-titan-200",
+        "displayWidth": 111.13033936935621,
+        "displayHeight": 111.13033936935621,
+        "worldBodyWidth": 51.449231189516766,
+        "worldBodyHeight": 51.449231189516766,
+        "centerOffsetX": -0.7246155947583475,
+        "centerOffsetY": -0.7246155947583475
+      },
+      {
+        "label": "boss-false-cardiac-titan-600",
+        "displayWidth": 108.00018137277077,
+        "displayHeight": 108.00018137277077,
+        "worldBodyWidth": 50.00008396887535,
+        "worldBodyHeight": 50.00008396887535,
+        "centerOffsetX": -0.000041984437643804995,
+        "centerOffsetY": -0.000041984437643804995
+      },
+      {
+        "label": "boss-false-cardiac-titan-1200",
+        "displayWidth": 108.0388090241174,
+        "displayHeight": 108.0388090241174,
+        "worldBodyWidth": 50.01796714079509,
+        "worldBodyHeight": 50.01796714079509,
+        "centerOffsetX": -0.008983570397504081,
+        "centerOffsetY": -0.008983570397504081
+      },
+      {
+        "label": "host",
+        "displayWidth": 97.2883038147572,
+        "displayHeight": 97.2883038147572,
+        "overlayWidth": 98.94220497960805,
+        "overlayHeight": 98.94220497960805,
+        "overlayVisible": true
+      },
+      {
+        "label": "host-restored",
+        "displayWidth": 97.2883038147572,
+        "displayHeight": 97.2883038147572,
+        "overlayWidth": 98.94220497960805,
+        "overlayHeight": 98.94220497960805,
+        "overlayVisible": true
+      }
+    ]
+  },
+  {
+    "renderer": "canvas",
+    "rows": [
+      {
+        "label": "player-0",
+        "displayWidth": 50.4,
+        "displayHeight": 50.4,
+        "worldBodyWidth": 23.400000000000002,
+        "worldBodyHeight": 23.400000000000002,
+        "centerOffsetX": -0.6999999999999886,
+        "centerOffsetY": -0.6999999999999886
+      },
+      {
+        "label": "player-200",
+        "displayWidth": 51.56760041211431,
+        "displayHeight": 51.56760041211431,
+        "worldBodyWidth": 23.94210019133879,
+        "worldBodyHeight": 23.94210019133879,
+        "centerOffsetX": -0.9710500956693977,
+        "centerOffsetY": -0.9710500956693977
+      },
+      {
+        "label": "player-600",
+        "displayWidth": 51.31309445845376,
+        "displayHeight": 51.31309445845376,
+        "worldBodyWidth": 23.82393671285353,
+        "worldBodyHeight": 23.82393671285353,
+        "centerOffsetX": -0.9119683564267689,
+        "centerOffsetY": -0.9119683564267689
+      },
+      {
+        "label": "player-1200",
+        "displayWidth": 48.91539599987079,
+        "displayHeight": 48.91539599987079,
+        "worldBodyWidth": 22.710719571368582,
+        "worldBodyHeight": 22.710719571368582,
+        "centerOffsetX": -0.3553597856842998,
+        "centerOffsetY": -0.3553597856842998
+      },
+      {
+        "label": "swarm-false-null-activate",
+        "displayWidth": 38,
+        "displayHeight": 38,
+        "worldBodyWidth": 22,
+        "worldBodyHeight": 22,
+        "centerOffsetX": 0,
+        "centerOffsetY": 0
+      },
+      {
+        "label": "swarm-false-null-200",
+        "displayWidth": 38,
+        "displayHeight": 38,
+        "worldBodyWidth": 22,
+        "worldBodyHeight": 22,
+        "centerOffsetX": 0,
+        "centerOffsetY": 0
+      },
+      {
+        "label": "swarm-false-null-600",
+        "displayWidth": 38,
+        "displayHeight": 38,
+        "worldBodyWidth": 22,
+        "worldBodyHeight": 22,
+        "centerOffsetX": 0,
+        "centerOffsetY": 0
+      },
+      {
+        "label": "swarm-false-null-1200",
+        "displayWidth": 38,
+        "displayHeight": 38,
+        "worldBodyWidth": 22,
+        "worldBodyHeight": 22,
+        "centerOffsetX": 0,
+        "centerOffsetY": 0
+      },
+      {
+        "label": "swarm-true-null-activate",
+        "displayWidth": 55.1,
+        "displayHeight": 55.1,
+        "worldBodyWidth": 31.9,
+        "worldBodyHeight": 31.9,
+        "centerOffsetX": -0.9500000000000455,
+        "centerOffsetY": -0.9500000000000455
+      },
+      {
+        "label": "swarm-true-null-200",
+        "displayWidth": 55.1,
+        "displayHeight": 55.1,
+        "worldBodyWidth": 31.9,
+        "worldBodyHeight": 31.9,
+        "centerOffsetX": -0.9500000000000455,
+        "centerOffsetY": -0.9500000000000455
+      },
+      {
+        "label": "swarm-true-null-600",
+        "displayWidth": 55.1,
+        "displayHeight": 55.1,
+        "worldBodyWidth": 31.9,
+        "worldBodyHeight": 31.9,
+        "centerOffsetX": -0.9500000000000455,
+        "centerOffsetY": -0.9500000000000455
+      },
+      {
+        "label": "swarm-true-null-1200",
+        "displayWidth": 55.1,
+        "displayHeight": 55.1,
+        "worldBodyWidth": 31.9,
+        "worldBodyHeight": 31.9,
+        "centerOffsetX": -0.9500000000000455,
+        "centerOffsetY": -0.9500000000000455
+      },
+      {
+        "label": "runner-false-null-activate",
+        "displayWidth": 44,
+        "displayHeight": 40,
+        "worldBodyWidth": 20,
+        "worldBodyHeight": 20,
+        "centerOffsetX": 0,
+        "centerOffsetY": 0
+      },
+      {
+        "label": "runner-false-null-200",
+        "displayWidth": 42.5842340704764,
+        "displayHeight": 41.28705993593055,
+        "worldBodyWidth": 19.35647003203473,
+        "worldBodyHeight": 20.643529967965275,
+        "centerOffsetX": -0.678235016017311,
+        "centerOffsetY": -0.32176498398268905
+      },
+      {
+        "label": "runner-false-null-600",
+        "displayWidth": 43.27247014094636,
+        "displayHeight": 40.66139078095786,
+        "worldBodyWidth": 19.669304609521074,
+        "worldBodyHeight": 20.33069539047893,
+        "centerOffsetX": -0.8346523047605388,
+        "centerOffsetY": -0.16534769523946125
+      },
+      {
+        "label": "runner-false-null-1200",
+        "displayWidth": 42.4801500404942,
+        "displayHeight": 41.381681781368904,
+        "worldBodyWidth": 19.309159109315544,
+        "worldBodyHeight": 20.690840890684452,
+        "centerOffsetX": -0.6545795546577438,
+        "centerOffsetY": -0.34542044534225624
+      },
+      {
+        "label": "runner-true-null-activate",
+        "displayWidth": 63.8,
+        "displayHeight": 58,
+        "worldBodyWidth": 29,
+        "worldBodyHeight": 29,
+        "centerOffsetX": -0.5,
+        "centerOffsetY": -0.5
+      },
+      {
+        "label": "runner-true-null-200",
+        "displayWidth": 61.747139402190776,
+        "displayHeight": 59.8662369070993,
+        "worldBodyWidth": 28.066881546450354,
+        "worldBodyHeight": 29.93311845354965,
+        "centerOffsetX": -0.03344077322515204,
+        "centerOffsetY": -0.966559226774848
+      },
+      {
+        "label": "runner-true-null-600",
+        "displayWidth": 62.745081704372225,
+        "displayHeight": 58.95901663238889,
+        "worldBodyWidth": 28.52049168380556,
+        "worldBodyHeight": 29.479508316194444,
+        "centerOffsetX": -0.2602458419028153,
+        "centerOffsetY": -0.7397541580971847
+      },
+      {
+        "label": "runner-true-null-1200",
+        "displayWidth": 61.59621755871659,
+        "displayHeight": 60.00343858298491,
+        "worldBodyWidth": 27.99828070850754,
+        "worldBodyHeight": 30.001719291492456,
+        "centerOffsetX": -0.9991403542537682,
+        "centerOffsetY": -0.000859645746231763
+      },
+      {
+        "label": "brute-false-null-activate",
+        "displayWidth": 62,
+        "displayHeight": 62,
+        "worldBodyWidth": 26,
+        "worldBodyHeight": 26,
+        "centerOffsetX": 0,
+        "centerOffsetY": 0
+      },
+      {
+        "label": "brute-false-null-200",
+        "displayWidth": 63.018329228014125,
+        "displayHeight": 60.99812621327305,
+        "worldBodyWidth": 26.427041289167214,
+        "worldBodyHeight": 25.579859379759668,
+        "centerOffsetX": -0.213520644583582,
+        "centerOffsetY": -0.7899296898798411
+      },
+      {
+        "label": "brute-false-null-600",
+        "displayWidth": 63.458132362853654,
+        "displayHeight": 60.57537240491108,
+        "worldBodyWidth": 26.611474861841856,
+        "worldBodyHeight": 25.40257552464013,
+        "centerOffsetX": -0.30573743092088534,
+        "centerOffsetY": -0.7012877623200211
+      },
+      {
+        "label": "brute-false-null-1200",
+        "displayWidth": 61.15676727812148,
+        "displayHeight": 62.85485925897151,
+        "worldBodyWidth": 25.646386277921913,
+        "worldBodyHeight": 26.35848936666547,
+        "centerOffsetX": -0.8231931389609599,
+        "centerOffsetY": -0.17924468333274035
+      },
+      {
+        "label": "brute-true-null-activate",
+        "displayWidth": 89.89999999999999,
+        "displayHeight": 89.89999999999999,
+        "worldBodyWidth": 37.699999999999996,
+        "worldBodyHeight": 37.699999999999996,
+        "centerOffsetX": -0.8500000000000227,
+        "centerOffsetY": -0.8500000000000227
+      },
+      {
+        "label": "brute-true-null-200",
+        "displayWidth": 91.37657738062047,
+        "displayHeight": 88.44728300924594,
+        "worldBodyWidth": 38.31920986929246,
+        "worldBodyHeight": 37.09079610065152,
+        "centerOffsetX": -0.1596049346462678,
+        "centerOffsetY": -0.5453980503257299
+      },
+      {
+        "label": "brute-true-null-600",
+        "displayWidth": 92.0142919261378,
+        "displayHeight": 87.83428998712107,
+        "worldBodyWidth": 38.58663854967069,
+        "worldBodyHeight": 36.83373451072819,
+        "centerOffsetX": -0.29331927483531217,
+        "centerOffsetY": -0.41686725536408176
+      },
+      {
+        "label": "brute-true-null-1200",
+        "displayWidth": 88.67731255327615,
+        "displayHeight": 91.13954592550868,
+        "worldBodyWidth": 37.18726010298677,
+        "worldBodyHeight": 38.21980958166493,
+        "centerOffsetX": -0.5936300514933919,
+        "centerOffsetY": -0.10990479083250193
+      },
+      {
+        "label": "boss-false-immune-prime-activate",
+        "displayWidth": 94,
+        "displayHeight": 94,
+        "worldBodyWidth": 50,
+        "worldBodyHeight": 50,
+        "centerOffsetX": 0,
+        "centerOffsetY": 0
+      },
+      {
+        "label": "boss-false-immune-prime-200",
+        "displayWidth": 95.01045468678515,
+        "displayHeight": 95.01045468678515,
+        "worldBodyWidth": 50.537475897226145,
+        "worldBodyHeight": 50.537475897226145,
+        "centerOffsetX": -0.2687379486130794,
+        "centerOffsetY": -0.2687379486130794
+      },
+      {
+        "label": "boss-false-immune-prime-600",
+        "displayWidth": 95.58988014147558,
+        "displayHeight": 95.58988014147558,
+        "worldBodyWidth": 50.845680926316795,
+        "worldBodyHeight": 50.845680926316795,
+        "centerOffsetX": -0.4228404631584226,
+        "centerOffsetY": -0.4228404631584226
+      },
+      {
+        "label": "boss-false-immune-prime-1200",
+        "displayWidth": 92.91204612844479,
+        "displayHeight": 92.91204612844479,
+        "worldBodyWidth": 49.42130113215148,
+        "worldBodyHeight": 49.42130113215148,
+        "centerOffsetX": -0.7106505660757421,
+        "centerOffsetY": -0.7106505660757421
+      },
+      {
+        "label": "boss-false-cardiac-titan-activate",
+        "displayWidth": 108,
+        "displayHeight": 108,
+        "worldBodyWidth": 50,
+        "worldBodyHeight": 50,
+        "centerOffsetX": 0,
+        "centerOffsetY": 0
+      },
+      {
+        "label": "boss-false-cardiac-titan-200",
+        "displayWidth": 111.13033936935621,
+        "displayHeight": 111.13033936935621,
+        "worldBodyWidth": 51.449231189516766,
+        "worldBodyHeight": 51.449231189516766,
+        "centerOffsetX": -0.7246155947583475,
+        "centerOffsetY": -0.7246155947583475
+      },
+      {
+        "label": "boss-false-cardiac-titan-600",
+        "displayWidth": 108.00018137277077,
+        "displayHeight": 108.00018137277077,
+        "worldBodyWidth": 50.00008396887535,
+        "worldBodyHeight": 50.00008396887535,
+        "centerOffsetX": -0.000041984437643804995,
+        "centerOffsetY": -0.000041984437643804995
+      },
+      {
+        "label": "boss-false-cardiac-titan-1200",
+        "displayWidth": 108.0388090241174,
+        "displayHeight": 108.0388090241174,
+        "worldBodyWidth": 50.01796714079509,
+        "worldBodyHeight": 50.01796714079509,
+        "centerOffsetX": -0.008983570397504081,
+        "centerOffsetY": -0.008983570397504081
+      },
+      {
+        "label": "host",
+        "displayWidth": 97.2883038147572,
+        "displayHeight": 97.2883038147572,
+        "overlayWidth": 98.94220497960805,
+        "overlayHeight": 98.94220497960805,
+        "overlayVisible": true
+      },
+      {
+        "label": "host-restored",
+        "displayWidth": 97.2883038147572,
+        "displayHeight": 97.2883038147572,
+        "overlayWidth": 98.94220497960805,
+        "overlayHeight": 98.94220497960805,
+        "overlayVisible": true
+      }
+    ]
+  }
+]

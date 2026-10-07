@@ -1,0 +1,148 @@
+{
+  "rows": [
+    {
+      "contextState": "running",
+      "muted": false,
+      "suspended": false,
+      "musicWanted": true,
+      "loading": false,
+      "playing": true,
+      "actualBedIndex": 0,
+      "gains": {
+        "master": 0.800000011920929,
+        "music": 0.6499999761581421,
+        "bedTrim": 0.4699999988079071,
+        "sfx": 1
+      },
+      "lastLoadError": null
+    },
+    {
+      "contextState": "running",
+      "muted": false,
+      "suspended": false,
+      "musicWanted": true,
+      "loading": false,
+      "playing": true,
+      "actualBedIndex": 1,
+      "gains": {
+        "master": 0.800000011920929,
+        "music": 0.6499999761581421,
+        "bedTrim": 0.3700000047683716,
+        "sfx": 1
+      },
+      "lastLoadError": null
+    },
+    {
+      "contextState": "running",
+      "muted": false,
+      "suspended": false,
+      "musicWanted": true,
+      "loading": false,
+      "playing": true,
+      "actualBedIndex": 2,
+      "gains": {
+        "master": 0.800000011920929,
+        "music": 0.6499999761581421,
+        "bedTrim": 0.7099999785423279,
+        "sfx": 1
+      },
+      "lastLoadError": null
+    },
+    {
+      "contextState": "running",
+      "muted": false,
+      "suspended": false,
+      "musicWanted": true,
+      "loading": false,
+      "playing": true,
+      "actualBedIndex": 3,
+      "gains": {
+        "master": 0.800000011920929,
+        "music": 0.6499999761581421,
+        "bedTrim": 1.1399999856948853,
+        "sfx": 1
+      },
+      "lastLoadError": null
+    },
+    {
+      "contextState": "running",
+      "muted": false,
+      "suspended": false,
+      "musicWanted": true,
+      "loading": false,
+      "playing": true,
+      "actualBedIndex": 4,
+      "gains": {
+        "master": 0.800000011920929,
+        "music": 0.6499999761581421,
+        "bedTrim": 2,
+        "sfx": 1
+      },
+      "lastLoadError": null
+    },
+    {
+      "contextState": "running",
+      "muted": false,
+      "suspended": false,
+      "musicWanted": true,
+      "loading": false,
+      "playing": true,
+      "actualBedIndex": 5,
+      "gains": {
+        "master": 0.800000011920929,
+        "music": 0.6499999761581421,
+        "bedTrim": 0.3199999928474426,
+        "sfx": 1
+      },
+      "lastLoadError": null
+    },
+    {
+      "contextState": "running",
+      "muted": false,
+      "suspended": false,
+      "musicWanted": true,
+      "loading": false,
+      "playing": true,
+      "actualBedIndex": 6,
+      "gains": {
+        "master": 0.800000011920929,
+        "music": 0.6499999761581421,
+        "bedTrim": 0.5,
+        "sfx": 1
+      },
+      "lastLoadError": null
+    }
+  ],
+  "hidden": {
+    "contextState": "suspended",
+    "muted": false,
+    "suspended": true,
+    "musicWanted": true,
+    "loading": false,
+    "playing": false,
+    "actualBedIndex": 3,
+    "gains": {
+      "master": 0.800000011920929,
+      "music": 0.6499999761581421,
+      "bedTrim": 1.1399999856948853,
+      "sfx": 1
+    },
+    "lastLoadError": null
+  },
+  "stopped": {
+    "contextState": "running",
+    "muted": false,
+    "suspended": false,
+    "musicWanted": false,
+    "loading": false,
+    "playing": false,
+    "actualBedIndex": null,
+    "gains": {
+      "master": 0.800000011920929,
+      "music": 0.6499999761581421,
+      "bedTrim": 1,
+      "sfx": 1
+    },
+    "lastLoadError": null
+  }
+}
