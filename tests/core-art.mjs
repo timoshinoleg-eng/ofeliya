@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 const require = createRequire(import.meta.url), ts = require('typescript');
 const cache = new Map();
 class Display {
@@ -28,6 +29,54 @@ test('all seven art/fallback backings are bounded 4x including non-square T-cell
 test('repeated bake plus partial canonical presence still completes all required keys without duplication',()=>{const f=fixture();f.textures.set('virus-player',{width:224,height:224});bake(f);const count=f.textures.size;for (const key of [...Object.keys(logical),'viral-particle','rna-fragment','erythrocyte','host-cell-infection','membrane-fragment','bio-spark','combat-particles','mutation-prism','mutation-halo','mutation-singularity','blood-plasma','heart-plasma','cardiac-fiber']) assert.ok(f.textures.has(key), 'required texture '+key);bake(f);assert.equal(f.textures.size,count);});
 test('projectile RNA atmosphere and combat atlas source geometry remains unchanged',()=>{const f=fixture();bake(f);for(const [k,w,h]of [['viral-particle',22,14],['rna-fragment',22,28],['combat-particles',200,40],['blood-plasma',256,256],['heart-plasma',256,256],['cardiac-fiber',256,256],['host-cell-infection',112,112]])assert.deepEqual([f.textures.get(k).width,f.textures.get(k).height],[w,h]);});
 test('boot preload uses seven distinct raw keys with per-image finite XHR timeout',()=>{const {BootScene}=load('src/scenes/BootScene.ts'),boot=new BootScene(),requests=[];boot.textures={exists:()=>false};boot.load={image:(...args)=>requests.push(args)};boot.preload();assert.equal(requests.length,7);for(const [k,path,config]of requests){assert.ok(k.startsWith('raw-art-'));assert.equal(path,'art/'+k.slice(8)+'.webp');assert.equal(config.timeout,1800);}assert.equal(new Set(requests.map(r=>r[0])).size,7);});
+test('boot preload skips only individually present canonical textures', () => {
+ const { BootScene } = load('src/scenes/BootScene.ts'), boot = new BootScene(), requests = [];
+ const present = new Set(['virus-player', 'immune-tcell']);
+ boot.textures = { exists: key => present.has(key) };
+ boot.load = { image: (...args) => requests.push(args) };
+ boot.preload();
+ assert.deepEqual(requests.map(([key]) => key), Object.keys(logical).filter(key => !present.has(key)).map(key => 'raw-art-' + key));
+ for (const key of Object.keys(logical)) present.add(key);
+ requests.length = 0; boot.preload(); assert.deepEqual(requests, []);
+});
+test('boot create bakes missing or partly loaded art before removing splash and starting Menu', () => {
+ const { BootScene } = load('src/scenes/BootScene.ts');
+ const priorDocument = globalThis.document;
+ try {
+  for (const raw of [[], ['virus-player', 'immune-tcell']]) {
+   const f = fixture(raw), boot = Object.assign(new BootScene(), f.scene), events = [];
+   // Legacy graphics texture generation is a separate adapter boundary; execute the actual
+   // Boot create method and production core bake after optional loader completion/failure.
+   boot.makeTextures = () => events.push('legacy');
+   globalThis.document = { getElementById: id => {
+    assert.equal(id, 'splash');
+    return { remove: () => {
+     for (const key of Object.keys(logical)) assert.ok(f.textures.get(key)?.refreshed, key + ' must be ready before splash removal');
+     events.push('splash');
+    } };
+   } };
+   boot.scene = { start: key => { assert.equal(key, 'Menu'); events.push('menu'); } };
+   boot.create();
+   assert.deepEqual(events, ['legacy', 'splash', 'menu']);
+   assert.deepEqual(f.removed.sort(), raw.map(key => 'raw-art-' + key).sort());
+  }
+ } finally {
+  if (priorDocument === undefined) delete globalThis.document;
+  else globalThis.document = priorDocument;
+ }
+});
+test('packaged generated asset provenance covers exactly the seven core keys and current bytes', () => {
+ const provenance = JSON.parse(readFileSync('public/art/provenance.json', 'utf8'));
+ assert.deepEqual(provenance.assets.map(asset => asset.key).sort(), Object.keys(logical).sort());
+ for (const asset of provenance.assets) {
+  assert.equal(asset.file, asset.key + '.webp');
+  assert.ok(asset.source, 'source identifier required');
+  const bytes = readFileSync('public/art/' + asset.file);
+  assert.equal(bytes.toString('ascii', 0, 4), 'RIFF');
+  assert.equal(bytes.toString('ascii', 8, 12), 'WEBP');
+  assert.equal(createHash('sha256').update(bytes).digest('hex'), asset.sha256);
+ }
+});
 test('central metrics preserve unknown texture factor 1',()=>{const m=load('src/game/ArtMetrics.ts');assert.equal(m.artSourceFactor('unknown'),1);for(const k of Object.keys(logical))assert.equal(m.artSourceFactor(k),4);});
 test('player constructor/breathing world display and centered circle match original geometry',()=>{const f=fixture();bake(f);const {Player}=load('src/game/Player.ts');const p=new Player(f.scene,200,300);assert.equal(p.displayWidth,56);assert.equal(p.body.radius*p.scaleX,13);for(const t of [0,200,600,1200]){p.preUpdate(t,0);const breathe=.9+Math.sin(t*.0042)*.028;assert.ok(Math.abs(p.displayWidth-56*breathe)<1e-10);assert.ok(Math.abs(p.body.radius*p.scaleX-13*breathe)<1e-10);assert.equal((p.body.offset.x+p.body.radius-p.width/2)*p.scaleX,0);assert.equal((p.body.offset.y+p.body.radius-p.height/2)*p.scaleY,0);}});
 test('enemy activation, role animation and recycling retain world geometry across all seven roles',()=>{const f=fixture();bake(f);const {Enemy}=load('src/game/Enemy.ts'),{ENEMY_DEFS,ELITE}=load('src/game/config.ts');const p={x:200,y:300,body:{velocity:{x:0,y:0}}};const gs={player:p,enemies:{countActive:()=>1},getCombatVisualDensity:()=>0,getEnemyPressureMultiplier:()=>1,runTimeMs:0};const e=new Enemy(f.scene,0,0);for(const[kind,elite,key]of [['swarm',false,'immune-antibody'],['swarm',true,'immune-antibody'],['runner',false,'immune-tcell'],['runner',true,'immune-tcell'],['brute',false,'immune-macrophage'],['brute',true,'immune-macrophage'],['boss',false,'immune-prime'],['boss',false,'cardiac-titan']]){e.activate(gs,kind,800,900,{elite,hpScale:1,dmgScale:1,textureKey:key,bossBehavior:key==='cardiac-titan'?'heartbeat-pulse':'pressure-wave',heartbeatMs:820});const def=ENEMY_DEFS[kind],scale=def.scale*(elite?ELITE.scale:1);assert.equal(e.radius,def.radius*scale);assert.ok(Math.abs(e.displayWidth-logical[key][0]*scale)<1e-9);assert.ok(Math.abs(e.body.radius*e.scaleX-e.radius)<1e-9);e.nextRoleActionAt=e.nextBossAttackAt=Infinity;for(const t of [200,600,1200]){e.preUpdate(t,0);assert.equal((e.body.offset.x+e.body.radius-e.width/2)*e.scaleX,0);assert.equal((e.body.offset.y+e.body.radius-e.height/2)*e.scaleY,0);assert.ok(e.displayWidth<logical[key][0]*scale*1.3);}e.deactivateForStageReset();}});
