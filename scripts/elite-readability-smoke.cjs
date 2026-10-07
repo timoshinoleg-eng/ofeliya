@@ -92,6 +92,7 @@ function browserDriver() {
         collisionRadius: enemy.body.halfWidth,
         collisionRadiusY: enemy.body.halfHeight,
         sourceWorldRadius: enemy.body.radius * Math.abs(enemy.scaleX),
+        sourceWorldRadiusY: enemy.body.radius * Math.abs(enemy.scaleY),
         centerOffsetX: (enemy.body.offset.x + enemy.body.radius - enemy.width / 2) * enemy.scaleX,
         centerOffsetY: (enemy.body.offset.y + enemy.body.radius - enemy.height / 2) * enemy.scaleY,
         expectedSignature,
@@ -118,7 +119,9 @@ function browserDriver() {
     if (
       Math.abs(row.logicalRadius - row.collisionRadius) > 1.01 ||
       Math.abs(row.logicalRadius - row.collisionRadiusY) > 1.01 ||
-      Math.abs(row.collisionRadius - row.sourceWorldRadius) > 0.01 ||
+      // Phaser Arcade setCircle/updateBounds floor scaled halfWidth/halfHeight.
+      Math.abs(row.collisionRadius - Math.floor(row.sourceWorldRadius)) > 0.01 ||
+      Math.abs(row.collisionRadiusY - Math.floor(row.sourceWorldRadiusY)) > 0.01 ||
       Math.abs(row.centerOffsetX) > 0.01 ||
       Math.abs(row.centerOffsetY) > 0.01 ||
       row.signature !== row.expectedSignature ||

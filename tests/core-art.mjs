@@ -39,6 +39,21 @@ test('boot preload skips only individually present canonical textures', () => {
  for (const key of Object.keys(logical)) present.add(key);
  requests.length = 0; boot.preload(); assert.deepEqual(requests, []);
 });
+test('optional art consumes one timeout window without retry or Android batching', () => {
+ const { BootScene } = load('src/scenes/BootScene.ts');
+ for (const parallel of [6, 32]) {
+  const boot = new BootScene(), requests = [];
+  boot.textures = { exists: () => false };
+  // File captures loader retry policy at queue time, so assert before the first image call.
+  boot.load = { maxRetries: 2, maxParallelDownloads: parallel, image: (...args) => {
+   assert.equal(boot.load.maxRetries, 0);
+   assert.equal(boot.load.maxParallelDownloads, Math.max(parallel, 7));
+   requests.push(args);
+  } };
+  boot.preload(); assert.equal(requests.length, 7);
+  assert.equal(boot.load.maxRetries, 2, 'unrelated future loads retain retry policy');
+ }
+});
 test('boot create bakes missing or partly loaded art before removing splash and starting Menu', () => {
  const { BootScene } = load('src/scenes/BootScene.ts');
  const priorDocument = globalThis.document;

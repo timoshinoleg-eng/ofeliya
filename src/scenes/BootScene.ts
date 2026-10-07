@@ -11,9 +11,19 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload(): void {
-    for (const key of Object.keys(CORE_ART)) {
-      if (this.textures.exists(key)) continue;
-      this.load.image(rawArtKey(key), `art/${key}.webp`, { responseType: 'blob', timeout: 1800 });
+    // Optional presentation art must share one timeout window. Phaser defaults to two retries
+    // per file and only six concurrent downloads on Android; either would delay fallback.
+    const previousRetries = this.load.maxRetries;
+    this.load.maxRetries = 0;
+    this.load.maxParallelDownloads = Math.max(this.load.maxParallelDownloads, Object.keys(CORE_ART).length);
+    try {
+      for (const key of Object.keys(CORE_ART)) {
+        if (this.textures.exists(key)) continue;
+        this.load.image(rawArtKey(key), `art/${key}.webp`, { responseType: 'blob', timeout: 1800 });
+      }
+    } finally {
+      // Each queued File captures maxRetries immediately; unrelated future loads retain policy.
+      this.load.maxRetries = previousRetries;
     }
   }
 
