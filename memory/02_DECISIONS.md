@@ -114,3 +114,10 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - Phaser Text style.resolution and TextureSource.resolution are independent observed facts. Production renderer tests use numeric renderer.type because constructor names are minified.
 - Browser fixture freezes Game.update before start and pauses physics after ready to isolate logical camera mapping from collision shake. Production controls/gameplay stay untouched; existing multitouch suite is separate evidence.
 - Kimi failed invocation is not a review. Coordinator owns frozen candidate review; no other workers, push, merge or deploy.
+
+## VO01 fix1 decisions — 07.10.2026
+- Diagnostic snapshot returns a stable empty scene record when a canonical key is missing. Focused test removes actual Phaser scenes, avoiding mocks.
+- Ordinary production means PROD without VITE_RELEASE_MATRIX_QA=1; both literal hook string absence across JS chunks and behavioral opacity required. Existing build-time gate remains unchanged.
+- Preserve pre-start update freeze based on validated control-smoke lifecycle; narrow dimensions/input evidence, no progression/performance claim. Destroy nested Text/container before later samples.
+- Scene pause/resume plus already-visible handler dispatch only; no actual hidden transition acceptance. Intrinsic size expectations explicitly baseline-specific.
+- Successful Kimi text-only review supersedes failed invocation artifact; coordinator owns final acceptance.

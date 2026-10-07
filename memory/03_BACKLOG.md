@@ -147,3 +147,9 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - [ ] Run full Linux CI against the final candidate when authorized; current local builds stamped base d7797bc, not final HEAD.
 - [ ] Real MAX Android/iOS/Telegram touch, safe areas, resume and GPU/sharpness acceptance remain external gates.
 - [ ] Separate architecture/design for any future overall HiDPI; VO-01 deliberately does not change rendering resolution.
+
+## VO01 fix1 backlog — 07.10.2026
+- [x] Real Kimi frozen-diff review imported; invalid-key blocker resolved externally, superseding earlier pending note.
+- [x] F1-F5 and requested F6/F8/F10 addressed in c231d60ebcf5748b9a2a2d2c5bbf99ca39adaa5a; focused missing-scenes/QA matrix/production opacity/typecheck passed.
+- [ ] Coordinator rereview/accept fix1 and import branch into original pipeline; broader plan remains coordinator-owned.
+- [ ] Full Linux CI, slow bridge resize latency, real nonzero safe areas/hidden resume/devices/GPU remain unverified; do not promote local focused evidence to acceptance.
