@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { COLORS, PLAYER } from './config';
+import { artScale, artSourceFactor } from './ArtMetrics';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   hurtUntil = 0;
@@ -11,6 +12,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'virus-player');
+    this.setScale(artScale(this.texture.key, 1));
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setDepth(15);
@@ -18,7 +20,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Visual art is deliberately larger than the authoritative gameplay body. Keep the hitbox
     // stable across every art/mutation state so polish never changes difficulty by accident.
     const body = this.body as Phaser.Physics.Arcade.Body;
-    body.setCircle(13, this.width / 2 - 13, this.height / 2 - 13);
+    const radius = 13 * artSourceFactor(this.texture.key);
+    body.setCircle(radius, this.width / 2 - radius, this.height / 2 - radius);
 
     // One Canvas-safe contrast anchor keeps the player readable over plasma, cells and VFX
     // without a per-frame shader or permanent bloom pass.
@@ -66,7 +69,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const baseRotation = time * 0.00014;
     const breathe = 0.9 + Math.sin(time * 0.0042) * 0.028;
     this.setRotation(baseRotation);
-    this.setScale(breathe);
+    this.setScale(artScale(this.texture.key, breathe));
 
     this.focusAnchor
       .setPosition(this.x, this.y)

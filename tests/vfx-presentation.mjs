@@ -230,7 +230,7 @@ test('nearest palette fallback and zero/invalid direction keep legacy emission f
   f.vfx.kill(100, 80, COLORS.cyan);
   assert.deepEqual(f.particles[0].emitted.at(-1).angle, { min: 0, max: 360 });
 });
-test('atlas baking stores distinct colored spark and chip frames without resizing gameplay art', () => {
+test('atlas baking stores distinct colored frames and retains projectile dimensions', () => {
   const { ensureStrainZeroTextures } = load('src/game/StrainZeroTextures.ts');
   const textures = new Map();
   const scene = { textures: { exists: key => textures.has(key), createCanvas(key, width, height) {
@@ -250,7 +250,7 @@ test('atlas baking stores distinct colored spark and chip frames without resizin
   assert.ok(atlas.colors.includes('#7fffa1')); assert.ok(atlas.colors.includes('#8fe8ff'));
   assert.equal(atlas.frames.length, 20);
   assert.deepEqual(atlas.frames.find(f => f[0] === 'chip-cyan'), ['chip-cyan', 0, 20, 20, 20, 20]);
-  assert.equal(textures.get('virus-player').width, 56);
+  assert.equal(textures.get('virus-player').width, 224); // Task5 core art backing; logical width stays 56.
   assert.equal(textures.get('viral-particle').width, 22);
   const before = textures.size; ensureStrainZeroTextures(scene); assert.equal(textures.size, before);
 });

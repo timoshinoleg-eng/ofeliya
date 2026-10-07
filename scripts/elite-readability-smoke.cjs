@@ -90,6 +90,10 @@ function browserDriver() {
         logicalRadius: enemy.radius,
         sourceRadius: enemy.body.radius,
         collisionRadius: enemy.body.halfWidth,
+        collisionRadiusY: enemy.body.halfHeight,
+        sourceWorldRadius: enemy.body.radius * Math.abs(enemy.scaleX),
+        centerOffsetX: (enemy.body.offset.x + enemy.body.radius - enemy.width / 2) * enemy.scaleX,
+        centerOffsetY: (enemy.body.offset.y + enemy.body.radius - enemy.height / 2) * enemy.scaleY,
         expectedSignature,
         signature: enemy.eliteVisualSignature,
         markerVisible: Boolean(enemy.eliteMarker?.visible),
@@ -113,7 +117,10 @@ function browserDriver() {
   for (const row of contract) {
     if (
       Math.abs(row.logicalRadius - row.collisionRadius) > 1.01 ||
-      row.collisionRadius <= row.sourceRadius ||
+      Math.abs(row.logicalRadius - row.collisionRadiusY) > 1.01 ||
+      Math.abs(row.collisionRadius - row.sourceWorldRadius) > 0.01 ||
+      Math.abs(row.centerOffsetX) > 0.01 ||
+      Math.abs(row.centerOffsetY) > 0.01 ||
       row.signature !== row.expectedSignature ||
       !row.markerVisible ||
       !row.coronaVisible ||

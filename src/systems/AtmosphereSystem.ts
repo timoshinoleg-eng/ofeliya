@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { artScale } from '../game/ArtMetrics';
 import { COLORS } from '../game/config';
 import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
 import type { StageDefinition } from '../game/StageDefinitions';
@@ -129,7 +130,7 @@ export class AtmosphereSystem {
         .image(x, y, 'host-cell-shadow')
         .setScrollFactor(0)
         .setDepth(-27)
-        .setScale(Phaser.Math.FloatBetween(1.2, 2.15))
+        .setScale(artScale('host-cell-shadow', Phaser.Math.FloatBetween(1.2, 2.15)))
         .setAlpha(alpha)
         .setRotation(Phaser.Math.FloatBetween(-Math.PI, Math.PI));
       this.hostCells.push({

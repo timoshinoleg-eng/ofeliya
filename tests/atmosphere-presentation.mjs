@@ -190,8 +190,8 @@ test('baked organ sources preserve 256px geometry with broad vessel flow and obl
     const first = p.points[0], last = p.points.at(-1);
     assert.ok(Math.abs((last[1] - first[1]) / (last[0] - first[0]) - .5) < .02, 'fibres share oblique orientation');
   }
-  // This task changes no actor, host, projectile or combat atlas backing geometry.
-  assert.deepEqual([recipes.get('virus-player').width, recipes.get('virus-player').height], [56, 56]);
+  // Task5 increases only core art backing; atmosphere and combat atlas remain unchanged.
+  assert.deepEqual([recipes.get('virus-player').width, recipes.get('virus-player').height], [224, 224]);
   assert.deepEqual([recipes.get('combat-particles').width, recipes.get('combat-particles').height], [200, 40]);
 });
 if (failures.length) { console.error(`${failures.length} atmosphere contracts failed`); process.exitCode = 1; }

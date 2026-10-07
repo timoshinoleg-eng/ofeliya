@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { COLORS } from './config';
+import { CORE_ART, artSourceFactor, rawArtKey } from './ArtMetrics';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -37,27 +38,37 @@ export function combatParticleFrame(color: number, kind: 'spark' | 'chip' = 'spa
  * STRAIN ZERO visual language v2.
  *
  * All art is baked once into CanvasTextures at boot/menu time. Runtime uses ordinary Phaser
- * Images/Sprites, so the richer microscopic look costs almost nothing per frame and carries no
- * external asset/license dependency. Silhouette and phone-size readability take priority over
- * microscopic realism.
+ * Images/Sprites. Optional packaged art and procedural fallback share the same bounded backing.
+ * Silhouette and phone-size readability take priority over microscopic realism.
  */
 export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
-  if (scene.textures.exists('virus-player')) return;
-
   const make = (
     key: string,
     width: number,
     height: number,
     draw: (ctx: Ctx, width: number, height: number) => void
   ): void => {
-    const texture = scene.textures.createCanvas(key, width, height);
+    if (scene.textures.exists(key)) return;
+    const factor = artSourceFactor(key);
+    if (factor > 1) {
+      ({ width, height } = CORE_ART[key as keyof typeof CORE_ART]);
+    }
+    const texture = scene.textures.createCanvas(key, width * factor, height * factor);
     if (!texture) return;
     const ctx = texture.getContext();
-    ctx.clearRect(0, 0, width, height);
+    ctx.clearRect(0, 0, width * factor, height * factor);
+    ctx.scale(factor, factor);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    draw(ctx, width, height);
+    const rawKey = rawArtKey(key);
+    if (factor > 1 && scene.textures.exists(rawKey)) {
+      ctx.drawImage(scene.textures.get(rawKey).getSourceImage() as HTMLImageElement, 0, 0, width, height);
+    } else {
+      draw(ctx, width, height);
+    }
     texture.refresh();
+    // The canonical bake now owns its pixels; release the larger raw GPU upload only afterwards.
+    if (factor > 1 && scene.textures.exists(rawKey)) scene.textures.remove(rawKey);
   };
 
   const rgba = (hex: string, alpha: number): string => {
@@ -546,7 +557,7 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
   // the Canvas particle renderer does not compensate TextureSource.resolution.
   const palette = Object.entries(COMBAT_PARTICLE_PALETTE);
   const cell = 20;
-  const atlas = scene.textures.createCanvas('combat-particles', cell * palette.length, cell * 2);
+  const atlas = scene.textures.exists('combat-particles') ? null : scene.textures.createCanvas('combat-particles', cell * palette.length, cell * 2);
   if (atlas) {
     const ctx = atlas.getContext();
     ctx.clearRect(0, 0, cell * palette.length, cell * 2);
@@ -682,7 +693,7 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
   // ---------------------------------------------------------------------------
   // PLASMA BACKDROP — periodic warm capillary flow baked once, no shader/blur required.
   // ---------------------------------------------------------------------------
-  const plasma = scene.textures.createCanvas('blood-plasma', 256, 256);
+  const plasma = scene.textures.exists('blood-plasma') ? null : scene.textures.createCanvas('blood-plasma', 256, 256);
   if (plasma) {
     const ctx = plasma.getContext();
     const bg = ctx.createLinearGradient(0, 0, 0, 256);
@@ -717,7 +728,7 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
     plasma.refresh();
   }
 
-  const heartPlasma = scene.textures.createCanvas('heart-plasma', 256, 256);
+  const heartPlasma = scene.textures.exists('heart-plasma') ? null : scene.textures.createCanvas('heart-plasma', 256, 256);
   if (heartPlasma) {
     const ctx = heartPlasma.getContext();
     const bg = ctx.createLinearGradient(0, 0, 0, 256);
@@ -737,7 +748,7 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
     heartPlasma.refresh();
   }
 
-  const cardiacFiber = scene.textures.createCanvas('cardiac-fiber', 256, 256);
+  const cardiacFiber = scene.textures.exists('cardiac-fiber') ? null : scene.textures.createCanvas('cardiac-fiber', 256, 256);
   if (cardiacFiber) {
     const ctx = cardiacFiber.getContext(); ctx.clearRect(0, 0, 256, 256);
     for (let i = -5; i < 9; i++) {

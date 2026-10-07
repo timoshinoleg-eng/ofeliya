@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { artScale } from '../game/ArtMetrics';
 import {
   COLORS,
   COMBO,
@@ -1026,12 +1027,12 @@ export class GameScene extends Phaser.Scene {
       .setVisible(true)
       .setAlpha(this.runState.hasEvolution('halo') ? 0.34 : 0.23)
       .setTint(this.runState.hasEvolution('halo') ? COLORS.gold : COLORS.white)
-      .setScale(1)
+      .setScale(artScale('virus-player', 1))
       .setRotation(0);
     this.tweens.add({
       targets: t,
       alpha: 0,
-      scale: 0.62,
+      scale: artScale('virus-player', 0.62),
       duration: JUICE.trailFadeMs,
       ease: 'Quad.Out',
       onComplete: () => t.setVisible(false),
@@ -1718,7 +1719,7 @@ export class GameScene extends Phaser.Scene {
     const centerY = this.scale.height / 2;
     this.player.setMutationState(false, false, false);
     this.player.hurtUntil = 0;
-    this.player.clearTint().setAlpha(1).setRotation(0).setScale(0.9).setPosition(centerX, centerY);
+    this.player.clearTint().setAlpha(1).setRotation(0).setScale(artScale('virus-player', 0.9)).setPosition(centerX, centerY);
     (this.player.body as Phaser.Physics.Arcade.Body).reset(centerX, centerY);
     this.aimMarker.setVisible(false);
     this.playerBar.clear();

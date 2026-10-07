@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { artScale } from '../game/ArtMetrics';
 import { parseChallengePayload } from '../game/Challenge';
 import { parseDuelStartPayload, type DuelChallengeSnapshot } from '../game/Duel';
 import { ACHIEVEMENTS } from '../game/AchievementSystem';
@@ -127,7 +128,7 @@ export class MenuScene extends Phaser.Scene {
 
     const host = this.add
       .image(W * 0.5, H * 0.3, 'host-cell-shadow')
-      .setScale(H < 650 ? 1.1 : 1.4)
+      .setScale(artScale('host-cell-shadow', H < 650 ? 1.1 : 1.4))
       .setAlpha(0.1)
       .setDepth(-10);
     this.tweens.add({
@@ -142,7 +143,7 @@ export class MenuScene extends Phaser.Scene {
 
     const virus = this.add
       .image(W / 2, H * 0.28, 'virus-player')
-      .setScale(H < 650 ? 1.8 : 2.15)
+      .setScale(artScale('virus-player', H < 650 ? 1.8 : 2.15))
       .setDepth(2);
     this.tweens.add({
       targets: virus,

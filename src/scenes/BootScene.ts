@@ -1,17 +1,27 @@
 import Phaser from 'phaser';
 import { COLORS } from '../game/config';
+import { CORE_ART, rawArtKey } from '../game/ArtMetrics';
+import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
 import { StartupTrace } from '../systems/StartupTrace';
 
-/** Генерирует все текстуры кодом — ассеты не нужны, лицензионных рисков нет. */
+/** Load optional core art; procedural textures keep startup usable when a file fails. */
 export class BootScene extends Phaser.Scene {
   constructor() {
     super('Boot');
+  }
+
+  preload(): void {
+    for (const key of Object.keys(CORE_ART)) {
+      if (this.textures.exists(key)) continue;
+      this.load.image(rawArtKey(key), `art/${key}.webp`, { responseType: 'blob', timeout: 1800 });
+    }
   }
 
   create(): void {
     StartupTrace.mark('boot.scene.create');
     StartupTrace.mark('boot.textures.start');
     this.makeTextures();
+    ensureStrainZeroTextures(this);
     StartupTrace.mark('boot.textures.end');
     document.getElementById('splash')?.remove();
     StartupTrace.mark('splash.removed');

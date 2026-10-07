@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { artScale, artSourceFactor } from '../game/ArtMetrics';
 import { COLORS } from '../game/config';
 import type { Player } from '../game/Player';
 import { selectHostCellRecycleIndex } from './HostCellRecycling';
@@ -104,7 +105,7 @@ export class HostCellSystem {
       const image = scene.add
         .image(0, 0, 'host-cell-shadow')
         .setDepth(12)
-        .setScale(0.78)
+        .setScale(artScale('host-cell-shadow', 0.78))
         .setAlpha(0)
         .setVisible(false);
       const infectionOverlay = scene.add
@@ -184,7 +185,7 @@ export class HostCellSystem {
       const rotation = Math.sin(time * 0.00032 + cell.phase) * 0.025;
 
       cell.image
-        .setScale(scale)
+        .setScale(artScale('host-cell-shadow', scale))
         .setAlpha(0.78 + infected * 0.16)
         .setRotation(rotation)
         .setTint(infected > 0.82 ? 0xffd7eb : 0xffffff);
@@ -313,7 +314,7 @@ export class HostCellSystem {
         .setAlpha(0.78 + saved.infection * 0.16)
         .clearTint()
         .setRotation(0)
-        .setScale(0.78 + saved.infection * 0.1);
+        .setScale(artScale('host-cell-shadow', 0.78 + saved.infection * 0.1));
       cell.infectionOverlay
         .setPosition(saved.x, saved.y)
         .setVisible(saved.infection > 0.015)
@@ -352,7 +353,7 @@ export class HostCellSystem {
       cell.interactionId = 0;
       cell.wasInside = false;
       cell.approachNotified = false;
-      cell.image.setVisible(false).setAlpha(0).clearTint().setRotation(0).setScale(0.78);
+      cell.image.setVisible(false).setAlpha(0).clearTint().setRotation(0).setScale(artScale('host-cell-shadow', 0.78));
       cell.infectionOverlay.setVisible(false).setAlpha(0).setRotation(0).setScale(0.78);
       cell.ring.setVisible(false).clear();
     }
@@ -420,7 +421,7 @@ export class HostCellSystem {
       .setAlpha(0)
       .clearTint()
       .setRotation(0)
-      .setScale(0.68);
+      .setScale(artScale('host-cell-shadow', 0.68));
     slot.infectionOverlay
       .setPosition(x, y)
       .setVisible(false)
@@ -431,7 +432,7 @@ export class HostCellSystem {
     this.scene.tweens.add({
       targets: slot.image,
       alpha: 0.78,
-      scale: 0.78,
+      scale: artScale('host-cell-shadow', 0.78),
       duration: 280,
       ease: 'Back.Out',
     });
@@ -440,7 +441,7 @@ export class HostCellSystem {
   private lyse(cell: HostCellSlot): void {
     const x = cell.image.x;
     const y = cell.image.y;
-    const scale = cell.image.scaleX;
+    const scale = cell.image.scaleX * artSourceFactor('host-cell-shadow');
     const interactionId = cell.interactionId;
     cell.active = false;
     cell.infection = 0;
@@ -455,7 +456,7 @@ export class HostCellSystem {
     const membraneGhost = this.scene.add
       .image(x, y, 'host-cell-shadow')
       .setDepth(13)
-      .setScale(scale * 0.98)
+      .setScale(artScale('host-cell-shadow', scale * 0.98))
       .setAlpha(0.96);
     const infectionGhost = this.scene.add
       .image(x, y, 'host-cell-infection')
@@ -502,7 +503,7 @@ export class HostCellSystem {
 
     this.scene.tweens.add({
       targets: membraneGhost,
-      scale: scale * 1.48,
+      scale: artScale('host-cell-shadow', scale * 1.48),
       alpha: 0,
       duration: 610,
       ease: 'Quad.Out',
