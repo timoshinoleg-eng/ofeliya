@@ -172,6 +172,40 @@ async function openCase(browser, spec) {
   }
   await page.evaluate(() => {
     window.__game.registry.set('runSeedOverride', 'release-matrix-seed');
+    // Phaser captures Scene.update after create(), so freeze live progression before startup.
+    // Sprite.preUpdate and rendering remain active for actor animation and density captures;
+    // physics.pause alone cannot prevent Game.update from spawning additional host cells.
+    const gs = window.__game.scene.getScene('Game');
+    gs.update = () => {};
+    const sampledSprites = new WeakSet();
+    window.__releaseMatrixPrepareSprite = object => {
+      if (typeof object.preUpdate !== 'function' || sampledSprites.has(object)) return;
+      const preUpdate = object.preUpdate;
+      object.preUpdate = function () { preUpdate.call(this, 1000, 0); };
+      sampledSprites.add(object);
+    };
+    const create = gs.create;
+    gs.create = function () {
+      // Gameplay already has a run seed, but Phaser FloatBetween uses global Math.random
+      // for ambient placement. Scope a separate cosmetic seed to this fixture's creation.
+      const random = Math.random;
+      let seed = 0x4f46454c;
+      Math.random = () => {
+        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+        return seed / 0x100000000;
+      };
+      try {
+        this.time.now = 0;
+        create.call(this);
+      } finally {
+        Math.random = random;
+      }
+      // Keep production Sprite animation code, but sample one shared 1000ms pose. Live
+      // RAF time made slower WebGL reach windup while Canvas captured pursuit instead.
+      for (const object of this.children.list) {
+        window.__releaseMatrixPrepareSprite(object);
+      }
+    };
     window.__game.scene.getScene('Menu').scene.start('Game');
   });
   await page.waitForFunction(
@@ -200,6 +234,7 @@ async function openCase(browser, spec) {
       if (bullet.active) bullet.deactivateForStageReset();
     }
     gs.hostCells.resetStage();
+    gs.time.now = 0;
 
     const kinds = ['swarm', 'runner', 'brute'];
     const spawnTo = (target) => {
@@ -238,8 +273,35 @@ async function openCase(browser, spec) {
     }
 
     const bullet = gs.bullets.get(gs.player.x, gs.player.y);
-    bullet.fire(gs.time.now, -0.15, 10, 0, false, 0);
+    bullet.fire(1000, -0.15, 10, 0, false, 0);
     gs.physics.world.pause();
+    window.__releaseMatrixSamplePose = () => {
+      // Include actual production windup telegraphs, not an artificially quiet scene.
+      for (const object of gs.children.list) {
+        if (!object.active || typeof object.preUpdate !== 'function') continue;
+        // Groups allocate sprites lazily after create(); each new member needs the same
+        // wrapper before the next RAF, and explicit arguments also protect this sample.
+        window.__releaseMatrixPrepareSprite(object);
+        object.preUpdate(1000, 0);
+        object.preUpdate(1000, 0);
+      }
+      gs.tweens.pauseAll();
+      gs.hostCells.update(1000, 0, 0);
+      // New sprites queue a depth sort; apply it before recording the actual draw order.
+      gs.children.depthSort();
+    };
+    window.__releaseMatrixInputs = () => ({
+      cosmeticSeed: '4f46454c',
+      poseTime: 1000,
+      quality: gs.registry.get('runtimeQuality') ?? null,
+      sprites: gs.children.list.filter(o => o.visible && o.texture).map(o => [
+        o.texture.key, o.x, o.y, o.scaleX, o.scaleY, o.rotation, o.alpha,
+      ]),
+      roles: gs.enemies.getChildren().filter(o => o.active).map(o => [
+        o.rolePhase, Boolean(o.roleTelegraph?.visible), o.roleTelegraph?.commandBuffer ?? [],
+      ]),
+    });
+    window.__releaseMatrixSamplePose();
 
     return {
       renderer: gs.game.renderer?.constructor?.name ?? '',
@@ -304,6 +366,7 @@ async function openCase(browser, spec) {
   for (const density of DENSITIES) {
     const state = await page.evaluate((target) => {
       const gs = window.__game.scene.getScene('Game');
+      gs.time.now = 0;
       const activeEnemies = window.__releaseMatrixSpawnTo(target);
 
       // Physics pause does not stop Sprite.preUpdate, so a projectile can expire between dense
@@ -312,7 +375,8 @@ async function openCase(browser, spec) {
         if (item.active) item.deactivateForStageReset();
       }
       const bullet = gs.bullets.get(gs.player.x, gs.player.y);
-      bullet.fire(gs.time.now, -0.15, 10, 0, false, 0);
+      bullet.fire(1000, -0.15, 10, 0, false, 0);
+      window.__releaseMatrixSamplePose();
 
       return {
         activeEnemies,
@@ -338,9 +402,31 @@ async function openCase(browser, spec) {
     }
 
     await page.waitForTimeout(90);
+    const visualInputs = await page.evaluate(() => window.__releaseMatrixInputs());
+    const assertFiniteInputs = inputs => {
+      const visit = value => {
+        if (typeof value === 'number' && !Number.isFinite(value)) {
+          throw new Error('controlled matrix inputs contain a non-finite number');
+        }
+        if (value && typeof value === 'object') Object.values(value).forEach(visit);
+      };
+      visit(inputs);
+      if (!inputs.sprites.every(([, ...transform]) => transform.every(Number.isFinite))) {
+        throw new Error('controlled matrix sprite transform is missing or non-finite');
+      }
+    };
+    assertFiniteInputs(visualInputs);
+    if (!visualInputs.roles.some(([, visible]) => visible)) {
+      throw new Error('controlled matrix pose must retain dangerous role telegraphs');
+    }
     const file = `${spec.renderer}-${spec.tier}-${density}.png`;
     await page.locator('#game').screenshot({ path: path.join(CAPTURE_DIR, file) });
-    rows.push({ density, ...state, file });
+    const capturedInputs = await page.evaluate(() => window.__releaseMatrixInputs());
+    assertFiniteInputs(capturedInputs);
+    if (JSON.stringify(visualInputs) !== JSON.stringify(capturedInputs)) {
+      throw new Error(`visual inputs changed during ${spec.renderer}/${spec.tier}/${density} capture`);
+    }
+    rows.push({ density, ...state, visualInputs, file });
   }
 
   if (errors.length) {
@@ -372,6 +458,7 @@ async function openCase(browser, spec) {
   }
 
   const canonical = new Map();
+  const presentation = new Map();
   for (const result of results) {
     for (const row of result.rows) {
       const signature = JSON.stringify({
@@ -384,6 +471,12 @@ async function openCase(browser, spec) {
       if (!canonical.has(row.density)) canonical.set(row.density, signature);
       if (canonical.get(row.density) !== signature) {
         throw new Error(`gameplay state diverged across renderer/tier at density ${row.density}`);
+      }
+      const poseKey = `${result.tier}/${row.density}`;
+      const pose = JSON.stringify(row.visualInputs);
+      if (!presentation.has(poseKey)) presentation.set(poseKey, pose);
+      if (presentation.get(poseKey) !== pose) {
+        throw new Error(`visual inputs diverged across renderers at ${poseKey}`);
       }
     }
   }

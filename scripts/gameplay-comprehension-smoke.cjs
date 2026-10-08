@@ -333,8 +333,21 @@ async function bootGame(page) {
       enemyA.hp = enemyA.maxHp = 200;
       enemyB.hp = enemyB.maxHp = 200;
       const ringRadii = [];
-      const ring = gs.vfx.ring.bind(gs.vfx);
-      gs.vfx.ring = (...args) => { ringRadii.push(args[3]); ring(...args); };
+      const lysis = gs.vfx.lysis.bind(gs.vfx);
+      gs.vfx.lysis = (...args) => {
+        // Capture actual nested lysis rings. The subsequent damage loop
+        // also emits independent contact rings through vfx.hit.
+        const ring = gs.vfx.ring;
+        gs.vfx.ring = (...ringArgs) => {
+          ringRadii.push(ringArgs[3]);
+          return ring.apply(gs.vfx, ringArgs);
+        };
+        try {
+          return lysis(...args);
+        } finally {
+          gs.vfx.ring = ring;
+        }
+      };
 
       gs.player.setPosition(x, y);
       cell.interactionId = 100;
@@ -498,7 +511,7 @@ async function bootGame(page) {
     assert.ok(interaction.firstLysis.inactive, '100% infection did not lyse immediately');
     assert.equal(interaction.firstLysis.enemyADamage, 26, 'enemy inside lysis radius got wrong damage');
     assert.equal(interaction.firstLysis.enemyBDamage, 0, 'enemy outside lysis radius took damage');
-    assert.deepEqual(interaction.firstLysis.radiusCalls.slice(-2), [108, 150], 'lysis inner/outer VFX radii do not match runtime radius');
+    assert.deepEqual(interaction.firstLysis.radiusCalls, [108, 150], 'lysis inner/outer VFX radii do not match runtime radius');
     assert.equal(interaction.firstLysis.hostCellsInfected, 1, 'host cell completion was double-counted');
     assert.equal(interaction.firstLysis.gemsSpawned, 4, 'lysis RNA gem count changed');
     assert.ok(interaction.xpUnchangedByLysis, 'lysis directly added XP');

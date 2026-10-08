@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { artScale, artSourceFactor } from './ArtMetrics';
 import { COLORS, ELITE, ENEMY_DEFS, type EnemyKind } from './config';
 import type { GameScene } from '../scenes/GameScene';
 import type { Player } from './Player';
@@ -70,6 +71,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'immune-antibody');
+    this.setScale(artScale(this.texture.key, 1));
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setDepth(10);
@@ -101,7 +103,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.spawnSerial += 1;
 
     this.enableBody(true, x, y, true, true);
-    this.setTexture(opts.textureKey ?? def.tex).setScale(scale);
+    this.setTexture(opts.textureKey ?? def.tex).setScale(artScale(opts.textureKey ?? def.tex, scale));
     this.isElite = opts.elite;
     this.isBoss = kind === 'boss';
     this.eliteModifier = opts.elite ? (opts.eliteModifier ?? null) : null;
@@ -165,7 +167,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.setRotation(0);
 
     const body = this.body as Phaser.Physics.Arcade.Body;
-    body.setCircle(def.radius, this.width / 2 - def.radius, this.height / 2 - def.radius);
+    const sourceRadius = def.radius * artSourceFactor(this.texture.key);
+    body.setCircle(sourceRadius, this.width / 2 - sourceRadius, this.height / 2 - sourceRadius);
 
     if (opts.elite) {
       if (!this.eliteRing) this.eliteRing = this.scene.add.graphics().setDepth(9);
@@ -339,6 +342,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     // Role motion is a second readability channel after silhouette:
     // antibody = drifting Y, T-killer = locked charge, macrophage = heavy membrane wobble.
+    const visualScale = artScale(this.texture.key, this.visualScale);
     if (this.kind === 'runner') {
       this.setRotation(
         this.rolePhase === 'burst'
@@ -351,15 +355,15 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
           : this.rolePhase === 'burst'
             ? 1.12
             : 1 + Math.sin(time * 0.012 + this.y * 0.01) * 0.035;
-      this.setScale(this.visualScale * charge, this.visualScale * (2 - charge));
+      this.setScale(visualScale * charge, visualScale * (2 - charge));
     } else if (this.kind === 'brute') {
       this.setRotation(Math.sin(time * 0.0012 + this.x * 0.01) * 0.1);
       const windupPulse = this.rolePhase === 'windup' ? Math.sin(time * 0.022) * 0.055 : 0;
       const wobble = 1 + Math.sin(time * 0.003 + this.x * 0.008) * 0.025 + windupPulse;
-      this.setScale(this.visualScale * wobble, this.visualScale / wobble);
+      this.setScale(visualScale * wobble, visualScale / wobble);
     } else if (this.kind === 'swarm') {
       this.setRotation(Math.atan2(dy, dx) + Math.PI / 2 + Math.sin(time * 0.003 + this.x) * 0.06);
-      this.setScale(this.visualScale);
+      this.setScale(visualScale);
     } else {
       if (this.bossBehavior === 'heartbeat-pulse' && this.heartbeatMs > 0) {
         const phase = (time % this.heartbeatMs) / this.heartbeatMs;
@@ -367,14 +371,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         const doubleBeat = Math.max(Math.exp(-phase * 15), secondBeat);
         this.setRotation(Math.sin(time * 0.0012) * (this.bossPhase === 2 ? 0.16 : 0.11));
         this.setScale(
-          this.visualScale *
+          visualScale *
             (this.bossPhase === 2 ? 1.045 : 1) *
             (1 + doubleBeat * (this.bossPhase === 2 ? 0.12 : 0.085))
         );
       } else {
         this.setRotation(Math.sin(time * 0.0007) * 0.06);
         const bossPulse = 1 + Math.sin(time * 0.0032) * 0.018;
-        this.setScale(this.visualScale * bossPulse);
+        this.setScale(visualScale * bossPulse);
       }
     }
 

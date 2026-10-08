@@ -1,0 +1,325 @@
+{
+  "generatedAt": "2026-10-07T19:20:25.478Z",
+  "sourceHead": "5b71c6353f170a7d4ce2f4b7d62e765dab6ed9fe",
+  "qaBundleRelease": "97228667bec618a99ce5b8dd1c59b0d0743374ef",
+  "viewport": {
+    "width": 390,
+    "height": 740
+  },
+  "visualMetrics": [
+    {
+      "renderer": "webgl",
+      "tier": "full",
+      "density": 100,
+      "meanLuminance": 72.50385278948451,
+      "edgeEnergy": 5.528370201881693
+    },
+    {
+      "renderer": "webgl",
+      "tier": "reduced",
+      "density": 100,
+      "meanLuminance": 71.96511200525974,
+      "edgeEnergy": 5.543045111776648
+    },
+    {
+      "renderer": "canvas",
+      "tier": "full",
+      "density": 100,
+      "meanLuminance": 72.92049070497322,
+      "edgeEnergy": 5.179693763543109
+    },
+    {
+      "renderer": "canvas",
+      "tier": "reduced",
+      "density": 100,
+      "meanLuminance": 72.37323509608814,
+      "edgeEnergy": 5.178642706005278
+    },
+    {
+      "renderer": "webgl",
+      "tier": "full",
+      "density": 150,
+      "meanLuminance": 79.32486727021536,
+      "edgeEnergy": 5.968621428598413
+    },
+    {
+      "renderer": "webgl",
+      "tier": "reduced",
+      "density": 150,
+      "meanLuminance": 78.94956189931885,
+      "edgeEnergy": 5.982037685600985
+    },
+    {
+      "renderer": "canvas",
+      "tier": "full",
+      "density": 150,
+      "meanLuminance": 79.75498084577919,
+      "edgeEnergy": 5.5526059169872575
+    },
+    {
+      "renderer": "canvas",
+      "tier": "reduced",
+      "density": 150,
+      "meanLuminance": 79.3704844405762,
+      "edgeEnergy": 5.550364841108669
+    },
+    {
+      "renderer": "webgl",
+      "tier": "full",
+      "density": 200,
+      "meanLuminance": 81.77702947454,
+      "edgeEnergy": 6.049062265465607
+    },
+    {
+      "renderer": "webgl",
+      "tier": "reduced",
+      "density": 200,
+      "meanLuminance": 81.47386247302688,
+      "edgeEnergy": 6.0602122399407055
+    },
+    {
+      "renderer": "canvas",
+      "tier": "full",
+      "density": 200,
+      "meanLuminance": 82.1835273355277,
+      "edgeEnergy": 5.604626407949596
+    },
+    {
+      "renderer": "canvas",
+      "tier": "reduced",
+      "density": 200,
+      "meanLuminance": 81.87136514260276,
+      "edgeEnergy": 5.600055282401178
+    }
+  ],
+  "results": [
+    {
+      "renderer": "webgl",
+      "tier": "full",
+      "baseContract": {
+        "renderer": "initialize",
+        "rendererType": 2,
+        "tier": "full",
+        "postFxEnabled": false,
+        "vignetteVisible": true,
+        "ambientCounts": {
+          "erythrocytes": 14,
+          "hostCells": 4,
+          "particles": 24
+        },
+        "runSeed": "release-matrix-seed",
+        "activeGems": 18,
+        "activeHostCells": 2,
+        "activeBullets": 1,
+        "infectedHostCellVisible": true,
+        "playerAnchorVisible": true
+      },
+      "rows": [
+        {
+          "density": 100,
+          "activeEnemies": 100,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "file": "webgl-full-100.png",
+          "poseTime": 1000,
+          "visibleRoleTelegraphs": 40,
+          "visualInputSHA256": "ecc5121cf53db3e394a3fafe052ae089e828be175de068db57638d0c33ea5ff7"
+        },
+        {
+          "density": 150,
+          "activeEnemies": 150,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "file": "webgl-full-150.png",
+          "poseTime": 1000,
+          "visibleRoleTelegraphs": 61,
+          "visualInputSHA256": "19d18d55a4bfcae3083c9f5fcab1f0f90caf81bf5a045ce2b70ec4360ad193f7"
+        },
+        {
+          "density": 200,
+          "activeEnemies": 200,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "file": "webgl-full-200.png",
+          "poseTime": 1000,
+          "visibleRoleTelegraphs": 82,
+          "visualInputSHA256": "fb9014bef485c461a08ff9ad4726df8b01becc898e8ce26595809a470cfbe372"
+        }
+      ]
+    },
+    {
+      "renderer": "webgl",
+      "tier": "reduced",
+      "baseContract": {
+        "renderer": "initialize",
+        "rendererType": 2,
+        "tier": "reduced",
+        "postFxEnabled": false,
+        "vignetteVisible": true,
+        "ambientCounts": {
+          "erythrocytes": 8,
+          "hostCells": 2,
+          "particles": 12
+        },
+        "runSeed": "release-matrix-seed",
+        "activeGems": 18,
+        "activeHostCells": 2,
+        "activeBullets": 1,
+        "infectedHostCellVisible": true,
+        "playerAnchorVisible": true
+      },
+      "rows": [
+        {
+          "density": 100,
+          "activeEnemies": 100,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "file": "webgl-reduced-100.png",
+          "poseTime": 1000,
+          "visibleRoleTelegraphs": 40,
+          "visualInputSHA256": "1c21057ec1c834e4f01ea805e5ab535e84ae841cc9be968f12b59e2422300c04"
+        },
+        {
+          "density": 150,
+          "activeEnemies": 150,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "file": "webgl-reduced-150.png",
+          "poseTime": 1000,
+          "visibleRoleTelegraphs": 61,
+          "visualInputSHA256": "8ef9fc1915a668cdf5be871d7950314a36e58de2e415ed7b15441524a627475f"
+        },
+        {
+          "density": 200,
+          "activeEnemies": 200,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "file": "webgl-reduced-200.png",
+          "poseTime": 1000,
+          "visibleRoleTelegraphs": 82,
+          "visualInputSHA256": "646af44262a7cd8a02999c39d802ed212047103a3f5b7e08b7cfe7e8cef6af29"
+        }
+      ]
+    },
+    {
+      "renderer": "canvas",
+      "tier": "full",
+      "baseContract": {
+        "renderer": "initialize",
+        "rendererType": 1,
+        "tier": "full",
+        "postFxEnabled": false,
+        "vignetteVisible": true,
+        "ambientCounts": {
+          "erythrocytes": 14,
+          "hostCells": 4,
+          "particles": 24
+        },
+        "runSeed": "release-matrix-seed",
+        "activeGems": 18,
+        "activeHostCells": 2,
+        "activeBullets": 1,
+        "infectedHostCellVisible": true,
+        "playerAnchorVisible": true
+      },
+      "rows": [
+        {
+          "density": 100,
+          "activeEnemies": 100,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "file": "canvas-full-100.png",
+          "poseTime": 1000,
+          "visibleRoleTelegraphs": 40,
+          "visualInputSHA256": "ecc5121cf53db3e394a3fafe052ae089e828be175de068db57638d0c33ea5ff7"
+        },
+        {
+          "density": 150,
+          "activeEnemies": 150,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "file": "canvas-full-150.png",
+          "poseTime": 1000,
+          "visibleRoleTelegraphs": 61,
+          "visualInputSHA256": "19d18d55a4bfcae3083c9f5fcab1f0f90caf81bf5a045ce2b70ec4360ad193f7"
+        },
+        {
+          "density": 200,
+          "activeEnemies": 200,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "file": "canvas-full-200.png",
+          "poseTime": 1000,
+          "visibleRoleTelegraphs": 82,
+          "visualInputSHA256": "fb9014bef485c461a08ff9ad4726df8b01becc898e8ce26595809a470cfbe372"
+        }
+      ]
+    },
+    {
+      "renderer": "canvas",
+      "tier": "reduced",
+      "baseContract": {
+        "renderer": "initialize",
+        "rendererType": 1,
+        "tier": "reduced",
+        "postFxEnabled": false,
+        "vignetteVisible": true,
+        "ambientCounts": {
+          "erythrocytes": 8,
+          "hostCells": 2,
+          "particles": 12
+        },
+        "runSeed": "release-matrix-seed",
+        "activeGems": 18,
+        "activeHostCells": 2,
+        "activeBullets": 1,
+        "infectedHostCellVisible": true,
+        "playerAnchorVisible": true
+      },
+      "rows": [
+        {
+          "density": 100,
+          "activeEnemies": 100,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "file": "canvas-reduced-100.png",
+          "poseTime": 1000,
+          "visibleRoleTelegraphs": 40,
+          "visualInputSHA256": "1c21057ec1c834e4f01ea805e5ab535e84ae841cc9be968f12b59e2422300c04"
+        },
+        {
+          "density": 150,
+          "activeEnemies": 150,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "file": "canvas-reduced-150.png",
+          "poseTime": 1000,
+          "visibleRoleTelegraphs": 61,
+          "visualInputSHA256": "8ef9fc1915a668cdf5be871d7950314a36e58de2e415ed7b15441524a627475f"
+        },
+        {
+          "density": 200,
+          "activeEnemies": 200,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "file": "canvas-reduced-200.png",
+          "poseTime": 1000,
+          "visibleRoleTelegraphs": 82,
+          "visualInputSHA256": "646af44262a7cd8a02999c39d802ed212047103a3f5b7e08b7cfe7e8cef6af29"
+        }
+      ]
+    }
+  ]
+}

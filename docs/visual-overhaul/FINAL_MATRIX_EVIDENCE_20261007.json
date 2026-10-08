@@ -1,0 +1,311 @@
+{
+  "generatedAt": "2026-10-07T18:51:12.104Z",
+  "viewport": {
+    "width": 390,
+    "height": 740
+  },
+  "results": [
+    {
+      "renderer": "webgl",
+      "tier": "full",
+      "baseContract": {
+        "renderer": "WebGLRenderer2",
+        "rendererType": 2,
+        "tier": "full",
+        "postFxEnabled": false,
+        "vignetteVisible": true,
+        "ambientCounts": {
+          "erythrocytes": 14,
+          "hostCells": 4,
+          "particles": 24
+        },
+        "runSeed": "release-matrix-seed",
+        "activeGems": 18,
+        "activeHostCells": 2,
+        "activeBullets": 1,
+        "infectedHostCellVisible": true,
+        "playerAnchorVisible": true
+      },
+      "rows": [
+        {
+          "density": 100,
+          "activeEnemies": 100,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "tier": "full",
+          "runSeed": "release-matrix-seed",
+          "file": "webgl-full-100.png"
+        },
+        {
+          "density": 150,
+          "activeEnemies": 150,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "tier": "full",
+          "runSeed": "release-matrix-seed",
+          "file": "webgl-full-150.png"
+        },
+        {
+          "density": 200,
+          "activeEnemies": 200,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "tier": "full",
+          "runSeed": "release-matrix-seed",
+          "file": "webgl-full-200.png"
+        }
+      ]
+    },
+    {
+      "renderer": "webgl",
+      "tier": "reduced",
+      "baseContract": {
+        "renderer": "WebGLRenderer2",
+        "rendererType": 2,
+        "tier": "reduced",
+        "postFxEnabled": false,
+        "vignetteVisible": true,
+        "ambientCounts": {
+          "erythrocytes": 8,
+          "hostCells": 2,
+          "particles": 12
+        },
+        "runSeed": "release-matrix-seed",
+        "activeGems": 18,
+        "activeHostCells": 2,
+        "activeBullets": 1,
+        "infectedHostCellVisible": true,
+        "playerAnchorVisible": true
+      },
+      "rows": [
+        {
+          "density": 100,
+          "activeEnemies": 100,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "tier": "reduced",
+          "runSeed": "release-matrix-seed",
+          "file": "webgl-reduced-100.png"
+        },
+        {
+          "density": 150,
+          "activeEnemies": 150,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "tier": "reduced",
+          "runSeed": "release-matrix-seed",
+          "file": "webgl-reduced-150.png"
+        },
+        {
+          "density": 200,
+          "activeEnemies": 200,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "tier": "reduced",
+          "runSeed": "release-matrix-seed",
+          "file": "webgl-reduced-200.png"
+        }
+      ]
+    },
+    {
+      "renderer": "canvas",
+      "tier": "full",
+      "baseContract": {
+        "renderer": "CanvasRenderer2",
+        "rendererType": 1,
+        "tier": "full",
+        "postFxEnabled": false,
+        "vignetteVisible": true,
+        "ambientCounts": {
+          "erythrocytes": 14,
+          "hostCells": 4,
+          "particles": 24
+        },
+        "runSeed": "release-matrix-seed",
+        "activeGems": 18,
+        "activeHostCells": 2,
+        "activeBullets": 1,
+        "infectedHostCellVisible": true,
+        "playerAnchorVisible": true
+      },
+      "rows": [
+        {
+          "density": 100,
+          "activeEnemies": 100,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "tier": "full",
+          "runSeed": "release-matrix-seed",
+          "file": "canvas-full-100.png"
+        },
+        {
+          "density": 150,
+          "activeEnemies": 150,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "tier": "full",
+          "runSeed": "release-matrix-seed",
+          "file": "canvas-full-150.png"
+        },
+        {
+          "density": 200,
+          "activeEnemies": 200,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "tier": "full",
+          "runSeed": "release-matrix-seed",
+          "file": "canvas-full-200.png"
+        }
+      ]
+    },
+    {
+      "renderer": "canvas",
+      "tier": "reduced",
+      "baseContract": {
+        "renderer": "CanvasRenderer2",
+        "rendererType": 1,
+        "tier": "reduced",
+        "postFxEnabled": false,
+        "vignetteVisible": true,
+        "ambientCounts": {
+          "erythrocytes": 8,
+          "hostCells": 2,
+          "particles": 12
+        },
+        "runSeed": "release-matrix-seed",
+        "activeGems": 18,
+        "activeHostCells": 2,
+        "activeBullets": 1,
+        "infectedHostCellVisible": true,
+        "playerAnchorVisible": true
+      },
+      "rows": [
+        {
+          "density": 100,
+          "activeEnemies": 100,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "tier": "reduced",
+          "runSeed": "release-matrix-seed",
+          "file": "canvas-reduced-100.png"
+        },
+        {
+          "density": 150,
+          "activeEnemies": 150,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "tier": "reduced",
+          "runSeed": "release-matrix-seed",
+          "file": "canvas-reduced-150.png"
+        },
+        {
+          "density": 200,
+          "activeEnemies": 200,
+          "activeGems": 18,
+          "activeHostCells": 2,
+          "activeBullets": 1,
+          "tier": "reduced",
+          "runSeed": "release-matrix-seed",
+          "file": "canvas-reduced-200.png"
+        }
+      ]
+    }
+  ],
+  "visualMetrics": [
+    {
+      "renderer": "webgl",
+      "tier": "full",
+      "density": 100,
+      "meanLuminance": 64.03210236706941,
+      "edgeEnergy": 4.212744046921223
+    },
+    {
+      "renderer": "webgl",
+      "tier": "reduced",
+      "density": 100,
+      "meanLuminance": 63.0006670461184,
+      "edgeEnergy": 4.191920989045775
+    },
+    {
+      "renderer": "canvas",
+      "tier": "full",
+      "density": 100,
+      "meanLuminance": 64.67243043830368,
+      "edgeEnergy": 3.868330338951221
+    },
+    {
+      "renderer": "canvas",
+      "tier": "reduced",
+      "density": 100,
+      "meanLuminance": 63.786256695794705,
+      "edgeEnergy": 3.8748356656026446
+    },
+    {
+      "renderer": "webgl",
+      "tier": "full",
+      "density": 150,
+      "meanLuminance": 70.51832823912127,
+      "edgeEnergy": 4.723419762192764
+    },
+    {
+      "renderer": "webgl",
+      "tier": "reduced",
+      "density": 150,
+      "meanLuminance": 80.54858307191246,
+      "edgeEnergy": 6.455583905405052
+    },
+    {
+      "renderer": "canvas",
+      "tier": "full",
+      "density": 150,
+      "meanLuminance": 81.60492251892991,
+      "edgeEnergy": 6.018648059158041
+    },
+    {
+      "renderer": "canvas",
+      "tier": "reduced",
+      "density": 150,
+      "meanLuminance": 81.15802437548797,
+      "edgeEnergy": 5.994401566747017
+    },
+    {
+      "renderer": "webgl",
+      "tier": "full",
+      "density": 200,
+      "meanLuminance": 73.59809000134771,
+      "edgeEnergy": 4.906961494002769
+    },
+    {
+      "renderer": "webgl",
+      "tier": "reduced",
+      "density": 200,
+      "meanLuminance": 72.48211205596735,
+      "edgeEnergy": 4.890107946261018
+    },
+    {
+      "renderer": "canvas",
+      "tier": "full",
+      "density": 200,
+      "meanLuminance": 73.78609520600077,
+      "edgeEnergy": 4.4582436144497795
+    },
+    {
+      "renderer": "canvas",
+      "tier": "reduced",
+      "density": 200,
+      "meanLuminance": 73.35213568299713,
+      "edgeEnergy": 4.493486486456713
+    }
+  ]
+}

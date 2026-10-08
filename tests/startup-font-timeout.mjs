@@ -22,6 +22,9 @@ try {
     args: process.platform === 'win32' ? [] : ['--no-sandbox', '--disable-dev-shm-usage'],
   });
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  // Isolate the font deadline from optional image loading/decode work. Real
+  // available/missing/stalled art deadlines are covered by startup-art-fallback.
+  await page.route('**/art/*.webp', route => route.abort());
 
   await page.addInitScript(() => {
     const never = new Promise(() => {});

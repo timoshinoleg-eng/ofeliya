@@ -1,17 +1,37 @@
 import Phaser from 'phaser';
 import { COLORS } from '../game/config';
+import { CORE_ART, rawArtKey } from '../game/ArtMetrics';
+import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
 import { StartupTrace } from '../systems/StartupTrace';
 
-/** Генерирует все текстуры кодом — ассеты не нужны, лицензионных рисков нет. */
+/** Load optional core art; procedural textures keep startup usable when a file fails. */
 export class BootScene extends Phaser.Scene {
   constructor() {
     super('Boot');
+  }
+
+  preload(): void {
+    // Optional presentation art must share one timeout window. Phaser defaults to two retries
+    // per file and only six concurrent downloads on Android; either would delay fallback.
+    const previousRetries = this.load.maxRetries;
+    this.load.maxRetries = 0;
+    this.load.maxParallelDownloads = Math.max(this.load.maxParallelDownloads, Object.keys(CORE_ART).length);
+    try {
+      for (const key of Object.keys(CORE_ART)) {
+        if (this.textures.exists(key)) continue;
+        this.load.image(rawArtKey(key), `art/${key}.webp`, { responseType: 'blob', timeout: 1800 });
+      }
+    } finally {
+      // Each queued File captures maxRetries immediately; unrelated future loads retain policy.
+      this.load.maxRetries = previousRetries;
+    }
   }
 
   create(): void {
     StartupTrace.mark('boot.scene.create');
     StartupTrace.mark('boot.textures.start');
     this.makeTextures();
+    ensureStrainZeroTextures(this);
     StartupTrace.mark('boot.textures.end');
     document.getElementById('splash')?.remove();
     StartupTrace.mark('splash.removed');

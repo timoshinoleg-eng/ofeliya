@@ -174,3 +174,75 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - This is a stress-fixture content limit, not evidence of a trophy issue: the actual guaranteed trophy offers two cards. The taller synthetic long-effect stress case remains; the short guard now chooses definitions 0, 2, and 5, with effects fitting within two lines, while retaining all actual pairs at 320x520. Browser rerun and independent review pending. Linux build/test suite and device acceptance are not claimed passed.
 
 The next Linux run exposed that short-guard index 3 also wraps to three lines. Measured wrap counts for the six definitions are `[2,3,2,3,3,2]`; the fixture now selects indices 0, 2, and 5 (index 5 is the last-life-saving Legendary), all measured at two lines. The 320x520 guard isolates height fitting; no Linux pass is claimed until rerun.
+
+## VO-01 diagnostics-first — 07.10.2026
+- Branch visual/vo-01-render-clarity-20261007, base d7797bc67bbda063d2fc3de68026101b0b061121, code/tests/docs 582723032b060f690eb59dac933c60834d0969a2.
+- Runtime RED observed: Menu ready, __renderSnapshot undefined. Added bounded on-demand snapshot under existing DEV/QA gate; ordinary production runtime opacity passed.
+- DEV and QA production browser 6/6 each: WebGL/Canvas DPR1/2/3, Menu/Game/two resizes/resume; local buffer remains CSS/logical size, no general HiDPI enabled. Text style/source resolutions recorded independently.
+- Local startup, viewport, control modes/CDP multitouch, layout diagnostics, typecheck, ordinary + QA builds, tokens, runtime-quality, challenge, language checks passed. Builds stamped base SHA, not new code HEAD. Full commands/intermediate failures/warnings in docs/visual-overhaul/VO01_VALIDATION.md.
+- Separate npm ci created ordinary local node_modules (Phaser 3.90.0), not a shared junction. npm/esbuild/git sandbox failures required approved escalation retries. No gate weakening or config/auth/route/skill changes.
+- Kimi invalid API key artifact excluded; independent review coordinator-owned and pending. Local work/ evidence, .vo01-npm-cache and failed Kimi artifact intentionally untracked. No full CI/device acceptance/publication.
+
+## VO01 Kimi fix round1 — 07.10.2026
+- c231d60ebcf5748b9a2a2d2c5bbf99ca39adaa5a addresses F1-F5, F6/F8/F10. Successful text-only Kimi review now committed as docs/visual-overhaul/VO01_KIMI_REVIEW.md; old invalid-key artifact overwritten. External credential recovery was coordinator work; no auth touched here.
+- Missing-scene runtime test observed null.cameras RED then GREEN. QA matrix 6/6, ordinary production static hook absence and runtime opacity, typecheck and builds passed. Actual commands/failures in VO01_VALIDATION.md. Builds stamped preceding 6204e33, not c231d60.
+- Nested test objects destroyed; progression freeze remains fixture-only. Visible handler dispatch is not hidden transition. RESIZE intrinsic=CSS assertions pin current baseline, no HiDPI enabled.
+- Original pipeline coordinator owns branch import/review/acceptance and broader plan. No additional workers, publication, configs/auth/routing changes; local cache/evidence excluded.
+
+
+## VO02 combat presentation — 07.10.2026
+- Branch `visual/vo02-combat-20261007`, base `a4d20d1`; code/tests `ddbe943`. Existing four retained emitters now select baked spark/chip frames from one 200x40 Canvas atlas (10 palette colors, 20 frames), providing renderer-independent event colors.
+- Bullet-hit presentation receives existing normalized velocity and victim radius; directed spray originates at the incoming membrane surface. Legacy three-argument calls stay centered/radial. Death presentation receives radius only. Gameplay damage/knockback/event ordering, actor/projectile sources, Joystick, ImpactDirector, VfxBudget and disabled camera postFX are unchanged.
+- Death chips and sparks share one token grant; 40% rounded down become chips. All VfxSystem circles are retained in a full12/reduced6 pool, including singularity core/collapse and delayed rings. Ordinary traffic reserves3/2 slots; important feedback preempts oldest ordinary then oldest important. Runtime scale<=.65 trims to6 immediately. Completion hides/reuses; explicit destroy and scene shutdown cancel tweens and reclaim circles/four emitters idempotently.
+- Focused Node boundary contracts 8/8 passed; `test:impact-budget`, `test:runtime-quality`, `test:telegraphs`, `npx tsc --noEmit`, `git diff --check` passed. Six focused contracts were observed RED before implementation. No browser was run by this worker; coordinator owns real Phaser Canvas/WebGL and matrix acceptance plus independent Kimi review. This is focused task validation, not final release acceptance.
+
+
+## VO02 Kimi fix1 tests — 07.10.2026
+- Coordinator reports Kimi scoped code-correctness PASS, no Critical findings, four Important nonblocking coverage gaps. Worker verified current production behavior and added only test cases in `04f56f7c849a01d11b508fcfd5e67bdd89c1a1d1`; production source unchanged.
+- New coverage: mixed ordinary/important runtime shedding retains all six important effects; important preemption cancels old tween and manually injected stale completion neither hides nor releases replacement; far black/white palette selection and genuine white/immune nearest tie; ordinary pool saturation blocks a hit ring while hit particles retain separate shared-budget accounting.
+- Focused contracts now 12/12, plus typecheck/impact-budget/runtime-quality/telegraphs/whitespace exit0. Four isolated in-memory production mutations each failed its intended new test; temporary runner removed. No browser/independent rereview performed by worker.
+
+
+## VO03 organ atmosphere — 07.10.2026
+- Branch `visual/vo03-organ-atmosphere-20261007`, base `b3dec2f`, code/tests `8af0b92`. Full14/4/24 and reduced8/2/12 image pools unchanged; RBC depth bands full8/4/2 and reduced4/3/1, depths-26/-14/-8 with coherent scale/alpha/parallax. Runtime/Heart selection retains all available bands; Heart takes about half budget with minimum3.
+- Three existing256px atmosphere backgrounds now bake periodic broad warm vessel flow and oblique Heart fibres. Actor/host/projectile/combat atlas sources unchanged; postFX disabled. Task5 backing compensation remains pending.
+- One retained Rectangle replaces every transient flash; depth-6 alpha<=.075, elapsed-ms exponential decay. Single numeric190ms second beat is replaced by newer heartbeat and canceled at stage/shutdown. Visual envelope second peak starts onlyphase>=.22; no gameplay heartbeat/director/AI files changed. Repeated destroy and calls after shutdown are safe.
+- Focused contracts9/9 (8 initial RED plus recipe RED), four mutation checks, stages/runtime-quality/impact-budget, VFX12/12, typecheck/whitespace exit0. Initial tuple/reduce type errors corrected. Existing npm http-proxy warning persists. Worker ran no browser or independent review; root owns those gates.
+
+
+## VO04 audible audio mix — 07.10.2026
+- Branch `visual/vo04-audio-20261007`, base `c247ba4`, code/tests/architecture `5c53377`. Pure production `audioMixMath` master.8/music.65, seven bed trims [.47,.37,.71,1.14,2,.32,.5], SFX role gains replace old manifest volumes. Decoded SFX all-channel peak scan once/cache, min(12,.63/peak), silent/invalid1; shoot/hit/pickup throttles unchanged.
+- One shared master compressor threshold-8/knee6/ratio4/attack.003/release.12. Separate bed trim before music/duck/filter; procedural layer filter and direct-to-master bio topology preserved. No gameplay/RNG/Joystick/score/save/campaign or AdaptiveAudioDirector decision changes.
+- Visibility flag retained before context creation, document hidden fallback, source/resume guards and pending-resume resuspension. Existing abort/request-ID cancellation and gesture retries retained; resume called synchronously within gesture stack. Adaptive transient tones now reclaim on run teardown as well as ended; SFX unaffected by stopMusic.
+- Immutable identity-free diagnostics distinguish wanted/loading/actually-playing and decoded actual fallback index from requested deterministic selection; generic error text avoids raw URL/error payloads.
+- Focused17/17 production TS math/WebAudio boundary contracts passed; initial13/14 expected RED plus existing throttle PASS. Required audio/save/RNG+checkpoint/typecheck/whitespace checks exit0. Existing npm http-proxy warning persists; no package/lock changes. Worker performed no browser, sample DSP rendering, subagents or independent review; root owns those acceptance steps.
+
+
+## VO05 recovered core art verification — 07.10.2026
+- Saved implementation `fdacc92` retained unchanged on `visual/vo05-art-20261007`; existing generated seven-WebP asset/provenance commit `346638d` is in ancestor history.
+- Seven canonical bounded4x backings share ArtMetrics compensation; raw images bake then release after refresh. Boot missing-key preload timeout1800ms and procedural fallback retain logical geometry; all hero/enemy/host scale consumers compensate backing factor. Noncore projectile/RNA/organ/combat sources are unchanged.
+- Recovery coverage `3de91b7` adds individual canonical preload guards, production Boot.create fallback ordering for no/partial raw results, and seven exact provenance/hash checks. Core art15/15, typecheck, viewport/tokens/impact-budget/runtime-quality/telegraphs, nonbrowser startup-renderer, VFX12/12, atmosphere9/9, save/RNG+checkpoint/stages and whitespace passed.
+- Existing untracked timeout-mutant file retained untouched; it intentionally fails finite-XHR timeout assertion after1800->0 mutation (other11original cases pass). No package/lock/CI changes and no production rewrite required.
+- Actual stalled-XHR/engine physics and raster/browser controls/elite/matrix remain root-owned. No browser, push/merge/deploy; final build/CI and real-device MAX/TG gates remain open.
+
+
+## VO05 stalled-art follow-up — 07.10.2026
+- Root actual-browser regression exposed >6000ms stalled startup. Phaser3.90 Loader defaults maxRetries2; File.onError reloads twice, creating3x1800ms windows. Desktop parallel32; Android parallel6 can additionally batch seven assets.
+- `9dc9650` sets optional-art retries0 while queueing (restores prior value in finally for unrelated future files) and Boot concurrency max(existing,7). Per-file1800ms timeout unchanged. Core art contract now16/16 includes retry capture/restore and Android6/desktop32 batching policy.
+- With root-authorized browser follow-up, actual Chromium Canvas startup available1335ms/missing1102ms/stalled2501ms/Android-UA stalled2673ms, all unchanged6000ms gate. Stalled modes each requested exactly7distinct assets, no retries; Android config default6 and Boot loader7 explicitly confirmed. Private extended copy of root startup test remains untracked for coordinator import.
+- Elite fixture now compares actual halfWidth/halfHeight to floor(sourceWorldRadiusX/Y), matching Phaser Body.setCircle/updateBounds; logical tolerance1.01, markers/signatures/centers unchanged. Actual elite script passed against own Vite server with only URL substituted in temporary copy. No physics production changes.
+- Typecheck, core16/16, nonbrowser startup-renderer, viewport/tokens/impact-budget and whitespace passed after fix. No push/merge/deploy. Root still owns full geometry/controls/matrix/scoped review and external device gates.
+
+## VO06 Menu/HUD finish — 07.10.2026
+- Branch `visual/vo06-ui-20261007`, base20f3b48; decorative implementation8d8d9cd changes only MenuScene/UIScene.
+- Menu retains two specimen Graphics/one alpha tween and two static noninteractive selector edges behind existing text/hero/input. HUD90px plate gains a hairline; highlights reuse existing fill Graphics and inherit visibility/fades/pulses.
+- Existing health/RNA text/fill timing, launch-once guard, callbacks and input/text geometry remain unchanged. No package/token/gameplay changes.
+- Worker passed typecheck, tokens, ui-copy, layout-diagnostics, language1584, viewport, Legendary/impact/VFX smoke and whitespace. No browser evidence provided; coordinator owns browser and scoped review.
+
+## 2026-10-07: Recovered visual overhaul integration
+
+Tasks1–6 recovered/completed; seven generated local core assets, bounded art fallback, compensated geometry and Menu/HUD finish integrated. Final evidence/reviews in docs/visual-overhaul/VALIDATION_20261007.md. NativeHONOR HUD, rollback and Compose passed; real-device MAX/Telegram acceptance remains open. No merge/deploy.
+
+## Hosted CI fixture recovery
+
+PR179 created. Initial hosted failures investigated: Node22 hardware selected reduced in an implicit-full VFX test; uncontrolled RAF phases/random cosmetic placement caused QA parity flakiness; global ring spy included new16px hit ring after lysis108/150. Test-only fixes preserve production behavior and all thresholds. Independent reviews PASS after lazy-sprite and deferred-depth-sort corrections. Native production QA12 cases PASS; comprehension all6viewports PASS. Latest combined head hosted rerun pending. Original failures retained in CI_FIXTURE_REVIEW_20261007.md. No merge/deploy.

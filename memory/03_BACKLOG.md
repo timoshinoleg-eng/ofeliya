@@ -139,3 +139,87 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - [ ] Rerun with the short guard using three two-line effects (definitions 0, 2, 5); keep all 15 actual pairs at 320x520 and leave assertions/production UI unchanged. Independent review approved this bounded fixture adjustment. No real-device acceptance claim.
 - [x] Linux measurement found short-guard definition index 3 also wraps to 3 lines; measured six single wrap counts are `[2,3,2,3,3,2]` (`work/multicard-linux-plain2.log`).
 - [ ] Rerun short guard with measured two-line definitions 0, 2, and 5 (index 5 is last-life-saving Legendary); all other cases remain unchanged. Latest Linux is 87/88; do not claim pass until rerun.
+
+## VO-01 follow-up — 07.10.2026
+- [x] Runtime RED before implementation; bounded DEV/QA snapshot and dimensions/input browser assertions.
+- [x] Local DEV + QA production renderer 6/6, ordinary production opacity, focused existing checks and builds. Evidence and failures: docs/visual-overhaul/VO01_VALIDATION.md.
+- [ ] Coordinator independent review of 582723032b060f690eb59dac933c60834d0969a2. Kimi blocked by invalid API key; failed artifact must not be committed or treated as evidence.
+- [ ] Run full Linux CI against the final candidate when authorized; current local builds stamped base d7797bc, not final HEAD.
+- [ ] Real MAX Android/iOS/Telegram touch, safe areas, resume and GPU/sharpness acceptance remain external gates.
+- [ ] Separate architecture/design for any future overall HiDPI; VO-01 deliberately does not change rendering resolution.
+
+## VO01 fix1 backlog — 07.10.2026
+- [x] Real Kimi frozen-diff review imported; invalid-key blocker resolved externally, superseding earlier pending note.
+- [x] F1-F5 and requested F6/F8/F10 addressed in c231d60ebcf5748b9a2a2d2c5bbf99ca39adaa5a; focused missing-scenes/QA matrix/production opacity/typecheck passed.
+- [ ] Coordinator rereview/accept fix1 and import branch into original pipeline; broader plan remains coordinator-owned.
+- [ ] Full Linux CI, slow bridge resize latency, real nonzero safe areas/hidden resume/devices/GPU remain unverified; do not promote local focused evidence to acceptance.
+
+
+## VO02 combat follow-up — 07.10.2026
+- [x] Baked Canvas/WebGL particle frame palette, single death budget grant, directed membrane hits and retained decoration pool implemented in `ddbe943`.
+- [x] Focused RED then GREEN8/8; impact budget/runtime quality/telegraphs/typecheck/whitespace checks passed locally.
+- [ ] Coordinator real Phaser impact/Canvas/WebGL visual matrix against VO02 candidate; inspect actual frame colors and contact readability under100/150/200 enemies.
+- [ ] Coordinator independent Kimi frozen task-range review (`a4d20d1..VO02_HEAD`), scoped fix/re-review before Task3.
+- [ ] Coordinator integrate `node tests/vfx-presentation.mjs` into final acceptance commands as appropriate; no new npm script/CI wiring was included in this scoped task.
+- [ ] Full branch CI/build and real MAX Android/iOS/Telegram gates remain pending; focused Node adapter checks are not pixel/performance acceptance.
+
+
+## VO02 Kimi fix1 backlog — 07.10.2026
+- [x] Coordinator reported scoped Kimi code PASS/no Critical; all four Important nonblocking test gaps addressed in 04f56f7.
+- [x] Focused 12/12 and four meaningful mutation checks; required typecheck/impact/runtime/telegraph checks passed.
+- [ ] Coordinator import test+memory commits and rereview/accept the four coverage fixes. Existing production behavior is unchanged; earlier full task browser evidence need not be represented as a worker run.
+- [ ] Root real Phaser matrix/impact acceptance and full final branch gates remain coordinator-owned; real MAX Android/iOS/Telegram external gates remain open.
+
+
+## VO03 organ atmosphere follow-up — 07.10.2026
+- [x] Coherent three-band RBC depth, bounded retained pulse and separated Heart visual peaks implemented in `8af0b92`; original static image counts/geometry retained.
+- [x] Focused9/9, meaningful four mutation checks, stage/runtime-quality/impact-budget, VFX12/12, typecheck and whitespace checks passed.
+- [ ] Coordinator independent Task3 frozen-diff review; remote Kimi currently unavailable, fallback reviewer remains root-owned. Scoped fixes/review before Task4 acceptance.
+- [ ] Coordinator real Phaser WebGL/Canvas dense full/reduced screenshots, Heart valley/second peak, compact resize/stage reset/shutdown QA. Worker adapter tests are not raster/GPU evidence.
+- [ ] Coordinator integrates focused atmosphere command into final branch acceptance; no scoped npm/CI wiring added.
+- [ ] Task5 actor/host high-resolution backing compensation; host shadow source unchanged in Task3. Full final branch build/CI and real MAX Android/iOS/Telegram gates remain open.
+
+
+## VO04 audible mix follow-up — 07.10.2026
+- [x] Audible master/music/bed/SFX mix, normalization caching, compressor, authoritative visibility and immutable safe diagnostics in `5c53377`.
+- [x] Focused17/17 production TS math/graph lifecycle contracts; required audio/save/RNG+checkpoint/typecheck/whitespace checks passed.
+- [ ] Root integrate code/memory commits and run independent frozen Task4 diff review; worker remains available for scoped fixes.
+- [ ] Root actual seven-CC0-bed OfflineAudioContext busy sample rendering using production math; establish finite/clipping bounds and audibility evidence separately from boundary tests.
+- [ ] Root integration/Phaser QA and final task gates; scoped test command is `node tests/audio-mix.mjs` with no package/CI wiring changes.
+- [ ] Task5 high-resolution actor/host backing compensation; final build/CI and real MAX Android/iOS/Telegram external acceptance remain open. No deploy/merge performed.
+
+
+## VO05 core art recovery follow-up — 07.10.2026
+- [x] Recovered saved `fdacc92` core art integration and inherited `346638d` seven generated assets/provenance without regenerating them.
+- [x] Verification coverage `3de91b7`: core-art15/15; typecheck, viewport/tokens/impact-budget/runtime-quality/telegraphs/startup-renderer, VFX12/12, atmosphere9/9, save/RNG/checkpoint/stages and whitespace.
+- [x] Preserve original untracked timeout-mutant, confirm one targeted finite-XHR assertion fails under1800->0 mutation.
+- [ ] Coordinator frozen Task5 scoped review and cherry-pick coverage/memory; implementation `fdacc92` remains unchanged.
+- [ ] Coordinator actual browser missing/stalled-image fallback/startup, Phaser body/display/centers across WebGL/Canvas, controls/elite/visual matrix and screenshots; worker adapters do not close these gates.
+- [ ] Task6 menu/HUD finish, final branch build/CI, real MAX Android/iOS16/16 and Telegram external acceptance. No merge/deploy performed.
+
+
+## VO05 stalled-art follow-up — 07.10.2026
+- Root actual-browser regression exposed >6000ms stalled startup. Phaser3.90 Loader defaults maxRetries2; File.onError reloads twice, creating3x1800ms windows. Desktop parallel32; Android parallel6 can additionally batch seven assets.
+- `9dc9650` sets optional-art retries0 while queueing (restores prior value in finally for unrelated future files) and Boot concurrency max(existing,7). Per-file1800ms timeout unchanged. Core art contract now16/16 includes retry capture/restore and Android6/desktop32 batching policy.
+- With root-authorized browser follow-up, actual Chromium Canvas startup available1335ms/missing1102ms/stalled2501ms/Android-UA stalled2673ms, all unchanged6000ms gate. Stalled modes each requested exactly7distinct assets, no retries; Android config default6 and Boot loader7 explicitly confirmed. Private extended copy of root startup test remains untracked for coordinator import.
+- Elite fixture now compares actual halfWidth/halfHeight to floor(sourceWorldRadiusX/Y), matching Phaser Body.setCircle/updateBounds; logical tolerance1.01, markers/signatures/centers unchanged. Actual elite script passed against own Vite server with only URL substituted in temporary copy. No physics production changes.
+- Typecheck, core16/16, nonbrowser startup-renderer, viewport/tokens/impact-budget and whitespace passed after fix. No push/merge/deploy. Root still owns full geometry/controls/matrix/scoped review and external device gates.
+
+## VO06 Menu/HUD follow-up — 07.10.2026
+- [x] Decorative Menu framing/halo and illuminated selector edges; HUD retained bar highlights/hairline implemented8d8d9cd.
+- [x] Worker typecheck/tokens/ui-copy/layout-diagnostics/language1584/viewport/Legendary-impact-VFX smoke/whitespace passed.
+- [ ] Coordinator integrate code/memory commits, frozen independent Task6 scoped review and any review fixes.
+- [ ] Coordinator actual portrait/compact menu/HUD/Legendary/modal-control browser acceptance, screenshots, retained-object/tween teardown. Worker did not run browser.
+- [ ] Task7 integrated acceptance/build/review/PR; real MAX Android/iOS16/16 and Telegram external gates remain open. No merge/deploy performed.
+
+## 2026-10-07: Post-overhaul release work
+
+Check hosted PRCI; collect realMAX Android/iOS16-point and Telegram audio-unlock/performance evidence. Track existing fallback-font compactHUD overlap (LinuxDejaVu reproduces baseline; nativeHONOR gatepassed). FullHiDPI renderer experiment and optional music-track/trim array maintenance guard remain separate followups. No current production merge/deploy authorization inferred.
+
+## Current CI checkpoint
+
+- [x] Restore interrupted visual work and create draft PR179.
+- [x] Investigate initial hosted CI failures and review test-only fixture fixes.
+- [x] Native production QA12-cell matrix and six-viewport comprehension acceptance.
+- [ ] Confirm full hosted CI on latest combined PR head before concluding PR validation.
+- [ ] Real MAX Android/iOS16-point, Telegram audio unlock/device performance and separate generalHiDPI renderer follow-up remain open. No merge/deploy.

@@ -107,3 +107,78 @@ GPT-6 Luna независимо проверил обе задачи; no functio
 - Linux run of the expanded browser probe passed 87/88 after fixing the fallback port. All 15 real definition pairs across every tested viewport, including 320x520, passed. The only failure was the synthetic three-choice short-height fixture: one 3-line effect met the intended 2-line cap on 124px compact cards. This is an unreachable synthetic content/layout combination (trophy contract is two choices), while the longer 3-card stress case remains at taller heights. Use only 2-line effects in the 320x520 guard to isolate height-fit logic; keep all 15 actual pairs there. No production UI change and no relaxed assertion. Rerun pending.
 
 - Linux wrap measurements showed the previous 320x520 short guard still included a 3-line effect: definition index 3. The six measured counts are `[2,3,2,3,3,2]`. Use indices 0, 2, and 5 for this guard; index 5 is the last-life-saving Legendary. Base the selection on measured wrapping, not inferred string length. Keep all other scenarios/assertions unchanged; latest Linux status is 87/88 and rerun is pending.
+
+## VO-01 decisions — 07.10.2026
+- Diagnostics only, no overall DPR/framebuffer multiplier. Use existing DEV/release-matrix-QA gate and detached on-demand readback, never timers or history.
+- Snapshot fixed Menu/Game/UI scope, bounded recursive visible Text sampling, numeric geometry/resolution only; no content/identity/user fields.
+- Phaser Text style.resolution and TextureSource.resolution are independent observed facts. Production renderer tests use numeric renderer.type because constructor names are minified.
+- Browser fixture freezes Game.update before start and pauses physics after ready to isolate logical camera mapping from collision shake. Production controls/gameplay stay untouched; existing multitouch suite is separate evidence.
+- Kimi failed invocation is not a review. Coordinator owns frozen candidate review; no other workers, push, merge or deploy.
+
+## VO01 fix1 decisions — 07.10.2026
+- Diagnostic snapshot returns a stable empty scene record when a canonical key is missing. Focused test removes actual Phaser scenes, avoiding mocks.
+- Ordinary production means PROD without VITE_RELEASE_MATRIX_QA=1; both literal hook string absence across JS chunks and behavioral opacity required. Existing build-time gate remains unchanged.
+- Preserve pre-start update freeze based on validated control-smoke lifecycle; narrow dimensions/input evidence, no progression/performance claim. Destroy nested Text/container before later samples.
+- Scene pause/resume plus already-visible handler dispatch only; no actual hidden transition acceptance. Intrinsic size expectations explicitly baseline-specific.
+- Successful Kimi text-only review supersedes failed invocation artifact; coordinator owns final acceptance.
+
+
+## VO02 combat decisions — 07.10.2026
+- Use baked palette atlas frames instead of tint or TextureSource.resolution compensation: Phaser3.90 Canvas particles ignore tint/resolution. Preserve all gameplay art/source dimensions for Task5.
+- Retain exactly four emitters; two death silhouettes split one existing VfxBudget grant rather than taking independent full requests. Nearest RGB palette preserves unlisted event colors approximately; known colors map exactly. Particle RNG remains Phaser cosmetic RNG, no gameplay RNG use.
+- Retain a lazy circle pool full12/reduced6, reserves3/2 for important feedback. Preemption cancels prior tweens, resets circle geometry/style/transforms and guards late completion by generation. If all slots are important, newest important feedback replaces oldest. Gameplay warning geometry lives outside VfxSystem and is unaffected.
+- Keep ordinary hit feedback local and globally throttled; surface spray and short contact ring improve legibility without camera shake. Do not alter hitStop/ImpactDirector policy.
+- Focused tests execute production TS modules with rendering-boundary adapters and real EventEmitter3; they establish calls/policy/recipes, not pixel parity or real-phone performance. Root-owned browser and Kimi review are still required.
+
+
+## VO02 Kimi fix1 coverage decisions — 07.10.2026
+- Resolve reviewer test gaps with boundary tests, no speculative production rewrite. Existing sort `Number(false)-Number(true)` correctly puts ordinary entries before important; Q2 interpretation does not warrant changing it.
+- Exercise a stale callback despite cancellation, then permit new ordinary traffic to prove replacement remains active through public allocation behavior. Assert current completion releases visibility normally.
+- Tie fixture is literal RGB(242,246,244): hand-checked squared distances 237 to white/immune, all other palette distances > 10,000. Expect white as first declaration-order tie winner, with both spark/chip frames; no duplicate nearest-color loop in tests.
+- Mutation verification modifies production source strings only in the temporary loader memory, never tracked source: wrong shedding, absent serial guard, <= tie update and disabled ordinary cap each fail the corresponding new case. Regression additions passed existing code; do not describe their mutation RED as preimplementation feature RED.
+
+
+## VO03 organ atmosphere decisions — 07.10.2026
+- Keep logical background256px geometry and existing keys. Bake periodic sine flow and0.5-slope Heart fibres; broad warm detail stays below gameplay without postFX. Leave actor, host shadow and combat atlas dimensions/recipes to their existing owners.
+- Allocate all three RBC bands at construction (full8/4/2, reduced4/3/1). Proportional visible budget preserves at least one per available band; Heart uses ceil(runtimeBudget/2), subject to the same three-band floor, preventing quality/stage switches from removing near depth.
+- Retain one pulse Rectangle behind gameplay. Clamp composite alpha<=.075 and decay by actual elapsed milliseconds, separate from movement's50ms clamp. Split elapsed time at pending190ms second beat to preserve overlay decay with large frame intervals; store only latest pending numeric schedule and cancel on stage/reset/shutdown.
+- Separate the cosmetic Heart envelope from authoritative heartbeat logic: first exp(-phase*14), second absent beforephase.22 then .52*exp(-(phase-.22)*18). Do not alter real heartbeat, director or AI timers.
+- Focused test adapters record Phaser/Canvas calls while production logic and real EventEmitter3 execute. Four in-memory source mutations verify gate/decay/band/cancellation coverage. Root browser screenshots/independent review remain separate evidence.
+
+
+## VO04 mix and lifecycle decisions — 07.10.2026
+- Place per-bed loudness correction on a dedicated retained gain, separate from .65 music bus duck automation. Route all buses through .8master and one configured compressor. Keep existing procedural stinger/heartbeat filter and direct bio path.
+- Cache decoded SFX normalization at successful load; role gain is its only event coefficient, replacing legacy manifest vol. Invalid/nonfinite samples or silent/empty data use trim1; bounded boost max12. Existing fallback oscillators and event throttles retain their values.
+- Store desired deterministic bed independently from decoded fallback index. Diagnostics return frozen snapshots of actual node values and lifecycle booleans; decoded actual index is null before success/after stop. Emit bounded generic decode errors instead of arbitrary environment error messages.
+- Visibility owns suspension even before AudioContext exists; also check document.hidden because director binds its listener after bedStart and teardown calls setSuspended(false). Never resume/spawn while hidden; cache legitimate hidden decode for visible restart. Recheck visibility after asynchronous resume to prevent pending resume overriding hide.
+- Call ctx.resume() inside the gesture callback stack; deduplicate its pending promise and rearm one listener per event after failure. Keep manual pause from suspending shared UI audio. Stop outstanding adaptive layer tones on run teardown while leaving SFX transient cleanup on ended.
+- Focused WebAudio adapter must distinguish scheduled oscillator stop from immediate teardown; otherwise live-node lifecycle assertions are vacuous. Restart tests assert bio plus four live layer oscillators before explicit cleanup. Browser/sample/device acceptance remains coordinator-owned.
+
+
+## VO05 core art recovery decisions — 07.10.2026
+- Resume saved `fdacc92` rather than repeat asset generation or replace stable implementation. Keep canonical logical metrics and bounded4x backing explicit; do not use TextureSource.resolution to compensate sprite/body geometry.
+- Extend coverage at Boot loader/canonical-key and create-sequencing boundaries; validate generated asset byte hashes against recorded provenance. XHR completion and Phaser body rounding require separate actual browser acceptance.
+- Retain intentional untracked `.vo05-mutant.mjs` unchanged; its finite-timeout failure is coverage evidence, not a tracked feature or failing production gate. Coverage additions were green on existing implementation; no claim of new feature RED.
+- Keep recovered changes scoped to Task5 tests/memory; no unnecessary source rewrite, package/CI wiring, browser operation or deployment. Coordinator owns root integration/scoped review and actual Phaser checks.
+
+
+## VO05 stalled-art follow-up — 07.10.2026
+- Root actual-browser regression exposed >6000ms stalled startup. Phaser3.90 Loader defaults maxRetries2; File.onError reloads twice, creating3x1800ms windows. Desktop parallel32; Android parallel6 can additionally batch seven assets.
+- `9dc9650` sets optional-art retries0 while queueing (restores prior value in finally for unrelated future files) and Boot concurrency max(existing,7). Per-file1800ms timeout unchanged. Core art contract now16/16 includes retry capture/restore and Android6/desktop32 batching policy.
+- With root-authorized browser follow-up, actual Chromium Canvas startup available1335ms/missing1102ms/stalled2501ms/Android-UA stalled2673ms, all unchanged6000ms gate. Stalled modes each requested exactly7distinct assets, no retries; Android config default6 and Boot loader7 explicitly confirmed. Private extended copy of root startup test remains untracked for coordinator import.
+- Elite fixture now compares actual halfWidth/halfHeight to floor(sourceWorldRadiusX/Y), matching Phaser Body.setCircle/updateBounds; logical tolerance1.01, markers/signatures/centers unchanged. Actual elite script passed against own Vite server with only URL substituted in temporary copy. No physics production changes.
+- Typecheck, core16/16, nonbrowser startup-renderer, viewport/tokens/impact-budget and whitespace passed after fix. No push/merge/deploy. Root still owns full geometry/controls/matrix/scoped review and external device gates.
+
+## VO06 restrained framing decisions — 07.10.2026
+- Reuse existing BORDER/PANEL/ROLE tokens without modifying frozen recipes. Specimen radius=min(82,H*.105) keeps circular decoration below title/copy; low-alpha warm plate and pink halo are behind hero, with fixed geometry and alpha-only animation.
+- Add panel illumination as static noninteractive hairlines inside existing selector bounds; preserve every text/touch callback and launch-once guard.
+- Draw highlights inside the retained XP/HP/boss Graphics (3px side inset,2px top inset,2px height), so existing hide/pulse/cinematic handling applies automatically. Leave fill/text updates immediate and geometry unchanged.
+- No new implementation-mirroring test for cosmetic decoration. Existing non-browser contracts establish unrelated token/copy/math stability; root actual Phaser acceptance must assess visible layout, teardown and pixel quality.
+
+## 2026-10-07: Recovery and acceptance decisions
+
+Preserve saved implementations rather than restart. Disable optional-art retries only while queueing and restore prior policy. Freeze live progression in density-capture fixture, preserving Sprite.preUpdate/rendering and all assertions. Isolate font900ms gate from optional art; separate real artstartup6sec evidence. Keep general1xcanvas and compensated4xart; a fullHiDPI renderer is outside this contained presentation change.
+
+## Hosted CI determinism decisions
+
+Use real production tier override before test modules load, restoring global storage descriptor. Sample real production animation at shared1000ms, seed only creation cosmetics and restore Math.random. Prepare lazy group sprites idempotently; explicitly apply existing depthSort before exact ordered input snapshots. Require finite poses, retained windup telegraphs, before/after stability and same-tier renderer input equality; preserve raster thresholds. Scope lysis-radius spy to actual lysis rather than unrelated hit rings; assert complete108/150 array and original damage bounds. These are fixture corrections, not gameplay/rendering changes.

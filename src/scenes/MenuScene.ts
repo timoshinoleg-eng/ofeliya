@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { artScale } from '../game/ArtMetrics';
 import { parseChallengePayload } from '../game/Challenge';
 import { parseDuelStartPayload, type DuelChallengeSnapshot } from '../game/Duel';
 import { ACHIEVEMENTS } from '../game/AchievementSystem';
@@ -30,6 +31,7 @@ import { ensureCinematicTextures } from '../game/CinematicTextures';
 import { clearDailyIntent, launchDailyRun } from '../game/DailyRunIntent';
 import { showLegalOverlay } from '../legal/LegalOverlay';
 import { SocialHub } from '../ui/SocialHub';
+import { BORDER, PANEL, ROLE } from '../ui/tokens';
 import { FOUNDER_BADGE_LABEL, hasFounderBadge } from '../ui/FounderBadge';
 import { PlatformBridge } from '../platform';
 import { RELEASE_SHORT } from '../release';
@@ -127,7 +129,7 @@ export class MenuScene extends Phaser.Scene {
 
     const host = this.add
       .image(W * 0.5, H * 0.3, 'host-cell-shadow')
-      .setScale(H < 650 ? 1.1 : 1.4)
+      .setScale(artScale('host-cell-shadow', H < 650 ? 1.1 : 1.4))
       .setAlpha(0.1)
       .setDepth(-10);
     this.tweens.add({
@@ -140,9 +142,32 @@ export class MenuScene extends Phaser.Scene {
       ease: 'Sine.InOut',
     });
 
+    // Retained specimen framing sits below the portrait and all copy/input targets.
+    // Only the halo's opacity breathes; no scene objects are spawned by animation.
+    const specimenRadius = Math.min(82, H * 0.105);
+    const specimen = this.add.graphics().setPosition(W / 2, H * 0.28).setDepth(0);
+    specimen.fillStyle(ROLE.surface.panel, PANEL.plate * 0.5);
+    specimen.fillCircle(0, 0, specimenRadius);
+    specimen.lineStyle(BORDER.hair, ROLE.faction.immune, 0.22);
+    specimen.strokeCircle(0, 0, specimenRadius);
+    for (const angle of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
+      const inner = specimenRadius - 5;
+      const outer = specimenRadius + 5;
+      specimen.lineBetween(Math.cos(angle) * inner, Math.sin(angle) * inner,
+        Math.cos(angle) * outer, Math.sin(angle) * outer);
+    }
+    const halo = this.add.graphics().setPosition(W / 2, H * 0.28).setDepth(1);
+    halo.lineStyle(BORDER.heavyLg, ROLE.faction.player, 0.1);
+    halo.strokeCircle(0, 0, specimenRadius - 11);
+    halo.lineStyle(BORDER.hair, ROLE.faction.player, 0.32);
+    halo.strokeCircle(0, 0, specimenRadius - 11);
+    halo.setAlpha(0.55);
+    this.tweens.add({ targets: halo, alpha: 1, duration: 2400, yoyo: true,
+      repeat: -1, ease: 'Sine.InOut' });
+
     const virus = this.add
       .image(W / 2, H * 0.28, 'virus-player')
-      .setScale(H < 650 ? 1.8 : 2.15)
+      .setScale(artScale('virus-player', H < 650 ? 1.8 : 2.15))
       .setDepth(2);
     this.tweens.add({
       targets: virus,
@@ -377,6 +402,8 @@ export class MenuScene extends Phaser.Scene {
     const difficultyRail = this.add
       .rectangle(difficultyLeft + 5, difficultyY, 5, selectorH - 10, COLORS.cyan, 0.92)
       .setDepth(6);
+    this.add.rectangle(difficultyX, difficultyY - selectorH / 2 + 1,
+      selectorW - 16, BORDER.hair, ROLE.faction.immune, 0.38).setDepth(6);
     this.add
       .text(difficultyLeft + 14, difficultyY - (splitSelectors ? 27 : 12), 'СЛОЖНОСТЬ:', {
         fontFamily: UI_FONT,
@@ -478,6 +505,8 @@ export class MenuScene extends Phaser.Scene {
     const controlRail = this.add
       .rectangle(controlLeft + 5, controlY, 5, controlH - 10, COLORS.magenta, 0.94)
       .setDepth(6);
+    this.add.rectangle(controlX, controlY - controlH / 2 + 1,
+      selectorW - 16, BORDER.hair, ROLE.faction.player, 0.38).setDepth(6);
     this.add
       .text(controlLeft + 14, controlY - (splitSelectors ? 27 : 11), 'УПРАВЛЕНИЕ:', {
         fontFamily: UI_FONT,
