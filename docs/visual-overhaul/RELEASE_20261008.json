@@ -1,0 +1,69 @@
+{
+  "release_sha": "716292b78c5b2e53485170bcb8a4cc2780f9df04",
+  "main_ci": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/37775488149",
+  "pr182_ci": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/37773729014",
+  "deploy": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/37777242773",
+  "deploy_status": "success",
+  "public_url": "https://ofeliya.freeveol.dpdns.org/ofeliya/",
+  "public_verification": {
+    "source": "GitHub deployment workflow external HTTPS fetch and assertions",
+    "timestamp_utc": "2026-10-08T12:30:45.8762968Z",
+    "exact_sha": "716292b78c5b2e53485170bcb8a4cc2780f9df04",
+    "index_sha256_match": true,
+    "service_worker_sha256_match": true,
+    "runtime_config_sha256_match": true,
+    "max_and_telegram_csp": true,
+    "local_fetch": "connection timeout12s; not independent local HTTP confirmation"
+  },
+  "rollback_sha": "d7797bc67bbda063d2fc3de68026101b0b061121",
+  "browser_artifact": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/37775488149/artifacts/11549674888",
+  "inspected_matrix_cases": 24,
+  "production_density": 1,
+  "experimental_density": "2x QA only",
+  "physical_messenger_acceptance": "unverified",
+  "remaining_scope": [
+    "authored soundtrack/stems",
+    "RNA/projectile/icon kit",
+    "complete charge/hit/death cycles",
+    "dense moving battle/device FPS/thermal acceptance"
+  ],
+  "additional_kimi_fixture_review": "empty content thenHTTP504; not approval",
+  "prs": [
+    {
+      "headRefOid": "d3d4c33c34ea529898ff22d454a98d14c4210691",
+      "mergeCommit": {
+        "oid": "9c05b256063a0bc1a33922c8dbc3736fdd3462a7"
+      },
+      "number": 179,
+      "state": "MERGED",
+      "url": "https://github.com/timoshinoleg-eng/ofeliya/pull/179"
+    },
+    {
+      "headRefOid": "231b38dd93e1733d107c0fff2392639d3130f95e",
+      "mergeCommit": {
+        "oid": "acfd040a8c0c70f98b81374be6b01072a3c6cc0f"
+      },
+      "number": 180,
+      "state": "MERGED",
+      "url": "https://github.com/timoshinoleg-eng/ofeliya/pull/180"
+    },
+    {
+      "headRefOid": "cf5f0cff5be81f28814936a015145539e4671655",
+      "mergeCommit": {
+        "oid": "50c47049b61380921c02a62831a486598c8984bd"
+      },
+      "number": 181,
+      "state": "MERGED",
+      "url": "https://github.com/timoshinoleg-eng/ofeliya/pull/181"
+    },
+    {
+      "headRefOid": "8cdc196d4652a6a6bdfad9b208ef967ca91bb748",
+      "mergeCommit": {
+        "oid": "716292b78c5b2e53485170bcb8a4cc2780f9df04"
+      },
+      "number": 182,
+      "state": "MERGED",
+      "url": "https://github.com/timoshinoleg-eng/ofeliya/pull/182"
+    }
+  ]
+}

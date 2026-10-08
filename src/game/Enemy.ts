@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { artScale, artSourceFactor } from './ArtMetrics';
 import { biologicalAtlasKey, biologicalFrameAt } from './BiologicalAnimation';
+import { biologicalHitAtlasKey, biologicalHitDirection, biologicalHitFrame } from './BiologicalImpact';
 import { COLORS, ELITE, ENEMY_DEFS, type EnemyKind } from './config';
 import type { GameScene } from '../scenes/GameScene';
 import type { Player } from './Player';
@@ -70,6 +71,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private bossTelegraph: Phaser.GameObjects.Graphics | null = null;
   private primeBrokenUntil = 0;
   private biologicalFrame = -1;
+  private biologicalHitAt = -Infinity;
+  private biologicalHitDirection = 0;
   private biologicalCycle = false;
   private biologicalPhase = 0;
 
@@ -109,6 +112,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.enableBody(true, x, y, true, true);
     this.setTexture(opts.textureKey ?? def.tex).setScale(artScale(opts.textureKey ?? def.tex, scale));
     this.biologicalFrame = -1;
+    this.biologicalHitAt = -Infinity;
     this.biologicalCycle = (opts.textureKey ?? def.tex) === 'immune-antibody';
     this.biologicalPhase = Math.abs(x * 3 + y * 5 + this.spawnSerial * 97) % 720;
     this.isElite = opts.elite;
@@ -228,10 +232,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       // Enemy owns gameplay telegraphs: keep this observer independent of the runtime governor.
       const reduced = this.scene.registry.get('performanceTier') === 'reduced';
       const frame = biologicalFrameAt(time, this.biologicalPhase, reduced);
-      if (frame !== this.biologicalFrame) {
-        this.setTexture(atlas, `bio-${frame}`);
-        this.biologicalFrame = frame;
-      }
+      const hitAtlas = biologicalHitAtlasKey('immune-antibody');
+      const hitFrame = biologicalHitFrame(this.scene.time.now - this.biologicalHitAt, this.biologicalHitDirection, reduced);
+      const texture = hitFrame && this.scene.textures.exists(hitAtlas) ? hitAtlas : atlas;
+      const pose = texture === hitAtlas ? hitFrame! : `bio-${frame}`;
+      if (this.texture.key !== texture || this.frame.name !== pose) this.setTexture(texture, pose);
+      this.biologicalFrame = frame;
     }
 
     if (time < this.flashUntil) this.setTintFill(0xffffff);
@@ -625,6 +631,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.hp -= actualDamage;
     if (actualDamage > 0) {
       this.lastDamageAt = now;
+      if (this.biologicalCycle) {
+        this.biologicalHitAt = now;
+        this.biologicalHitDirection = biologicalHitDirection(kx, ky, this.rotation);
+      }
       this.gs?.onEnemyDamaged(this, actualDamage);
     }
     this.flashUntil = now + 70;

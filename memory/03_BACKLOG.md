@@ -1,5 +1,9 @@
 # BACKLOG — OFELIYA: STRAIN ZERO
 
+## Latest combat continuation (08.10)
+[x] Publish reviewed local hero/antibodyhit+antibodydeath slice with actualPhaser/tests/captures. [ ] Read finalPRhead CI before merge. [ ] RealMAXAndroid/iOS/Telegram sustainedFPS/thermal/audio/gesture acceptance. [ ] Authored coherent score/stems, selectedRNA/projectile/icons, actualrolecharge/playerdeath; see precise ART_AUDIO_BRIEF. [ ] Ownerapprove follow-up merge/deploy; currentproduction716292b preserved.
+
+
 Обновлено: 2026-10-05. Отмечайте сделанное галочкой; новые пункты добавляйте сюда, а не в чат.
 
 ## Control-mode browser smoke (06.10)

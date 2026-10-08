@@ -28,6 +28,8 @@ export class VfxSystem {
   private destroyed = false;
   private combatDensity = 0;
   private runtimeQualityScale = 1;
+  private readonly biologicalGhosts: { image: Phaser.GameObjects.Image; active: boolean; serial: number }[] = [];
+  private ghostSerial = 0;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -157,6 +159,50 @@ export class VfxSystem {
     if (!Number.isFinite(scale)) return;
     this.runtimeQualityScale = Phaser.Math.Clamp(scale, 0.45, 1);
     this.trimDecorations();
+    this.trimBiologicalGhosts();
+  }
+
+  /** Snapshot after authoritative death; this Image has no body and cannot retain a pooled enemy. */
+  biologicalDeath(source: {
+    active: boolean; x: number; y: number; rotation: number; scaleX: number; scaleY: number;
+    alpha: number; texture: { key: string }; frame: { name: string | number };
+  }): void {
+    if (this.destroyed || source.active || this.combatDensity >= 150) return;
+    if (!['immune-antibody', 'bio-cycle-immune-antibody', 'bio-hit-immune-antibody'].includes(source.texture.key)) return;
+    let entry = this.biologicalGhosts.find(ghost => !ghost.active);
+    if (!entry && this.biologicalGhosts.length < this.biologicalGhostCap) {
+      entry = { image: this.scene.add.image(0, 0, source.texture.key).setDepth(12).setVisible(false), active: false, serial: 0 };
+      this.biologicalGhosts.push(entry);
+    }
+    if (!entry) return; // Drop decoration rather than replace an in-flight collapse.
+    const ghost = entry;
+    ghost.active = true;
+    const serial = ghost.serial = ++this.ghostSerial;
+    ghost.image.setTexture(source.texture.key, source.frame.name).clearTint()
+      .setPosition(source.x, source.y).setRotation(source.rotation)
+      .setScale(source.scaleX, source.scaleY).setAlpha(Math.min(0.65, source.alpha)).setVisible(true);
+    this.scene.tweens.add({
+      targets: ghost.image, scaleX: source.scaleX * 0.25, scaleY: source.scaleY * 0.25,
+      alpha: 0, duration: this.biologicalGhostCap === 2 ? 120 : 180, ease: 'Quad.In',
+      onComplete: () => {
+        if (this.destroyed || ghost.serial !== serial) return;
+        ghost.active = false;
+        ghost.image.setVisible(false);
+      },
+    });
+  }
+
+  private get biologicalGhostCap(): number {
+    return PERFORMANCE.tier === 'reduced' || this.runtimeQualityScale <= 0.65 ? 2 : 4;
+  }
+
+  private trimBiologicalGhosts(): void {
+    while (this.biologicalGhosts.length > this.biologicalGhostCap) {
+      const ghost = this.biologicalGhosts.pop()!;
+      ghost.serial = ++this.ghostSerial;
+      this.scene.tweens.killTweensOf(ghost.image);
+      ghost.image.destroy();
+    }
   }
 
   get debugRuntimeQualityScale(): number {
@@ -234,6 +280,11 @@ export class VfxSystem {
       entry.circle.destroy();
     }
     this.decorations.length = 0;
+    for (const ghost of this.biologicalGhosts) {
+      this.scene.tweens.killTweensOf(ghost.image);
+      ghost.image.destroy();
+    }
+    this.biologicalGhosts.length = 0;
     this.killEmitter.destroy();
     this.hitEmitter.destroy();
     this.pickupEmitter.destroy();

@@ -1,0 +1,262 @@
+[
+  {
+    "viewport": {
+      "width": 360,
+      "height": 640
+    },
+    "cells": [
+      {
+        "renderer": "webgl",
+        "tier": "full",
+        "rows": [
+          {
+            "density": 100,
+            "activeEnemies": 100,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          },
+          {
+            "density": 150,
+            "activeEnemies": 150,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          },
+          {
+            "density": 200,
+            "activeEnemies": 200,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          }
+        ]
+      },
+      {
+        "renderer": "webgl",
+        "tier": "reduced",
+        "rows": [
+          {
+            "density": 100,
+            "activeEnemies": 100,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          },
+          {
+            "density": 150,
+            "activeEnemies": 150,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          },
+          {
+            "density": 200,
+            "activeEnemies": 200,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          }
+        ]
+      },
+      {
+        "renderer": "canvas",
+        "tier": "full",
+        "rows": [
+          {
+            "density": 100,
+            "activeEnemies": 100,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          },
+          {
+            "density": 150,
+            "activeEnemies": 150,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          },
+          {
+            "density": 200,
+            "activeEnemies": 200,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          }
+        ]
+      },
+      {
+        "renderer": "canvas",
+        "tier": "reduced",
+        "rows": [
+          {
+            "density": 100,
+            "activeEnemies": 100,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          },
+          {
+            "density": 150,
+            "activeEnemies": 150,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          },
+          {
+            "density": 200,
+            "activeEnemies": 200,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          }
+        ]
+      }
+    ],
+    "cases": 12,
+    "source": "C:\\Users\\Имярек\\Documents\\Codex\\2026-10-08\\ofeliya-ofeliya-codex-handoff-2026-10\\outputs\\release-browser-716292b\\release-visual-matrix\\360x640\\matrix.json"
+  },
+  {
+    "viewport": {
+      "width": 390,
+      "height": 740
+    },
+    "cells": [
+      {
+        "renderer": "webgl",
+        "tier": "full",
+        "rows": [
+          {
+            "density": 100,
+            "activeEnemies": 100,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          },
+          {
+            "density": 150,
+            "activeEnemies": 150,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          },
+          {
+            "density": 200,
+            "activeEnemies": 200,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          }
+        ]
+      },
+      {
+        "renderer": "webgl",
+        "tier": "reduced",
+        "rows": [
+          {
+            "density": 100,
+            "activeEnemies": 100,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          },
+          {
+            "density": 150,
+            "activeEnemies": 150,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          },
+          {
+            "density": 200,
+            "activeEnemies": 200,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          }
+        ]
+      },
+      {
+        "renderer": "canvas",
+        "tier": "full",
+        "rows": [
+          {
+            "density": 100,
+            "activeEnemies": 100,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          },
+          {
+            "density": 150,
+            "activeEnemies": 150,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          },
+          {
+            "density": 200,
+            "activeEnemies": 200,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          }
+        ]
+      },
+      {
+        "renderer": "canvas",
+        "tier": "reduced",
+        "rows": [
+          {
+            "density": 100,
+            "activeEnemies": 100,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          },
+          {
+            "density": 150,
+            "activeEnemies": 150,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          },
+          {
+            "density": 200,
+            "activeEnemies": 200,
+            "activeGems": 18,
+            "activeHostCells": 2,
+            "activeBullets": 1,
+            "runSeed": "release-matrix-seed"
+          }
+        ]
+      }
+    ],
+    "cases": 12,
+    "source": "C:\\Users\\Имярек\\Documents\\Codex\\2026-10-08\\ofeliya-ofeliya-codex-handoff-2026-10\\outputs\\release-browser-716292b\\release-visual-matrix\\390x740\\matrix.json"
+  }
+]

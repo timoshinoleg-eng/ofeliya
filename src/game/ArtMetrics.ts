@@ -10,7 +10,7 @@ export const CORE_ART = {
 } as const;
 
 export function artSourceFactor(key: string): number {
-  if (key === 'bio-cycle-virus-player' || key === 'bio-cycle-immune-antibody') return 4;
+  if (key === 'bio-cycle-virus-player' || key === 'bio-cycle-immune-antibody' || key === 'bio-hit-virus-player' || key === 'bio-hit-immune-antibody') return 4;
   return Object.prototype.hasOwnProperty.call(CORE_ART, key) ? 4 : 1;
 }
 

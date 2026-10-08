@@ -1,5 +1,9 @@
 # STATE — OFELIYA: STRAIN ZERO
 
+## Latest combat continuation (08.10)
+Current production716292b release verified (mainCI37775488149,deploy37777242773/publicexactSHA/hashparity). Separate undeployedcombatbranch adds24hitposes+boundedantibodydeath; localpresentation,rng,audio,build,76baselinePhasergeometry,4impactcellsPASS. See COMBAT_SLICE_20261008.md; hostedfinalhead remains required. Historical entries below retained.
+
+
 Обновлено: 2026-10-05. Только факты; решения — в `02_DECISIONS.md`.
 
 ## Control smoke precondition (06.10)

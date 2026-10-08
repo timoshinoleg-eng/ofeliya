@@ -1,5 +1,9 @@
 # DECISIONS — OFELIYA: STRAIN ZERO
 
+## Latest combat continuation (08.10)
+Use boot-baked local warp, fixed frame dimensions and Scene.time.now; never alter physics sprite scale/rotation for hit. Death snapshot only after disableBody, Imagepool4/2, skipdensity150, serialguards/trim/shutdown. Do not invent swarmcharge or delay player results for cosmeticdeath. Additional3.36MiBRGBA+GPU requires phone measurement; no productionHiDPI activation. Furtherfeaturemerge/deploy needs scoped ownerapproval.
+
+
 Формат: `[дата] Решение — причина. Статус.`
 Перенесённые решения помечены источником (документы репо). Новые решения добавляются сюда после каждой сессии.
 
