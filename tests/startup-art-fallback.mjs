@@ -24,10 +24,10 @@ try {
       return ['virus-player','immune-antibody','immune-tcell','immune-macrophage','immune-prime','cardiac-titan','host-cell-shadow'].map(key => ({ key, present: t.exists(key), width: t.exists(key) ? t.get(key).getSourceImage().width : 0, raw: t.exists('raw-art-' + key) }));
     });
     assert.equal(errors.length, 0, errors.join('\n'));
-    if (scenario.includes('stalled')) { assert.equal(requested.length, 7, 'optional stalled art must not retry'); assert.equal(new Set(requested).size, 7); }
+    if (scenario.includes('stalled')) { assert.equal(requested.length, 10, 'optional stalled art must not retry'); assert.equal(new Set(requested).size, 10); }
     if (scenario === 'android-stalled') {
       const config = await page.evaluate(() => ({ initial: window.__game.config.loaderMaxParallelDownloads, actual: window.__game.scene.getScene('Boot').load.maxParallelDownloads }));
-      assert.equal(config.initial, 6, 'Android must exercise six-download Phaser default'); assert.equal(config.actual, 7);
+      assert.equal(config.initial, 6, 'Android must exercise six-download Phaser default'); assert.equal(config.actual, 10);
     }
     assert.ok(textures.every(t => t.present && t.width > 0 && !t.raw), JSON.stringify(textures));
     assert.ok(Date.now() - started < 6000, 'Menu startup must remain bounded');
