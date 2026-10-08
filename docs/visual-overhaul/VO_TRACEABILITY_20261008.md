@@ -34,3 +34,5 @@ Scoped polish branch `visual/continuation-polish-20261008`: six biological frame
 VO01 branch comparison found **no tree diff** in the renderer hook/tests after comparing original `a989f3e` against recovered `d3d4c33`; four absent commit identities are already preserved semantically. No cherry-pick required. No history lost.
 
 P0 HiDPI: isolated12cell prototype and actual201actor game pairs demonstrate feasible2x main framebuffer with unchanged logical camera/text/input and repeated resize. A separate QA opt-in feasibility PR will keep ordinary production1x pending integrated/device/offscreen/context acceptance. VO01 remains PARTIAL, not DONE. VO10 phone gate remains BLOCKED—HUMAN ACCEPTANCE REQUIRED.
+
+Integrated HiDPI follow-up: explicit DEV/release-matrix2x QA adapter;6renderer/DPR cells,4viewports, actual201actor pairs,input,controls,quality fallback,teardown pass. Default production remains1x. See HIDPI_FEASIBILITY_20261008.md. VO01 stays PARTIAL pending device/offscreen/context evidence; no blanket professional-quality acceptance.

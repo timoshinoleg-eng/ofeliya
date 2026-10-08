@@ -185,3 +185,5 @@ Use real production tier override before test modules load, restoring global sto
 
 ## 2026-10-08 presentation continuation rulings
 Ruling: keep canonical art and bake only two6frame atlases at boot; equal source frame size/factor4 preserves physics. No gameplayRNG or new per-frame objects. Ruling: cap combo pulse by availableHPgutter and compact numbers; separate boss title/bar within unchangedplate and preserve input targets. Ruling: portable filesystem paths in testsource loaders, assertions unchanged. Ruling: HiDPI production default stays1x; followup QA-only proof until device/performance/context/offscreen evidence. Kimi route connectivity is separate from a successful review: use available authenticated direct fallback when OmniRoute timeout/empty response prevents review.
+
+- [2026-10-08] Keep density2 explicit DEV/release-matrix-only, maximum2x/4Mpx and static/runtime1x fallback, pinned Phaser3.90 internals. Quadrupled framebuffer area requires device evidence before rollout; preserve logical input/camera/body geometry. No automatic production activation.
