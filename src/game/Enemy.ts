@@ -225,7 +225,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
     const atlas = biologicalAtlasKey('immune-antibody');
     if (this.biologicalCycle && this.scene.textures.exists(atlas)) {
-      const reduced = this.scene.registry.get('performanceTier') === 'reduced' || this.scene.registry.get('runtimeQuality')?.level === 'low';
+      // Enemy owns gameplay telegraphs: keep this observer independent of the runtime governor.
+      const reduced = this.scene.registry.get('performanceTier') === 'reduced';
       const frame = biologicalFrameAt(time, this.biologicalPhase, reduced);
       if (frame !== this.biologicalFrame) {
         this.setTexture(atlas, `bio-${frame}`);

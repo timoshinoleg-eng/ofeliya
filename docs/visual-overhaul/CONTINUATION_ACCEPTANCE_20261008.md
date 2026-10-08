@@ -32,6 +32,10 @@ Kimi3 (`k3-256k`) reviewed actual29,136-character frozen diff/source package in 
 
 Kimi's initial pooling "Important" heading is self-refuted in its analysis: canonical and atlas both factor4, reset frame=-1. Questions resolved by current source: `spawnSerial=0` field, increment before phase computation; `compactHudNumber` has K/M branches and measured peak bounds pass. Its absolute90px overflow hypothesis missed plate origin5: bottom93 lies inside95. Reviewer statements equating smoke with perceptual sign-off are not adopted. No Critical/Important defect remains from this review.
 
+## Hosted CI correction
+
+First #180 build failed the unchanged runtime-quality contract: Enemy source must not depend on `runtimeQuality` because it owns gameplay telegraphs. Removed dynamic governor observation from Enemy cosmetic frame selection; antibodies retain static reduced cadence, hero retains static/dynamic reduction. The test was not relaxed or redirected. `test:runtime-quality` passes after correction. Atlas memory/pixels and all geometry remain unchanged. Initial large numerical JSON evidence is reformatted compactly without dropping fields.
+
 ## Creative residuals
 
 Do not add random unprovenanced art or musical tracks to claim coverage. See `ART_AUDIO_BRIEF_20261008.md`. Full soundtrack composition, charge/hit/death authored cycles, expanded RNA/projectile/icon art remain explicit residuals. General production framebuffer is still1x; independent QA HiDPI investigation follows in a separate PR.
