@@ -77,23 +77,23 @@ await test('production normalization math handles silence, invalid peaks and bou
 await test('production gain math composes bed trim and duck with new constants', () => {
   const m = load('src/systems/audioMixMath.ts');
   assert.equal(m.MASTER_GAIN, .8); assert.equal(m.MUSIC_GAIN, .65);
-  assert.deepEqual(m.MUSIC_BED_TRIMS, [.47, .37, .71, 1.14, 2, .32, .5]);
+  assert.deepEqual(m.MUSIC_BED_TRIMS, [1, 1, 1, 1, 1, 1, 1]);
   assert.equal(m.musicGainForDuck(.6), .26); assert.equal(m.musicGainForDuck(1), .02);
   assert.equal(m.musicGainForDuck(NaN), .65);
-  assert.equal(m.MASTER_GAIN * m.MUSIC_BED_TRIMS[4] * m.musicGainForDuck(.6), .41600000000000004);
+  assert.equal(m.MASTER_GAIN * m.MUSIC_BED_TRIMS[4] * m.musicGainForDuck(.6), 0.20800000000000002);
 });
 await test('one master compressor and distinct bed trim preserve procedural bus routing', async () => {
   const f = fixture(); f.Sfx.startBed(4); await flush();
   const c = f.contexts[0], src = c.nodes.find(n => n.kind === 'source');
   const trim = src.connections[0], music = trim.connections[0], filter = music.connections[0], master = filter.connections[0], compressor = master.connections[0];
-  assert.equal(trim.gain.value, 2); assert.equal(music.gain.value, .65); assert.equal(master.gain.value, .8);
+  assert.equal(trim.gain.value, 1); assert.equal(music.gain.value, .65); assert.equal(master.gain.value, .8);
   assert.equal(filter.kind, 'filter'); assert.equal(compressor.kind, 'compressor'); assert.equal(compressor.connections[0], c.destination);
   for (const [k, v] of Object.entries({ threshold: -8, knee: 6, ratio: 4, attack: .003, release: .12 })) assert.equal(compressor[k].value, v);
   const layer = c.nodes.find(n => n.kind === 'gain' && n !== music && n.connections[0] === filter);
   assert(layer); assert.equal(layer.gain.value, 1);
   f.Sfx.duckMusic(.6, 700);
   assert.deepEqual(music.gain.calls.slice(-2), [['target', .26, 10, .08], ['target', .65, 10.7, .35]]);
-  assert.equal(trim.gain.value, 2, 'duck must not overwrite trim');
+  assert.equal(trim.gain.value, 1, 'duck must not overwrite trim');
   f.Sfx.stopMusic();
   assert(src.stopped && src.disconnected); assert.equal(f.contexts.length, 1);
 });
@@ -126,7 +126,7 @@ await test('diagnostics report loading and actual fallback bed separately withou
   assert.equal(pending.musicWanted, true); assert.equal(pending.loading, true); assert.equal(pending.playing, false); assert.equal(pending.actualBedIndex, null);
   d.resolve(buffer()); await flush();
   const debug = f.Sfx.debugAudioState;
-  assert.equal(debug.actualBedIndex, 4); assert.equal(debug.loading, false); assert.equal(debug.playing, true); assert.equal(debug.gains.bedTrim, 2); assert.equal(debug.lastLoadError, null);
+  assert.equal(debug.actualBedIndex, 4); assert.equal(debug.loading, false); assert.equal(debug.playing, true); assert.equal(debug.gains.bedTrim, 1); assert.equal(debug.lastLoadError, null);
   assert(Object.isFrozen(debug) && Object.isFrozen(debug.gains));
   assert.deepEqual(Object.keys(debug).sort(), ['actualBedIndex', 'contextState', 'gains', 'lastLoadError', 'loading', 'musicWanted', 'muted', 'playing', 'suspended'].sort());
   f.Sfx.stopMusic(); assert.equal(f.Sfx.debugAudioState.actualBedIndex, null);
@@ -210,7 +210,7 @@ await test('restart and bed change invalidate old decode while keeping one persi
   f.Sfx.startBed(1); await flush(); f.Sfx.startBed(6); await flush();
   old.resolve(buffer()); await flush(); assert.equal(f.Sfx.debugAudioState.actualBedIndex, null);
   fresh.resolve(buffer()); await flush(); assert.equal(f.Sfx.debugAudioState.actualBedIndex, 6);
-  assert.equal(f.Sfx.debugAudioState.gains.bedTrim, .5);
+  assert.equal(f.Sfx.debugAudioState.gains.bedTrim, 1);
   for (let i = 0; i < 5; i++) {
     f.Sfx.playCue('boss-warning'); f.Sfx.playHeartbeat('impact', true);
     assert.equal(f.contexts[0].nodes.filter(n => n.kind === 'oscillator' && !n.disconnected).length, 5, 'bio + 4 still-live layer tones');

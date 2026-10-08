@@ -1,7 +1,13 @@
 /** Presentation-only mix policy; no WebAudio, Phaser, save state or gameplay RNG. */
 export const MASTER_GAIN = 0.8;
 export const MUSIC_GAIN = 0.65;
-export const MUSIC_BED_TRIMS = [0.47, 0.37, 0.71, 1.14, 2, 0.32, 0.5] as const;
+/**
+ * Licensed-bed loudness correction. Every bed is mastered to −14 LUFS / −1 dBTP
+ * (see tools/audio/master_audio.py and public/audio/audio-manifest.json), so no
+ * per-bed correction is needed anymore. The trim node stays in the graph as the
+ * anchored place for future beds that ship outside the mastering contract.
+ */
+export const MUSIC_BED_TRIMS = [1, 1, 1, 1, 1, 1, 1] as const;
 export const SFX_ROLE_GAINS = {
   shoot: 0.12, hit: 0.16, pickup: 0.28, click: 0.20,
   levelup: 0.50, hurt: 0.55, nova: 0.48, elite: 0.50,

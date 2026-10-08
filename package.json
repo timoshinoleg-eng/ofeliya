@@ -34,6 +34,7 @@
     "test:pacing": "node scripts/check-pacing.mjs",
     "test:cardiac-hazard": "node scripts/cardiac-line-hazard-smoke.cjs",
     "test:audio": "node scripts/check-adaptive-audio.mjs",
+    "test:audio-assets": "node scripts/check-audio-assets.mjs",
     "test:result-actions": "node scripts/result-actions-smoke.cjs",
     "test:video": "node scripts/video-interstitial-smoke.cjs",
     "test:duel": "node scripts/check-duel.mjs",
@@ -70,7 +71,7 @@
     "test:telegram-bot": "node scripts/check-telegram-bot.mjs",
     "test:caddy-edge": "node scripts/check-caddy-edge.mjs",
     "test:telegram-api": "node scripts/check-telegram-api-transport.mjs",
-    "test:presentation": "node tests/core-art.mjs && node tests/vfx-presentation.mjs && node tests/atmosphere-presentation.mjs && node tests/audio-mix.mjs && node tests/biological-animation.mjs",
+    "test:presentation": "node tests/core-art.mjs && node tests/vfx-presentation.mjs && node tests/atmosphere-presentation.mjs && node tests/audio-mix.mjs && node tests/biological-animation.mjs && node scripts/check-audio-assets.mjs",
     "test:art-startup": "node tests/startup-art-fallback.mjs"
   },
   "dependencies": {
