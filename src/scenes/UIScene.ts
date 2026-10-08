@@ -215,11 +215,12 @@ export class UIScene extends Phaser.Scene {
         .setResolution(2)
         .setDepth(DEPTH + 1);
 
-    this.timerText = text(W / 2, 28, '00:00', 24, '#f4fbff')
+    this.timerText = text(W / 2, HUD.row.timerY, '00:00', HUD.type.timer, '#f4fbff')
       .setFontStyle('bold')
       .setShadow(0, 1, '#02030a', 4, true, true);
-    this.levelText = text(16, 30, 'МУТАЦИЯ 1', 14, '#ff8fd0', 0)
+    this.levelText = text(16, HUD.row.levelY, 'МУТАЦИЯ 1', HUD.type.level, '#ff8fd0', 0)
       .setFontStyle('bold')
+      .setStroke('#2a0a1e', 2)
       .setShadow(0, 1, '#02030a', 3, true, true);
     this.rnaPickupText = text(0, 0, '', 11, '#baffd8', 0)
       .setFontStyle('bold')
@@ -243,10 +244,10 @@ export class UIScene extends Phaser.Scene {
       .container(W / 2, 116, [this.contextHintPanel, this.contextHintText])
       .setDepth(DEPTH + 8)
       .setVisible(false);
-    this.killsText = text(W - 16, HUD.row.killsY, 'УНИЧТОЖЕНО 0', 14, '#e9fbff', 1)
+    this.killsText = text(W - 16, HUD.row.killsY, 'УНИЧТОЖЕНО 0', HUD.type.kills, '#e9fbff', 1)
       .setFontStyle('bold')
       .setShadow(0, 1, '#02030a', 3, true, true);
-    this.hpText = text(W / 2, HUD.row.hpTextY, '', 11, '#f4fbff')
+    this.hpText = text(W / 2, HUD.row.hpTextY, '', HUD.type.hp, '#f4fbff')
       .setFontStyle('bold')
       .setShadow(0, 1, '#02030a', 3, true, true);
     this.bossLabel = text(W / 2, HUD.row.bossLabelY, IDENTITY.boss, 12, '#ff5472')
@@ -371,6 +372,8 @@ export class UIScene extends Phaser.Scene {
       this.xpBack.clear();
       this.xpBack.fillStyle(HUD.barBack, 0.9);
       this.xpBack.fillRoundedRect(m.xpX, HUD.row.xpY, m.xpW, HUD.row.xpH, 5);
+      this.xpBack.lineStyle(1, ROLE.faction.immune, 0.28);
+      this.xpBack.strokeRoundedRect(m.xpX, HUD.row.xpY, m.xpW, HUD.row.xpH, 5);
       this.xpFill.clear();
       const xf = Phaser.Math.Clamp(run.xp / run.xpNext, 0, 1);
       if (xf > 0) {
@@ -816,11 +819,22 @@ export class UIScene extends Phaser.Scene {
     const H = this.scale.height;
     const compact = H < 620;
     this.setHudCinematicAlpha(0.12);
+    // Full-field dim guarantees the title zone stays legible over any boss art
+    // or live combat behind the reveal; the HUD itself is already faded above.
+    const dim = this.add
+      .rectangle(W / 2, H / 2, W, H, 0x030208, 0.62)
+      .setDepth(149);
+    const hintsWereVisible = {
+      context: this.contextHintContainer?.visible ?? false,
+      onboarding: this.onboardingContainer?.visible ?? false,
+    };
+    this.contextHintContainer?.setVisible(false);
+    this.onboardingContainer?.setVisible(false);
     const c = this.add.container(0, 0).setDepth(150).setAlpha(0);
 
     const bandH = compact ? 156 : 184;
     const band = this.add
-      .rectangle(W / 2, H / 2, W, bandH, 0x040308, 0.78)
+      .rectangle(W / 2, H / 2, W, bandH, 0x040308, 0.9)
       .setStrokeStyle(1, accent, 0.4);
     const lineTop = this.add.rectangle(W / 2, H / 2 - bandH / 2, W, 2, accent, 0.82);
     const lineBottom = this.add.rectangle(W / 2, H / 2 + bandH / 2, W, 2, accent, 0.5);
@@ -866,13 +880,20 @@ export class UIScene extends Phaser.Scene {
       });
     }
 
+    // Solid backplate behind the title block: the boss body and cinematic art
+    // stay visible elsewhere, but the copy zone never competes with them.
+    c.add(
+      this.add
+        .rectangle(W * 0.52 + W * 0.225, H / 2 + 6, W * 0.47, 96, 0x030208, 0.78)
+        .setStrokeStyle(1, accent, 0.22)
+    );
     c.add(
       this.add
         .text(W * 0.52, H / 2 - 31, 'ИММУННЫЙ КОНТАКТ', {
           fontFamily: FONT,
           fontSize: compact ? '10px' : '11px',
           fontStyle: 'bold',
-          color: '#aab4d4',
+          color: '#cdd6f0',
           letterSpacing: 2,
         })
         .setOrigin(0, 0.5)
@@ -911,6 +932,9 @@ export class UIScene extends Phaser.Scene {
       ease: 'Quad.Out',
       onComplete: () => {
         c.destroy(true);
+        dim.destroy();
+        if (hintsWereVisible.context) this.contextHintContainer?.setVisible(true);
+        if (hintsWereVisible.onboarding) this.onboardingContainer?.setVisible(true);
         this.setHudCinematicAlpha(1);
       },
     });
