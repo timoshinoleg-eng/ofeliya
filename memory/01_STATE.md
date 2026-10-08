@@ -249,3 +249,6 @@ PR179 created. Initial hosted failures investigated: Node22 hardware selected re
 
 ## 2026-10-08 continuation facts
 Six-frame hero/antibody atlas adds ~1.68MiB RGBA backing plus GPU and uses three poses under reduced/runtime-low. Actual76Phaserbody/display/center rows match original baseline. Combo9999 peak and boss label/bar overlap reproduced and fixed; native6viewportHUD rerun passed. Original54contracts plus biological,12dense renderer/tier cases,4artstartup, audio8restart/0leaks and production-opacity passed. Exact-head build/hosted checks tracked in publication. No merge/deploy; real phones and full soundtrack/charge/death remain unavailable/incomplete. See continuation acceptance and VO traceability.
+
+## Verified HiDPI QA continuation (08.10)
+PR180 four exact-head hosted checks PASS at231b38d. QA-only capped2x actual adapter passes local six renderer/DPR cells/fourviewports, paired201actor Text/camera/input/resize, controls and teardown. Production default1x; no phone/offscreen/context acceptance. Source review Codex fallback PASS; additional Kimi403quota blocked.

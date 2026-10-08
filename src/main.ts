@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { renderSnapshot } from './systems/RenderSnapshot';
+import { installRenderDensityExperiment } from './systems/RenderDensityExperiment';
 import { ViewportManager } from './platform/ViewportManager';
 import { BootScene } from './scenes/BootScene';
 import { MenuScene } from './scenes/MenuScene';
@@ -347,6 +348,12 @@ async function boot(): Promise<void> {
   // only in its dedicated QA bundle so Playwright can inspect real production rendering.
   const releaseMatrixQa = import.meta.env.VITE_RELEASE_MATRIX_QA === '1';
   if (import.meta.env.DEV || releaseMatrixQa) {
+    // Explicit QA probe only. Ordinary production tree-shakes this adapter/query out.
+    // Phones and offscreen/context paths remain acceptance gates; no automatic rollout.
+    if (new URLSearchParams(location.search).get('renderDensity') === '2' && window.devicePixelRatio >= 2) {
+      const experiment = installRenderDensityExperiment(game, 2);
+      game.events.once(Phaser.Core.Events.DESTROY, () => experiment.destroy());
+    }
     window.__game = game;
     window.__viewportManager = viewport;
     window.__renderSnapshot = () => renderSnapshot(game, host);

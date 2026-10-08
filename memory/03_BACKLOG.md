@@ -231,3 +231,10 @@ Check hosted PRCI; collect realMAX Android/iOS16-point and Telegram audio-unlock
 - [ ] QA-only capped2x framebuffer followup: integrate/retest independently before density activation.
 - [ ] Original composed compatible stems and authored charge/hit/death cycles: brief ready, assets not claimed.
 - [ ] MAXAndroid/iOS + Telegram real-device audio/input/denseframe-times/thermals acceptance BLOCKED—HUMAN ACCEPTANCE REQUIRED.
+
+## HiDPI QA follow-up (08.10)
+- [x] Final integrated logical/backing/input/resize/teardown and multitouch controls.
+- [ ] Final hosted dedicated density + existing CI green; exact SHA readback.
+- [ ] Actual MAX Android/iOS and Telegram10–15min acceptance including sustained density1x/2x frame-time/thermal/audio/touch evidence.
+- [ ] Context/offscreen/mask/postFX tests before HiDPI rollout.
+- [ ] Authored compatible music stems and full charge/hit/death/RNA/icon scope; do not mark original visual goal DONE.
