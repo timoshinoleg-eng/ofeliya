@@ -252,3 +252,6 @@ Six-frame hero/antibody atlas adds ~1.68MiB RGBA backing plus GPU and uses three
 
 ## Verified HiDPI QA continuation (08.10)
 PR180 four exact-head hosted checks PASS at231b38d. QA-only capped2x actual adapter passes local six renderer/DPR cells/fourviewports, paired201actor Text/camera/input/resize, controls and teardown. Production default1x; no phone/offscreen/context acceptance. Source review Codex fallback PASS; additional Kimi403quota blocked.
+
+## Release fixture correction (08.10)
+User-authorized179/180/181 merged tomain50c47049. Main CI37763374322 threefailedattempts retained. Two fixture-only scripts corrected without production/timeout/assertion relaxation; exact localPASS, independent source reviewPASS. Fresh hosted checks/deploypending.

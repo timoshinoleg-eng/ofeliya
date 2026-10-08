@@ -238,3 +238,9 @@ Check hosted PRCI; collect realMAX Android/iOS16-point and Telegram audio-unlock
 - [ ] Actual MAX Android/iOS and Telegram10–15min acceptance including sustained density1x/2x frame-time/thermal/audio/touch evidence.
 - [ ] Context/offscreen/mask/postFX tests before HiDPI rollout.
 - [ ] Authored compatible music stems and full charge/hit/death/RNA/icon scope; do not mark original visual goal DONE.
+
+## Authorized release recovery (08.10)
+- [x] Merge179/180/181 and run freshmainCI/matrix.
+- [x] Fixture isolation + exactlocaltests + independentsourcereview.
+- [ ] Fresh fixturePR CI, merge, finalmainCI, immutable deploy/publicSHAhashparity.
+- [ ] Actual MAX/Telegram device acceptance; fullcreative remaining scope unchanged.

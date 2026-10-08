@@ -91,6 +91,13 @@ function browserDriver() {
     // This smoke owns the phase-two hazard contract, not the boss-reveal presentation.
     // Prevent the real reveal/video path from pausing Game while the synthetic boss is exercised.
     const ui = window.__game.scene.getScene('UI');
+    // Initial progression is outside the beam contract and may otherwise pause its real updater.
+    gs.awaitingChoice = false;
+    gs.pendingChoices = [];
+    gs.queuedLevels = 0;
+    gs.pendingLegendaryCeremony = null;
+    gs.legendaryRewardPending = false;
+    ui.dismissProgressionForStageBoundary();
     ui.showBossReveal = () => false;
 
     const boss = gs.spawnEnemy('boss', gs.player.x + 260, gs.player.y, false);
@@ -105,10 +112,11 @@ function browserDriver() {
       behavior: gs.stageDirector.currentStage.boss.behavior,
       phase: boss.bossPhase,
       hp: gs.runState.stage.hp,
+      unblocked: !ui.modalOpen && !ui.uiBlocked && game.scene.isActive('Game'),
     };
   });
 
-  if (setup.stageId !== 'heart' || setup.behavior !== 'heartbeat-pulse' || setup.phase !== 1) {
+  if (setup.stageId !== 'heart' || setup.behavior !== 'heartbeat-pulse' || setup.phase !== 1 || !setup.unblocked) {
     throw new Error('Heart phase-one setup failed: ' + JSON.stringify(setup));
   }
 

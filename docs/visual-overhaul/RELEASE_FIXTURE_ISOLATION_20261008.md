@@ -1,0 +1,9 @@
+# Release browser fixture isolation — 2026-10-08
+
+The user authorized merging179/180/181 and production deployment. Their main merge50c47049 exactly matches the reviewedcf5f0cf product tree. Main CI37763374322 failed in three attempts before any deploy: attempt1 Legendary close4stimeout; attempt2 Cardiac hazard8stimeout; attempt3 Legendary close wait passed but100mslater modalOpen/uiBlocked were true while Game active and pendingCeremony null. This proves the test observed a subsequent modal, not a permanently stuck original ceremony; the exact modal identity was not captured.
+
+Production code is unchanged. Legendary fixture freezes only Game.update before scene start to isolate real choice handlers, ceremony UI/clock/tween, ownership and actual Scene pause/resume. This verifies scene lifecycle, not continuing gameplay simulation. Other gameplay contracts remain active. Cardiac retains real Game.update and clears unrelated initial progression/UI before phase2, with a new unblocked/Game-active precondition. Phase-one absence, telegraph/beam, exact14damage and cleanup assertions plus all4s/8s/2s/1.5s deadlines remain unchanged.
+
+Exact modified scripts PASS locally on newworktree dev5192. Prior unmodified local ceremony probes stopped at Game.active startup because Game was paused; isolated copy passed. Original Cardiac with added failure-state diagnostics passed without triggering diagnostics. These do not prove either hosted failure cause by themselves. Source-reviewed mechanism and attempt3 state justify fixture isolation; hosted PR/main results must be confirmed before deploying.
+
+Independent final source review: RELEASE_FIXTURE_REVIEW_20261008.md, no Critical/Important findings. No physical mobile acceptance or timeout relaxation. Parent dirty memory branch and all prior artifacts retained.
