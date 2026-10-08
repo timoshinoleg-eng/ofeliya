@@ -19,6 +19,10 @@ export interface SaveData {
   bestLevel: number;
   runs: number;
   muted: boolean;
+  /** User music volume 0..1 (perceptual curve applied at the audio graph). */
+  musicVolume: number;
+  /** User SFX volume 0..1. */
+  sfxVolume: number;
   totalKills: number;
   achievements: string[];
   evolutionsSeen: EvolutionId[];
@@ -49,6 +53,8 @@ const DEFAULTS: SaveData = {
   bestLevel: 0,
   runs: 0,
   muted: false,
+  musicVolume: 1,
+  sfxVolume: 1,
   totalKills: 0,
   achievements: [],
   evolutionsSeen: [],
@@ -95,6 +101,8 @@ class SaveImpl {
             bestLevel: this.num(parsed.bestLevel),
             runs: this.num(parsed.runs),
             muted: typeof parsed.muted === 'boolean' ? parsed.muted : false,
+            musicVolume: this.volume(parsed.musicVolume),
+            sfxVolume: this.volume(parsed.sfxVolume),
             totalKills: this.num(parsed.totalKills),
             achievements: this.stringArray(parsed.achievements),
             evolutionsSeen: this.stringArray(parsed.evolutionsSeen).filter((v): v is EvolutionId =>
@@ -227,6 +235,12 @@ class SaveImpl {
 
   private num(v: unknown): number {
     return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0;
+  }
+
+  /** Volume settings: finite number clamped to 0..1; anything else = full volume. */
+  private volume(v: unknown): number {
+    if (typeof v !== 'number' || !Number.isFinite(v)) return 1;
+    return Math.max(0, Math.min(1, v));
   }
 
   private stringArray(v: unknown): string[] {

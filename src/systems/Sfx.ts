@@ -10,7 +10,7 @@ import { RELEASE_SHA } from '../release';
 import type { AdaptiveCueKind, HeartbeatCueKind } from './AdaptiveAudioDirector';
 import {
   MASTER_GAIN, MUSIC_GAIN, MUSIC_BED_TRIMS, SFX_ROLE_GAINS,
-  scanNormalizationTrim, musicGainForDuck,
+  scanNormalizationTrim, musicGainForDuck, perceptualVolumeGain, nextVolumeStep,
 } from './audioMixMath';
 
 export type SfxName =
@@ -66,6 +66,8 @@ class SfxImpl {
   private compressor: DynamicsCompressorNode | null = null;
   private sfxGain: GainNode | null = null;
   private musicGain: GainNode | null = null;
+  /** User music volume between the tension filter and master; ducking stays on musicGain. */
+  private musicUserGain: GainNode | null = null;
   /** Licensed bed loudness correction only; adaptive ducking remains on musicGain. */
   private bedTrim: GainNode | null = null;
   /** Lowpass that the adaptive director opens as danger rises. */
@@ -105,6 +107,31 @@ class SfxImpl {
   private bioCadenceMs = 0;
 
   muted = SaveSystem.get().muted;
+  /** User music volume 0..1; lives between the tension filter and master. */
+  private musicUserVol = SaveSystem.get().musicVolume;
+  /** User SFX volume 0..1; applied straight on the SFX bus. */
+  private sfxUserVol = SaveSystem.get().sfxVolume;
+
+  setMusicVolume(volume01: number): number {
+    this.musicUserVol = Math.max(0, Math.min(1, Number.isFinite(volume01) ? volume01 : 1));
+    SaveSystem.update({ musicVolume: this.musicUserVol });
+    if (this.musicUserGain) this.musicUserGain.gain.value = perceptualVolumeGain(this.musicUserVol);
+    return this.musicUserVol;
+  }
+
+  setSfxVolume(volume01: number): number {
+    this.sfxUserVol = Math.max(0, Math.min(1, Number.isFinite(volume01) ? volume01 : 1));
+    SaveSystem.update({ sfxVolume: this.sfxUserVol });
+    if (this.sfxGain) this.sfxGain.gain.value = perceptualVolumeGain(this.sfxUserVol);
+    return this.sfxUserVol;
+  }
+
+  /** Tap-to-cycle helpers for the settings row; return the new 0..1 value. */
+  bumpMusicVolume(): number { return this.setMusicVolume(nextVolumeStep(this.musicUserVol)); }
+  bumpSfxVolume(): number { return this.setSfxVolume(nextVolumeStep(this.sfxUserVol)); }
+
+  getMusicVolume(): number { return this.musicUserVol; }
+  getSfxVolume(): number { return this.sfxUserVol; }
 
   setMuted(m: boolean): void {
     this.muted = m;
@@ -267,8 +294,9 @@ class SfxImpl {
       gains: Object.freeze({
         master: this.master?.gain.value ?? (this.muted ? 0 : MASTER_GAIN),
         music: this.musicGain?.gain.value ?? MUSIC_GAIN,
+        musicUser: this.musicUserGain?.gain.value ?? perceptualVolumeGain(this.musicUserVol),
         bedTrim: this.bedTrim?.gain.value ?? 1,
-        sfx: this.sfxGain?.gain.value ?? 1,
+        sfx: this.sfxGain?.gain.value ?? perceptualVolumeGain(this.sfxUserVol),
       }),
       lastLoadError: this.lastMusicError,
     });
@@ -291,7 +319,7 @@ class SfxImpl {
         this.master.connect(this.compressor);
         this.compressor.connect(this.ctx.destination);
         this.sfxGain = this.ctx.createGain();
-        this.sfxGain.gain.value = 1;
+        this.sfxGain.gain.value = perceptualVolumeGain(this.sfxUserVol);
         this.sfxGain.connect(this.master);
 
         // One bounded lowpass on the music layer: the adaptive director opens it with danger.
@@ -301,7 +329,10 @@ class SfxImpl {
           MUSIC_TENSION_MIN_HZ *
           Math.pow(MUSIC_TENSION_MAX_HZ / MUSIC_TENSION_MIN_HZ, this.musicTension);
         this.musicFilter.Q.value = 0.9;
-        this.musicFilter.connect(this.master);
+        this.musicUserGain = this.ctx.createGain();
+        this.musicUserGain.gain.value = perceptualVolumeGain(this.musicUserVol);
+        this.musicFilter.connect(this.musicUserGain);
+        this.musicUserGain.connect(this.master);
 
         this.musicGain = this.ctx.createGain();
         this.musicGain.gain.value = MUSIC_GAIN;

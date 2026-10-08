@@ -778,10 +778,33 @@ export class MenuScene extends Phaser.Scene {
       ? H - (resumeCheckpoint ? 59 : 64)
       : btnY + (resumeCheckpoint ? 72 : 55);
     const legalY = compactFooter && resumeCheckpoint ? H - 38 : H - 43;
-    const soundText = this.add
-      .text(W / 2 - 100, utilityY, `звук: ${Sfx.muted ? 'выкл' : 'вкл'}`, {
+    // Utilities row: volume steppers flank the existing mute toggle; slot spacing adapts to
+    // the viewport so the row still fits the 320px compact fallback (see VISUAL_POLISH_AUDIT_V3:
+    // no new persistent rows at 320x568 — these replace nothing but reuse the same band).
+    const utilityGap = Math.max(56, Math.min(80, Math.floor(W / 5)));
+    const utilityFont = H < 650 ? '10px' : '11px';
+    const volLabel = (pct: number) => (utilityGap < 70 ? `муз·${pct}%` : `музыка: ${pct}%`);
+    const sfxLabel = (pct: number) => (utilityGap < 70 ? `эфф·${pct}%` : `эффекты: ${pct}%`);
+    const musicVolText = this.add
+      .text(W / 2 - 2 * utilityGap, utilityY, volLabel(Math.round(Sfx.getMusicVolume() * 100)), {
         fontFamily: UI_FONT,
-        fontSize: H < 650 ? '11px' : '13px',
+        fontSize: utilityFont,
+        fontStyle: '650',
+        color: '#c89aaf',
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .setResolution(2)
+      .setDepth(5)
+      .on('pointerup', () => {
+        const v = Sfx.bumpMusicVolume();
+        musicVolText.setText(volLabel(Math.round(v * 100)));
+        Sfx.play('click');
+      });
+    const soundText = this.add
+      .text(W / 2 - utilityGap, utilityY, `звук: ${Sfx.muted ? 'выкл' : 'вкл'}`, {
+        fontFamily: UI_FONT,
+        fontSize: utilityFont,
         fontStyle: '650',
         color: Sfx.muted ? UI_TEXT.secondary : '#efcddd',
       })
@@ -794,10 +817,26 @@ export class MenuScene extends Phaser.Scene {
         soundText.setText(`звук: ${muted ? 'выкл' : 'вкл'}`).setColor(muted ? '#755266' : '#c89aaf');
         if (!muted) Sfx.play('click');
       });
+    const sfxVolText = this.add
+      .text(W / 2 + utilityGap, utilityY, sfxLabel(Math.round(Sfx.getSfxVolume() * 100)), {
+        fontFamily: UI_FONT,
+        fontSize: utilityFont,
+        fontStyle: '650',
+        color: '#c89aaf',
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .setResolution(2)
+      .setDepth(5)
+      .on('pointerup', () => {
+        const v = Sfx.bumpSfxVolume();
+        sfxVolText.setText(sfxLabel(Math.round(v * 100)));
+        Sfx.play('click');
+      });
 
 
     this.add
-      .text(W / 2, utilityY, 'СВОДКА', {
+      .text(W / 2, utilityY, `СВОДКА`, {
         fontFamily: FONT,
         fontSize: H < 650 ? '11px' : '12px',
         fontStyle: 'bold',
@@ -817,7 +856,7 @@ export class MenuScene extends Phaser.Scene {
     const codexSave = SaveSystem.get();
     const codexFound = codexSave.evolutionsSeen.length + codexSave.legendarySeen.length;
     this.add
-      .text(W / 2 + 100, utilityY, `КОДЕКС ${codexFound}/9`, {
+      .text(W / 2 + 2 * utilityGap, utilityY, `КОДЕКС ${codexFound}/9`, {
         fontFamily: FONT,
         fontSize: H < 650 ? '12px' : '13px',
         fontStyle: 'bold',
