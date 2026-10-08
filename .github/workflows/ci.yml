@@ -254,6 +254,11 @@ jobs:
       - name: Art world display and body geometry
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/art-world-geometry-smoke.cjs
 
+      - name: Biological hit and death presentation contract
+        env:
+          OFELIYA_IMPACT_DIR: /tmp/biological-impact
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/biological-impact-smoke.cjs
+
       - name: Renderer diagnostics with missing scenes
         run: OFELIYA_URL=http://127.0.0.1:5173/ node tests/render-snapshot-missing-scenes.mjs
 
@@ -327,6 +332,8 @@ jobs:
             /tmp/browser-smoke/*.png
             /tmp/release-visual-matrix/**/*.png
             /tmp/release-visual-matrix/**/matrix.json
+            /tmp/biological-impact/*.png
+            /tmp/biological-impact/*.json
           if-no-files-found: ignore
 
   production-contract:

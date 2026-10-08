@@ -1,0 +1,330 @@
+[
+  {
+    "renderer": "webgl",
+    "tier": "full",
+    "phases": [
+      {
+        "elapsed": 0,
+        "player": "hit-0-0",
+        "enemy": "hit-1-0",
+        "playerAtlas": "bio-hit-virus-player",
+        "enemyAtlas": "bio-hit-immune-antibody"
+      },
+      {
+        "elapsed": 60,
+        "player": "hit-0-1",
+        "enemy": "hit-1-1",
+        "playerAtlas": "bio-hit-virus-player",
+        "enemyAtlas": "bio-hit-immune-antibody"
+      },
+      {
+        "elapsed": 90,
+        "player": "hit-0-1",
+        "enemy": "hit-1-1",
+        "playerAtlas": "bio-hit-virus-player",
+        "enemyAtlas": "bio-hit-immune-antibody"
+      },
+      {
+        "elapsed": 120,
+        "player": "hit-0-2",
+        "enemy": "hit-1-2",
+        "playerAtlas": "bio-hit-virus-player",
+        "enemyAtlas": "bio-hit-immune-antibody"
+      },
+      {
+        "elapsed": 179,
+        "player": "hit-0-2",
+        "enemy": "hit-1-2",
+        "playerAtlas": "bio-hit-virus-player",
+        "enemyAtlas": "bio-hit-immune-antibody"
+      },
+      {
+        "elapsed": 180,
+        "player": "bio-5",
+        "enemy": "bio-3",
+        "playerAtlas": "bio-cycle-virus-player",
+        "enemyAtlas": "bio-cycle-immune-antibody"
+      }
+    ],
+    "before": {
+      "player": [
+        224,
+        224,
+        51.31309445845376,
+        51.31309445845376,
+        23.82393671285353,
+        23.82393671285353,
+        -0.9119683564267689,
+        -0.9119683564267689
+      ],
+      "enemy": [
+        152,
+        152,
+        38,
+        38,
+        22,
+        22,
+        0,
+        0
+      ]
+    },
+    "damage": 1,
+    "iframe": 2440,
+    "snapshot": {
+      "x": 780,
+      "y": 760,
+      "texture": "bio-cycle-immune-antibody",
+      "frame": "bio-3"
+    },
+    "atlasBytes": 3517440,
+    "ghostsReleased": true,
+    "shutdownDestroyed": true,
+    "pageErrors": []
+  },
+  {
+    "renderer": "webgl",
+    "tier": "reduced",
+    "phases": [
+      {
+        "elapsed": 0,
+        "player": "hit-0-0",
+        "enemy": "hit-1-0",
+        "playerAtlas": "bio-hit-virus-player",
+        "enemyAtlas": "bio-hit-immune-antibody"
+      },
+      {
+        "elapsed": 60,
+        "player": "hit-0-0",
+        "enemy": "hit-1-0",
+        "playerAtlas": "bio-hit-virus-player",
+        "enemyAtlas": "bio-hit-immune-antibody"
+      },
+      {
+        "elapsed": 90,
+        "player": "hit-0-2",
+        "enemy": "hit-1-2",
+        "playerAtlas": "bio-hit-virus-player",
+        "enemyAtlas": "bio-hit-immune-antibody"
+      },
+      {
+        "elapsed": 120,
+        "player": "hit-0-2",
+        "enemy": "hit-1-2",
+        "playerAtlas": "bio-hit-virus-player",
+        "enemyAtlas": "bio-hit-immune-antibody"
+      },
+      {
+        "elapsed": 179,
+        "player": "hit-0-2",
+        "enemy": "hit-1-2",
+        "playerAtlas": "bio-hit-virus-player",
+        "enemyAtlas": "bio-hit-immune-antibody"
+      },
+      {
+        "elapsed": 180,
+        "player": "bio-4",
+        "enemy": "bio-2",
+        "playerAtlas": "bio-cycle-virus-player",
+        "enemyAtlas": "bio-cycle-immune-antibody"
+      }
+    ],
+    "before": {
+      "player": [
+        224,
+        224,
+        51.31309445845376,
+        51.31309445845376,
+        23.82393671285353,
+        23.82393671285353,
+        -0.9119683564267689,
+        -0.9119683564267689
+      ],
+      "enemy": [
+        152,
+        152,
+        38,
+        38,
+        22,
+        22,
+        0,
+        0
+      ]
+    },
+    "damage": 1,
+    "iframe": 2591.8,
+    "snapshot": {
+      "x": 780,
+      "y": 760,
+      "texture": "bio-cycle-immune-antibody",
+      "frame": "bio-2"
+    },
+    "atlasBytes": 3517440,
+    "ghostsReleased": true,
+    "shutdownDestroyed": true,
+    "pageErrors": []
+  },
+  {
+    "renderer": "canvas",
+    "tier": "full",
+    "phases": [
+      {
+        "elapsed": 0,
+        "player": "hit-0-0",
+        "enemy": "hit-1-0",
+        "playerAtlas": "bio-hit-virus-player",
+        "enemyAtlas": "bio-hit-immune-antibody"
+      },
+      {
+        "elapsed": 60,
+        "player": "hit-0-1",
+        "enemy": "hit-1-1",
+        "playerAtlas": "bio-hit-virus-player",
+        "enemyAtlas": "bio-hit-immune-antibody"
+      },
+      {
+        "elapsed": 90,
+        "player": "hit-0-1",
+        "enemy": "hit-1-1",
+        "playerAtlas": "bio-hit-virus-player",
+        "enemyAtlas": "bio-hit-immune-antibody"
+      },
+      {
+        "elapsed": 120,
+        "player": "hit-0-2",
+        "enemy": "hit-1-2",
+        "playerAtlas": "bio-hit-virus-player",
+        "enemyAtlas": "bio-hit-immune-antibody"
+      },
+      {
+        "elapsed": 179,
+        "player": "hit-0-2",
+        "enemy": "hit-1-2",
+        "playerAtlas": "bio-hit-virus-player",
+        "enemyAtlas": "bio-hit-immune-antibody"
+      },
+      {
+        "elapsed": 180,
+        "player": "bio-5",
+        "enemy": "bio-3",
+        "playerAtlas": "bio-cycle-virus-player",
+        "enemyAtlas": "bio-cycle-immune-antibody"
+      }
+    ],
+    "before": {
+      "player": [
+        224,
+        224,
+        51.31309445845376,
+        51.31309445845376,
+        23.82393671285353,
+        23.82393671285353,
+        -0.9119683564267689,
+        -0.9119683564267689
+      ],
+      "enemy": [
+        152,
+        152,
+        38,
+        38,
+        22,
+        22,
+        0,
+        0
+      ]
+    },
+    "damage": 1,
+    "iframe": 2423.4,
+    "snapshot": {
+      "x": 780,
+      "y": 760,
+      "texture": "bio-cycle-immune-antibody",
+      "frame": "bio-3"
+    },
+    "atlasBytes": 3517440,
+    "ghostsReleased": true,
+    "shutdownDestroyed": true,
+    "pageErrors": []
+  },
+  {
+    "renderer": "canvas",
+    "tier": "reduced",
+    "phases": [
+      {
+        "elapsed": 0,
+        "player": "hit-0-0",
+        "enemy": "hit-1-0",
+        "playerAtlas": "bio-hit-virus-player",
+        "enemyAtlas": "bio-hit-immune-antibody"
+      },
+      {
+        "elapsed": 60,
+        "player": "hit-0-0",
+        "enemy": "hit-1-0",
+        "playerAtlas": "bio-hit-virus-player",
+        "enemyAtlas": "bio-hit-immune-antibody"
+      },
+      {
+        "elapsed": 90,
+        "player": "hit-0-2",
+        "enemy": "hit-1-2",
+        "playerAtlas": "bio-hit-virus-player",
+        "enemyAtlas": "bio-hit-immune-antibody"
+      },
+      {
+        "elapsed": 120,
+        "player": "hit-0-2",
+        "enemy": "hit-1-2",
+        "playerAtlas": "bio-hit-virus-player",
+        "enemyAtlas": "bio-hit-immune-antibody"
+      },
+      {
+        "elapsed": 179,
+        "player": "hit-0-2",
+        "enemy": "hit-1-2",
+        "playerAtlas": "bio-hit-virus-player",
+        "enemyAtlas": "bio-hit-immune-antibody"
+      },
+      {
+        "elapsed": 180,
+        "player": "bio-4",
+        "enemy": "bio-2",
+        "playerAtlas": "bio-cycle-virus-player",
+        "enemyAtlas": "bio-cycle-immune-antibody"
+      }
+    ],
+    "before": {
+      "player": [
+        224,
+        224,
+        51.31309445845376,
+        51.31309445845376,
+        23.82393671285353,
+        23.82393671285353,
+        -0.9119683564267689,
+        -0.9119683564267689
+      ],
+      "enemy": [
+        152,
+        152,
+        38,
+        38,
+        22,
+        22,
+        0,
+        0
+      ]
+    },
+    "damage": 1,
+    "iframe": 1892,
+    "snapshot": {
+      "x": 780,
+      "y": 760,
+      "texture": "bio-cycle-immune-antibody",
+      "frame": "bio-2"
+    },
+    "atlasBytes": 3517440,
+    "ghostsReleased": true,
+    "shutdownDestroyed": true,
+    "pageErrors": []
+  }
+]

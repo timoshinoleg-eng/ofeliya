@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { COLORS, PLAYER } from './config';
 import { artScale, artSourceFactor } from './ArtMetrics';
 import { biologicalAtlasKey, biologicalFrameAt } from './BiologicalAnimation';
+import { biologicalHitAtlasKey, biologicalHitDirection, biologicalHitFrame } from './BiologicalImpact';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   hurtUntil = 0;
@@ -11,6 +12,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private readonly capsidShell: Phaser.GameObjects.Graphics;
   private readonly lysisCore: Phaser.GameObjects.Graphics;
   private biologicalFrame = -1;
+  private biologicalHitAt = -Infinity;
+  private biologicalHitDirection = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'virus-player');
@@ -69,10 +72,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.scene.textures.exists(atlas)) {
       const reduced = this.scene.registry.get('performanceTier') === 'reduced' || this.scene.registry.get('runtimeQuality')?.level === 'low';
       const frame = biologicalFrameAt(time, 0, reduced);
-      if (frame !== this.biologicalFrame || this.texture.key !== atlas) {
-        this.setTexture(atlas, `bio-${frame}`);
-        this.biologicalFrame = frame;
-      }
+      const hitAtlas = biologicalHitAtlasKey('virus-player');
+      const hitFrame = biologicalHitFrame(this.scene.time.now, this.biologicalHitDirection, reduced, this.biologicalHitAt);
+      const texture = hitFrame && this.scene.textures.exists(hitAtlas) ? hitAtlas : atlas;
+      const pose = texture === hitAtlas ? hitFrame! : `bio-${frame}`;
+      if (this.texture.key !== texture || this.frame.name !== pose) this.setTexture(texture, pose);
+      this.biologicalFrame = frame;
     }
 
     // Slow virion drift + membrane breathing. The 0.9 visual scale keeps the richer 56px texture
@@ -106,7 +111,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       .setAlpha(0.56 + Math.sin(time * 0.0054) * 0.2);
   }
 
-  markHurt(now: number): void {
+  markHurt(now: number, directionX = 0, directionY = 0): void {
+    this.biologicalHitAt = now;
+    this.biologicalHitDirection = biologicalHitDirection(directionX, directionY, this.rotation);
     this.hurtUntil = now + PLAYER.iframeMs;
     this.setTintFill(0xffffff);
   }

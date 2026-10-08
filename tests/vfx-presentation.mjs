@@ -37,8 +37,18 @@ assert.equal(PERFORMANCE.tier, 'full', 'full-tier contracts require an explicit 
 const { COLORS } = load('src/game/config.ts');
 const { VfxSystem } = load('src/systems/VfxSystem.ts');
 function fixture() {
-  const particles = [], circles = [], tweens = [];
+  const particles = [], circles = [], tweens = [], images = [];
   const scene = { time: { now: 1000 }, events: new EventEmitter(), add: {
+    image(x,y,texture) {
+      const image={x,y,texture,visible:true,dead:false,alpha:1,
+        setDepth(){return this;},clearTint(){return this;},
+        setTexture(key,frame){this.texture=key;this.frame=frame;return this;},
+        setPosition(x,y){this.x=x;this.y=y;return this;},setRotation(v){this.rotation=v;return this;},
+        setScale(x,y=x){this.scaleX=x;this.scaleY=y;return this;},
+        setAlpha(v){this.alpha=v;return this;},setVisible(v){this.visible=v;return this;},
+        destroy(){this.dead=true;this.visible=false;},
+      };images.push(image);return image;
+    },
     particles(x, y, texture, config) {
       const emitter = { texture, config, frame: config.frame, angle: config.angle, dead: false, emitted: [],
         setDepth() { return this; }, setParticleTint() { return this; },
@@ -65,10 +75,27 @@ function fixture() {
     add(config) { tweens.push(config); return config; },
     killTweensOf(target) { for (let i = tweens.length - 1; i >= 0; i--) if (tweens[i].targets === target) tweens.splice(i, 1); },
   } };
-  return { scene, particles, circles, tweens, vfx: new VfxSystem(scene) };
+  return { scene, particles, circles, tweens, images, vfx: new VfxSystem(scene) };
 }
 const failures = [];
 function test(name, fn) { try { fn(); console.log(`PASS ${name}`); } catch (error) { failures.push(name); console.error(`FAIL ${name}: ${error.message}`); } }
+test('biological death snapshots only a dead antibody with four reusable body-free ghosts',()=>{
+  const f=fixture();const source={active:true,x:10,y:20,rotation:.2,scaleX:.25,scaleY:.25,alpha:1,texture:{key:'bio-hit-immune-antibody'},frame:{name:'hit-0-0'}};
+  f.vfx.biologicalDeath(source);assert.equal(f.images.length,0);
+  source.active=false;for(let i=0;i<30;i++)f.vfx.biologicalDeath(source);
+  assert.equal(f.images.length,4);assert.equal(f.tweens.length,4);
+  assert.equal(f.images[0].body,undefined);assert.equal(f.images[0].alpha,.65);
+  source.x=900;source.frame.name='bio-2';assert.equal(f.images[0].x,10);assert.equal(f.images[0].frame,'hit-0-0');
+  const old=f.tweens[0];old.onComplete();f.vfx.biologicalDeath(source);
+  assert.equal(f.images.length,4);old.onComplete();assert.equal(f.images[0].visible,true,'stale completion cannot hide reused ghost');
+  f.vfx.setRuntimeQualityScale(.5);assert.equal(f.images.filter(i=>!i.dead).length,2);
+  f.scene.events.emit('shutdown');assert.ok(f.images.every(i=>i.dead));assert.equal(f.tweens.length,0);
+});
+test('dense combat skips new collapse ghosts while existing kill particle vocabulary remains available',()=>{
+  const f=fixture();f.vfx.setCombatDensity(150);
+  f.vfx.biologicalDeath({active:false,x:0,y:0,rotation:0,scaleX:.25,scaleY:.25,alpha:1,texture:{key:'immune-antibody'},frame:{name:'__BASE'}});
+  assert.equal(f.images.length,0);f.vfx.kill(0,0,COLORS.cyan);assert.ok(f.particles[0].emitted.length>0);
+});
 // Breaks caught: tint-only rendering, repeated independently budgeted death requests,
 // direction/position leaking between emissions, unbounded decorations, missing cancellation.
 test('baked frame selection changes visible particle source for green / gold / cyan events', () => {

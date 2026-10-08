@@ -1,5 +1,23 @@
 # VO continuation traceability — 8 October 2026
 
+## Current continuation state after release and combat follow-up
+
+PR179–182 merged; production716292b is verified by exact main CI37775488149 and deploy37777242773 with publicSHA/hash parity. Original entry matrix below is historical. New branch `visual/combat-organic-response-20261008` adds reviewed local hit/death slice; not deployed. Details/evidence: [COMBAT_SLICE_20261008.md](COMBAT_SLICE_20261008.md).
+
+| Requirement | Current status | Evidence / remaining gate |
+| --- | --- | --- |
+| VO-01 HiDPI | PARTIAL | PR181 technical2xQA proof; production1x; device decision pending |
+| VO-02 ordinary hits | DONE scoped browser/source | Existing directed particles plus new local anatomical hit; phone salience pending |
+| VO-03 VFX budget | DONE scoped browser/source | Existing4emitters/ring budgets preserved; new death cap4/2 and dense suppression |
+| VO-04 Bloodstream | DONE scoped browser/source | Released depth/parallax and previous captures; phone comfort pending |
+| VO-05 Heart | DONE scoped browser/source | Released fibres/double beat; phone comfort pending |
+| VO-06 audio | PARTIAL | Seven normalized beds/adaptive controls exist; genuine coherent authored stems absent; actual phone listening pending |
+| VO-07 art kit | PARTIAL | Seven core4xassets released; expanded RNA/projectile/icons not delivered |
+| VO-08 biological motion | PARTIAL, advanced | Six idle poses + new hero/antibody180ms hit and bounded antibodydeath; charge/playerdeath/otherorganisms remain |
+| VO-09 UI | DONE scoped browser/source | Released combo/boss/HUD/native cards; physical small-screen play acceptance pending |
+| VO-10 acceptance | PARTIAL / BLOCKED | Released24browserdensecases plus new4impactcells; MAXAndroid/iOS/Telegram actual devices not tested |
+
+
 ## Verified starting state
 
 Git fetch and GitHub PR readback: main `d7797bc67bbda063d2fc3de68026101b0b061121`; PR #179 Draft/open, head `d3d4c33c34ea529898ff22d454a98d14c4210691`, 40 commits ahead, zero behind. All four hosted checks succeeded on that head: [CI](https://github.com/timoshinoleg-eng/ofeliya/actions/runs/37673989641), [visual matrix](https://github.com/timoshinoleg-eng/ofeliya/actions/runs/37673989600). No submitted GitHub reviews; independent reviews are repository documents.

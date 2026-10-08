@@ -1,5 +1,9 @@
 # BACKLOG — OFELIYA: STRAIN ZERO
 
+## Latest combat continuation (08.10)
+[x] Publish reviewed local hero/antibodyhit+antibodydeath slice with actualPhaser/tests/captures. [ ] Read finalPRhead CI before merge. [ ] RealMAXAndroid/iOS/Telegram sustainedFPS/thermal/audio/gesture acceptance. [ ] Authored coherent score/stems, selectedRNA/projectile/icons, actualrolecharge/playerdeath; see precise ART_AUDIO_BRIEF. [ ] Ownerapprove follow-up merge/deploy; currentproduction716292b preserved.
+
+
 Обновлено: 2026-10-05. Отмечайте сделанное галочкой; новые пункты добавляйте сюда, а не в чат.
 
 ## Control-mode browser smoke (06.10)
@@ -259,3 +263,10 @@ The fixture now uses production-standard deactivateForStageReset for existing bu
 Final6c84b89 CI37771605821 passed Legendary, Cardiac and controls, then dense-readability failed target150/cache150 with allalpha1. Enemy preUpdate reads prior density; Game.update refreshes cache afterward. Original fixed150ms sleep need not contain both real frames.
 
 Density fixture now waits two actual Scene POST_UPDATE frames with cache>=target, bounded1500ms, before unchanged150/200targets/alpha assertions. This replaces a synchronization assumption, NOT an unchanged performance/timing gate. No manual Game/Enemy update or cache writes. Startup accepts an already-paused real Game, resumes then clears progression/UI; new unblocked assertion added. Exact native finalscript PASS; original native Game.active-only wait had stopped at startup30s. Paired sparseRAF240ms with shared corrected startup: old150ms sleep failed cache100/target150/allalpha1; completed-frame wait PASS. This demonstrates synchronization sensitivity, not the exact hosted scheduling. Independent Codex source review PASS. Additional Kimi nonstream diagnostic HTTP504; no routed approval.
+
+- [x] PR183 published with rawKimidirect/Codex review and OmniRoute failure limitation.
+- [ ] Read full finalhead hostedCI; phoneacceptance/merge/deploy remain gates.
+
+
+## Combat CI correction checkpoint
+InitialcodeCI37811968746 idle180failure and docsCI37812345699 pausepreconditionfailure are notgreen. Actualfractionalstart76.41176470588235 reproducedold180tail/new4cellsPASS; useabsolutehitdeadlines. Pauseexistingisolationsetup movedbeforefirstrealupdate, realclock/physics/touchassertionspreserved; sharedRNA100oldblocked/failvsnewunblocked/PASS. Codex+KimidirectcorrectionreviewPASS; read COMBAT_CI_CORRECTION_20261008.md. FinalheadCIstillrequired; no productionmerge/deploy.

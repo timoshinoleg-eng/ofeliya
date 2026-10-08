@@ -1,5 +1,9 @@
 # DECISIONS — OFELIYA: STRAIN ZERO
 
+## Latest combat continuation (08.10)
+Use boot-baked local warp, fixed frame dimensions and Scene.time.now; never alter physics sprite scale/rotation for hit. Death snapshot only after disableBody, Imagepool4/2, skipdensity150, serialguards/trim/shutdown. Do not invent swarmcharge or delay player results for cosmeticdeath. Additional3.36MiBRGBA+GPU requires phone measurement; no productionHiDPI activation. Furtherfeaturemerge/deploy needs scoped ownerapproval.
+
+
 Формат: `[дата] Решение — причина. Статус.`
 Перенесённые решения помечены источником (документы репо). Новые решения добавляются сюда после каждой сессии.
 
@@ -204,3 +208,10 @@ The fixture now uses production-standard deactivateForStageReset for existing bu
 Final6c84b89 CI37771605821 passed Legendary, Cardiac and controls, then dense-readability failed target150/cache150 with allalpha1. Enemy preUpdate reads prior density; Game.update refreshes cache afterward. Original fixed150ms sleep need not contain both real frames.
 
 Density fixture now waits two actual Scene POST_UPDATE frames with cache>=target, bounded1500ms, before unchanged150/200targets/alpha assertions. This replaces a synchronization assumption, NOT an unchanged performance/timing gate. No manual Game/Enemy update or cache writes. Startup accepts an already-paused real Game, resumes then clears progression/UI; new unblocked assertion added. Exact native finalscript PASS; original native Game.active-only wait had stopped at startup30s. Paired sparseRAF240ms with shared corrected startup: old150ms sleep failed cache100/target150/allalpha1; completed-frame wait PASS. This demonstrates synchronization sensitivity, not the exact hosted scheduling. Independent Codex source review PASS. Additional Kimi nonstream diagnostic HTTP504; no routed approval.
+
+## Review disposition
+Preserve rawKimi text with root source assessment; hypothetical futurepackedcanvas/pooling are constraints, canonicalfallback is intentional, Playerhitfield already initialized. Do not mistake reviewermerge recommendation for ownerapproval.
+
+
+## Combat CI correction checkpoint
+InitialcodeCI37811968746 idle180failure and docsCI37812345699 pausepreconditionfailure are notgreen. Actualfractionalstart76.41176470588235 reproducedold180tail/new4cellsPASS; useabsolutehitdeadlines. Pauseexistingisolationsetup movedbeforefirstrealupdate, realclock/physics/touchassertionspreserved; sharedRNA100oldblocked/failvsnewunblocked/PASS. Codex+KimidirectcorrectionreviewPASS; read COMBAT_CI_CORRECTION_20261008.md. FinalheadCIstillrequired; no productionmerge/deploy.

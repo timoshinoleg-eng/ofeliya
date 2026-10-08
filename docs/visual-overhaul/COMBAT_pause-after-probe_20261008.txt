@@ -1,0 +1,2 @@
+RNA challenge pre-cleanup {"paused":false,"uiBlocked":false,"modalOpen":false,"awaitingChoice":false,"queuedLevels":0,"xpNext":1000000}
+real-touch pause smoke: ok

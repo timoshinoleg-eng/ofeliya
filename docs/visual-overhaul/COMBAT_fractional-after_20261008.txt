@@ -1,0 +1,1 @@
+biological impact: 4 actual Phaser renderer/tier cells PASS; frozen progression, not live mobile/performance acceptance

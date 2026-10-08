@@ -1,7 +1,7 @@
 const fs = require('fs');
 const { chromium } = require('playwright-core');
 
-const chrome = ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(fs.existsSync);
+const chrome = [chromium.executablePath(), '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(fs.existsSync);
 if (!chrome) throw new Error('Chrome not found');
 
 const VIEWPORT = { width: 360, height: 640 };
@@ -63,9 +63,23 @@ async function textCenter(page, label) {
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (error) => errors.push(String(error)));
-  await page.goto('http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
+  await page.goto(process.env.OFELIYA_BASE_URL || 'http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
-  await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
+  await page.evaluate(() => {
+    const game = window.__game, gs = game.scene.getScene('Game');
+    const create = gs.create;
+    gs.create = function (...args) {
+      create.apply(this, args);
+      // Install before the first Game.update; preserve the real updater, run clock and physics.
+      this.wave.update = () => {};
+      this.enemies.getChildren().forEach(enemy => enemy.disableBody?.(true, true));
+      this.runState.stage.xp = 0;
+      this.runState.stage.xpNext = 1_000_000;
+      this.queuedLevels = 0;
+      this.awaitingChoice = false;
+    };
+    game.scene.getScene('Menu').scene.start('Game');
+  });
   await page.waitForFunction(
     () => window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI')
   );
@@ -74,12 +88,10 @@ async function textCenter(page, label) {
   // mutation within a few hundred milliseconds, which pauses Game through the progression modal.
   await page.evaluate(() => {
     const gs = window.__game.scene.getScene('Game');
-    gs.wave.update = () => {};
-    gs.enemies.getChildren().forEach((enemy) => enemy.disableBody?.(true, true));
-    gs.runState.stage.xp = 0;
-    gs.runState.stage.xpNext = 1_000_000;
-    gs.queuedLevels = 0;
-    gs.awaitingChoice = false;
+    const ui = window.__game.scene.getScene('UI');
+    if (gs.scene.isPaused() || ui.uiBlocked || ui.modalOpen || gs.awaitingChoice) {
+      throw new Error('manual pause fixture blocked before touch');
+    }
     window.__game.registry.set('joy', { x: 1, y: 0 });
   });
   await sleep(260);

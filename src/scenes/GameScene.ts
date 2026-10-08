@@ -747,6 +747,7 @@ export class GameScene extends Phaser.Scene {
       boss: e.isBoss,
     });
     this.captureAchievements(false, true);
+    if (e.kind === 'swarm') this.vfx.biologicalDeath(e);
     this.vfx.kill(
       e.x, e.y, e.color, e.isBoss ? 'boss' : e.isElite ? 'elite' : 'normal', undefined, e.radius
     );
@@ -814,7 +815,7 @@ export class GameScene extends Phaser.Scene {
     this.runState.stage.hp -= damage;
     this.wave.recordPlayerDamage(damage, this.runState.stage.maxHp);
     this.runState.resetNoDamage();
-    this.player.markHurt(now);
+    this.player.markHurt(now, this.player.x - x, this.player.y - y);
     Sfx.play('hurt');
     PlatformBridge.haptic('medium');
     this.cameras.main.flash(110, 255, 60, 90);
@@ -1229,7 +1230,7 @@ export class GameScene extends Phaser.Scene {
     this.runState.stage.hp -= appliedDamage;
     this.wave.recordPlayerDamage(appliedDamage, this.runState.stage.maxHp);
     this.runState.resetNoDamage();
-    this.player.markHurt(now);
+    this.player.markHurt(now, this.player.x - boss.x, this.player.y - boss.y);
     Sfx.play('hurt');
     PlatformBridge.haptic('medium');
     this.cameras.main.flash(110, 255, 64, 92);
@@ -2297,7 +2298,7 @@ export class GameScene extends Phaser.Scene {
     this.runState.stage.hp -= e.dmg;
     this.wave.recordPlayerDamage(e.dmg, this.runState.stage.maxHp);
     this.runState.resetNoDamage();
-    this.player.markHurt(now);
+    this.player.markHurt(now, this.player.x - e.x, this.player.y - e.y);
     Sfx.play('hurt');
     PlatformBridge.haptic('medium');
     this.cameras.main.flash(140, 255, 60, 100);
