@@ -846,7 +846,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.vfx.lysis(event.x, event.y, event.radius * 0.72, event.radius);
     this.atmosphere.pulse(COLORS.green, 0.14);
-    Sfx.play('nova');
+    Sfx.play('lysis');
     PlatformBridge.haptic('medium');
 
     for (let i = 0; i < event.rna; i++) {
@@ -895,6 +895,8 @@ export class GameScene extends Phaser.Scene {
       resume: 'infection_resumed',
     };
     this.trackComprehensionOnce(analyticsEvent[event.type], { progress: event.progress });
+
+    if (event.type === 'enter' || event.type === 'resume') Sfx.play('infect');
 
     if (!this.firstRunComprehension || event.type === 'resume') return;
     if (
@@ -1080,7 +1082,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   onGemCollected(value: number): void {
-    Sfx.play('pickup');
+    Sfx.playPickupVariant();
     this.vfx.pickup(this.player.x, this.player.y);
     this.queuedLevels += this.runState.addXp(value);
 
@@ -1186,6 +1188,7 @@ export class GameScene extends Phaser.Scene {
     const decision = this.impact.request('boss_phase', this.time.now);
     if (decision.allowCameraShake) this.shake(220, 0.006, true);
     PlatformBridge.haptic('heavy');
+    Sfx.play('bossphase');
   }
 
   triggerBossPressureWave(boss: Enemy, radius: number, damage: number): void {

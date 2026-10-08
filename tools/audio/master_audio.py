@@ -60,9 +60,10 @@ MUSIC_FILES = [
 ]
 
 SFX_FILES = [
-    "sfx/shoot.ogg", "sfx/hit.ogg", "sfx/pickup.ogg", "sfx/levelup.ogg",
-    "sfx/hurt.ogg", "sfx/click.ogg", "sfx/nova.ogg", "sfx/elite.ogg",
-    "sfx/boss.ogg", "sfx/gameover.ogg", "sfx/victory.ogg",
+    "sfx/shoot.ogg", "sfx/hit.ogg", "sfx/pickup.ogg", "sfx/pickup2.mp3", "sfx/pickup3.mp3",
+    "sfx/levelup.ogg", "sfx/hurt.ogg", "sfx/click.ogg", "sfx/nova.ogg", "sfx/elite.ogg",
+    "sfx/boss.ogg", "sfx/bossphase.mp3", "sfx/gameover.ogg", "sfx/victory.ogg",
+    "sfx/infect.mp3", "sfx/lysis.mp3",
 ]
 
 VORBIS_QUALITY = 0.5  # ~160 kbps stereo, transparent enough for a music bed

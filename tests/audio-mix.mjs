@@ -99,7 +99,7 @@ await test('one master compressor and distinct bed trim preserve procedural bus 
 });
 await test('decoded SFX scan once, cache normalization and replace legacy coefficients for every role', async () => {
   const b = buffer(), f = fixture({ decoder: async () => b });
-  const roles = { shoot: .12, hit: .16, pickup: .28, click: .20, levelup: .50, hurt: .55, nova: .48, elite: .50, boss: .60, gameover: .58, victory: .58 };
+  const roles = { shoot: .12, hit: .16, pickup: .28, pickup2: .28, pickup3: .28, click: .20, levelup: .50, hurt: .55, nova: .48, elite: .50, boss: .60, bossphase: .62, gameover: .58, victory: .58, infect: .42, lysis: .62 };
   for (const [name, role] of Object.entries(roles)) {
     f.Sfx.play(name); await flush(); const scans = b.scans;
     for (let i = 0; i < 2; i++) { f.advance(); f.Sfx.play(name);
@@ -109,7 +109,14 @@ await test('decoded SFX scan once, cache normalization and replace legacy coeffi
     }
     assert.equal(b.scans, scans, 'play must never rescan decoded samples');
   }
-  assert.equal(f.requests.length, 11); assert.equal(b.scans, 22);
+  assert.equal(f.requests.length, 16); assert.equal(b.scans, 32);
+  // RNA pickup round-robin cycles the three variants cursor-only, no RNG.
+  for (const expected of ['pickup', 'pickup2', 'pickup3', 'pickup']) {
+    f.advance(); f.Sfx.playPickupVariant();
+    const src = f.contexts[0].nodes.filter(n => n.kind === 'source').at(-1);
+    assert.equal(src.connections[0].gain.value, roles[expected] * 1.26);
+    src.onended();
+  }
 });
 await test('existing SFX throttles reject tight shoot hit pickup repeats', async () => {
   for (const name of ['shoot', 'hit', 'pickup']) {

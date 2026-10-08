@@ -133,6 +133,32 @@
       "sha256": "f24f2d867906ea650bd0aa35c247028ebbd611f2de87c28859558a16bc6cf49f",
       "bytes": 8601
     },
+    "sfx/pickup2.mp3": {
+      "durationSec": 0.6,
+      "sampleRate": 44100,
+      "channels": 2,
+      "lufs": -15.12,
+      "truePeakDbTp": -4.07,
+      "peak": 0.6062,
+      "clippedFraction": 0.0,
+      "rms": 0.092,
+      "kind": "sfx",
+      "sha256": "3124dd5c9a3ecb92e83de1c19127dc8a0ac7df747ee0ec206dbd71c2e008a6ae",
+      "bytes": 10493
+    },
+    "sfx/pickup3.mp3": {
+      "durationSec": 0.6,
+      "sampleRate": 44100,
+      "channels": 2,
+      "lufs": -16.97,
+      "truePeakDbTp": 0.47,
+      "peak": 1.0555,
+      "clippedFraction": 2e-05,
+      "rms": 0.0574,
+      "kind": "sfx",
+      "sha256": "f22e310c2f677aa6bb333304eff0325069aae9dace6a990bb3b0ff5ef598fa1b",
+      "bytes": 10493
+    },
     "sfx/levelup.ogg": {
       "durationSec": 0.432,
       "sampleRate": 44100,
@@ -211,6 +237,19 @@
       "sha256": "dcebc33292449d10a874c6d35a6d71acce3db72f066e0ab121b7dd243d8edc01",
       "bytes": 16093
     },
+    "sfx/bossphase.mp3": {
+      "durationSec": 2.48,
+      "sampleRate": 44100,
+      "channels": 2,
+      "lufs": -15.02,
+      "truePeakDbTp": -0.42,
+      "peak": 0.9525,
+      "clippedFraction": 0.0,
+      "rms": 0.1393,
+      "kind": "sfx",
+      "sha256": "b7fa2690006c343c9dcafc5676992c4e6efe1a09e5156a664b3aba949e8a28bd",
+      "bytes": 40586
+    },
     "sfx/gameover.ogg": {
       "durationSec": 0.746,
       "sampleRate": 44100,
@@ -236,6 +275,32 @@
       "kind": "sfx",
       "sha256": "f8f8c3385cded68dcf79697803870c7761634b29bbc6a6f296e047eecf791f4d",
       "bytes": 14951
+    },
+    "sfx/infect.mp3": {
+      "durationSec": 1.48,
+      "sampleRate": 44100,
+      "channels": 2,
+      "lufs": -18.98,
+      "truePeakDbTp": -0.39,
+      "peak": 0.9551,
+      "clippedFraction": 0.0,
+      "rms": 0.0603,
+      "kind": "sfx",
+      "sha256": "1dc681a3da92bb9ae898aa72a3faa4f989f707ca710fd22060d92802256f085e",
+      "bytes": 24703
+    },
+    "sfx/lysis.mp3": {
+      "durationSec": 2.0,
+      "sampleRate": 44100,
+      "channels": 2,
+      "lufs": -24.67,
+      "truePeakDbTp": -1.1,
+      "peak": 0.8754,
+      "clippedFraction": 0.0,
+      "rms": 0.0276,
+      "kind": "sfx",
+      "sha256": "4cb749c6faddf2f2342e11780e03273e4a8ba7f26a68c89ac10c90834e211802",
+      "bytes": 33062
     }
   }
 }

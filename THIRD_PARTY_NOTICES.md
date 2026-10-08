@@ -45,6 +45,23 @@ OpenGameArt item URLs/authors. Do not invent individual track authors or titles.
 download/source notes are available, recover and append the exact seven mappings before marketplace
 moderation; otherwise preserve the repository import commit and binary hashes as the evidence trail.
 
+## Generated sound effects
+
+Files:
+
+- `public/audio/sfx/pickup2.mp3`
+- `public/audio/sfx/pickup3.mp3`
+- `public/audio/sfx/infect.mp3`
+- `public/audio/sfx/lysis.mp3`
+- `public/audio/sfx/bossphase.mp3`
+
+- Origin: project-directed original sound effects generated via AI sound-effect generation
+  (agent-gw `generate_sound_effects`) from project-written English prompts in October 2026;
+  same provenance model as the key art in `public/art/provenance.json`.
+- License: project-original generated assets; no third-party license terms attached.
+- Fingerprints (sha256, measured loudness/true peak) are recorded in
+  `public/audio/audio-manifest.json`.
+
 ## Chakra Petch font
 
 Files:

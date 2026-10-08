@@ -9,9 +9,10 @@ export const MUSIC_GAIN = 0.65;
  */
 export const MUSIC_BED_TRIMS = [1, 1, 1, 1, 1, 1, 1] as const;
 export const SFX_ROLE_GAINS = {
-  shoot: 0.12, hit: 0.16, pickup: 0.28, click: 0.20,
+  shoot: 0.12, hit: 0.16, pickup: 0.28, pickup2: 0.28, pickup3: 0.28, click: 0.20,
   levelup: 0.50, hurt: 0.55, nova: 0.48, elite: 0.50,
-  boss: 0.60, gameover: 0.58, victory: 0.58,
+  boss: 0.60, bossphase: 0.62, gameover: 0.58, victory: 0.58,
+  infect: 0.42, lysis: 0.62,
 } as const;
 
 export function normalizationTrimForPeak(peak: number): number {
