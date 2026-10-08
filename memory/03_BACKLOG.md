@@ -262,4 +262,3 @@ Density fixture now waits two actual Scene POST_UPDATE frames with cache>=target
 
 ## Current authorized release checkpoint — 2026-10-08
 PR179/180/181/182 are merged with history and branches preserved. Immutable target 716292b78c5b2e53485170bcb8a4cc2780f9df04. PR182 CI37773729014 PASS all3jobs; final main push CI37775488149 pending. No new production deploy dispatched yet. Product source matches reviewedcf5f0cf; only scoped browser fixtures/docs changed in182. Four own release checkpoint edits atabf0905 retained in branch history; conflict resolution preserves all latestmain memory plus these current release facts. Deploy only the exact target after green mainCI, then prove publicSHA/index/sw/runtime hash parity. Productiondensity1x;2xQA-only; physicalMAX/Telegram and fullcreative gates remain pending.
-
