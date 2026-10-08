@@ -65,6 +65,17 @@ function browserDriver() {
     for (const enemy of gs.enemies.getChildren()) {
       if (enemy.active) enemy.deactivateForStageReset();
     }
+    // Reuse the production stage-boundary pool reset. A drop from a kill before setup can
+    // still attract to the player later and reopen mutation UI after queuedLevels was cleared.
+    for (const bullet of gs.bullets.getChildren()) {
+      if (bullet.active) bullet.deactivateForStageReset();
+    }
+    for (const gem of gs.gems.getChildren()) {
+      if (gem.active) gem.deactivateForStageReset();
+    }
+    gs.hostCells.resetStage();
+    // Cell infection/RNA rewards are covered separately and must not create a new choice here.
+    gs.hostCells.update = () => {};
 
     gs.stageDirector.restore({
       stageId: 'heart',
@@ -91,6 +102,13 @@ function browserDriver() {
     // This smoke owns the phase-two hazard contract, not the boss-reveal presentation.
     // Prevent the real reveal/video path from pausing Game while the synthetic boss is exercised.
     const ui = window.__game.scene.getScene('UI');
+    // Initial progression is outside the beam contract and may otherwise pause its real updater.
+    gs.awaitingChoice = false;
+    gs.pendingChoices = [];
+    gs.queuedLevels = 0;
+    gs.pendingLegendaryCeremony = null;
+    gs.legendaryRewardPending = false;
+    ui.dismissProgressionForStageBoundary();
     ui.showBossReveal = () => false;
 
     const boss = gs.spawnEnemy('boss', gs.player.x + 260, gs.player.y, false);
@@ -99,16 +117,31 @@ function browserDriver() {
     boss.dmg = 0;
     boss.hp = boss.maxHp;
     gs.wave.boss = boss;
+    // The separate pacing contract checks heartbeat exclusion at the 1980/1981 ms boundary.
+    // This runtime fixture measures the beam lifecycle. Keep a real heartbeat director, but
+    // move its next beat outside the fixture so raw RAF time and smoothed stage delta cannot
+    // compete for its unchanged 8 s wall deadline during Phaser's startup cooldown.
+    gs.heartbeatPulse.restore({
+      nextImpactAtMs: gs.runState.stage.timeMs + 60_000,
+      telegraphedImpactAtMs: null,
+      pressureUntilMs: null,
+      pressureBoss: false,
+      bossWasActive: true,
+    });
 
     return {
       stageId: gs.stageDirector.currentStage.id,
       behavior: gs.stageDirector.currentStage.boss.behavior,
       phase: boss.bossPhase,
       hp: gs.runState.stage.hp,
+      unblocked: !ui.modalOpen && !ui.uiBlocked && game.scene.isActive('Game'),
+      heartbeatWindowMs: gs.heartbeatPulse.debugState.nextImpactAtMs - gs.runState.stage.timeMs,
+      activeGems: gs.gems.countActive(true),
+      activeBullets: gs.bullets.countActive(true),
     };
   });
 
-  if (setup.stageId !== 'heart' || setup.behavior !== 'heartbeat-pulse' || setup.phase !== 1) {
+  if (setup.stageId !== 'heart' || setup.behavior !== 'heartbeat-pulse' || setup.phase !== 1 || !setup.unblocked || setup.heartbeatWindowMs !== 60_000 || setup.activeGems !== 0 || setup.activeBullets !== 0) {
     throw new Error('Heart phase-one setup failed: ' + JSON.stringify(setup));
   }
 
@@ -129,11 +162,33 @@ function browserDriver() {
     gs.onBossPhaseChanged(boss);
   });
 
-  await page.waitForFunction(
-    () => Boolean(window.__game.scene.getScene('Game').cardiacHazardVisual),
-    null,
-    { timeout: 8_000 }
-  );
+  try {
+    await page.waitForFunction(
+      () => Boolean(window.__game.scene.getScene('Game').cardiacHazardVisual),
+      null,
+      { timeout: 8_000 }
+    );
+  } catch (error) {
+    const state = await page.evaluate(() => {
+      const game = window.__game;
+      const gs = game.scene.getScene('Game');
+      const ui = game.scene.getScene('UI');
+      const boss = gs.wave.boss;
+      return {
+        gameActive: game.scene.isActive('Game'), gamePaused: game.scene.isPaused('Game'),
+        modalOpen: ui.modalOpen, uiBlocked: ui.uiBlocked, awaitingChoice: gs.awaitingChoice,
+        queuedLevels: gs.queuedLevels, phase: gs.stageDirector.phase,
+        sceneTime: gs.time.now, stageTime: gs.runState.stage.timeMs,
+        boss: boss && { active: boss.active, phase: boss.bossPhase, hp: boss.hp, maxHp: boss.maxHp },
+        hazard: { enabled: gs.cardiacHazard.enabled, nextTelegraphAtMs: gs.cardiacHazard.nextTelegraphAtMs, serial: gs.cardiacHazard.serial },
+        heartbeat: gs.heartbeatPulse.debugState,
+        safeIndicator: Boolean(gs.heartbeatSafeIndicator), opportunityUntil: gs.heartbeatOpportunityUntil,
+        pageErrors: [],
+      };
+    });
+    state.pageErrors = errors;
+    throw new Error('Cardiac telegraph timeout state: ' + JSON.stringify(state), { cause: error });
+  }
 
   const telegraph = await page.evaluate(() => {
     const gs = window.__game.scene.getScene('Game');

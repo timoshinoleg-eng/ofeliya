@@ -48,9 +48,14 @@ function browserDriver() {
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (error) => errors.push(String(error)));
-  await page.goto('http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
+  await page.goto(process.env.OFELIYA_BASE_URL || 'http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
-  await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
+  await page.evaluate(() => {
+    // This fixture owns choice -> ceremony -> scene resume, not autonomous run progression.
+    // Keep the real UIScene, clocks and choice handlers; avoid a new mutation during dismissal.
+    window.__game.scene.getScene('Game').update = () => {};
+    window.__game.scene.getScene('Menu').scene.start('Game');
+  });
   await page.waitForFunction(
     () => window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI')
   );
