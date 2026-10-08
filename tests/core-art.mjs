@@ -20,16 +20,16 @@ const phaser={ Scene:class {},Physics:{Arcade:{Sprite:Display}},BlendModes:{ADD:
 function load(path){path=resolve(path);if(cache.has(path))return cache.get(path);const m={exports:{}};cache.set(path,m.exports);const source=ts.transpileModule(readFileSync(path,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS,esModuleInterop:true}}).outputText;new Function('require','module','exports',source)(n=>n==='phaser'?phaser:n.endsWith('/StartupTrace')?{StartupTrace:{mark(){}}}:load(resolve(dirname(path), n+'.ts')),m,m.exports);cache.set(path,m.exports);return m.exports;}
 // Phaser raster/physics are I/O adapters; production TS and source method bodies execute unchanged.
 // Root's actual Phaser WebGL/Canvas baseline protects the engine's body rounding and centers.
-const logical={'virus-player':[56,56],'immune-antibody':[38,38],'immune-tcell':[44,40],'immune-macrophage':[62,62],'immune-prime':[94,94],'cardiac-titan':[108,108],'host-cell-shadow':[112,112]};
+const logical={'virus-player':[56,56],'immune-antibody':[38,38],'immune-tcell':[44,40],'immune-macrophage':[62,62],'immune-prime':[94,94],'cardiac-titan':[108,108],'host-cell-shadow':[112,112],'mutation-prism':[64,64],'mutation-halo':[64,64],'mutation-singularity':[64,64]};
 function fixture(raw=[]){const textures=new Map(), removed=[], objects=[], tweens=[];for(const key of raw) textures.set('raw-art-'+key,{width:1024,height:1024,getSourceImage:()=>({art:key})});
  const scene={textures:{exists:k=>textures.has(k),get:k=>textures.get(k),remove:k=>{assert.ok(textures.get(k.slice(8))?.refreshed,'raw removal must follow canonical refresh');removed.push(k);textures.delete(k);},createCanvas(k,w,h){assert.ok(!textures.has(k),'must not duplicate '+k);const ops=[];const ctx=new Proxy({scale:(...a)=>ops.push(['scale',...a]),drawImage:(...a)=>ops.push(['drawImage',...a]),createRadialGradient:()=>({addColorStop(){}}),createLinearGradient:()=>({addColorStop(){}})},{get:(t,k)=>t[k]??(()=>{})});const texture={width:w,height:h,ops,getContext:()=>ctx,refresh(){this.refreshed=true;},add(){}};textures.set(k,texture);return texture;}},add:{existing(){},tileSprite(x,y,w,h,k){const o=new Display(scene,x,y,k);o.width=w;o.height=h;objects.push(o);return o;},rectangle(x,y,w,h){const o=new Display(scene,x,y);o.width=w;o.height=h;objects.push(o);return o;},image(x,y,k){const o=new Display(scene,x,y,k);objects.push(o);return o;},graphics(){const o=new Graphics(scene);objects.push(o);return o;},circle(){return new Display(scene);},arc(){const o=new Display(scene);objects.push(o);return o;}},physics:{add:{existing(o){o.body={setCircle(r,x,y){Object.assign(this,{radius:r,offset:{x,y}});},setVelocity(){},velocity:{x:0,y:0}};}}},time:{now:0},cameras:{main:{width:390,height:844,scrollX:0,scrollY:0}},tweens:{add:c=>{tweens.push(c);return c;},killTweensOf(){}},scale:{width:390,height:844},events:{once(){},off(){}}};return {scene,textures,removed,objects,tweens};}
 let passed=0;
 const failures=[];function test(name,fn){try{fn();passed++;console.log('PASS '+name);}catch(e){failures.push(name);console.error('FAIL '+name+': '+e.message);}}
 const bake=f=>load('src/game/StrainZeroTextures.ts').ensureStrainZeroTextures(f.scene);
-test('all seven art/fallback backings are bounded 4x including non-square T-cell; raw removed after refresh',()=>{for(const raw of [[],Object.keys(logical),['virus-player','immune-tcell']]){const f=fixture(raw);bake(f);for(const[k,[w,h]]of Object.entries(logical)){const t=f.textures.get(k);assert.deepEqual([t.width,t.height],[w*4,h*4]);assert.deepEqual(t.ops[0],['scale',4,4]);const op=t.ops.find(o=>o[0]==='drawImage');if(raw.includes(k))assert.deepEqual(op.slice(2),[0,0,w,h]);else assert.equal(op,undefined);assert.ok(t.refreshed);}assert.deepEqual(f.removed.sort(),raw.map(k=>'raw-art-'+k).sort());}});
+test('all ten art/fallback backings are bounded 4x including non-square T-cell; raw removed after refresh',()=>{for(const raw of [[],Object.keys(logical),['virus-player','immune-tcell']]){const f=fixture(raw);bake(f);for(const[k,[w,h]]of Object.entries(logical)){const t=f.textures.get(k);assert.deepEqual([t.width,t.height],[w*4,h*4]);assert.deepEqual(t.ops[0],['scale',4,4]);const op=t.ops.find(o=>o[0]==='drawImage');if(raw.includes(k))assert.deepEqual(op.slice(2),[0,0,w,h]);else assert.equal(op,undefined);assert.ok(t.refreshed);}assert.deepEqual(f.removed.sort(),raw.map(k=>'raw-art-'+k).sort());}});
 test('repeated bake plus partial canonical presence still completes all required keys without duplication',()=>{const f=fixture();f.textures.set('virus-player',{width:224,height:224});bake(f);const count=f.textures.size;for (const key of [...Object.keys(logical),'viral-particle','rna-fragment','erythrocyte','host-cell-infection','membrane-fragment','bio-spark','combat-particles','mutation-prism','mutation-halo','mutation-singularity','blood-plasma','heart-plasma','cardiac-fiber']) assert.ok(f.textures.has(key), 'required texture '+key);bake(f);assert.equal(f.textures.size,count);});
 test('projectile RNA atmosphere and combat atlas source geometry remains unchanged',()=>{const f=fixture();bake(f);for(const [k,w,h]of [['viral-particle',22,14],['rna-fragment',22,28],['combat-particles',200,40],['blood-plasma',256,256],['heart-plasma',256,256],['cardiac-fiber',256,256],['host-cell-infection',112,112]])assert.deepEqual([f.textures.get(k).width,f.textures.get(k).height],[w,h]);});
-test('boot preload uses seven distinct raw keys with per-image finite XHR timeout',()=>{const {BootScene}=load('src/scenes/BootScene.ts'),boot=new BootScene(),requests=[];boot.textures={exists:()=>false};boot.load={image:(...args)=>requests.push(args)};boot.preload();assert.equal(requests.length,7);for(const [k,path,config]of requests){assert.ok(k.startsWith('raw-art-'));assert.equal(path,'art/'+k.slice(8)+'.webp');assert.equal(config.timeout,1800);}assert.equal(new Set(requests.map(r=>r[0])).size,7);});
+test('boot preload uses ten distinct raw keys with per-image finite XHR timeout',()=>{const {BootScene}=load('src/scenes/BootScene.ts'),boot=new BootScene(),requests=[];boot.textures={exists:()=>false};boot.load={image:(...args)=>requests.push(args)};boot.preload();assert.equal(requests.length,10);for(const [k,path,config]of requests){assert.ok(k.startsWith('raw-art-'));assert.equal(path,'art/'+k.slice(8)+'.webp');assert.equal(config.timeout,1800);}assert.equal(new Set(requests.map(r=>r[0])).size,10);});
 test('boot preload skips only individually present canonical textures', () => {
  const { BootScene } = load('src/scenes/BootScene.ts'), boot = new BootScene(), requests = [];
  const present = new Set(['virus-player', 'immune-tcell']);
@@ -48,10 +48,10 @@ test('optional art consumes one timeout window without retry or Android batching
   // File captures loader retry policy at queue time, so assert before the first image call.
   boot.load = { maxRetries: 2, maxParallelDownloads: parallel, image: (...args) => {
    assert.equal(boot.load.maxRetries, 0);
-   assert.equal(boot.load.maxParallelDownloads, Math.max(parallel, 7));
+   assert.equal(boot.load.maxParallelDownloads, Math.max(parallel, 10));
    requests.push(args);
   } };
-  boot.preload(); assert.equal(requests.length, 7);
+  boot.preload(); assert.equal(requests.length, 10);
   assert.equal(boot.load.maxRetries, 2, 'unrelated future loads retain retry policy');
  }
 });
@@ -81,7 +81,7 @@ test('boot create bakes missing or partly loaded art before removing splash and 
   else globalThis.document = priorDocument;
  }
 });
-test('packaged generated asset provenance covers exactly the seven core keys and current bytes', () => {
+test('packaged generated asset provenance covers exactly the ten core keys and current bytes', () => {
  const provenance = JSON.parse(readFileSync('public/art/provenance.json', 'utf8'));
  assert.deepEqual(provenance.assets.map(asset => asset.key).sort(), Object.keys(logical).sort());
  for (const asset of provenance.assets) {

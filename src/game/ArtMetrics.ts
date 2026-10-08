@@ -7,6 +7,10 @@ export const CORE_ART = {
   'immune-prime': { width: 94, height: 94 },
   'cardiac-titan': { width: 108, height: 108 },
   'host-cell-shadow': { width: 112, height: 112 },
+  // Critical-mutation silhouettes: art-backed when the webp loads, procedural emblem fallback.
+  'mutation-prism': { width: 64, height: 64 },
+  'mutation-halo': { width: 64, height: 64 },
+  'mutation-singularity': { width: 64, height: 64 },
 } as const;
 
 export function artSourceFactor(key: string): number {
