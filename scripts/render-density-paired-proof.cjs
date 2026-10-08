@@ -43,7 +43,11 @@ for(const renderer of ['webgl','canvas']){
  const full=await geometry();if(full.backing[0]!==780)throw Error('quality upgrade failed');
  await page.evaluate(()=>window.__game.registry.set('performanceTier','reduced'));
  const staticReduced=await geometry();if(staticReduced.backing[0]!==390)throw Error('static reduced fallback failed');
- await page.evaluate(()=>{window.__game.registry.set('performanceTier','full');window.__game.scale.resize(1100,1000);});
+ // RESIZE mode follows actual host bounds; establish a larger host before testing the cap.
+ await page.setViewportSize({width:1100,height:1000});
+ await page.evaluate(async()=>{await window.__viewportManager.sync();});
+ await page.waitForFunction(()=>window.__game.scale.width===1100&&window.__game.scale.height===1000);
+ await page.evaluate(()=>{window.__game.registry.set('performanceTier','full');window.__game.registry.set('runtimeQuality',{level:'full'});window.__game.scale.resize(1100,1000);});
  const capped=await geometry();if(capped.backing[0]!==capped.logical[0]||capped.backing[1]!==capped.logical[1]||capped.logical[0]*capped.logical[1]*4<=4000000)throw Error('4M pixel cap failed '+JSON.stringify({logical:capped.logical,backing:capped.backing}));
  if(errors.length)throw Error('page errors '+errors.join('\n'));
  rows.push({renderer,fixture,menu1,menu2,game1,game2,input,resized,reduced,full,staticReduced,capped,rafTimes,note:'SwiftShader headless RAF intervals, not phone game FPS/thermals',errors});await context.close();
