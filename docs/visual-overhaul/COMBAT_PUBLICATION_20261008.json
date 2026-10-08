@@ -1,0 +1,19 @@
+{
+  "pr": "https://github.com/timoshinoleg-eng/ofeliya/pull/183",
+  "head": "f1aefd27a087732140dc4b3b8f4e7e51f8cb8bea",
+  "ci": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/37814951211",
+  "ci_conclusion": "success",
+  "jobs": {
+    "build": "success",
+    "browser-smoke": "success",
+    "production-contract": "success"
+  },
+  "artifact": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/37814951211/artifacts/11567044096",
+  "artifact_id": 11567044096,
+  "inspected_actual_impact_cells": 4,
+  "production_sha": "716292b78c5b2e53485170bcb8a4cc2780f9df04",
+  "production_density": 1,
+  "new_merge_or_deploy": false,
+  "phone_acceptance": "not performed",
+  "kimi": "direct source and correction reviews PASS; OmniRoute empty/HTTP504 not approval"
+}

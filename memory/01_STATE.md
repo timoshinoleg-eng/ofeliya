@@ -1,5 +1,9 @@
 # STATE — OFELIYA: STRAIN ZERO
 
+## Final verified combat publication (08.10)
+PR183 headf1aefd27a087732140dc4b3b8f4e7e51f8cb8bea, fullCI37814951211 PASS:build/production-contract/browser-smoke. Final artifact11567044096 downloaded;4actualPhaserimpactcells inspected,180msrecovery/shutdown/0pageerrors confirmed. Codex and directKimi source/correction reviewsPASS; Omniempty/504 notapproval. Production716292b/main unchanged, deploy37777242773 stilllatestPASS. No newmerge/deploy/paidresources. Codeworktree work/combat-slice; branchvisual/combat-organic-response-20261008. This docsbranch publishes finalfacts, not featurecode. PhysicalMAXAndroid/iOS/Telegram/FPS/thermal/audio and fullauthoredscore/art/charge/playerdeath remain partial.
+
+
 Обновлено: 2026-10-05. Только факты; решения — в `02_DECISIONS.md`.
 
 ## Control smoke precondition (06.10)
