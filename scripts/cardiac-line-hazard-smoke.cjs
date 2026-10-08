@@ -137,11 +137,33 @@ function browserDriver() {
     gs.onBossPhaseChanged(boss);
   });
 
-  await page.waitForFunction(
-    () => Boolean(window.__game.scene.getScene('Game').cardiacHazardVisual),
-    null,
-    { timeout: 8_000 }
-  );
+  try {
+    await page.waitForFunction(
+      () => Boolean(window.__game.scene.getScene('Game').cardiacHazardVisual),
+      null,
+      { timeout: 8_000 }
+    );
+  } catch (error) {
+    const state = await page.evaluate(() => {
+      const game = window.__game;
+      const gs = game.scene.getScene('Game');
+      const ui = game.scene.getScene('UI');
+      const boss = gs.wave.boss;
+      return {
+        gameActive: game.scene.isActive('Game'), gamePaused: game.scene.isPaused('Game'),
+        modalOpen: ui.modalOpen, uiBlocked: ui.uiBlocked, awaitingChoice: gs.awaitingChoice,
+        queuedLevels: gs.queuedLevels, phase: gs.stageDirector.phase,
+        sceneTime: gs.time.now, stageTime: gs.runState.stage.timeMs,
+        boss: boss && { active: boss.active, phase: boss.bossPhase, hp: boss.hp, maxHp: boss.maxHp },
+        hazard: { enabled: gs.cardiacHazard.enabled, nextTelegraphAtMs: gs.cardiacHazard.nextTelegraphAtMs, serial: gs.cardiacHazard.serial },
+        heartbeat: gs.heartbeatPulse.debugState,
+        safeIndicator: Boolean(gs.heartbeatSafeIndicator), opportunityUntil: gs.heartbeatOpportunityUntil,
+        pageErrors: [],
+      };
+    });
+    state.pageErrors = errors;
+    throw new Error('Cardiac telegraph timeout state: ' + JSON.stringify(state), { cause: error });
+  }
 
   const telegraph = await page.evaluate(() => {
     const gs = window.__game.scene.getScene('Game');
