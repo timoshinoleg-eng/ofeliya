@@ -1,3 +1,4 @@
+import { resolve, dirname } from 'node:path';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -16,7 +17,7 @@ class Display {
 const display = () => new Proxy(Display.prototype,{get(t,k){return t[k]??function(){return this;};}});
 class Graphics extends Display{} Object.setPrototypeOf(Graphics.prototype,display());
 const phaser={ Scene:class {},Physics:{Arcade:{Sprite:Display}},BlendModes:{ADD:1,NORMAL:0},Math:{Clamp:(v,a,b)=>Math.max(a,Math.min(b,v)),FloatBetween:(a,b)=>(a+b)/2,Between:(a,b)=>Math.floor((a+b)/2)}};
-function load(path){path=new URL(path,`file://${process.cwd()}/`).pathname;if(cache.has(path))return cache.get(path);const m={exports:{}};cache.set(path,m.exports);const source=ts.transpileModule(readFileSync(path,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS,esModuleInterop:true}}).outputText;new Function('require','module','exports',source)(n=>n==='phaser'?phaser:n.endsWith('/StartupTrace')?{StartupTrace:{mark(){}}}:load(new URL(n+'.ts','file://'+path).pathname),m,m.exports);cache.set(path,m.exports);return m.exports;}
+function load(path){path=resolve(path);if(cache.has(path))return cache.get(path);const m={exports:{}};cache.set(path,m.exports);const source=ts.transpileModule(readFileSync(path,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS,esModuleInterop:true}}).outputText;new Function('require','module','exports',source)(n=>n==='phaser'?phaser:n.endsWith('/StartupTrace')?{StartupTrace:{mark(){}}}:load(resolve(dirname(path), n+'.ts')),m,m.exports);cache.set(path,m.exports);return m.exports;}
 // Phaser raster/physics are I/O adapters; production TS and source method bodies execute unchanged.
 // Root's actual Phaser WebGL/Canvas baseline protects the engine's body rounding and centers.
 const logical={'virus-player':[56,56],'immune-antibody':[38,38],'immune-tcell':[44,40],'immune-macrophage':[62,62],'immune-prime':[94,94],'cardiac-titan':[108,108],'host-cell-shadow':[112,112]};

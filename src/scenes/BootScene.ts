@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { COLORS } from '../game/config';
 import { CORE_ART, rawArtKey } from '../game/ArtMetrics';
 import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
+import { ensureBiologicalAnimations } from '../game/BiologicalAnimation';
 import { StartupTrace } from '../systems/StartupTrace';
 
 /** Load optional core art; procedural textures keep startup usable when a file fails. */
@@ -32,6 +33,7 @@ export class BootScene extends Phaser.Scene {
     StartupTrace.mark('boot.textures.start');
     this.makeTextures();
     ensureStrainZeroTextures(this);
+    ensureBiologicalAnimations(this);
     StartupTrace.mark('boot.textures.end');
     document.getElementById('splash')?.remove();
     StartupTrace.mark('splash.removed');

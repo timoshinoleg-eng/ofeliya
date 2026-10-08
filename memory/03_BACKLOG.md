@@ -223,3 +223,11 @@ Check hosted PRCI; collect realMAX Android/iOS16-point and Telegram audio-unlock
 - [x] Native production QA12-cell matrix and six-viewport comprehension acceptance.
 - [ ] Confirm full hosted CI on latest combined PR head before concluding PR validation.
 - [ ] Real MAX Android/iOS16-point, Telegram audio unlock/device performance and separate generalHiDPI renderer follow-up remain open. No merge/deploy.
+
+## 2026-10-08 visual residuals
+- [x] Hero/antibody local6frame idle deformation with exact76row geometry proof.
+- [x] Measured compact combo and boss title/bar overlap fixed;6viewportHUD passed.
+- [x] WindowsCyrillic presentation source harness repaired, original54assertions intact.
+- [ ] QA-only capped2x framebuffer followup: integrate/retest independently before density activation.
+- [ ] Original composed compatible stems and authored charge/hit/death cycles: brief ready, assets not claimed.
+- [ ] MAXAndroid/iOS + Telegram real-device audio/input/denseframe-times/thermals acceptance BLOCKED—HUMAN ACCEPTANCE REQUIRED.

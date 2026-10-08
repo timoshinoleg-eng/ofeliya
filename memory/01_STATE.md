@@ -246,3 +246,6 @@ Tasks1–6 recovered/completed; seven generated local core assets, bounded art f
 ## Hosted CI fixture recovery
 
 PR179 created. Initial hosted failures investigated: Node22 hardware selected reduced in an implicit-full VFX test; uncontrolled RAF phases/random cosmetic placement caused QA parity flakiness; global ring spy included new16px hit ring after lysis108/150. Test-only fixes preserve production behavior and all thresholds. Independent reviews PASS after lazy-sprite and deferred-depth-sort corrections. Native production QA12 cases PASS; comprehension all6viewports PASS. Latest combined head hosted rerun pending. Original failures retained in CI_FIXTURE_REVIEW_20261007.md. No merge/deploy.
+
+## 2026-10-08 continuation facts
+Six-frame hero/antibody atlas adds ~1.68MiB RGBA backing plus GPU and uses three poses under reduced/runtime-low. Actual76Phaserbody/display/center rows match original baseline. Combo9999 peak and boss label/bar overlap reproduced and fixed; native6viewportHUD rerun passed. Original54contracts plus biological,12dense renderer/tier cases,4artstartup, audio8restart/0leaks and production-opacity passed. Exact-head build/hosted checks tracked in publication. No merge/deploy; real phones and full soundtrack/charge/death remain unavailable/incomplete. See continuation acceptance and VO traceability.
