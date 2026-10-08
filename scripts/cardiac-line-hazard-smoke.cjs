@@ -106,6 +106,17 @@ function browserDriver() {
     boss.dmg = 0;
     boss.hp = boss.maxHp;
     gs.wave.boss = boss;
+    // The separate pacing contract checks heartbeat exclusion at the 1980/1981 ms boundary.
+    // This runtime fixture measures the beam lifecycle. Keep a real heartbeat director, but
+    // move its next beat outside the fixture so raw RAF time and smoothed stage delta cannot
+    // compete for its unchanged 8 s wall deadline during Phaser's startup cooldown.
+    gs.heartbeatPulse.restore({
+      nextImpactAtMs: gs.runState.stage.timeMs + 60_000,
+      telegraphedImpactAtMs: null,
+      pressureUntilMs: null,
+      pressureBoss: false,
+      bossWasActive: true,
+    });
 
     return {
       stageId: gs.stageDirector.currentStage.id,
@@ -113,10 +124,11 @@ function browserDriver() {
       phase: boss.bossPhase,
       hp: gs.runState.stage.hp,
       unblocked: !ui.modalOpen && !ui.uiBlocked && game.scene.isActive('Game'),
+      heartbeatWindowMs: gs.heartbeatPulse.debugState.nextImpactAtMs - gs.runState.stage.timeMs,
     };
   });
 
-  if (setup.stageId !== 'heart' || setup.behavior !== 'heartbeat-pulse' || setup.phase !== 1 || !setup.unblocked) {
+  if (setup.stageId !== 'heart' || setup.behavior !== 'heartbeat-pulse' || setup.phase !== 1 || !setup.unblocked || setup.heartbeatWindowMs !== 60_000) {
     throw new Error('Heart phase-one setup failed: ' + JSON.stringify(setup));
   }
 
