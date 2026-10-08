@@ -1,6 +1,22 @@
 # BACKLOG — OFELIYA: STRAIN ZERO
 
-Обновлено: 2026-10-05. Отмечайте сделанное галочкой; новые пункты добавляйте сюда, а не в чат.
+Обновлено: 2026-10-09. Отмечайте сделанное галочкой; новые пункты добавляйте сюда, а не в чат.
+
+## Current verified follow-up (09.10)
+
+- [x] Verify main `716292b`, CI `37775488149` and deploy `37777242773` steps through GitHub API; parity passed and rollback was skipped.
+- [x] Correct handoff's stale main/no-deployment claims while retaining the historical fixture investigation.
+- [x] Update the source-map-js lock entry to patched 1.2.2 without a direct dependency or unrelated package updates.
+- [x] Clean install/audit, local build/bundle shape, server 75 checks, score-outbox 24 tests, analytics, Daily V2 and isolation passed on Node 22.23.0.
+- [x] Independent source/diff review of `fix/review-followup-20261009`: no blocking findings; pending evidence remains a failing gate.
+- [ ] Obtain complete PR CI for the final candidate. No merge/deploy in this follow-up.
+- [ ] Record current public release.json plus index/sw/runtime-config hash parity; latest local connection attempt failed.
+- [ ] Collect real Android evidence from the user's phone (model, Android/MAX versions, exact release, recordings); iOS and Telegram remain separate open gates.
+- [ ] Read current score capacity and arrival rates; implement alerts/retention only after the migration contract in `docs/release/REVIEW_FOLLOWUP_20261009.md` is settled.
+- [ ] Verify signed production analytics arrival. PR #177 is still open; inspect its report before review/merge and distinguish deployed aggregate reporting from unmerged run-scoped reporting.
+- [ ] Observe 5-8 newcomer sessions after delivery is verified; choose at most three evidence-backed gameplay changes.
+
+Older backlog entries below describe earlier snapshots. Do not repeat already-merged fixes solely because a historical checkbox remains open.
 
 ## Control-mode browser smoke (06.10)
 - [ ] Root review/publish `fix/control-smoke-preconditions-20261006` and rerun full main CI; focused browser smoke passed locally.

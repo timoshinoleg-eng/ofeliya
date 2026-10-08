@@ -1,4 +1,37 @@
-# OFELIYA release fixture handoff — 2026-10-08
+# OFELIYA review follow-up handoff — 2026-10-09
+
+## Current verified status
+
+Base main is `716292b78c5b2e53485170bcb8a4cc2780f9df04` (PR #182 merged).
+GitHub API confirms CI run `37775488149`: build, browser-smoke and production-contract succeeded.
+Deploy run `37777242773` succeeded: rollout and public HTTPS parity smoke passed; rollback and
+the final failure step were skipped. These are historical deployment facts, not current phone acceptance.
+On 2026-10-09 a direct public `release.json` request from the review environment failed to connect;
+current public SHA/hash parity is therefore unverified here, not proven down for players.
+
+Working branch: `fix/review-followup-20261009`. Scope: lockfile-only source-map-js 1.2.1 -> 1.2.2,
+correct this handoff, and document capacity/acceptance follow-up in
+`docs/release/REVIEW_FOLLOWUP_20261009.md`. Validation results and the eventual PR are recorded in
+`memory/01_STATE.md`. This branch has not been merged or deployed.
+
+Kimi T4 and T6 are contradicted by this base: scores already cap at 20,000 with a 2,000 verified
+reserve; `saveStore()` coalesces writes with default 250ms delay; rollback explicitly fails the
+deployment workflow. Rate-limit buckets remain per-process. Keep mobile-evidence fail-closed.
+
+User has Samsung S20+ and reports the latest MAX; numeric Android/MAX versions and real recordings are still pending.
+iOS and Telegram device acceptance remain open. Open PR #177 contains run-scoped comprehension
+reporting and is not merged; do not describe its report as deployed or modify that branch in this task.
+PR #183 is parallel combat presentation work and is outside this follow-up.
+
+Next: inspect this branch's diff/validation, review the PR and run its CI. Separately collect actual
+Android evidence, check live release identity, obtain a read-only production capacity snapshot and
+verify analytics delivery before observing 5-8 newcomer sessions. Never infer device acceptance
+or successful publication from CI, a draft JSON, or these historical workflow results.
+
+## Historical fixture investigation — 2026-10-08
+
+The text below records the pre-merge investigation. Its statements about pending CI/deployment
+describe that earlier point in time; the current status above supersedes them.
 
 User explicitly authorized merge/deploy. PR179/180/181 merged preserving branches/history; main50c47049. Required main CI37763374322 failed3attempts before deploy: Legendary close timeout,Cardiac timeout,then subsequentmodal after Legendary close. No deployment performed.
 
