@@ -1,6 +1,6 @@
 # STATE — OFELIYA: STRAIN ZERO
 
-Обновлено: 2026-10-05. Только факты; решения — в `02_DECISIONS.md`.
+Обновлено: 2026-10-08. Только факты; решения — в `02_DECISIONS.md`.
 
 ## Control smoke precondition (06.10)
 
@@ -252,3 +252,6 @@ Six-frame hero/antibody atlas adds ~1.68MiB RGBA backing plus GPU and uses three
 
 ## Verified HiDPI QA continuation (08.10)
 PR180 four exact-head hosted checks PASS at231b38d. QA-only capped2x actual adapter passes local six renderer/DPR cells/fourviewports, paired201actor Text/camera/input/resize, controls and teardown. Production default1x; no phone/offscreen/context acceptance. Source review Codex fallback PASS; additional Kimi403quota blocked.
+
+## Authorized release (08.10)
+The user approved merge and production deployment. PR179/180/181 merged preserving history. Main=50c47049b61380921c02a62831a486598c8984bd; product tree identical to reviewedcf5f0cf. Exact-main CI37763374322 pending; main visual matrix37763538350 PASS. Production deploy pending exact-main CI/public rollback capture.

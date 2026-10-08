@@ -1,6 +1,6 @@
 # BACKLOG — OFELIYA: STRAIN ZERO
 
-Обновлено: 2026-10-05. Отмечайте сделанное галочкой; новые пункты добавляйте сюда, а не в чат.
+Обновлено: 2026-10-08. Отмечайте сделанное галочкой; новые пункты добавляйте сюда, а не в чат.
 
 ## Control-mode browser smoke (06.10)
 - [ ] Root review/publish `fix/control-smoke-preconditions-20261006` and rerun full main CI; focused browser smoke passed locally.
@@ -238,3 +238,9 @@ Check hosted PRCI; collect realMAX Android/iOS16-point and Telegram audio-unlock
 - [ ] Actual MAX Android/iOS and Telegram10–15min acceptance including sustained density1x/2x frame-time/thermal/audio/touch evidence.
 - [ ] Context/offscreen/mask/postFX tests before HiDPI rollout.
 - [ ] Authored compatible music stems and full charge/hit/death/RNA/icon scope; do not mark original visual goal DONE.
+
+## Approved production release (08.10)
+- [x] Merge PR179/180/181 with branch/history preservation.
+- [x] Fresh main visual matrix37763538350 PASS.
+- [ ] Main CI37763374322 success, exact50c47049 deploy, public SHA+index/sw/runtime parity.
+- [ ] Human MAX Android/iOS and Telegram touch/audio/resume/performance acceptance after full Mini App reopen.
