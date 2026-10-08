@@ -1,0 +1,11 @@
+## CI corrections and reproduced boundaries
+
+Initial codeCI37811968746 failed new biological smoke at180ms (idle not recovered). DocsheadCI37812345699 failed existing real-touch pause before button touch (Game already paused). Build/production-contract passed both; neither browser run is accepted as green.
+
+Fractional recovery mechanism reproduced with the same actualPhaserfixture on isolated0086db4 source: start76.41176470588235, both hero/enemy stillhit-*-2 at180ms. `(start+180)-start=179.99999999999997`. Correction compares absoluteScene deadlines, including60/90/120pose edges, preserving180ms duration/body/RNG/gameplay clocks. Adversarial pure regression and corrected4Phasercells PASS. Hosted failure did not log its own timestamp, so this proves the matching failure mechanism, not its specific fractional stamp.
+
+Pause isolation was installed after Game started, permitting real progression to open a choice first. Existing wave-disable/xpNext1million/queue isolation moved into a create wrapper before first actualupdate. RealGame.update/physics/runclock, touch handlers and every originalpause/time assertion/deadline remain; unblocked assertion added. Shared synthetic probe excludes random initial waves in both versions, then calls realonGemCollected(100) before latecleanup: original reportsuiBlocked/modal/awaiting true,queued3 and failsalreadyPaused; corrected reportsfalse/false/false,queued0,xpNext1million, and passesreal-touchpause. This demonstrates setup ownership, not exacthostedRNA source. An earlier unmodifiedstartup probe timed out because initialGame alreadypaused; not part of the paired proof.
+
+Independent Codex correction review PASS, no confirmed Critical/Important defect. Kimi direct correction review PASS, noP0/P1. Its speculativeP2 concerns undisclosed sampling context: fullfixture samplesfixed[0,60,90,120,179,180] and setsnow=sampleTime+elapsed; hitstamp=sampleTime. Thus finalnow and absolute deadline use identical addition, confirmed by the adversarialactualtest; no currentadditionalrounding issue substantiated. Rawresponse: COMBAT_FIX_KIMI_DIRECT_20261008.md. No new successfulOmniRoute review claimed.
+
+Final full hostedhead checks required after this correction. No timeout/alpha/damage/body/control assertion weakened, no productionpause implementation changed. Production716292b remains unchanged.

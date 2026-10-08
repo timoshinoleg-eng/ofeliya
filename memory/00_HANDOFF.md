@@ -8,3 +8,7 @@ Respect AGENTS.md: root alone owns browser tasks; no gameplay/RNG/physics/Joysti
 
 ## Published follow-up checkpoint
 PR183 https://github.com/timoshinoleg-eng/ofeliya/pull/183, code0e3269c. Initial CI37811968746 running; build alreadyPASS. DirectKimi fallback PASS with limitations afterOmniempty/504; read COMBAT_REVIEW_20261008.md for refuted/hypothetical findings. No merge/deploy. Read latesthead/checks before proceeding.
+
+
+## Combat CI correction checkpoint
+InitialcodeCI37811968746 idle180failure and docsCI37812345699 pausepreconditionfailure are notgreen. Actualfractionalstart76.41176470588235 reproducedold180tail/new4cellsPASS; useabsolutehitdeadlines. Pauseexistingisolationsetup movedbeforefirstrealupdate, realclock/physics/touchassertionspreserved; sharedRNA100oldblocked/failvsnewunblocked/PASS. Codex+KimidirectcorrectionreviewPASS; read COMBAT_CI_CORRECTION_20261008.md. FinalheadCIstillrequired; no productionmerge/deploy.

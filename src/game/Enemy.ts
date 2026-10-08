@@ -233,7 +233,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       const reduced = this.scene.registry.get('performanceTier') === 'reduced';
       const frame = biologicalFrameAt(time, this.biologicalPhase, reduced);
       const hitAtlas = biologicalHitAtlasKey('immune-antibody');
-      const hitFrame = biologicalHitFrame(this.scene.time.now - this.biologicalHitAt, this.biologicalHitDirection, reduced);
+      const hitFrame = biologicalHitFrame(this.scene.time.now, this.biologicalHitDirection, reduced, this.biologicalHitAt);
       const texture = hitFrame && this.scene.textures.exists(hitAtlas) ? hitAtlas : atlas;
       const pose = texture === hitAtlas ? hitFrame! : `bio-${frame}`;
       if (this.texture.key !== texture || this.frame.name !== pose) this.setTexture(texture, pose);

@@ -15,6 +15,12 @@ assert.equal(biologicalHitDirection(NaN,1),0);
 assert.equal(biologicalHitDirection(0,0),0);
 assert.deepEqual([0,59,60,119,120,179,180,-1].map(t=>biologicalHitFrame(t,2)),['hit-2-0','hit-2-0','hit-2-1','hit-2-1','hit-2-2','hit-2-2',null,null]);
 assert.deepEqual([0,89,90,179,180].map(t=>biologicalHitFrame(t,1,true)),['hit-1-0','hit-1-0','hit-1-2','hit-1-2',null]);
+const fractionalStart=76.41176470588235;
+assert.ok((fractionalStart+180)-fractionalStart<180,'adversarial subtraction rounds below the actual deadline');
+assert.equal(biologicalHitFrame(fractionalStart+180,1,false,fractionalStart),null);
+assert.equal(biologicalHitFrame(fractionalStart+60,1,false,fractionalStart),'hit-1-1');
+assert.equal(biologicalHitFrame(fractionalStart+90,1,true,fractionalStart),'hit-1-2');
+assert.equal(biologicalHitFrame(100,1,false,-Infinity),null);
 const started=performance.now();
 const entries=new Map(), frames=[], allocations=[];
 for(const [key,size] of [['virus-player',224],['immune-antibody',152]]) {

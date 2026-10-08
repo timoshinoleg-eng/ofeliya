@@ -10,9 +10,10 @@ export function biologicalHitDirection(x: number, y: number, rotation = 0): numb
   return ((Math.round((Math.atan2(y, x) - rotation) / (Math.PI / 2)) % 4) + 4) % 4;
 }
 
-export function biologicalHitFrame(elapsed: number, direction: number, reduced = false): string | null {
-  if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed >= BIOLOGICAL_HIT_MS) return null;
-  const pose = reduced ? (elapsed < 90 ? 0 : 2) : Math.min(2, Math.floor(elapsed / 60));
+export function biologicalHitFrame(now: number, direction: number, reduced = false, startedAt = 0): string | null {
+  // Compare absolute deadlines: (startedAt + 180) - startedAt can round below180.
+  if (!Number.isFinite(now) || !Number.isFinite(startedAt) || now < startedAt || now >= startedAt + BIOLOGICAL_HIT_MS) return null;
+  const pose = reduced ? (now < startedAt + 90 ? 0 : 2) : now < startedAt + 60 ? 0 : now < startedAt + 120 ? 1 : 2;
   return `hit-${direction}-${pose}`;
 }
 

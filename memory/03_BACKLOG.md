@@ -266,3 +266,7 @@ Density fixture now waits two actual Scene POST_UPDATE frames with cache>=target
 
 - [x] PR183 published with rawKimidirect/Codex review and OmniRoute failure limitation.
 - [ ] Read full finalhead hostedCI; phoneacceptance/merge/deploy remain gates.
+
+
+## Combat CI correction checkpoint
+InitialcodeCI37811968746 idle180failure and docsCI37812345699 pausepreconditionfailure are notgreen. Actualfractionalstart76.41176470588235 reproducedold180tail/new4cellsPASS; useabsolutehitdeadlines. Pauseexistingisolationsetup movedbeforefirstrealupdate, realclock/physics/touchassertionspreserved; sharedRNA100oldblocked/failvsnewunblocked/PASS. Codex+KimidirectcorrectionreviewPASS; read COMBAT_CI_CORRECTION_20261008.md. FinalheadCIstillrequired; no productionmerge/deploy.

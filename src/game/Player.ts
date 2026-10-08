@@ -73,7 +73,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       const reduced = this.scene.registry.get('performanceTier') === 'reduced' || this.scene.registry.get('runtimeQuality')?.level === 'low';
       const frame = biologicalFrameAt(time, 0, reduced);
       const hitAtlas = biologicalHitAtlasKey('virus-player');
-      const hitFrame = biologicalHitFrame(this.scene.time.now - this.biologicalHitAt, this.biologicalHitDirection, reduced);
+      const hitFrame = biologicalHitFrame(this.scene.time.now, this.biologicalHitDirection, reduced, this.biologicalHitAt);
       const texture = hitFrame && this.scene.textures.exists(hitAtlas) ? hitAtlas : atlas;
       const pose = texture === hitAtlas ? hitFrame! : `bio-${frame}`;
       if (this.texture.key !== texture || this.frame.name !== pose) this.setTexture(texture, pose);

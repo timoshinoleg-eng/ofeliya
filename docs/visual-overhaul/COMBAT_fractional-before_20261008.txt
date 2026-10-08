@@ -1,0 +1,8 @@
+page.evaluate: Error: idle not recovered: {"sampleTime":76.41176470588235,"phases":[{"elapsed":0,"player":"hit-0-0","enemy":"hit-1-0","playerAtlas":"bio-hit-virus-player","enemyAtlas":"bio-hit-immune-antibody"},{"elapsed":60,"player":"hit-0-1","enemy":"hit-1-1","playerAtlas":"bio-hit-virus-player","enemyAtlas":"bio-hit-immune-antibody"},{"elapsed":90,"player":"hit-0-1","enemy":"hit-1-1","playerAtlas":"bio-hit-virus-player","enemyAtlas":"bio-hit-immune-antibody"},{"elapsed":120,"player":"hit-0-2","enemy":"hit-1-2","playerAtlas":"bio-hit-virus-player","enemyAtlas":"bio-hit-immune-antibody"},{"elapsed":179,"player":"hit-0-2","enemy":"hit-1-2","playerAtlas":"bio-hit-virus-player","enemyAtlas":"bio-hit-immune-antibody"},{"elapsed":180,"player":"hit-0-2","enemy":"hit-1-2","playerAtlas":"bio-hit-virus-player","enemyAtlas":"bio-hit-immune-antibody"}]}
+    at fail (eval at evaluate (:311:30), <anonymous>:8:57)
+    at eval (eval at evaluate (:311:30), <anonymous>:26:4)
+    at UtilityScript.evaluate (<anonymous>:313:16)
+    at UtilityScript.<anonymous> (<anonymous>:1:44)
+    at C:\Users\Имярек\Documents\Codex\2026-10-08\ofeliya-ofeliya-codex-handoff-2026-10\work\fractional-impact-probe.cjs:27:27 {
+  log: []
+}

@@ -29,3 +29,6 @@ Native inspection confirms local pose differences at source scale. At ordinary1x
 ## Remaining release gates
 
 Production stays1x; QA2x needs MAXAndroid/iOS and Telegram gesture/input/camera/FPS/thermal acceptance before activation. Compatible authored score/stems, expanded RNA/projectile/icon kit, charge poses on real role deadlines, player/other-enemy death motion, and moving200-actor readability remain partial. Follow ART_AUDIO_BRIEF_20261008.md; no new composition/assets or paid resources are claimed. Final release readiness is conditional on phone/player acceptance and owner approval of this follow-up.
+
+
+[CI failures, actual paired reproductions and correction reviews](COMBAT_CI_CORRECTION_20261008.md). Initial hosted runs failed and are historical; use the latest PR head checks.

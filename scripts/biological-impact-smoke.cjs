@@ -49,7 +49,7 @@ fs.mkdirSync(OUT,{recursive:true});
    }
    fail(damage===1&&enemy.hp===hp-1,'damage contract');fail(gs.player.hurtUntil===iframe,'iframe changed');
    fail(phases[0].enemyAtlas==='bio-hit-immune-antibody'&&phases[0].playerAtlas==='bio-hit-virus-player','hit not selected');
-   fail(phases[5].enemyAtlas==='bio-cycle-immune-antibody'&&phases[5].playerAtlas==='bio-cycle-virus-player','idle not recovered');
+   fail(phases[5].enemyAtlas==='bio-cycle-immune-antibody'&&phases[5].playerAtlas==='bio-cycle-virus-player',`idle not recovered: ${JSON.stringify({sampleTime,phases})}`);
    for(const phase of phases.slice(0,5)) {
     const pose=tier==='reduced'?(phase.elapsed<90?0:2):Math.floor(phase.elapsed/60);
     fail(phase.player===`hit-${directions.player}-${pose}`&&phase.enemy===`hit-${directions.enemy}-${pose}`,`wrong tier pose at ${phase.elapsed}`);
