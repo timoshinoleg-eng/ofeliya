@@ -5,10 +5,12 @@ Prepared after real-device readability V3 at f450183b7b4cc0885b1a45876b8685c217c
 ## Integration priority
 
 1. Existing 02_bloodstream_to_heart.mp4 — first.
-2. Existing 01_start_intro.mp4 — only after Menu is interactive; never part of boot.
-3. Existing 04_defeat.mp4.
+2. Existing 01_start_intro_v3.mp4 — only after Menu is interactive; never part of boot.
+3. Existing 04_defeat_v3.mp4.
 4. New 06_victory_canonical.mp4.
 5. Boss intros are P2 and must not delay the first four integrations.
+
+Superseded encodes (`01_start_intro.mp4`, `01_start_intro_v2.mp4`, `04_defeat.mp4`, `04_defeat_v2.mp4`, `07_immune_prime_intro.mp4`, `08_cardiac_titan_intro.mp4`) were removed from the repository; only the canonical files listed in `public/video/video-manifest.json` ship.
 
 03_victory_candidate.mp4 remains non-canonical because of foreign blue/jellyfish-like organisms. 05_atmospheric_background_candidate.mp4 remains optional.
 
@@ -19,9 +21,9 @@ All four supplied sources are H.264, 720x1280, 24 fps, yuv420p, about 10 seconds
 | Production filename | Source | Use |
 | --- | --- | --- |
 | 06_victory_canonical.mp4 | gemini_generated_video_3d08aab9.mp4 | canonical campaign Victory |
-| 07_immune_prime_intro.mp4 | gemini_generated_video_9ed430bf.mp4 | IMMUNE PRIME intro, P2 |
-| 08_cardiac_titan_intro.mp4 | gemini_generated_video_a9a54fc9.mp4 | CARDIAC TITAN intro, P2 |
-| 09_cardiac_titan_intro_alt.mp4 | gemini_generated_video_de35cf48.mp4 | backup/reference only |
+| 07_immune_prime_intro_v2.mp4 | gemini_generated_video_9ed430bf.mp4 | IMMUNE PRIME intro, P2 |
+| 08_cardiac_titan_intro_v2.mp4 | gemini_generated_video_a9a54fc9.mp4 | CARDIAC TITAN intro, P2 |
+| 09_cardiac_titan_intro_alt.mp4 | gemini_generated_video_de35cf48.mp4 | backup/reference only — never shipped to the repo |
 
 ### Visual decisions
 
@@ -36,9 +38,10 @@ Destination: public/video/. All prepared files are 720x1280 vertical 9:16, H.264
 | File | Duration | Approx size | SHA-256 |
 | --- | ---: | ---: | --- |
 | 06_victory_canonical.mp4 | 7.58 s | 1.7 MB | 4a2ce19083e468e32a71f4a96e4b5f17fc873b043839483dcd3c130f9bace57d |
-| 07_immune_prime_intro.mp4 | 8.50 s | 1.3 MB | ed19ca326c3e387463aa15f5c8edcb275fdd8d56c23eb0d9ddd3ac3ed6e537d8 |
-| 08_cardiac_titan_intro.mp4 | 8.50 s | 1.3 MB | 3098aa548b22a184f40bdb0dc7f430fd0d067c8921a580bf1076649f25ac1011 |
-| 09_cardiac_titan_intro_alt.mp4 | 8.50 s | 1.5 MB | 420dd55a8b41bdb791e38fb0549ba1878ac9c7cad8c8087a1dffa6b263a94755 |
+| 07_immune_prime_intro_v2.mp4 | 3.92 s | 0.96 MB | 589735115c6f0cef166674599ffe2004c4ad0817c8cfae938daa5c2a3be5b3a8 |
+| 08_cardiac_titan_intro_v2.mp4 | 3.92 s | 0.92 MB | 786f908ca7fa1e3fa255b81ad88ab0535eb0e635ab0500c3f3693b897b214143 |
+
+(The earlier 8.50 s boss-intro encodes listed here historically were superseded by the shorter v2 cuts above; 09 was never shipped.)
 
 ## Asset handoff state
 
