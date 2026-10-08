@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { COLORS, PLAYER } from './config';
 import { artScale, artSourceFactor } from './ArtMetrics';
+import { biologicalAtlasKey, biologicalFrameAt } from './BiologicalAnimation';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   hurtUntil = 0;
@@ -9,6 +10,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private readonly spikeCrown: Phaser.GameObjects.Graphics;
   private readonly capsidShell: Phaser.GameObjects.Graphics;
   private readonly lysisCore: Phaser.GameObjects.Graphics;
+  private biologicalFrame = -1;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'virus-player');
@@ -63,6 +65,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   preUpdate(time: number, delta: number): void {
     super.preUpdate(time, delta);
     if (!this.active) return;
+    const atlas = biologicalAtlasKey('virus-player');
+    if (this.scene.textures.exists(atlas)) {
+      const reduced = this.scene.registry.get('performanceTier') === 'reduced' || this.scene.registry.get('runtimeQuality')?.level === 'low';
+      const frame = biologicalFrameAt(time, 0, reduced);
+      if (frame !== this.biologicalFrame || this.texture.key !== atlas) {
+        this.setTexture(atlas, `bio-${frame}`);
+        this.biologicalFrame = frame;
+      }
+    }
 
     // Slow virion drift + membrane breathing. The 0.9 visual scale keeps the richer 56px texture
     // close to the old footprint while preserving readable spikes on small phones.

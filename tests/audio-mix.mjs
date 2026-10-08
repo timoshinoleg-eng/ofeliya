@@ -1,10 +1,11 @@
+import { resolve, dirname } from 'node:path';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 const ts = createRequire(import.meta.url)('typescript');
 // Only browser I/O, saved mute and Vite metadata are replaced. Production Sfx/math execute.
 function load(path, globals = {}, cache = new Map()) {
-  path = new URL(path, `file://${process.cwd()}/`).pathname;
+  path = resolve(path);
   if (cache.has(path)) return cache.get(path);
   const module = { exports: {} };
   const source = readFileSync(path, 'utf8').replace('import.meta.env.BASE_URL', "'./'");
@@ -14,7 +15,7 @@ function load(path, globals = {}, cache = new Map()) {
   const require = name => name === './SaveSystem'
     ? { SaveSystem: { get: () => ({ muted: false }), update() {} } }
     : name === '../release' ? { RELEASE_SHA: 'audio-test' }
-    : load(new URL(`${name}.ts`, `file://${path}`).pathname, globals, cache);
+    : load(resolve(dirname(path), `${name}.ts`), globals, cache);
   new Function('require', 'module', 'exports', ...Object.keys(globals), code)
     (require, module, module.exports, ...Object.values(globals));
   cache.set(path, module.exports); return module.exports;

@@ -22,7 +22,7 @@ export const HUD = {
     levelX: 16, levelY: 30,
     killsY: 9, killsPadX: 16,
     hpY: 54, hpH: 12, hpTextY: 56,
-    bossLabelY: 72, bossBarY: 82, bossBarH: 11,
+    bossLabelY: 70, bossBarY: 87, bossBarH: 6,
     comboX: 16, comboY: 54,
     muteY: 54, mutePadX: 16,
   },

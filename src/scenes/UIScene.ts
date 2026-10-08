@@ -399,10 +399,13 @@ export class UIScene extends Phaser.Scene {
       this.comboText.setVisible(showCombo);
       if (showCombo && run.combo !== this.lastCombo) {
         this.lastCombo = run.combo;
-        this.comboText.setText(`×${run.combo}`);
+        this.comboText.setText(`×${compactHudNumber(run.combo)}`);
         this.tweens.killTweensOf(this.comboText);
-        this.comboText.setScale(1.4);
-        this.tweens.add({ targets: this.comboText, scale: 1, duration: 200, ease: 'Quad.Out' });
+        // The pulse must fit left of HP even at its peak on a 320px viewport.
+        const available = Math.max(1, m.hpX - HUD.row.comboX - 8);
+        const restingScale = Math.min(1, available / Math.max(1, this.comboText.width));
+        this.comboText.setScale(Math.min(1.4, available / Math.max(1, this.comboText.width)));
+        this.tweens.add({ targets: this.comboText, scale: restingScale, duration: 200, ease: 'Quad.Out' });
       } else if (!showCombo) {
         this.lastCombo = 0;
       }
@@ -1007,6 +1010,7 @@ export class UIScene extends Phaser.Scene {
     this.pauseHit.setPosition(W - HUD.pauseVisual.x, HUD.pauseVisual.y);
     this.pauseText.setPosition(W - HUD.pauseVisual.x, HUD.pauseVisual.y);
     this.comboText.setPosition(HUD.row.comboX, HUD.row.comboY).setFontSize(HUD.type.combo);
+    this.lastCombo = 0; // Refit an unchanged combo after orientation/viewport changes.
     this.contextHintContainer?.setPosition(W / 2, 116);
     this.contextHintPanel?.setSize(Math.min(W - 28, 360), 34);
     this.contextHintText

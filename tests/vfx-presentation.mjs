@@ -1,3 +1,4 @@
+import { resolve, dirname } from 'node:path';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -9,13 +10,13 @@ const cache = new Map();
 // budgeting, pooling, texture recipe and contact transforms execute their real TS code.
 const phaser = { BlendModes: { ADD: 1 }, Math: { Clamp: (v, a, b) => Math.max(a, Math.min(b, v)) } };
 function load(path) {
-  path = new URL(path, `file://${process.cwd()}/`).pathname;
+  path = resolve(path);
   if (cache.has(path)) return cache.get(path);
   const module = { exports: {} }; cache.set(path, module.exports);
   const code = ts.transpileModule(readFileSync(path, 'utf8'), { compilerOptions: {
     target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, esModuleInterop: true,
   } }).outputText;
-  const localRequire = name => name === 'phaser' ? phaser : load(new URL(`${name}.ts`, new URL(path, `file://${process.cwd()}/`)).pathname);
+  const localRequire = name => name === 'phaser' ? phaser : load(resolve(dirname(path), `${name}.ts`));
   new Function('require', 'module', 'exports', code)(localRequire, module, module.exports);
   cache.set(path, module.exports); return module.exports;
 }

@@ -1,3 +1,4 @@
+import { resolve, dirname } from 'node:path';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -12,13 +13,13 @@ const phaser = { BlendModes: { ADD: 1 }, Math: {
 // Phaser's DOM-dependent rendering boundary is recorded; the real system, stage,
 // performance profile and pure math execute unchanged. Raster quality belongs to browser QA.
 function load(path) {
-  path = new URL(path, `file://${process.cwd()}/`).pathname;
+  path = resolve(path);
   if (cache.has(path)) return cache.get(path);
   const module = { exports: {} };
   const code = ts.transpileModule(readFileSync(path, 'utf8'), { compilerOptions: {
     target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, esModuleInterop: true,
   } }).outputText;
-  const localRequire = name => name === 'phaser' ? phaser : load(new URL(`${name}.ts`, `file://${path}`).pathname);
+  const localRequire = name => name === 'phaser' ? phaser : load(resolve(dirname(path), `${name}.ts`));
   new Function('require', 'module', 'exports', code)(localRequire, module, module.exports);
   cache.set(path, module.exports); return module.exports;
 }
