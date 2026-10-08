@@ -25,8 +25,12 @@ for(const renderer of ['webgl','canvas']){
  gs.tweens.pauseAll();g.loop.stop();gs.registry.set('run',gs.snapshot());ui.update(1000,0);return {enemies:gs.enemies.getChildren().filter(e=>e.active).length,uiBlocked:ui.uiBlocked,boss:boss.hp,bossBarVisible:ui.bossBack.visible,bossFillCommands:ui.bossFill.commandBuffer.length};});
  await render();const game1=await geometry();await page.locator('#game canvas').screenshot({path:path.join(dir,renderer+'-game-1x.png')});
  await page.evaluate(async()=>{const m=await import('/src/systems/RenderDensityExperiment.ts');window.__densityDraft=m.installRenderDensityExperiment(window.__game,2);});await render();const game2=await geometry();await page.locator('#game canvas').screenshot({path:path.join(dir,renderer+'-game-2x.png')});
- await page.evaluate(()=>{const g=window.__game;g.scene.getScene('UI').add.rectangle(100,200,30,30,0xff00ff).setInteractive().setDepth(1000).on('pointerdown',p=>window.__densityHit={x:p.x,y:p.y});g.loop.start(g.step.bind(g));});
- await page.mouse.click(100,200);await page.waitForTimeout(100);
+ await page.evaluate(()=>{const g=window.__game;g.scene.getScene('UI').add.rectangle(100,200,30,30,0xff00ff).setName('density-input-probe').setInteractive().setDepth(1000).on('pointerdown',p=>window.__densityHit={x:p.x,y:p.y});g.loop.start(g.step.bind(g));});
+ // setInteractive queues insertion; await the real scene preUpdate before issuing DOM input.
+ await page.waitForFunction(()=>window.__game.scene.getScene('UI').input._list.some(o=>o.name==='density-input-probe'&&o.input.enabled));
+ // Keep the physical press down until Phaser reports the hit, even under slow CI Canvas frames.
+ await page.mouse.move(100,200);await page.mouse.down();
+ await page.waitForFunction(()=>Boolean(window.__densityHit));await page.mouse.up();
  const rafTimes=await page.evaluate(()=>new Promise(resolve=>{const gaps=[];let last=performance.now();const step=now=>{gaps.push(now-last);last=now;if(gaps.length===90)resolve(gaps);else requestAnimationFrame(step)};requestAnimationFrame(step)}));
  const input=await page.evaluate(()=>{const g=window.__game;g.loop.stop();return{css:[g.scale.transformX(100),g.scale.transformY(200)],hit:window.__densityHit};});
  if(!input.hit||input.hit.x!==100||input.hit.y!==200)throw Error(renderer+' real input target failed '+JSON.stringify(input));
