@@ -65,6 +65,17 @@ function browserDriver() {
     for (const enemy of gs.enemies.getChildren()) {
       if (enemy.active) enemy.deactivateForStageReset();
     }
+    // Reuse the production stage-boundary pool reset. A drop from a kill before setup can
+    // still attract to the player later and reopen mutation UI after queuedLevels was cleared.
+    for (const bullet of gs.bullets.getChildren()) {
+      if (bullet.active) bullet.deactivateForStageReset();
+    }
+    for (const gem of gs.gems.getChildren()) {
+      if (gem.active) gem.deactivateForStageReset();
+    }
+    gs.hostCells.resetStage();
+    // Cell infection/RNA rewards are covered separately and must not create a new choice here.
+    gs.hostCells.update = () => {};
 
     gs.stageDirector.restore({
       stageId: 'heart',
@@ -125,10 +136,12 @@ function browserDriver() {
       hp: gs.runState.stage.hp,
       unblocked: !ui.modalOpen && !ui.uiBlocked && game.scene.isActive('Game'),
       heartbeatWindowMs: gs.heartbeatPulse.debugState.nextImpactAtMs - gs.runState.stage.timeMs,
+      activeGems: gs.gems.countActive(true),
+      activeBullets: gs.bullets.countActive(true),
     };
   });
 
-  if (setup.stageId !== 'heart' || setup.behavior !== 'heartbeat-pulse' || setup.phase !== 1 || !setup.unblocked || setup.heartbeatWindowMs !== 60_000) {
+  if (setup.stageId !== 'heart' || setup.behavior !== 'heartbeat-pulse' || setup.phase !== 1 || !setup.unblocked || setup.heartbeatWindowMs !== 60_000 || setup.activeGems !== 0 || setup.activeBullets !== 0) {
     throw new Error('Heart phase-one setup failed: ' + JSON.stringify(setup));
   }
 
