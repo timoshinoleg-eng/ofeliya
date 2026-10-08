@@ -2,7 +2,7 @@ import {
   ADAPTIVE_AUDIO_TUNING,
   AdaptiveMoodTracker,
   bioIntensityForMood,
-  pickMusicBedIndex,
+  pickMusicBedIndexForStage,
   tensionForMood,
   type AdaptiveMood,
   type AdaptiveTuning,
@@ -19,10 +19,12 @@ import {
  *  - The director itself has no Phaser/WebAudio dependency, so its state model is unit-testable
  *    in plain Node.
  *
- * Music rule for V1: the run keeps ONE deterministic bed chosen from the run seed. OFELIYA's seven
- * CC0 loops have no proven musical compatibility, so crossfading between them mid-run is explicitly
- * NOT done. Tension is expressed with the existing bed (lowpass openness, gain ducking) plus
- * procedural layers/cues, which is the documented, evidence-free-of-risk path.
+ * Music rule: each act keeps ONE deterministic bed chosen from an act-specific pool
+ * (`MUSIC_BED_POOLS` in `adaptiveAudioMath`): a Bloodstream pick for act I and a darker
+ * Heart pick for act II, both derived from the run seed. OFELIYA's CC0 loops have no proven
+ * musical compatibility for mid-run crossfading, so tension stays on the same bed (lowpass
+ * openness, gain ducking) plus procedural layers/cues; the act switch at the organ
+ * transition is the only sanctioned bed change, and it rides the existing clean-restart path.
  */
 
 export type AdaptiveCueKind =
@@ -109,10 +111,10 @@ export class AdaptiveAudioDirector {
         : options.visibility;
   }
 
-  /** Begin a run: deterministic bed for this run seed, nothing else changes. */
+  /** Begin a run: deterministic act-I bed for this run seed, nothing else changes. */
   start(runSeed: string, stageOrder: number, heartbeatMs: number): void {
     this.runSeed = typeof runSeed === 'string' && runSeed.length > 0 ? runSeed : 'ofeliya';
-    this.bedIndex = pickMusicBedIndex(this.runSeed, this.bedding);
+    this.bedIndex = pickMusicBedIndexForStage(this.runSeed, stageOrder, this.bedding);
     this.tracker.reset();
     this.running = true;
     this.suspended = false;
@@ -124,12 +126,22 @@ export class AdaptiveAudioDirector {
     this.bindVisibility();
   }
 
-  /** Stage-started (including the first stage of a run). Releases any transition hold. */
+  /**
+   * Stage-started (including the first stage of a run). Releases any transition hold.
+   * An act change (Bloodstream -> Heart) is the one sanctioned bed switch: the new bed is
+   * deterministically derived from the same run seed, and the transition duck/stinger
+   * has already fired from `onStageTransition`.
+   */
   setStage(stageOrder: number, heartbeatMs: number): void {
     this.stageOrder = stageOrder;
     this.heartbeatMs = heartbeatMs;
     this.lastInput = { ...this.lastInput, stageOrder };
     this.tracker.releaseTransition();
+    const nextBed = pickMusicBedIndexForStage(this.runSeed, stageOrder, this.bedding);
+    if (nextBed !== this.bedIndex) {
+      this.bedIndex = nextBed;
+      this.sink.bedStart(nextBed);
+    }
     this.sink.setBioCadence(heartbeatMs);
     this.sink.cue('stage-start');
   }

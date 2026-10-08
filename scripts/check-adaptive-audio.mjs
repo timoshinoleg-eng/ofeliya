@@ -59,9 +59,11 @@ try {
     enemyThreatWeight,
     expApproach,
     moodRank,
+    MUSIC_BED_POOLS,
     nextAdaptiveMood,
     normalizeNearbyThreat,
     pickMusicBedIndex,
+    pickMusicBedIndexForStage,
     smoothDanger,
     tensionForMood,
   } = require(join(temp, 'systems/adaptiveAudioMath.js'));
@@ -335,7 +337,7 @@ try {
     assert(visibility.listeners.size === 1, 'visibility listener must be attached once');
     assert(sink.calls.bedStart.length === 1, 'run start must start exactly one bed');
     assert(
-      sink.calls.bedStart[0] === pickMusicBedIndex(seed, bedCount),
+      sink.calls.bedStart[0] === pickMusicBedIndexForStage(seed, 1, bedCount),
       'director bed must match deterministic selection'
     );
 
@@ -407,13 +409,36 @@ try {
     'a restart cycle selected an out-of-range bed'
   );
   assert(
-    cycleSeeds.every((seed, i) => cycleBeds[i] === pickMusicBedIndex(seed, bedCount)),
+    cycleSeeds.every((seed, i) => cycleBeds[i] === pickMusicBedIndexForStage(seed, 1, bedCount)),
     'repeated runs must be reproducible from their seed'
   );
 
   // Same seed repeated (restart spam) must not drift to another bed.
   const repeatBeds = [0, 1, 2, 3, 4].map(() => runCycle('same-seed').bed);
   assert(new Set(repeatBeds).size === 1, 'restarting the same run must never swap the bed');
+
+  // Act switch: same-stage setStage keeps the bed; an act change restarts exactly one
+  // Heart-pool bed, never reusing the Bloodstream pool.
+  {
+    const sink = makeSink();
+    const director = new AdaptiveAudioDirector(sink, { bedCount, visibility: null });
+    director.start('act-switch', 1, 0);
+    const actOneBed = sink.calls.bedStart[0];
+    assert(MUSIC_BED_POOLS.bloodstream.includes(actOneBed), 'act I must use a Bloodstream bed');
+    director.setStage(1, 0);
+    assert(sink.calls.bedStart.length === 1, 'same-act setStage must not restart the bed');
+    director.setStage(2, 850);
+    assert(sink.calls.bedStart.length === 2, 'act switch must restart the bed exactly once');
+    const actTwoBed = sink.calls.bedStart[1];
+    assert(MUSIC_BED_POOLS.heart.includes(actTwoBed), 'act II must use a Heart bed');
+    assert(!MUSIC_BED_POOLS.bloodstream.includes(actTwoBed), 'act pools must stay disjoint');
+    assert(actTwoBed !== actOneBed, 'organ transition must never reuse the act I bed');
+    assert(
+      actTwoBed === pickMusicBedIndexForStage('act-switch', 2, bedCount),
+      'act II bed must be deterministic from the same run seed'
+    );
+    director.stop();
+  }
 
   // Visibility handling: suspend on hidden, resume on visible, and nothing else.
   {

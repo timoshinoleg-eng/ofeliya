@@ -286,6 +286,45 @@ export function pickMusicBedIndex(seed: string, trackCount: number): number {
   return (h >>> 0) % Math.floor(trackCount);
 }
 
+/**
+ * Act-specific music bed pools — indices into `MUSIC_TRACKS` in `src/systems/Sfx.ts`.
+ *
+ * Curation is data-driven (spectral analysis of the mastered beds, recorded in
+ * docs/AUDIO_MASTERING.md): Bloodstream beds are brighter (centroid ≈3.1–6.3 kHz) and
+ * Heart beds darker/heavier (≈2.1–3.0 kHz), so the organ transition is heard, not only
+ * seen. Pools must stay disjoint so act II never reuses the act I bed of the same run.
+ */
+export const MUSIC_BED_POOLS = {
+  bloodstream: [0, 1, 3, 6],
+  heart: [2, 4, 5],
+} as const;
+
+export function musicBedPoolForStage(stageOrder: number): readonly number[] {
+  return stageOrder >= 2 ? MUSIC_BED_POOLS.heart : MUSIC_BED_POOLS.bloodstream;
+}
+
+/**
+ * Deterministic per-act bed: FNV-1a of `seed + act`, mapped into the act pool.
+ * `trackCount` guards pool indices when fewer licensed beds are wired than curated.
+ */
+export function pickMusicBedIndexForStage(
+  seed: string,
+  stageOrder: number,
+  trackCount: number
+): number {
+  if (!Number.isFinite(trackCount) || trackCount <= 0) return 0;
+  const act = stageOrder >= 2 ? 2 : 1;
+  const pool = musicBedPoolForStage(stageOrder).filter((i) => i < Math.floor(trackCount));
+  if (!pool.length) return pickMusicBedIndex(seed, trackCount);
+  const source = `${seed}:ofeliya-adaptive-audio-bed:act${act}`;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < source.length; i++) {
+    h ^= source.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return pool[(h >>> 0) % pool.length];
+}
+
 const MOOD_TENSION: Record<AdaptiveMood, number> = {
   calm: 0.12,
   pressure: 0.38,
