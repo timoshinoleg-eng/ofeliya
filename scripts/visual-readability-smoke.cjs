@@ -43,16 +43,17 @@ function browserDriver() {
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (error) => errors.push(String(error)));
-  await page.goto('http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
+  await page.goto(process.env.OFELIYA_BASE_URL || 'http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
   await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
   await page.waitForFunction(() =>
-    window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI')
+    (window.__game.scene.isActive('Game') || window.__game.scene.isPaused('Game')) && window.__game.scene.isActive('UI')
   );
 
   const contract = await page.evaluate(() => {
     const gs = window.__game.scene.getScene('Game');
     const ui = window.__game.scene.getScene('UI');
+    if (window.__game.scene.isPaused('Game')) window.__game.scene.resume('Game');
     gs.awaitingChoice = false;
     gs.pendingChoices = [];
     gs.queuedLevels = 0;
@@ -118,6 +119,7 @@ function browserDriver() {
     window.__visualReadabilitySpawnTo = spawnTo;
 
     return {
+      unblocked: window.__game.scene.isActive('Game') && !ui.modalOpen && !ui.uiBlocked,
       activeEnemies: gs.enemies.getChildren().filter((e) => e.active).length,
       activeGems: gs.gems.getChildren().filter((g) => g.active).length,
       activeHostCells: activeCells.length,
@@ -141,6 +143,7 @@ function browserDriver() {
   });
 
   if (
+    !contract.unblocked ||
     contract.activeEnemies < 100 ||
     contract.activeGems < 16 ||
     contract.activeHostCells < 2 ||
@@ -169,12 +172,21 @@ function browserDriver() {
     const actual = await page.evaluate((target) => {
       const gs = window.__game.scene.getScene('Game');
       window.__visualReadabilitySpawnTo(target);
+      // Enemy.preUpdate consumes the cache before Game.update refreshes it. Wait for two real
+      // completed scene frames with the new cache instead of assuming 150 ms contains them.
+      window.__visualDensitySettledFrames = 0;
+      const settled = () => {
+        if (gs.getCombatVisualDensity() >= target) window.__visualDensitySettledFrames++;
+        else window.__visualDensitySettledFrames = 0;
+        if (window.__visualDensitySettledFrames >= 2) gs.events.off('postupdate', settled);
+      };
+      gs.events.on('postupdate', settled);
       return gs.enemies.getChildren().filter((e) => e.active).length;
     }, density);
     if (actual < density) {
       throw new Error(`Visual readability density ${density} could not be reached: ${actual}`);
     }
-    await page.waitForTimeout(150);
+    await page.waitForFunction(() => window.__visualDensitySettledFrames >= 2, null, { timeout: 1_500 });
     const densityContract = await page.evaluate((target) => {
       const gs = window.__game.scene.getScene('Game');
       const enemies = gs.enemies.getChildren().filter((enemy) => enemy.active);
