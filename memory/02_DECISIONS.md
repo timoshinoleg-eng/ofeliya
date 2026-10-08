@@ -3,6 +3,10 @@
 Формат: `[дата] Решение — причина. Статус.`
 Перенесённые решения помечены источником (документы репо). Новые решения добавляются сюда после каждой сессии.
 
+- [2026-10-09] Apply only verified Kimi follow-up: update the vulnerable transitive source-map-js lock entry, reconcile release handoff and document capacity/acceptance work. Do not add an already-existing score cap or change rollback status handling.
+- [2026-10-09] Keep mobile evidence validation fail-closed and externally stored. Android-only evidence cannot close iOS or Telegram gates, and a prepared checklist/JSON cannot stand in for a device run.
+- [2026-10-09] No automatic score rotation in this patch. Archive/retention must preserve submission-id replay semantics, Daily score references and period bests; get actual occupancy/arrival rates and approve the migration contract first. No new product mechanics before analytics delivery and 5-8 newcomer sessions.
+
 - [2026-10-06] The control-mode smoke freezes only the Game instance update before startup and asserts UI unblocked/modal-free state before synthetic pointer routing — the original failure was a valid `uiBlocked` rejection during automatic mutation choices, not a TwinStick production defect. Production unchanged; reviewer approved; root owns CI follow-up.
 
 - [2026-10-05] The deploy script loads its compatibility gate from fetched `origin/main` rather than a sibling path — the bastion executes an extracted standalone script from `/tmp`; keep helper policy centralized, fail closed on missing/empty policy, and retain all SHA/floor guards. Review/PR and fresh main CI pending.

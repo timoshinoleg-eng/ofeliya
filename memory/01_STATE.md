@@ -1,6 +1,20 @@
 # STATE — OFELIYA: STRAIN ZERO
 
-Обновлено: 2026-10-05. Только факты; решения — в `02_DECISIONS.md`.
+Обновлено: 2026-10-09. Только факты; решения — в `02_DECISIONS.md`.
+
+## Current review follow-up (09.10)
+
+- Base/main: `716292b78c5b2e53485170bcb8a4cc2780f9df04`; branch `fix/review-followup-20261009`.
+- GitHub API readback: CI `37775488149` passed all three jobs; deploy `37777242773` passed rollout and public parity, with rollback skipped.
+- Direct current public release request failed to connect from this environment. Current production SHA/parity is unverified; this is not evidence of a general outage.
+- Lockfile-only `source-map-js` update to 1.2.2. On Node 22.23.0, clean `npm ci` and `npm audit --package-lock-only --ignore-scripts` reported zero vulnerabilities.
+- Local validation passed: `npm run build` (local QA stamp uses base SHA; this is not a deployed artifact), `test:bundle-shape`, server 75 checks, score-outbox 24 tests, analytics, Daily V2 and project isolation. Branch CI remains separate.
+- Independent subagent source/diff review found no blocking findings. Reviewer also ran the real mobile evidence validator against the pending preparation JSON: expected FAIL, not device acceptance. Full tests/workflows were not independently rerun by that reviewer.
+- Source already has scores cap 20,000, verified reserve 2,000, capacity/503 in `/health`, and coalesced store persistence (default 250ms). A full store refuses new scores; no automatic score eviction exists.
+- Open PRs read back: #177 comprehension report, #183 combat feedback, #178 plugin pins, #169 typography, #163 Telegram egress. No parallel branch was modified.
+- User reports Samsung S20+ and latest MAX. Numeric Android/MAX versions, real acceptance evidence, iOS/TG acceptance, live capacity and production analytics remain unverified.
+
+The older sections below are historical snapshots; current facts above supersede their pending-release statements.
 
 ## Control smoke precondition (06.10)
 
