@@ -1336,6 +1336,7 @@ export class UIScene extends Phaser.Scene {
         fontStyle: 'bold',
         color: legendaryReward ? '#ffe066' : '#ff78c8',
         align: 'center',
+        wordWrap: { width: W - 24 },
       })
       .setOrigin(0.5)
       .setResolution(2)
@@ -1350,10 +1351,13 @@ export class UIScene extends Phaser.Scene {
     c.add(titleT);
     titleT.setScale(0.7);
     this.tweens.add({ targets: titleT, scale: 1, duration: 260, ease: 'Back.Out' });
+    // Subtitle hangs from the measured title bottom (title may wrap on narrow
+    // screens), so the header band keeps its separation however the copy wraps.
+    const subtitleGap = compact ? 12 : 14;
     const subtitle = this.add
       .text(
         W / 2,
-        titleY + (compact ? 39 : 46),
+        titleY + titleT.height / titleT.scaleY / 2 + subtitleGap,
         legendaryReward
           ? 'ИММУННЫЙ ПРАЙМ подавлен · выбери мутацию для СЕРДЦА'
           : 'МУТАЦИЯ ' + gs.runState.stage.level + ' · выбери карту',
@@ -1367,14 +1371,16 @@ export class UIScene extends Phaser.Scene {
           lineSpacing: 2,
         }
       )
-      .setOrigin(0.5)
+      .setOrigin(0.5, 0)
       .setResolution(2);
     c.add(subtitle);
 
     const cards = gs.pendingChoices;
     const cw = Math.min(W - 16, 374);
     const gap = compact ? 9 : 11;
-    const blockCenter = compact ? H * 0.59 : H * 0.57;
+    // Cards never collide with the header, even when the subtitle wraps to two lines.
+    const minTop = subtitle.getBounds().bottom + gap;
+    let blockCenter = compact ? H * 0.59 : H * 0.57;
     const expandedCardHeight = 136;
     const expandedTotalH = cards.length * expandedCardHeight + (cards.length - 1) * gap;
     const expandedTop = blockCenter - expandedTotalH / 2;
@@ -1382,10 +1388,11 @@ export class UIScene extends Phaser.Scene {
     const expandedStackFits =
       compact &&
       legendaryReward &&
-      expandedTop >= subtitle.getBounds().bottom + gap &&
+      expandedTop >= minTop &&
       expandedBottom <= H - gap;
     const ch = compact ? (expandedStackFits ? expandedCardHeight : 124) : 148;
     const totalH = cards.length * ch + (cards.length - 1) * gap;
+    if (blockCenter - totalH / 2 < minTop) blockCenter = minTop + totalH / 2;
     let y = blockCenter - totalH / 2 + ch / 2;
 
     cards.forEach((def: UpgradeDef, cardIndex: number) => {

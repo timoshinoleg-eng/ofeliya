@@ -11,6 +11,7 @@ const TAG = process.argv[3] || 'capture';
 const VIEWPORTS = [
   { name: '390x740', width: 390, height: 740 },
   { name: '360x640', width: 360, height: 640 },
+  { name: '320x568', width: 320, height: 568 },
 ];
 const DENSITIES = [100, 150, 200];
 
@@ -72,6 +73,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       waitUntil: 'domcontentloaded',
     });
     await page.waitForFunction(() => window.__game?.scene.isActive('Menu'), null, { timeout: 15_000 });
+    await page.screenshot({ path: path.join(OUT, `${TAG}-${vp.name}-menu.png`) });
     await page.evaluate(() => {
       const scene = window.__game.scene.getScene('Game');
       scene.events.once('create', () => scene.scene.pause('Game'));
@@ -103,6 +105,11 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         gs.awaitingChoice = false;
         gs.dismissIntroHint(true);
         if (ui.modalOpen) ui.hideModal();
+        ui.modalOpen = false;
+        ui.uiBlocked = false;
+        // A natural level-up modal pauses Game; QA scenarios need its update loop.
+        if (window.__game.scene.isPaused('Game')) window.__game.scene.resume('Game');
+        gs.physics.world.pause();
         ui.onboardingContainer?.setVisible(false);
         ui.contextHintContainer?.setVisible(false);
         for (const e of gs.enemies.getChildren()) if (e.active) e.deactivateForStageReset();
@@ -115,6 +122,28 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       });
 
     const shot = (name) => page.screenshot({ path: path.join(OUT, `${TAG}-${vp.name}-${name}.png`) });
+
+    // --- 0b: legendary reward modal (long Heart-transition copy) ---
+    await prepRun();
+    await page.evaluate(() => {
+      const gs = window.__game.scene.getScene('Game');
+      gs.runState.stage.level = 6;
+      gs.legendaryRewardPending = true;
+      gs.queuedLevels = 1;
+    });
+    await sleep(600); // level-up modal opens on the next Game update tick
+    await shot('levelup-legendary');
+    await page.evaluate(() => {
+      const gs = window.__game.scene.getScene('Game');
+      const ui = window.__game.scene.getScene('UI');
+      ui.hideModal();
+      ui.modalOpen = false;
+      ui.uiBlocked = false;
+      gs.legendaryRewardPending = false;
+      gs.awaitingChoice = false;
+      gs.queuedLevels = 0;
+      window.__game.scene.resume('Game');
+    });
 
     // --- 1..3: dense bloodstream combat at 100/150/200 ---
     for (const n of DENSITIES) {
@@ -201,6 +230,37 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     await sleep(650); // reveal tween mid-flight (container alpha ramps to 1)
     await shot('boss-reveal');
     console.log(`${vp.name} boss-reveal captured`);
+
+    // --- 6: real defeat -> result screen (compact-density reference) ---
+    await page.evaluate(() => {
+      const gs = window.__game.scene.getScene('Game');
+      const ui = window.__game.scene.getScene('UI');
+      ui.hideModal();
+      ui.modalOpen = false;
+      ui.uiBlocked = false;
+      for (const e of gs.enemies.getChildren()) if (e.active) e.deactivateForStageReset();
+      gs.runState.stage.hp = 1;
+      gs.runState.stage.maxHp = 100;
+      gs.physics.world.resume();
+      const px = gs.player.x;
+      const py = gs.player.y;
+      for (let i = 0; i < 4; i++) {
+        const e = gs.enemies.get(px, py);
+        if (!e) continue;
+        e.activate(gs, 'brute', px, py, { elite: false, hpScale: 1, dmgScale: 60, speedScale: 1 });
+      }
+    });
+    await page.waitForFunction(
+      () => {
+        const ui = window.__game.scene.getScene('UI');
+        return ui.overShown === true;
+      },
+      null,
+      { timeout: 9000 }
+    );
+    await sleep(700);
+    await shot('result');
+    console.log(`${vp.name} result captured`);
 
     if (errors.length) throw new Error('page errors: ' + errors.join(' | '));
     await ctx.close();
