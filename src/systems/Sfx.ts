@@ -72,10 +72,12 @@ class SfxImpl {
   private bedTrim: GainNode | null = null;
   /** Lowpass that the adaptive director opens as danger rises. */
   private musicFilter: BiquadFilterNode | null = null;
-  /** Procedural stingers/heartbeat share the filter; the retained bio pulse feeds master. */
+  /** Procedural stingers/heartbeat share the filter; the retained bio pulse feeds musicUserGain. */
   private layerBus: GainNode | null = null;
   private lastAt: Partial<Record<SfxName, number>> = {};
   private pickupCursor = 0;
+  /** Family-level pickup throttle: the round-robin cycles names, so per-name gaps can't rate-limit it. */
+  private lastPickupFamilyAt = -1e9;
   private buffers: Partial<Record<SfxName, AudioBuffer>> = {};
   private bufferTrims: Partial<Record<SfxName, number>> = {};
   private loading: Partial<Record<SfxName, Promise<AudioBuffer | null>>> = {};
@@ -422,7 +424,10 @@ class SfxImpl {
       osc.frequency.value = 48 + this.runIntensity * 8;
       gain.gain.value = 0.0001;
       osc.connect(gain);
-      gain.connect(this.master);
+      // The pulse belongs to the music bed (gated on musicWanted), so it must obey
+      // the user music volume like the streamed loops — routing it straight to master
+      // let it play at full level with music set to 0%.
+      gain.connect(this.musicUserGain ?? this.master);
       osc.start();
       this.bioOsc = osc;
       this.bioGain = gain;
@@ -529,8 +534,13 @@ class SfxImpl {
    * RNA pickup round-robin: cycles the licensed pickup and its two generated variants so
    * rapid collection never turns into a machine-gun of one identical blip. Cursor-only —
    * audio presentation must not consume gameplay RNG.
+   * Family-level throttle: the round-robin cycles pickup/pickup2/pickup3, so the per-name
+   * throttles alone would let three rapid pickups sound within one 45ms window.
    */
   playPickupVariant(): void {
+    const now = performance.now();
+    if (now - this.lastPickupFamilyAt < (THROTTLE_MS.pickup ?? 0)) return;
+    this.lastPickupFamilyAt = now;
     this.play(PICKUP_VARIANTS[this.pickupCursor % PICKUP_VARIANTS.length]);
     this.pickupCursor += 1;
   }

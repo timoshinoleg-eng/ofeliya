@@ -779,13 +779,40 @@ export class MenuScene extends Phaser.Scene {
       : btnY + (resumeCheckpoint ? 72 : 55);
     const legalY = compactFooter && resumeCheckpoint ? H - 38 : H - 43;
     // Utilities row: volume steppers flank the existing mute toggle. Slot spacing is
-    // measured after text creation (layoutUtilityRow below), so the row provably fits
-    // any viewport and font metrics — the old fixed-gap formula overflowed at 360px
-    // on Linux Chrome ("музыка: 100%" ran off-screen left, "КОДЕКС 0/9" off right).
+    // measured live in layoutUtilityRow() — at creation and after every label change —
+    // so the row provably fits any viewport/font metrics and never overlaps after taps
+    // (the old fixed-gap formula overflowed at 360px on Linux Chrome).
     const wideLabels = W >= 460;
     const utilityFont = H < 650 ? '11px' : '12px';
     const volLabel = (pct: number) => (wideLabels ? `музыка: ${pct}%` : `муз·${pct}%`);
     const sfxLabel = (pct: number) => (wideLabels ? `эффекты: ${pct}%` : `эфф·${pct}%`);
+    const utilitySlots: Phaser.GameObjects.Text[] = [];
+    // Function declarations hoist above the pointerup registrations, so handlers can
+    // re-run the layout after setText(); the length guard covers creation order.
+    function layoutUtilityRow(): void {
+      if (utilitySlots.length !== 5) return;
+      let slotWidths = utilitySlots.map((t) => t.width);
+      let slotTotal = slotWidths.reduce((a, b) => a + b, 0);
+      // Linux Chrome renders these labels measurably wider than local metrics. The
+      // readability contract floors the row at 11px (compact) / 12px (tall), so only
+      // when the row cannot fit at all do we step one pixel down and re-measure.
+      if ((W - 16 - slotTotal) / (utilitySlots.length - 1) < 2) {
+        utilitySlots.forEach((t) => t.setFontSize(H < 650 ? 10 : 11));
+        slotWidths = utilitySlots.map((t) => t.width);
+        slotTotal = slotWidths.reduce((a, b) => a + b, 0);
+      }
+      const slotGap = Math.max(2, Math.min(28, (W - 16 - slotTotal) / (utilitySlots.length - 1)));
+      let slotX = (W - (slotTotal + slotGap * (utilitySlots.length - 1))) / 2;
+      utilitySlots.forEach((t, i) => {
+        t.setX(slotX + slotWidths[i] / 2);
+        slotX += slotWidths[i] + slotGap;
+        // setInteractive() snapshots the hit Rectangle once (InputPlugin
+        // setHitAreaFromTexture), so a grown label keeps its stale tap area
+        // unless the rectangle is resized here.
+        const hit = t.input?.hitArea;
+        if (hit && typeof hit.setSize === 'function') hit.setSize(t.width, t.height);
+      });
+    }
     const musicVolText = this.add
       .text(W / 2, utilityY, volLabel(Math.round(Sfx.getMusicVolume() * 100)), {
         fontFamily: UI_FONT,
@@ -800,8 +827,10 @@ export class MenuScene extends Phaser.Scene {
       .on('pointerup', () => {
         const v = Sfx.bumpMusicVolume();
         musicVolText.setText(volLabel(Math.round(v * 100)));
+        layoutUtilityRow();
         Sfx.play('click');
       });
+    utilitySlots.push(musicVolText);
     const soundText = this.add
       .text(W / 2, utilityY, `звук: ${Sfx.muted ? 'выкл' : 'вкл'}`, {
         fontFamily: UI_FONT,
@@ -816,8 +845,10 @@ export class MenuScene extends Phaser.Scene {
       .on('pointerup', () => {
         const muted = Sfx.toggle();
         soundText.setText(`звук: ${muted ? 'выкл' : 'вкл'}`).setColor(muted ? '#755266' : '#c89aaf');
+        layoutUtilityRow();
         if (!muted) Sfx.play('click');
       });
+    utilitySlots.push(soundText);
     const sfxVolText = this.add
       .text(W / 2, utilityY, sfxLabel(Math.round(Sfx.getSfxVolume() * 100)), {
         fontFamily: UI_FONT,
@@ -832,8 +863,10 @@ export class MenuScene extends Phaser.Scene {
       .on('pointerup', () => {
         const v = Sfx.bumpSfxVolume();
         sfxVolText.setText(sfxLabel(Math.round(v * 100)));
+        layoutUtilityRow();
         Sfx.play('click');
       });
+    utilitySlots.push(sfxVolText);
 
 
     const summaryText = this.add
@@ -853,6 +886,7 @@ export class MenuScene extends Phaser.Scene {
         PlatformBridge.haptic('light');
         this.showSocialHub();
       });
+    utilitySlots.push(summaryText);
 
     const codexSave = SaveSystem.get();
     const codexFound = codexSave.evolutionsSeen.length + codexSave.legendarySeen.length;
@@ -872,26 +906,10 @@ export class MenuScene extends Phaser.Scene {
         PlatformBridge.haptic('light');
         this.showCodex();
       });
-
+    utilitySlots.push(codexText);
     // All five utility labels were created centered as placeholders; distribute them
     // edge-to-edge from real measured widths so neither end can leave the screen.
-    const utilitySlots = [musicVolText, soundText, summaryText, sfxVolText, codexText];
-    let slotWidths = utilitySlots.map((t) => t.width);
-    let slotTotal = slotWidths.reduce((a, b) => a + b, 0);
-    // Linux Chrome renders these labels measurably wider than local metrics. The
-    // readability contract floors the row at 11px (compact) / 12px (tall), so only
-    // when the row cannot fit at all do we step one pixel down and re-measure.
-    if ((W - 16 - slotTotal) / (utilitySlots.length - 1) < 2) {
-      utilitySlots.forEach((t) => t.setFontSize(H < 650 ? 10 : 11));
-      slotWidths = utilitySlots.map((t) => t.width);
-      slotTotal = slotWidths.reduce((a, b) => a + b, 0);
-    }
-    const slotGap = Math.max(2, Math.min(28, (W - 16 - slotTotal) / (utilitySlots.length - 1)));
-    let slotX = (W - (slotTotal + slotGap * (utilitySlots.length - 1))) / 2;
-    utilitySlots.forEach((t, i) => {
-      t.setX(slotX + slotWidths[i] / 2);
-      slotX += slotWidths[i] + slotGap;
-    });
+    layoutUtilityRow();
 
     if (!compactFooter) {
       this.add
