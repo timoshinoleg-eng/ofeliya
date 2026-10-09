@@ -13,7 +13,7 @@ function load(path, globals = {}, cache = new Map()) {
     target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS,
   } }).outputText;
   const require = name => name === './SaveSystem'
-    ? { SaveSystem: { get: () => ({ muted: false }), update() {} } }
+    ? { SaveSystem: { get: () => ({ muted: false, musicVolume: 1, sfxVolume: 1 }), update() {} } }
     : name === '../release' ? { RELEASE_SHA: 'audio-test' }
     : load(resolve(dirname(path), `${name}.ts`), globals, cache);
   new Function('require', 'module', 'exports', ...Object.keys(globals), code)
@@ -61,7 +61,8 @@ function fixture({ hidden = false, state = 'running', resumeBlocked = false, res
     gesture: () => { for (const fn of [...(listeners.get('pointerdown') ?? [])]) fn(); } };
 }
 const failures = [];
-async function test(name, fn) { try { await fn(); console.log(`PASS ${name}`); } catch (e) { failures.push(name); console.error(`FAIL ${name}: ${e.message}`); } }
+let total = 0;
+async function test(name, fn) { total += 1; try { await fn(); console.log(`PASS ${name}`); } catch (e) { failures.push(name); console.error(`FAIL ${name}: ${e.message}`); } }
 await test('production normalization math handles silence, invalid peaks and bounded boost', () => {
   const m = load('src/systems/audioMixMath.ts');
   for (const peak of [0, -1, NaN, Infinity, -Infinity]) assert.equal(m.normalizationTrimForPeak(peak), 1);
@@ -77,29 +78,66 @@ await test('production normalization math handles silence, invalid peaks and bou
 await test('production gain math composes bed trim and duck with new constants', () => {
   const m = load('src/systems/audioMixMath.ts');
   assert.equal(m.MASTER_GAIN, .8); assert.equal(m.MUSIC_GAIN, .65);
-  assert.deepEqual(m.MUSIC_BED_TRIMS, [.47, .37, .71, 1.14, 2, .32, .5]);
+  assert.deepEqual(m.MUSIC_BED_TRIMS, [1, 1, 1, 1, 1, 1, 1]);
   assert.equal(m.musicGainForDuck(.6), .26); assert.equal(m.musicGainForDuck(1), .02);
   assert.equal(m.musicGainForDuck(NaN), .65);
-  assert.equal(m.MASTER_GAIN * m.MUSIC_BED_TRIMS[4] * m.musicGainForDuck(.6), .41600000000000004);
+  assert.equal(m.MASTER_GAIN * m.MUSIC_BED_TRIMS[4] * m.musicGainForDuck(.6), 0.20800000000000002);
+});
+await test('user volume clamps, persists, and composes with duck without touching trim', async () => {
+  const m = load('src/systems/audioMixMath.ts');
+  assert.equal(m.perceptualVolumeGain(1), 1);
+  assert.equal(m.perceptualVolumeGain(0), 0);
+  assert(Math.abs(m.perceptualVolumeGain(.5) - Math.pow(.5, 1.6)) < 1e-9);
+  assert.equal(m.perceptualVolumeGain(NaN), 1);
+  assert.equal(m.nextVolumeStep(1), .75);
+  assert.equal(m.nextVolumeStep(.75), .5);
+  assert.equal(m.nextVolumeStep(.25), 0);
+  assert.equal(m.nextVolumeStep(0), 1);
+  assert.equal(m.nextVolumeStep(.33), .75, 'unknown step cycles from the top');
+
+  const f = fixture(); f.Sfx.startBed(2); await flush();
+  const c = f.contexts[0];
+  const filter = c.nodes.find(n => n.kind === 'filter');
+  const userGain = filter.connections[0];
+  assert.equal(userGain.kind, 'gain');
+  const master = userGain.connections[0];
+  assert.equal(master.kind, 'gain');
+  assert.equal(master.connections[0].kind, 'compressor');
+
+  f.Sfx.setMusicVolume(.5);
+  assert(Math.abs(userGain.gain.value - Math.pow(.5, 1.6)) < 1e-9);
+  f.Sfx.duckMusic(.6, 700);
+  assert(Math.abs(userGain.gain.value - Math.pow(.5, 1.6)) < 1e-9, 'duck must not touch user volume');
+  assert.equal(f.Sfx.getMusicVolume(), .5);
+
+  f.Sfx.setSfxVolume(.25);
+  assert(Math.abs(f.Sfx.debugAudioState.gains.sfx - Math.pow(.25, 1.6)) < 1e-9);
+  f.Sfx.setSfxVolume(7);
+  assert.equal(f.Sfx.getSfxVolume(), 1, 'out-of-range volume must clamp to 1');
+  const v = f.Sfx.bumpMusicVolume();
+  assert.equal(v, .25, 'bump cycles 50 -> 25 after the earlier set');
+  f.Sfx.stopMusic();
 });
 await test('one master compressor and distinct bed trim preserve procedural bus routing', async () => {
   const f = fixture(); f.Sfx.startBed(4); await flush();
   const c = f.contexts[0], src = c.nodes.find(n => n.kind === 'source');
-  const trim = src.connections[0], music = trim.connections[0], filter = music.connections[0], master = filter.connections[0], compressor = master.connections[0];
-  assert.equal(trim.gain.value, 2); assert.equal(music.gain.value, .65); assert.equal(master.gain.value, .8);
+  const trim = src.connections[0], music = trim.connections[0], filter = music.connections[0],
+    userGain = filter.connections[0], master = userGain.connections[0], compressor = master.connections[0];
+  assert.equal(trim.gain.value, 1); assert.equal(music.gain.value, .65);
+  assert.equal(userGain.gain.value, 1); assert.equal(master.gain.value, .8);
   assert.equal(filter.kind, 'filter'); assert.equal(compressor.kind, 'compressor'); assert.equal(compressor.connections[0], c.destination);
   for (const [k, v] of Object.entries({ threshold: -8, knee: 6, ratio: 4, attack: .003, release: .12 })) assert.equal(compressor[k].value, v);
-  const layer = c.nodes.find(n => n.kind === 'gain' && n !== music && n.connections[0] === filter);
+  const layer = c.nodes.find(n => n.kind === 'gain' && n !== music && n !== userGain && n.connections[0] === filter);
   assert(layer); assert.equal(layer.gain.value, 1);
   f.Sfx.duckMusic(.6, 700);
   assert.deepEqual(music.gain.calls.slice(-2), [['target', .26, 10, .08], ['target', .65, 10.7, .35]]);
-  assert.equal(trim.gain.value, 2, 'duck must not overwrite trim');
+  assert.equal(trim.gain.value, 1, 'duck must not overwrite trim');
   f.Sfx.stopMusic();
   assert(src.stopped && src.disconnected); assert.equal(f.contexts.length, 1);
 });
 await test('decoded SFX scan once, cache normalization and replace legacy coefficients for every role', async () => {
   const b = buffer(), f = fixture({ decoder: async () => b });
-  const roles = { shoot: .12, hit: .16, pickup: .28, click: .20, levelup: .50, hurt: .55, nova: .48, elite: .50, boss: .60, gameover: .58, victory: .58 };
+  const roles = { shoot: .12, hit: .16, pickup: .28, pickup2: .28, pickup3: .28, click: .20, levelup: .50, hurt: .55, nova: .48, elite: .50, boss: .60, bossphase: .62, gameover: .58, victory: .58, infect: .42, lysis: .62 };
   for (const [name, role] of Object.entries(roles)) {
     f.Sfx.play(name); await flush(); const scans = b.scans;
     for (let i = 0; i < 2; i++) { f.advance(); f.Sfx.play(name);
@@ -109,7 +147,14 @@ await test('decoded SFX scan once, cache normalization and replace legacy coeffi
     }
     assert.equal(b.scans, scans, 'play must never rescan decoded samples');
   }
-  assert.equal(f.requests.length, 11); assert.equal(b.scans, 22);
+  assert.equal(f.requests.length, 16); assert.equal(b.scans, 32);
+  // RNA pickup round-robin cycles the three variants cursor-only, no RNG.
+  for (const expected of ['pickup', 'pickup2', 'pickup3', 'pickup']) {
+    f.advance(); f.Sfx.playPickupVariant();
+    const src = f.contexts[0].nodes.filter(n => n.kind === 'source').at(-1);
+    assert.equal(src.connections[0].gain.value, roles[expected] * 1.26);
+    src.onended();
+  }
 });
 await test('existing SFX throttles reject tight shoot hit pickup repeats', async () => {
   for (const name of ['shoot', 'hit', 'pickup']) {
@@ -126,7 +171,7 @@ await test('diagnostics report loading and actual fallback bed separately withou
   assert.equal(pending.musicWanted, true); assert.equal(pending.loading, true); assert.equal(pending.playing, false); assert.equal(pending.actualBedIndex, null);
   d.resolve(buffer()); await flush();
   const debug = f.Sfx.debugAudioState;
-  assert.equal(debug.actualBedIndex, 4); assert.equal(debug.loading, false); assert.equal(debug.playing, true); assert.equal(debug.gains.bedTrim, 2); assert.equal(debug.lastLoadError, null);
+  assert.equal(debug.actualBedIndex, 4); assert.equal(debug.loading, false); assert.equal(debug.playing, true); assert.equal(debug.gains.bedTrim, 1); assert.equal(debug.lastLoadError, null);
   assert(Object.isFrozen(debug) && Object.isFrozen(debug.gains));
   assert.deepEqual(Object.keys(debug).sort(), ['actualBedIndex', 'contextState', 'gains', 'lastLoadError', 'loading', 'musicWanted', 'muted', 'playing', 'suspended'].sort());
   f.Sfx.stopMusic(); assert.equal(f.Sfx.debugAudioState.actualBedIndex, null);
@@ -210,7 +255,7 @@ await test('restart and bed change invalidate old decode while keeping one persi
   f.Sfx.startBed(1); await flush(); f.Sfx.startBed(6); await flush();
   old.resolve(buffer()); await flush(); assert.equal(f.Sfx.debugAudioState.actualBedIndex, null);
   fresh.resolve(buffer()); await flush(); assert.equal(f.Sfx.debugAudioState.actualBedIndex, 6);
-  assert.equal(f.Sfx.debugAudioState.gains.bedTrim, .5);
+  assert.equal(f.Sfx.debugAudioState.gains.bedTrim, 1);
   for (let i = 0; i < 5; i++) {
     f.Sfx.playCue('boss-warning'); f.Sfx.playHeartbeat('impact', true);
     assert.equal(f.contexts[0].nodes.filter(n => n.kind === 'oscillator' && !n.disconnected).length, 5, 'bio + 4 still-live layer tones');
@@ -233,4 +278,4 @@ await test('transient tone natural ended cleanup disconnects both nodes and tear
   f.Sfx.stopMusic(); f.Sfx.stopMusic(); assert.equal(f.Sfx.debugAudioState.playing, false);
 });
 if (failures.length) { console.error(`${failures.length} audio mix contract(s) failed`); process.exitCode = 1; }
-else console.log('audio mix: 17/17 contracts passed (production TS math + WebAudio boundary)');
+else console.log(`audio mix: ${total}/${total} contracts passed (production TS math + WebAudio boundary)`);

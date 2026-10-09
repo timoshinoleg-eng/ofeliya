@@ -265,16 +265,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
           ? nearPlayer
             ? 0.94
             : this.kind === 'swarm'
-              ? 0.58
-              : 0.72
+              ? 0.5
+              : 0.66
           : density >= 140
             ? nearPlayer
-              ? 0.97
+              ? 0.96
               : this.kind === 'swarm'
-                ? 0.7
-                : 0.82
+                ? 0.64
+                : 0.78
             : density >= 110 && !nearPlayer
-              ? 0.88
+              ? 0.84
               : 1;
       this.setAlpha(alpha);
     }
@@ -400,17 +400,21 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
 
     if (this.isElite && this.eliteRing) {
+      // At high combat density the surrounding mass dims; elite identity must not
+      // dim with it, so the corona/marker rise above their quiet-combat baselines.
+      const density = this.gs?.getCombatVisualDensity() ?? 0;
+      const priorityBoost = density >= 180 ? 1 : density >= 140 ? 0.7 : 0;
       this.eliteRing
         .setVisible(true)
         .setPosition(this.x, this.y)
         .setRotation(-time * 0.00105)
-        .setScale(0.96 + Math.sin(time / 180) * 0.055)
-        .setAlpha(0.58 + Math.sin(time / 180) * 0.15);
+        .setScale((0.96 + Math.sin(time / 180) * 0.055) * (1 + priorityBoost * 0.12))
+        .setAlpha(0.58 + Math.sin(time / 180) * 0.15 + priorityBoost * 0.24);
       this.eliteMarker
         ?.setVisible(true)
         .setPosition(this.x, this.y - this.radius - 10)
-        .setScale(0.92 + Math.sin(time / 130) * 0.12)
-        .setAlpha(0.78 + Math.sin(time / 130) * 0.18);
+        .setScale((0.92 + Math.sin(time / 130) * 0.12) * (1 + priorityBoost * 0.15))
+        .setAlpha(0.78 + Math.sin(time / 130) * 0.18 + priorityBoost * 0.17);
     }
 
     if (this.isBoss && this.bossBehavior === 'pressure-wave' && this.bossAura) {

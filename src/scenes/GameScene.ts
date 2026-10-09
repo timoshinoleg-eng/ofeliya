@@ -146,6 +146,7 @@ export class GameScene extends Phaser.Scene {
   private milestones!: RunMilestones;
   private aimMarker!: Phaser.GameObjects.Image;
   private playerBar!: Phaser.GameObjects.Graphics;
+  private playerHalo!: Phaser.GameObjects.Graphics;
 
   private nextFireAt = 0;
   private novaAcc = 0;
@@ -383,6 +384,10 @@ export class GameScene extends Phaser.Scene {
     this.player = new Player(this, W / 2, H / 2);
     this.aimMarker = this.add.image(0, 0, 'marker').setDepth(16).setVisible(false);
     this.playerBar = this.add.graphics().setDepth(17);
+    // Dense-combat readability: a soft dark bubble under the player carves a
+    // contrast zone against the enemy mass. Sits above atmosphere (negative
+    // depths) but below telegraphs (8), enemies (10) and the player (28).
+    this.playerHalo = this.add.graphics().setDepth(7.5);
 
     this.bullets = this.physics.add.group({ classType: Bullet, maxSize: 160 });
     this.enemies = this.physics.add.group({ classType: Enemy, maxSize: 260 });
@@ -655,6 +660,17 @@ export class GameScene extends Phaser.Scene {
     this.atmosphere.update(time, delta, st.timeMs, stage.durationMs);
 
     this.playerBar.clear();
+    this.playerHalo.clear();
+    if (this.visualEnemyDensity >= 110) {
+      // Ramp 0..1 across the 110..200 stress band; elites/bosses keep their own
+      // boosted identity marks above this bubble, so only the backdrop recedes.
+      const f = Phaser.Math.Clamp((this.visualEnemyDensity - 110) / 90, 0, 1);
+      const r = 42 + f * 8;
+      this.playerHalo.fillStyle(0x05070f, 0.42 + f * 0.2);
+      this.playerHalo.fillCircle(this.player.x, this.player.y, r);
+      this.playerHalo.lineStyle(1.6, COLORS.cyan, 0.3 + f * 0.28);
+      this.playerHalo.strokeCircle(this.player.x, this.player.y, r);
+    }
     if (st.hp < st.maxHp) {
       const w = 34;
       const x = this.player.x - w / 2;
@@ -846,7 +862,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.vfx.lysis(event.x, event.y, event.radius * 0.72, event.radius);
     this.atmosphere.pulse(COLORS.green, 0.14);
-    Sfx.play('nova');
+    Sfx.play('lysis');
     PlatformBridge.haptic('medium');
 
     for (let i = 0; i < event.rna; i++) {
@@ -895,6 +911,8 @@ export class GameScene extends Phaser.Scene {
       resume: 'infection_resumed',
     };
     this.trackComprehensionOnce(analyticsEvent[event.type], { progress: event.progress });
+
+    if (event.type === 'enter' || event.type === 'resume') Sfx.play('infect');
 
     if (!this.firstRunComprehension || event.type === 'resume') return;
     if (
@@ -1080,7 +1098,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   onGemCollected(value: number): void {
-    Sfx.play('pickup');
+    Sfx.playPickupVariant();
     this.vfx.pickup(this.player.x, this.player.y);
     this.queuedLevels += this.runState.addXp(value);
 
@@ -1186,6 +1204,7 @@ export class GameScene extends Phaser.Scene {
     const decision = this.impact.request('boss_phase', this.time.now);
     if (decision.allowCameraShake) this.shake(220, 0.006, true);
     PlatformBridge.haptic('heavy');
+    Sfx.play('bossphase');
   }
 
   triggerBossPressureWave(boss: Enemy, radius: number, damage: number): void {
@@ -1723,6 +1742,7 @@ export class GameScene extends Phaser.Scene {
     (this.player.body as Phaser.Physics.Arcade.Body).reset(centerX, centerY);
     this.aimMarker.setVisible(false);
     this.playerBar.clear();
+    this.playerHalo.clear();
     this.registry.set('joy', { x: 0, y: 0 });
   }
 

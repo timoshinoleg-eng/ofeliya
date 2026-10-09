@@ -10,14 +10,17 @@ import { RELEASE_SHA } from '../release';
 import type { AdaptiveCueKind, HeartbeatCueKind } from './AdaptiveAudioDirector';
 import {
   MASTER_GAIN, MUSIC_GAIN, MUSIC_BED_TRIMS, SFX_ROLE_GAINS,
-  scanNormalizationTrim, musicGainForDuck,
+  scanNormalizationTrim, musicGainForDuck, perceptualVolumeGain, nextVolumeStep,
 } from './audioMixMath';
 
 export type SfxName =
-  | 'shoot' | 'hit' | 'pickup' | 'levelup' | 'hurt' | 'click'
-  | 'nova' | 'elite' | 'boss' | 'gameover' | 'victory';
+  | 'shoot' | 'hit' | 'pickup' | 'pickup2' | 'pickup3' | 'levelup' | 'hurt' | 'click'
+  | 'nova' | 'elite' | 'boss' | 'bossphase' | 'gameover' | 'victory'
+  | 'infect' | 'lysis';
 
-const THROTTLE_MS: Partial<Record<SfxName, number>> = { shoot: 70, hit: 55, pickup: 45 };
+const THROTTLE_MS: Partial<Record<SfxName, number>> = {
+  shoot: 70, hit: 55, pickup: 45, pickup2: 45, pickup3: 45, infect: 140, lysis: 200,
+};
 const BASE: string = import.meta.env.BASE_URL || './';
 
 function audioAssetUrl(file: string): string {
@@ -29,15 +32,21 @@ const MANIFEST: Record<SfxName, { file: string }> = {
   shoot: { file: 'audio/sfx/shoot.ogg' },
   hit: { file: 'audio/sfx/hit.ogg' },
   pickup: { file: 'audio/sfx/pickup.ogg' },
+  pickup2: { file: 'audio/sfx/pickup2.mp3' },
+  pickup3: { file: 'audio/sfx/pickup3.mp3' },
   levelup: { file: 'audio/sfx/levelup.ogg' },
   hurt: { file: 'audio/sfx/hurt.ogg' },
   click: { file: 'audio/sfx/click.ogg' },
   nova: { file: 'audio/sfx/nova.ogg' },
   elite: { file: 'audio/sfx/elite.ogg' },
   boss: { file: 'audio/sfx/boss.ogg' },
+  bossphase: { file: 'audio/sfx/bossphase.mp3' },
   gameover: { file: 'audio/sfx/gameover.ogg' },
   victory: { file: 'audio/sfx/victory.ogg' },
+  infect: { file: 'audio/sfx/infect.mp3' },
+  lysis: { file: 'audio/sfx/lysis.mp3' },
 };
+const PICKUP_VARIANTS: readonly SfxName[] = ['pickup', 'pickup2', 'pickup3'];
 const MUSIC_TRACKS = [
   'audio/music/loop0.ogg', 'audio/music/loop1.ogg', 'audio/music/loop2.ogg',
   'audio/music/loop3.mp3', 'audio/music/loop4.mp3', 'audio/music/loop5.mp3', 'audio/music/loop6.mp3',
@@ -57,6 +66,8 @@ class SfxImpl {
   private compressor: DynamicsCompressorNode | null = null;
   private sfxGain: GainNode | null = null;
   private musicGain: GainNode | null = null;
+  /** User music volume between the tension filter and master; ducking stays on musicGain. */
+  private musicUserGain: GainNode | null = null;
   /** Licensed bed loudness correction only; adaptive ducking remains on musicGain. */
   private bedTrim: GainNode | null = null;
   /** Lowpass that the adaptive director opens as danger rises. */
@@ -64,6 +75,7 @@ class SfxImpl {
   /** Procedural stingers/heartbeat share the filter; the retained bio pulse feeds master. */
   private layerBus: GainNode | null = null;
   private lastAt: Partial<Record<SfxName, number>> = {};
+  private pickupCursor = 0;
   private buffers: Partial<Record<SfxName, AudioBuffer>> = {};
   private bufferTrims: Partial<Record<SfxName, number>> = {};
   private loading: Partial<Record<SfxName, Promise<AudioBuffer | null>>> = {};
@@ -95,6 +107,31 @@ class SfxImpl {
   private bioCadenceMs = 0;
 
   muted = SaveSystem.get().muted;
+  /** User music volume 0..1; lives between the tension filter and master. */
+  private musicUserVol = SaveSystem.get().musicVolume;
+  /** User SFX volume 0..1; applied straight on the SFX bus. */
+  private sfxUserVol = SaveSystem.get().sfxVolume;
+
+  setMusicVolume(volume01: number): number {
+    this.musicUserVol = Math.max(0, Math.min(1, Number.isFinite(volume01) ? volume01 : 1));
+    SaveSystem.update({ musicVolume: this.musicUserVol });
+    if (this.musicUserGain) this.musicUserGain.gain.value = perceptualVolumeGain(this.musicUserVol);
+    return this.musicUserVol;
+  }
+
+  setSfxVolume(volume01: number): number {
+    this.sfxUserVol = Math.max(0, Math.min(1, Number.isFinite(volume01) ? volume01 : 1));
+    SaveSystem.update({ sfxVolume: this.sfxUserVol });
+    if (this.sfxGain) this.sfxGain.gain.value = perceptualVolumeGain(this.sfxUserVol);
+    return this.sfxUserVol;
+  }
+
+  /** Tap-to-cycle helpers for the settings row; return the new 0..1 value. */
+  bumpMusicVolume(): number { return this.setMusicVolume(nextVolumeStep(this.musicUserVol)); }
+  bumpSfxVolume(): number { return this.setSfxVolume(nextVolumeStep(this.sfxUserVol)); }
+
+  getMusicVolume(): number { return this.musicUserVol; }
+  getSfxVolume(): number { return this.sfxUserVol; }
 
   setMuted(m: boolean): void {
     this.muted = m;
@@ -257,8 +294,9 @@ class SfxImpl {
       gains: Object.freeze({
         master: this.master?.gain.value ?? (this.muted ? 0 : MASTER_GAIN),
         music: this.musicGain?.gain.value ?? MUSIC_GAIN,
+        musicUser: this.musicUserGain?.gain.value ?? perceptualVolumeGain(this.musicUserVol),
         bedTrim: this.bedTrim?.gain.value ?? 1,
-        sfx: this.sfxGain?.gain.value ?? 1,
+        sfx: this.sfxGain?.gain.value ?? perceptualVolumeGain(this.sfxUserVol),
       }),
       lastLoadError: this.lastMusicError,
     });
@@ -281,7 +319,7 @@ class SfxImpl {
         this.master.connect(this.compressor);
         this.compressor.connect(this.ctx.destination);
         this.sfxGain = this.ctx.createGain();
-        this.sfxGain.gain.value = 1;
+        this.sfxGain.gain.value = perceptualVolumeGain(this.sfxUserVol);
         this.sfxGain.connect(this.master);
 
         // One bounded lowpass on the music layer: the adaptive director opens it with danger.
@@ -291,7 +329,10 @@ class SfxImpl {
           MUSIC_TENSION_MIN_HZ *
           Math.pow(MUSIC_TENSION_MAX_HZ / MUSIC_TENSION_MIN_HZ, this.musicTension);
         this.musicFilter.Q.value = 0.9;
-        this.musicFilter.connect(this.master);
+        this.musicUserGain = this.ctx.createGain();
+        this.musicUserGain.gain.value = perceptualVolumeGain(this.musicUserVol);
+        this.musicFilter.connect(this.musicUserGain);
+        this.musicUserGain.connect(this.master);
 
         this.musicGain = this.ctx.createGain();
         this.musicGain.gain.value = MUSIC_GAIN;
@@ -441,6 +482,8 @@ class SfxImpl {
       case 'shoot': this.blip(760, 410, 0.055, 'triangle', 0.03); break;
       case 'hit': this.blip(230, 105, 0.05, 'triangle', 0.045); break;
       case 'pickup': this.blip(620, 980, 0.075, 'sine', 0.05); break;
+      case 'pickup2': this.blip(720, 1180, 0.07, 'sine', 0.05); break;
+      case 'pickup3': this.blip(540, 880, 0.08, 'triangle', 0.05); break;
       case 'hurt': this.blip(165, 62, 0.2, 'sawtooth', 0.11); break;
       case 'levelup':
         this.blip(420, 540, 0.09, 'sine', 0.055);
@@ -452,6 +495,16 @@ class SfxImpl {
       case 'boss':
         this.blip(78, 45, 0.78, 'sawtooth', 0.13);
         this.blip(108, 62, 0.72, 'sine', 0.055, 0.1); break;
+      case 'bossphase':
+        this.blip(64, 40, 0.5, 'sawtooth', 0.12);
+        this.blip(64, 40, 0.5, 'sawtooth', 0.12, 0.42);
+        this.blip(130, 260, 0.9, 'triangle', 0.05, 0.1); break;
+      case 'infect':
+        this.blip(300, 520, 0.28, 'sine', 0.045);
+        this.blip(520, 760, 0.3, 'sine', 0.035, 0.12); break;
+      case 'lysis':
+        this.blip(420, 60, 0.22, 'square', 0.07);
+        this.blip(180, 46, 0.34, 'sawtooth', 0.08, 0.04); break;
       case 'gameover':
         this.blip(380, 190, 0.32, 'triangle', 0.07);
         this.blip(260, 110, 0.44, 'triangle', 0.07, 0.26); break;
@@ -470,6 +523,16 @@ class SfxImpl {
     }
     if (!this.loading[name]) void this.load(name);
     this.fallback(name);
+  }
+
+  /**
+   * RNA pickup round-robin: cycles the licensed pickup and its two generated variants so
+   * rapid collection never turns into a machine-gun of one identical blip. Cursor-only —
+   * audio presentation must not consume gameplay RNG.
+   */
+  playPickupVariant(): void {
+    this.play(PICKUP_VARIANTS[this.pickupCursor % PICKUP_VARIANTS.length]);
+    this.pickupCursor += 1;
   }
 
   private blip(f0: number, f1: number, dur: number, type: OscillatorType, vol: number, delay = 0): void {

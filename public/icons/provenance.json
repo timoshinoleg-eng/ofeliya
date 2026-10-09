@@ -1,0 +1,7 @@
+{
+  "date": "2026-10-09",
+  "origin": "AI image generation (agent-gw generate_image), project-directed original icon",
+  "reference": "public/art/virus-player.webp (sha256 recorded in public/art/provenance.json)",
+  "derivative": "icon-master.webp 1024x1024; icon-{512,192,180}.png LANCZOS downscales, RGB",
+  "assets": ["icon-master.webp", "icon-512.png", "icon-192.png", "icon-180.png"]
+}

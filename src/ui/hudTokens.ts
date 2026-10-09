@@ -11,7 +11,7 @@
  *  - primitives come from `./tokens` and are never re-declared here;
  *  - `TYPE` is deliberately absent - the HUD uses explicit per-element floors.
  */
-import { BORDER, PANEL, ROLE, TOUCH } from './tokens';
+import { BORDER, ROLE, TOUCH } from './tokens';
 
 /** In-run HUD strip: plate, rows, bar clamps, type floors, touch targets. */
 export const HUD = {
@@ -21,14 +21,14 @@ export const HUD = {
     timerY: 28,
     levelX: 16, levelY: 30,
     killsY: 9, killsPadX: 16,
-    hpY: 54, hpH: 12, hpTextY: 56,
+    hpY: 54, hpH: 14, hpTextY: 55,
     bossLabelY: 70, bossBarY: 87, bossBarH: 6,
     comboX: 16, comboY: 54,
     muteY: 54, mutePadX: 16,
   },
   bar: { xpPadX: 12, xpReserveRight: 168, hpPad: 156, hpMaxW: 200, bossPad: 32, bossMaxW: 280 },
-  type: { timer: 24, level: 15, kills: 14, hp: 12, boss: 13, combo: 18 },
-  plateAlpha: PANEL.plate,
+  type: { timer: 26, level: 16, kills: 14, hp: 12, boss: 13, combo: 18 },
+  plateAlpha: 0.5,
   lowHp: ROLE.state.bad,
   barBack: ROLE.surface.barBack,
   pauseVisual: { x: 52, y: 65, w: 34, h: 30, fill: 0x141a2e, fillAlpha: 0.92, strokeW: BORDER.hair, strokeAlpha: 0.72 },

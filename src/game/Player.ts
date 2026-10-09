@@ -10,6 +10,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private readonly spikeCrown: Phaser.GameObjects.Graphics;
   private readonly capsidShell: Phaser.GameObjects.Graphics;
   private readonly lysisCore: Phaser.GameObjects.Graphics;
+  // Critical-mutation silhouette underlays: baked key art (procedural emblem fallback) that
+  // materially extends the silhouette under the animated virion. The ADD-blend overlays above
+  // keep the telegraph language; the hitbox never changes.
+  private readonly prismUnderlay: Phaser.GameObjects.Image;
+  private readonly haloUnderlay: Phaser.GameObjects.Image;
+  private readonly singularityUnderlay: Phaser.GameObjects.Image;
   private biologicalFrame = -1;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
@@ -53,6 +59,23 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       .setBlendMode(Phaser.BlendModes.ADD)
       .setVisible(false);
     this.drawLysisCore(this.lysisCore);
+
+    this.prismUnderlay = this.makeMutationUnderlay('mutation-prism');
+    this.haloUnderlay = this.makeMutationUnderlay('mutation-halo');
+    this.singularityUnderlay = this.makeMutationUnderlay('mutation-singularity');
+  }
+
+  /**
+   * Mutation silhouettes render at ~1.44x the 64-logical emblem base (≈92 px aura) so the
+   * virion body covers the art's own core and only the identifying extremities read.
+   */
+  private makeMutationUnderlay(key: string): Phaser.GameObjects.Image {
+    return this.scene.add
+      .image(this.x, this.y, key)
+      .setDepth(13.5)
+      .setAlpha(0.9)
+      .setScale(artScale(key, 1.44))
+      .setVisible(false);
   }
 
   /** Keep internal evolution IDs stable while making their effect visible on the virion itself. */
@@ -60,6 +83,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.spikeCrown.setVisible(hyperSpike);
     this.capsidShell.setVisible(superCapsid);
     this.lysisCore.setVisible(lysis);
+    this.prismUnderlay.setVisible(hyperSpike);
+    this.haloUnderlay.setVisible(superCapsid);
+    this.singularityUnderlay.setVisible(lysis);
   }
 
   preUpdate(time: number, delta: number): void {
@@ -104,6 +130,26 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       .setRotation(-time * 0.0004)
       .setScale(0.92 + Math.sin(time * 0.0054) * 0.08)
       .setAlpha(0.56 + Math.sin(time * 0.0054) * 0.2);
+
+    // Silhouette underlays counter-rotate against the body so the mutation reads in motion,
+    // not only in a still frame. Distinct speeds keep the three identities separable.
+    this.prismUnderlay
+      .setPosition(this.x, this.y)
+      .setRotation(-time * 0.00062)
+      .setScale(artScale('mutation-prism', 1.44 + Math.sin(time * 0.0048) * 0.05))
+      .setAlpha(0.82 + Math.sin(time * 0.006) * 0.08);
+
+    this.haloUnderlay
+      .setPosition(this.x, this.y)
+      .setRotation(time * 0.00046)
+      .setScale(artScale('mutation-halo', 1.44 + Math.sin(time * 0.0034) * 0.04))
+      .setAlpha(0.86 + Math.sin(time * 0.0041) * 0.06);
+
+    this.singularityUnderlay
+      .setPosition(this.x, this.y)
+      .setRotation(-time * 0.0004)
+      .setScale(artScale('mutation-singularity', 1.5 + Math.sin(time * 0.0054) * 0.09))
+      .setAlpha(0.8 + Math.sin(time * 0.0054) * 0.1);
   }
 
   markHurt(now: number): void {
@@ -116,6 +162,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.spikeCrown.destroy();
     this.capsidShell.destroy();
     this.lysisCore.destroy();
+    this.prismUnderlay.destroy();
+    this.haloUnderlay.destroy();
+    this.singularityUnderlay.destroy();
     super.destroy(fromScene);
   }
 

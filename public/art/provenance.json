@@ -51,6 +51,27 @@
       "size": 384,
       "source": "exec-98aa99e4-a58f-4d4b-aa61-b1aee408cc72.png",
       "sha256": "ec4d3a2e1f35772665faf18106377d321fd1795d8552098668192b0200db4c8f"
+    },
+    {
+      "key": "mutation-prism",
+      "file": "mutation-prism.webp",
+      "size": 512,
+      "source": "ai-generated-2026-10-09-mutation-prism.png",
+      "sha256": "ad90b329b8bb9f0ab7b9cf520449cfa23089c24edb0884e950eaacee83340e85"
+    },
+    {
+      "key": "mutation-halo",
+      "file": "mutation-halo.webp",
+      "size": 512,
+      "source": "ai-generated-2026-10-09-mutation-halo.png",
+      "sha256": "1a83bb3146b7bdce5ceb97a233f6f662e22e03652763f4e2e2df5fb7893f33c2"
+    },
+    {
+      "key": "mutation-singularity",
+      "file": "mutation-singularity.webp",
+      "size": 512,
+      "source": "ai-generated-2026-10-09-mutation-singularity.png",
+      "sha256": "ef6b8446223fb806d43ffd8e98f47371e18a37a778ae39dd50c47b6194f1ce58"
     }
   ]
 }

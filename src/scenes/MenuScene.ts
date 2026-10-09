@@ -778,10 +778,34 @@ export class MenuScene extends Phaser.Scene {
       ? H - (resumeCheckpoint ? 59 : 64)
       : btnY + (resumeCheckpoint ? 72 : 55);
     const legalY = compactFooter && resumeCheckpoint ? H - 38 : H - 43;
-    const soundText = this.add
-      .text(W / 2 - 100, utilityY, `звук: ${Sfx.muted ? 'выкл' : 'вкл'}`, {
+    // Utilities row: volume steppers flank the existing mute toggle. Slot spacing is
+    // measured after text creation (layoutUtilityRow below), so the row provably fits
+    // any viewport and font metrics — the old fixed-gap formula overflowed at 360px
+    // on Linux Chrome ("музыка: 100%" ran off-screen left, "КОДЕКС 0/9" off right).
+    const wideLabels = W >= 460;
+    const utilityFont = H < 650 ? '11px' : '12px';
+    const volLabel = (pct: number) => (wideLabels ? `музыка: ${pct}%` : `муз·${pct}%`);
+    const sfxLabel = (pct: number) => (wideLabels ? `эффекты: ${pct}%` : `эфф·${pct}%`);
+    const musicVolText = this.add
+      .text(W / 2, utilityY, volLabel(Math.round(Sfx.getMusicVolume() * 100)), {
         fontFamily: UI_FONT,
-        fontSize: H < 650 ? '11px' : '13px',
+        fontSize: utilityFont,
+        fontStyle: '650',
+        color: '#c89aaf',
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .setResolution(2)
+      .setDepth(5)
+      .on('pointerup', () => {
+        const v = Sfx.bumpMusicVolume();
+        musicVolText.setText(volLabel(Math.round(v * 100)));
+        Sfx.play('click');
+      });
+    const soundText = this.add
+      .text(W / 2, utilityY, `звук: ${Sfx.muted ? 'выкл' : 'вкл'}`, {
+        fontFamily: UI_FONT,
+        fontSize: utilityFont,
         fontStyle: '650',
         color: Sfx.muted ? UI_TEXT.secondary : '#efcddd',
       })
@@ -794,10 +818,26 @@ export class MenuScene extends Phaser.Scene {
         soundText.setText(`звук: ${muted ? 'выкл' : 'вкл'}`).setColor(muted ? '#755266' : '#c89aaf');
         if (!muted) Sfx.play('click');
       });
+    const sfxVolText = this.add
+      .text(W / 2, utilityY, sfxLabel(Math.round(Sfx.getSfxVolume() * 100)), {
+        fontFamily: UI_FONT,
+        fontSize: utilityFont,
+        fontStyle: '650',
+        color: '#c89aaf',
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .setResolution(2)
+      .setDepth(5)
+      .on('pointerup', () => {
+        const v = Sfx.bumpSfxVolume();
+        sfxVolText.setText(sfxLabel(Math.round(v * 100)));
+        Sfx.play('click');
+      });
 
 
-    this.add
-      .text(W / 2, utilityY, 'СВОДКА', {
+    const summaryText = this.add
+      .text(W / 2, utilityY, `СВОДКА`, {
         fontFamily: FONT,
         fontSize: H < 650 ? '11px' : '12px',
         fontStyle: 'bold',
@@ -816,8 +856,8 @@ export class MenuScene extends Phaser.Scene {
 
     const codexSave = SaveSystem.get();
     const codexFound = codexSave.evolutionsSeen.length + codexSave.legendarySeen.length;
-    this.add
-      .text(W / 2 + 100, utilityY, `КОДЕКС ${codexFound}/9`, {
+    const codexText = this.add
+      .text(W / 2, utilityY, `КОДЕКС ${codexFound}/9`, {
         fontFamily: FONT,
         fontSize: H < 650 ? '12px' : '13px',
         fontStyle: 'bold',
@@ -832,6 +872,26 @@ export class MenuScene extends Phaser.Scene {
         PlatformBridge.haptic('light');
         this.showCodex();
       });
+
+    // All five utility labels were created centered as placeholders; distribute them
+    // edge-to-edge from real measured widths so neither end can leave the screen.
+    const utilitySlots = [musicVolText, soundText, summaryText, sfxVolText, codexText];
+    let slotWidths = utilitySlots.map((t) => t.width);
+    let slotTotal = slotWidths.reduce((a, b) => a + b, 0);
+    // Linux Chrome renders these labels measurably wider than local metrics. The
+    // readability contract floors the row at 11px (compact) / 12px (tall), so only
+    // when the row cannot fit at all do we step one pixel down and re-measure.
+    if ((W - 16 - slotTotal) / (utilitySlots.length - 1) < 2) {
+      utilitySlots.forEach((t) => t.setFontSize(H < 650 ? 10 : 11));
+      slotWidths = utilitySlots.map((t) => t.width);
+      slotTotal = slotWidths.reduce((a, b) => a + b, 0);
+    }
+    const slotGap = Math.max(2, Math.min(28, (W - 16 - slotTotal) / (utilitySlots.length - 1)));
+    let slotX = (W - (slotTotal + slotGap * (utilitySlots.length - 1))) / 2;
+    utilitySlots.forEach((t, i) => {
+      t.setX(slotX + slotWidths[i] / 2);
+      slotX += slotWidths[i] + slotGap;
+    });
 
     if (!compactFooter) {
       this.add
