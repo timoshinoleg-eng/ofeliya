@@ -1353,11 +1353,13 @@ export class UIScene extends Phaser.Scene {
     this.tweens.add({ targets: titleT, scale: 1, duration: 260, ease: 'Back.Out' });
     // Subtitle hangs from the measured title bottom (title may wrap on narrow
     // screens), so the header band keeps its separation however the copy wraps.
+    // Text.height is already unscaled — dividing by the entrance-tween scaleY
+    // would push the subtitle ~40% too low at creation time.
     const subtitleGap = compact ? 12 : 14;
     const subtitle = this.add
       .text(
         W / 2,
-        titleY + titleT.height / titleT.scaleY / 2 + subtitleGap,
+        titleY + titleT.height / 2 + subtitleGap,
         legendaryReward
           ? 'ИММУННЫЙ ПРАЙМ подавлен · выбери мутацию для СЕРДЦА'
           : 'МУТАЦИЯ ' + gs.runState.stage.level + ' · выбери карту',
