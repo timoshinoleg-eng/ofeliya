@@ -211,3 +211,10 @@ snapshot. Do not place authoritative state only on Render's ephemeral filesystem
 or on Render Free Postgres (30dayexpiry). Restore before listening; acknowledge
 mutations only after durable commit; fence old deploys with a writer generation.
 BotKeep creation returned503NoAvailability despite expanded key permissions.
+
+
+## 2026-10-11 cutover completeness
+User permits skipping old player-data migration. Preserve the canonical origin
+and deploy both Telegram and dedicated MAX handlers before old hosting retirement.
+Preview hosting startup must never modify MAX subscriptions or begin polling.
+Keep unrelated Cloud.ru workloads separate from OFELIYA retirement.

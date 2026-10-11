@@ -3,6 +3,7 @@ import { createReadStream } from 'node:fs';
 import { stat, realpath } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
 import { once } from 'node:events';
+import { createHostedMaxWebhook } from '../bot/hosting.mjs';
 
 const port = Number(process.env.SERVER_PORT ?? process.env.PORT ?? 10000);
 const apiPort = Number(process.env.OFELIYA_API_PORT ?? 8787);
@@ -11,6 +12,10 @@ if (process.env.RENDER === 'true' && (!process.env.OFELIYA_STATE_URL || !process
 }
 if (port === apiPort) throw new Error('Public and internal API ports must differ');
 process.env.PORT = String(apiPort);
+if (!process.env.MAX_BOT_TOKEN && process.env.OFELIYA_BOT_TOKEN) {
+  process.env.MAX_BOT_TOKEN = process.env.OFELIYA_MAX_BOT_TOKEN || process.env.OFELIYA_BOT_TOKEN;
+}
+const maxWebhook = createHostedMaxWebhook();
 const { server: api } = await import('./index.mjs');
 if (!api.listening) await once(api, 'listening');
 const root = await realpath(resolve(process.env.OFELIYA_DIST_DIR ?? 'dist'));
@@ -22,6 +27,13 @@ const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 const gateway = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
+    if (url.pathname === '/ofeliya/bot/webhook') {
+      if (!maxWebhook) {
+        res.writeHead(503, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'MAX webhook is not configured' }));
+      } else maxWebhook(req, res);
+      return;
+    }
     if (url.pathname.startsWith('/api/') || url.pathname === '/health') {
       const proxy = request({ hostname: '127.0.0.1', port: apiPort, path: req.url,
         method: req.method, headers: { ...req.headers, host: 'localhost:' + apiPort } }, upstream => {
