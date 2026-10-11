@@ -1,4 +1,17 @@
-# OFELIYA release fixture handoff — 2026-10-08
+# OFELIYA Render migration handoff — 2026-10-11
+
+User authorized migration to Render Free and subsequent removal of paid Cloud.ru
+resources after preservation/verification. BotKeep is blocked by503capacity.
+Branch codex/render-migration-20261011 adds one Node hosting entrypoint and durable
+snapshot adapter. Supabase project gihizzpuzcuctitvwavz is restored under a verified
+free org; private state schema and authenticated Edge Function are deployed, with
+an initial67scores/4profiles snapshot. Final cutover/export has NOT occurred yet.
+Read deploy/RENDER.md. No gameplay, ruleset or campaign changes. Existing75server
+checks and durable unit checks pass. New Render deployment, final capture, domain/
+Telegram switch, restart verification and Cloud.ru deletion remain pending.
+Secrets remain outside git; never expose production.env or state key.
+
+## Previous release fixture handoff — 2026-10-08
 
 User explicitly authorized merge/deploy. PR179/180/181 merged preserving branches/history; main50c47049. Required main CI37763374322 failed3attempts before deploy: Legendary close timeout,Cardiac timeout,then subsequentmodal after Legendary close. No deployment performed.
 

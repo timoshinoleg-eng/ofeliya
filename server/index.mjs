@@ -24,10 +24,15 @@ import { fileURLToPath } from 'node:url';
 import { saveTelegramPreparedMessage } from './telegram-share.mjs';
 import { telegramApiJson } from './telegram-api.mjs';
 import { buildTelegramWebhookMethod, telegramWebhookSecretMatches } from './telegram-webhook.mjs';
+import { DurableState } from './durable-state.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT ?? 8787);
 const DATA_DIR = process.env.DATA_DIR ?? join(ROOT, 'server', 'data');
+const durable = process.env.OFELIYA_STATE_URL || process.env.OFELIYA_STATE_TOKEN
+  ? new DurableState(process.env.OFELIYA_STATE_URL, process.env.OFELIYA_STATE_TOKEN) : null;
+// Refuse to listen if restoration fails; an empty ephemeral disk is not a new game.
+if (durable) await durable.restore(DATA_DIR);
 const TG_TOKEN = process.env.TG_BOT_TOKEN ?? '';
 const TG_WEBHOOK_SECRET = process.env.TG_WEBHOOK_SECRET ?? '';
 const TG_OUTBOUND_ENABLED = process.env.OFELIYA_TELEGRAM_OUTBOUND_ENABLED === '1';
@@ -350,6 +355,7 @@ function scheduleStoreFlush(delayMs = STORE_SAVE_DELAY_MS) {
 
 function saveStore() {
   storeDirty = true;
+  durable?.mark();
   scheduleStoreFlush();
 }
 
@@ -1022,6 +1028,7 @@ let profileStore = loadProfileStore();
 
 function saveProfilesNow() {
   writeJsonAtomically(PROFILES_FILE, profileStore);
+  durable?.mark();
 }
 
 /**
@@ -1136,13 +1143,20 @@ function verifyMessengerProfileIdentity(body) {
 }
 
 // ---------- HTTP ----------
-function send(res, code, obj) {
+async function send(res, code, obj) {
   // Acknowledged scores and issued/consumed capabilities must survive process exit.
   // Analytics retains debounced persistence; disk errors reach the request's500 path.
   const path = res.req?.url?.split('?')[0];
-  if (code < 500 && res.req?.method === 'POST' &&
-      ['/api/score', '/api/run/start', '/api/daily/run'].includes(path)) flushStoreNow();
-  const body = JSON.stringify(obj);
+  // Freeze the response before waiting: another request can update a profile.
+  let body = JSON.stringify(obj);
+  try {
+    if (code < 500 && res.req?.method === 'POST' &&
+        (durable || ['/api/score', '/api/run/start', '/api/daily/run'].includes(path))) flushStoreNow();
+    if (durable && code < 500) await durable.flush(() => ({ store, profiles: profileStore }));
+  } catch {
+    code = durable ? 503 : 500;
+    body = JSON.stringify({ ok: false, error: 'state persistence unavailable' });
+  }
   res.writeHead(code, {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': process.env.ALLOW_ORIGIN ?? '*',
@@ -1193,8 +1207,9 @@ const server = createServer(async (req, res) => {
   try {
     if (req.method === 'GET' && url.pathname === '/health') {
       const capacity = scoreCapacity();
-      return send(res, capacity.ready ? 200 : 503, {
-        ok: capacity.ready,
+      const healthy = capacity.ready && (!durable || durable.health().healthy);
+      return send(res, healthy ? 200 : 503, {
+        ok: healthy,
         app: 'ofeliya-server',
         scores: store.scores.length,
         scoreCapacity: capacity,
@@ -1208,6 +1223,7 @@ const server = createServer(async (req, res) => {
           dirty: storeDirty,
           healthy: lastStoreFlushError == null,
           lastFlushAt: lastStoreFlushAt || null,
+          ...(durable?.health() ?? { mode: 'local' }),
         },
         rulesetVersion: CURRENT_RULESET_VERSION,
         campaignVersion: CURRENT_CAMPAIGN_VERSION,
@@ -1996,7 +2012,9 @@ function shutdown(signal) {
   shutdownStarted = true;
   console.log(`[ofeliya-server] ${signal}: draining connections`);
   flushStoreOnClose();
-  server.close(() => {
+  server.close(async () => {
+    try { await durable?.flush(() => ({ store, profiles: profileStore })); }
+    catch { process.exitCode = 1; }
     process.exit(process.exitCode ?? 0);
   });
   const forceExitTimer = setTimeout(() => {
