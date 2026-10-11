@@ -1,4 +1,5 @@
 import { COLORS, type EnemyKind } from './config';
+import type { WaveEventDefinition } from './WaveEvents';
 
 export type StageId = string;
 export type StageAmbientProfile = 'bloodstream' | 'heart';
@@ -72,6 +73,8 @@ export interface StageDefinition {
   boss: StageBossDefinition;
   signatureMechanic: StageSignatureMechanic;
   milestones: readonly StageMilestoneDefinition[];
+  /** Optional authored surge events; validated by StageDirector. */
+  waveEvents?: readonly WaveEventDefinition[];
 }
 
 export const BLOODSTREAM_STAGE: StageDefinition = {
@@ -129,6 +132,35 @@ export const BLOODSTREAM_STAGE: StageDefinition = {
     behavior: 'pressure-wave',
   },
   signatureMechanic: 'none',
+  waveEvents: [
+    {
+      id: 'encircle-1',
+      atMs: 130_000,
+      kind: 'encircle',
+      telegraphMs: 1_400,
+      title: 'КОЛЬЦЕВАЯ ОСАДА',
+      subtitle: 'АНТИТЕЛА ОКРУЖАЮТ ШТАММ',
+      color: COLORS.magenta,
+    },
+    {
+      id: 'flank-wedge-1',
+      atMs: 200_000,
+      kind: 'flank-wedge',
+      telegraphMs: 1_200,
+      title: 'КЛИН С ФЛАНГА',
+      subtitle: 'T-КЛЕТКИ АТАКУЮТ С ОДНОЙ СТОРОНЫ',
+      color: COLORS.purple,
+    },
+    {
+      id: 'swarm-surge-1',
+      atMs: 258_000,
+      kind: 'swarm-surge',
+      telegraphMs: 1_200,
+      title: 'НАПЛЫВ РОЯ',
+      subtitle: 'ИММУННЫЙ ОТВЕТ УСИЛИВАЕТСЯ',
+      color: COLORS.orange,
+    },
+  ],
   milestones: [
     {
       id: 'rna-detected',
@@ -232,6 +264,35 @@ export const HEART_STAGE: StageDefinition = {
     behavior: 'heartbeat-pulse',
   },
   signatureMechanic: 'heartbeat-pulse',
+  waveEvents: [
+    {
+      id: 'flank-wedge-2',
+      atMs: 65_000,
+      kind: 'flank-wedge',
+      telegraphMs: 1_200,
+      title: 'КЛИН С ФЛАНГА',
+      subtitle: 'ЗАЩИТНИКИ МИОКАРДА СЖИМАЮТСЯ',
+      color: 0xffb36b,
+    },
+    {
+      id: 'encircle-2',
+      atMs: 122_000,
+      kind: 'encircle',
+      telegraphMs: 1_400,
+      title: 'КОЛЬЦЕВАЯ ОСАДА',
+      subtitle: 'КАРДИАЛЬНАЯ ТКАНЬ ОКРУЖАЕТ ШТАММ',
+      color: 0xff6b4a,
+    },
+    {
+      id: 'swarm-surge-2',
+      atMs: 178_000,
+      kind: 'swarm-surge',
+      telegraphMs: 1_200,
+      title: 'НАПЛЫВ РОЯ',
+      subtitle: 'РИТМ ГОНИТ ИММУННЫЕ КЛЕТКИ',
+      color: 0xff8a65,
+    },
+  ],
   milestones: [
     {
       id: 'myocardium-entered',
