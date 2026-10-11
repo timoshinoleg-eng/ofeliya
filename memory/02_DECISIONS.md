@@ -1,3 +1,28 @@
+# Render cutover decisions - 2026-10-11
+
+Use the account the owner signed into: tea-d8iruouq1p3s73f30a90. The old Render
+preview is in another inaccessible workspace and is not production. Preserve
+the canonical domain, bot identities, secrets and webhook paths through DNS.
+Host the existing dedicated MAX SDK handlers without polling/subscription
+changes, and proxy /ofeliya/api/* so relative game requests reach the API.
+Keep Supabase remote persistence; Render's ephemeral files are not authoritative.
+Enable Telegram outbound prepared sharing on Render after live verification.
+
+Owner permits skipping final old-player data transfer. Existing67scores were
+retained; no claim is made that all final Cloud.ru player changes were imported.
+Retire only the dedicated OFELIYA Cloud.ru VM/disk/IP after new hosting checks.
+Ignore only memory/**, PROJECT_IDENTITY.md and deploy/RENDER.md in Render build
+filters; documentation updates do not redeploy gameplay. Future runtime changes
+continue through main/checksPass. No keepalive or paid upgrade is introduced.
+
+Supabase state access key was rotated in the existing Free project. The new
+Render uses the replacement; the old key returns401 for read and writer claim,
+so the inaccessible preview cannot steal production persistence. A 24-hour
+management token was scoped only to this project and Edge Functions. No keys
+are committed. Main CI38158081443 passed all three jobs for runtime d92325b.
+
+## Historical notes
+
 # DECISIONS — OFELIYA: STRAIN ZERO
 
 Формат: `[дата] Решение — причина. Статус.`

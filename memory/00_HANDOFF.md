@@ -1,3 +1,49 @@
+# OFELIYA Render production cutover - 2026-10-11
+
+Canonical URL remains https://ofeliya.freeveol.dpdns.org/ofeliya/.
+Production now runs on Render Free service srv-db5ro5vlk1mc73b0v0eg
+(ofeliya-game, owner tea-d8iruouq1p3s73f30a90, Frankfurt), tracking main
+with checksPass automatic deployment. Verified runtime release: d92325b1c83259fbbebd4e02331826fd98982a5e.
+PR190 restores the dedicated MAX webhook; PR191 proxies /ofeliya/api/*
+to the internal API, preserving game-relative requests and the Telegram webhook.
+
+Canonical HTTPS, release hashes, all54 public files, health, signed MAX/Telegram
+profiles, daily/friends/referral reads, both protected webhook handlers and
+Telegram prepared sharing passed. Existing67 scores remain in Supabase remote
+state; restart verification restored them with persistence healthy. Both bot
+identities, Mini App links, canonical webhook URLs and secrets are retained.
+Browser menu/start/mutation passed without console errors. Synthetic signed and
+webhook checks are not actual Telegram/MAX device acceptance or a real /start.
+
+Cloud.ru chatgpt-ofeliya-1 (32488dbc-e3e1-45f2-97f4-0249fdc8fd11), its
+30GB disk dfef9b54-a44b-477b-838e-374eec72e0c5 and public IP resource
+c7dc7d8b-d494-4f14-ac68-7261bdf2a8ac were removed after stopping the VM
+and rechecking canonical Render. Each GET now returns404. Other three VMs,
+disks, addresses and two Quiz backups were preserved. This does not assert
+zero account-wide Cloud.ru charges; unrelated paid resources remain.
+
+Render Free idle cold starts remain a platform limitation. No keepalive bypass.
+The previous ofeliya-telegram Render preview belongs to another inaccessible
+workspace and is not production. Global memory and production secrets are not
+in this repository. Prior PR189 historical status remains unmerged.
+
+Next verification: real Telegram/MAX /start, Mini App gameplay and save/reopen
+on the owner's devices. Historical Cloud.ru instructions below are archived
+context, not current deployment targets. See PROJECT_IDENTITY.md and deploy/RENDER.md.
+
+
+Render build filters ignore only `memory/**`, `PROJECT_IDENTITY.md` and
+`deploy/RENDER.md`; documentation updates do not redeploy the runtime.
+The retired Cloud.ru deployment workflow is disabled.
+
+Supabase state access key was rotated in the existing Free project. The new
+Render uses the replacement; the old key returns401 for read and writer claim,
+so the inaccessible preview cannot steal production persistence. A 24-hour
+management token was scoped only to this project and Edge Functions. No keys
+are committed. Main CI38158081443 passed all three jobs for runtime d92325b.
+
+## Historical notes
+
 # OFELIYA Render cutover continuation - 2026-10-11
 
 Branch codex/render-cutover-completion-20261011 mounts the existing dedicated MAX

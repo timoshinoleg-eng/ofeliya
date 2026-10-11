@@ -1,11 +1,11 @@
 # OFELIYA on Render Free
 
-One Node 22 web service serves `dist` at `/ofeliya/` and proxies `/api/*` and
+One Node 22 web service serves `dist` at `/ofeliya/` and proxies `/api/*`, `/ofeliya/api/*` and
 `/health` to the score server in the same process. Telegram uses
-`/api/telegram/webhook` with the existing secret validation. The existing MAX
+`/ofeliya/api/telegram/webhook` (also `/api/telegram/webhook`) with the existing secret validation. The existing MAX
 handlers are mounted at `/ofeliya/bot/webhook` when the dedicated MAX credentials
 are configured. Hosting startup does not poll, register or remove subscriptions;
-the cutover explicitly updates them after verification.
+the canonical webhook URLs remain unchanged through DNS cutover.
 
 Build: `npm ci && VITE_RELEASE_SHA="$RENDER_GIT_COMMIT" npm run build:max`
 
@@ -61,3 +61,26 @@ the same commit. `/health` reports remote persistence health and revision.
 Render Free sleeps after15idle minutes and may take about a minute to start.
 750instance hours are shared by the workspace; bandwidth/build allowances also
 apply. Supabase Free may pause inactive projects. No keepalive bypass is added.
+
+## Verified production cutover (2026-10-11)
+
+Production service: `ofeliya-game` (`srv-db5ro5vlk1mc73b0v0eg`), Render Free,
+Frankfurt, main with checksPass automatic deployment. Canonical DNS is a
+non-proxied CNAME to `ofeliya-game.onrender.com`; Render verifies domain/TLS.
+MAX and Telegram retain their canonical bot identities and webhook URLs.
+`OFELIYA_TELEGRAM_OUTBOUND_ENABLED=1` restores prepared sharing; the live API
+returned200 without sending a chat message. Supabase restore after restart
+remains healthy. Cloud.ru OFELIYA VM/disk/IP are deleted; other workloads remain.
+
+
+Render build filters ignore only `memory/**`, `PROJECT_IDENTITY.md` and
+`deploy/RENDER.md`; documentation updates do not redeploy the runtime.
+The retired Cloud.ru deployment workflow is disabled.
+
+## State writer isolation
+
+Supabase state access key was rotated in the existing Free project. The new
+Render uses the replacement; the old key returns401 for read and writer claim,
+so the inaccessible preview cannot steal production persistence. A 24-hour
+management token was scoped only to this project and Edge Functions. No keys
+are committed. Main CI38158081443 passed all three jobs for runtime d92325b.
