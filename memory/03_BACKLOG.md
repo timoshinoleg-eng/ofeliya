@@ -262,8 +262,13 @@ Density fixture now waits two actual Scene POST_UPDATE frames with cache>=target
 # 2026-10-11 Migration checklist
 
 - [x] Verify free plans and initial state export; durable adapter/unit checks.
-- [ ] Deploy Render and verify signed Telegram API plus restart persistence.
+- [x] Deploy Render and verify signed Telegram API plus sleep/wake persistence.
 - [ ] Drain/export/import final Cloud.ru state; keep canonical HTTPS domain.
 - [ ] Switch Telegram webhook/menu; verify release and asset parity.
 - [ ] Independently preserve other workloads then delete all paid Cloud.ru resources.
 - [ ] Verify remaining tariff/resource inventory and residual charges.
+
+- [ ] Obtain Render API access to service workspace tea-d3efqm15pdvs739533i0;
+  bind canonical domain and change service branch to main.
+- [ ] Inspect stopped quiz-battle-web-1 volume and historical backups before
+  deletion; active VM file backups do not imply these are preserved.

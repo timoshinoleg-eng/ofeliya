@@ -276,3 +276,10 @@ Authorized target: Render Free with durable state in existing free Supabase.
 Initial export:67scores,4profiles,Telegram user list preserved. Source production
 SHAa1e540c49225d9b627f44c291e5a67f3f27c49e7. New hosting entrypoint and durable
 adapter tested; no production traffic switched yet. See deploy/RENDER.md.
+
+2026-10-11 verified progress: PR188 merged after complete CI success; new Render
+Free service live, signed Telegram API and idle wake restore checked. Canonical
+DNS remains Cloud.ru. Existing Render key belongs to another workspace; target
+workspace credentials are required for custom domain and main branch settings.
+Full Ofeliya/QuizBattle+PostgreSQL/ops working-file backups independently preserved.
+No final source drain or paid-resource cleanup yet. See latest00_HANDOFF.

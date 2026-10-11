@@ -211,3 +211,8 @@ snapshot. Do not place authoritative state only on Render's ephemeral filesystem
 or on Render Free Postgres (30dayexpiry). Restore before listening; acknowledge
 mutations only after durable commit; fence old deploys with a writer generation.
 BotKeep creation returned503NoAvailability despite expanded key permissions.
+
+2026-10-11 cutover constraint: preserve canonical Mini App origin for existing
+Telegram configuration and browser saves. Keep old production active until the
+Render account can bind that domain, final snapshot is imported and new backend
+is verified. Existing unrelated/stopped volumes need inspection before removal.

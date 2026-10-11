@@ -1,15 +1,38 @@
 # OFELIYA Render migration handoff — 2026-10-11
 
-User authorized migration to Render Free and subsequent removal of paid Cloud.ru
-resources after preservation/verification. BotKeep is blocked by503capacity.
-Branch codex/render-migration-20261011 adds one Node hosting entrypoint and durable
-snapshot adapter. Supabase project gihizzpuzcuctitvwavz is restored under a verified
-free org; private state schema and authenticated Edge Function are deployed, with
-an initial67scores/4profiles snapshot. Final cutover/export has NOT occurred yet.
-Read deploy/RENDER.md. No gameplay, ruleset or campaign changes. Existing75server
-checks and durable unit checks pass. New Render deployment, final capture, domain/
-Telegram switch, restart verification and Cloud.ru deletion remain pending.
-Secrets remain outside git; never expose production.env or state key.
+PR188 merged after all three CI jobs passed (run38141623083). Main SHA
+ dee02a4852d27e10a47d2a6612210f1aaa94f90c. No gameplay/ruleset changes.
+Render Free service srv-db5oaad9fdbs73dic4fg in workspace
+tea-d3efqm15pdvs739533i0 (aurum1984@ya.ru):
+https://ofeliya-telegram.onrender.com/ofeliya/ . Branch remains
+codex/render-migration-20261011 until account API access can change it to main.
+Supabase free project gihizzpuzcuctitvwavz restores initial67scores/4profiles/
+551analytics events; signed Telegram profile and sleep/wake restore passed.
+Private state authentication and server-only database privileges are verified.
+
+BLOCKER: existing Render API key belongs to tea-d8iruouq1p3s73f30a90
+(timoshin.oleg@gmail.com), not the service workspace. Custom domain/branch
+settings require a matching API key or signed-in Render session. Browser shows
+sign-in screen. Never expose credentials; do not ask for passwords in chat.
+Canonical ofeliya.freeveol.dpdns.org still points to176.108.241.28. Existing
+Telegram webhook/menu and Cloud.ru production remain unchanged. Final drain/
+export/import, canonical domain switch and Cloud.ru paid-resource deletion are
+NOT done. User already authorized these actions after preservation; no repeated
+approval needed. See deploy/RENDER.md.
+
+Independent verified backups are saved: ofeliya-migration-20261011.tar.gz
+(70,569,845bytes SHA2567d8427945596603ff1bee3520b7a0c1f88228bd6779858a84aadc302fbd2f91a),
+quizbattle-migration-20261011.tar.gz including PostgreSQL dump (83,528,245bytes,
+SHA25694e76ce50b2b3d0f13d7ee52f3ed0cead8cf72113ffcd9acd779eba7100d1424),
+ops-migration-20261011.tar.gz preserves worktree files (674,113,920bytes,
+SHA2566a0a5910853e17f31732d62de707e31ce094d70c7151c3e4b12535694f7584f8).
+Ops archive excludes reproducible node_modules/.git/cache/.local dependencies.
+Do not infer preservation of stopped quiz-battle-web-1 disk or historical
+Cloud.ru snapshots from these archives. Inspect those before destructive cleanup.
+Cloud.ru AI Agents, Container Apps/Jobs, Foundation Models inference, EvoClaw and
+MCP servers show no deployments/charges. Paid VM/disks/IP/backups/registry remain.
+Only this session's unused176.123.162.196 IP was released. Preserve free evo-claw
+Object Storage bucket. Secrets stay outside git.
 
 ## Previous release fixture handoff — 2026-10-08
 
