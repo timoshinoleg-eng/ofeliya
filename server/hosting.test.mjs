@@ -50,6 +50,14 @@ async function check(configured) {
     assert.ok(ready, output);
     assert.equal(await (await fetch(base + '/ofeliya/')).text(), 'hosting-fixture');
     assert.equal((await fetch(base + '/api/top')).status, 200);
+    // These are the relative URLs used by clients loaded from /ofeliya/.
+    const gameApi = new URL('api/top?limit=1', base + '/ofeliya/');
+    const top = await fetch(gameApi);
+    assert.equal(top.status, 200);
+    assert.match(top.headers.get('content-type'), /application\/json/);
+    assert.equal((await fetch(base + '/ofeliya/api/telegram/webhook', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}'
+    })).status, 403, 'Telegram route must reach the API authentication handler');
     const url = base + '/ofeliya/bot/webhook';
     const post = (body, secret) => fetch(url, { method: 'POST',
       headers: { 'x-max-bot-api-secret': secret }, body });
@@ -63,7 +71,7 @@ async function check(configured) {
       const dataCheck = Object.keys(fields).sort().map(key => `${key}=${fields[key]}`).join('\n');
       const secret = createHmac('sha256', 'WebAppData').update(env.OFELIYA_BOT_TOKEN).digest();
       fields.hash = createHmac('sha256', secret).update(dataCheck).digest('hex');
-      const profile = await fetch(base + '/api/profile', {method: 'POST',
+      const profile = await fetch(new URL('api/profile', base + '/ofeliya/'), {method: 'POST',
         headers: {'content-type': 'application/json'},
         body: JSON.stringify({platform: 'max', initData: new URLSearchParams(fields).toString()}) });
       assert.equal(profile.status, 200, 'hosted MAX profile must use the dedicated token');
