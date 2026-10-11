@@ -250,6 +250,7 @@ function validWave(value: unknown): value is WaveDirectorSnapshot {
     integer(value.spawnedElites, 0, 1_000_000) &&
     finite(value.minionAcc, 0, 10_000_000) &&
     (value.threatAccMs === undefined || finite(value.threatAccMs, 0, 1_000)) &&
+    (value.waveEventIndex === undefined || integer(value.waveEventIndex, 0, 1_000)) &&
     validThreatSnapshot(value.threat)
   );
 }

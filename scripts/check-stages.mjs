@@ -134,6 +134,7 @@ try {
     ...bloodstream,
     durationMs: 1_000,
     bossWarningLeadMs: 200,
+    waveEvents: [],
     milestones: [{ id: 'test-beat', atMs: 400, title: 'TEST', subtitle: 'TEST', color: 0xffffff }],
   };
   const second = {
@@ -141,6 +142,7 @@ try {
     id: 'heart-test',
     durationMs: 2_000,
     bossWarningLeadMs: 0,
+    waveEvents: [],
     milestones: [],
     boss: { ...HEART_STAGE.boss, id: 'heart-boss-test', name: 'HEART BOSS TEST' },
   };
