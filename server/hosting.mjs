@@ -34,8 +34,9 @@ const gateway = createServer(async (req, res) => {
       } else maxWebhook(req, res);
       return;
     }
-    if (url.pathname.startsWith('/api/') || url.pathname === '/health') {
-      const proxy = request({ hostname: '127.0.0.1', port: apiPort, path: req.url,
+    if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/ofeliya/api/') || url.pathname === '/health') {
+      const apiPath = url.pathname.startsWith('/ofeliya/api/') ? req.url.slice('/ofeliya'.length) : req.url;
+      const proxy = request({ hostname: '127.0.0.1', port: apiPort, path: apiPath,
         method: req.method, headers: { ...req.headers, host: 'localhost:' + apiPort } }, upstream => {
         res.writeHead(upstream.statusCode, upstream.headers); upstream.pipe(res);
       });
