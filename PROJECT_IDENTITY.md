@@ -8,11 +8,17 @@ This file is the canonical identity map for humans, agents, audits and deploymen
 - Repository: `timoshinoleg-eng/ofeliya`
 - MAX bot: `@id402806822924_5_bot`
 - Mini App URL: `https://ofeliya.freeveol.dpdns.org/ofeliya/`
-- Cloud.ru VM: `chatgpt-ofeliya-1`
-- Public IP: `176.108.241.28`
+- Hosting: **Render Free**, Frankfurt
+- Render service: `srv-db5ro5vlk1mc73b0v0eg` (`ofeliya-game`)
+- Render origin: `https://ofeliya-game.onrender.com`
+- Deployment branch: `main` (automatic after checks pass)
+- Durable state: private Supabase `ofeliya-state` snapshot
 - Bot ownership: **dedicated**
 - Webhook namespace: `/ofeliya/bot/webhook`
-- Runtime env root: `/opt/ofeliya`
+- Telegram bot: `@ofeliya_game_bot`
+- Telegram webhook: `/ofeliya/api/telegram/webhook`
+- Runtime secrets: Render environment, never committed
+- Retired 2026-10-11: Cloud.ru `chatgpt-ofeliya-1`, its30GB disk and IP `176.108.241.28`
 
 ## Retired legacy target — never use for OFELIYA
 

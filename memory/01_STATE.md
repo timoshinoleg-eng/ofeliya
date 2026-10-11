@@ -1,3 +1,26 @@
+# Production state - 2026-10-11
+
+OFELIYA is live on Render Free ofeliya-game (srv-db5ro5vlk1mc73b0v0eg),
+Frankfurt, main/checksPass, canonical https://ofeliya.freeveol.dpdns.org/ofeliya/.
+Runtime d92325b1c83259fbbebd4e02331826fd98982a5e includes merged PR190/191.
+MAX/TG protected callbacks and /ofeliya/api/* work; prepared Telegram sharing
+returned200. Remote Supabase state is healthy; restart restored67scores,
+551events, and existing profiles. All54 assets and release hashes passed.
+
+Cloud.ru OFELIYA VM,30GB disk and IP are deleted (GET404 for each); its deploy
+workflow is disabled. Other three VMs, their resources and two Quiz backups
+were preserved. Account-wide Cloud.ru charges are not claimed to be zero.
+Real Telegram/MAX device /start and save/reopen remain external acceptance.
+See memory/00_HANDOFF.md for verified IDs and evidence limits.
+
+Supabase state access key was rotated in the existing Free project. The new
+Render uses the replacement; the old key returns401 for read and writer claim,
+so the inaccessible preview cannot steal production persistence. A 24-hour
+management token was scoped only to this project and Edge Functions. No keys
+are committed. Main CI38158081443 passed all three jobs for runtime d92325b.
+
+## Historical notes
+
 # STATE — OFELIYA: STRAIN ZERO
 
 Обновлено: 2026-10-05. Только факты; решения — в `02_DECISIONS.md`.

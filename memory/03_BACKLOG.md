@@ -1,3 +1,26 @@
+# Cutover backlog - 2026-10-11
+
+Completed: dedicated MAX hosting callback; game-relative API/Telegram path
+compatibility; new owner-account Render Free service; main/checksPass config;
+canonical DNS/TLS; signed profiles/social reads; Telegram prepared sharing;
+remote restart restore; full public-file/hash checks; OFELIYA Cloud.ru VM/disk/IP
+removal; obsolete Cloud.ru deploy workflow disabled.
+
+Remaining external acceptance: real /start in Telegram and MAX, Mini App
+gameplay and save/reopen on owner devices. Automated/synthetic evidence does
+not replace those checks. Render idle cold starts remain expected.
+Other Cloud.ru workloads and charges require a separate scope; preserved.
+The inaccessible old Render preview may be removed by its workspace owner.
+Prior PR189 contains historical status and should not overwrite this handoff.
+
+Supabase state access key was rotated in the existing Free project. The new
+Render uses the replacement; the old key returns401 for read and writer claim,
+so the inaccessible preview cannot steal production persistence. A 24-hour
+management token was scoped only to this project and Edge Functions. No keys
+are committed. Main CI38158081443 passed all three jobs for runtime d92325b.
+
+## Historical notes
+
 # BACKLOG — OFELIYA: STRAIN ZERO
 
 Обновлено: 2026-10-05. Отмечайте сделанное галочкой; новые пункты добавляйте сюда, а не в чат.
