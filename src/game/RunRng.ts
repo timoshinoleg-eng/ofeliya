@@ -5,6 +5,7 @@ export const GAMEPLAY_RNG_STREAMS = [
   'elite',
   'host-cell',
   'loot',
+  'wave-event',
 ] as const;
 
 export type GameplayRngStream = (typeof GAMEPLAY_RNG_STREAMS)[number];
@@ -93,6 +94,13 @@ export class RunRng {
     if (snapshot.seed !== this.seed) throw new Error('RunRng snapshot seed mismatch');
     for (const stream of GAMEPLAY_RNG_STREAMS) {
       const state = snapshot.states[stream];
+      if (state === undefined) {
+        // Additive stream migration: checkpoints written before a stream
+        // existed re-derive it from the seed instead of failing validation.
+        // Consumption order of pre-existing streams is untouched.
+        this.states[stream] = hash32(`${this.seed}:${stream}`);
+        continue;
+      }
       if (!Number.isInteger(state) || state < 0 || state > 0xffffffff) {
         throw new Error('Invalid RunRng stream state');
       }
