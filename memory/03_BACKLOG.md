@@ -267,3 +267,12 @@ Density fixture now waits two actual Scene POST_UPDATE frames with cache>=target
 - [ ] Switch Telegram webhook/menu; verify release and asset parity.
 - [ ] Independently preserve other workloads then delete all paid Cloud.ru resources.
 - [ ] Verify remaining tariff/resource inventory and residual charges.
+
+
+## 2026-10-11 local cutover follow-up
+- [x] Audit54public files, release hashes, remote health and browser game startup.
+- [x] Mount existing MAX webhook handlers and test /start/auth/gateway/MAX profile locally.
+- [ ] Complete authenticated access to the service Render workspace; available UI awaits GitHub2FA.
+- [ ] CI/review/merge hosted MAX correction and deploy from main with dedicated credentials.
+- [ ] Bind canonical domain, verify TLS/DNS and both messenger bots/identity/state restart.
+- [ ] Retire only verified OFELIYA Cloud.ru resources; do not claim billing stopped before inventory readback.

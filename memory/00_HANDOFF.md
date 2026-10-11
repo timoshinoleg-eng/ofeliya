@@ -1,3 +1,39 @@
+# OFELIYA Render cutover continuation - 2026-10-11
+
+Branch codex/render-cutover-completion-20261011 mounts the existing dedicated MAX
+bot handlers on the Node hosting gateway without polling or changing subscriptions.
+Dedicated MAX credentials are mapped to score/profile authentication. New real
+HTTP webhook authentication, /start and gateway/profile tests run in server:test.
+No gameplay, score version or campaign changes. See deploy/RENDER.md.
+
+Live Render release: fb54e0b4b71d51cea143f1e4b5546e3ffc123fab. Health reports
+remote persistence healthy, revision8,67scores/551analytics events. All54 checked
+public files match; six text files differ only in Windows CRLF vs deployed LF.
+HTML/runtime-config/service-worker hashes exactly match the public release marker.
+Browser menu/start/mutation reached; this is not messenger/device acceptance.
+Unauthenticated Telegram webhook returns403. MAX webhook returns405 because it
+is not mounted in the current deployment. This correction is NOT deployed yet.
+
+Cloudflare record d685ca1fcef5dbcf8f5167f54552dc1a still points canonical domain
+to176.108.241.28; old public release a1e540c49225d9b627f44c291e5a67f3f27c49e7.
+Existing Render key belongs to tea-d8iruouq1p3s73f30a90; OFELIYA service
+srv-db5oaad9fdbs73dic4fg belongs to tea-d3efqm15pdvs739533i0.
+User said they signed into another Render account; available browser remained at
+GitHub two-factor verification. User was asked to complete it themselves; never
+request OTPs in chat. Direct SSH to old VM timed out; bastion key auth failed.
+No DNS, production secret, webhook, subscription or Cloud.ru resource changed.
+
+Local75server tests, durable restore/fencing checks, MAX bot checks, hosted HTTP
+/start/authentication/gateway/MAX-profile tests, Telegram runtime/bot policy,
+identity isolation and TypeScript passed. Hosted CI and deployment remain pending.
+
+User permits leaving old player data behind. Complete domain binding/TLS, main
+deployment, both messenger credentials/bots and durable restart checks before
+retiring OFELIYA Cloud.ru resources. Preserve unrelated workloads. Prior PR189
+archive/status notes remain unmerged. Secrets stay outside git.
+
+## Previous handoff
+
 # OFELIYA Render migration handoff — 2026-10-11
 
 User authorized migration to Render Free and subsequent removal of paid Cloud.ru

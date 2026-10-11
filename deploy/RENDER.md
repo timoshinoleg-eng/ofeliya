@@ -1,8 +1,11 @@
 # OFELIYA on Render Free
 
 One Node 22 web service serves `dist` at `/ofeliya/` and proxies `/api/*` and
-`/health` to the score server in the same process. No MAX polling bot is started.
-Telegram uses `/api/telegram/webhook` with the existing secret validation.
+`/health` to the score server in the same process. Telegram uses
+`/api/telegram/webhook` with the existing secret validation. The existing MAX
+handlers are mounted at `/ofeliya/bot/webhook` when the dedicated MAX credentials
+are configured. Hosting startup does not poll, register or remove subscriptions;
+the cutover explicitly updates them after verification.
 
 Build: `npm ci && VITE_RELEASE_SHA="$RENDER_GIT_COMMIT" npm run build:max`
 
@@ -12,6 +15,16 @@ Runtime secrets: `TG_BOT_TOKEN`, `TG_WEBHOOK_SECRET`, `OFELIYA_STATE_URL`,
 `OFELIYA_STATE_TOKEN`. Set `GAME_URL` to the HTTPS game URL and retain the existing
 `OFELIYA_TELEGRAM_GAME_URL` direct Mini App link. Legal/build values are unchanged
 from the previous release. Do not use a shared MAX token as `MAX_BOT_TOKEN`.
+
+For MAX retain `OFELIYA_BOT_TOKEN`, `OFELIYA_BOT_USERNAME`,
+`OFELIYA_BOT_MODE=dedicated`, `OFELIYA_BOT_WEBHOOK_DOMAIN`,
+`OFELIYA_BOT_WEBHOOK_PATH=/ofeliya/bot/webhook` and
+`OFELIYA_BOT_WEBHOOK_SECRET` (at least 32 characters). The SDK callback shares
+Render's public port; `OFELIYA_BOT_WEBHOOK_PORT` is only validated as legacy config
+and defaults to 8788. MAX score authentication uses explicit `MAX_BOT_TOKEN`, or
+the existing `OFELIYA_MAX_BOT_TOKEN`/dedicated bot token when not explicitly set.
+No Hub/Chatbot24 credential fallback is used. Without a MAX bot token the MAX
+webhook returns 503, so a Telegram-only deployment does not look MAX-ready.
 
 ## State
 

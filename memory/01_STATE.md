@@ -276,3 +276,12 @@ Authorized target: Render Free with durable state in existing free Supabase.
 Initial export:67scores,4profiles,Telegram user list preserved. Source production
 SHAa1e540c49225d9b627f44c291e5a67f3f27c49e7. New hosting entrypoint and durable
 adapter tested; no production traffic switched yet. See deploy/RENDER.md.
+
+
+## 2026-10-11 local cutover continuation
+Render public release fb54e0b verified against all54public files and release
+hashes; remote revision8 healthy. Canonical DNS still Cloud.ru/a1e540c. Existing
+Render key cannot access service workspace; available UI awaits GitHub2FA.
+MAX webhook missing in current Render deployment (405), corrected locally with
+existing handlers and credential mapping; new HTTP/auth/profile tests passed.
+No production settings or Cloud.ru resources changed. See latest00_HANDOFF.
