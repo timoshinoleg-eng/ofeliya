@@ -1395,6 +1395,10 @@ export class UIScene extends Phaser.Scene {
     const ch = compact ? (expandedStackFits ? expandedCardHeight : 124) : 148;
     const totalH = cards.length * ch + (cards.length - 1) * gap;
     if (blockCenter - totalH / 2 < minTop) blockCenter = minTop + totalH / 2;
+    // The push-down guarantees header clearance but can shove the last card past the
+    // bottom edge on short viewports; clamp the stack inside the screen (bottom wins —
+    // a cut-off footer is worse than a tight header gap in the impossible-fit corner).
+    if (blockCenter + totalH / 2 > H - gap) blockCenter = H - gap - totalH / 2;
     let y = blockCenter - totalH / 2 + ch / 2;
 
     cards.forEach((def: UpgradeDef, cardIndex: number) => {

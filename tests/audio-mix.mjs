@@ -162,6 +162,33 @@ await test('existing SFX throttles reject tight shoot hit pickup repeats', async
     assert.equal(f.contexts[0].nodes.filter(n => n.kind === 'source').length, 1);
   }
 });
+await test('pickup round-robin keeps one family throttle: rapid variants do not stack', () => {
+  const f = fixture();
+  // Without a decode flush every variant falls back to a transient oscillator; either
+  // node kind proves a blip actually sounded, unlike counting only decoded sources.
+  const transients = () => f.contexts[0].nodes.filter(n => n.kind === 'oscillator' || n.kind === 'source').length;
+  f.Sfx.playPickupVariant();
+  assert.equal(transients(), 1);
+  f.Sfx.playPickupVariant(); f.Sfx.playPickupVariant();
+  assert.equal(transients(), 1);
+  f.advance(); f.Sfx.playPickupVariant();
+  assert.equal(transients(), 2);
+  // Rejected plays must not advance the cursor: the second allowed call is pickup2 (f0 720).
+  const last = f.contexts[0].nodes.filter(n => n.kind === 'oscillator').at(-1);
+  assert.equal(last.frequency.value, 720);
+});
+await test('bio pulse rides the user music gain, not master', async () => {
+  const f = fixture(); f.Sfx.startBed(2); await flush();
+  const c = f.contexts[0];
+  const bio = c.nodes.find(n => n.kind === 'oscillator' && !n.disconnected);
+  assert(bio, 'bio oscillator must be running with the bed');
+  // Chain: trim -> music -> filter -> musicUserGain -> master -> compressor.
+  const filter = c.nodes.find(n => n.kind === 'filter');
+  const userGain = filter.connections[0];
+  assert.equal(bio.connections[0].connections[0], userGain, 'bio pulse gain must feed musicUserGain');
+  f.Sfx.setMusicVolume(0);
+  assert.equal(userGain.gain.value, 0, 'music 0% must silence the bio pulse bus');
+});
 await test('diagnostics report loading and actual fallback bed separately without unsafe data', async () => {
   const d = deferred(); const f = fixture({ decoder: async ab => {
     if (ab.url.includes('loop3')) throw new Error('codec rejected'); return d.promise;
