@@ -10,6 +10,7 @@ import {
 } from '../systems/SocialClient';
 import type { DailyTicketStatus } from '../systems/DailyRunClient';
 import { dailyStreakSummary } from '../systems/DailyHistory';
+import { dailyMutatorForDate, todayDateKey } from '../game/DailyMutator';
 
 const MAX_ROWS = 3;
 
@@ -301,7 +302,19 @@ export class SocialHub {
       .setOrigin(0.5)
       .setResolution(2)
       .setName('ofeliya-social-daily-label');
-    this.body.add([bg, label]);
+    const todayMutator = dailyMutatorForDate(todayDateKey());
+    const mutatorText = this.scene.add
+      .text(W / 2, y + 20, todayMutator.title.replace('МУТАТОР ДНЯ · ', ''), {
+        fontFamily: FONT,
+        fontSize: this.scene.scale.height < 650 ? '9px' : '10px',
+        fontStyle: 'bold',
+        color: '#e8f4ff',
+      })
+      .setOrigin(0.5)
+      .setResolution(2)
+      .setAlpha(0.92)
+      .setName('ofeliya-social-daily-mutator');
+    this.body.add([bg, label, mutatorText]);
     const streak = dailyStreakSummary();
     if (streak.current > 0 || streak.best > 0) {
       const streakText = this.scene.add

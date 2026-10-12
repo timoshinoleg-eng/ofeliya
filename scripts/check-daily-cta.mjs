@@ -78,7 +78,7 @@ const ticket = {
   issuedAt: 1000,
   expiresAt: 9_999_999_999_999,
   difficultyId: 'standard',
-  rulesetVersion: 2,
+  rulesetVersion: 3,
   campaignVersion: 2,
 };
 
@@ -183,8 +183,8 @@ try {
 
   // --- (2) submitDailyRunScoreDetailed status table ---------------------------------
   const scoreCases = [
-    ['200 + dailyRunAccepted -> ok', 200, { ok: true, rank: 3, ranked: true, rulesetVersion: 2, campaignVersion: 2, dailyRunAccepted: true }, 'ok'],
-    ['200 without the flag -> rejected', 200, { ok: true, rank: 3, ranked: true, rulesetVersion: 2, campaignVersion: 2 }, 'rejected'],
+    ['200 + dailyRunAccepted -> ok', 200, { ok: true, rank: 3, ranked: true, rulesetVersion: 3, campaignVersion: 2, dailyRunAccepted: true }, 'ok'],
+    ['200 without the flag -> rejected', 200, { ok: true, rank: 3, ranked: true, rulesetVersion: 3, campaignVersion: 2 }, 'rejected'],
     ['403 -> denied', 403, { ok: false }, 'denied'],
     ['409 -> closed', 409, { ok: false }, 'closed'],
     ['410 -> expired', 410, { ok: false }, 'expired'],
@@ -224,7 +224,7 @@ try {
       let fetches = 0;
       global.fetch = async () => {
         fetches += 1;
-        return jsonRes(200, { ok: true, dailyRunAccepted: true, ranked: true, rulesetVersion: 2, campaignVersion: 2 });
+        return jsonRes(200, { ok: true, dailyRunAccepted: true, ranked: true, rulesetVersion: 3, campaignVersion: 2 });
       };
       const outcome = await score.submitDailyRunScoreDetailed(res, plat, ticket);
       assert.equal(outcome.status, 'unavailable');
@@ -234,10 +234,10 @@ try {
   }
 
   await test('submitDailyRunScore stays compatible (ok -> response, else null)', async () => {
-    global.fetch = async () => jsonRes(200, { ok: true, rank: 3, ranked: true, rulesetVersion: 2, campaignVersion: 2, dailyRunAccepted: true });
+    global.fetch = async () => jsonRes(200, { ok: true, rank: 3, ranked: true, rulesetVersion: 3, campaignVersion: 2, dailyRunAccepted: true });
     const ok = await score.submitDailyRunScore(result, platform, ticket);
     assert.equal(ok.dailyRunAccepted, true);
-    global.fetch = async () => jsonRes(200, { ok: true, ranked: true, rulesetVersion: 2, campaignVersion: 2 });
+    global.fetch = async () => jsonRes(200, { ok: true, ranked: true, rulesetVersion: 3, campaignVersion: 2 });
     assert.equal(await score.submitDailyRunScore(result, platform, ticket), null);
     global.fetch = async () => jsonRes(409, { ok: false });
     assert.equal(await score.submitDailyRunScore(result, platform, ticket), null);

@@ -70,7 +70,10 @@ function currentSeason(now = Date.now()) {
 }
 
 // ---------- score ruleset / anti-cheat ----------
-export const CURRENT_RULESET_VERSION = 2;
+// P0-3 (daily mutator): bumped 2 → 3. Daily tickets are stamped with this
+// version and the daily submit rejects a mismatch, so cached v2 clients get
+// a clean 422 instead of an unfair leaderboard entry after this lands.
+export const CURRENT_RULESET_VERSION = 3;
 export const CURRENT_CAMPAIGN_VERSION = 2;
 
 const ANTI_CHEAT = {

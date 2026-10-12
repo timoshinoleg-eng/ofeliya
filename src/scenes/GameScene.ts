@@ -76,6 +76,8 @@ import {
   type RunCheckpointData,
 } from '../systems/RunCheckpoint';
 import { readDailyIntent, shouldCheckpoint } from '../game/DailyRunIntent';
+import type { DailyRunTicket } from '../systems/DailyRunClient';
+import { applyDailyMutator, type DailyMutator } from '../game/DailyMutator';
 import { SCORE_CAMPAIGN_VERSION, SCORE_RULESET_VERSION } from '../game/RunVersions';
 import {
   ADAPTIVE_AUDIO_TUNING,
@@ -184,6 +186,7 @@ export class GameScene extends Phaser.Scene {
   resumed = false;
   private checkpointAccMs = 0;
   private dailyRun = false;
+  private dailyMutator: DailyMutator | null = null;
   private gameplayRng!: RunRng;
   private audio!: AdaptiveAudioDirector;
   private audioAccMs = 0;
@@ -252,6 +255,14 @@ export class GameScene extends Phaser.Scene {
     // as an ordinary run. Non-daily launch paths clear the marker in MenuScene.
     const dailyIntent = readDailyIntent(this.registry);
     this.dailyRun = dailyIntent !== null;
+    if (this.dailyRun) {
+      // Daily mutator (P0-3): the day's modifier is derived from the server
+      // ticket's dateKey — identical for every player, no runtime RNG.
+      const ticket = (this.registry.get('dailyTicket') as DailyRunTicket | null | undefined) ?? null;
+      const applied = applyDailyMutator(this.difficulty, ticket?.dateKey ?? '');
+      this.dailyMutator = applied.mutator;
+      this.difficulty = applied.difficulty;
+    }
     this.gameplayRng = new RunRng(resume?.runSeed ?? requestedSeed ?? generateRunSeed());
     if (resume) this.gameplayRng.restore(resume.rng);
     this.runSeed = this.gameplayRng.seed;
@@ -462,6 +473,17 @@ export class GameScene extends Phaser.Scene {
       () => this.gameplayRng.next('anomaly')
     );
     this.milestones = new RunMilestones(this);
+    if (this.dailyMutator) {
+      // Same presentation path as stage milestones/wave events: one banner,
+      // no new UI system.
+      this.milestones.show({
+        id: 'daily-mutator',
+        atMs: 0,
+        title: this.dailyMutator.title,
+        subtitle: this.dailyMutator.subtitle,
+        color: this.dailyMutator.color,
+      });
+    }
     if (resume) this.restoreCheckpointRuntime(resume);
     else this.handleStageEvents(this.stageDirector.startRun());
     this.cameras.main.startFollow(this.player, true, 0.14, 0.14);

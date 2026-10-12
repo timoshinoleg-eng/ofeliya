@@ -67,7 +67,7 @@ try {
 
   const checkpoint = {
     schemaVersion: 1,
-    rulesetVersion: 2,
+    rulesetVersion: 3,
     campaignVersion: 2,
     savedAtEpochMs: Date.now(),
     runSeed: rng.seed,
@@ -109,6 +109,15 @@ try {
   delete legacyPreAnomaly.rng.states.anomaly;
   delete legacyPreAnomaly.wave.anomalySpawned;
   assert(validateRunCheckpoint(legacyPreAnomaly), 'pre-anomaly checkpoint rejected');
+
+  // Ruleset tolerance (P0-3, v2 → v3 daily mutator): ordinary-run checkpoints
+  // carry no mutator state and stay resumable; anything older than v2 is not.
+  const legacyRuleset = structuredClone(checkpoint);
+  legacyRuleset.rulesetVersion = 2;
+  assert(validateRunCheckpoint(legacyRuleset), 'legacy ruleset v2 checkpoint rejected');
+  const obsoleteRuleset = structuredClone(checkpoint);
+  obsoleteRuleset.rulesetVersion = 1;
+  assert(validateRunCheckpoint(obsoleteRuleset) === null, 'obsolete ruleset v1 checkpoint accepted');
 
   const impossible = structuredClone(checkpoint);
   impossible.runState.stage.hp = impossible.runState.stage.maxHp + 1;

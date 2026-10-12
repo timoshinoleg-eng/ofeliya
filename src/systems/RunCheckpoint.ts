@@ -316,9 +316,15 @@ export function validateRunCheckpoint(raw: unknown): RunCheckpointData | null {
   const value = migrateBoundary(raw);
   if (!record(value)) return null;
 
+  // P0-3: ruleset 2 → 3 (daily mutator). The bump only adds the daily-path
+  // modifier — ordinary-run checkpoint payloads carry no mutator state and
+  // simulate identically under v2 and v3, so legacy v2 checkpoints stay
+  // resumable instead of being silently wiped for every player.
+  const rulesetOk = value.rulesetVersion === SCORE_RULESET_VERSION || value.rulesetVersion === 2;
+
   if (
     value.schemaVersion !== RUN_CHECKPOINT_SCHEMA_VERSION ||
-    value.rulesetVersion !== SCORE_RULESET_VERSION ||
+    !rulesetOk ||
     value.campaignVersion !== SCORE_CAMPAIGN_VERSION ||
     !finite(value.savedAtEpochMs, 1, 9_999_999_999_999) ||
     typeof value.runSeed !== 'string' ||
