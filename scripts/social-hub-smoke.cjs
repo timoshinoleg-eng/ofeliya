@@ -19,13 +19,13 @@ const season = { ok: true, season: { index: 4, start: 1, end: 2, daysLeft: 12 } 
 const top = {
   ok: true,
   top: [
-    { rank: 1, platform: 'max', daily: false, win: true, timeMs: 184000, kills: 320, level: 12, dateKey: '2026-09-22', rulesetVersion: 2, campaignVersion: 2, difficultyId: 'standard', completionStage: 'heart' },
-    { rank: 2, platform: 'telegram', daily: false, win: true, timeMs: 191000, kills: 305, level: 11, dateKey: '2026-09-22', rulesetVersion: 2, campaignVersion: 2, difficultyId: 'standard', completionStage: 'heart' },
-    { rank: 3, platform: 'max', daily: false, win: true, timeMs: 205000, kills: 292, level: 10, dateKey: '2026-09-22', rulesetVersion: 2, campaignVersion: 2, difficultyId: 'standard', completionStage: 'heart' },
-    { rank: 4, platform: 'telegram', daily: false, win: false, timeMs: 213000, kills: 280, level: 9, dateKey: '2026-09-22', rulesetVersion: 2, campaignVersion: 2, difficultyId: 'standard', completionStage: null },
+    { rank: 1, platform: 'max', daily: false, win: true, timeMs: 184000, kills: 320, level: 12, dateKey: '2026-09-22', rulesetVersion: 3, campaignVersion: 2, difficultyId: 'standard', completionStage: 'heart' },
+    { rank: 2, platform: 'telegram', daily: false, win: true, timeMs: 191000, kills: 305, level: 11, dateKey: '2026-09-22', rulesetVersion: 3, campaignVersion: 2, difficultyId: 'standard', completionStage: 'heart' },
+    { rank: 3, platform: 'max', daily: false, win: true, timeMs: 205000, kills: 292, level: 10, dateKey: '2026-09-22', rulesetVersion: 3, campaignVersion: 2, difficultyId: 'standard', completionStage: 'heart' },
+    { rank: 4, platform: 'telegram', daily: false, win: false, timeMs: 213000, kills: 280, level: 9, dateKey: '2026-09-22', rulesetVersion: 3, campaignVersion: 2, difficultyId: 'standard', completionStage: null },
   ],
 };
-const daily = { ok: true, dateKey: '2026-09-22', total: 1, rank: 2, you: { win: true, timeMs: 198000, kills: 287, rulesetVersion: 2 } };
+const daily = { ok: true, dateKey: '2026-09-22', total: 1, rank: 2, you: { win: true, timeMs: 198000, kills: 287, rulesetVersion: 3 } };
 const friends = {
   ok: true,
   friends: [
@@ -43,7 +43,7 @@ const DAILY_TICKET = {
   issuedAt: 1_000,
   expiresAt: 9_999_999_999_999,
   difficultyId: 'standard',
-  rulesetVersion: 2,
+  rulesetVersion: 3,
   campaignVersion: 2,
 };
 

@@ -77,7 +77,7 @@ async function touchText(ctx, page, sceneKey, label) {
         ranked: false,
         challenge: {
           challengeId,
-          rulesetVersion: 2,
+          rulesetVersion: 3,
           campaignVersion: 2,
           runSeed: seed,
           difficultyId: 'standard',
@@ -124,7 +124,7 @@ async function touchText(ctx, page, sceneKey, label) {
         ok: true,
         ranked: true,
         rank: 1,
-        rulesetVersion: 2,
+        rulesetVersion: 3,
         campaignVersion: 2,
       }),
     });

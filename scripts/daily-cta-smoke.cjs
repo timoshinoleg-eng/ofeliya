@@ -30,7 +30,7 @@ const TICKET = {
   issuedAt: 1_000,
   expiresAt: 9_999_999_999_999,
   difficultyId: 'standard',
-  rulesetVersion: 2,
+  rulesetVersion: 3,
   campaignVersion: 2,
 };
 
@@ -152,7 +152,7 @@ async function waitForText(page, needle, timeout = 6000) {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ ok: true, rank: 5, ranked: true, rulesetVersion: 2, campaignVersion: 2, dailyRunAccepted: true, top: [] }),
+          body: JSON.stringify({ ok: true, rank: 5, ranked: true, rulesetVersion: 3, campaignVersion: 2, dailyRunAccepted: true, top: [] }),
         });
       });
       const { page, errors } = await boot(ctx);
@@ -222,7 +222,7 @@ async function waitForText(page, needle, timeout = 6000) {
       let scoreRequests = 0;
       await ctx.route('**/api/score', async (route) => {
         scoreRequests += 1;
-        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, rank: 5, ranked: true, rulesetVersion: 2, campaignVersion: 2, dailyRunAccepted: true }) });
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, rank: 5, ranked: true, rulesetVersion: 3, campaignVersion: 2, dailyRunAccepted: true }) });
       });
       const { page, errors } = await boot(ctx);
       await startGameWith(page, {
@@ -260,7 +260,7 @@ async function waitForText(page, needle, timeout = 6000) {
       await ctx.route('**/api/score', async (route) => {
         scoreRequests += 1;
         captured = JSON.parse(route.request().postData() || '{}');
-        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, rank: 7, ranked: true, rulesetVersion: 2, campaignVersion: 2, top: [] }) });
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, rank: 7, ranked: true, rulesetVersion: 3, campaignVersion: 2, top: [] }) });
       });
       const { page, errors } = await boot(ctx);
       await startGameWith(page, { runSeedOverride: 'ordinary-smoke-seed', difficultyId: 'standard' });

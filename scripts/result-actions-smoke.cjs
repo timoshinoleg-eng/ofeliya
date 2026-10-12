@@ -35,7 +35,7 @@ async function bootResult(browser) {
         ok: true,
         rank: null,
         ranked: false,
-        rulesetVersion: 2,
+        rulesetVersion: 3,
         campaignVersion: 2,
       }),
     })
