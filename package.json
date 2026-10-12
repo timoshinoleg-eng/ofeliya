@@ -29,7 +29,7 @@
     "smoke:bot": "node bot/smoke.mjs",
     "test:startup": "node tests/startup-font-timeout.mjs && node tests/startup-viewport-timeout.mjs && node tests/startup-renderer-contract.mjs",
     "server": "node server/index.mjs",
-    "server:test": "node server/test.mjs && node server/durable-state.test.mjs",
+    "server:test": "node server/test.mjs && node server/durable-state.test.mjs && node bot/hosting.test.mjs && node server/hosting.test.mjs",
     "bot": "node server/bot.mjs",
     "test:pacing": "node scripts/check-pacing.mjs",
     "test:cardiac-hazard": "node scripts/cardiac-line-hazard-smoke.cjs",

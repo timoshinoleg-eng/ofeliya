@@ -1,4 +1,124 @@
-# OFELIYA release fixture handoff — 2026-10-08
+# Free backup and BI follow-up - 2026-10-12
+
+All remaining Cloud.ru paid VMs/disks/IPs, both Quiz backups and two registries
+were subsequently deleted with owner confirmation. EvoClaw Lili is stopped.
+OFELIYA production remains Render Free with Supabase remote state.
+
+A private gzip snapshot (store/profiles/tg_users) was uploaded to the existing
+standard S3 bucket, downloaded and compared exactly. Latest verified revision
+28; SHA256 a6cc54bbaad3d5eefa8a596899d7d05a083d0d51790232a42f025b1a5c7bf72d.
+Bucket usage is about3.7MB, below the current15GB organizational free tier.
+Public bucket access is disabled. No new VM/IP/registry is required.
+
+Owner approved daily Windows backup at20:00 Europe/Moscow, task
+OFELIYA-S3-DailyBackup. Trial task exited0 and verified a fresh snapshot.
+It requires this computer and a logged-in Windows session; missed runs start
+when available. Local work/s3-backup.mjs rejects multiple buckets, truncated
+listings, total storage above100MB and backups above2MB. Secrets stay local.
+
+Managed BI service activation remains pending in Cloud.ru. Official API says
+Product evobi not active; no BI instance or paid database/SNAT was created.
+Do not create paid dependencies: owner authorized only free use. CSV upload
+requires an existing database; direct external sources require network review.
+Aggregated CSV and offline HTML preview contain no player identifiers. They
+represent551 stored events and4 actors, not a current telemetry acceptance test.
+
+# OFELIYA Render production cutover - 2026-10-11
+
+Canonical URL remains https://ofeliya.freeveol.dpdns.org/ofeliya/.
+Production now runs on Render Free service srv-db5ro5vlk1mc73b0v0eg
+(ofeliya-game, owner tea-d8iruouq1p3s73f30a90, Frankfurt), tracking main
+with checksPass automatic deployment. Verified runtime release: d92325b1c83259fbbebd4e02331826fd98982a5e.
+PR190 restores the dedicated MAX webhook; PR191 proxies /ofeliya/api/*
+to the internal API, preserving game-relative requests and the Telegram webhook.
+
+Canonical HTTPS, release hashes, all54 public files, health, signed MAX/Telegram
+profiles, daily/friends/referral reads, both protected webhook handlers and
+Telegram prepared sharing passed. Existing67 scores remain in Supabase remote
+state; restart verification restored them with persistence healthy. Both bot
+identities, Mini App links, canonical webhook URLs and secrets are retained.
+Browser menu/start/mutation passed without console errors. Synthetic signed and
+webhook checks are not actual Telegram/MAX device acceptance or a real /start.
+
+Cloud.ru chatgpt-ofeliya-1 (32488dbc-e3e1-45f2-97f4-0249fdc8fd11), its
+30GB disk dfef9b54-a44b-477b-838e-374eec72e0c5 and public IP resource
+c7dc7d8b-d494-4f14-ac68-7261bdf2a8ac were removed after stopping the VM
+and rechecking canonical Render. Each GET now returns404. Other three VMs,
+disks, addresses and two Quiz backups were preserved. This does not assert
+zero account-wide Cloud.ru charges; unrelated paid resources remain.
+
+Render Free idle cold starts remain a platform limitation. No keepalive bypass.
+The previous ofeliya-telegram Render preview belongs to another inaccessible
+workspace and is not production. Global memory and production secrets are not
+in this repository. Prior PR189 historical status remains unmerged.
+
+Next verification: real Telegram/MAX /start, Mini App gameplay and save/reopen
+on the owner's devices. Historical Cloud.ru instructions below are archived
+context, not current deployment targets. See PROJECT_IDENTITY.md and deploy/RENDER.md.
+
+
+Render build filters ignore only `memory/**`, `PROJECT_IDENTITY.md` and
+`deploy/RENDER.md`; documentation updates do not redeploy the runtime.
+The retired Cloud.ru deployment workflow is disabled.
+
+Supabase state access key was rotated in the existing Free project. The new
+Render uses the replacement; the old key returns401 for read and writer claim,
+so the inaccessible preview cannot steal production persistence. A 24-hour
+management token was scoped only to this project and Edge Functions. No keys
+are committed. Main CI38158081443 passed all three jobs for runtime d92325b.
+
+## Historical notes
+
+# OFELIYA Render cutover continuation - 2026-10-11
+
+Branch codex/render-cutover-completion-20261011 mounts the existing dedicated MAX
+bot handlers on the Node hosting gateway without polling or changing subscriptions.
+Dedicated MAX credentials are mapped to score/profile authentication. New real
+HTTP webhook authentication, /start and gateway/profile tests run in server:test.
+No gameplay, score version or campaign changes. See deploy/RENDER.md.
+
+Live Render release: fb54e0b4b71d51cea143f1e4b5546e3ffc123fab. Health reports
+remote persistence healthy, revision8,67scores/551analytics events. All54 checked
+public files match; six text files differ only in Windows CRLF vs deployed LF.
+HTML/runtime-config/service-worker hashes exactly match the public release marker.
+Browser menu/start/mutation reached; this is not messenger/device acceptance.
+Unauthenticated Telegram webhook returns403. MAX webhook returns405 because it
+is not mounted in the current deployment. This correction is NOT deployed yet.
+
+Cloudflare record d685ca1fcef5dbcf8f5167f54552dc1a still points canonical domain
+to176.108.241.28; old public release a1e540c49225d9b627f44c291e5a67f3f27c49e7.
+Existing Render key belongs to tea-d8iruouq1p3s73f30a90; OFELIYA service
+srv-db5oaad9fdbs73dic4fg belongs to tea-d3efqm15pdvs739533i0.
+User said they signed into another Render account; available browser remained at
+GitHub two-factor verification. User was asked to complete it themselves; never
+request OTPs in chat. Direct SSH to old VM timed out; bastion key auth failed.
+No DNS, production secret, webhook, subscription or Cloud.ru resource changed.
+
+Local75server tests, durable restore/fencing checks, MAX bot checks, hosted HTTP
+/start/authentication/gateway/MAX-profile tests, Telegram runtime/bot policy,
+identity isolation and TypeScript passed. Hosted CI and deployment remain pending.
+
+User permits leaving old player data behind. Complete domain binding/TLS, main
+deployment, both messenger credentials/bots and durable restart checks before
+retiring OFELIYA Cloud.ru resources. Preserve unrelated workloads. Prior PR189
+archive/status notes remain unmerged. Secrets stay outside git.
+
+## Previous handoff
+
+# OFELIYA Render migration handoff — 2026-10-11
+
+User authorized migration to Render Free and subsequent removal of paid Cloud.ru
+resources after preservation/verification. BotKeep is blocked by503capacity.
+Branch codex/render-migration-20261011 adds one Node hosting entrypoint and durable
+snapshot adapter. Supabase project gihizzpuzcuctitvwavz is restored under a verified
+free org; private state schema and authenticated Edge Function are deployed, with
+an initial67scores/4profiles snapshot. Final cutover/export has NOT occurred yet.
+Read deploy/RENDER.md. No gameplay, ruleset or campaign changes. Existing75server
+checks and durable unit checks pass. New Render deployment, final capture, domain/
+Telegram switch, restart verification and Cloud.ru deletion remain pending.
+Secrets remain outside git; never expose production.env or state key.
+
+## Previous release fixture handoff — 2026-10-08
 
 User explicitly authorized merge/deploy. PR179/180/181 merged preserving branches/history; main50c47049. Required main CI37763374322 failed3attempts before deploy: Legendary close timeout,Cardiac timeout,then subsequentmodal after Legendary close. No deployment performed.
 
@@ -23,7 +143,8 @@ Density fixture now waits two actual Scene POST_UPDATE frames with cache>=target
 
 ## Wave events P0-1 handoff — 2026-10-12
 
-PR #193 (`feat/wave-events-20261011`, head 516a5f83) opened, NOT merged — merge/deploy await explicit user consent.
+PR #193 (`feat/wave-events-20261011`) opened; merge conflict with main resolved manually
+(package.json + 00_HANDOFF.md taken from main, wave-events additions re-applied).
 Authored wave events: WaveEvents.ts (encircle/flank-wedge/swarm-surge + validateWaveEvents + pendingWaveEventIndex),
 3 events per stage in StageDefinitions, WaveDirector.updateWaveEvents/fireWaveEvent via new RunRng stream `wave-event`,
 RunCheckpoint optional `waveEventIndex`, GameScene.announceWaveEvent telegraph (drawRadialCombatTelegraph, depth 13).
