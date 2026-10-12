@@ -218,8 +218,11 @@ function validDirector(value: unknown): value is StageDirectorSnapshot {
 function validRng(value: unknown, seed: string): value is RunRngSnapshot {
   if (!record(value) || value.seed !== seed || !record(value.states)) return false;
   const states = value.states;
-  return GAMEPLAY_RNG_STREAMS.every((stream: GameplayRngStream) =>
-    integer(states[stream], 0, 0xffffffff)
+  // Streams appended after a checkpoint was written are allowed to be absent:
+  // RunRng.restore re-derives missing streams from the seed (additive migration).
+  return GAMEPLAY_RNG_STREAMS.every(
+    (stream: GameplayRngStream) =>
+      states[stream] === undefined || integer(states[stream], 0, 0xffffffff)
   );
 }
 
@@ -251,6 +254,7 @@ function validWave(value: unknown): value is WaveDirectorSnapshot {
     finite(value.minionAcc, 0, 10_000_000) &&
     (value.threatAccMs === undefined || finite(value.threatAccMs, 0, 1_000)) &&
     (value.waveEventIndex === undefined || integer(value.waveEventIndex, 0, 1_000)) &&
+    (value.anomalySpawned === undefined || typeof value.anomalySpawned === 'boolean') &&
     validThreatSnapshot(value.threat)
   );
 }

@@ -234,6 +234,30 @@ License: MIT.
 > OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 > SOFTWARE.
 
+## Mini-boss behaviour adaptation — MIT
+
+Files:
+
+- `src/game/AnomalyPrime.ts` (attack state machine: pursuit / telegraph / strike / recovery)
+- Anomaly behaviour branch in `src/game/Enemy.ts` (`updateAnomalyBehavior`)
+- Mini-boss direction in `src/game/WaveDirector.ts` (`updateMiniBoss`)
+
+The mini-boss state-machine shape — a charger-style walk / pause / charge cycle, a
+rammer-style aim-commit-recover cycle, and a berserker-style enrage below a health
+fraction — was adapted from `giovanneluna/poke-survivors`, specifically
+`src/systems/EnemyBehaviors.ts` (charger, rammer, berserker behaviours). OFELIYA
+rewrites the behaviour around its own two-phase pacing table, strict
+radial-burst ↔ charge-dash alternation, combat telegraph primitives and stage
+schedule validation. Donor `Math.random` usage and tween/tint telegraphs are NOT
+reproduced: all randomness runs through the run-seeded `RunRng` gameplay streams
+and the attack alternation itself is fully deterministic; telegraphs render only
+through `drawRadialCombatTelegraph` / `drawDirectionalCombatTelegraph`. No donor
+source file, art, audio, names or other assets are imported (in particular, no
+Pokémon IP).
+
+Upstream: `https://github.com/giovanneluna/poke-survivors`
+License: MIT (license text quoted in the section above).
+
 ## Release rule
 
 Any new third-party binary asset must add, in the same change:

@@ -24,8 +24,8 @@ export type AdaptiveMood =
   | 'transition'
   | 'ended';
 
-/** Enemy classes that contribute to nearby pressure. Mirrors config's EnemyKind minus the boss. */
-export type ThreatKind = 'swarm' | 'runner' | 'brute' | 'boss';
+/** Enemy classes that contribute to nearby pressure. Mirrors config's EnemyKind. */
+export type ThreatKind = 'swarm' | 'runner' | 'brute' | 'boss' | 'anomaly';
 
 export interface DangerInput {
   /** Distance-weighted hostile pressure around the player, already normalized to 0..1. */
@@ -132,7 +132,10 @@ export function enemyThreatWeight(
 ): number {
   if (!Number.isFinite(distancePx) || distancePx < 0) return 0;
   if (scanRadius <= 0 || distancePx >= scanRadius) return 0;
-  const base = kind === 'brute' ? 3 : kind === 'runner' ? 1.5 : kind === 'boss' ? 0 : 1;
+  // The mini-boss reads as a heavy elite: strong audio pressure while it is near,
+  // but still below an actual elite corona swarm so the mix never pins to critical.
+  const base =
+    kind === 'brute' ? 3 : kind === 'anomaly' ? 2.5 : kind === 'runner' ? 1.5 : kind === 'boss' ? 0 : 1;
   const weight = base + (elite ? 7 : 0);
   return weight * (1 - distancePx / scanRadius);
 }

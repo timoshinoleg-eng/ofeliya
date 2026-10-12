@@ -141,6 +141,31 @@ Final6c84b89 CI37771605821 passed Legendary, Cardiac and controls, then dense-re
 
 Density fixture now waits two actual Scene POST_UPDATE frames with cache>=target, bounded1500ms, before unchanged150/200targets/alpha assertions. This replaces a synchronization assumption, NOT an unchanged performance/timing gate. No manual Game/Enemy update or cache writes. Startup accepts an already-paused real Game, resumes then clears progression/UI; new unblocked assertion added. Exact native finalscript PASS; original native Game.active-only wait had stopped at startup30s. Paired sparseRAF240ms with shared corrected startup: old150ms sleep failed cache100/target150/allalpha1; completed-frame wait PASS. This demonstrates synchronization sensitivity, not the exact hosted scheduling. Independent Codex source review PASS. Additional Kimi nonstream diagnostic HTTP504; no routed approval.
 
+## Mini-boss P0-2 handoff — 2026-10-12
+
+Branch `feat/anomaly-prime-20261012` off main (5ceb9402). Mini-boss АНОМАЛИЯ-ПРАЙМ
+(bloodstream, atMs 150000) and КАРДИАЛЬНАЯ АНОМАЛИЯ (heart, atMs 80000). New clean module
+`src/game/AnomalyPrime.ts`: MiniBossDefinition, two-phase pacing (phase 2 below 55% HP,
+faster telegraphs/strikes/cooldowns), strict radial-burst ↔ charge-dash alternation (no RNG),
+vulnerability windows (telegraph ×0.9, recovery ×1.3), schedule validation
+(validateMiniBossSchedule vs wave events + boss window, called from StageDirector),
+restore derivation miniBossSpawnedByStageTime. Enemy kind `anomaly` (config ENEMY_DEFS,
+purple), Enemy.ts behaviour branch (aura, telegraphs via combat telegraph primitives only,
+velocity-override charge commit guard ≥70px), WaveDirector.updateMiniBoss (suppresses wave
+events while anomaly lives, threat cost 2.5, snapshot flag anomalySpawned),
+GameScene announceMiniBoss/onAnomalySpawned/onAnomalyPhaseChanged/triggerAnomalyBurst
+(full player-damage pipeline)/onAnomalyDefeated (12 gems via `loot` stream), checkpoints
+suppressed while anomalyInProgress. RNG: additive stream `anomaly` (position only); attack
+alternation deterministic; validRng tolerates missing streams so legacy checkpoints restore.
+New gate `test:mini-boss` (scripts/check-mini-boss.mjs). check-stages.mjs synthetic fixtures
+now set miniBoss: undefined (spread stages kept real miniBoss otherwise). No new analytics
+events (ProductEvent is a closed server contract). Gates green: tsc --noEmit, check-stages,
+check-wave-events, check-mini-boss, check-rng, check-checkpoint, audio-mix 20/20.
+Donor: giovanneluna/poke-survivors EnemyBehaviors.ts (MIT) — Math.random/tween-tint NOT
+reproduced; recorded in THIRD_PARTY_NOTICES.md. Pre-existing main failures unchanged
+(ui-readability-smoke #187, browser-smoke, mobile-layout-matrix). Merge only after explicit
+owner approval. Next: P0-3 per roadmap.
+
 ## Wave events P0-1 handoff — 2026-10-12
 
 PR #193 (`feat/wave-events-20261011`) opened; merge conflict with main resolved manually
