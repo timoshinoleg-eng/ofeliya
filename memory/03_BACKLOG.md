@@ -1,3 +1,28 @@
+# Free backup and BI follow-up - 2026-10-12
+
+All remaining Cloud.ru paid VMs/disks/IPs, both Quiz backups and two registries
+were subsequently deleted with owner confirmation. EvoClaw Lili is stopped.
+OFELIYA production remains Render Free with Supabase remote state.
+
+A private gzip snapshot (store/profiles/tg_users) was uploaded to the existing
+standard S3 bucket, downloaded and compared exactly. Latest verified revision
+28; SHA256 a6cc54bbaad3d5eefa8a596899d7d05a083d0d51790232a42f025b1a5c7bf72d.
+Bucket usage is about3.7MB, below the current15GB organizational free tier.
+Public bucket access is disabled. No new VM/IP/registry is required.
+
+Owner approved daily Windows backup at20:00 Europe/Moscow, task
+OFELIYA-S3-DailyBackup. Trial task exited0 and verified a fresh snapshot.
+It requires this computer and a logged-in Windows session; missed runs start
+when available. Local work/s3-backup.mjs rejects multiple buckets, truncated
+listings, total storage above100MB and backups above2MB. Secrets stay local.
+
+Managed BI service activation remains pending in Cloud.ru. Official API says
+Product evobi not active; no BI instance or paid database/SNAT was created.
+Do not create paid dependencies: owner authorized only free use. CSV upload
+requires an existing database; direct external sources require network review.
+Aggregated CSV and offline HTML preview contain no player identifiers. They
+represent551 stored events and4 actors, not a current telemetry acceptance test.
+
 # Cutover backlog - 2026-10-11
 
 Completed: dedicated MAX hosting callback; game-relative API/Telegram path
