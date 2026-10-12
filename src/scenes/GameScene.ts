@@ -2137,7 +2137,6 @@ export class GameScene extends Phaser.Scene {
       comboBest: run.comboBest,
       stageId: stage.id,
       stageOrder: stage.order,
-      stageName: stage.name,
       bossesDefeated: run.bossesDefeated,
       boss1ClearMs,
       stacks: { ...stage.stacks },
