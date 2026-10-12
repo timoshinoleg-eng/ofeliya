@@ -258,6 +258,32 @@ Pokémon IP).
 Upstream: `https://github.com/giovanneluna/poke-survivors`
 License: MIT (license text quoted in the section above).
 
+## Daily mutator adaptation — MIT
+
+Files:
+
+- `src/game/DailyMutator.ts`
+- Daily-mutator banner in `src/scenes/GameScene.ts`
+- Daily-mutator line in `src/ui/SocialHub.ts`
+
+The "one authored modifier per calendar day" idea — a deterministic
+rotation where the day (not a random draw) selects the modifier, so every
+player worldwide faces the identical challenge — was adapted from
+`ricardo-foundry/canvas-vampire-survivors`, `src/daily.js` (their
+deterministic daily challenge and stage/boss rotation). OFELIYA rewrites
+the idea around its own server-issued daily tickets: the modifier is a
+pure FNV-1a hash of the server ticket's `dateKey` and only re-combines
+existing `DifficultyProfile` multiplier knobs (no new simulation systems,
+no runtime RNG consumed). The donor's local history/streak parts already
+exist in OFELIYA as `DailyHistory`/`SocialHub` (see the daily streak
+section above) and are not re-imported. No donor source file, art, audio,
+names or other assets are imported.
+
+Upstream: `https://github.com/ricardo-foundry/canvas-vampire-survivors`
+Pinned revision: `v2.8.0` @ `e616704889e57efc9c1f49098786a95c364008d3`
+License: MIT (license text quoted in the onboarding section above).
+Copyright (c) 2024 Survivor Game
+
 ## Release rule
 
 Any new third-party binary asset must add, in the same change:

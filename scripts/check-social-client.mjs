@@ -86,7 +86,7 @@ try {
       kills: 2,
       level: 3,
       dateKey: '2026-09-22',
-      rulesetVersion: 2,
+      rulesetVersion: 3,
       campaignVersion: 2,
       difficultyId: 'standard',
       completionStage: null,

@@ -31,7 +31,7 @@ async function makeContext(browser, checkpointRaw = null) {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        ok: true, rank: 11, ranked: true, rulesetVersion: 2, campaignVersion: 2, top: [],
+        ok: true, rank: 11, ranked: true, rulesetVersion: 3, campaignVersion: 2, top: [],
       }),
     });
   });

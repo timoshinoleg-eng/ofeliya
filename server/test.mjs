@@ -90,7 +90,7 @@ function campaignPayload({
   resumed = false,
 } = {}) {
   return {
-    rulesetVersion: 2,
+    rulesetVersion: 3,
     campaignVersion: 2,
     difficultyId,
     completionStage,
@@ -197,7 +197,7 @@ await ok('GET /health', async () => {
     limit: 20_000, remaining: 20_000, trustedReserve: 2_000,
     unverifiedRemaining: 18_000, ready: true,
   });
-  assert.equal(r.rulesetVersion, 2);
+  assert.equal(r.rulesetVersion, 3);
   assert.equal(r.campaignVersion, 2);
 });
 
@@ -240,11 +240,11 @@ await ok('POST /api/score rejects JSON null with 400 instead of an internal erro
 await ok('GET /api/ruleset публикует текущий двухактный контракт', async () => {
   const r = await j(await fetch(`${BASE}/api/ruleset`));
   assert.equal(r.ok, true);
-  assert.equal(r.rulesetVersion, 2);
+  assert.equal(r.rulesetVersion, 3);
   assert.equal(r.campaignVersion, 2);
   assert.equal(r.rankedDifficultyId, 'standard');
   assert.equal(r.minCampaignWinTimeMs, 540_000);
-  assert.deepEqual(r.supportedRulesets, [1, 2]);
+  assert.deepEqual(r.supportedRulesets, [1, 3]);
 });
 
 await ok('TG: валидный initData принимается, legacy без server run остаётся вне рейтинга', async () => {
@@ -331,7 +331,7 @@ await ok('Phase 1: exact forged Standard result without server start never enter
   const attacker = { id: 44001, first_name: 'Forgery' };
   const initData = signInitData(attacker, MAX_TOKEN);
   const payload = {
-    rulesetVersion: 2,
+    rulesetVersion: 3,
     campaignVersion: 2,
     difficultyId: 'standard',
     completionStage: 'heart',
@@ -369,7 +369,7 @@ await ok('Phase 1: run capability is identity/seed/control bound and exact start
   const user = { id: 44002, first_name: 'Capability' };
   const auth = { platform: 'max', initData: signInitData(user, MAX_TOKEN) };
   const run = {
-    rulesetVersion: 2,
+    rulesetVersion: 3,
     campaignVersion: 2,
     difficultyId: 'standard',
     runSeed: 'phase1-capability-001',
@@ -405,7 +405,7 @@ await ok('Phase 1: fresh capability cannot validate 9 minutes of play immediatel
   const user = { id: 44003, first_name: 'WallClock' };
   const auth = { platform: 'max', initData: signInitData(user, MAX_TOKEN) };
   const run = {
-    rulesetVersion: 2,
+    rulesetVersion: 3,
     campaignVersion: 2,
     difficultyId: 'standard',
     runSeed: 'phase1-wallclock-001',
@@ -417,7 +417,7 @@ await ok('Phase 1: fresh capability cannot validate 9 minutes of play immediatel
     body: JSON.stringify({ ...auth, run }),
   }));
   const forgedPayload = {
-    rulesetVersion: 2,
+    rulesetVersion: 3,
     campaignVersion: 2,
     difficultyId: 'standard',
     completionStage: 'heart',
@@ -453,7 +453,7 @@ await ok('Phase 1: a genuine short Standard run with capability remains rankable
   const user = { id: 44004, first_name: 'Honest' };
   const auth = { platform: 'max', initData: signInitData(user, MAX_TOKEN) };
   const run = {
-    rulesetVersion: 2,
+    rulesetVersion: 3,
     campaignVersion: 2,
     difficultyId: 'standard',
     runSeed: 'phase1-honest-001',
@@ -488,7 +488,7 @@ await ok('Phase 1: a genuine short Standard run with capability remains rankable
   assert.ok(scored.rank !== null);
 });
 
-await ok('ruleset v2: Standard без server-minted start сохраняется только как unranked shadow', async () => {
+await ok('ruleset v3: Standard без server-minted start сохраняется только как unranked shadow', async () => {
   const dora = { id: 444, first_name: 'Dora', username: 'dora' };
   const r = await j(await fetch(`${BASE}/api/score`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -496,7 +496,7 @@ await ok('ruleset v2: Standard без server-minted start сохраняется
       platform: 'max',
       initData: signInitData(dora, MAX_TOKEN),
       payload: {
-        rulesetVersion: 2,
+        rulesetVersion: 3,
         campaignVersion: 2,
         difficultyId: 'standard',
         completionStage: 'heart',
@@ -522,14 +522,14 @@ await ok('ruleset v2: Standard без server-minted start сохраняется
   assert.ok(shadow.top.some((row) => row.timeMs === 560_000 && row.kills === 420));
 });
 
-await ok('ruleset v2: победа раньше 9:00 невозможна (422)', async () => {
+await ok('ruleset v3: победа раньше 9:00 невозможна (422)', async () => {
   const res = await fetch(`${BASE}/api/score`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       platform: 'telegram',
       initData: signInitData(ALICE, TG_TOKEN),
       payload: {
-        rulesetVersion: 2,
+        rulesetVersion: 3,
         campaignVersion: 2,
         difficultyId: 'standard',
         completionStage: 'heart',
@@ -549,14 +549,14 @@ await ok('ruleset v2: победа раньше 9:00 невозможна (422)'
   assert.match((await j(res)).error, /win-time/);
 });
 
-await ok('ruleset v2: win обязан завершаться в Heart после двух боссов', async () => {
+await ok('ruleset v3: win обязан завершаться в Heart после двух боссов', async () => {
   const badStage = await fetch(`${BASE}/api/score`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       platform: 'telegram',
       initData: signInitData(ALICE, TG_TOKEN),
       payload: {
-        rulesetVersion: 2,
+        rulesetVersion: 3,
         campaignVersion: 2,
         difficultyId: 'standard',
         completionStage: 'bloodstream',
@@ -581,7 +581,7 @@ await ok('ruleset v2: win обязан завершаться в Heart посл�
       platform: 'telegram',
       initData: signInitData(ALICE, TG_TOKEN),
       payload: {
-        rulesetVersion: 2,
+        rulesetVersion: 3,
         campaignVersion: 2,
         difficultyId: 'standard',
         completionStage: 'heart',
@@ -601,7 +601,7 @@ await ok('ruleset v2: win обязан завершаться в Heart посл�
   assert.match((await j(badBosses)).error, /win-bosses/);
 });
 
-await ok('ruleset v2: Strained сохраняется, но сервер не даёт рейтинг', async () => {
+await ok('ruleset v3: Strained сохраняется, но сервер не даёт рейтинг', async () => {
   const strained = { id: 555, first_name: 'Strain', username: 'strain' };
   const r = await j(await fetch(`${BASE}/api/score`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -609,7 +609,7 @@ await ok('ruleset v2: Strained сохраняется, но сервер не д
       platform: 'max',
       initData: signInitData(strained, MAX_TOKEN),
       payload: {
-        rulesetVersion: 2,
+        rulesetVersion: 3,
         campaignVersion: 2,
         difficultyId: 'strained',
         completionStage: 'heart',
@@ -638,13 +638,13 @@ await ok('ruleset filters: current, legacy и all не смешиваются м
   const current = await j(await fetch(`${BASE}/api/top?period=all`));
   const legacy = await j(await fetch(`${BASE}/api/top?period=all&ruleset=legacy`));
   const all = await j(await fetch(`${BASE}/api/top?period=all&ruleset=all&includeUnverified=1`));
-  assert.equal(current.rulesetVersion, 2);
+  assert.equal(current.rulesetVersion, 3);
   assert.equal(legacy.rulesetVersion, 1);
   assert.equal(all.rulesetVersion, null);
-  assert.ok(current.top.every((row) => row.rulesetVersion === 2));
+  assert.ok(current.top.every((row) => row.rulesetVersion === 3));
   assert.ok(legacy.top.every((row) => row.rulesetVersion === 1));
   assert.ok(all.top.some((row) => row.rulesetVersion === 1));
-  assert.ok(all.top.some((row) => row.rulesetVersion === 2));
+  assert.ok(all.top.some((row) => row.rulesetVersion === 3));
 });
 
 await ok('анти-чит: слишком много kills (422)', async () => {
@@ -890,7 +890,7 @@ await ok('Daily V2: сервер выдаёт identity-bound ticket и пере�
   assert.equal(first.ok, true);
   assert.equal(first.reused, false);
   assert.equal(first.ticket.difficultyId, 'standard');
-  assert.equal(first.ticket.rulesetVersion, 2);
+  assert.equal(first.ticket.rulesetVersion, 3);
   assert.equal(first.ticket.campaignVersion, 2);
   assert.match(first.ticket.runId, /^[A-Za-z0-9_-]{16,32}$/);
   assert.match(first.ticket.runSeed, /^[a-f0-9]{16}$/);
@@ -1072,7 +1072,7 @@ await ok('Daily V2: elapsed wall-clock plus grace rejects even a 1ms excess', as
   assert.deepEqual(await j(response), { ok: false, error: 'anti-cheat: run-time-exceeds-wall-clock' });
 }));
 
-await ok('Daily V2: ruleset v2 daily без ticket отклоняется', async () => {
+await ok('Daily V2: ruleset v3 daily без ticket отклоняется', async () => {
   const response = await fetch(`${BASE}/api/score`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1497,7 +1497,7 @@ const makeVerified = async (platform) => {
     ? ${JSON.stringify(signInitData(ALICE, MAX_TOKEN))}
     : ${JSON.stringify(signInitData(BOB, TG_TOKEN))};
   const run = {
-    rulesetVersion:2,campaignVersion:2,difficultyId:'standard',
+    rulesetVersion:3,campaignVersion:2,difficultyId:'standard',
     runSeed:'capacity-' + platform,controlMode:'one-hand',
   };
   const start = await post('/api/run/start', {platform,initData,run});

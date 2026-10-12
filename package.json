@@ -11,6 +11,7 @@
     "test:stages": "node scripts/check-stages.mjs",
     "test:wave-events": "node scripts/check-wave-events.mjs",
     "test:mini-boss": "node scripts/check-mini-boss.mjs",
+    "test:daily-mutator": "node scripts/check-daily-mutator.mjs",
     "test:legendary": "node scripts/check-legendary.mjs",
     "test:legendary-layout": "node scripts/legendary-layout-probe.cjs",
     "test:layout-diagnostics": "node tests/visible-text-bounds.mjs",

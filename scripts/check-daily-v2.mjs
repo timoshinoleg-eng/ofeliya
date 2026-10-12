@@ -64,7 +64,7 @@ try {
     issuedAt: 1000,
     expiresAt: 9999999999999,
     difficultyId: 'standard',
-    rulesetVersion: 2,
+    rulesetVersion: 3,
     campaignVersion: 2,
   };
   const result = {
@@ -104,7 +104,7 @@ try {
         ok: true,
         rank: 3,
         ranked: true,
-        rulesetVersion: 2,
+        rulesetVersion: 3,
         campaignVersion: 2,
         dailyRunAccepted: true,
       }),
@@ -147,7 +147,7 @@ try {
     return {
       ok: true,
       status: 200,
-      json: async () => ({ ok: true, ranked: false, rank: null, rulesetVersion: 2, campaignVersion: 2, dailyRunAccepted: true }),
+      json: async () => ({ ok: true, ranked: false, rank: null, rulesetVersion: 3, campaignVersion: 2, dailyRunAccepted: true }),
     };
   };
   const lost = await submitDailyRunScoreDetailed(result, platform, ticket);

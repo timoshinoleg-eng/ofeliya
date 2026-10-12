@@ -1,3 +1,38 @@
+# Daily mutator P0-3 handoff — 2026-10-12
+
+Daily runs now carry one authored global mutator per calendar day (branch
+feat/daily-mutator-20261012, PR to main). Pool of 6 in src/game/DailyMutator.ts —
+dense-swarm, frenzy-blood, iron-sheath, sparse-lethal, cardiac-stress, elite-surge —
+each only re-combining existing DifficultyProfile knobs. Choice is a pure FNV-1a
+hash of the server ticket dateKey: identical worldwide, zero runtime RNG (audio has
+no RNG to borrow; determinism via seed/hashes only). Presentation reuses the
+RunMilestones banner path in GameScene; SocialHub daily button shows today's line
+via todayDateKey(). Donor: ricardo-foundry/canvas-vampire-survivors src/daily.js
+(MIT, pinned v2.8.0) — recorded in THIRD_PARTY_NOTICES.md; their history/streak
+already lives in DailyHistory, not re-imported.
+
+Ruleset bumped 2 → 3 on both sides (server CURRENT_RULESET_VERSION, client
+SCORE_RULESET_VERSION; CampaignVersion stays 2). Server stamps tickets v3 and the
+daily submit rejects ruleset mismatch with 422, so cached v2 clients fail closed
+without a capability flag. RunCheckpoint.validateRunCheckpoint accepts legacy v2
+checkpoints (additive change: ordinary runs carry no mutator state, simulation
+identical), rejects v1; scripts/check-checkpoint.mjs asserts v2+v3 valid, v1 not.
+All test fixtures that simulated the current ruleset moved 2 → 3 (server/test.mjs,
+tests/server-policy.mjs, check-daily-v2.mjs, check-daily-cta.mjs,
+check-score-outbox.mjs, check-social-client.mjs). New gate:
+scripts/check-daily-mutator.mjs (test:daily-mutator) — pool shape, determinism,
+apply semantics (no input mutation, add-deltas from zero base), client/server
+version parity.
+
+Known pre-existing failures untouched: ui-readability-smoke #187, browser-smoke,
+mobile-layout-matrix. QA-only workspace artifacts (qa-*.cjs, visual-qa/, logs,
+session-brief.txt) are not committed. Unrelated uncommitted working-tree changes
+from the 2026-10-08 security review (CORS allowlist, TRUSTED_PROXY_HOPS, referral
+self-check, duel flush, boot-failure reporter) were deliberately left uncommitted
+and unstaged — they belong to a separate PR.
+
+Next per roadmap: P0-4 STANDARD elite modifier.
+
 # Free backup and BI follow-up - 2026-10-12
 
 All remaining Cloud.ru paid VMs/disks/IPs, both Quiz backups and two registries

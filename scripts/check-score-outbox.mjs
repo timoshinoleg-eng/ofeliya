@@ -16,7 +16,7 @@ const result = {
   stageId: 'bloodstream', bossesDefeated: 0, boss1ClearMs: 0, hostCellsInfected: 2,
   win: false, timeMs: 145000, kills: 73, highestLevel: 11,
 };
-const accepted = { ok: true, rank: null, ranked: false, rulesetVersion: 2, campaignVersion: 2 };
+const accepted = { ok: true, rank: null, ranked: false, rulesetVersion: 3, campaignVersion: 2 };
 const response = (status, body = accepted) => ({
   ok: status >= 200 && status < 300, status, json: async () => body,
 });

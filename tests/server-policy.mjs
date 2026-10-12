@@ -28,14 +28,14 @@ await test('production defaults give analytics 60 events and disable outbound un
       for(let i=0;i<61;i++) statuses.push((await post('/api/event',{platform:'telegram',initData,event:'app_open'})).status);
       const share = await post('/api/telegram/share',{initData});
       const health = await (await fetch(base+'/health')).json();
-      const ordinary = await post('/api/run/start', {platform:'telegram',initData,run:{rulesetVersion:2,campaignVersion:2,difficultyId:'standard',runSeed:'durable-ordinary',controlMode:'one-hand'}});
+      const ordinary = await post('/api/run/start', {platform:'telegram',initData,run:{rulesetVersion:3,campaignVersion:2,difficultyId:'standard',runSeed:'durable-ordinary',controlMode:'one-hand'}});
       const ordinaryAck = await ordinary.json();
       if (ordinary.status!==201 || !JSON.parse(readFileSync(join(process.env.DATA_DIR,'store.json'),'utf8')).runGrants.some(r=>r.runId===ordinaryAck.grant.runId)) throw new Error('run grant ack before durable commit');
       const issued = await post('/api/daily/run', {platform:'telegram',initData});
       const {ticket} = await issued.json();
       const durableTicket = JSON.parse(readFileSync(join(process.env.DATA_DIR,'store.json'),'utf8')).dailyRuns.find(r=>r.runId===ticket.runId);
       if (!durableTicket) throw new Error('ticket ack before durable commit');
-      const score = await post('/api/score', {platform:'telegram',initData,submissionId:'durable-score-test001',payload:{rulesetVersion:2,campaignVersion:2,difficultyId:'standard',completionStage:'bloodstream',runSeed:ticket.runSeed,controlMode:'one-hand',bossesDefeated:0,boss1ClearMs:null,hostCellsInfected:0,win:false,timeMs:1000,kills:1,level:1,daily:true,dailyRunId:ticket.runId,dateKey:ticket.dateKey}});
+      const score = await post('/api/score', {platform:'telegram',initData,submissionId:'durable-score-test001',payload:{rulesetVersion:3,campaignVersion:2,difficultyId:'standard',completionStage:'bloodstream',runSeed:ticket.runSeed,controlMode:'one-hand',bossesDefeated:0,boss1ClearMs:null,hostCellsInfected:0,win:false,timeMs:1000,kills:1,level:1,daily:true,dailyRunId:ticket.runId,dateKey:ticket.dateKey}});
       const ack = await score.json();
       if (score.status!==200 || !ack.dailyRunAccepted) throw new Error('score fixture rejected '+JSON.stringify(ack));
       const durable = JSON.parse(readFileSync(join(process.env.DATA_DIR,'store.json'),'utf8'));

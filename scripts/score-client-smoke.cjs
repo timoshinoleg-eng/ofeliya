@@ -74,7 +74,7 @@ function browserDriver() {
         ok: true,
         rank: 7,
         ranked: true,
-        rulesetVersion: 2,
+        rulesetVersion: 3,
         campaignVersion: 2,
         top: [],
       }),
@@ -122,7 +122,7 @@ function browserDriver() {
   if (
     runStartCaptured.platform !== 'max' ||
     runStartCaptured.initData !== 'signed-score-client-smoke' ||
-    runStartCaptured.run?.rulesetVersion !== 2 ||
+    runStartCaptured.run?.rulesetVersion !== 3 ||
     runStartCaptured.run?.campaignVersion !== 2 ||
     runStartCaptured.run?.difficultyId !== 'standard' ||
     runStartCaptured.run?.runSeed !== 'score-client-seed' ||
@@ -174,7 +174,7 @@ function browserDriver() {
 
   const p = captured.payload || {};
   const expected = {
-    rulesetVersion: 2,
+    rulesetVersion: 3,
     campaignVersion: 2,
     difficultyId: 'standard',
     completionStage: 'bloodstream',
