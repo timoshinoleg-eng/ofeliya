@@ -140,3 +140,16 @@ The fixture now uses production-standard deactivateForStageReset for existing bu
 Final6c84b89 CI37771605821 passed Legendary, Cardiac and controls, then dense-readability failed target150/cache150 with allalpha1. Enemy preUpdate reads prior density; Game.update refreshes cache afterward. Original fixed150ms sleep need not contain both real frames.
 
 Density fixture now waits two actual Scene POST_UPDATE frames with cache>=target, bounded1500ms, before unchanged150/200targets/alpha assertions. This replaces a synchronization assumption, NOT an unchanged performance/timing gate. No manual Game/Enemy update or cache writes. Startup accepts an already-paused real Game, resumes then clears progression/UI; new unblocked assertion added. Exact native finalscript PASS; original native Game.active-only wait had stopped at startup30s. Paired sparseRAF240ms with shared corrected startup: old150ms sleep failed cache100/target150/allalpha1; completed-frame wait PASS. This demonstrates synchronization sensitivity, not the exact hosted scheduling. Independent Codex source review PASS. Additional Kimi nonstream diagnostic HTTP504; no routed approval.
+
+## Wave events P0-1 handoff — 2026-10-12
+
+PR #193 (`feat/wave-events-20261011`) opened; merge conflict with main resolved manually
+(package.json + 00_HANDOFF.md taken from main, wave-events additions re-applied).
+Authored wave events: WaveEvents.ts (encircle/flank-wedge/swarm-surge + validateWaveEvents + pendingWaveEventIndex),
+3 events per stage in StageDefinitions, WaveDirector.updateWaveEvents/fireWaveEvent via new RunRng stream `wave-event`,
+RunCheckpoint optional `waveEventIndex`, GameScene.announceWaveEvent telegraph (drawRadialCombatTelegraph, depth 13).
+Gates green on exact remote state (verified byte-identical via blob SHA): tsc --noEmit, check-wave-events, check-stages,
+audio-mix 20/20, check-rng, check-checkpoint. Fixed mid-flight: an earlier push had corrupted completeBossDefeat guard
+(BOSS_DEFEATED -> BOSS_ACTIVE) and once pushed an empty StageDirector.ts; both corrected, final blob ddbd732c.
+Donor: giovanneluna/poke-survivors (MIT) recorded in THIRD_PARTY_NOTICES.md. Pre-existing main failures unchanged
+(ui-readability-smoke #187, browser-smoke, mobile-layout-matrix).

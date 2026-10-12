@@ -9,6 +9,14 @@ import {
   type ThreatDirectorSnapshot,
   type ThreatPacingDirective,
 } from './ThreatDirector';
+import {
+  pendingWaveEventIndex,
+  waveEventSpawns,
+  waveEventTelegraph,
+  WAVE_EVENT_LIMITS,
+  type WaveEventDefinition,
+  type WaveEventSpawn,
+} from './WaveEvents';
 
 export interface WaveDirectorSnapshot {
   spawnAcc: number;
@@ -17,6 +25,11 @@ export interface WaveDirectorSnapshot {
   /** Optional for backwards-compatible checkpoints created before adaptive threat pacing. */
   threat?: ThreatDirectorSnapshot;
   threatAccMs?: number;
+  /**
+   * Index of the next authored wave event. Optional: checkpoints written
+   * before wave events existed re-derive it from the stage clock on restore.
+   */
+  waveEventIndex?: number;
 }
 
 /** Owns only stage-local enemy composition; StageDirector owns lifecycle and boss timing. */
@@ -32,10 +45,13 @@ export class WaveDirector {
   private minionAcc = 0;
   private readonly randomKind: () => number;
   private readonly randomSpawn: () => number;
+  private readonly randomEvent: () => number;
   private readonly threat = new ThreatDirector();
   private threatAccMs = 0;
   private threatAssessment: ThreatAssessment = this.threat.current;
   private readonly adaptivePacingEnabled: boolean;
+  private waveEventIndex = 0;
+  private pendingEvent: { def: WaveEventDefinition; plan: WaveEventSpawn[] } | null = null;
 
   constructor(
     scene: GameScene,
@@ -44,6 +60,7 @@ export class WaveDirector {
     difficulty: DifficultyProfile,
     randomKind: () => number,
     randomSpawn: () => number,
+    randomEvent?: () => number,
     adaptivePacingEnabled = false
   ) {
     this.scene = scene;
@@ -52,6 +69,7 @@ export class WaveDirector {
     this.difficulty = difficulty;
     this.randomKind = randomKind;
     this.randomSpawn = randomSpawn;
+    this.randomEvent = randomEvent ?? (() => 0.5);
     this.adaptivePacingEnabled = adaptivePacingEnabled;
   }
 
@@ -64,6 +82,8 @@ export class WaveDirector {
     this.threatAccMs = 0;
     this.threat.reset(this.scene.runState.stage.timeMs);
     this.threatAssessment = this.threat.current;
+    this.waveEventIndex = 0;
+    this.pendingEvent = null;
     this.spawnOpeningEnemies();
   }
 
@@ -71,6 +91,7 @@ export class WaveDirector {
     const t = this.scene.runState.stage.timeMs;
     const waves = this.stage.waves;
     this.updateAdaptiveThreat(delta);
+    this.updateWaveEvents(t);
 
     if (this.boss) {
       this.minionAcc += delta;
@@ -139,6 +160,7 @@ export class WaveDirector {
       minionAcc: this.minionAcc,
       threat: this.threat.snapshot(this.scene.runState.stage.timeMs),
       threatAccMs: this.threatAccMs,
+      waveEventIndex: this.waveEventIndex,
     };
   }
 
@@ -151,6 +173,60 @@ export class WaveDirector {
     this.threat.restore(snapshot.threat, this.scene.runState.stage.timeMs);
     this.threatAssessment = this.threat.current;
     this.boss = null;
+    this.pendingEvent = null;
+    this.waveEventIndex =
+      snapshot.waveEventIndex ??
+      pendingWaveEventIndex(stage.waveEvents ?? [], this.scene.runState.stage.timeMs);
+  }
+
+  /**
+   * Authored surge events. Deterministic schedule from StageDefinitions;
+   * geometry draws once from the run RNG at telegraph time, so checkpoint
+   * restore mid-telegraph simply re-plans the same event from the same index.
+   */
+  private updateWaveEvents(t: number): void {
+    const events = this.stage.waveEvents;
+    if (!events || events.length === 0) return;
+
+    if (this.pendingEvent) {
+      if (this.boss || t >= this.pendingEvent.def.atMs) {
+        this.fireWaveEvent(this.pendingEvent.plan);
+        this.pendingEvent = null;
+        this.waveEventIndex += 1;
+      }
+      return;
+    }
+
+    const def = events[this.waveEventIndex];
+    if (!def || this.boss) return;
+    if (t < def.atMs - def.telegraphMs) return;
+    // Recovery windows suppress dangerous combinations; the surge is dropped
+    // rather than delayed past its authored moment (same rule as elites).
+    if (!this.pacingDirective.allowDangerousCombinations) {
+      this.waveEventIndex += 1;
+      return;
+    }
+
+    const player = this.scene.player;
+    const plan = waveEventSpawns(def, {
+      playerX: player.x,
+      playerY: player.y,
+      random: this.randomEvent,
+    });
+    this.pendingEvent = { def, plan };
+    this.scene.announceWaveEvent(def, waveEventTelegraph(def, plan, player.x, player.y));
+  }
+
+  private fireWaveEvent(plan: readonly WaveEventSpawn[]): void {
+    let attempts = 0;
+    for (const spawn of plan) {
+      if (attempts >= WAVE_EVENT_LIMITS.maxAttempts) break;
+      attempts += 1;
+      const cap = this.stage.waves.normalEnemyCap + this.difficulty.normalEnemyCapBonus;
+      if (this.enemies.countActive(true) >= cap) break;
+      if (!this.canAddThreat(spawn.kind, false, this.scene.runState.stage.timeMs)) continue;
+      this.scene.spawnEnemy(spawn.kind, spawn.x, spawn.y, false);
+    }
   }
 
   spawnBoss(): import('./Enemy').Enemy | null {

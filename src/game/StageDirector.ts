@@ -1,4 +1,5 @@
 import type { StageDefinition, StageMilestoneDefinition } from './StageDefinitions';
+import { validateWaveEvents } from './WaveEvents';
 
 export type StagePhase =
   | 'STAGE_START'
@@ -59,6 +60,9 @@ export class StageDirector {
           throw new Error(`Invalid milestone order for stage: ${stage.id}`);
         }
         lastMilestoneMs = milestone.atMs;
+      }
+      if (stage.waveEvents) {
+        validateWaveEvents(stage.waveEvents, stage.durationMs, stage.bossWarningLeadMs);
       }
       orders.add(stage.order);
       ids.add(stage.id);

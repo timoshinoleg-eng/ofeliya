@@ -62,6 +62,8 @@ import {
 import { STAGES, difficultyForStage, type StageDefinition } from '../game/StageDefinitions';
 import type { EvolutionId, UpgradeDef } from '../game/UpgradeSystem';
 import { WaveDirector } from '../game/WaveDirector';
+import { drawRadialCombatTelegraph } from '../game/CombatTelegraphRenderer';
+import type { WaveEventDefinition, WaveEventTelegraph } from '../game/WaveEvents';
 import { AtmosphereSystem } from '../systems/AtmosphereSystem';
 import { PlatformBridge } from '../platform';
 import { SaveSystem } from '../systems/SaveSystem';
@@ -454,6 +456,7 @@ export class GameScene extends Phaser.Scene {
       this.difficulty,
       () => this.gameplayRng.next('enemy-kind'),
       () => this.gameplayRng.next('enemy-spawn'),
+      () => this.gameplayRng.next('wave-event'),
       this.difficulty.id === 'strained' && !this.dailyRun
     );
     this.milestones = new RunMilestones(this);
@@ -1818,6 +1821,64 @@ export class GameScene extends Phaser.Scene {
       },
     };
     return RunCheckpoint.save(checkpoint);
+  }
+
+  /**
+   * Authored wave-event warning: milestone-style banner plus a world-space
+   * telegraph drawn in the shared combat telegraph language. The burst plan
+   * is already fixed at this point, so the warning marks the real landing
+   * zone (radial ring for encircle, a directional arc band otherwise).
+   */
+  announceWaveEvent(def: WaveEventDefinition, telegraph: WaveEventTelegraph): void {
+    this.milestones.show({
+      id: `wave-event-${def.id}`,
+      atMs: 0,
+      title: def.title,
+      subtitle: def.subtitle,
+      color: def.color,
+    });
+    PlatformBridge.haptic('light');
+
+    const graphics = this.add.graphics().setDepth(13);
+    graphics.setPosition(telegraph.x, telegraph.y);
+    if (telegraph.shape === 'radial') {
+      drawRadialCombatTelegraph(graphics, telegraph.radius, 'dangerous', telegraph.color, 0.05);
+    } else {
+      // Directional band: short radial ticks across the arrival sector, centred
+      // on the burst centroid angle at the pattern's base radius.
+      const band = 0.62;
+      const steps = 7;
+      for (let i = 0; i < steps; i++) {
+        const angle = telegraph.angle - band / 2 + (i / (steps - 1)) * band;
+        const inner = telegraph.radius - 14;
+        const outer = telegraph.radius + 14;
+        graphics.lineStyle(3, 0x140b12, 0.6);
+        graphics.lineBetween(
+          Math.cos(angle) * inner,
+          Math.sin(angle) * inner,
+          Math.cos(angle) * outer,
+          Math.sin(angle) * outer
+        );
+        graphics.lineStyle(2, telegraph.color, 0.95);
+        graphics.lineBetween(
+          Math.cos(angle) * inner,
+          Math.sin(angle) * inner,
+          Math.cos(angle) * outer,
+          Math.sin(angle) * outer
+        );
+      }
+    }
+
+    const blinkMs = 220;
+    const blinkRepeats = Math.max(0, Math.floor(telegraph.durationMs / blinkMs) - 1);
+    this.tweens.add({
+      targets: graphics,
+      alpha: 0.25,
+      duration: blinkMs,
+      yoyo: true,
+      repeat: blinkRepeats,
+    });
+    this.time.delayedCall(telegraph.durationMs, () => graphics.destroy());
   }
 
   private cancelStageTransition(resumePhysics = true): void {

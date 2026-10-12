@@ -196,6 +196,44 @@ These are bounded transparent WebP derivatives of generated source images. Exact
 dimensions and derivative SHA-256 hashes are recorded in `public/art/provenance.json`. They are not
 claimed to be CC0 third-party stock assets. Existing CC0 audio notices remain applicable.
 
+## Wave event surge adaptation — MIT
+
+Files:
+
+- `src/game/WaveEvents.ts`
+- Wave-event scheduling in `src/game/WaveDirector.ts` (`updateWaveEvents` / `fireWaveEvent`)
+- Wave-event warning presentation in `src/scenes/GameScene.ts` (`announceWaveEvent`)
+
+The authored-surge pattern — a registry of named, timed events that announce
+first and then fire a delayed geometric burst (their `spawnRattataCircle`
+spawns a ring around the player after a warning flash) — was adapted from
+`giovanneluna/poke-survivors`, specifically `src/systems/EventSystem.ts` and
+`src/systems/SpawnSystem.ts`. OFELIYA rewrites the idea around its own stage
+lifecycle, run-seeded deterministic RNG stream, threat caps and combat
+telegraph language; no donor source file, art, audio, names or other assets
+are imported (in particular, no Pokémon IP).
+
+Upstream: `https://github.com/giovanneluna/poke-survivors`
+License: MIT.
+
+> Permission is hereby granted, free of charge, to any person obtaining a copy
+> of this software and associated documentation files (the "Software"), to deal
+> in the Software without restriction, including without limitation the rights
+> to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+> copies of the Software, and to permit persons to whom the Software is
+> furnished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all
+> copies or substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+> IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+> FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+> AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+> LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+> OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+> SOFTWARE.
+
 ## Release rule
 
 Any new third-party binary asset must add, in the same change:

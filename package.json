@@ -9,6 +9,7 @@
     "test:challenge": "node scripts/check-challenge.mjs",
     "test:save": "node scripts/check-save-migration.mjs",
     "test:stages": "node scripts/check-stages.mjs",
+    "test:wave-events": "node scripts/check-wave-events.mjs",
     "test:legendary": "node scripts/check-legendary.mjs",
     "test:legendary-layout": "node scripts/legendary-layout-probe.cjs",
     "test:layout-diagnostics": "node tests/visible-text-bounds.mjs",
