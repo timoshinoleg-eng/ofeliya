@@ -135,6 +135,7 @@ try {
     durationMs: 1_000,
     bossWarningLeadMs: 200,
     waveEvents: [],
+    miniBoss: undefined,
     milestones: [{ id: 'test-beat', atMs: 400, title: 'TEST', subtitle: 'TEST', color: 0xffffff }],
   };
   const second = {
@@ -143,6 +144,7 @@ try {
     durationMs: 2_000,
     bossWarningLeadMs: 0,
     waveEvents: [],
+    miniBoss: undefined,
     milestones: [],
     boss: { ...HEART_STAGE.boss, id: 'heart-boss-test', name: 'HEART BOSS TEST' },
   };

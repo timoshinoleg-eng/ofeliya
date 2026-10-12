@@ -103,6 +103,13 @@ try {
   assert(RunCheckpoint.save(checkpoint), 'valid checkpoint was not persisted');
   assert(RunCheckpoint.load()?.runSeed === rng.seed, 'persisted checkpoint did not round-trip');
 
+  // Additive migration: a checkpoint written before the mini-boss stream/flag
+  // existed must still validate (RunRng.restore re-derives the missing stream).
+  const legacyPreAnomaly = structuredClone(checkpoint);
+  delete legacyPreAnomaly.rng.states.anomaly;
+  delete legacyPreAnomaly.wave.anomalySpawned;
+  assert(validateRunCheckpoint(legacyPreAnomaly), 'pre-anomaly checkpoint rejected');
+
   const impossible = structuredClone(checkpoint);
   impossible.runState.stage.hp = impossible.runState.stage.maxHp + 1;
   assert(validateRunCheckpoint(impossible) === null, 'impossible HP checkpoint accepted');

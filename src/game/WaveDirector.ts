@@ -17,6 +17,7 @@ import {
   type WaveEventDefinition,
   type WaveEventSpawn,
 } from './WaveEvents';
+import { miniBossSpawnedByStageTime, type MiniBossDefinition } from './AnomalyPrime';
 
 export interface WaveDirectorSnapshot {
   spawnAcc: number;
@@ -30,11 +31,19 @@ export interface WaveDirectorSnapshot {
    * before wave events existed re-derive it from the stage clock on restore.
    */
   waveEventIndex?: number;
+  /**
+   * Whether the authored mini-boss beat already passed. Optional: checkpoints
+   * written before mini-boss existed re-derive it from the stage clock; while
+   * the anomaly lives, checkpoints are suppressed, so restore never sees a
+   * half-fought mini-boss.
+   */
+  anomalySpawned?: boolean;
 }
 
 /** Owns only stage-local enemy composition; StageDirector owns lifecycle and boss timing. */
 export class WaveDirector {
   boss: import('./Enemy').Enemy | null = null;
+  anomaly: import('./Enemy').Enemy | null = null;
 
   private readonly scene: GameScene;
   private readonly enemies: Phaser.Physics.Arcade.Group;
@@ -46,12 +55,15 @@ export class WaveDirector {
   private readonly randomKind: () => number;
   private readonly randomSpawn: () => number;
   private readonly randomEvent: () => number;
+  private readonly randomAnomaly: () => number;
   private readonly threat = new ThreatDirector();
   private threatAccMs = 0;
   private threatAssessment: ThreatAssessment = this.threat.current;
   private readonly adaptivePacingEnabled: boolean;
   private waveEventIndex = 0;
   private pendingEvent: { def: WaveEventDefinition; plan: WaveEventSpawn[] } | null = null;
+  private anomalySpawned = false;
+  private pendingAnomaly: { def: MiniBossDefinition; x: number; y: number } | null = null;
 
   constructor(
     scene: GameScene,
@@ -61,7 +73,8 @@ export class WaveDirector {
     randomKind: () => number,
     randomSpawn: () => number,
     randomEvent?: () => number,
-    adaptivePacingEnabled = false
+    adaptivePacingEnabled = false,
+    randomAnomaly?: () => number
   ) {
     this.scene = scene;
     this.enemies = enemies;
@@ -70,6 +83,7 @@ export class WaveDirector {
     this.randomKind = randomKind;
     this.randomSpawn = randomSpawn;
     this.randomEvent = randomEvent ?? (() => 0.5);
+    this.randomAnomaly = randomAnomaly ?? (() => 0.5);
     this.adaptivePacingEnabled = adaptivePacingEnabled;
   }
 
@@ -79,6 +93,9 @@ export class WaveDirector {
     this.spawnedElites = 0;
     this.minionAcc = 0;
     this.boss = null;
+    this.anomaly = null;
+    this.anomalySpawned = false;
+    this.pendingAnomaly = null;
     this.threatAccMs = 0;
     this.threat.reset(this.scene.runState.stage.timeMs);
     this.threatAssessment = this.threat.current;
@@ -92,6 +109,7 @@ export class WaveDirector {
     const waves = this.stage.waves;
     this.updateAdaptiveThreat(delta);
     this.updateWaveEvents(t);
+    this.updateMiniBoss(t);
 
     if (this.boss) {
       this.minionAcc += delta;
@@ -161,6 +179,7 @@ export class WaveDirector {
       threat: this.threat.snapshot(this.scene.runState.stage.timeMs),
       threatAccMs: this.threatAccMs,
       waveEventIndex: this.waveEventIndex,
+      anomalySpawned: this.anomalySpawned,
     };
   }
 
@@ -173,16 +192,34 @@ export class WaveDirector {
     this.threat.restore(snapshot.threat, this.scene.runState.stage.timeMs);
     this.threatAssessment = this.threat.current;
     this.boss = null;
+    this.anomaly = null;
     this.pendingEvent = null;
+    this.pendingAnomaly = null;
     this.waveEventIndex =
       snapshot.waveEventIndex ??
       pendingWaveEventIndex(stage.waveEvents ?? [], this.scene.runState.stage.timeMs);
+    this.anomalySpawned =
+      snapshot.anomalySpawned ??
+      miniBossSpawnedByStageTime(stage.miniBoss, this.scene.runState.stage.timeMs);
+  }
+
+  /**
+   * True from the mini-boss warning until its death. GameScene uses this to
+   * suppress checkpoints: the beat is short, and re-deriving it from the stage
+   * clock after restore keeps save format and validator untouched.
+   */
+  get anomalyInProgress(): boolean {
+    return (
+      this.pendingAnomaly !== null || (this.anomaly !== null && this.anomaly.active)
+    );
   }
 
   /**
    * Authored surge events. Deterministic schedule from StageDefinitions;
    * geometry draws once from the run RNG at telegraph time, so checkpoint
    * restore mid-telegraph simply re-plans the same event from the same index.
+   * A live mini-boss suppresses surges (dangerous combinations stay authored,
+   * never improvised).
    */
   private updateWaveEvents(t: number): void {
     const events = this.stage.waveEvents;
@@ -198,7 +235,7 @@ export class WaveDirector {
     }
 
     const def = events[this.waveEventIndex];
-    if (!def || this.boss) return;
+    if (!def || this.boss || this.anomaly) return;
     if (t < def.atMs - def.telegraphMs) return;
     // Recovery windows suppress dangerous combinations; the surge is dropped
     // rather than delayed past its authored moment (same rule as elites).
@@ -215,6 +252,61 @@ export class WaveDirector {
     });
     this.pendingEvent = { def, plan };
     this.scene.announceWaveEvent(def, waveEventTelegraph(def, plan, player.x, player.y));
+  }
+
+  /**
+   * Authored mini-boss beat. The spawn position is drawn from the run RNG at
+   * warning time and telegraphed for real; the burst lands exactly there.
+   * Unlike surges, the anomaly is never dropped for recovery windows — it is
+   * the centerpiece beat, and the threat governor slows ordinary spawning
+   * around it instead.
+   */
+  private updateMiniBoss(t: number): void {
+    const def = this.stage.miniBoss;
+    if (!def || this.anomalySpawned) return;
+
+    if (!this.pendingAnomaly) {
+      // A boss already on the field means the beat was missed past its window;
+      // drop it rather than stacking a mini-boss onto a boss.
+      if (this.boss) {
+        this.anomalySpawned = true;
+        return;
+      }
+      if (t < def.atMs - def.telegraphMs) return;
+      const position = this.anomalyRingPos();
+      this.pendingAnomaly = { def, x: position.x, y: position.y };
+      this.scene.announceMiniBoss(def, position.x, position.y);
+      return;
+    }
+
+    if (t < this.pendingAnomaly.def.atMs) return;
+    const position = this.pendingAnomaly;
+    const enemy = this.scene.spawnEnemy('anomaly', position.x, position.y, false);
+    if (!enemy) return; // enemy pool exhausted: retry next frame, warning stays put
+    this.anomaly = enemy;
+    this.anomalySpawned = true;
+    this.pendingAnomaly = null;
+    this.scene.onAnomalySpawned(enemy, def);
+  }
+
+  private anomalyRingPos(): { x: number; y: number } {
+    const camera = this.scene.cameras.main;
+    const player = this.scene.player;
+    const angle = this.randomAnomaly() * Math.PI * 2;
+    const radius =
+      Math.max(camera.width, camera.height) / 2 + 70 + this.randomAnomaly() * 50;
+    let x = camera.midPoint.x + Math.cos(angle) * radius;
+    let y = camera.midPoint.y + Math.sin(angle) * radius;
+    const minDistance = 240;
+    const dx = x - player.x;
+    const dy = y - player.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance < minDistance) {
+      const scale = minDistance / Math.max(1, distance);
+      x = player.x + dx * scale;
+      y = player.y + dy * scale;
+    }
+    return { x, y };
   }
 
   private fireWaveEvent(plan: readonly WaveEventSpawn[]): void {
@@ -291,7 +383,16 @@ export class WaveDirector {
   }
 
   private threatCost(kind: EnemyKind, elite: boolean): number {
-    const base = kind === 'brute' ? 3 : kind === 'runner' ? 1.5 : kind === 'boss' ? 0 : 1;
+    const base =
+      kind === 'brute'
+        ? 3
+        : kind === 'anomaly'
+          ? 2.5
+          : kind === 'runner'
+            ? 1.5
+            : kind === 'boss'
+              ? 0
+              : 1;
     return base + (elite ? 7 : 0);
   }
 
@@ -357,7 +458,7 @@ export class WaveDirector {
         const proximity = 1 - distance / scanRadius;
         const cost = this.threatCost(enemy.kind, enemy.isElite);
         nearbyWeight += cost * proximity;
-        if (enemy.isElite) eliteWeight += proximity;
+        if (enemy.isElite || enemy.kind === 'anomaly') eliteWeight += proximity;
       }
 
       if (distance < escapeRadius) {

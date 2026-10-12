@@ -64,6 +64,7 @@ import type { EvolutionId, UpgradeDef } from '../game/UpgradeSystem';
 import { WaveDirector } from '../game/WaveDirector';
 import { drawRadialCombatTelegraph } from '../game/CombatTelegraphRenderer';
 import type { WaveEventDefinition, WaveEventTelegraph } from '../game/WaveEvents';
+import type { MiniBossDefinition } from '../game/AnomalyPrime';
 import { AtmosphereSystem } from '../systems/AtmosphereSystem';
 import { PlatformBridge } from '../platform';
 import { SaveSystem } from '../systems/SaveSystem';
@@ -457,7 +458,8 @@ export class GameScene extends Phaser.Scene {
       () => this.gameplayRng.next('enemy-kind'),
       () => this.gameplayRng.next('enemy-spawn'),
       () => this.gameplayRng.next('wave-event'),
-      this.difficulty.id === 'strained' && !this.dailyRun
+      this.difficulty.id === 'strained' && !this.dailyRun,
+      () => this.gameplayRng.next('anomaly')
     );
     this.milestones = new RunMilestones(this);
     if (resume) this.restoreCheckpointRuntime(resume);
@@ -803,6 +805,10 @@ export class GameScene extends Phaser.Scene {
         stageId: defeatedStageId,
         completeAt: this.time.now + 550,
       };
+    }
+    if (e.kind === 'anomaly' && this.wave.anomaly === e) {
+      this.wave.anomaly = null;
+      this.onAnomalyDefeated(e);
     }
   }
 
@@ -1686,6 +1692,7 @@ export class GameScene extends Phaser.Scene {
     this.hostCells.resetStage();
     this.resetCardiacLineHazard();
     this.wave.boss = null;
+    this.wave.anomaly = null;
 
     for (const enemy of this.enemies.getChildren() as Enemy[]) {
       if (enemy.active) enemy.deactivateForStageReset();
@@ -1781,6 +1788,7 @@ export class GameScene extends Phaser.Scene {
       this.pendingLegendaryCeremony !== null ||
       this.stageTransition !== null ||
       this.bossDefeatCeremony !== null ||
+      this.wave.anomalyInProgress ||
       this.hitStopped ||
       this.time.now < this.zeroPointUntil
     ) {
@@ -1879,6 +1887,117 @@ export class GameScene extends Phaser.Scene {
       repeat: blinkRepeats,
     });
     this.time.delayedCall(telegraph.durationMs, () => graphics.destroy());
+  }
+
+  /**
+   * Mini-boss warning: milestone-style banner plus a real radial telegraph at the
+   * exact spawn point (the position was drawn from the run RNG at warning time
+   * and is reused for the spawn, so the marker never lies).
+   */
+  announceMiniBoss(def: MiniBossDefinition, spawnX: number, spawnY: number): void {
+    this.milestones.show({
+      id: `mini-boss-${def.id}`,
+      atMs: 0,
+      title: def.title,
+      subtitle: def.subtitle,
+      color: def.color,
+    });
+    Sfx.play('elite');
+    PlatformBridge.haptic('medium');
+
+    const graphics = this.add.graphics().setDepth(13);
+    graphics.setPosition(spawnX, spawnY);
+    drawRadialCombatTelegraph(graphics, 60, 'dangerous', def.color, 0.06);
+
+    const blinkMs = 220;
+    const blinkRepeats = Math.max(0, Math.floor(def.telegraphMs / blinkMs) - 1);
+    this.tweens.add({
+      targets: graphics,
+      alpha: 0.25,
+      duration: blinkMs,
+      yoyo: true,
+      repeat: blinkRepeats,
+    });
+    this.time.delayedCall(def.telegraphMs, () => graphics.destroy());
+  }
+
+  /** Spawn impact: the anomaly enters with elite-tier juice, not boss-ceremony weight. */
+  onAnomalySpawned(anomaly: Enemy, def: MiniBossDefinition): void {
+    this.atmosphere.pulse(def.color, 0.2);
+    this.vfx.legendary(anomaly.x, anomaly.y, def.color);
+    const decision = this.impact.request('elite_spawn', this.time.now);
+    if (decision.allowCameraShake) this.shake(200, 0.005, true);
+  }
+
+  onAnomalyPhaseChanged(anomaly: Enemy): void {
+    if (!anomaly.active || anomaly.kind !== 'anomaly') return;
+    this.atmosphere.pulse(COLORS.purple, 0.18);
+    this.vfx.legendary(anomaly.x, anomaly.y, COLORS.purple);
+    PlatformBridge.haptic('light');
+    Sfx.play('bossphase');
+  }
+
+  /** Radial burst impact: same damage pipeline as the boss pressure wave, scaled down. */
+  triggerAnomalyBurst(anomaly: Enemy, radius: number, damage: number): void {
+    if (!anomaly.active || anomaly.kind !== 'anomaly') return;
+
+    const wave = this.add
+      .circle(anomaly.x, anomaly.y, 24, COLORS.purple, 0.04)
+      .setStrokeStyle(3, COLORS.purple, 0.92)
+      .setDepth(25)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    this.tweens.add({
+      targets: wave,
+      scale: radius / 24,
+      alpha: 0,
+      duration: 340,
+      ease: 'Quad.Out',
+      onComplete: () => wave.destroy(),
+    });
+    this.atmosphere.pulse(COLORS.purple, 0.16);
+    const impactDecision = this.impact.request('elite_death', this.time.now);
+    if (impactDecision.allowCameraShake) this.shake(120, 0.004, true);
+
+    const distance = Math.hypot(this.player.x - anomaly.x, this.player.y - anomaly.y);
+    if (distance > radius || this.time.now < this.player.hurtUntil) return;
+
+    const appliedDamage = Math.max(8, damage);
+    this.runState.stage.hp -= appliedDamage;
+    this.wave.recordPlayerDamage(appliedDamage, this.runState.stage.maxHp);
+    this.runState.resetNoDamage();
+    this.player.markHurt(this.time.now);
+    Sfx.play('hurt');
+    PlatformBridge.haptic('medium');
+    this.cameras.main.flash(110, 190, 90, 255);
+    if (
+      this.runState.stage.hp <= 0 &&
+      this.runState.hasLegendary('last-carrier') &&
+      !this.lastCarrierUsed
+    ) {
+      this.activateLastCarrier();
+      return;
+    }
+    if (this.runState.stage.hp <= 0) this.finish(false);
+  }
+
+  /** Scripted RNA shower: the mini-boss pays out through the loot stream, deterministically. */
+  private onAnomalyDefeated(anomaly: Enemy): void {
+    const decision = this.impact.request('elite_death', this.time.now);
+    this.hitStop(decision.hitStopMs);
+    if (decision.allowCameraShake) this.shake(260, 0.007, true);
+    this.atmosphere.pulse(COLORS.gold, 0.22);
+    PlatformBridge.haptic('heavy');
+
+    const gems = 12;
+    for (let i = 0; i < gems; i++) {
+      const angle = (i / gems) * Math.PI * 2 + this.gameplayRng.next('loot') * 0.4;
+      const distance = 20 + this.gameplayRng.next('loot') * 34;
+      this.spawnGem(
+        anomaly.x + Math.cos(angle) * distance,
+        anomaly.y + Math.sin(angle) * distance,
+        2
+      );
+    }
   }
 
   private cancelStageTransition(resumePhysics = true): void {
@@ -2226,7 +2345,7 @@ export class GameScene extends Phaser.Scene {
       const dot = (dx / d) * ax + (dy / d) * ay;
       // Right stick expresses a broad priority sector, not pixel-perfect manual aiming.
       if (dot < 0.28) continue;
-      const threatBias = e.isBoss ? 0.16 : e.isElite ? 0.08 : 0;
+      const threatBias = e.isBoss ? 0.16 : e.kind === 'anomaly' ? 0.12 : e.isElite ? 0.08 : 0;
       const score = dot * 2.2 - (d / range) * 0.48 + threatBias;
       if (score > bestScore) {
         bestScore = score;
