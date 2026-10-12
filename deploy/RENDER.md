@@ -84,3 +84,12 @@ Render uses the replacement; the old key returns401 for read and writer claim,
 so the inaccessible preview cannot steal production persistence. A 24-hour
 management token was scoped only to this project and Edge Functions. No keys
 are committed. Main CI38158081443 passed all three jobs for runtime d92325b.
+
+## Independent free S3 backup (2026-10-12)
+
+Private remote-state snapshots now have an independent Cloud.ru S3 copy.
+Daily execution is a local Windows task at20:00 Europe/Moscow, not a Render
+cron service. Download/hash/JSON round-trip was verified without claiming
+a full production restore. Task needs the owner computer and Windows session.
+Use only the existing standard-class bucket and conservative size limits.
+Managed BI activation is pending; no paid database or SNAT is authorized.
