@@ -25,6 +25,17 @@ import {
   drawDirectionalCombatTelegraph,
   drawRadialCombatTelegraph,
 } from './CombatTelegraphRenderer';
+import {
+  ANOMALY_ATTACK_PACING,
+  anomalyAttackPacing,
+  anomalyDamageMultiplier,
+  anomalyPhaseForHpFraction,
+  nextAnomalyAttack,
+  type AnomalyAttackKind,
+  type AnomalyAttackState,
+  type AnomalyPhase,
+  type AnomalyPhasePacing,
+} from './AnomalyPrime';
 
 export type EnemyDamageSource = 'standard' | 'lysis';
 
@@ -69,6 +80,17 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private nextBossAttackAt = 0;
   private bossTelegraph: Phaser.GameObjects.Graphics | null = null;
   private primeBrokenUntil = 0;
+  anomalyPhase: AnomalyPhase = 1;
+  anomalyAttackState: AnomalyAttackState = 'pursuit';
+  private anomalyAttackKind: AnomalyAttackKind = 'radial-burst';
+  private anomalyLastAttack: AnomalyAttackKind | null = null;
+  private anomalyAttackStartedAt = 0;
+  private anomalyStateUntil = 0;
+  private nextAnomalyAttackAt = 0;
+  private anomalyLockedDirX = 0;
+  private anomalyLockedDirY = 0;
+  private anomalyTelegraph: Phaser.GameObjects.Graphics | null = null;
+  private anomalyAura: Phaser.GameObjects.Graphics | null = null;
   private biologicalFrame = -1;
   private biologicalCycle = false;
   private biologicalPhase = 0;
@@ -143,11 +165,13 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       ? this.eliteModifierColor()
       : kind === 'boss'
         ? (opts.color ?? COLORS.cyan)
-        : kind === 'swarm'
-          ? COLORS.white
-          : kind === 'runner'
-            ? COLORS.cyan
-            : 0xffd6a1;
+        : kind === 'anomaly'
+          ? COLORS.purple
+          : kind === 'swarm'
+            ? COLORS.white
+            : kind === 'runner'
+              ? COLORS.cyan
+              : 0xffd6a1;
 
     this.flashUntil = 0;
     this.bladeImmuneUntil = 0;
@@ -169,6 +193,17 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       : 0;
     this.bossTelegraph?.setVisible(false).clear();
     this.primeBrokenUntil = 0;
+    this.anomalyPhase = 1;
+    this.anomalyAttackState = 'pursuit';
+    this.anomalyAttackKind = 'radial-burst';
+    this.anomalyLastAttack = null;
+    this.anomalyAttackStartedAt = 0;
+    this.anomalyStateUntil = 0;
+    this.nextAnomalyAttackAt =
+      kind === 'anomaly' ? this.scene.time.now + ANOMALY_ATTACK_PACING.initialDelayMs : 0;
+    this.anomalyLockedDirX = 0;
+    this.anomalyLockedDirY = 0;
+    this.anomalyTelegraph?.setVisible(false).clear();
     this.setAlpha(1);
     this.clearTint();
     this.setRotation(0);
@@ -213,6 +248,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     } else {
       this.bossAura?.setVisible(false);
     }
+
+    if (kind === 'anomaly') {
+      if (!this.anomalyAura) this.anomalyAura = this.scene.add.graphics().setDepth(9);
+      this.drawAnomalyAura(this.anomalyAura, Math.max(46, this.radius + 30), 'pursuit');
+      this.anomalyAura.setVisible(true).setPosition(x, y);
+    } else {
+      this.anomalyAura?.setVisible(false);
+    }
   }
 
   preUpdate(time: number, delta: number): void {
@@ -221,6 +264,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.eliteRing?.setVisible(false);
       this.eliteMarker?.setVisible(false);
       this.bossAura?.setVisible(false);
+      this.anomalyAura?.setVisible(false);
+      this.anomalyTelegraph?.setVisible(false);
       return;
     }
     const atlas = biologicalAtlasKey('immune-antibody');
@@ -253,9 +298,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const d = Math.hypot(dx, dy) || 1;
 
     // Dense fights should preserve danger hierarchy instead of turning every silhouette equally
-    // bright. Bosses/elites stay at full priority; nearby normal enemies remain readable while
-    // distant low-value bodies recede as density rises.
-    if (this.isBoss || this.isElite) {
+    // bright. Bosses/elites/mini-boss stay at full priority; nearby normal enemies remain
+    // readable while distant low-value bodies recede as density rises.
+    if (this.isBoss || this.isElite || this.kind === 'anomaly') {
       this.setAlpha(1);
     } else {
       const density = this.gs?.getCombatVisualDensity() ?? 0;
@@ -307,6 +352,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.updateRolePhase(time, d, dx / d, dy / d);
     }
 
+    if (this.kind === 'anomaly') {
+      this.updateAnomalyBehavior(time, d, dx / d, dy / d);
+    }
+
     let velocityX = (pursuitDx / pursuitD) * forwardSpeed + this.knockX;
     let velocityY = (pursuitDy / pursuitD) * forwardSpeed + this.knockY;
 
@@ -351,6 +400,24 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       const lateral = Math.sin(time * 0.0026) * this.speed * lateralMul;
       velocityX = (dx / d) * forwardSpeed * pursuitMul + (-dy / d) * lateral + this.knockX;
       velocityY = (dy / d) * forwardSpeed * pursuitMul + (dx / d) * lateral + this.knockY;
+    } else if (this.kind === 'anomaly') {
+      const pacing = anomalyAttackPacing(this.anomalyPhase);
+      if (this.anomalyAttackState === 'strike' && this.anomalyAttackKind === 'charge-dash') {
+        // Locked-direction dash: the telegraph aimed, the strike commits.
+        velocityX = this.anomalyLockedDirX * forwardSpeed * pacing.chargeSpeedMultiplier + this.knockX;
+        velocityY = this.anomalyLockedDirY * forwardSpeed * pacing.chargeSpeedMultiplier + this.knockY;
+      } else {
+        const moveMul =
+          this.anomalyAttackState === 'telegraph'
+            ? 0.12
+            : this.anomalyAttackState === 'recovery'
+              ? 0.5
+              : this.anomalyPhase === 2
+                ? 1.06
+                : 0.9;
+        velocityX = (dx / d) * forwardSpeed * moveMul + this.knockX;
+        velocityY = (dy / d) * forwardSpeed * moveMul + this.knockY;
+      }
     }
     (this.body as Phaser.Physics.Arcade.Body).setVelocity(velocityX, velocityY);
     const knockDecay = Math.pow(0.82, delta / (1000 / 60));
@@ -381,6 +448,24 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     } else if (this.kind === 'swarm') {
       this.setRotation(Math.atan2(dy, dx) + Math.PI / 2 + Math.sin(time * 0.003 + this.x) * 0.06);
       this.setScale(visualScale);
+    } else if (this.kind === 'anomaly') {
+      // The windup trembles (read: punish window incoming), the strike stretches
+      // along the locked direction, recovery sags — motion mirrors the state machine.
+      if (this.anomalyAttackState === 'telegraph') {
+        const tremble = Math.sin(time * 0.03) * 0.05;
+        this.setRotation(Math.atan2(dy, dx) + tremble);
+        this.setScale(visualScale * (0.93 + Math.abs(tremble)), visualScale * (1.05 - Math.abs(tremble)));
+      } else if (this.anomalyAttackState === 'strike' && this.anomalyAttackKind === 'charge-dash') {
+        this.setRotation(Math.atan2(this.anomalyLockedDirY, this.anomalyLockedDirX));
+        this.setScale(visualScale * 1.14, visualScale * 0.9);
+      } else if (this.anomalyAttackState === 'recovery') {
+        this.setRotation(Math.sin(time * 0.0012) * 0.08);
+        this.setScale(visualScale * 0.96, visualScale * 0.96);
+      } else {
+        this.setRotation(Math.sin(time * 0.0009) * 0.07);
+        const anomalyPulse = 1 + Math.sin(time * (this.anomalyPhase === 2 ? 0.006 : 0.0038)) * 0.03;
+        this.setScale(visualScale * anomalyPulse);
+      }
     } else {
       if (this.bossBehavior === 'heartbeat-pulse' && this.heartbeatMs > 0) {
         const phase = (time % this.heartbeatMs) / this.heartbeatMs;
@@ -430,6 +515,152 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         .setScale((this.bossPhase === 2 ? 1.08 : 0.98) + beat * (this.bossPhase === 2 ? 0.2 : 0.16))
         .setAlpha((this.bossPhase === 2 ? 0.72 : 0.62) + beat * 0.28);
     }
+
+    if (this.kind === 'anomaly' && this.anomalyAura) {
+      this.updateAnomalyAura(time);
+    }
+  }
+
+  /**
+   * Mini-boss attack cycle (donor pattern: poke-survivors EnemyBehaviors
+   * charger/rammer state machines, rewritten deterministic and telegraphed):
+   * pursuit → telegraph → strike → recovery, strictly alternating radial burst
+   * and locked-direction charge dash. Phase two below 55% HP quickens the cycle.
+   */
+  private updateAnomalyBehavior(time: number, distance: number, dirX: number, dirY: number): void {
+    const phase = anomalyPhaseForHpFraction(this.hp / Math.max(1, this.maxHp));
+    if (phase !== this.anomalyPhase) {
+      this.anomalyPhase = phase;
+      this.gs?.onAnomalyPhaseChanged(this);
+    }
+    const pacing = anomalyAttackPacing(this.anomalyPhase);
+
+    if (this.anomalyAttackState === 'pursuit') {
+      this.anomalyTelegraph?.setVisible(false);
+      if (time < this.nextAnomalyAttackAt) return;
+      // Commit only at a readable range: no point-blank telegraphs.
+      if (this.anomalyAttackKind === 'charge-dash' ? distance < 70 : distance > 420) return;
+      this.anomalyAttackState = 'telegraph';
+      this.anomalyAttackStartedAt = time;
+      this.anomalyStateUntil = time + pacing.telegraphMs;
+      this.anomalyLockedDirX = dirX;
+      this.anomalyLockedDirY = dirY;
+      this.drawAnomalyTelegraph(pacing);
+      return;
+    }
+
+    if (this.anomalyAttackState === 'telegraph') {
+      this.updateAnomalyTelegraph(time);
+      if (time < this.anomalyStateUntil) return;
+      this.anomalyTelegraph?.setVisible(false);
+      this.anomalyAttackState = 'strike';
+      this.anomalyStateUntil =
+        time +
+        (this.anomalyAttackKind === 'charge-dash' ? pacing.chargeMs : pacing.strikeMs);
+      if (this.anomalyAttackKind === 'radial-burst') {
+        this.gs?.triggerAnomalyBurst(this, pacing.burstRadius, this.dmg * pacing.damageMultiplier);
+      }
+      return;
+    }
+
+    if (this.anomalyAttackState === 'strike') {
+      if (time < this.anomalyStateUntil) return;
+      this.anomalyAttackState = 'recovery';
+      this.anomalyStateUntil = time + pacing.recoveryMs;
+      return;
+    }
+
+    if (time < this.anomalyStateUntil) return;
+    this.anomalyAttackState = 'pursuit';
+    this.anomalyLastAttack = this.anomalyAttackKind;
+    this.anomalyAttackKind = nextAnomalyAttack(this.anomalyLastAttack);
+    this.nextAnomalyAttackAt = time + pacing.cooldownMs;
+  }
+
+  private drawAnomalyTelegraph(pacing: AnomalyPhasePacing): void {
+    if (!this.anomalyTelegraph) {
+      this.anomalyTelegraph = this.scene.add.graphics().setDepth(8);
+    }
+    this.anomalyTelegraph.clear().setVisible(true).setPosition(this.x, this.y);
+    if (this.anomalyAttackKind === 'radial-burst') {
+      drawRadialCombatTelegraph(
+        this.anomalyTelegraph,
+        pacing.burstRadius,
+        'dangerous',
+        COLORS.purple,
+        0.05
+      );
+      return;
+    }
+    drawDirectionalCombatTelegraph(
+      this.anomalyTelegraph,
+      this.anomalyLockedDirX,
+      this.anomalyLockedDirY,
+      Math.max(26, this.radius + 8),
+      190,
+      'dangerous',
+      COLORS.purple
+    );
+    // Compact origin marker: the dash starts here, not at the player's feet.
+    this.anomalyTelegraph.lineStyle(1.8, COLORS.white, 0.72);
+    this.anomalyTelegraph.strokeCircle(0, 0, Math.max(27, this.radius + 10));
+  }
+
+  private updateAnomalyTelegraph(time: number): void {
+    if (!this.anomalyTelegraph) return;
+    const duration = Math.max(1, this.anomalyStateUntil - this.anomalyAttackStartedAt);
+    const progress = Phaser.Math.Clamp((time - this.anomalyAttackStartedAt) / duration, 0, 1);
+    const motion = combatTelegraphCountdown('dangerous', progress);
+    this.anomalyTelegraph
+      .setVisible(true)
+      .setPosition(this.x, this.y)
+      .setScale(motion.scale)
+      .setAlpha(motion.alpha);
+  }
+
+  private drawAnomalyAura(
+    g: Phaser.GameObjects.Graphics,
+    radius: number,
+    mode: 'pursuit' | 'telegraph' | 'recovery'
+  ): void {
+    g.clear();
+    const color = mode === 'telegraph' ? COLORS.gold : COLORS.purple;
+    const gap = mode === 'recovery' ? 0.42 : 0.62;
+    g.lineStyle(mode === 'telegraph' ? 3.4 : 2.6, color, mode === 'telegraph' ? 0.9 : 0.68);
+    for (const offset of [0, Math.PI]) {
+      g.beginPath();
+      g.arc(0, 0, radius, offset + gap, offset + Math.PI - gap, false);
+      g.strokePath();
+    }
+    g.lineStyle(1.5, COLORS.white, 0.4);
+    g.strokeCircle(0, 0, radius + 9);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + gap;
+      g.lineStyle(2, color, 0.6);
+      g.beginPath();
+      g.moveTo(Math.cos(a) * (radius - 5), Math.sin(a) * (radius - 5));
+      g.lineTo(Math.cos(a) * (radius + 5), Math.sin(a) * (radius + 5));
+      g.strokePath();
+    }
+  }
+
+  private updateAnomalyAura(time: number): void {
+    if (!this.anomalyAura) return;
+    const mode =
+      this.anomalyAttackState === 'telegraph'
+        ? 'telegraph'
+        : this.anomalyAttackState === 'recovery'
+          ? 'recovery'
+          : 'pursuit';
+    const radius = Math.max(46, this.radius + 30);
+    this.drawAnomalyAura(this.anomalyAura, radius, mode);
+    const rate = this.anomalyPhase === 2 ? 0.0016 : 0.0009;
+    this.anomalyAura
+      .setVisible(true)
+      .setPosition(this.x, this.y)
+      .setRotation(time * rate)
+      .setScale(1 + Math.sin(time * 0.005) * (mode === 'telegraph' ? 0.05 : 0.025))
+      .setAlpha(mode === 'telegraph' ? 0.9 : 0.72);
   }
 
   private updateBossPressureAttack(time: number): void {
@@ -583,6 +814,15 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.bossAura?.setVisible(false);
     this.roleTelegraph?.setVisible(false).clear();
     this.bossTelegraph?.setVisible(false).clear();
+    this.anomalyAura?.setVisible(false);
+    this.anomalyTelegraph?.setVisible(false).clear();
+    this.anomalyPhase = 1;
+    this.anomalyAttackState = 'pursuit';
+    this.anomalyAttackKind = 'radial-burst';
+    this.anomalyLastAttack = null;
+    this.nextAnomalyAttackAt = 0;
+    this.anomalyLockedDirX = 0;
+    this.anomalyLockedDirY = 0;
     this.primeBrokenUntil = 0;
     this.target = null;
     this.gs = null;
@@ -626,6 +866,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       );
     }
 
+    if (this.kind === 'anomaly') {
+      actualDamage *= anomalyDamageMultiplier(this.anomalyAttackState);
+    }
+
     this.hp -= actualDamage;
     if (actualDamage > 0) {
       this.lastDamageAt = now;
@@ -643,6 +887,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.bossAura?.setVisible(false);
       this.roleTelegraph?.setVisible(false).clear();
       this.bossTelegraph?.setVisible(false).clear();
+      this.anomalyAura?.setVisible(false);
+      this.anomalyTelegraph?.setVisible(false).clear();
       this.gs?.hideEnemyHealth(this);
       this.disableBody(true, true);
       this.gs?.onEnemyDied(this);
@@ -752,6 +998,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       g.strokeCircle(0, 0, 2.6);
       for (let i = 0; i < 4; i++) {
         const a = (i / 4) * Math.PI * 2;
+        g.lineStyle(1.6, color, 0.6);
         g.beginPath();
         g.moveTo(Math.cos(a) * 10, Math.sin(a) * 10);
         g.lineTo(Math.cos(a) * 6.5, Math.sin(a) * 6.5);
