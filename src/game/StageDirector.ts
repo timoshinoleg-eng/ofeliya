@@ -1,5 +1,6 @@
 import type { StageDefinition, StageMilestoneDefinition } from './StageDefinitions';
 import { validateWaveEvents } from './WaveEvents';
+import { validateMiniBossSchedule } from './AnomalyPrime';
 
 export type StagePhase =
   | 'STAGE_START'
@@ -64,6 +65,12 @@ export class StageDirector {
       if (stage.waveEvents) {
         validateWaveEvents(stage.waveEvents, stage.durationMs, stage.bossWarningLeadMs);
       }
+      validateMiniBossSchedule(
+        stage.miniBoss,
+        stage.waveEvents ?? [],
+        stage.durationMs,
+        stage.bossWarningLeadMs
+      );
       orders.add(stage.order);
       ids.add(stage.id);
     }

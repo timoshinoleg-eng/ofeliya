@@ -6,6 +6,9 @@ export const GAMEPLAY_RNG_STREAMS = [
   'host-cell',
   'loot',
   'wave-event',
+  // Appended for the P0-2 mini-boss: additive stream, so checkpoints written
+  // before it existed re-derive it from the seed (RunRng.restore migration).
+  'anomaly',
 ] as const;
 
 export type GameplayRngStream = (typeof GAMEPLAY_RNG_STREAMS)[number];

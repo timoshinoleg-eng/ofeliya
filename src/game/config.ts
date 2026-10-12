@@ -87,7 +87,7 @@ export const PROGRESSION = { firstKillXpFloor: 5 };
 /** Момент появления финального иммунного ответа — победа, если уничтожить его. */
 export const RUN = { bossTimeMs: 5 * 60 * 1000, bossPhaseSpawnMul: 0.35 };
 
-export type EnemyKind = 'swarm' | 'runner' | 'brute' | 'boss';
+export type EnemyKind = 'swarm' | 'runner' | 'brute' | 'boss' | 'anomaly';
 
 export interface EnemyDef {
   tex: string;
@@ -104,6 +104,10 @@ export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
   runner: { tex: 'immune-tcell', hp: 12, speed: 152, dmg: 6, xp: 1, scale: 1, radius: 10 },
   brute: { tex: 'immune-macrophage', hp: 85, speed: 56, dmg: 16, xp: 4, scale: 1, radius: 13 },
   boss: { tex: 'immune-prime', hp: 2600, speed: 66, dmg: 26, xp: 0, scale: 1, radius: 25 },
+  // Mid-run mini-boss (АНОМАЛИЯ-ПРАЙМ): macrophage silhouette re-read through a
+  // larger scale and its own aura; HP rides the normal stage curve, the scripted
+  // RNA reward is dropped by GameScene on defeat instead of a plain XP value.
+  anomaly: { tex: 'immune-macrophage', hp: 1500, speed: 74, dmg: 20, xp: 0, scale: 1.5, radius: 14 },
 };
 
 export const ELITE = { hpMul: 6, dmgMul: 1.7, xpMul: 8, scale: 1.45 };

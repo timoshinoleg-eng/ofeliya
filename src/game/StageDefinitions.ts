@@ -1,5 +1,6 @@
 import { COLORS, type EnemyKind } from './config';
 import type { WaveEventDefinition } from './WaveEvents';
+import type { MiniBossDefinition } from './AnomalyPrime';
 
 export type StageId = string;
 export type StageAmbientProfile = 'bloodstream' | 'heart';
@@ -75,6 +76,8 @@ export interface StageDefinition {
   milestones: readonly StageMilestoneDefinition[];
   /** Optional authored surge events; validated by StageDirector. */
   waveEvents?: readonly WaveEventDefinition[];
+  /** Optional authored mid-run mini-boss; validated by StageDirector. */
+  miniBoss?: MiniBossDefinition;
 }
 
 export const BLOODSTREAM_STAGE: StageDefinition = {
@@ -132,6 +135,15 @@ export const BLOODSTREAM_STAGE: StageDefinition = {
     behavior: 'pressure-wave',
   },
   signatureMechanic: 'none',
+  miniBoss: {
+    id: 'anomaly-prime',
+    atMs: 150_000,
+    telegraphMs: 1_800,
+    name: 'АНОМАЛИЯ-ПРАЙМ',
+    title: 'АНОМАЛИЯ-ПРАЙМ',
+    subtitle: 'МУТАНТ ВЫДЕЛЯЕТСЯ ИЗ РОЯ',
+    color: COLORS.purple,
+  },
   waveEvents: [
     {
       id: 'encircle-1',
@@ -264,6 +276,15 @@ export const HEART_STAGE: StageDefinition = {
     behavior: 'heartbeat-pulse',
   },
   signatureMechanic: 'heartbeat-pulse',
+  miniBoss: {
+    id: 'cardiac-anomaly',
+    atMs: 80_000,
+    telegraphMs: 1_800,
+    name: 'КАРДИАЛЬНАЯ АНОМАЛИЯ',
+    title: 'КАРДИАЛЬНАЯ АНОМАЛИЯ',
+    subtitle: 'МУТАНТ ПРИНИМАЕТ РИТМ СЕРДЦА',
+    color: COLORS.purple,
+  },
   waveEvents: [
     {
       id: 'flank-wedge-2',
