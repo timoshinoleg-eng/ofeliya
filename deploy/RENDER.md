@@ -11,6 +11,22 @@ Build: `npm ci && VITE_RELEASE_SHA="$RENDER_GIT_COMMIT" npm run build:max`
 
 Start: `node server/hosting.mjs`
 
+Readiness: `/ready` aggregates score persistence/capacity and configuration of
+required MAX/Telegram integrations. `/health` retains the API health contract.
+Use `/ready` for deployment acceptance; it does not prove external Bot API uptime.
+Optional unconfigured integrations are explicitly disabled, while malformed
+configured MAX startup leaves Telegram/static hosting alive and readiness503.
+
+The internal API binds127.0.0.1. Public forwarding headers are replaced by the
+gateway; forwarding is trusted only with both `HOST_TRUSTED_PROXY_HOPS` and explicit
+`HOST_TRUSTED_PROXY_IPS`. Default is0, so unknown Render proxy topology groups IP
+limits conservatively rather than trusting attacker-supplied XFF. To preserve
+real client IPs, verify the actual connecting proxy addresses first. Direct API
+mode uses `TRUSTED_PROXY_HOPS=0`; explicit0 is valid. An external frontend origin
+must be listed in comma-separated `ALLOW_ORIGINS`; same-host clients need no entry.
+Gateway CSP hashes the actual shipped inline HTML bootstrap. Both real messenger
+embeds remain device acceptance gates.
+
 Runtime secrets: `TG_BOT_TOKEN`, `TG_WEBHOOK_SECRET`, `OFELIYA_STATE_URL`,
 `OFELIYA_STATE_TOKEN`. Set `GAME_URL` to the HTTPS game URL and retain the existing
 `OFELIYA_TELEGRAM_GAME_URL` direct Mini App link. Legal/build values are unchanged
@@ -27,6 +43,13 @@ No Hub/Chatbot24 credential fallback is used. Without a MAX bot token the MAX
 webhook returns 503, so a Telegram-only deployment does not look MAX-ready.
 
 ## State
+
+The hosted Telegram webhook/API is the sole registry writer. Valid private/start
+registration marks its own generation and returns200 only after the current full
+snapshot is acknowledged. A503 causes Telegram redelivery. Local tg_users.json is
+a mirror of that authoritative remote snapshot; do not merge competing files by
+mtime. Long polling refuses remote-state or configured webhook mode. Never run a
+second registry writer or rewrite pending commit UUID/payload on retry.
 
 Render Free files disappear on restart, redeploy and idle shutdown. Production
 therefore **requires both state environment variables**. A dedicated private

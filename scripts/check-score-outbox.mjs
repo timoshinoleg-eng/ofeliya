@@ -229,6 +229,19 @@ try {
       assert.deepEqual(queue(), []);
     });
   }
+  await test('v2 offline score remains v2 on replay and is removed after terminal rejection', async () => {
+    seed('old-v2');
+    const entries = queue();
+    entries[0].submission.payload.rulesetVersion = 2;
+    local.set(key, JSON.stringify(entries));
+    const requests = [];
+    global.fetch = async (_url, options) => { requests.push(JSON.parse(options.body)); return response(422); };
+    await retryPendingDailySubmission(platform);
+    assert.equal(requests[0].payload.rulesetVersion, 2);
+    assert.equal(requests[0].submissionId, entries[0].submissionId);
+    assert.deepEqual(queue(), []);
+  });
+
   await test('Daily terminal409 releases ordinary replay and overlapping Daily removal is exact', async () => {
     seed('ordinary');
     const dailyKey = 'ofeliya_daily_score_outbox_v1';

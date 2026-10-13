@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { validateTelegramUsers } from './telegram-users.mjs';
 
 export class DurableState {
   constructor(url, token, request = fetch) {
@@ -23,12 +24,13 @@ export class DurableState {
   async restore(directory) {
     const result = await this.call({ op: 'claim', writer_id: this.writer });
     if (!result.document?.store || !result.document?.profiles) throw new Error('Durable state has no initialized snapshot');
+    const users = validateTelegramUsers(result.document.tg_users ?? {});
     this.revision = result.revision;
     mkdirSync(directory, { recursive: true });
     for (const name of ['store', 'profiles', 'tg_users']) {
-      if (result.document[name] != null) writeFileSync(join(directory, name + '.json'), JSON.stringify(result.document[name]));
+      const value = name === 'tg_users' ? users : result.document[name];
+      if (value != null) writeFileSync(join(directory, name + '.json'), JSON.stringify(value));
     }
-    this.extra = result.document.tg_users ?? {};
   }
   mark() { this.generation++; }
   flush(snapshot) {
@@ -36,9 +38,13 @@ export class DurableState {
       try {
         if (this.pending) await this.commitPending();
         if (this.savedGeneration === this.generation) return;
+        const document = snapshot();
+        // Every writer supplies the registry it owns; never fall back to the
+        // startup snapshot or read a competing file during a retry.
+        const users = validateTelegramUsers(document.tg_users);
         this.pending = { generation: this.generation, input: {
           op: 'commit', writer_id: this.writer, expected: this.revision, commit_id: randomUUID(),
-          document: JSON.parse(JSON.stringify({ ...snapshot(), tg_users: this.extra })),
+          document: JSON.parse(JSON.stringify({ ...document, tg_users: users })),
         } };
         await this.commitPending();
       } catch (error) { this.error = error.message; throw error; }

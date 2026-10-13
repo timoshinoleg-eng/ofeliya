@@ -215,14 +215,15 @@ function validDirector(value: unknown): value is StageDirectorSnapshot {
   );
 }
 
-function validRng(value: unknown, seed: string): value is RunRngSnapshot {
+function validRng(value: unknown, seed: string, allowLegacyAnomaly: boolean): value is RunRngSnapshot {
   if (!record(value) || value.seed !== seed || !record(value.states)) return false;
   const states = value.states;
-  // Streams appended after a checkpoint was written are allowed to be absent:
-  // RunRng.restore re-derives missing streams from the seed (additive migration).
+  // Every historical stream is required. Only the anomaly stream added during
+  // ruleset v2 can be derived for a checkpoint from before that addition.
   return GAMEPLAY_RNG_STREAMS.every(
     (stream: GameplayRngStream) =>
-      states[stream] === undefined || integer(states[stream], 0, 0xffffffff)
+      (stream === 'anomaly' && allowLegacyAnomaly && states[stream] === undefined) ||
+      integer(states[stream], 0, 0xffffffff)
   );
 }
 
@@ -321,6 +322,7 @@ export function validateRunCheckpoint(raw: unknown): RunCheckpointData | null {
   // simulate identically under v2 and v3, so legacy v2 checkpoints stay
   // resumable instead of being silently wiped for every player.
   const rulesetOk = value.rulesetVersion === SCORE_RULESET_VERSION || value.rulesetVersion === 2;
+  const allowLegacyAnomaly = value.rulesetVersion === 2 && record(value.wave) && value.wave.anomalySpawned === undefined;
 
   if (
     value.schemaVersion !== RUN_CHECKPOINT_SCHEMA_VERSION ||
@@ -334,7 +336,7 @@ export function validateRunCheckpoint(raw: unknown): RunCheckpointData | null {
     typeof value.resumed !== 'boolean' ||
     !validDirector(value.director) ||
     !validRunState(value.runState, value.director) ||
-    !validRng(value.rng, value.runSeed) ||
+    !validRng(value.rng, value.runSeed, allowLegacyAnomaly) ||
     !validWave(value.wave) ||
     !validHeartbeat(value.heartbeat) ||
     !validHostCells(value.hostCells) ||

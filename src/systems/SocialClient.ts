@@ -36,6 +36,9 @@ export interface FriendSnapshot {
 
 export interface DailySnapshot {
   dateKey: string | null;
+  challengeDateKey?: string;
+  serverTime?: number;
+  nextDayAt?: number;
   total: number;
   rank: number | null;
   you: {

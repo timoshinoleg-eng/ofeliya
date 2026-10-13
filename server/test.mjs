@@ -1201,7 +1201,7 @@ await ok('рефы: награда один раз, повтор без нагр
     }),
   }));
   assert.ok(r1.refReward);
-  assert.equal(r1.refReward.from, 'telegram:111');
+  assert.deepEqual(r1.refReward, { first: true }, 'public reward must not expose either account identity');
   assert.equal(r1.refReward.first, true);
 
   const r2 = await fetch(`${BASE}/api/ref`, {
@@ -1443,7 +1443,9 @@ server.close();
 process.stdout.write('__RATE__' + JSON.stringify({actorStatuses,ipStatuses}));
 `;
   const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
-    env: { ...process.env, PORT: '0', DATA_DIR: rateDataDir, WRITE_RATE_LIMIT: '1' },
+    // This fixture deliberately represents a known local reverse proxy. Direct
+    // requests with hops=0 are tested separately against spoofed forwarding IPs.
+    env: { ...process.env, PORT: '0', DATA_DIR: rateDataDir, WRITE_RATE_LIMIT: '1', TRUSTED_PROXY_HOPS: '1', TRUSTED_PROXY_IPS: '127.0.0.1,::1' },
     encoding: 'utf8',
     timeout: 20_000,
   });

@@ -1,3 +1,11 @@
+# Current review fixes — 2026-10-13
+
+Branch fix/kimi-review-20261013, based on main26fcc88. User approved the independent review follow-up plan. See docs/release/KIMI_REVIEW_FIXES_20261013.md for contracts, tests and mixed-version policy. Previous handoff is archived under memory/archive/2026-10-13-before-review-fixes/; older state/decisions/backlog remain as historical notes below.
+
+Open gates: final-head CI, production backup/restore and release parity, S20+ Android/MAX/TG numerical versions + real acceptance/performance, MAXiOS, newcomer study. Broad scene refactoring and performance promises require measured evidence. Security patch from other machine is not imported. PR184 dependency portion is included here but prior PR remains open.
+
+## Historical notes (snapshot-specific; current facts above take precedence)
+
 # Free backup and BI follow-up - 2026-10-12
 
 All remaining Cloud.ru paid VMs/disks/IPs, both Quiz backups and two registries

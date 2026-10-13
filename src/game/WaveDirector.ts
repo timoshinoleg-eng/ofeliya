@@ -234,6 +234,15 @@ export class WaveDirector {
       return;
     }
 
+    // Consume missed beats instead of replaying an expired burst one frame
+    // after its warning. During an anomaly, drop each beat as its warning
+    // window opens, including beats whose burst is still in the future.
+    while (this.waveEventIndex < events.length) {
+      const missed = events[this.waveEventIndex];
+      const deadline = this.anomaly ? missed.atMs - missed.telegraphMs : missed.atMs;
+      if (t < deadline) break;
+      this.waveEventIndex += 1;
+    }
     const def = events[this.waveEventIndex];
     if (!def || this.boss || this.anomaly) return;
     if (t < def.atMs - def.telegraphMs) return;

@@ -151,6 +151,8 @@ try {
     ['403 denied', async () => jsonRes(403, { ok: false }), 'denied'],
     ['500 http', async () => jsonRes(500, {}), 'http'],
     ['malformed 200 http', async () => jsonRes(200, { ok: false, ticket }), 'http'],
+    ['old ruleset ticket', async () => jsonRes(200, { ok: true, ticket: { ...ticket, rulesetVersion: 2 } }), 'incompatible'],
+    ['future campaign ticket', async () => jsonRes(200, { ok: true, ticket: { ...ticket, campaignVersion: 3 } }), 'incompatible'],
     ['throw network', async () => { throw new Error('boom'); }, 'network'],
   ];
   for (const [name, stub, expected] of failureCases) {
@@ -295,11 +297,12 @@ try {
 
   // --- (5) copy exhaustiveness ------------------------------------------------------
   await test('every ticket/submit status maps to a non-empty copy slot', () => {
-    const ticketStatuses = ['ok', 'capacity', 'denied', 'http', 'network', 'unavailable'];
+    const ticketStatuses = ['ok', 'capacity', 'denied', 'incompatible', 'http', 'network', 'unavailable'];
     const submitStatuses = ['ok', 'rejected', 'closed', 'expired', 'denied', 'http', 'network', 'unavailable'];
     const ticketCopy = {
       capacity: 'ежедневный забег временно недоступен',
       denied: 'нужен подтверждённый запуск',
+      incompatible: 'обновите игру и повторите',
       http: 'сервис недоступен',
       network: 'проверьте соединение',
       unavailable: 'нужна идентичность мессенджера',

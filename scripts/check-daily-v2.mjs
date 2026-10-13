@@ -199,6 +199,17 @@ try {
   assert.equal(detailed.status, 'ok');
   assert.deepEqual(detailed.ticket, ticket);
 
+  for (const incompatible of [
+    { ...ticket, rulesetVersion: 2 },
+    { ...ticket, campaignVersion: 1 },
+    { ...ticket, rulesetVersion: 4 },
+  ]) {
+    global.fetch = async () => jsonRes(200, { ok: true, ticket: incompatible });
+    detailed = await requestDailyRunDetailed(platform);
+    assert.equal(detailed.status, 'incompatible', 'old/new server contracts must be blocked before gameplay');
+    assert.equal(detailed.ticket, null);
+  }
+
   global.fetch = async () => jsonRes(503, { ok: false });
   detailed = await requestDailyRunDetailed(platform);
   assert.equal(detailed.status, 'capacity');

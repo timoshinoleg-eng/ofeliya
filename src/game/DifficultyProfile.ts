@@ -126,7 +126,6 @@ export function pickEliteModifier(
 }
 
 export function heartbeatProfileForDifficulty(profile: DifficultyProfile): HeartbeatPulseProfile {
-  if (profile.id === 'standard') return { ...HEARTBEAT_PULSE_PROFILE };
   return {
     ...HEARTBEAT_PULSE_PROFILE,
     firstImpactAtMs: Math.round(

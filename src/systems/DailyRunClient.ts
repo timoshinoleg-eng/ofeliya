@@ -1,4 +1,5 @@
 import type { PlatformAdapter } from '../platform/PlatformBridge';
+import { SCORE_RULESET_VERSION, SCORE_CAMPAIGN_VERSION } from '../game/RunVersions';
 
 const DAILY_RUN_TIMEOUT_MS = 2500;
 
@@ -17,6 +18,7 @@ export type DailyTicketStatus =
   | 'ok'
   | 'capacity'
   | 'denied'
+  | 'incompatible'
   | 'http'
   | 'network'
   | 'unavailable';
@@ -96,6 +98,9 @@ export async function requestDailyRunDetailed(
     }
     const ticket = parseTicket(body);
     if (!ticket) return { ticket: null, status: 'http' };
+    if (ticket.rulesetVersion !== SCORE_RULESET_VERSION || ticket.campaignVersion !== SCORE_CAMPAIGN_VERSION) {
+      return { ticket: null, status: 'incompatible' };
+    }
     return { ticket, status: 'ok' };
   } catch {
     return { ticket: null, status: 'network' };

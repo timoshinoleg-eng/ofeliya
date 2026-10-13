@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import ts from 'typescript';
 
 const temp = mkdtempSync(join(tmpdir(), 'ofeliya-daily-mutator-'));
 const require = createRequire(import.meta.url);
@@ -43,9 +44,93 @@ try {
     hashDateKey,
     todayDateKey,
   } = require(join(temp, 'game/DailyMutator.js'));
-  const { STANDARD_DIFFICULTY, STRAINED_DIFFICULTY } = require(
+  const { STANDARD_DIFFICULTY, STRAINED_DIFFICULTY, heartbeatProfileForDifficulty } = require(
     join(temp, 'game/DifficultyProfile.js')
   );
+  const { HEARTBEAT_PULSE_PROFILE } = require(join(temp, 'game/HeartbeatPulseDirector.js'));
+
+  for (const [date, expectedHash, expectedId] of [
+    ['2026-10-12', 1283409593, 'elite-surge'],
+    ['2026-10-13', 1266631974, 'dense-swarm'],
+    ['2027-01-01', 1431789288, 'dense-swarm'],
+  ]) {
+    assert(hashDateKey(date) === expectedHash, `golden date hash changed: ${date}`);
+    assert(dailyMutatorForDate(date).id === expectedId, `authored date rotation changed: ${date}`);
+  }
+
+  const deltas = {
+    'dense-swarm': { mul: { spawnIntervalMultiplier: 0.9 }, add: { batchBonus: 1 } },
+    'frenzy-blood': { mul: { eliteIntervalMultiplier: 0.75, enemySpeedMultiplier: 1.12 } },
+    'iron-sheath': { mul: { enemyHpMultiplier: 1.25, enemyDamageMultiplier: 0.9 } },
+    'sparse-lethal': { mul: { spawnIntervalMultiplier: 1.15, enemyDamageMultiplier: 1.3, enemyHpMultiplier: 1.1 } },
+    'cardiac-stress': { mul: { heartbeatIntervalMultiplier: 0.85, heartbeatPressureMultiplier: 1.2 } },
+    'elite-surge': { mul: { eliteIntervalMultiplier: 0.6 }, add: { normalEnemyCapBonus: 30, batchBonus: 1 } },
+  };
+  assert(DAILY_MUTATORS.length === Object.keys(deltas).length, 'authored pool changed without updated contracts');
+  for (const base of [STANDARD_DIFFICULTY, STRAINED_DIFFICULTY]) {
+    for (const mutator of DAILY_MUTATORS) {
+      const expected = { ...base };
+      const patch = deltas[mutator.id];
+      assert(patch, `no authored contract for ${mutator.id}`);
+      for (const [key, multiplier] of Object.entries(patch.mul ?? {})) expected[key] = base[key] * multiplier;
+      for (const [key, bonus] of Object.entries(patch.add ?? {})) expected[key] = base[key] + bonus;
+      assert(JSON.stringify(mutator.apply(base)) === JSON.stringify(expected), `${mutator.id}: authored difficulty deltas drifted`);
+    }
+    const cardiac = DAILY_MUTATORS.find((mutator) => mutator.id === 'cardiac-stress').apply(base);
+    const heartbeat = heartbeatProfileForDifficulty(cardiac);
+    for (const key of ['firstImpactAtMs', 'intervalMs', 'bossIntervalMs', 'bossFirstImpactDelayMs']) {
+      assert(heartbeat[key] === Math.round(HEARTBEAT_PULSE_PROFILE[key] * cardiac.heartbeatIntervalMultiplier), `${base.id}: daily Cardiac timing not applied to actual heartbeat ${key}`);
+    }
+    for (const key of ['pressureMultiplier', 'bossPressureMultiplier']) {
+      const expected = 1 + (HEARTBEAT_PULSE_PROFILE[key] - 1) * cardiac.heartbeatPressureMultiplier;
+      assert(Math.abs(heartbeat[key] - expected) < 1e-12, `${base.id}: daily Cardiac pressure not applied`);
+    }
+  }
+  assert(JSON.stringify(heartbeatProfileForDifficulty(STANDARD_DIFFICULTY)) === JSON.stringify(HEARTBEAT_PULSE_PROFILE), 'ordinary Standard heartbeat changed');
+
+  // Execute the production create() initialization statements on the same scene
+  // object across launches. Phaser/UI adapters are outside this state contract.
+  const gameSource = readFileSync(resolve('src/scenes/GameScene.ts'), 'utf8');
+  const gameAst = ts.createSourceFile('GameScene.ts', gameSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const gameClass = gameAst.statements.find((statement) => ts.isClassDeclaration(statement) && statement.name?.text === 'GameScene');
+  const createMethod = gameClass?.members.find((member) => ts.isMethodDeclaration(member) && member.name.getText(gameAst) === 'create');
+  assert(createMethod?.body, 'GameScene.create initialization missing');
+  const initialization = [];
+  let foundRngBoundary = false;
+  for (const statement of createMethod.body.statements) {
+    if (ts.isExpressionStatement(statement) && ts.isBinaryExpression(statement.expression)
+      && statement.expression.left.getText(gameAst) === 'this.gameplayRng') {
+      foundRngBoundary = true;
+      break;
+    }
+    initialization.push(statement.getText(gameAst));
+  }
+  assert(foundRngBoundary, 'GameScene RNG boundary missing');
+  const compiledInitialization = ts.transpileModule(`function initialize() { ${initialization.join('\n')} }`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2020 },
+  }).outputText;
+  const initialize = new Function('StageDirector', 'STAGES', 'RunCheckpoint', 'validateRunCheckpoint',
+    'getDifficultyProfile', 'readDifficultySelection', 'readDailyIntent', 'applyDailyMutator',
+    `${compiledInitialization}\nreturn initialize;`)(class {}, [], { clear() {} }, () => null,
+    () => STANDARD_DIFFICULTY, () => 'standard', (registry) => registry.get('dailyIntent') ?? null, applyDailyMutator);
+  const registryValues = new Map([
+    ['dailyIntent', { runId: 'daily-test' }], ['dailyTicket', { dateKey: '2026-10-12' }],
+  ]);
+  const scene = { registry: {
+    get: (key) => registryValues.get(key), set: (key, value) => registryValues.set(key, value),
+    remove: (key) => registryValues.delete(key),
+  }, dailyMutator: null };
+  initialize.call(scene);
+  assert(scene.dailyMutator?.id === 'elite-surge', 'daily scene initialization ignored ticket mutator');
+  registryValues.delete('dailyIntent');
+  registryValues.delete('dailyTicket');
+  initialize.call(scene);
+  assert(scene.dailyMutator === null, 'ordinary run retained the previous daily banner');
+  assert(scene.difficulty === STANDARD_DIFFICULTY && !scene.dailyRun, 'ordinary run retained daily difficulty/intent');
+  registryValues.set('dailyIntent', { runId: 'second-daily-test' });
+  registryValues.set('dailyTicket', { dateKey: '2026-10-13' });
+  initialize.call(scene);
+  assert(scene.dailyMutator?.id === 'dense-swarm', 'restarted scene did not replace the daily mutator');
 
   // The whole point of the module: no runtime RNG anywhere. Determinism must
   // come from the dateKey hash alone (audio has no RNG to borrow either).

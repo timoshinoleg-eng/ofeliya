@@ -1,10 +1,10 @@
 const fs = require('fs');
-const { chromium } = require('playwright-core');
+const { chromium } = process.platform === 'win32' ? require('playwright') : require('playwright-core');
 
-const chrome = ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(fs.existsSync);
-if (!chrome) throw new Error('Chrome not found');
+const chrome = process.platform === 'win32' ? undefined : ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(fs.existsSync);
+if (process.platform !== 'win32' && !chrome) throw new Error('Chrome not found');
 
-const URL = 'http://127.0.0.1:5173/';
+const URL = process.env.OFELIYA_URL || 'http://127.0.0.1:5173/';
 const KEY = 'ofeliya_run_checkpoint_v1';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -121,7 +121,7 @@ async function startFresh(ctx, page, seed) {
   const browser = await chromium.launch({
     executablePath: chrome,
     headless: true,
-    args: ['--no-sandbox', '--disable-dev-shm-usage'],
+    args: process.platform === 'win32' ? [] : ['--no-sandbox', '--disable-dev-shm-usage'],
   });
 
   let reusableCheckpointRaw = null;

@@ -1,3 +1,11 @@
+# Current review fixes — 2026-10-13
+
+Branch fix/kimi-review-20261013, based on main26fcc88. User approved the independent review follow-up plan. See docs/release/KIMI_REVIEW_FIXES_20261013.md for contracts, tests and mixed-version policy. Previous handoff is archived under memory/archive/2026-10-13-before-review-fixes/; older state/decisions/backlog remain as historical notes below.
+
+Confirmed: local TypeScript/QA build, server75/75 plus migration/security/durable suites, browser startup/lifecycle/CSP, gameplay gates and npm audit zero. Hosted CI/deploy/device evidence pending.
+
+## Historical notes (snapshot-specific; current facts above take precedence)
+
 # Free backup and BI follow-up - 2026-10-12
 
 All remaining Cloud.ru paid VMs/disks/IPs, both Quiz backups and two registries
