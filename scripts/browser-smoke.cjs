@@ -1,8 +1,10 @@
 const fs = require('fs');
-const { chromium } = require('playwright-core');
+const path = require('path');
+const { chromium } = process.platform === 'win32' ? require('playwright') : require('playwright-core');
 
-const chrome = ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(fs.existsSync);
-if (!chrome) throw new Error('Chrome not found');
+const chrome = process.platform === 'win32' ? undefined : ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(fs.existsSync);
+if (process.platform !== 'win32' && !chrome) throw new Error('Chrome not found');
+const captureDir = process.platform === 'win32' ? path.join(process.cwd(), '.tmp-browser-smoke') : '/tmp/browser-smoke';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -10,7 +12,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const browser = await chromium.launch({
     executablePath: chrome,
     headless: true,
-    args: ['--no-sandbox', '--disable-dev-shm-usage'],
+    args: process.platform === 'win32' ? [] : ['--no-sandbox', '--disable-dev-shm-usage'],
   });
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
   await ctx.route('https://st.max.ru/**', (route) =>
@@ -37,7 +39,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (error) => errors.push(String(error)));
-  await page.goto('http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
+  await page.goto(process.env.OFELIYA_URL || 'http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
   await sleep(300);
 
@@ -89,8 +91,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   ) {
     throw new Error(`MAX menu layout contract failed: ${JSON.stringify(menuState)}`);
   }
-  fs.mkdirSync('/tmp/browser-smoke', { recursive: true });
-  await page.locator('#game').screenshot({ path: '/tmp/browser-smoke/01-challenge-menu.png' });
+  fs.mkdirSync(captureDir, { recursive: true });
+  await page.locator('#game').screenshot({ path: path.join(captureDir, '01-challenge-menu.png') });
 
   await page.evaluate(() => {
     const menu = window.__game.scene.getScene('Menu');
@@ -118,7 +120,17 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   await page.waitForSelector('#ofeliya-legal-overlay', { state: 'detached' });
 
   await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
-  await page.waitForFunction(() => window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI'));
+  try {
+    // The real first mutation may already pause Game by the first observed
+    // frame. UI owns that legitimate pause; active-only waits race progression.
+    await page.waitForFunction(() => (window.__game.scene.isActive('Game') || window.__game.scene.isPaused('Game')) && window.__game.scene.isActive('UI'));
+  } catch (error) {
+    const state = await page.evaluate(() => {
+      const game = window.__game, gs = game.scene.getScene('Game'), ui = game.scene.getScene('UI');
+      return { active: game.scene.isActive('Game'), paused: game.scene.isPaused('Game'), ui: game.scene.isActive('UI'), awaitingChoice: gs.awaitingChoice, modalOpen: ui.modalOpen };
+    });
+    throw new Error(`initial run wait failed: ${JSON.stringify(state)}; ${error.message}`);
+  }
   await page.evaluate(() => {
     const gs = window.__game.scene.getScene('Game');
     gs.runState.run.timeMs = 130000;
@@ -245,7 +257,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   ) {
     throw new Error(`challenge result layout failed: ${JSON.stringify(resultState)}`);
   }
-  await page.locator('#game').screenshot({ path: '/tmp/browser-smoke/02-challenge-result.png' });
+  await page.locator('#game').screenshot({ path: path.join(captureDir, '02-challenge-result.png') });
 
   await page.evaluate(() => {
     const ui = window.__game.scene.getScene('UI');

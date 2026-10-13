@@ -63,6 +63,10 @@ try {
   director.startRun();
   const state = new RunState(director.currentStage);
   const rng = new RunRng('checkpoint-unit-seed');
+  for (const stream of Object.keys(rng.snapshot().states)) {
+    rng.next(stream);
+    rng.next(stream);
+  }
   const heartbeat = new HeartbeatPulseDirector();
 
   const checkpoint = {
@@ -77,7 +81,7 @@ try {
     director: director.snapshot(),
     runState: state.snapshotForCheckpoint(),
     rng: rng.snapshot(),
-    wave: { spawnAcc: 0, spawnedElites: 0, minionAcc: 0 },
+    wave: { spawnAcc: 0, spawnedElites: 0, minionAcc: 0, anomalySpawned: false },
     heartbeat: heartbeat.snapshot(),
     hostCells: {
       spawnAcc: 0,
@@ -106,9 +110,39 @@ try {
   // Additive migration: a checkpoint written before the mini-boss stream/flag
   // existed must still validate (RunRng.restore re-derives the missing stream).
   const legacyPreAnomaly = structuredClone(checkpoint);
+  legacyPreAnomaly.rulesetVersion = 2;
   delete legacyPreAnomaly.rng.states.anomaly;
   delete legacyPreAnomaly.wave.anomalySpawned;
   assert(validateRunCheckpoint(legacyPreAnomaly), 'pre-anomaly checkpoint rejected');
+  const migratedRng = new RunRng(rng.seed);
+  migratedRng.restore(legacyPreAnomaly.rng);
+  assert(migratedRng.next('anomaly') === new RunRng(rng.seed).next('anomaly'), 'legacy anomaly migration changed the seeded continuation');
+  for (const stream of Object.keys(checkpoint.rng.states).filter((key) => key !== 'anomaly')) {
+    assert(migratedRng.next(stream) === rng.next(stream), `legacy migration changed historical ${stream} continuation`);
+  }
+
+  for (const stream of Object.keys(checkpoint.rng.states)) {
+    const missing = structuredClone(checkpoint);
+    delete missing.rng.states[stream];
+    assert(validateRunCheckpoint(missing) === null, `current checkpoint accepted missing RNG stream ${stream}`);
+    if (stream !== 'anomaly') {
+      missing.rulesetVersion = 2;
+      delete missing.wave.anomalySpawned;
+      assert(validateRunCheckpoint(missing) === null, `legacy checkpoint accepted missing historical RNG stream ${stream}`);
+    }
+    for (const invalid of [-1, 0.5, 0x100000000, NaN, Infinity, null, '1']) {
+      const corrupted = structuredClone(checkpoint);
+      corrupted.rng.states[stream] = invalid;
+      assert(validateRunCheckpoint(corrupted) === null, `checkpoint accepted invalid ${stream} state ${invalid}`);
+    }
+  }
+  const emptyRng = structuredClone(checkpoint);
+  emptyRng.rng.states = {};
+  assert(validateRunCheckpoint(emptyRng) === null, 'checkpoint accepted empty RNG state');
+  const nonLegacyAnomaly = structuredClone(checkpoint);
+  nonLegacyAnomaly.rulesetVersion = 2;
+  delete nonLegacyAnomaly.rng.states.anomaly;
+  assert(validateRunCheckpoint(nonLegacyAnomaly) === null, 'post-anomaly checkpoint accepted missing anomaly state');
 
   // Ruleset tolerance (P0-3, v2 → v3 daily mutator): ordinary-run checkpoints
   // carry no mutator state and stay resumable; anything older than v2 is not.

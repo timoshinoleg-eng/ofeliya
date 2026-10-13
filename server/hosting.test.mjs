@@ -3,6 +3,7 @@ import { createServer } from 'node:net';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createHmac } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -17,17 +18,21 @@ async function freePort() {
 }
 const dir = mkdtempSync(join(tmpdir(), 'ofeliya-hosting-'));
 mkdirSync(join(dir, 'dist'));
-writeFileSync(join(dir, 'dist', 'index.html'), 'hosting-fixture');
+const inlineScript = 'window.fixture = true;';
+const html = `<script>${inlineScript}</script>hosting-fixture`;
+writeFileSync(join(dir, 'dist', 'index.html'), html);
 
-async function check(configured) {
+async function check(mode) {
+  const configured = mode === 'configured';
+  const broken = mode === 'broken';
   const port = await freePort();
   let apiPort = await freePort();
   while (apiPort === port) apiPort = await freePort();
   const env = { ...process.env, SERVER_PORT: String(port), OFELIYA_API_PORT: String(apiPort),
-    DATA_DIR: join(dir, configured ? 'configured' : 'unconfigured'),
-    OFELIYA_DIST_DIR: join(dir, 'dist'), RENDER: 'false', NODE_ENV: 'production',
-    OFELIYA_BOT_TOKEN: configured ? 'hosting-test-token' : '',
-    OFELIYA_BOT_USERNAME: 'id100000000000_test_bot', OFELIYA_BOT_MODE: 'dedicated',
+    DATA_DIR: join(dir, mode),
+    OFELIYA_DIST_DIR: join(dir, 'dist'), RENDER: 'false', NODE_ENV: 'production', WRITE_RATE_LIMIT: '1',
+    OFELIYA_BOT_TOKEN: configured || broken ? 'hosting-test-token' : '',
+    OFELIYA_BOT_USERNAME: broken ? '' : 'id100000000000_test_bot', OFELIYA_BOT_MODE: 'dedicated',
     OFELIYA_BOT_WEBHOOK_DOMAIN: 'https://example.test',
     OFELIYA_BOT_WEBHOOK_PATH: '/ofeliya/bot/webhook',
     OFELIYA_BOT_WEBHOOK_SECRET: '0123456789abcdef0123456789abcdef' };
@@ -48,8 +53,33 @@ async function check(configured) {
       if (!ready) await new Promise(r => setTimeout(r, 50));
     }
     assert.ok(ready, output);
-    assert.equal(await (await fetch(base + '/ofeliya/')).text(), 'hosting-fixture');
+    const page = await fetch(base + '/ofeliya/');
+    assert.equal(await page.text(), html);
+    const csp = page.headers.get('content-security-policy');
+    assert.ok(csp, 'Render gateway must emit an effective CSP');
+    assert.ok(csp.includes(`'sha256-${createHash('sha256').update(inlineScript).digest('base64')}'`));
+    assert.ok(!csp.split(';').find(part => part.trim().startsWith('script-src')).includes('unsafe-inline'));
+    assert.match(csp, /frame-ancestors.*https:\/\/web\.telegram\.org/);
+    assert.equal(page.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
+    assert.match(page.headers.get('permissions-policy'), /camera=\(\)/);
+    assert.match(page.headers.get('strict-transport-security'), /max-age=31536000/);
+    const readiness = await fetch(base + '/ready');
+    assert.equal(readiness.status, broken ? 503 : 200);
+    assert.equal((await readiness.json()).integrations.max.state, broken ? 'failed' : configured ? 'configured' : 'disabled');
+    assert.equal((await fetch(base + '/ofeliya/missing')).headers.get('content-security-policy'), csp);
     assert.equal((await fetch(base + '/api/top')).status, 200);
+    if (mode === 'disabled') {
+      const statuses = [];
+      for (let index = 0; index < 13; index++) {
+        const response = await fetch(base + '/ofeliya/api/score', { method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-forwarded-for': `198.51.100.${index}` },
+          body: JSON.stringify({ platform: 'browser', anonId: `gateway-spoof-${index}`,
+            payload: { win: false, timeMs: 1000, kills: 1, level: 1 } }) });
+        statuses.push(response.status);
+      }
+      assert.deepEqual(statuses.slice(0, 12), Array(12).fill(200));
+      assert.equal(statuses[12], 429, 'gateway must replace spoofable forwarding chains');
+    }
     // These are the relative URLs used by clients loaded from /ofeliya/.
     const gameApi = new URL('api/top?limit=1', base + '/ofeliya/');
     const top = await fetch(gameApi);
@@ -81,6 +111,6 @@ async function check(configured) {
     await exit;
   }
 }
-try { await check(true); await check(false); }
+try { await check('configured'); await check('disabled'); await check('broken'); }
 finally { rmSync(dir, { recursive: true, force: true }); }
 console.log('Hosting gateway: game, API and configured/unconfigured MAX webhook passed');

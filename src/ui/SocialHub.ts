@@ -10,7 +10,7 @@ import {
 } from '../systems/SocialClient';
 import type { DailyTicketStatus } from '../systems/DailyRunClient';
 import { dailyStreakSummary } from '../systems/DailyHistory';
-import { dailyMutatorForDate, todayDateKey } from '../game/DailyMutator';
+import { dailyPreviewTitle, dailyPreviewRefreshDelay } from './DailyPreview';
 
 const MAX_ROWS = 3;
 
@@ -52,6 +52,7 @@ export class SocialHub {
   private readonly panelH: number;
   private closed = false;
   private loadGeneration = 0;
+  private refreshTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private lastDetail: SocialSnapshotDetailed | null = null;
   private dailyLaunchStatus: DailyTicketStatus | 'idle' | 'loading' = 'idle';
 
@@ -138,6 +139,7 @@ export class SocialHub {
     if (this.closed) return;
     this.closed = true;
     this.loadGeneration += 1;
+    if (this.refreshTimer !== null) globalThis.clearTimeout(this.refreshTimer);
     this.platform.setBackHandler(null);
     this.root.destroy(true);
     this.onDismiss();
@@ -243,6 +245,15 @@ export class SocialHub {
         stroke: COLORS.stroke,
       };
     }
+    if (this.dailyLaunchStatus === 'incompatible') {
+      return {
+        label: 'ОБНОВИТЕ ИГРУ И ПОВТОРИТЕ',
+        enabled: false,
+        color: '#ffb095',
+        fill: 0x1a1520,
+        stroke: COLORS.stroke,
+      };
+    }
     if (this.dailyLaunchStatus === 'capacity') {
       return {
         label: 'ЗАБЕГ НЕДОСТУПЕН · ПОВТОРИТЬ',
@@ -302,9 +313,8 @@ export class SocialHub {
       .setOrigin(0.5)
       .setResolution(2)
       .setName('ofeliya-social-daily-label');
-    const todayMutator = dailyMutatorForDate(todayDateKey());
     const mutatorText = this.scene.add
-      .text(W / 2, y + 20, todayMutator.title.replace('МУТАТОР ДНЯ · ', ''), {
+      .text(W / 2, y + 20, dailyPreviewTitle(loadingView ? null : this.lastDetail?.snapshot.daily ?? null), {
         fontFamily: FONT,
         fontSize: this.scene.scale.height < 650 ? '9px' : '10px',
         fontStyle: 'bold',
@@ -480,10 +490,12 @@ export class SocialHub {
   }
 
   private async reload(): Promise<void> {
+    if (this.refreshTimer !== null) globalThis.clearTimeout(this.refreshTimer);
     const generation = ++this.loadGeneration;
     this.renderLoading();
     const detail = await loadSocialSnapshotDetailed(this.platform);
     if (this.closed || generation !== this.loadGeneration) return;
     this.render(detail);
+    this.refreshTimer = globalThis.setTimeout(() => { void this.reload(); }, dailyPreviewRefreshDelay(detail.snapshot.daily));
   }
 }

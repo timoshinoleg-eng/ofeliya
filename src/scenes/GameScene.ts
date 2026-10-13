@@ -255,6 +255,7 @@ export class GameScene extends Phaser.Scene {
     // as an ordinary run. Non-daily launch paths clear the marker in MenuScene.
     const dailyIntent = readDailyIntent(this.registry);
     this.dailyRun = dailyIntent !== null;
+    this.dailyMutator = null;
     if (this.dailyRun) {
       // Daily mutator (P0-3): the day's modifier is derived from the server
       // ticket's dateKey — identical for every player, no runtime RNG.

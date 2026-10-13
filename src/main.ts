@@ -9,6 +9,7 @@ import { UIScene } from './scenes/UIScene';
 import { installMobileLayoutGuard } from './ui/MobileLayoutGuard';
 import { PlatformBridge } from './platform';
 import { StartupTrace } from './systems/StartupTrace';
+import { runStartupBoundary } from './systems/StartupBoundary';
 import { ensureTelegramBridge } from './platform/TelegramBridgeLoader';
 import { trackProductEvent } from './systems/AnalyticsClient';
 import { retryPendingDailySubmission } from './systems/ScoreClient';
@@ -29,6 +30,7 @@ const RELEASE_CHECK_TIMEOUT_MS = 1200;
 let releaseCheckInFlight: Promise<boolean> | null = null;
 let releaseRefreshPending = false;
 let releaseGuardGame: Phaser.Game | null = null;
+let releaseGuardViewport: ViewportManager | null = null;
 
 function hasActiveRun(): boolean {
   const scenes = releaseGuardGame?.scene;
@@ -261,7 +263,7 @@ function installAppOpenTracking(): void {
   window.setTimeout(tryTrack, 1200);
 }
 
-async function boot(): Promise<void> {
+async function boot(signal: AbortSignal): Promise<void> {
   StartupTrace.mark('boot.start');
   StartupTrace.setMeta('platformInitial', PlatformBridge.kind);
   StartupTrace.setMeta('platformVersion', PlatformBridge.version || '');
@@ -272,16 +274,19 @@ async function boot(): Promise<void> {
   installReleaseResumeGuard();
 
   const viewport = new ViewportManager(host);
+  releaseGuardViewport = viewport;
   viewport.start();
   // Let MAX Bridge answer before Phaser reads the parent size. Browser fallback resolves immediately.
   StartupTrace.mark('viewport.first.start');
   await viewport.sync();
+  signal.throwIfAborted();
   StartupTrace.mark('viewport.first.end');
   StartupTrace.setMeta('viewportSourceFirst', host.dataset.viewportSource ?? 'unknown');
   StartupTrace.setMeta('viewportWidthFirst', host.clientWidth);
   StartupTrace.setMeta('viewportHeightFirst', host.clientHeight);
 
   await waitForFonts();
+  signal.throwIfAborted();
 
   const rendererOverride = explicitRenderer();
   StartupTrace.setMeta('rendererOverride', rendererOverride ?? 'auto');
@@ -336,11 +341,13 @@ async function boot(): Promise<void> {
   }
 
   releaseGuardGame = game;
+  game.events.once(Phaser.Core.Events.DESTROY, () => viewport.destroy());
   installWebGLRecovery(game);
   installMobileLayoutGuard(game);
   viewport.attachGame(game);
   StartupTrace.mark('viewport.second.start');
   await viewport.sync();
+  signal.throwIfAborted();
   StartupTrace.mark('viewport.second.end');
   StartupTrace.setMeta('viewportSourceSecond', host.dataset.viewportSource ?? 'unknown');
 
@@ -371,8 +378,31 @@ async function boot(): Promise<void> {
   }
 }
 
-void (async () => {
+function reportBootFailure(): void {
+  console.error('[startup] failed to initialize game');
+  releaseGuardViewport?.destroy();
+  releaseGuardViewport = null;
+  releaseGuardGame?.destroy(true);
+  releaseGuardGame = null;
+  document.getElementById('splash')?.remove();
+  const host = document.getElementById('game') ?? document.body;
+  host.replaceChildren();
+  const panel = document.createElement('div');
+  panel.id = 'ofeliya-boot-failure';
+  panel.setAttribute('role', 'alert');
+  panel.style.cssText = 'color:#fff4ec;padding:24px;font:16px sans-serif;text-align:center';
+  const text = document.createElement('p');
+  text.textContent = 'НЕ УДАЛОСЬ ЗАПУСТИТЬ ИГРУ. ПРОВЕРЬТЕ СОЕДИНЕНИЕ И ПОВТОРИТЕ.';
+  const retry = document.createElement('button');
+  retry.textContent = 'ПОВТОРИТЬ';
+  retry.addEventListener('click', () => window.location.reload());
+  panel.append(text, retry);
+  host.append(panel);
+}
+
+void runStartupBoundary(async (signal) => {
   if (await ensureCurrentRelease()) return;
+  signal.throwIfAborted();
 
   let scoreRetryInFlight = false;
   const retryPendingScores = (): void => {
@@ -385,6 +415,8 @@ void (async () => {
 
   window.addEventListener('ofeliya:max-bridge-ready', retryPendingScores, { once: true });
   await ensureTelegramBridge();
-  await boot();
+  signal.throwIfAborted();
+  await boot(signal);
+  signal.throwIfAborted();
   retryPendingScores();
-})();
+}, reportBootFailure);

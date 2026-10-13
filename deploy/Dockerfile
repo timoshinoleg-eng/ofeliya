@@ -13,6 +13,8 @@ ENV NODE_ENV=production
 RUN mkdir -p /app/server/data && chown -R node:node /app/server
 COPY --chown=node:node server/index.mjs ./server/index.mjs
 COPY --chown=node:node server/durable-state.mjs ./server/durable-state.mjs
+COPY --chown=node:node server/telegram-users.mjs ./server/telegram-users.mjs
+COPY --chown=node:node server/request-policy.mjs ./server/request-policy.mjs
 COPY --chown=node:node server/telegram-share.mjs ./server/telegram-share.mjs
 COPY --chown=node:node server/telegram-api.mjs ./server/telegram-api.mjs
 COPY --chown=node:node server/telegram-webhook.mjs ./server/telegram-webhook.mjs

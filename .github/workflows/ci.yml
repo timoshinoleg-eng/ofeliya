@@ -59,6 +59,15 @@ jobs:
       - name: Campaign pacing deterministic smoke
         run: npm run test:pacing
 
+      - name: Authored waves, mini-boss and committed attack regressions
+        run: npm run test:wave-events && npm run test:mini-boss && npm run test:anomaly-runtime
+
+      - name: Daily mutator and server-date preview regressions
+        run: npm run test:daily-mutator && npm run test:daily-preview
+
+      - name: Entire startup failure boundary
+        run: npm run test:startup-boundary
+
       - name: Frame-rate decay deterministic smoke
         run: node scripts/check-frame-rate-decay.mjs
 
@@ -196,6 +205,14 @@ jobs:
 
       - name: Full startup timeout contracts
         run: npm run test:startup
+
+      - name: Daily lifecycle and startup failure browser regressions
+        run: npm run test:review-browser
+
+      - name: Built Render gateway CSP startup in Chromium
+        env:
+          VITE_RELEASE_SHA: ${{ github.sha }}
+        run: npm run build && node tests/hosting-csp-startup.mjs
 
       - name: Optional art missing and stalled startup fallback
         run: npm run test:art-startup

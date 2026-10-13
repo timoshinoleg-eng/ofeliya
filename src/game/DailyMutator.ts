@@ -155,9 +155,8 @@ export function applyDailyMutator(
 
 /**
  * Local-calendar date key in the server's `localDateKey` format (YYYY-MM-DD,
- * see server/index.mjs). Used by menu-time UI (SocialHub) that has no server
- * ticket yet; the in-run choice always comes from the ticket's dateKey, and
- * both resolve to the same mutator because they hash the same calendar day.
+ * see server/index.mjs). A device date is suitable only for local history;
+ * challenge UI must use the server snapshot and gameplay the ticket dateKey.
  */
 export function todayDateKey(now: Date = new Date()): string {
   const y = now.getFullYear();

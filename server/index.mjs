@@ -25,6 +25,8 @@ import { saveTelegramPreparedMessage } from './telegram-share.mjs';
 import { telegramApiJson } from './telegram-api.mjs';
 import { buildTelegramWebhookMethod, telegramWebhookSecretMatches } from './telegram-webhook.mjs';
 import { DurableState } from './durable-state.mjs';
+import { TelegramUserRegistry } from './telegram-users.mjs';
+import { proxyHops, clientIp, corsHeaders } from './request-policy.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT ?? 8787);
@@ -33,6 +35,11 @@ const durable = process.env.OFELIYA_STATE_URL || process.env.OFELIYA_STATE_TOKEN
   ? new DurableState(process.env.OFELIYA_STATE_URL, process.env.OFELIYA_STATE_TOKEN) : null;
 // Refuse to listen if restoration fails; an empty ephemeral disk is not a new game.
 if (durable) await durable.restore(DATA_DIR);
+const telegramUsers = new TelegramUserRegistry(DATA_DIR, { onChange: () => durable?.mark() });
+const TRUSTED_PROXY_HOPS = proxyHops(process.env.TRUSTED_PROXY_HOPS);
+const TRUSTED_PROXY_IPS = String(process.env.TRUSTED_PROXY_IPS ?? '').split(',').map(value => value.trim()).filter(Boolean);
+const ALLOWED_ORIGINS = String(process.env.ALLOW_ORIGINS ?? process.env.ALLOW_ORIGIN ?? '').split(',').map(value => value.trim()).filter(value => value && value !== '*');
+const stateSnapshot = () => ({ store, profiles: profileStore, tg_users: telegramUsers.snapshot() });
 const TG_TOKEN = process.env.TG_BOT_TOKEN ?? '';
 const TG_WEBHOOK_SECRET = process.env.TG_WEBHOOK_SECRET ?? '';
 const TG_OUTBOUND_ENABLED = process.env.OFELIYA_TELEGRAM_OUTBOUND_ENABLED === '1';
@@ -382,12 +389,7 @@ function allowFixedWindow(map, key, limit, now = Date.now()) {
 }
 
 function requestIp(req) {
-  const forwarded = req.headers['x-forwarded-for'];
-  const firstForwarded = Array.isArray(forwarded)
-    ? forwarded[0]
-    : String(forwarded ?? '').split(',')[0].trim();
-  const raw = firstForwarded || req.socket?.remoteAddress || 'unknown';
-  return raw.slice(0, 96);
+  return clientIp(req, TRUSTED_PROXY_HOPS, TRUSTED_PROXY_IPS);
 }
 
 function allowWriteRequest(req, scope, actor, now = Date.now(), actorLimit = WRITE_RATE_LIMIT) {
@@ -743,6 +745,9 @@ function issueDailyRun(identity, now = Date.now()) {
       run.platform === identity.platform &&
       run.uid === identity.uid &&
       run.dateKey === dateKey &&
+      run.rulesetVersion === CURRENT_RULESET_VERSION &&
+      run.campaignVersion === CURRENT_CAMPAIGN_VERSION &&
+      run.difficultyId === 'standard' &&
       run.closedAt == null &&
       run.expiresAt > now
   );
@@ -1154,17 +1159,15 @@ async function send(res, code, obj) {
   let body = JSON.stringify(obj);
   try {
     if (code < 500 && res.req?.method === 'POST' &&
-        (durable || ['/api/score', '/api/run/start', '/api/daily/run'].includes(path))) flushStoreNow();
-    if (durable && code < 500) await durable.flush(() => ({ store, profiles: profileStore }));
+        (durable || ['/api/score', '/api/run/start', '/api/daily/run', '/api/duel'].includes(path) || /^\/api\/duel\/[^/]+\/(event|attempt)$/.test(path))) flushStoreNow();
+    if (durable && code < 500) await durable.flush(stateSnapshot);
   } catch {
     code = durable ? 503 : 500;
     body = JSON.stringify({ ok: false, error: 'state persistence unavailable' });
   }
   res.writeHead(code, {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': process.env.ALLOW_ORIGIN ?? '*',
-    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    ...corsHeaders(res.req, ALLOWED_ORIGINS),
   });
   res.end(body);
 }
@@ -1200,9 +1203,7 @@ const server = createServer(async (req, res) => {
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
-      'Access-Control-Allow-Origin': process.env.ALLOW_ORIGIN ?? '*',
-      'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Platform',
+      ...corsHeaders(req, ALLOWED_ORIGINS),
     });
     return res.end();
   }
@@ -1210,7 +1211,7 @@ const server = createServer(async (req, res) => {
   try {
     if (req.method === 'GET' && url.pathname === '/health') {
       const capacity = scoreCapacity();
-      const healthy = capacity.ready && (!durable || durable.health().healthy);
+      const healthy = capacity.ready && lastStoreFlushError == null && (!durable || durable.health().healthy);
       return send(res, healthy ? 200 : 503, {
         ok: healthy,
         app: 'ofeliya-server',
@@ -1250,6 +1251,7 @@ const server = createServer(async (req, res) => {
         return send(res, 403, { ok: false, error: 'invalid Telegram webhook secret' });
       }
       const update = await readBody(req);
+      telegramUsers.registerPrivateStart(update);
       const method = buildTelegramWebhookMethod(update, { gameUrl: GAME_URL });
       return send(res, 200, method ?? { ok: true });
     }
@@ -1773,7 +1775,7 @@ const server = createServer(async (req, res) => {
           }
           if (!store.refRewards[edgeKey] && Object.keys(store.refRewards).length < MAX_REFS) {
             store.refRewards[edgeKey] = record.ts;
-            refReward = { from: ref.key, to: toKey, first: true };
+            refReward = { first: true };
             refToNotify = ref;
           }
         }
@@ -1830,9 +1832,15 @@ const server = createServer(async (req, res) => {
       const identity = verifyDuelIdentity(body);
       if (!identity) return send(res, 403, { ok: false, error: 'verified messenger identity required' });
       const rulesetVersion = parseRulesetFilter(url.searchParams.get('ruleset'));
+      const serverTime = Date.now();
+      const nextDay = new Date(serverTime);
+      nextDay.setHours(24, 0, 0, 0);
       return send(res, 200, {
         ok: true,
         rulesetVersion,
+        serverTime,
+        nextDayAt: nextDay.getTime(),
+        challengeDateKey: localDateKey(serverTime),
         ...dailyStats(identity.uid, identity.platform, rulesetVersion),
       });
     }
@@ -1994,7 +2002,8 @@ const server = createServer(async (req, res) => {
 
     return send(res, 404, { ok: false, error: 'not found' });
   } catch (e) {
-    return send(res, 500, { ok: false, error: e.message ?? 'server error' });
+    console.error('[ofeliya-server] request failed:', req.method, url.pathname);
+    return send(res, 500, { ok: false, error: 'server error' });
   }
 });
 
@@ -2016,7 +2025,7 @@ function shutdown(signal) {
   console.log(`[ofeliya-server] ${signal}: draining connections`);
   flushStoreOnClose();
   server.close(async () => {
-    try { await durable?.flush(() => ({ store, profiles: profileStore })); }
+    try { await durable?.flush(stateSnapshot); }
     catch { process.exitCode = 1; }
     process.exit(process.exitCode ?? 0);
   });
@@ -2030,7 +2039,7 @@ function shutdown(signal) {
 process.once('SIGTERM', () => shutdown('SIGTERM'));
 process.once('SIGINT', () => shutdown('SIGINT'));
 
-server.listen(PORT, () => {
+server.listen(PORT, process.env.API_HOST ?? '0.0.0.0', () => {
   console.log(`[ofeliya-server] http://localhost:${PORT} (data: ${DATA_DIR})`);
   if (!TG_TOKEN) console.warn('[ofeliya-server] TG_BOT_TOKEN не задан — telegram-скоры не будут верифицироваться');
   if (!MAX_TOKEN) console.warn('[ofeliya-server] dedicated MAX_BOT_TOKEN не задан — MAX identity checks fail closed');

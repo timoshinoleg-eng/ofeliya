@@ -135,6 +135,9 @@ export async function pollOnce() {
 }
 
 async function main() {
+  if (process.env.OFELIYA_STATE_URL || process.env.OFELIYA_STATE_TOKEN || process.env.TG_WEBHOOK_SECRET) {
+    throw new Error('Registrations are owned by the hosted Telegram webhook; polling must be disabled');
+  }
   console.log('[bot] OFELIYA bot started (long polling)');
   for (;;) {
     if (stopping) break;

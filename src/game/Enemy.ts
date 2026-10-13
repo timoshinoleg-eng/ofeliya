@@ -86,6 +86,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private anomalyLastAttack: AnomalyAttackKind | null = null;
   private anomalyAttackStartedAt = 0;
   private anomalyStateUntil = 0;
+  private anomalyCommittedPacing: AnomalyPhasePacing | null = null;
+  private anomalyCommittedDamage = 0;
+  private anomalyCommittedDashSpeed = 0;
   private nextAnomalyAttackAt = 0;
   private anomalyLockedDirX = 0;
   private anomalyLockedDirY = 0;
@@ -199,6 +202,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.anomalyLastAttack = null;
     this.anomalyAttackStartedAt = 0;
     this.anomalyStateUntil = 0;
+    this.anomalyCommittedPacing = null;
+    this.anomalyCommittedDamage = 0;
+    this.anomalyCommittedDashSpeed = 0;
     this.nextAnomalyAttackAt =
       kind === 'anomaly' ? this.scene.time.now + ANOMALY_ATTACK_PACING.initialDelayMs : 0;
     this.anomalyLockedDirX = 0;
@@ -401,11 +407,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       velocityX = (dx / d) * forwardSpeed * pursuitMul + (-dy / d) * lateral + this.knockX;
       velocityY = (dy / d) * forwardSpeed * pursuitMul + (dx / d) * lateral + this.knockY;
     } else if (this.kind === 'anomaly') {
-      const pacing = anomalyAttackPacing(this.anomalyPhase);
       if (this.anomalyAttackState === 'strike' && this.anomalyAttackKind === 'charge-dash') {
         // Locked-direction dash: the telegraph aimed, the strike commits.
-        velocityX = this.anomalyLockedDirX * forwardSpeed * pacing.chargeSpeedMultiplier + this.knockX;
-        velocityY = this.anomalyLockedDirY * forwardSpeed * pacing.chargeSpeedMultiplier + this.knockY;
+        velocityX = this.anomalyLockedDirX * this.anomalyCommittedDashSpeed + this.knockX;
+        velocityY = this.anomalyLockedDirY * this.anomalyCommittedDashSpeed + this.knockY;
       } else {
         const moveMul =
           this.anomalyAttackState === 'telegraph'
@@ -528,12 +533,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
    * and locked-direction charge dash. Phase two below 55% HP quickens the cycle.
    */
   private updateAnomalyBehavior(time: number, distance: number, dirX: number, dirY: number): void {
-    const phase = anomalyPhaseForHpFraction(this.hp / Math.max(1, this.maxHp));
-    if (phase !== this.anomalyPhase) {
-      this.anomalyPhase = phase;
-      this.gs?.onAnomalyPhaseChanged(this);
+    // An announced attack owns its phase until recovery ends. Changing HP or
+    // Heart pressure must never enlarge or accelerate the already shown danger.
+    if (this.anomalyAttackState === 'pursuit') {
+      const phase = anomalyPhaseForHpFraction(this.hp / Math.max(1, this.maxHp));
+      if (phase !== this.anomalyPhase) {
+        this.anomalyPhase = phase;
+        this.gs?.onAnomalyPhaseChanged(this);
+      }
     }
-    const pacing = anomalyAttackPacing(this.anomalyPhase);
+    const pacing = this.anomalyCommittedPacing ?? anomalyAttackPacing(this.anomalyPhase);
 
     if (this.anomalyAttackState === 'pursuit') {
       this.anomalyTelegraph?.setVisible(false);
@@ -542,6 +551,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       if (this.anomalyAttackKind === 'charge-dash' ? distance < 70 : distance > 420) return;
       this.anomalyAttackState = 'telegraph';
       this.anomalyAttackStartedAt = time;
+      this.anomalyCommittedPacing = { ...pacing };
+      this.anomalyCommittedDamage = this.dmg * pacing.damageMultiplier;
+      this.anomalyCommittedDashSpeed =
+        this.speed * (this.gs?.getEnemyPressureMultiplier() ?? 1) * pacing.chargeSpeedMultiplier;
       this.anomalyStateUntil = time + pacing.telegraphMs;
       this.anomalyLockedDirX = dirX;
       this.anomalyLockedDirY = dirY;
@@ -558,7 +571,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         time +
         (this.anomalyAttackKind === 'charge-dash' ? pacing.chargeMs : pacing.strikeMs);
       if (this.anomalyAttackKind === 'radial-burst') {
-        this.gs?.triggerAnomalyBurst(this, pacing.burstRadius, this.dmg * pacing.damageMultiplier);
+        this.gs?.triggerAnomalyBurst(this, pacing.burstRadius, this.anomalyCommittedDamage);
       }
       return;
     }
@@ -575,6 +588,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.anomalyLastAttack = this.anomalyAttackKind;
     this.anomalyAttackKind = nextAnomalyAttack(this.anomalyLastAttack);
     this.nextAnomalyAttackAt = time + pacing.cooldownMs;
+    this.anomalyCommittedPacing = null;
+    this.anomalyCommittedDamage = 0;
+    this.anomalyCommittedDashSpeed = 0;
   }
 
   private drawAnomalyTelegraph(pacing: AnomalyPhasePacing): void {
@@ -821,6 +837,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.anomalyAttackKind = 'radial-burst';
     this.anomalyLastAttack = null;
     this.nextAnomalyAttackAt = 0;
+    this.anomalyCommittedPacing = null;
+    this.anomalyCommittedDamage = 0;
+    this.anomalyCommittedDashSpeed = 0;
     this.anomalyLockedDirX = 0;
     this.anomalyLockedDirY = 0;
     this.primeBrokenUntil = 0;

@@ -1,3 +1,11 @@
+# Current review fixes — 2026-10-13
+
+Branch fix/kimi-review-20261013, based on main26fcc88. User approved the independent review follow-up plan. See docs/release/KIMI_REVIEW_FIXES_20261013.md for contracts, tests and mixed-version policy. Previous handoff is archived under memory/archive/2026-10-13-before-review-fixes/; older state/decisions/backlog remain as historical notes below.
+
+Decisions: keep ruleset3/campaign2; old tickets immutable; old explicitv2 scores/grants/duels fail closed, ordinaryv2 checkpoints resumed/unranked; remote registry has one webhook owner and explicit durable ACK; public XFF trust defaults0; no paid services or production mutation during branch verification.
+
+## Historical notes (snapshot-specific; current facts above take precedence)
+
 # Free backup and BI follow-up - 2026-10-12
 
 All remaining Cloud.ru paid VMs/disks/IPs, both Quiz backups and two registries

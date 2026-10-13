@@ -12,6 +12,10 @@
     "test:wave-events": "node scripts/check-wave-events.mjs",
     "test:mini-boss": "node scripts/check-mini-boss.mjs",
     "test:daily-mutator": "node scripts/check-daily-mutator.mjs",
+    "test:anomaly-runtime": "node scripts/check-anomaly-runtime.cjs",
+    "test:daily-preview": "node scripts/check-daily-preview.mjs",
+    "test:startup-boundary": "node scripts/check-startup-boundary.mjs",
+    "test:review-browser": "node tests/review-regressions.mjs",
     "test:legendary": "node scripts/check-legendary.mjs",
     "test:legendary-layout": "node scripts/legendary-layout-probe.cjs",
     "test:layout-diagnostics": "node tests/visible-text-bounds.mjs",
@@ -31,7 +35,7 @@
     "smoke:bot": "node bot/smoke.mjs",
     "test:startup": "node tests/startup-font-timeout.mjs && node tests/startup-viewport-timeout.mjs && node tests/startup-renderer-contract.mjs",
     "server": "node server/index.mjs",
-    "server:test": "node server/test.mjs && node server/durable-state.test.mjs && node bot/hosting.test.mjs && node server/hosting.test.mjs",
+    "server:test": "node server/test.mjs && node server/daily-upgrade.test.mjs && node server/request-policy.test.mjs && node server/telegram-users.test.mjs && node server/security-regressions.test.mjs && node server/durable-state.test.mjs && node bot/hosting.test.mjs && node server/hosting.test.mjs",
     "bot": "node server/bot.mjs",
     "test:pacing": "node scripts/check-pacing.mjs",
     "test:cardiac-hazard": "node scripts/cardiac-line-hazard-smoke.cjs",
@@ -75,6 +79,9 @@
     "test:telegram-api": "node scripts/check-telegram-api-transport.mjs",
     "test:presentation": "node tests/core-art.mjs && node tests/vfx-presentation.mjs && node tests/atmosphere-presentation.mjs && node tests/audio-mix.mjs && node tests/biological-animation.mjs && node scripts/check-audio-assets.mjs",
     "test:art-startup": "node tests/startup-art-fallback.mjs"
+  },
+  "overrides": {
+    "source-map-js": "1.2.2"
   },
   "dependencies": {
     "@maxhub/max-bot-api": "^0.3.1",
