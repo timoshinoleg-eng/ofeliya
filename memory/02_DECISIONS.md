@@ -1,3 +1,18 @@
+# Telegram bot image follow-up decisions — 2026-10-13
+
+Keep the runtime code change limited to the bot image's missing helper COPY
+and its existing contract guard. Scope the guard to the bot stage and actual
+COPY source/destination pairs so comments or later stages cannot mask omissions.
+Do not import other sections of the old security patch: PR #197 supersedes them.
+
+Close superseded PR #189 while preserving its branch and linking current memory.
+Do not deploy this maintenance package. After final-head PR CI passes, use a
+merge commit message with `[skip render]`, without skipping CI. Render documents
+this phrase at https://render.com/docs/deploys#skipping-an-auto-deploy.
+Do not infer live provider/trigger state from old notes or use the MCP connector
+for the other workspace; authenticated production-account inspection remains
+necessary. Verify any eventual automatic-trigger fix on the next runtime release.
+
 # Verified review-fix release — 2026-10-13
 
 Runtime source: c0c72fa81690b562e15c1d87580c66af842b3f3b (PR197 merged). Main CI38375891119: build/browser-smoke/production-contract success. Render Free deployment dep-db6vmg4s728c73cv4010 is live in production workspace tea-d8iruouq1p3s73f30a90 (timoshin.oleg@gmail.com). Canonical https://ofeliya.freeveol.dpdns.org/ofeliya/ reports this SHA. Metadata-only commits after this release do not change the published source identity.

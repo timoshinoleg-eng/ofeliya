@@ -1,3 +1,22 @@
+# Telegram image maintenance follow-up — 2026-10-13
+
+- PR #199: missing webhook helper fixed; new bot image COPY guard verified
+  RED/GREEN, including real Node22 Docker imports with network disabled.
+  Check full hosted CI on the final PR head before merging with `[skip render]`.
+- PR #189 closed with current/archive handoff links; branch preserved.
+- Security patch note corrected: equivalent and stricter fixes are in PR #197.
+- Render auto-deploy root cause remains open pending working-account access.
+  Existing API credential was not found locally; no live GET or setting change
+  has been performed in this follow-up. Owner is arranging login. Inspect
+  Git-provider connection, repo `timoshinoleg-eng/ofeliya`, main, checksPass,
+  buildFilter and deployment history/triggers; do not assume provider validity
+  from the repository URL alone. Official Render docs require a connected Git
+  provider for auto-deploy; public-URL services require manual deployment:
+  https://render.com/docs/deploys#automatic-deploys.
+  After an evidence-based minimal fix, validate on the next runtime release.
+- Real Samsung S20+ OS/MAX/TG versions, recordings, MAX Android/iOS/Telegram
+  acceptance, newcomer study and measured mobile performance remain external.
+
 # Verified review-fix release — 2026-10-13
 
 Runtime source: c0c72fa81690b562e15c1d87580c66af842b3f3b (PR197 merged). Main CI38375891119: build/browser-smoke/production-contract success. Render Free deployment dep-db6vmg4s728c73cv4010 is live in production workspace tea-d8iruouq1p3s73f30a90 (timoshin.oleg@gmail.com). Canonical https://ofeliya.freeveol.dpdns.org/ofeliya/ reports this SHA. Metadata-only commits after this release do not change the published source identity.
@@ -10,7 +29,7 @@ Remaining: real MAX Android/iOS and Telegram acceptance, numerical Android/MAX/T
 
 Branch fix/kimi-review-20261013, based on main26fcc88. User approved the independent review follow-up plan. See docs/release/KIMI_REVIEW_FIXES_20261013.md for contracts, tests and mixed-version policy. Previous handoff is archived under memory/archive/2026-10-13-before-review-fixes/; older state/decisions/backlog remain as historical notes below.
 
-Open gates: final-head CI, production backup/restore and release parity, S20+ Android/MAX/TG numerical versions + real acceptance/performance, MAXiOS, newcomer study. Broad scene refactoring and performance promises require measured evidence. Security patch from other machine is not imported. PR184 dependency portion is included here but prior PR remains open.
+Snapshot gates: final-head CI, production backup/restore and release parity, S20+ Android/MAX/TG numerical versions + real acceptance/performance, MAXiOS, newcomer study. Broad scene refactoring and performance promises require measured evidence. Equivalent and stricter security fixes were merged in PR #197 (`server/request-policy.mjs`, `server/security-regressions.test.mjs`); do not import the old security patch wholesale. PR184 dependency fixes are included; PR #184 was subsequently closed with its branch preserved.
 
 ## Historical notes (snapshot-specific; current facts above take precedence)
 
