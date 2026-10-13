@@ -1,3 +1,30 @@
+# Telegram image and maintenance verification — 2026-10-13
+
+PR #199 fixes the latent dedicated `telegram-bot` image dependency omission
+on branch `fix/telegram-bot-image-20261013`, based on main `f48c143`.
+`bot.mjs:23` imports `telegram-webhook.mjs` at module scope. The old bot stage
+copied only bot.mjs and telegram-api.mjs. RED `d9fb1c7` fails the added COPY
+guard; GREEN `360c05b` passes after copying the missing helper. The guard scopes
+COPY source/destination checks to the bot stage and is already wired into CI.
+Both actual Docker images build; with `--network none`, the old Node22 image
+import fails with `ERR_MODULE_NOT_FOUND` and the fixed one succeeds. Local
+server tests (75 core plus all additional suites) and TypeScript/Vite build pass.
+Existing CI builds runtime/score/static, not telegram-bot; contrary external
+handoff text is inaccurate. No workflow expansion was made in this package.
+
+PR #189 closed with a supersession comment linking current and archived handoff.
+Remote branch `codex/render-migration-handoff-20261011` still exists. The stale
+security-patch backlog claim is corrected: PR #197 already includes equivalent
+and stricter policy/security regressions. The backup patch must not be applied
+wholesale.
+
+Render live investigation is pending authenticated working-account access.
+No Render API credential was found in process environment, Documents/Codex,
+repository, Desktop or the checked local config/credential stores. This is an
+access limitation, not evidence about Render's provider or trigger. No settings
+or production data were changed. The prior release facts below are historical
+evidence, not a fresh authenticated API check in this follow-up.
+
 # Verified review-fix release — 2026-10-13
 
 Runtime source: c0c72fa81690b562e15c1d87580c66af842b3f3b (PR197 merged). Main CI38375891119: build/browser-smoke/production-contract success. Render Free deployment dep-db6vmg4s728c73cv4010 is live in production workspace tea-d8iruouq1p3s73f30a90 (timoshin.oleg@gmail.com). Canonical https://ofeliya.freeveol.dpdns.org/ofeliya/ reports this SHA. Metadata-only commits after this release do not change the published source identity.
