@@ -1,3 +1,13 @@
+# Verified review-fix release — 2026-10-13
+
+Runtime source: c0c72fa81690b562e15c1d87580c66af842b3f3b (PR197 merged). Main CI38375891119: build/browser-smoke/production-contract success. Render Free deployment dep-db6vmg4s728c73cv4010 is live in production workspace tea-d8iruouq1p3s73f30a90 (timoshin.oleg@gmail.com). Canonical https://ofeliya.freeveol.dpdns.org/ofeliya/ reports this SHA. Metadata-only commits after this release do not change the published source identity.
+
+Measured:56 public files match a local build using current production VITE values;47 exact and9 differing only in carriage-return line endings. Remote HTML/runtime-config/SW hashes match their release marker exactly. /ready200 aggregates configured MAX/TG and healthy API; Render healthCheckPath is /ready. Eight synthetic signed profile/social reads and both webhook auth gates passed; no test scores or fake registrations were written. Browser menu and actual touch start reached the first mutation without page errors/CSP violations, QA hooks absent. This is desktop Chromium, not a real phone.
+
+Private S3 backup revision78 (13094bytes) was downloaded and verified; isolated restore started the new server with71scores and validated registry. Published state preserved all baseline scores/profiles/registrations. After a Render restart, revision80→81, all71scores and existing profiles/registry remained. source-map-js1.2.2 is merged; superseded draftPR184 is closed, branch preserved.
+
+## Historical snapshots (current verified facts above take precedence)
+
 # Current review fixes — 2026-10-13
 
 Branch fix/kimi-review-20261013, based on main26fcc88. User approved the independent review follow-up plan. See docs/release/KIMI_REVIEW_FIXES_20261013.md for contracts, tests and mixed-version policy. Previous handoff is archived under memory/archive/2026-10-13-before-review-fixes/; older state/decisions/backlog remain as historical notes below.

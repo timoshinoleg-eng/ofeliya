@@ -1,5 +1,29 @@
 # OFELIYA on Render Free
 
+## Latest verified release (2026-10-13)
+
+PR197 merged source `c0c72fa81690b562e15c1d87580c66af842b3f3b` is live on the
+existing Free service. Exact-main CI38375891119 passed all three jobs.
+Deployment dep-db6vmg4s728c73cv4010 was pinned through the API after repeated
+checks showed no automatic deploy. checksPass remains configured; its automatic
+trigger behavior should be rechecked on the next code release.
+Render healthCheckPath is now `/ready` (MAX/TG configuration + API persistence).
+56 public files passed parity against the production-config local build;47 were
+byte-identical and9 differed only in Windows carriage-return line endings.
+Public entry hashes match release.json exactly. Synthetic signed profile/social
+reads and authenticated/invalid-secret webhook deliveries passed without test
+scores or fake registrations. Desktop Chromium reached menu/first mutation without
+page errors or CSP violations, with no production QA hooks.
+Private backup revision78 was independently downloaded and restored into an
+isolated new server. After deployment and a production restart, all71scores,
+existing profiles and registrations remained; remote revision80→81.
+MAX Android/iOS and Telegram physical-device acceptance/FPS remain unverified.
+Owner identified Samsung S20+; numerical OS/client versions and recordings pending.
+Source-map-js1.2.2 is included; superseded draftPR184 is closed without branch deletion.
+Docs-only updates below do not change the published runtime source identity.
+
+## Hosting contract
+
 One Node 22 web service serves `dist` at `/ofeliya/` and proxies `/api/*`, `/ofeliya/api/*` and
 `/health` to the score server in the same process. Telegram uses
 `/ofeliya/api/telegram/webhook` (also `/api/telegram/webhook`) with the existing secret validation. The existing MAX
