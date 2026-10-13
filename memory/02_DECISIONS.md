@@ -1,3 +1,11 @@
+# Verified review-fix release — 2026-10-13
+
+Runtime source: c0c72fa81690b562e15c1d87580c66af842b3f3b (PR197 merged). Main CI38375891119: build/browser-smoke/production-contract success. Render Free deployment dep-db6vmg4s728c73cv4010 is live in production workspace tea-d8iruouq1p3s73f30a90 (timoshin.oleg@gmail.com). Canonical https://ofeliya.freeveol.dpdns.org/ofeliya/ reports this SHA. Metadata-only commits after this release do not change the published source identity.
+
+Deploy only the exact successful main CI source; preserve old ticket/outbox contracts and platform-aware identities. Use /ready as the Render health probe. Pin manual recovery deploys after checking the queue to prevent duplicate instances/writer claims. Native phone gates remain external. Docs-only updates are ignored by Render and retain runtime source c0c72fa81690b562e15c1d87580c66af842b3f3b.
+
+## Historical snapshots (current verified facts above take precedence)
+
 # Current review fixes — 2026-10-13
 
 Branch fix/kimi-review-20261013, based on main26fcc88. User approved the independent review follow-up plan. See docs/release/KIMI_REVIEW_FIXES_20261013.md for contracts, tests and mixed-version policy. Previous handoff is archived under memory/archive/2026-10-13-before-review-fixes/; older state/decisions/backlog remain as historical notes below.

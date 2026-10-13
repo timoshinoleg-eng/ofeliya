@@ -1,3 +1,11 @@
+# Verified review-fix release — 2026-10-13
+
+Runtime source: c0c72fa81690b562e15c1d87580c66af842b3f3b (PR197 merged). Main CI38375891119: build/browser-smoke/production-contract success. Render Free deployment dep-db6vmg4s728c73cv4010 is live in production workspace tea-d8iruouq1p3s73f30a90 (timoshin.oleg@gmail.com). Canonical https://ofeliya.freeveol.dpdns.org/ofeliya/ reports this SHA. Metadata-only commits after this release do not change the published source identity.
+
+Remaining: real MAX Android/iOS and Telegram acceptance, numerical Android/MAX/TG versions on owner's Samsung S20+, newcomer study and mobile frame-time/thermal measurements. test:mobile-evidence stays fail-closed; no fabricated PASS/FPS. Automatic deployment is configured checksPass but did not create this deployment after successful main CI; one pinned API deployment was used. Recheck Git-provider/automatic-trigger behavior on the next code release. No paid infrastructure, DNS/bot identity/secret rotation or keepalive was introduced.
+
+## Historical snapshots (current verified facts above take precedence)
+
 # Current review fixes — 2026-10-13
 
 Branch fix/kimi-review-20261013, based on main26fcc88. User approved the independent review follow-up plan. See docs/release/KIMI_REVIEW_FIXES_20261013.md for contracts, tests and mixed-version policy. Previous handoff is archived under memory/archive/2026-10-13-before-review-fixes/; older state/decisions/backlog remain as historical notes below.
