@@ -27,6 +27,8 @@ ENV NODE_ENV=production
 RUN mkdir -p /app/server/data && chown -R node:node /app/server
 COPY --chown=node:node server/bot.mjs ./server/bot.mjs
 COPY --chown=node:node server/telegram-api.mjs ./server/telegram-api.mjs
+# bot.mjs imports these helpers at module scope; keep them in the bot image.
+COPY --chown=node:node server/telegram-webhook.mjs ./server/telegram-webhook.mjs
 USER node
 CMD ["node", "server/bot.mjs"]
 
