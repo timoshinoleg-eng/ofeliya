@@ -238,6 +238,9 @@ jobs:
       - name: MAX viewport challenge and legal browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/browser-smoke.cjs
 
+      - name: Legal dialog keyboard focus and cleanup
+        run: npm run test:legal-focus
+
       - name: Gameplay comprehension browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/gameplay-comprehension-smoke.cjs
 
