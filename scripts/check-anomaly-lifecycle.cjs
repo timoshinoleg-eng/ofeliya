@@ -1,11 +1,14 @@
 const assert=require('node:assert/strict');
+const {existsSync}=require('node:fs');
 const path=require('node:path'),{createRequire}=require('node:module');
 (async()=>{
 const root=path.resolve(__dirname,'..');process.chdir(root);const req=createRequire(path.join(root,'package.json'));
 const {createServer}=req('vite'),{chromium}=req('playwright');
 const server=await createServer({root,server:{host:'127.0.0.1',port:0}});let browser;
 try{
-await server.listen();browser=await chromium.launch({headless:true});const page=await browser.newPage({viewport:{width:390,height:740}}),errors=[];
+await server.listen();
+const executablePath=process.platform==='win32'?undefined:['/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/usr/bin/chromium'].find(existsSync);
+browser=await chromium.launch({headless:true,executablePath,args:process.platform==='win32'?[]:['--no-sandbox','--disable-dev-shm-usage']});const page=await browser.newPage({viewport:{width:390,height:740}}),errors=[];
 page.on('pageerror',e=>errors.push(String(e)));
 await page.route('https://st.max.ru/**',r=>r.fulfill({contentType:'application/javascript',body:''}));
 await page.route('**/api/**',r=>r.fulfill({contentType:'application/json',body:JSON.stringify({ok:true})}));
