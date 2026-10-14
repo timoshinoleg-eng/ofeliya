@@ -1,3 +1,16 @@
+# Issue #205 first subtask decisions — 2026-10-14
+
+- Prefer native button click semantics over custom key handlers to avoid duplicate
+  Enter/Space activation. Retain pointerup and the existing settled guard.
+- Reset only native button box defaults to preserve full-host overlay geometry;
+  retain native focus outline with inward offset. No broad UI redesign.
+- Suppress pointerdown default compatibility mouse focus so touch skip cannot
+  discard restored focus after pointerup removes the button (browser-reproduced).
+- Restore prior connected HTMLElement only if overlay owns focus at cleanup;
+  do not override focus moved elsewhere. Restoration precedes caller callbacks.
+- Use existing Vite/Playwright dependencies for an isolated real-DOM browser test
+  with deterministic mocked media; no gameplay scene or autoplay reliance.
+
 # Legacy mini-boss warning follow-up — 2026-10-14
 
 PR202 merged as9a6d327 after green PR CI38559170274. Before publication, an additional

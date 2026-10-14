@@ -1,3 +1,16 @@
+# Issue #205 accessible video skip — 2026-10-14
+
+- Local branch `agents/a11y-20261014`: VideoInterstitial overlay is a native
+  `button type=button`; native click handles Enter/Space, pointerup remains.
+- Initial focus uses preventScroll; cleanup restores connected prior focus only
+  when the overlay still owns focus. Native outline is retained inside host bounds.
+- Production one-shot outcomes/watchdogs unchanged. Browser test passes keyboard,
+  touch/mouse, resize, timers, failure/cancel and focus cases with mocked media.
+- `npm ci`, focused browser test, TypeScript/Vite/stamp build and diff whitespace
+  checks pass; local build stamped base HEAD via explicit VITE_RELEASE_SHA.
+- Existing video smoke is Linux-only (Chrome not found on Windows). Real media,
+  phone and screen-reader acceptance not measured. No remote or gameplay changes.
+
 # Legacy mini-boss warning follow-up — 2026-10-14
 
 PR202 merged as9a6d327 after green PR CI38559170274. Before publication, an additional
