@@ -16,6 +16,7 @@
     "test:daily-preview": "node scripts/check-daily-preview.mjs",
     "test:startup-boundary": "node scripts/check-startup-boundary.mjs",
     "test:review-browser": "node tests/review-regressions.mjs",
+    "test:legal-focus": "node tests/legal-overlay-focus.mjs",
     "test:anomaly-lifecycle": "node scripts/check-anomaly-lifecycle.cjs",
     "test:legendary": "node scripts/check-legendary.mjs",
     "test:legendary-layout": "node scripts/legendary-layout-probe.cjs",
