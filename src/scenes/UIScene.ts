@@ -135,7 +135,6 @@ export class UIScene extends Phaser.Scene {
   // Snapshot only the values that affect retained HUD Graphics. Layout invalidates this cache.
   private hudBarState: {
     width: number;
-    height: number;
     xp: number;
     xpNext: number;
     hp: number;
@@ -384,7 +383,7 @@ export class UIScene extends Phaser.Scene {
       this.tickOnboarding(run);
       const m = this.hudMetrics(W);
       const prev = this.hudBarState;
-      const geometryDirty = !prev || prev.width !== W || prev.height !== H;
+      const geometryDirty = !prev || prev.width !== W;
       const xpDirty = geometryDirty || prev?.xp !== run.xp || prev?.xpNext !== run.xpNext;
       const hpDirty = geometryDirty || prev?.hp !== run.hp || prev?.maxHp !== run.maxHp;
       const bossDirty = geometryDirty || prev?.bossHp !== run.bossHp || prev?.bossMax !== run.bossMax;
@@ -474,7 +473,7 @@ export class UIScene extends Phaser.Scene {
       this.bossLabel.setVisible(boss);
       if (boss) {
         this.bossLabel.setText(run.bossName);
-        if (geometryDirty || !prev || prev.bossMax <= 0) {
+        if (geometryDirty || prev.bossMax <= 0) {
           this.bossBack.clear();
           this.bossBack.fillStyle(HUD.barBack, 0.9);
           this.bossBack.fillRoundedRect(m.bossX, HUD.row.bossBarY, m.bossW, HUD.row.bossBarH, 4);
@@ -496,7 +495,6 @@ export class UIScene extends Phaser.Scene {
       if (xpDirty || hpDirty || bossDirty) {
         this.hudBarState = {
           width: W,
-          height: H,
           xp: run.xp,
           xpNext: run.xpNext,
           hp: run.hp,
@@ -1069,8 +1067,9 @@ export class UIScene extends Phaser.Scene {
 
   /** Single writer for the HUD strip geometry (X + Y) and the HUD type floors. */
   private layout(): void {
-    this.hudBarState = null;
     const W = this.scale.width;
+    // Height-only viewport changes do not move the HUD bars. Preserve retained Graphics.
+    if (this.hudBarState && this.hudBarState.width !== W) this.hudBarState = null;
     this.hudBackdrop
       .setPosition(W / 2, HUD.plate.top + HUD.plate.height / 2)
       .setDisplaySize(W - 12, HUD.plate.height);
