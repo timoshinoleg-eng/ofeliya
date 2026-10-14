@@ -209,6 +209,9 @@ jobs:
       - name: Daily lifecycle and startup failure browser regressions
         run: npm run test:review-browser
 
+      - name: Boot and Menu scene failure recovery
+        run: node tests/startup-scenes.mjs
+
       - name: Anomaly combat freezes across stage lifecycle
         run: npm run test:anomaly-lifecycle
 
@@ -434,6 +437,16 @@ jobs:
 
       - name: Build production score image
         run: docker build -f deploy/Dockerfile --target score -t ofeliya-score:strain-zero-ci .
+
+      - name: Build standalone Telegram bot image
+        run: docker build -f deploy/Dockerfile --target telegram-bot -t ofeliya-telegram-bot:strain-zero-ci .
+
+      - name: Import standalone Telegram bot with networking disabled
+        run: >-
+          timeout 15s docker run --rm --network none
+          -e TG_BOT_TOKEN=ci-placeholder-token
+          --entrypoint node ofeliya-telegram-bot:strain-zero-ci
+          --input-type=module -e "await import('./server/bot.mjs'); console.log('Telegram bot import PASS')"
 
       - name: Smoke production score image runtime
         shell: bash

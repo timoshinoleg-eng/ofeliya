@@ -1040,8 +1040,9 @@ function loadProfileStore() {
 
 let profileStore = loadProfileStore();
 
-function saveProfilesNow() {
-  writeJsonAtomically(PROFILES_FILE, profileStore);
+function saveProfilesNow(nextProfileStore = profileStore) {
+  writeJsonAtomically(PROFILES_FILE, nextProfileStore);
+  profileStore = nextProfileStore;
   durable?.mark();
 }
 
@@ -1217,7 +1218,8 @@ const server = createServer(async (req, res) => {
   try {
     if (req.method === 'GET' && url.pathname === '/health') {
       const capacity = scoreCapacity();
-      const healthy = capacity.ready && lastStoreFlushError == null && (!durable || durable.health().healthy);
+      const telegramRegistryHealth = telegramUsers.health();
+      const healthy = capacity.ready && lastStoreFlushError == null && telegramRegistryHealth.healthy && (!durable || durable.health().healthy);
       return send(res, healthy ? 200 : 503, {
         ok: healthy,
         app: 'ofeliya-server',
@@ -1235,6 +1237,7 @@ const server = createServer(async (req, res) => {
           lastFlushAt: lastStoreFlushAt || null,
           ...(durable?.health() ?? { mode: 'local' }),
         },
+        telegramRegistry: telegramRegistryHealth,
         rulesetVersion: CURRENT_RULESET_VERSION,
         campaignVersion: CURRENT_CAMPAIGN_VERSION,
       });
@@ -1975,18 +1978,21 @@ const server = createServer(async (req, res) => {
       }
 
       const outcome = await withProfileLock(identity.userKey, () => {
-        let profile = profileStore.profiles[identity.userKey];
+        // Stage the claim separately so a failed disk write cannot publish a
+        // migration marker or partially applied legacy save in live memory.
+        const nextProfileStore = JSON.parse(JSON.stringify(profileStore));
+        let profile = nextProfileStore.profiles[identity.userKey];
         let mutated = false;
         if (!profile) {
           if (Object.keys(profileStore.profiles).length >= MAX_PROFILES) return { capacity: true };
           profile = newProfile(Date.now());
-          profileStore.profiles[identity.userKey] = profile;
+          nextProfileStore.profiles[identity.userKey] = profile;
           mutated = true;
         }
         // One-time claim: первый валидный claim выигрывает, повторные получают
         // существующий профиль без ошибки (чтобы не провоцировать retry storms).
-        if (profileStore.migrations[identity.userKey]) {
-          if (mutated) saveProfilesNow();
+        if (nextProfileStore.migrations[identity.userKey]) {
+          if (mutated) saveProfilesNow(nextProfileStore);
           return { profile, claimed: false };
         }
         applyMigrationSave(profile, save);
@@ -1996,8 +2002,8 @@ const server = createServer(async (req, res) => {
           }
         }
         profile.updatedAt = Date.now();
-        profileStore.migrations[identity.userKey] = { claimedAt: Date.now(), saveHash };
-        saveProfilesNow();
+        nextProfileStore.migrations[identity.userKey] = { claimedAt: Date.now(), saveHash };
+        saveProfilesNow(nextProfileStore);
         return { profile, claimed: true };
       });
       if (outcome.capacity) {

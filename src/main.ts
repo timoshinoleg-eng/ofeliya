@@ -346,10 +346,14 @@ async function boot(signal: AbortSignal): Promise<void> {
   installMobileLayoutGuard(game);
   viewport.attachGame(game);
   StartupTrace.mark('viewport.second.start');
-  await viewport.sync();
+  await Promise.all([
+    viewport.sync().then(() => {
+      StartupTrace.mark('viewport.second.end');
+      StartupTrace.setMeta('viewportSourceSecond', host.dataset.viewportSource ?? 'unknown');
+    }),
+    waitForMenuReady(game, signal),
+  ]);
   signal.throwIfAborted();
-  StartupTrace.mark('viewport.second.end');
-  StartupTrace.setMeta('viewportSourceSecond', host.dataset.viewportSource ?? 'unknown');
 
   // Production builds stay opaque. The release visual-matrix workflow enables this hook
   // only in its dedicated QA bundle so Playwright can inspect real production rendering.
@@ -376,6 +380,41 @@ async function boot(signal: AbortSignal): Promise<void> {
       .then((registration) => registration.update())
       .catch((error) => console.warn('[sw] registration/update failed:', error));
   }
+}
+
+/** Phaser creates scenes asynchronously; construction alone is not a usable menu. */
+function waitForMenuReady(game: Phaser.Game, signal: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const cleanup = (): void => {
+      game.events.off(Phaser.Core.Events.POST_STEP, onFrame);
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onRejection);
+      signal.removeEventListener('abort', onAbort);
+    };
+    const fail = (error: unknown): void => { cleanup(); reject(error); };
+    const onFrame = (): void => {
+      // POST_STEP follows successful Scene.create and its first scene update.
+      if (!game.scene.isActive('Menu')) return;
+      cleanup();
+      StartupTrace.mark('menu.ready');
+      resolve();
+    };
+    const onError = (event: ErrorEvent): void => {
+      if (!event.message) return; // Resource load failures have their own fallbacks.
+      event.preventDefault();
+      fail(event.error ?? new Error(event.message));
+    };
+    const onRejection = (event: PromiseRejectionEvent): void => {
+      event.preventDefault();
+      fail(event.reason);
+    };
+    const onAbort = (): void => fail(signal.reason);
+    if (signal.aborted) { reject(signal.reason); return; }
+    game.events.on(Phaser.Core.Events.POST_STEP, onFrame);
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onRejection);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 function reportBootFailure(): void {
