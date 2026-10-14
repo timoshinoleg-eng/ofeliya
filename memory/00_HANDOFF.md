@@ -1,3 +1,31 @@
+# Production deployment verified — 2026-10-14
+
+Owner explicitly authorized production deployment after the maintenance package.
+Published source is `a0faa496ce9c7770d27c549684c6c41000df947f`, whose exact-main
+CI38525751420 passed build, browser-smoke and production-contract.
+Render deploy `dep-db7l3j7avr4c738l7mqg` succeeded and became Live at
+12:57:19 Europe/Moscow; duration 50.1 seconds. Trigger: manual Dashboard,
+Deploy latest commit. No pinned-commit action or service configuration change.
+
+Public release.json matches that source. HTML, sw.js and runtime-config.js
+SHA256 hashes match the marker, independently checked by Luna and repeated by
+parent. /ready and /health return200; MAX and Telegram configured, remote
+persistence healthy and clean. Before/after: scores73, analyticsEvents615,
+runGrants1, dailyRuns1; remote revision123→124 across startup. No synthetic
+production entities or user messages were created by this verification.
+
+Render Events now includes Deploy skipped for `a0faa49` after the repository
+access correction: GitHub events reach Render, while the merge intentionally
+contained [skip render]. This does not prove successful automatic deployment;
+observe a normal next code release with no skip phrase and exact successful CI.
+Real S20+/MAX Android/iOS/Telegram and mobile-performance gates remain open.
+Keep future documentation merges on branches/PRs with full green CI and
+[skip render], without a CI skip phrase. Historical runtime identities below
+are superseded by this deployment. No further production deployment is needed
+for this documentation update.
+
+## Previous snapshots (current release above takes precedence)
+
 # Render investigation — 2026-10-14
 
 PR #199 is merged as `51b910a0e8031ca477daf701ca1de1b31023cf01`.
