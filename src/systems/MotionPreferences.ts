@@ -1,7 +1,9 @@
-// Respect the host OS/browser accessibility setting without persisting a second preference.
-// Query on demand so gameplay camera effects respond when the preference changes.
+// MediaQueryList.matches updates as system/browser preferences change.
+// Cache the query object so critical-HP HUD rendering does not allocate every frame.
+const reducedMotionQuery = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+  ? window.matchMedia('(prefers-reduced-motion: reduce)')
+  : null;
+
 export function prefersReducedMotion(): boolean {
-  return typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return reducedMotionQuery?.matches ?? false;
 }
