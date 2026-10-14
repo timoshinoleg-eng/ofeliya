@@ -13,8 +13,9 @@ import { syncBuiltinESMExports } from 'node:module';
 import { createHmac } from 'node:crypto';
 const realRename = fs.renameSync;
 let diskFailed = false;
+let diskFailTarget = 'store';
 fs.renameSync = (...args) => {
-  if (diskFailed && /[\\/]store\.json$/.test(String(args[1]))) throw new Error('private-path-secret-example');
+  if (diskFailed && new RegExp('[\\\\/]' + diskFailTarget + '\\.json$').test(String(args[1]))) throw new Error('private-path-secret-example');
   return realRename(...args);
 };
 syncBuiltinESMExports();
@@ -55,12 +56,49 @@ try {
     remoteFailed = false;
     assert.equal((await post('/api/telegram/webhook', start(778), secret)).status, 200);
     assert.ok(db.document.tg_users['778'], 'an idempotent registration retry must still flush dirty remote state');
+    // A failed mirror write must degrade health, and a successful retry must recover it.
+    diskFailTarget = 'tg_users'; diskFailed = true;
+    assert.equal((await post('/api/telegram/webhook', start(779), secret)).status, 500);
+    assert.equal((await realFetch(base + '/health')).status, 503, 'Telegram registry disk failure must lower health');
+    diskFailed = false;
+    assert.equal((await post('/api/telegram/webhook', start(779), secret)).status, 200);
+    assert.ok(db.document.tg_users['779']);
+    assert.equal((await realFetch(base + '/health')).status, 200, 'Telegram registry health must recover after retry');
+
+    // A failed profile migration write must not publish an in-memory claim.
+    const fields = { user: JSON.stringify({ id: 780 }), auth_date: String(Math.floor(Date.now() / 1000)) };
+    const check = Object.keys(fields).sort().map(key => key + '=' + fields[key]).join('\n');
+    const key = createHmac('sha256', 'WebAppData').update(process.env.TG_BOT_TOKEN).digest();
+    const initData = new URLSearchParams({ ...fields, hash: createHmac('sha256', key).update(check).digest('hex') }).toString();
+    const migration = { platform: 'telegram', initData, save: { runs: 7 } };
+    const profileIdentity = { platform: migration.platform, initData };
+    const baselineProfile = await post('/api/profile', profileIdentity);
+    assert.equal(baselineProfile.status, 200);
+    assert.equal(baselineProfile.body.profile.records.runs, 0);
+    diskFailTarget = 'profiles'; diskFailed = true;
+    assert.equal((await post('/api/profile/migrate', migration)).status, 500);
+    const whileDiskFailed = await post('/api/profile', profileIdentity);
+    assert.equal(whileDiskFailed.status, 200, 'an existing profile remains readable during the write fault');
+    assert.equal(whileDiskFailed.body.profile.records.runs, 0, 'failed migration must not leak through signed profile reads');
+    assert.equal(whileDiskFailed.body.profile.records.migrated, false);
+    diskFailed = false;
+    const retriedMigration = await post('/api/profile/migrate', migration);
+    assert.equal(retriedMigration.status, 200);
+    assert.equal(retriedMigration.body.claimed, true, 'failed migration must remain claimable after disk recovery');
+    assert.equal(retriedMigration.body.profile.records.runs, 7);
+    assert.ok(db.document.profiles.profiles['telegram:780'], 'migration retry must reach durable state');
+    const duplicateMigration = await post('/api/profile/migrate', migration);
+    assert.equal(duplicateMigration.body.claimed, false, 'successful migration remains idempotent');
     const { DurableState } = await import('./durable-state.mjs');
     const { TelegramUserRegistry } = await import('./telegram-users.mjs');
     const restored = new DurableState(process.env.OFELIYA_STATE_URL, 'fixture');
     const restartDir = process.env.DATA_DIR + '/restart';
     await restored.restore(restartDir);
     assert.deepEqual(new TelegramUserRegistry(restartDir).snapshot(), db.document.tg_users);
+    const restoredProfiles = JSON.parse(fs.readFileSync(restartDir + '/profiles.json', 'utf8'));
+    assert.equal(restoredProfiles.profiles['telegram:780'].records.runs, 7);
+    assert.equal(restoredProfiles.profiles['telegram:780'].records.migrated, true);
+    assert.ok(restoredProfiles.migrations['telegram:780'], 'restored durable state includes the migration claim');
   } else {
     assert.ok(JSON.parse(fs.readFileSync(process.env.DATA_DIR + '/tg_users.json'))['777']);
     const origin = await realFetch(base + '/api/top', { headers: { origin: 'https://evil.example' } });

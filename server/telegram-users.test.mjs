@@ -22,6 +22,21 @@ try {
   assert.throws(() => broken.registerPrivateStart({ message: { ...start.message,
     from: { id: 778, first_name: 'Lost' } } }), /disk unavailable/);
   assert.equal(broken.snapshot()['778'], undefined);
+  assert.deepEqual(broken.health(), { healthy: false });
+  let failWrites = true;
+  const recovering = new TelegramUserRegistry(directory, {
+    write: (...args) => {
+      if (failWrites) throw new Error('disk unavailable');
+      return writeFileSync(args[0], JSON.stringify(args[1]));
+    },
+  });
+  assert.throws(() => recovering.registerPrivateStart({ message: { ...start.message,
+    from: { id: 779, first_name: 'Retry' } } }), /disk unavailable/);
+  assert.deepEqual(recovering.health(), { healthy: false });
+  failWrites = false;
+  assert.equal(recovering.registerPrivateStart({ message: { ...start.message,
+    from: { id: 779, first_name: 'Retry' } } }), true);
+  assert.deepEqual(recovering.health(), { healthy: true });
   writeFileSync(join(directory, 'tg_users.json'), '{');
   assert.throws(() => new TelegramUserRegistry(directory), /invalid/);
 } finally { rmSync(directory, { recursive: true, force: true }); }

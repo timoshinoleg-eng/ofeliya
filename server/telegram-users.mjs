@@ -30,6 +30,7 @@ export class TelegramUserRegistry {
     this.file = join(directory, 'tg_users.json');
     this.onChange = onChange;
     this.write = write;
+    this.persistenceError = false;
     try { this.users = validateTelegramUsers(JSON.parse(readFileSync(this.file, 'utf8'))); }
     catch (error) {
       if (error.code !== 'ENOENT') throw new Error('Telegram user registry unavailable or invalid');
@@ -51,9 +52,16 @@ export class TelegramUserRegistry {
     validateTelegramUsers(next);
     // Fail before publishing/marking a mutation when the local mirror cannot be
     // written. The caller must still await remote persistence before HTTP 200.
-    this.write(this.file, next);
+    try {
+      this.write(this.file, next);
+      this.persistenceError = false;
+    } catch (error) {
+      this.persistenceError = true;
+      throw error;
+    }
     this.users = next;
     this.onChange();
     return true;
   }
+  health() { return { healthy: !this.persistenceError }; }
 }
