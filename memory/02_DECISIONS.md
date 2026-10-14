@@ -1,3 +1,35 @@
+# Review48 P2 fixes — 2026-10-14
+
+Owner approved four fixes in order: pre-wave checkpoint migration, anomaly lifecycle,
+wave warning resume, proxy rate isolation. Implementation branch fix/review48-p2-20261014
+starts at a0faa496. Tests reproduced each defect before its fix.
+
+Implemented: real base6a5cf5be fixture retained; only additive missing streams derived
+for legacy v2, original six streams mandatory. Anomaly state machine and damage use
+combat-phase authority. New saves are suppressed during pending wave warnings; old
+mid-warning snapshots consume that event without redrawing RNG or short warnings.
+Verified actor counters are separated from anonymous counters and proxy backstop;
+anonymous retries/churn cannot drain or evict signed budgets. XFF remains untrusted
+unless the explicit connecting proxy policy permits it.
+
+Local evidence: checkpoint/RNG, anomaly-runtime6/6, actual Phaser lifecycle (frozen HP,
+transition reaches Heart, normal damage retained, real safe/pending save wiring),
+proxy HTTP flood +20,001-key eviction regression, TypeScript and existing browser
+review regressions passed. Server core75 + security/durable/hosting suites passed;
+final post-review suite/build and exact-head hosted CI must be recorded in PR.
+Independent whole-branch reviewer found actor-map eviction; corrected with separate
+signed counters and watched its regression fail then pass. Remaining native device,
+FPS/newcomer gates are open. Startup scene-boundary and telegram-bot CI build gaps
+are P3 follow-ups, outside these four fixes.
+
+Production known at task start: Render Free a0faa496, manual deployment
+ dep-db7l3j7avr4c738l7mqg. This source change has not yet been published. On release,
+verify exact SHA, backup, readiness/hash parity; observe auto trigger before manual
+fallback because GitHub repository access was corrected. No secrets, DNS, bot identity,
+paid resources or real user messages changed by implementation.
+
+## Previous snapshot
+
 # Render investigation — 2026-10-14
 
 PR #199 is merged as `51b910a0e8031ca477daf701ca1de1b31023cf01`.

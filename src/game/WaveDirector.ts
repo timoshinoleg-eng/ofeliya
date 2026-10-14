@@ -198,6 +198,14 @@ export class WaveDirector {
     this.waveEventIndex =
       snapshot.waveEventIndex ??
       pendingWaveEventIndex(stage.waveEvents ?? [], this.scene.runState.stage.timeMs);
+    // Older saves could be written after the plan already consumed its RNG.
+    // It cannot be recreated atomically: consume that beat, never re-roll a
+    // different plan with only a fraction of the announced warning remaining.
+    const events = stage.waveEvents ?? [];
+    while (this.waveEventIndex < events.length &&
+      this.scene.runState.stage.timeMs >= events[this.waveEventIndex].atMs - events[this.waveEventIndex].telegraphMs) {
+      this.waveEventIndex += 1;
+    }
     this.anomalySpawned =
       snapshot.anomalySpawned ??
       miniBossSpawnedByStageTime(stage.miniBoss, this.scene.runState.stage.timeMs);
@@ -214,10 +222,14 @@ export class WaveDirector {
     );
   }
 
+  get waveEventInProgress(): boolean {
+    return this.pendingEvent !== null;
+  }
+
   /**
    * Authored surge events. Deterministic schedule from StageDefinitions;
-   * geometry draws once from the run RNG at telegraph time, so checkpoint
-   * restore mid-telegraph simply re-plans the same event from the same index.
+   * geometry draws once from the run RNG at telegraph time. Checkpoints are
+   * suppressed while the plan is active; restore consumes old in-flight beats.
    * A live mini-boss suppresses surges (dangerous combinations stay authored,
    * never improvised).
    */

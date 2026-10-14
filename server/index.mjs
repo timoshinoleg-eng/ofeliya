@@ -214,6 +214,7 @@ const WRITE_RATE_LIMIT =
     ? configuredWriteRateLimit
     : 20;
 const writeRateByActor = new Map();
+const writeRateByVerifiedActor = new Map();
 const writeRateByIp = new Map();
 
 const MAX_RUN_GRANTS = 10_000;
@@ -392,10 +393,15 @@ function requestIp(req) {
   return clientIp(req, TRUSTED_PROXY_HOPS, TRUSTED_PROXY_IPS);
 }
 
-function allowWriteRequest(req, scope, actor, now = Date.now(), actorLimit = WRITE_RATE_LIMIT) {
-  if (!allowFixedWindow(writeRateByIp, scope + ':' + requestIp(req), actorLimit * 12, now)) return false;
-  if (!actor) return true;
-  return allowFixedWindow(writeRateByActor, scope + ':' + actor, actorLimit, now);
+function allowWriteRequest(req, scope, actor, verified, now = Date.now(), actorLimit = WRITE_RATE_LIMIT) {
+  // Anonymous key churn must never evict counters for signed users.
+  if (verified && actor) return allowFixedWindow(writeRateByVerifiedActor, scope + ':' + actor, actorLimit, now);
+  // Already-blocked actors must not drain their neighbours' proxy/NAT budget.
+  if (actor && !allowFixedWindow(writeRateByActor, scope + ':' + actor, actorLimit, now)) return false;
+  // A cryptographically verified identity has its own bounded budget. A shared
+  // connecting proxy is not a user identity and cannot veto unrelated actors.
+  if (verified) return true;
+  return allowFixedWindow(writeRateByIp, scope + ':' + requestIp(req), actorLimit * 12, now);
 }
 
 function analyticsActorHash(platform, uid) {
@@ -1267,7 +1273,7 @@ const server = createServer(async (req, res) => {
       }
 
       const now = Date.now();
-      if (!allowWriteRequest(req, 'telegram-share', 'telegram:' + verified.uid, now)) {
+      if (!allowWriteRequest(req, 'telegram-share', 'telegram:' + verified.uid, true, now)) {
         return send(res, 429, { ok: false, error: 'write rate limited' });
       }
       const shareKey = `telegram:${verified.uid}`;
@@ -1311,7 +1317,7 @@ const server = createServer(async (req, res) => {
         return send(res, 403, { ok: false, error: 'analytics initData validation failed' });
       }
 
-      if (!allowWriteRequest(req, 'event', platform + ':' + verified.uid, Date.now(), ANALYTICS_RATE_LIMIT)) {
+      if (!allowWriteRequest(req, 'event', platform + ':' + verified.uid, true, Date.now(), ANALYTICS_RATE_LIMIT)) {
         return send(res, 429, { ok: false, error: 'write rate limited' });
       }
       const actor = analyticsActorHash(platform, verified.uid);
@@ -1339,7 +1345,7 @@ const server = createServer(async (req, res) => {
       if (!identity) {
         return send(res, 403, { ok: false, error: 'verified messenger identity required' });
       }
-      if (!allowWriteRequest(req, 'run-start', identity.platform + ':' + identity.uid)) {
+      if (!allowWriteRequest(req, 'run-start', identity.platform + ':' + identity.uid, true)) {
         return send(res, 429, { ok: false, error: 'write rate limited' });
       }
       const spec = body?.run;
@@ -1373,7 +1379,7 @@ const server = createServer(async (req, res) => {
         return send(res, 403, { ok: false, error: 'verified messenger identity required' });
       }
 
-      if (!allowWriteRequest(req, 'daily-run', identity.platform + ':' + identity.uid)) {
+      if (!allowWriteRequest(req, 'daily-run', identity.platform + ':' + identity.uid, true)) {
         return send(res, 429, { ok: false, error: 'write rate limited' });
       }
       const issued = issueDailyRun(identity);
@@ -1392,7 +1398,7 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req);
       const identity = verifyDuelIdentity(body);
       if (!identity) return send(res, 403, { ok: false, error: 'verified messenger identity required' });
-      if (!allowWriteRequest(req, 'duel-create', identity.platform + ':' + identity.uid)) {
+      if (!allowWriteRequest(req, 'duel-create', identity.platform + ':' + identity.uid, true)) {
         return send(res, 429, { ok: false, error: 'write rate limited' });
       }
       const payload = body?.payload;
@@ -1464,7 +1470,7 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req);
       const identity = verifyDuelIdentity(body);
       if (!identity) return send(res, 403, { ok: false, error: 'verified messenger identity required' });
-      if (!allowWriteRequest(req, 'duel-event', identity.platform + ':' + identity.uid)) {
+      if (!allowWriteRequest(req, 'duel-event', identity.platform + ':' + identity.uid, true)) {
         return send(res, 429, { ok: false, error: 'write rate limited' });
       }
       if (!['open', 'start', 'rematch'].includes(body?.event)) {
@@ -1484,7 +1490,7 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req);
       const identity = verifyDuelIdentity(body);
       if (!identity) return send(res, 403, { ok: false, error: 'verified messenger identity required' });
-      if (!allowWriteRequest(req, 'duel-attempt', identity.platform + ':' + identity.uid)) {
+      if (!allowWriteRequest(req, 'duel-attempt', identity.platform + ':' + identity.uid, true)) {
         return send(res, 429, { ok: false, error: 'write rate limited' });
       }
       const payload = body?.payload;
@@ -1586,7 +1592,7 @@ const server = createServer(async (req, res) => {
         verifiedStartParam = v.startParam;
       }
 
-      if (!allowWriteRequest(req, 'score', platform + ':' + uid)) {
+      if (!allowWriteRequest(req, 'score', platform + ':' + uid, verified)) {
         return send(res, 429, { ok: false, error: 'write rate limited' });
       }
 
@@ -1923,7 +1929,7 @@ const server = createServer(async (req, res) => {
       const identity = verifyMessengerProfileIdentity(body);
       if (!identity) return send(res, 403, { ok: false, error: 'verified messenger identity required' });
 
-      if (!allowWriteRequest(req, 'profile', identity.userKey)) {
+      if (!allowWriteRequest(req, 'profile', identity.userKey, true)) {
         return send(res, 429, { ok: false, error: 'write rate limited' });
       }
       const outcome = await withProfileLock(identity.userKey, () => {
@@ -1950,7 +1956,7 @@ const server = createServer(async (req, res) => {
       }
       const identity = verifyMessengerProfileIdentity(body);
       if (!identity) return send(res, 403, { ok: false, error: 'verified messenger identity required' });
-      if (!allowWriteRequest(req, 'profile-migrate', identity.userKey)) {
+      if (!allowWriteRequest(req, 'profile-migrate', identity.userKey, true)) {
         return send(res, 429, { ok: false, error: 'write rate limited' });
       }
       const save = body?.save;

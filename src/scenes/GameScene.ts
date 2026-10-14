@@ -56,6 +56,7 @@ import { RunMilestones } from '../game/RunMilestones';
 import { RunState } from '../game/RunState';
 import {
   StageDirector,
+  isCombatPhase,
   type RunEndReason,
   type StageDirectorEvent,
 } from '../game/StageDirector';
@@ -1812,6 +1813,7 @@ export class GameScene extends Phaser.Scene {
       this.stageTransition !== null ||
       this.bossDefeatCeremony !== null ||
       this.wave.anomalyInProgress ||
+      this.wave.waveEventInProgress ||
       this.hitStopped ||
       this.time.now < this.zeroPointUntil
     ) {
@@ -1960,9 +1962,14 @@ export class GameScene extends Phaser.Scene {
     Sfx.play('bossphase');
   }
 
+  /** Lifecycle authority shared by enemy state machines and damage callbacks. */
+  isCombatActive(): boolean {
+    return isCombatPhase(this.stageDirector.phase);
+  }
+
   /** Radial burst impact: same damage pipeline as the boss pressure wave, scaled down. */
   triggerAnomalyBurst(anomaly: Enemy, radius: number, damage: number): void {
-    if (!anomaly.active || anomaly.kind !== 'anomaly') return;
+    if (!this.isCombatActive() || !anomaly.active || anomaly.kind !== 'anomaly') return;
 
     const wave = this.add
       .circle(anomaly.x, anomaly.y, 24, COLORS.purple, 0.04)

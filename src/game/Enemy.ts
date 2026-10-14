@@ -266,6 +266,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   preUpdate(time: number, delta: number): void {
     super.preUpdate(time, delta);
+    if (this.kind === 'anomaly' && this.gs && !this.gs.isCombatActive()) {
+      (this.body as Phaser.Physics.Arcade.Body)?.setVelocity(0, 0);
+      this.anomalyTelegraph?.setVisible(false);
+      return;
+    }
     if (!this.active || !this.target) {
       this.eliteRing?.setVisible(false);
       this.eliteMarker?.setVisible(false);
