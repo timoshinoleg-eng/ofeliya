@@ -1,3 +1,13 @@
+# Legacy mini-boss warning follow-up — 2026-10-14
+
+PR202 merged as9a6d327 after green PR CI38559170274. Before publication, an additional
+legacy checkpoint edge was found: pre-mini-boss saves can lie inside its new warning.
+Follow-up consumes that restored encounter, matching the wave-warning policy; saves
+before the warning still get the complete mini-boss warning. Actual production-method
+regression observed warning+spawn before the fix, then no partial replay; future warning
+remains full. Main CI38560367835 was cancelled to hold publication for this fix.
+Run final exact-head/main CI and verify runtime identity; do not treat cancelled CI as PASS.
+
 # Review48 P2 fixes — 2026-10-14
 
 Owner approved four fixes in order: pre-wave checkpoint migration, anomaly lifecycle,

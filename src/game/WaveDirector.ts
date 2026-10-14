@@ -209,6 +209,11 @@ export class WaveDirector {
     this.anomalySpawned =
       snapshot.anomalySpawned ??
       miniBossSpawnedByStageTime(stage.miniBoss, this.scene.runState.stage.timeMs);
+    // Pre-mini-boss saves were allowed anywhere, including inside the newly
+    // introduced warning. Give restored encounters the same full-warning rule.
+    if (stage.miniBoss && this.scene.runState.stage.timeMs >= stage.miniBoss.atMs - stage.miniBoss.telegraphMs) {
+      this.anomalySpawned = true;
+    }
   }
 
   /**
