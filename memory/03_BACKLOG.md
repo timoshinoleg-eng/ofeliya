@@ -15,14 +15,22 @@ not proof that GitHub events/checks reach Render successfully.
 
 The live `c0c72fa` deployment `dep-db6vmg4s728c73cv4010` and four earlier
 entries show trigger API; the initial deployment shows First Deploy.
-GitHub Installed Apps lists Render, installation `88263801`. Opening Configure
-requires GitHub reauthentication; repository grants and webhook delivery remain
-unverified. No Render API key is available locally. No settings, deployments,
-secrets or production data were changed during this investigation.
+GitHub installation `88263801` was active but restricted to only
+`junior_middle_it` and `coder_survival`; `ofeliya` was missing from selected
+repositories. This is a concrete integration access defect, consistent with
+missing automatic deployment events; historical webhook delivery was not inspected.
+With explicit owner approval, only `timoshinoleg-eng/ofeliya` was added and Save
+clicked. GitHub redirected to Render with `setup_action=update`. Reopening the
+installation confirmed three saved repositories, including ofeliya, and disabled
+Save/Cancel controls. Other repository grants and the permission set were preserved.
+No API key was created or recovered; no manual deployment, service setting or
+production data was changed. A fresh service Events check after Save still
+showed 35 entries, no new deployment and live source `c0c72fa`.
 
-The missed automatic deployment's cause is not established. Do not change
-settings speculatively. The maintenance merge's `[skip render]` is an explicit
-reason to suppress that commit; it cannot test automatic deployment health.
+Repository access is corrected; end-to-end automatic deployment is not yet
+verified. The maintenance merge's `[skip render]` deliberately suppresses that
+commit, so it cannot validate the fix. Historical trigger attribution remains
+unproven beyond the observed access defect.
 On the next authorized runtime release, use a commit affecting included paths
 without a Render skip phrase, confirm all checks on the exact main SHA, then
 observe a Render automatic deployment of that SHA before manual/API fallback.
