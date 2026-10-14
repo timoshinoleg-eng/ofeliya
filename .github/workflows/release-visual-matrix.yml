@@ -5,6 +5,8 @@ on:
   pull_request:
     paths:
       - 'scripts/release-visual-matrix.cjs'
+      - 'scripts/frame-cadence*'
+      - 'tests/frame-cadence.cjs'
       - '.github/workflows/release-visual-matrix.yml'
       - 'src/game/config.ts'
       - 'src/systems/PerformanceProfile.ts'
@@ -28,6 +30,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Frame cadence evidence summarization
+        run: npm run test:frame-cadence
 
       - name: Build production QA bundle
         env:

@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OFELIYA visual matrix rAF cadence evidence v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "sourceSha", "generatedAt", "status", "measurement", "fixture", "policy", "browserVersion", "results", "error"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "sourceSha": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40}$" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "status": { "enum": ["running", "complete", "failed"] },
+    "measurement": { "type": "string" },
+    "fixture": { "type": "string" },
+    "browserVersion": { "type": ["string", "null"] },
+    "error": { "type": ["string", "null"] },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["warmupFrames", "minSamples", "minWindowMs", "timeoutMs"],
+      "properties": {
+        "warmupFrames": { "const": 10 },
+        "minSamples": { "const": 60 },
+        "minWindowMs": { "const": 1000 },
+        "timeoutMs": { "const": 30000 }
+      }
+    },
+    "results": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["renderer", "tier", "enemyCount", "viewport", "deviceScaleFactor", "sampleCount", "windowMs", "p50Ms", "p95Ms", "over33_3MsRatio", "intervalsMs"],
+        "properties": {
+          "renderer": { "enum": ["canvas", "webgl"] },
+          "tier": { "enum": ["full", "reduced"] },
+          "enemyCount": { "enum": [100, 150, 200] },
+          "viewport": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["width", "height"],
+            "properties": {
+              "width": { "type": "integer", "minimum": 1 },
+              "height": { "type": "integer", "minimum": 1 }
+            }
+          },
+          "deviceScaleFactor": { "const": 2 },
+          "sampleCount": { "type": "integer", "minimum": 60 },
+          "windowMs": { "type": "number", "minimum": 1000 },
+          "p50Ms": { "type": "number", "exclusiveMinimum": 0 },
+          "p95Ms": { "type": "number", "exclusiveMinimum": 0 },
+          "over33_3MsRatio": { "type": "number", "minimum": 0, "maximum": 1 },
+          "intervalsMs": {
+            "type": "array", "minItems": 60,
+            "items": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "complete" } } },
+      "then": { "properties": { "results": { "minItems": 12 }, "error": { "type": "null" } } }
+    },
+    {
+      "if": { "properties": { "status": { "const": "failed" } } },
+      "then": { "properties": { "error": { "type": "string", "minLength": 1 } } }
+    }
+  ]
+}

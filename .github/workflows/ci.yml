@@ -71,6 +71,9 @@ jobs:
       - name: Frame-rate decay deterministic smoke
         run: node scripts/check-frame-rate-decay.mjs
 
+      - name: Frame cadence evidence summarization
+        run: npm run test:frame-cadence
+
       - name: Adaptive threat pacing deterministic smoke
         run: npm run test:threat
 
@@ -347,6 +350,7 @@ jobs:
             /tmp/browser-smoke/*.png
             /tmp/release-visual-matrix/**/*.png
             /tmp/release-visual-matrix/**/matrix.json
+            /tmp/release-visual-matrix/**/frame-cadence.json
           if-no-files-found: ignore
 
   production-contract:
