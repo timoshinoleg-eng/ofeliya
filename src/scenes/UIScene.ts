@@ -132,6 +132,18 @@ export class UIScene extends Phaser.Scene {
   private fanfare!: Phaser.GameObjects.Particles.ParticleEmitter;
   private comboText!: Phaser.GameObjects.Text;
   private lastCombo = 0;
+  // Snapshot only the values that affect retained HUD Graphics. Layout invalidates this cache.
+  private hudBarState: {
+    width: number;
+    height: number;
+    xp: number;
+    xpNext: number;
+    hp: number;
+    maxHp: number;
+    bossHp: number;
+    bossMax: number;
+  } | null = null;
+  private lowHpWarningActive = false;
 
   private modal: Phaser.GameObjects.Container | null = null;
   private modalViewport: { width: number; height: number } | null = null;
@@ -159,6 +171,8 @@ export class UIScene extends Phaser.Scene {
 
   create(): void {
     this.gs = this.scene.get('Game') as GameScene;
+    this.hudBarState = null;
+    this.lowHpWarningActive = false;
     this.modalOpen = false;
     this.pendingBossReveal = null;
     this.modalGeneration = 0;
@@ -369,17 +383,28 @@ export class UIScene extends Phaser.Scene {
       this.armOnboarding(run);
       this.tickOnboarding(run);
       const m = this.hudMetrics(W);
-      this.xpBack.clear();
-      this.xpBack.fillStyle(HUD.barBack, 0.9);
-      this.xpBack.fillRoundedRect(m.xpX, HUD.row.xpY, m.xpW, HUD.row.xpH, 5);
-      this.xpBack.lineStyle(1, ROLE.faction.immune, 0.28);
-      this.xpBack.strokeRoundedRect(m.xpX, HUD.row.xpY, m.xpW, HUD.row.xpH, 5);
-      this.xpFill.clear();
-      const xf = Phaser.Math.Clamp(run.xp / run.xpNext, 0, 1);
-      if (xf > 0) {
-        this.xpFill.fillStyle(COLORS.magenta, 1);
-        this.xpFill.fillRoundedRect(m.xpX, HUD.row.xpY, Math.max(m.xpW * xf, 10), HUD.row.xpH, 5);
-        this.drawBarHighlight(this.xpFill, m.xpX, HUD.row.xpY, Math.max(m.xpW * xf, 10));
+      const prev = this.hudBarState;
+      const geometryDirty = !prev || prev.width !== W || prev.height !== H;
+      const xpDirty = geometryDirty || prev?.xp !== run.xp || prev?.xpNext !== run.xpNext;
+      const hpDirty = geometryDirty || prev?.hp !== run.hp || prev?.maxHp !== run.maxHp;
+      const bossDirty = geometryDirty || prev?.bossHp !== run.bossHp || prev?.bossMax !== run.bossMax;
+
+      // Background geometry is stable between viewport/layout changes.
+      if (geometryDirty) {
+        this.xpBack.clear();
+        this.xpBack.fillStyle(HUD.barBack, 0.9);
+        this.xpBack.fillRoundedRect(m.xpX, HUD.row.xpY, m.xpW, HUD.row.xpH, 5);
+        this.xpBack.lineStyle(1, ROLE.faction.immune, 0.28);
+        this.xpBack.strokeRoundedRect(m.xpX, HUD.row.xpY, m.xpW, HUD.row.xpH, 5);
+      }
+      if (xpDirty) {
+        this.xpFill.clear();
+        const xf = Phaser.Math.Clamp(run.xp / run.xpNext, 0, 1);
+        if (xf > 0) {
+          this.xpFill.fillStyle(COLORS.magenta, 1);
+          this.xpFill.fillRoundedRect(m.xpX, HUD.row.xpY, Math.max(m.xpW * xf, 10), HUD.row.xpH, 5);
+          this.drawBarHighlight(this.xpFill, m.xpX, HUD.row.xpY, Math.max(m.xpW * xf, 10));
+        }
       }
 
       this.timerText.setText(fmtTime(run.timeMs));
@@ -415,24 +440,33 @@ export class UIScene extends Phaser.Scene {
 
       const bw = m.hpW;
       const bx = m.hpX;
-      this.hpBack.clear();
-      this.hpBack.fillStyle(HUD.barBack, 0.9);
-      this.hpBack.fillRoundedRect(bx, HUD.row.hpY, bw, HUD.row.hpH, 6);
-      this.hpFill.clear();
+      if (geometryDirty) {
+        this.hpBack.clear();
+        this.hpBack.fillStyle(HUD.barBack, 0.9);
+        this.hpBack.fillRoundedRect(bx, HUD.row.hpY, bw, HUD.row.hpH, 6);
+      }
       const hf = Phaser.Math.Clamp(run.hp / run.maxHp, 0, 1);
-      if (hf > 0) {
-        this.hpFill.fillStyle(hf > 0.35 ? COLORS.green : HUD.lowHp, 1);
-        this.hpFill.fillRoundedRect(bx, HUD.row.hpY, Math.max(bw * hf, 10), HUD.row.hpH, 6);
-        this.drawBarHighlight(this.hpFill, bx, HUD.row.hpY, Math.max(bw * hf, 10));
+      if (hpDirty) {
+        this.hpFill.clear();
+        if (hf > 0) {
+          this.hpFill.fillStyle(hf > 0.35 ? COLORS.green : HUD.lowHp, 1);
+          this.hpFill.fillRoundedRect(bx, HUD.row.hpY, Math.max(bw * hf, 10), HUD.row.hpH, 6);
+          this.drawBarHighlight(this.hpFill, bx, HUD.row.hpY, Math.max(bw * hf, 10));
+        }
       }
       this.hpText.setText(`${Math.ceil(Math.max(0, run.hp))} / ${run.maxHp}`);
 
-      this.hpWarn.clear();
-      if (run.hp > 0 && hf <= JUICE.lowHpFraction) {
+      // The critical-HP pulse is intentionally animated; avoid clearing it while inactive.
+      const lowHpWarning = run.hp > 0 && hf <= JUICE.lowHpFraction;
+      if (lowHpWarning) {
+        this.hpWarn.clear();
         const a = 0.22 + 0.22 * Math.sin(this.time.now / 120);
         this.hpWarn.lineStyle(16, COLORS.red, a);
         this.hpWarn.strokeRect(8, 8, W - 16, H - 16);
+      } else if (this.lowHpWarningActive) {
+        this.hpWarn.clear();
       }
+      this.lowHpWarningActive = lowHpWarning;
 
       const boss = run.bossMax > 0;
       this.bossBack.setVisible(boss);
@@ -440,20 +474,36 @@ export class UIScene extends Phaser.Scene {
       this.bossLabel.setVisible(boss);
       if (boss) {
         this.bossLabel.setText(run.bossName);
-        this.bossBack.clear();
-        this.bossBack.fillStyle(HUD.barBack, 0.9);
-        this.bossBack.fillRoundedRect(m.bossX, HUD.row.bossBarY, m.bossW, HUD.row.bossBarH, 4);
-        this.bossFill.clear();
-        this.bossFill.fillStyle(COLORS.red, 1);
-        this.bossFill.fillRoundedRect(
-          m.bossX,
-          HUD.row.bossBarY,
-          Math.max(m.bossW * Phaser.Math.Clamp(run.bossHp / run.bossMax, 0, 1), 8),
-          HUD.row.bossBarH,
-          4
-        );
-        this.drawBarHighlight(this.bossFill, m.bossX, HUD.row.bossBarY,
-          Math.max(m.bossW * Phaser.Math.Clamp(run.bossHp / run.bossMax, 0, 1), 8));
+        if (geometryDirty || !prev || prev.bossMax <= 0) {
+          this.bossBack.clear();
+          this.bossBack.fillStyle(HUD.barBack, 0.9);
+          this.bossBack.fillRoundedRect(m.bossX, HUD.row.bossBarY, m.bossW, HUD.row.bossBarH, 4);
+        }
+        if (bossDirty) {
+          this.bossFill.clear();
+          this.bossFill.fillStyle(COLORS.red, 1);
+          this.bossFill.fillRoundedRect(
+            m.bossX,
+            HUD.row.bossBarY,
+            Math.max(m.bossW * Phaser.Math.Clamp(run.bossHp / run.bossMax, 0, 1), 8),
+            HUD.row.bossBarH,
+            4
+          );
+          this.drawBarHighlight(this.bossFill, m.bossX, HUD.row.bossBarY,
+            Math.max(m.bossW * Phaser.Math.Clamp(run.bossHp / run.bossMax, 0, 1), 8));
+        }
+      }
+      if (xpDirty || hpDirty || bossDirty) {
+        this.hudBarState = {
+          width: W,
+          height: H,
+          xp: run.xp,
+          xpNext: run.xpNext,
+          hp: run.hp,
+          maxHp: run.maxHp,
+          bossHp: run.bossHp,
+          bossMax: run.bossMax,
+        };
       }
     }
 
@@ -1019,6 +1069,7 @@ export class UIScene extends Phaser.Scene {
 
   /** Single writer for the HUD strip geometry (X + Y) and the HUD type floors. */
   private layout(): void {
+    this.hudBarState = null;
     const W = this.scale.width;
     this.hudBackdrop
       .setPosition(W / 2, HUD.plate.top + HUD.plate.height / 2)
