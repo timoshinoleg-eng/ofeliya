@@ -30,6 +30,7 @@ import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
 import { ensureCinematicTextures } from '../game/CinematicTextures';
 import { clearDailyIntent, launchDailyRun } from '../game/DailyRunIntent';
 import { showLegalOverlay } from '../legal/LegalOverlay';
+import { MenuKeyboard } from '../ui/MenuKeyboard';
 import { SocialHub } from '../ui/SocialHub';
 import { BORDER, PANEL, ROLE } from '../ui/tokens';
 import { FOUNDER_BADGE_LABEL, hasFounderBadge } from '../ui/FounderBadge';
@@ -46,6 +47,7 @@ import { trackProductEvent } from '../systems/AnalyticsClient';
 
 export class MenuScene extends Phaser.Scene {
   private codexOverlay: Phaser.GameObjects.Container | null = null;
+  private dismissCodex: (() => void) | null = null;
   private socialHub: SocialHub | null = null;
   private founderBadge: Phaser.GameObjects.Container | null = null;
   private profileLoadGeneration = 0;
@@ -65,6 +67,7 @@ export class MenuScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
     this.codexOverlay = null;
+    this.dismissCodex = null;
     this.socialHub = null;
     this.founderBadge?.destroy();
     this.founderBadge = null;
@@ -479,7 +482,7 @@ export class MenuScene extends Phaser.Scene {
         .setFillStyle(profile.id === 'strained' ? 0x1f1714 : 0x171018, 0.97);
     };
     renderDifficulty();
-    difficultyBg.on('pointerup', () => {
+    const cycleDifficulty = () => {
       Sfx.play('click');
       PlatformBridge.haptic('light');
       if (incomingChallenge || (incomingDuelId && !duelUnavailable)) return;
@@ -487,7 +490,8 @@ export class MenuScene extends Phaser.Scene {
       writeDifficultySelection(selectedDifficulty);
       this.registry.set('difficultyId', selectedDifficulty);
       renderDifficulty();
-    });
+    };
+    difficultyBg.on('pointerup', cycleDifficulty);
     difficultyBg.on('pointerover', () => difficultyBg.setAlpha(1));
     difficultyBg.on('pointerout', () => difficultyBg.setAlpha(0.97));
 
@@ -588,7 +592,7 @@ export class MenuScene extends Phaser.Scene {
       }
     };
     renderControlMode();
-    controlBg.on('pointerup', () => {
+    const cycleControlMode = () => {
       Sfx.play('click');
       PlatformBridge.haptic('light');
       if (duelLoading || incomingDuel) return;
@@ -596,7 +600,8 @@ export class MenuScene extends Phaser.Scene {
       writeControlMode(selectedControlMode);
       this.registry.set('controlMode', selectedControlMode);
       renderControlMode();
-    });
+    };
+    controlBg.on('pointerup', cycleControlMode);
     controlBg.on('pointerover', () => controlBg.setAlpha(1));
     controlBg.on('pointerout', () => controlBg.setAlpha(0.96));
 
@@ -691,11 +696,12 @@ export class MenuScene extends Phaser.Scene {
     btnBg.on('pointerdown', () => {
       if (!resumeCheckpoint) VideoInterstitial.preload('startIntro');
     });
-    btnBg.on('pointerup', () => {
+    const activateStart = () => {
       Sfx.play('click');
       PlatformBridge.haptic('medium');
-      if (duelLoading) return;
+      if (duelLoading || freshRunStarting) return;
       if (resumeCheckpoint) {
+        freshRunStarting = true;
         clearDailyIntent(this.registry);
         this.registry.set('difficultyId', resumeCheckpoint.difficultyId);
         this.registry.set('controlMode', resumeCheckpoint.controlMode);
@@ -704,9 +710,26 @@ export class MenuScene extends Phaser.Scene {
         return;
       }
       startFreshRun();
-    });
+    };
+    btnBg.on('pointerup', activateStart);
     btnBg.on('pointerover', () => btnBg.setFillStyle(0x7a1a52, 1));
     btnBg.on('pointerout', () => btnBg.setFillStyle(0x5c143e, 0.92));
+
+    const keyboard = new MenuKeyboard(this, {
+      blocked: () => freshRunStarting || Boolean(this.socialHub || this.codexOverlay),
+      escape: () => {
+        if (this.socialHub) {
+          this.socialHub.destroy();
+          return true;
+        }
+        if (!this.dismissCodex) return false;
+        this.dismissCodex();
+        return true;
+      },
+    });
+    keyboard.add(difficultyBg, () => `СЛОЖНОСТЬ: ${difficultyText.text}. ${difficultyDesc.text}`, cycleDifficulty);
+    keyboard.add(controlBg, () => `УПРАВЛЕНИЕ: ${controlText.text}. ${controlDesc.text}`, cycleControlMode);
+    keyboard.add(btnBg, () => startButtonText.text, activateStart);
 
     if (incomingDuelId) {
       void loadDuelChallenge(incomingDuelId).then((challenge) => {
@@ -761,11 +784,13 @@ export class MenuScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setResolution(2)
         .setDepth(8);
-      newRunHit.on('pointerup', () => {
+      const activateNewRun = () => {
         Sfx.play('click');
         PlatformBridge.haptic('medium');
         startFreshRun();
-      });
+      };
+      newRunHit.on('pointerup', activateNewRun);
+      keyboard.add(newRunHit, () => 'НАЧАТЬ НОВЫЙ', activateNewRun);
     }
 
     // Keep the action/utilities/footer as separate vertical bands on short MAX WebViews.
@@ -823,13 +848,15 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
       .setResolution(2)
-      .setDepth(5)
-      .on('pointerup', () => {
-        const v = Sfx.bumpMusicVolume();
-        musicVolText.setText(volLabel(Math.round(v * 100)));
-        layoutUtilityRow();
-        Sfx.play('click');
-      });
+      .setDepth(5);
+    const cycleMusicVolume = () => {
+      const v = Sfx.bumpMusicVolume();
+      musicVolText.setText(volLabel(Math.round(v * 100)));
+      layoutUtilityRow();
+      Sfx.play('click');
+    };
+    musicVolText.on('pointerup', cycleMusicVolume);
+    keyboard.add(musicVolText, () => musicVolText.text, cycleMusicVolume);
     utilitySlots.push(musicVolText);
     const soundText = this.add
       .text(W / 2, utilityY, `звук: ${Sfx.muted ? 'выкл' : 'вкл'}`, {
@@ -841,13 +868,15 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
       .setResolution(2)
-      .setDepth(5)
-      .on('pointerup', () => {
-        const muted = Sfx.toggle();
-        soundText.setText(`звук: ${muted ? 'выкл' : 'вкл'}`).setColor(muted ? '#755266' : '#c89aaf');
-        layoutUtilityRow();
-        if (!muted) Sfx.play('click');
-      });
+      .setDepth(5);
+    const toggleMute = () => {
+      const muted = Sfx.toggle();
+      soundText.setText(`звук: ${muted ? 'выкл' : 'вкл'}`).setColor(muted ? '#755266' : '#c89aaf');
+      layoutUtilityRow();
+      if (!muted) Sfx.play('click');
+    };
+    soundText.on('pointerup', toggleMute);
+    keyboard.add(soundText, () => soundText.text, toggleMute);
     utilitySlots.push(soundText);
     const sfxVolText = this.add
       .text(W / 2, utilityY, sfxLabel(Math.round(Sfx.getSfxVolume() * 100)), {
@@ -859,13 +888,15 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
       .setResolution(2)
-      .setDepth(5)
-      .on('pointerup', () => {
-        const v = Sfx.bumpSfxVolume();
-        sfxVolText.setText(sfxLabel(Math.round(v * 100)));
-        layoutUtilityRow();
-        Sfx.play('click');
-      });
+      .setDepth(5);
+    const cycleEffectsVolume = () => {
+      const v = Sfx.bumpSfxVolume();
+      sfxVolText.setText(sfxLabel(Math.round(v * 100)));
+      layoutUtilityRow();
+      Sfx.play('click');
+    };
+    sfxVolText.on('pointerup', cycleEffectsVolume);
+    keyboard.add(sfxVolText, () => sfxVolText.text, cycleEffectsVolume);
     utilitySlots.push(sfxVolText);
 
 
@@ -880,12 +911,14 @@ export class MenuScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .setResolution(2)
       .setDepth(5)
-      .setName('ofeliya-menu-social')
-      .on('pointerup', () => {
-        Sfx.play('click');
-        PlatformBridge.haptic('light');
-        this.showSocialHub();
-      });
+      .setName('ofeliya-menu-social');
+    const openSocialHub = () => {
+      Sfx.play('click');
+      PlatformBridge.haptic('light');
+      this.showSocialHub();
+    };
+    summaryText.on('pointerup', openSocialHub);
+    keyboard.add(summaryText, () => summaryText.text, openSocialHub);
     utilitySlots.push(summaryText);
 
     const codexSave = SaveSystem.get();
@@ -900,12 +933,14 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
       .setResolution(2)
-      .setDepth(5)
-      .on('pointerup', () => {
-        Sfx.play('click');
-        PlatformBridge.haptic('light');
-        this.showCodex();
-      });
+      .setDepth(5);
+    const openCodex = () => {
+      Sfx.play('click');
+      PlatformBridge.haptic('light');
+      this.showCodex();
+    };
+    codexText.on('pointerup', openCodex);
+    keyboard.add(codexText, () => codexText.text, openCodex);
     utilitySlots.push(codexText);
     // All five utility labels were created centered as placeholders; distribute them
     // edge-to-edge from real measured widths so neither end can leave the screen.
@@ -926,7 +961,7 @@ export class MenuScene extends Phaser.Scene {
         .setDepth(5);
     }
 
-    this.add
+    const legalText = this.add
       .text(W / 2, legalY, 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА', {
         fontFamily: UI_FONT,
         fontSize: H < 650 ? '11px' : '12px',
@@ -936,11 +971,13 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setResolution(2)
       .setDepth(6)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerup', () => {
-        Sfx.play('click');
-        showLegalOverlay();
-      });
+      .setInteractive({ useHandCursor: true });
+    const openLegal = () => {
+      Sfx.play('click');
+      showLegalOverlay();
+    };
+    legalText.on('pointerup', openLegal);
+    keyboard.add(legalText, () => legalText.text, openLegal);
 
     let diagnosticTapCount = 0;
     let diagnosticTapTimer: number | null = null;
@@ -976,6 +1013,8 @@ export class MenuScene extends Phaser.Scene {
     this.scale.on('resize', this.onResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.onResize, this);
+      this.dismissCodex = null;
+      PlatformBridge.setBackHandler(null);
       this.socialHub?.destroy();
       this.socialHub = null;
       this.profileLoadGeneration += 1;
@@ -1303,7 +1342,9 @@ export class MenuScene extends Phaser.Scene {
       PlatformBridge.setBackHandler(null);
       overlay.destroy();
       this.codexOverlay = null;
+      this.dismissCodex = null;
     };
+    this.dismissCodex = dismiss;
     PlatformBridge.setBackHandler(dismiss);
     close.on('pointerup', dismiss);
     dim.on('pointerup', () => {
