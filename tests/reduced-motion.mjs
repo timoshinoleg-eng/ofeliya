@@ -7,8 +7,11 @@ const server = await createServer({ server: { host: '127.0.0.1', port: 0 } });
 let browser;
 try {
   await server.listen();
-  const executablePath = process.platform === 'win32' ? undefined
-    : ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(existsSync);
+  const executablePath = [process.env.OFELIYA_CHROME_PATH,
+    process.platform === 'win32' ? undefined : '/usr/bin/google-chrome',
+    process.platform === 'win32' ? undefined : '/usr/bin/google-chrome-stable',
+    process.platform === 'win32' ? undefined : '/usr/bin/chromium']
+    .filter(Boolean).find(existsSync);
   browser = await chromium.launch({ executablePath, headless: true,
     args: process.platform === 'win32' ? [] : ['--no-sandbox', '--disable-dev-shm-usage'] });
   const page = await browser.newPage();
