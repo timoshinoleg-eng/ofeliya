@@ -113,7 +113,8 @@ test('Menu host and hero keep the original large portraits and tween endpoints',
  const body = source.slice(source.indexOf('    const host ='), source.indexOf('    const titleY ='));
  for (const H of [568, 844]) {
   const f = fixture(); bake(f);
-  new Function('W', 'H', 'artScale', 'ROLE', 'BORDER', 'PANEL', body).call(f.scene, 390, H, artScale, ROLE, BORDER, PANEL);
+  new Function('W', 'H', 'artScale', 'ROLE', 'BORDER', 'PANEL', 'prefersReducedMotion', body)
+    .call(f.scene, 390, H, artScale, ROLE, BORDER, PANEL, () => false);
   const host = f.objects.find(o => o.texture?.key === 'host-cell-shadow');
   const hero = f.objects.find(o => o.texture?.key === 'virus-player');
   const hostScale = H < 650 ? 1.1 : 1.4, heroScale = H < 650 ? 1.8 : 2.15;
@@ -121,6 +122,13 @@ test('Menu host and hero keep the original large portraits and tween endpoints',
   assert.equal(hero.displayWidth, 56 * heroScale);
   assert.ok(Math.abs(f.tweens.find(t => t.targets === host && t.scale !== undefined).scale * host.width - 112 * hostScale * 1.07) < 1e-9);
   assert.ok(Math.abs(f.tweens.find(t => t.targets === hero && t.scale !== undefined).scale * hero.width - 56 * heroScale * 1.06) < 1e-9);
+  // Reduced-motion users retain the same static portrait dimensions without the looping tweens.
+  const reduced = fixture(); bake(reduced);
+  new Function('W', 'H', 'artScale', 'ROLE', 'BORDER', 'PANEL', 'prefersReducedMotion', body)
+    .call(reduced.scene, 390, H, artScale, ROLE, BORDER, PANEL, () => true);
+  assert.equal(reduced.objects.find(o => o.texture?.key === 'host-cell-shadow').displayWidth, 112 * hostScale);
+  assert.equal(reduced.objects.find(o => o.texture?.key === 'virus-player').displayWidth, 56 * heroScale);
+  assert.equal(reduced.tweens.length, 0, 'reduced motion must remove continuous portrait animations');
  }
 });
 test('Game trail initial/fade endpoints and organ reset retain their world footprint', () => {
