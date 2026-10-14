@@ -1,3 +1,13 @@
+# Review follow-ups — 2026-10-15
+
+Branch fix/review-followups-20261015 starts from main30a534f. Owner asked to continue remaining review recommendations. Four targeted follow-ups: Boot/Menu startup recovery now waits for the first usable Menu frame and catches scene exceptions/stalls; CI builds the actual telegram-bot target and imports it with networking disabled and a deadline; registry mirror-write failures lower health until a successful write; profile migration publishes a staged candidate only after its atomic disk write.
+
+RED→GREEN: actual Phaser scene-create failure; registry health on injected disk failure; failed migration remaining claimable and invisible to signed reads. Local server75 plus security/durable/hosting suites, TypeScript, bot contract, startup browser cases and prior review-browser scenarios pass. Independent Luna review found no P1/P2. The final extended startup check, production build and exact-head hosted CI must still be recorded in the PR. Local Docker Desktop could not start; actual image import remains pending hosted CI.
+
+Previous package PR202/203 is merged and was verified published on 14 October: exact main30a534fbf1656979c20434d4f4d724eea69c385f, all three main CI jobs succeeded, Render deploy dep-db7ndmm7bikc73d860lg automatically triggered new_commit and live. Public56 files/API/browser checks passed; all73 scores, existing profiles/registry preserved, Free and /ready retained. Those are prior-release facts, not proof of this branch being live. Physical S20+/MAX/TG, iOS, FPS/newcomer gates remain open. Other agents' open PRs are untouched; recheck main before integration.
+
+## Previous snapshots
+
 # Legacy mini-boss warning follow-up — 2026-10-14
 
 PR202 merged as9a6d327 after green PR CI38559170274. Before publication, an additional
