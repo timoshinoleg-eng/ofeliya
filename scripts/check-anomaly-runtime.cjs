@@ -67,6 +67,36 @@ function anomaly(kind = 'radial-burst') {
 }
 
 const cases = [
+  ['legacy restore inside mini-boss warning never spawns with a shortened warning', () => {
+    const def = BLOODSTREAM_STAGE.miniBoss;
+    for (const flag of [undefined, false]) {
+      const events = [];
+      const scene = { player: { x: 100, y: 200 }, runState: { stage: { timeMs: def.atMs - 100 } },
+        cameras: { main: { width: 390, height: 740, midPoint: { x: 100, y: 200 } } },
+        announceMiniBoss() { events.push('warning'); },
+        spawnEnemy() { events.push('spawn'); return { active: true }; }, onAnomalySpawned() {} };
+      const wave = new WaveDirector(scene, {}, BLOODSTREAM_STAGE, STANDARD_DIFFICULTY, () => 0.5, () => 0.5);
+      wave.restore(BLOODSTREAM_STAGE, { spawnAcc: 0, spawnedElites: 0, minionAcc: 0, anomalySpawned: flag });
+      wave.updateMiniBoss(scene.runState.stage.timeMs);
+      scene.runState.stage.timeMs = def.atMs;
+      wave.updateMiniBoss(scene.runState.stage.timeMs);
+      assert.deepEqual(events, [], 'restored mini-boss warning shorter than its full interval');
+      assert.equal(wave.snapshot().anomalySpawned, true);
+    }
+    const events = [];
+    const scene = { player: { x: 100, y: 200 }, runState: { stage: { timeMs: def.atMs - def.telegraphMs - 1 } },
+      cameras: { main: { width: 390, height: 740, midPoint: { x: 100, y: 200 } } },
+      announceMiniBoss() { events.push({ kind: 'warning', at: this.runState.stage.timeMs }); },
+      spawnEnemy() { events.push({ kind: 'spawn', at: this.runState.stage.timeMs }); return { active: true }; }, onAnomalySpawned() {} };
+    const wave = new WaveDirector(scene, {}, BLOODSTREAM_STAGE, STANDARD_DIFFICULTY, () => 0.5, () => 0.5);
+    wave.restore(BLOODSTREAM_STAGE, { spawnAcc: 0, spawnedElites: 0, minionAcc: 0 });
+    assert.equal(wave.snapshot().anomalySpawned, false, 'future mini-boss was incorrectly consumed');
+    scene.runState.stage.timeMs = def.atMs - def.telegraphMs;
+    wave.updateMiniBoss(scene.runState.stage.timeMs);
+    scene.runState.stage.timeMs = def.atMs;
+    wave.updateMiniBoss(scene.runState.stage.timeMs);
+    assert.equal(events[1].at - events[0].at, def.telegraphMs, 'future mini-boss lost full warning');
+  }],
   ['resume never re-plans an in-flight warning from advanced RNG', () => {
     const def = BLOODSTREAM_STAGE.waveEvents[1];
     const future = { ...def, id: 'future-resume', atMs: def.atMs + 5000 };
