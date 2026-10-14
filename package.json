@@ -28,6 +28,7 @@
     "test:tokens": "node tests/tokens-contract.mjs",
     "test:ui-copy": "node tests/ui-copy-catalog.mjs",
     "test:visual-matrix": "node scripts/release-visual-matrix.cjs",
+    "test:reduced-motion": "node tests/reduced-motion.mjs",
     "release:check": "node scripts/check-release-config.mjs",
     "build": "tsc --noEmit && vite build && node scripts/stamp-release.mjs",
     "build:max": "node scripts/check-release-config.mjs && npm run build",

@@ -39,6 +39,7 @@ import { SaveSystem } from '../systems/SaveSystem';
 import { fetchServerProfile } from '../systems/ProfileClient';
 import { RunCheckpoint } from '../systems/RunCheckpoint';
 import { Sfx } from '../systems/Sfx';
+import { prefersReducedMotion } from '../systems/MotionPreferences';
 import { StartupTrace } from '../systems/StartupTrace';
 import { VideoInterstitial } from '../systems/VideoInterstitial';
 import { loadDuelChallenge, trackDuelEvent } from '../systems/DuelClient';
@@ -93,7 +94,7 @@ export class MenuScene extends Phaser.Scene {
       .tileSprite(0, 0, W, H, 'blood-plasma')
       .setOrigin(0)
       .setDepth(-20);
-    this.tweens.add({
+    if (!prefersReducedMotion()) this.tweens.add({
       targets: plasma,
       tilePositionX: -120,
       duration: 9000,
@@ -115,7 +116,7 @@ export class MenuScene extends Phaser.Scene {
         .setAlpha(d.alpha)
         .setDepth(-12)
         .setRotation(Phaser.Math.FloatBetween(-Math.PI, Math.PI));
-      this.tweens.add({
+      if (!prefersReducedMotion()) this.tweens.add({
         targets: cell,
         x: cell.x + (i % 2 === 0 ? 28 : -22),
         y: cell.y + Phaser.Math.Between(-10, 10),
@@ -132,7 +133,7 @@ export class MenuScene extends Phaser.Scene {
       .setScale(artScale('host-cell-shadow', H < 650 ? 1.1 : 1.4))
       .setAlpha(0.1)
       .setDepth(-10);
-    this.tweens.add({
+    if (!prefersReducedMotion()) this.tweens.add({
       targets: host,
       scale: host.scaleX * 1.07,
       alpha: 0.14,
@@ -162,21 +163,21 @@ export class MenuScene extends Phaser.Scene {
     halo.lineStyle(BORDER.hair, ROLE.faction.player, 0.32);
     halo.strokeCircle(0, 0, specimenRadius - 11);
     halo.setAlpha(0.55);
-    this.tweens.add({ targets: halo, alpha: 1, duration: 2400, yoyo: true,
+    if (!prefersReducedMotion()) this.tweens.add({ targets: halo, alpha: 1, duration: 2400, yoyo: true,
       repeat: -1, ease: 'Sine.InOut' });
 
     const virus = this.add
       .image(W / 2, H * 0.28, 'virus-player')
       .setScale(artScale('virus-player', H < 650 ? 1.8 : 2.15))
       .setDepth(2);
-    this.tweens.add({
+    if (!prefersReducedMotion()) this.tweens.add({
       targets: virus,
       rotation: Math.PI * 2,
       duration: 12000,
       repeat: -1,
       ease: 'Linear',
     });
-    this.tweens.add({
+    if (!prefersReducedMotion()) this.tweens.add({
       targets: virus,
       scale: virus.scaleX * 1.06,
       duration: 1150,

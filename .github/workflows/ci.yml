@@ -235,6 +235,9 @@ jobs:
       - name: Telegram bridge runtime browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/telegram-runtime-smoke.cjs
 
+      - name: Reduced motion media preference smoke
+        run: npm run test:reduced-motion
+
       - name: MAX viewport challenge and legal browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/browser-smoke.cjs
 

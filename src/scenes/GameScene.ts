@@ -68,6 +68,7 @@ import type { WaveEventDefinition, WaveEventTelegraph } from '../game/WaveEvents
 import type { MiniBossDefinition } from '../game/AnomalyPrime';
 import { AtmosphereSystem } from '../systems/AtmosphereSystem';
 import { PlatformBridge } from '../platform';
+import { prefersReducedMotion } from '../systems/MotionPreferences';
 import { SaveSystem } from '../systems/SaveSystem';
 import {
   isCheckpointSafePhase,
@@ -2714,6 +2715,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private shake(duration: number, intensity: number, preGranted = false): void {
+    // Screen movement is decorative; gameplay telegraphs remain visible without it.
+    if (prefersReducedMotion()) return;
     if (preGranted || this.impact.allowCameraShake(this.time.now)) {
       this.cameras.main.shake(duration, intensity);
     }
