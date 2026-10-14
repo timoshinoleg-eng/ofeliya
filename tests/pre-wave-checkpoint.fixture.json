@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "rulesetVersion": 2,
+  "campaignVersion": 2,
+  "savedAtEpochMs": 1791976256360,
+  "runSeed": "real-base-v2-fixture",
+  "difficultyId": "standard",
+  "controlMode": "one-hand",
+  "resumed": false,
+  "director": {
+    "stageId": "bloodstream",
+    "phase": "PLAYING",
+    "milestoneIndex": 2,
+    "runStarted": true
+  },
+  "runState": {
+    "run": {
+      "timeMs": 60000,
+      "kills": 0,
+      "hostCellsInfected": 0,
+      "comboBest": 0,
+      "maxNoDamageMs": 60000,
+      "bossesDefeated": 0,
+      "currentStageOrder": 1,
+      "highestStageOrder": 1,
+      "bossClearTimesMs": {},
+      "evolutionsSeen": [],
+      "legendaryIds": [],
+      "legendaryPity": 0,
+      "legendaryOffersSeen": 0,
+      "highestLevel": 1,
+      "stageBuilds": {}
+    },
+    "stage": {
+      "id": "bloodstream",
+      "order": 1,
+      "timeMs": 60000,
+      "level": 1,
+      "xp": 0,
+      "xpNext": 5,
+      "kills": 0,
+      "hostCellsInfected": 0,
+      "combo": 0,
+      "comboTimer": 0,
+      "noDamageMs": 60000,
+      "hp": 100,
+      "maxHp": 100,
+      "damageMul": 1,
+      "fireRateMul": 1,
+      "speedMul": 1,
+      "magnetMul": 1,
+      "projectiles": 1,
+      "pierce": 0,
+      "orbitBlades": 0,
+      "novaLevel": 0,
+      "regen": 0,
+      "infectionSpeedMul": 1,
+      "infectionRadiusMul": 1,
+      "lysisDamageMul": 1,
+      "lysisRadiusMul": 1,
+      "lysisRnaBonus": 0,
+      "stacks": {},
+      "evolutions": []
+    }
+  },
+  "rng": {
+    "seed": "real-base-v2-fixture",
+    "states": {
+      "progression": 236388905,
+      "enemy-kind": 562962899,
+      "enemy-spawn": 3275856360,
+      "elite": 2570953397,
+      "host-cell": 2743795019,
+      "loot": 123323120
+    }
+  },
+  "wave": {
+    "spawnAcc": 0,
+    "spawnedElites": 0,
+    "minionAcc": 0
+  },
+  "heartbeat": {
+    "nextImpactAtMs": 12000,
+    "telegraphedImpactAtMs": null,
+    "pressureUntilMs": null,
+    "pressureBoss": false,
+    "bossWasActive": false
+  },
+  "hostCells": {
+    "spawnAcc": 0,
+    "firstSpawned": false,
+    "cells": [
+      {
+        "active": false,
+        "infection": 0,
+        "x": 0,
+        "y": 0,
+        "spawnedAgoMs": 0
+      },
+      {
+        "active": false,
+        "infection": 0,
+        "x": 0,
+        "y": 0,
+        "spawnedAgoMs": 0
+      },
+      {
+        "active": false,
+        "infection": 0,
+        "x": 0,
+        "y": 0,
+        "spawnedAgoMs": 0
+      },
+      {
+        "active": false,
+        "infection": 0,
+        "x": 0,
+        "y": 0,
+        "spawnedAgoMs": 0
+      },
+      {
+        "active": false,
+        "infection": 0,
+        "x": 0,
+        "y": 0,
+        "spawnedAgoMs": 0
+      },
+      {
+        "active": false,
+        "infection": 0,
+        "x": 0,
+        "y": 0,
+        "spawnedAgoMs": 0
+      }
+    ]
+  },
+  "runtime": {
+    "playerX": 195,
+    "playerY": 422,
+    "lastCarrierUsed": false,
+    "heartbeatBeatIndex": 0,
+    "zeroPointNextInMs": 0
+  }
+}

@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { buildSync } from 'esbuild';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 
@@ -81,7 +81,7 @@ try {
     director: director.snapshot(),
     runState: state.snapshotForCheckpoint(),
     rng: rng.snapshot(),
-    wave: { spawnAcc: 0, spawnedElites: 0, minionAcc: 0, anomalySpawned: false },
+    wave: { spawnAcc: 0, spawnedElites: 0, minionAcc: 0, waveEventIndex: 0, anomalySpawned: false },
     heartbeat: heartbeat.snapshot(),
     hostCells: {
       spawnAcc: 0,
@@ -106,6 +106,25 @@ try {
   assert(validateRunCheckpoint(checkpoint), 'valid checkpoint rejected');
   assert(RunCheckpoint.save(checkpoint), 'valid checkpoint was not persisted');
   assert(RunCheckpoint.load()?.runSeed === rng.seed, 'persisted checkpoint did not round-trip');
+
+  // Produced by the real pre-wave release (6a5cf5be), not a current fixture
+  // with selected fields deleted. Preserve all six historical stream states.
+  const preWave = JSON.parse(readFileSync('tests/pre-wave-checkpoint.fixture.json', 'utf8'));
+  assert(validateRunCheckpoint(preWave), 'real pre-wave v2 checkpoint rejected');
+  storage.set(RUN_CHECKPOINT_STORAGE_KEY, JSON.stringify(preWave));
+  assert(RunCheckpoint.load(), 'real pre-wave checkpoint was removed from storage');
+  const oldRng = new RunRng(preWave.runSeed);
+  oldRng.restore(preWave.rng);
+  const freshRng = new RunRng(preWave.runSeed);
+  for (const stream of ['wave-event', 'anomaly']) {
+    assert(oldRng.next(stream) === freshRng.next(stream), `new ${stream} stream not derived from seed`);
+  }
+  for (const [stream, oldState] of Object.entries(preWave.rng.states)) {
+    assert(oldRng.snapshot().states[stream] === oldState, `migration shifted historical ${stream}`);
+  }
+  const partialLegacy = structuredClone(preWave);
+  delete partialLegacy.rng.states.loot;
+  assert(validateRunCheckpoint(partialLegacy) === null, 'legacy checkpoint accepted missing original stream');
 
   // Additive migration: a checkpoint written before the mini-boss stream/flag
   // existed must still validate (RunRng.restore re-derives the missing stream).
