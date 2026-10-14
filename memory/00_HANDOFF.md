@@ -1,3 +1,44 @@
+# Render investigation — 2026-10-14
+
+PR #199 is merged as `51b910a0e8031ca477daf701ca1de1b31023cf01`.
+Final PR CI [38441586488](https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38441586488)
+and main CI [38443697280](https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38443697280)
+passed build, browser-smoke and production-contract. Merge used `[skip render]`.
+
+Authenticated dashboard inspection used `timoshin.oleg@gmail.com` and service
+`srv-db5ro5vlk1mc73b0v0eg`. Visible settings: GitHub repository
+`timoshinoleg-eng/ofeliya`, branch `main`, empty root directory, Auto Deploy
+`After CI Checks Pass`; no included build paths; ignored paths `memory/**`,
+`PROJECT_IDENTITY.md`, `deploy/RENDER.md`; health check `/ready`.
+The account has GitHub login `timoshinoleg-eng`. These are UI observations,
+not proof that GitHub events/checks reach Render successfully.
+
+The live `c0c72fa` deployment `dep-db6vmg4s728c73cv4010` and four earlier
+entries show trigger API; the initial deployment shows First Deploy.
+GitHub installation `88263801` was active but restricted to only
+`junior_middle_it` and `coder_survival`; `ofeliya` was missing from selected
+repositories. This is a concrete integration access defect, consistent with
+missing automatic deployment events; historical webhook delivery was not inspected.
+With explicit owner approval, only `timoshinoleg-eng/ofeliya` was added and Save
+clicked. GitHub redirected to Render with `setup_action=update`. Reopening the
+installation confirmed three saved repositories, including ofeliya, and disabled
+Save/Cancel controls. Other repository grants and the permission set were preserved.
+No API key was created or recovered; no manual deployment, service setting or
+production data was changed. A fresh service Events check after Save still
+showed 35 entries, no new deployment and live source `c0c72fa`.
+
+Repository access is corrected; end-to-end automatic deployment is not yet
+verified. The maintenance merge's `[skip render]` deliberately suppresses that
+commit, so it cannot validate the fix. Historical trigger attribution remains
+unproven beyond the observed access defect.
+On the next authorized runtime release, use a commit affecting included paths
+without a Render skip phrase, confirm all checks on the exact main SHA, then
+observe a Render automatic deployment of that SHA before manual/API fallback.
+If absent, inspect events, repository grants and GitHub event/check delivery.
+Reference: https://render.com/docs/deploys and https://render.com/docs/monorepo-support.
+
+## Previous snapshots (current findings above take precedence)
+
 # Telegram bot image follow-up — 2026-10-13
 
 PR #199 (`fix/telegram-bot-image-20261013`) starts from main `f48c143`.
