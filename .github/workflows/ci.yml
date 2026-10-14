@@ -172,8 +172,9 @@ jobs:
   browser-smoke:
     needs: build
     runs-on: ubuntu-22.04
-    # The additional 18 Legendary layout cases need headroom beyond the existing suite.
-    timeout-minutes: 15
+    # The full browser suite plus evidence sampling and post-stage visual checks exceeds 15 min.
+    # Increase only this browser job's cap; keep the build and contract limits unchanged.
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
