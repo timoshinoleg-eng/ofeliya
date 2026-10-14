@@ -214,6 +214,7 @@ const WRITE_RATE_LIMIT =
     ? configuredWriteRateLimit
     : 20;
 const writeRateByActor = new Map();
+const writeRateByVerifiedActor = new Map();
 const writeRateByIp = new Map();
 
 const MAX_RUN_GRANTS = 10_000;
@@ -393,6 +394,8 @@ function requestIp(req) {
 }
 
 function allowWriteRequest(req, scope, actor, verified, now = Date.now(), actorLimit = WRITE_RATE_LIMIT) {
+  // Anonymous key churn must never evict counters for signed users.
+  if (verified && actor) return allowFixedWindow(writeRateByVerifiedActor, scope + ':' + actor, actorLimit, now);
   // Already-blocked actors must not drain their neighbours' proxy/NAT budget.
   if (actor && !allowFixedWindow(writeRateByActor, scope + ':' + actor, actorLimit, now)) return false;
   // A cryptographically verified identity has its own bounded budget. A shared

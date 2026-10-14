@@ -1962,9 +1962,14 @@ export class GameScene extends Phaser.Scene {
     Sfx.play('bossphase');
   }
 
+  /** Lifecycle authority shared by enemy state machines and damage callbacks. */
+  isCombatActive(): boolean {
+    return isCombatPhase(this.stageDirector.phase);
+  }
+
   /** Radial burst impact: same damage pipeline as the boss pressure wave, scaled down. */
   triggerAnomalyBurst(anomaly: Enemy, radius: number, damage: number): void {
-    if (!isCombatPhase(this.stageDirector.phase) || !anomaly.active || anomaly.kind !== 'anomaly') return;
+    if (!this.isCombatActive() || !anomaly.active || anomaly.kind !== 'anomaly') return;
 
     const wave = this.add
       .circle(anomaly.x, anomaly.y, 24, COLORS.purple, 0.04)

@@ -1,5 +1,4 @@
 import Phaser from 'phaser';
-import { isCombatPhase } from './StageDirector';
 import { artScale, artSourceFactor } from './ArtMetrics';
 import { biologicalAtlasKey, biologicalFrameAt } from './BiologicalAnimation';
 import { COLORS, ELITE, ENEMY_DEFS, type EnemyKind } from './config';
@@ -267,7 +266,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   preUpdate(time: number, delta: number): void {
     super.preUpdate(time, delta);
-    if (this.kind === 'anomaly' && this.gs && !isCombatPhase(this.gs.stageDirector.phase)) {
+    if (this.kind === 'anomaly' && this.gs && !this.gs.isCombatActive()) {
       (this.body as Phaser.Physics.Arcade.Body)?.setVelocity(0, 0);
       this.anomalyTelegraph?.setVisible(false);
       return;

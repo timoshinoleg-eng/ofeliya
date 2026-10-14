@@ -14,7 +14,9 @@ for(const k of ['OFELIYA_STATE_URL','OFELIYA_STATE_TOKEN','OFELIYA_BOT_TOKEN','O
 const child=spawn(process.execPath,[resolve('server/hosting.mjs')],{env,stdio:['ignore','pipe','pipe']});let out='';child.stdout.on('data',s=>out+=s);child.stderr.on('data',s=>out+=s);const exited=once(child,'exit');
 const base='http://127.0.0.1:'+outer;
 try{
- for(let i=0;i<100;i++){try{if((await fetch(base+'/ready')).ok)break}catch{}if(child.exitCode!==null)throw Error(out);await new Promise(r=>setTimeout(r,40));}
+ let ready=false;
+ for(let i=0;i<300;i++){try{if((await fetch(base+'/ready')).ok){ready=true;break}}catch{}if(child.exitCode!==null)throw Error(out);await new Promise(r=>setTimeout(r,50));}
+ assert.ok(ready,'fixture gateway startup: '+out);
  const payload={win:false,timeMs:1000,kills:1,level:1};
  const post=async(body,client)=>{const r=await fetch(base+'/api/score',{method:'POST',headers:{'content-type':'application/json','x-forwarded-for':client},body:JSON.stringify(body)});return{status:r.status,body:await r.json()}};
  const attackCounts={};
@@ -33,5 +35,17 @@ try{
  const check2=Object.keys(fields2).sort().map(k=>k+'='+fields2[k]).join('\n');
  const initData2=new URLSearchParams({...fields2,hash:createHmac('sha256',key).update(check2).digest('hex')}).toString();
  assert.equal((await post({platform:'telegram',initData:initData2,payload},'203.0.113.3')).status,200,'anonymous flood blocked another signed user');
+ // Rejected anonymous churn cannot evict a signed actor's exhausted budget.
+ const {readFileSync}=await import('node:fs');
+ const source=readFileSync(resolve('server/index.mjs'),'utf8');
+ const helpers=source.slice(source.indexOf('function allowFixedWindow('),source.indexOf('function analyticsActorHash('));
+ const rate=new Function('clientIp',`const WRITE_RATE_WINDOW_MS=60000,WRITE_RATE_LIMIT=20,TRUSTED_PROXY_HOPS=0,TRUSTED_PROXY_IPS=[];
+ const writeRateByIp=new Map(),writeRateByActor=new Map(),writeRateByVerifiedActor=new Map();
+ ${helpers};return allowWriteRequest;`)(()=> 'shared-proxy');
+ for(let i=0;i<20;i++)assert.equal(rate({},'score','telegram:777',true,1000),true);
+ assert.equal(rate({},'score','telegram:777',true,1000),false);
+ for(let i=0;i<20001;i++)rate({},'score','browser:churn-'+i,false,1000);
+ assert.equal(rate({},'score','telegram:777',true,1000),false,'anonymous churn evicted signed actor budget');
+ assert.equal(rate({},'score','telegram:777',true,61000),true,'budget did not reset at the next window');
  console.log('Gateway rate isolation: actor retries, signed users, anonymous flood and spoofed XFF PASS');
 }finally{child.kill();await exited;if(resolve(dir).startsWith(resolve(tmpdir())+sep))rmSync(dir,{recursive:true,force:true});}

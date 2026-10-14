@@ -31,8 +31,13 @@ assert.equal(before.physicsPaused,true);
 assert.equal(frozen.hp,6,'anomaly damaged the frozen player');
 assert.equal(frozen.result,false,'anomaly ended the run during transition');
 assert.equal(frozen.attackState,'telegraph','anomaly attack state advanced while frozen');
-const guards=await page.evaluate(()=>{
- const s=window.__game.scene.getScene('Game'),enemy=s.wave.anomaly;
+await page.evaluate(()=>{const s=window.__game.scene.getScene('Game');s.requestStageTransitionCommit(s.stageTransition.token)});
+await page.waitForFunction(()=>window.__game.scene.getScene('Game').stageDirector.currentStage.id==='heart');
+assert.equal(await page.evaluate(()=>!!window.__game.registry.get('runResult')),false);
+await page.evaluate(()=>{const g=window.__game;g.scene.stop('UI');g.scene.stop('Game');g.scene.start('Game')});
+await page.waitForFunction(()=>window.__game.scene.getScene('Game').stageDirector.currentStage.id==='bloodstream'&&window.__game.scene.isActive('UI'));
+const guards=await page.evaluate(async()=>{
+ const g=window.__game,s=g.scene.getScene('Game');g.scene.getScene('UI').dismissProgressionForStageBoundary();g.scene.resume('Game');s.runState.stage.hp=6;const enemy=s.spawnEnemy('anomaly',s.player.x,s.player.y,false);s.wave.anomaly=enemy;
  for(const phase of ['STAGE_START','BOSS_DEFEATED','STAGE_TRANSITION','RUN_ENDED']){
   s.stageDirector.phase=phase;s.player.hurtUntil=0;
   s.triggerAnomalyBurst(enemy,150,14);
@@ -40,12 +45,22 @@ const guards=await page.evaluate(()=>{
  }
  s.cancelStageTransition();s.stageDirector.phase='PLAYING';s.runState.stage.hp=100;s.player.hurtUntil=0;
  s.triggerAnomalyBurst(enemy,150,14);
- return {combatHp:s.runState.stage.hp};
+ const combatHp=s.runState.stage.hp;
+ const {WaveDirector}=await import('/src/game/WaveDirector.ts');
+ const {STAGES}=await import('/src/game/StageDefinitions.ts');
+ enemy.deactivateForStageReset();
+ s.wave=new WaveDirector(s,s.enemies,STAGES[0],s.difficulty,()=>0.5,()=>0.5,()=>0.5);
+ s.awaitingChoice=false;s.legendaryRewardPending=false;s.pendingEvolutionCeremony=null;
+ s.pendingLegendaryCeremony=null;s.hitStopped=false;s.zeroPointUntil=0;s.bossDefeatCeremony=null;
+ const def=STAGES[0].waveEvents[0];s.runState.stage.timeMs=def.atMs-def.telegraphMs-16;
+ s.runState.run.timeMs=s.runState.stage.timeMs;
+ const safe=s.saveCheckpointNow(),baseline=localStorage.getItem('ofeliya_run_checkpoint_v1');
+ s.runState.stage.timeMs=def.atMs-def.telegraphMs;s.wave.updateWaveEvents(s.runState.stage.timeMs);
+ const blocked=s.saveCheckpointNow();
+ return {combatHp,safe,blocked,checkpointUnchanged:baseline===localStorage.getItem('ofeliya_run_checkpoint_v1'),pending:s.wave.waveEventInProgress};
 });
-assert.deepEqual(guards,{combatHp:86},'damage callback must reject frozen phases and retain combat damage');
+assert.deepEqual(guards,{combatHp:86,safe:true,blocked:false,checkpointUnchanged:true,pending:true},'damage callback must reject frozen phases and retain combat damage');
 assert.deepEqual(errors,[]);
 console.log('Anomaly lifecycle: real Phaser frozen state + damage guards PASS');
 }catch(e){console.error(e.stack);process.exitCode=1}finally{await browser?.close();await server.close()}
 })();
-
-
