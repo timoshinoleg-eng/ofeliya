@@ -250,6 +250,9 @@ jobs:
       - name: Video interstitial fail-safe smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/video-interstitial-smoke.cjs
 
+      - name: Keyboard and touch video skip accessibility smoke
+        run: npm run test:video-a11y
+
       - name: Codex and mastery browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/codex-smoke.cjs
 
