@@ -1813,6 +1813,7 @@ export class GameScene extends Phaser.Scene {
       this.stageTransition !== null ||
       this.bossDefeatCeremony !== null ||
       this.wave.anomalyInProgress ||
+      this.wave.waveEventInProgress ||
       this.hitStopped ||
       this.time.now < this.zeroPointUntil
     ) {

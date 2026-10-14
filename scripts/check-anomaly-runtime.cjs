@@ -32,6 +32,7 @@ const { Enemy } = source('game/Enemy.ts');
 const { WaveDirector } = source('game/WaveDirector.ts');
 const { BLOODSTREAM_STAGE } = source('game/StageDefinitions.ts');
 const { STANDARD_DIFFICULTY } = source('game/DifficultyProfile.ts');
+const { RunRng } = source('game/RunRng.ts');
 Module._load = originalLoad;
 
 function anomaly(kind = 'radial-burst') {
@@ -66,6 +67,39 @@ function anomaly(kind = 'radial-burst') {
 }
 
 const cases = [
+  ['resume never re-plans an in-flight warning from advanced RNG', () => {
+    const def = BLOODSTREAM_STAGE.waveEvents[1];
+    const future = { ...def, id: 'future-resume', atMs: def.atMs + 5000 };
+    const stage = { ...BLOODSTREAM_STAGE, waveEvents: [def, future] };
+    const events = [];
+    const scene = { player: { x: 100, y: 200 }, runState: { stage: { timeMs: def.atMs - def.telegraphMs } },
+      announceWaveEvent(d) { events.push({ id: d.id, at: this.runState.stage.timeMs }); } };
+    const rng = new RunRng('resume-warning');
+    const wave = new WaveDirector(scene, {}, stage, STANDARD_DIFFICULTY,
+      () => 0.5, () => 0.5, () => rng.next('wave-event'));
+    wave.updateWaveEvents(scene.runState.stage.timeMs);
+    assert.equal(wave.waveEventInProgress, true, 'pending wave must prohibit a new checkpoint');
+    const snapshot = wave.snapshot(), rngSnapshot = rng.snapshot();
+    scene.runState.stage.timeMs = def.atMs - 100;
+    const restored = new WaveDirector(scene, {}, stage, STANDARD_DIFFICULTY,
+      () => 0.5, () => 0.5, () => rng.next('wave-event'));
+    restored.restore(stage, snapshot);
+    events.length = 0;
+    restored.fireWaveEvent = () => events.push({ fired: true, at: scene.runState.stage.timeMs });
+    restored.updateWaveEvents(scene.runState.stage.timeMs);
+    assert.deepEqual(events, [], 'restored stale warning was re-announced');
+    assert.deepEqual(rng.snapshot(), rngSnapshot, 'restore consumed advanced RNG a second time');
+    scene.runState.stage.timeMs = def.atMs;
+    restored.updateWaveEvents(scene.runState.stage.timeMs);
+    assert.deepEqual(events, [], 'in-flight restored event must be consumed');
+    scene.runState.stage.timeMs = future.atMs - future.telegraphMs;
+    restored.updateWaveEvents(scene.runState.stage.timeMs);
+    scene.runState.stage.timeMs = future.atMs;
+    restored.updateWaveEvents(scene.runState.stage.timeMs);
+    assert.equal(events[0].id, future.id);
+    assert.equal(events[1].at - events[0].at, future.telegraphMs);
+    assert.equal(restored.waveEventInProgress, false);
+  }],
   ['radial attack keeps its announced radius/damage through recovery', () => {
     const { enemy, events } = anomaly();
     enemy.updateAnomalyBehavior(1000, 170, 1, 0);
