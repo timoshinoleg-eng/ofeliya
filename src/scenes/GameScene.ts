@@ -563,7 +563,6 @@ export class GameScene extends Phaser.Scene {
       this.registry.remove('runResult');
       this.registry.remove('joy');
       this.registry.remove('aimJoy');
-      this.registry.remove('adaptiveThreat');
       this.registry.remove('runtimeQuality');
     });
   }
@@ -679,10 +678,6 @@ export class GameScene extends Phaser.Scene {
     this.updateAdaptiveAudio(delta);
     this.updateHeartbeatSignature(stage, st.timeMs);
     this.wave.update(delta);
-    this.registry.set('adaptiveThreat', {
-      ...this.wave.debugAdaptiveThreatState,
-      pacingEnabled: this.difficulty.id === 'strained' && !this.dailyRun,
-    });
     this.enemyHealth.update(time);
     this.updateCardiacLineHazard(time);
     this.hostCells.update(time, delta, st.timeMs);
