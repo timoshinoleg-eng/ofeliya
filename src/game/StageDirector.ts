@@ -13,6 +13,10 @@ export type StagePhase =
 
 export type RunEndReason = 'defeat' | 'campaign-complete' | 'abandoned';
 
+export function isCombatPhase(phase: StagePhase): boolean {
+  return phase === 'PLAYING' || phase === 'BOSS_WARNING' || phase === 'BOSS_ACTIVE';
+}
+
 export interface StageDirectorSnapshot {
   stageId: string;
   phase: StagePhase;

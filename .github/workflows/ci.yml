@@ -209,6 +209,9 @@ jobs:
       - name: Daily lifecycle and startup failure browser regressions
         run: npm run test:review-browser
 
+      - name: Anomaly combat freezes across stage lifecycle
+        run: npm run test:anomaly-lifecycle
+
       - name: Built Render gateway CSP startup in Chromium
         env:
           VITE_RELEASE_SHA: ${{ github.sha }}

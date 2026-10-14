@@ -50,6 +50,7 @@ function anomaly(kind = 'radial-burst') {
     anomalyPhase: 1, anomalyAttackState: 'pursuit', anomalyAttackKind: kind,
     nextAnomalyAttackAt: 0, anomalyAura: null, anomalyTelegraph: null,
     gs: {
+      stageDirector: { phase: 'PLAYING' },
       getEnemyPressureMultiplier: () => pressure,
       onAnomalyPhaseChanged() { events.push({ kind: 'phase' }); },
       triggerAnomalyBurst(_enemy, radius, damage) {

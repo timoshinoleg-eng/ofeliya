@@ -56,6 +56,7 @@ import { RunMilestones } from '../game/RunMilestones';
 import { RunState } from '../game/RunState';
 import {
   StageDirector,
+  isCombatPhase,
   type RunEndReason,
   type StageDirectorEvent,
 } from '../game/StageDirector';
@@ -1962,7 +1963,7 @@ export class GameScene extends Phaser.Scene {
 
   /** Radial burst impact: same damage pipeline as the boss pressure wave, scaled down. */
   triggerAnomalyBurst(anomaly: Enemy, radius: number, damage: number): void {
-    if (!anomaly.active || anomaly.kind !== 'anomaly') return;
+    if (!isCombatPhase(this.stageDirector.phase) || !anomaly.active || anomaly.kind !== 'anomaly') return;
 
     const wave = this.add
       .circle(anomaly.x, anomaly.y, 24, COLORS.purple, 0.04)
