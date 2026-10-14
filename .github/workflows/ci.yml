@@ -241,6 +241,9 @@ jobs:
       - name: Legal dialog keyboard focus and cleanup
         run: npm run test:legal-focus
 
+      - name: Primary menu keyboard navigation and lifecycle
+        run: npm run test:menu-keyboard
+
       - name: Gameplay comprehension browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/gameplay-comprehension-smoke.cjs
 
