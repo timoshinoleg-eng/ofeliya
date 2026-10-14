@@ -1,31 +1,3 @@
-# Issue #205 first subtask: accessible video skip — 2026-10-14
-
-Branch `agents/a11y-20261014`, base `30a534fbf1656979c20434d4f4d724eea69c385f`.
-Only video skip accessibility implemented: native full-overlay button, Enter/Space
-click semantics, retained pointerup skip, one-shot guard, initial focus and safe
-restoration. Pointerdown suppresses touch compatibility mouse focus after removal.
-No gameplay/RNG/checkpoint/physics/density changes; PR #204 branch untouched.
-
-Checks: `npm ci` and `npm run test:video-a11y` PASS. `npm run build` PASS with
-`VITE_RELEASE_SHA` set to the base HEAD for this local uncommitted-tree check.
-Browser regression imports the actual production TS in Vite/Chromium and covers
-keyboard/Tab, mouse/touch, resize/layering, cleanup/racing detached events, pending
-and rejected autoplay, start/stall/hard-limit watchdogs, ended/error/abort/cancel,
-and moved/disconnected focus targets. Media is mocked; native device playback and
-screen-reader announcement are not verified. Existing `npm run test:video` cannot
-launch on Windows because it only searches Linux Chrome paths. No dependencies added.
-Build warnings: runtime-config classic script and two unresolved font references.
-Sandbox esbuild access failure and one concurrent-build OOM were bypassed by an
-authorized unsandboxed, serial rerun; no config/gate relaxation was made.
-No push, PR, merge or deployment. Remaining issue #205 subtasks are outside scope.
-
-## Режим проверки
-Review only this subtask: native button semantics, focus safety and unchanged
-completion/watchdog behavior. Run `npm run test:video-a11y`; build needs an explicit
-40-character `VITE_RELEASE_SHA`. Report confirmed / disproved / questions.
-
-## Previous handoff (historical; no production re-verification in this task)
-
 # Legacy mini-boss warning follow-up — 2026-10-14
 
 PR202 merged as9a6d327 after green PR CI38559170274. Before publication, an additional

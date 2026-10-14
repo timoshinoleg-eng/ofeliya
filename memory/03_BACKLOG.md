@@ -1,12 +1,3 @@
-# Issue #205 scope handoff — 2026-10-14
-
-- First independent subtask (keyboard-operable interstitial skip) implemented and
-  locally verified on `agents/a11y-20261014`; no remote publication authorized.
-- Other issue #205 work remains outside this task; do not edit PR #204 branch.
-- Real phone media playback and screen-reader acceptance remain unverified.
-- Optional later work: make existing Linux-only `test:video` browser discovery
-  portable. Not changed here; focused `test:video-a11y` runs on Windows Chromium.
-
 # Legacy mini-boss warning follow-up — 2026-10-14
 
 PR202 merged as9a6d327 after green PR CI38559170274. Before publication, an additional
