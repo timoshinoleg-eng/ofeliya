@@ -1,5 +1,15 @@
 # Independent Phase 1 code review
 
+## Continuation review — 16 October 2026
+
+Final candidate head is `44c657935f3124724fe6a3191d1b29c35189e4f2`. Its only code/test delta from `d5cae44` is seven lines in `scripts/gameplay-comprehension-smoke.cjs`; four project handoff files also record continuation state. All fifteen previously reviewed file digests still match. The updated sixteen-file manifest SHA256 is `77158aae1bd9e4ea7d490b31a9c386951e37279f7d1b82bf9f31bdc278b150c1`.
+
+Independent source review established no actionable P0/P1/P2 in the synchronization delta. An earlier real `spawnEnemy('boss')` starts a 940 ms presentation, during which contextual hints queue. Reading the host exit hint immediately races that presentation. Waiting for the actual `activeBossReveals === 0` neither mutates scene state nor weakens any host assertion; a stalled reveal still fails the 3000 ms timeout. Existing boss-presentation contracts verify overlapping completion, queue flushing and unchanged onboarding counters.
+
+Runtime evidence: the full unchanged comprehension suite with this wait passed twice across all six viewport fixtures plus returning/resume cases using installed desktop Chrome. A separate in-memory run removing only the wait reproduced the original CI symptom: active reveal count 1, the decay message queued, and the stale infection instruction failing `/ОСЛАБЕВАЕТ/`. Another no-wait run encountered an unrelated zero-clock heartbeat multiplier; no gameplay or expected-damage value was changed. Fresh full presentation contracts and TypeScript also passed. Hosted exact-head CI and public deployment evidence are recorded separately in the progress report.
+
+The following sections preserve earlier review snapshots and their original head attribution.
+
 Reviewed branch: `visual/phase1-ui-20261015`. Exact final HEAD: `d5cae44ac969b88607179d2693100380226a53b3`, including world-art commit `ee19eea`, UI commit `334f946`, boss/onboarding correction `b739945`, and the final HUD verification contract update. Base: `aba70324d13592fbcd86894fb29f395ac201f48a`. Working tree was clean at the final followup.
 
 The fifteen reviewed source/test/package file SHA-256 values are recorded in `code-review-digests.json`; SHA-256 of the final manifest: `7cdc3bd3da3ea774b760478db855f3ed67f5acbed1015b2aa85c2220e31c88b8`. Earlier reviews covered a working-tree snapshot, `334f946`, and `b739945`; this followup supersedes their file identity and incorporates the result-button, reveal, and HUD verification fixes. Later changes require re-review of affected files.

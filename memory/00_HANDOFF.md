@@ -1,3 +1,22 @@
+# Verified Phase0/1 publication — 16 October 2026
+
+Product candidate44c657935f3124724fe6a3191d1b29c35189e4f2 is live on the existing Render Free service, deploy dep-db8ko259fdbs739ncmsg, finished00:57:09 Moscow. Exact-head CI38812038028 and visual matrix38812172355 passed all jobs. PR213/214/215 remain open; main is unchanged aba70324. No merge or service-setting change was made. The seven-line comprehension wait is reviewed and passed twice locally; production source did not change during this continuation.
+
+Read docs/frontend-overhaul/release/RELEASE_20261016.md for final evidence and limitations, including public release/assets hash parity, healthy readiness/persistence, preserved74 immutable scores/4 profiles/registration keys and revision150→151. Public desktop menu startup320/360/390 and touch gameplay390 passed, QA globals absent; visual inspection at390 confirmed card choice, field/joystick and onboarding progression. Five optional mutation-art requests were cancelled; all3 resources independently returned200. Zero page/console/CSP/HTTP errors. Raw private state backups and credentials are excluded.
+
+Completed: test synchronization, exact-head CI/review binding, fresh backup, authorized pinned deployment, public/state/browser verification and documentation. Remaining: physical MAX/Telegram/iOS and phone FPS/thermals/input/newcomer acceptance; rich/full campaign device coverage; separate PR204/207/208/209/210/212 integration and later visual phases. API deployment leaves main auto-deploy enabled, so a future successful main release can supersede this pin. Do not deploy the documentation branch or claim the entire master task complete.
+
+## Previous snapshots
+# Frontend overhaul continuation — 16 October 2026
+
+Continue Phase0/1 from the implemented candidate; do not restart the visual work. Main snapshot is `aba70324d13592fbcd86894fb29f395ac201f48a`. PR213 (world), PR214 (dependent UI), and PR215 (documentation) are open. Product checkout is `../repo` on `visual/phase1-ui-20261015`; this documentation checkout is `docs/frontend-overhaul-20261015`. Candidate recorded head is `d5cae44ac969b88607179d2693100380226a53b3`; a test-only comprehension synchronization fix is pending. Refresh exact heads/checks before release and append final SHA here after verification.
+
+Owner authorized deployment after validation and explicitly prohibited main merges. Deployment is pending; preparation/readback from 15 October is historical evidence, not candidate publication. Refresh the pre-deployment backup/baseline, require exact-head CI, then verify live identity, assets/API/browser and state continuity. Keep PR204/207/208/209/210/212 separate; no integration is implicitly authorized.
+
+Read `FRONTEND_OVERHAUL_PROGRESS.md` and `docs/frontend-overhaul/` for source audit, concepts, captures, reviews, walkthrough and performance limitations. Independent source review accepted the saved comprehension fix: waiting for actual `activeBossReveals === 0` removes fixture interference from an earlier spawned boss, preserves all host assertions and fails if completion stalls. Local rerun and hosted CI remain separate required evidence. Physical S20+/MAX/TG/iOS, live combat density/FPS/memory/thermals, newcomer acceptance and full campaign coverage remain open. Future phases are not completed by Phase1.
+
+## Previous snapshots
+
 # Frontend overhaul candidate — 15October2026
 
 Read `FRONTEND_OVERHAUL_PROGRESS.md` first; full evidence/design under `docs/frontend-overhaul/`. Starting main aba70324, initial public marker30a534f. World PR213 ee19eea; dependent UI PR214334f946 (base213). This documentation branch is code-free. Do not overwrite parallel PR204/207/208/209/210/212 or claim they are integrated. Main merge remains unauthorized; owner separately authorized deployment after candidate validation. Exact-head CI, blind visual review, full walkthrough, live deployment verification and physical-device/performance gates are not yet complete in this snapshot.

@@ -1,0 +1,52 @@
+{
+  "checkedAt": "2026-10-15T21:57:30.290Z",
+  "expectedSha": "44c657935f3124724fe6a3191d1b29c35189e4f2",
+  "deploy": {
+    "id": "dep-db8ko259fdbs739ncmsg",
+    "status": "live",
+    "sha": "44c657935f3124724fe6a3191d1b29c35189e4f2"
+  },
+  "service": {
+    "id": "srv-db5ro5vlk1mc73b0v0eg",
+    "plan": "free",
+    "settingsUnchanged": true
+  },
+  "public": {
+    "release": "44c657935f3124724fe6a3191d1b29c35189e4f2",
+    "ready": true,
+    "healthy": true,
+    "persistenceHealthy": true,
+    "htmlHashMatches": true,
+    "runtimeHashMatches": true,
+    "serviceWorkerHashMatches": true,
+    "mainScripts": [
+      {
+        "path": "/ofeliya/assets/index-Csouz11m.js",
+        "status": 200,
+        "bytes": 417488,
+        "sha256": "83b2ab312b4dfe4b78895c1519852751cdd519de94f0421ef54d84e1eb44f17b"
+      }
+    ]
+  },
+  "state": {
+    "baselineRevision": 150,
+    "revision": 151,
+    "baselineScores": 74,
+    "scores": 74,
+    "newScores": 0,
+    "baselineProfiles": 4,
+    "profiles": 4,
+    "newProfiles": 0,
+    "baselineRegistrations": 1,
+    "registrations": 1,
+    "newRegistrations": 0,
+    "immutableScoresRetained": true,
+    "profileKeysRetained": true,
+    "registrationKeysRetained": true,
+    "existingProfileValuesChanged": 0,
+    "existingRegistrationValuesChanged": 0
+  },
+  "privateAfterSnapshotSha256": "84dcff218e1ddb43df5a1f40850590408bc076702a8d990b7751defa4b220743",
+  "browserQaHookAbsence": "root browser verification required",
+  "readOnlyRemote": true
+}

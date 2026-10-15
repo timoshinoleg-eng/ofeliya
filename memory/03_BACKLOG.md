@@ -1,3 +1,23 @@
+# Verified Phase0/1 publication — 16 October 2026
+
+Product candidate44c657935f3124724fe6a3191d1b29c35189e4f2 is live on the existing Render Free service, deploy dep-db8ko259fdbs739ncmsg, finished00:57:09 Moscow. Exact-head CI38812038028 and visual matrix38812172355 passed all jobs. PR213/214/215 remain open; main is unchanged aba70324. No merge or service-setting change was made. The seven-line comprehension wait is reviewed and passed twice locally; production source did not change during this continuation.
+
+Read docs/frontend-overhaul/release/RELEASE_20261016.md for final evidence and limitations, including public release/assets hash parity, healthy readiness/persistence, preserved74 immutable scores/4 profiles/registration keys and revision150→151. Public desktop menu startup320/360/390 and touch gameplay390 passed, QA globals absent; visual inspection at390 confirmed card choice, field/joystick and onboarding progression. Five optional mutation-art requests were cancelled; all3 resources independently returned200. Zero page/console/CSP/HTTP errors. Raw private state backups and credentials are excluded.
+
+Completed: test synchronization, exact-head CI/review binding, fresh backup, authorized pinned deployment, public/state/browser verification and documentation. Remaining: physical MAX/Telegram/iOS and phone FPS/thermals/input/newcomer acceptance; rich/full campaign device coverage; separate PR204/207/208/209/210/212 integration and later visual phases. API deployment leaves main auto-deploy enabled, so a future successful main release can supersede this pin. Do not deploy the documentation branch or claim the entire master task complete.
+
+## Previous snapshots
+# Frontend overhaul remaining work — 16 October 2026
+
+- [ ] Finish local verification of the saved comprehension wait, commit/push the reviewed test-only fix, and pass required hosted CI on the final exact SHA. Append final review binding and SHA; no main merge.
+- [ ] Refresh PR213/214/215 status and the documentation evidence ledger. Preserve separate PR204/207/208/209/210/212 and review overlaps only within a later authorized integration.
+- [ ] Complete authorized deployment after checks: refresh pre-deployment private backup/baseline, deploy final tested candidate SHA, then verify live marker/assets/API/browser and preservation of existing remote state. Record actual result; current deployment remains pending.
+- [ ] Complete full campaign/rich-result/legendary/async-state coverage; existing desktop touch recording is a limited slice.
+- [ ] Physical S20+/MAX/TG/iOS readability/input, live100/150/200 actor performance, frame-time/memory/thermals and newcomer acceptance.
+- [ ] Later scoped phases: social/global typography, additional role/animation assets, keyboard/focus/reduced-motion integration and gated HiDPI validation. Do not mark these done from concepts or Phase1 captures.
+
+## Previous snapshots
+
 # Frontend overhaul remaining gates — 15October2026
 
 - [ ] Finish full exact-head CI for213/214 and bind final code-review hashes to final files.

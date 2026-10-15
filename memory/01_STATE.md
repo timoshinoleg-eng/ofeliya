@@ -1,3 +1,22 @@
+# Verified Phase0/1 publication — 16 October 2026
+
+Product candidate44c657935f3124724fe6a3191d1b29c35189e4f2 is live on the existing Render Free service, deploy dep-db8ko259fdbs739ncmsg, finished00:57:09 Moscow. Exact-head CI38812038028 and visual matrix38812172355 passed all jobs. PR213/214/215 remain open; main is unchanged aba70324. No merge or service-setting change was made. The seven-line comprehension wait is reviewed and passed twice locally; production source did not change during this continuation.
+
+Read docs/frontend-overhaul/release/RELEASE_20261016.md for final evidence and limitations, including public release/assets hash parity, healthy readiness/persistence, preserved74 immutable scores/4 profiles/registration keys and revision150→151. Public desktop menu startup320/360/390 and touch gameplay390 passed, QA globals absent; visual inspection at390 confirmed card choice, field/joystick and onboarding progression. Five optional mutation-art requests were cancelled; all3 resources independently returned200. Zero page/console/CSP/HTTP errors. Raw private state backups and credentials are excluded.
+
+Completed: test synchronization, exact-head CI/review binding, fresh backup, authorized pinned deployment, public/state/browser verification and documentation. Remaining: physical MAX/Telegram/iOS and phone FPS/thermals/input/newcomer acceptance; rich/full campaign device coverage; separate PR204/207/208/209/210/212 integration and later visual phases. API deployment leaves main auto-deploy enabled, so a future successful main release can supersede this pin. Do not deploy the documentation branch or claim the entire master task complete.
+
+## Previous snapshots
+# Frontend overhaul state — 16 October 2026
+
+- Phase0 inventory/baseline and Phase1 world/UI candidate exist; the full overhaul is incomplete. Main snapshot: `aba70324`; open PR213 world, PR214 dependent UI, PR215 documentation. Candidate: `d5cae44`, plus pending test-only comprehension fix. Final exact SHA/checks and deployment result must be appended after verification.
+- CI run `38707078826` failed comprehension: interrupted-infection copy expected `/ОСЛАБЕВАЕТ/`, actual prior host-cell hint. Earlier health-bar fixture spawned a real boss reveal, which now correctly queues hints. Saved patch waits up to3000ms for its actual completion before host interactions; no product code or assertion changes.
+- Independent review found no actionable P0/P1/P2 in this test delta. Nominal reveal duration940ms; UI remains active while Game is paused. Stuck reveal still fails the wait. Separate boss-presentation contract covers queued hints, overlapping/duplicate completion, onboarding restoration and unchanged tutorial counters. Runtime/CI results belong to their executing agents and must be recorded separately.
+- Candidate deployment remains pending. Existing 15 October preparation and production marker are prior snapshots. Owner permits validated deployment, prohibits merging main. Preserve existing data/service identity and other open PRs.
+- Captures are frozen/synthetic; walkthrough uses desktop touch emulation/API fixtures. SwiftShader cadence does not prove mobile or live combat performance. Physical S20+/MAX/TG/iOS, newcomer, thermals/memory/FPS and complete campaign gates remain open; later phases remain unfinished.
+
+## Previous snapshots
+
 # Frontend overhaul candidate state — 15October2026
 
 - Initial main aba70324d13592fbcd86894fb29f395ac201f48a; public readback30a534fbf1656979c20434d4f4d724eea69c385f. PR213 ee19eea world; PR214334f946 UI depends on213. Snapshot only; query again before integration.

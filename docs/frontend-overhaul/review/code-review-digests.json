@@ -1,8 +1,8 @@
 {
-  "head": "d5cae44ac969b88607179d2693100380226a53b3",
+  "head": "44c657935f3124724fe6a3191d1b29c35189e4f2",
   "base": "aba70324d13592fbcd86894fb29f395ac201f48a",
   "branch": "visual/phase1-ui-20261015",
-  "capturedAt": "2026-10-15T08:38:46.0948317Z",
+  "capturedAt": "2026-10-15T21:44:54.3926767Z",
   "files": [
     {
       "path": "src/scenes/MenuScene.ts",
@@ -63,6 +63,10 @@
     {
       "path": "scripts/hud-hierarchy-smoke.cjs",
       "sha256": "add84b45b3c4ea6c564d995866f403794738a1255f1579cb54f5613d38402a66"
+    },
+    {
+      "path": "scripts/gameplay-comprehension-smoke.cjs",
+      "sha256": "9f1256c7ca7179d6cbb18beb8a72c676f19d449abbb365eb9c5418e31bb4b776"
     }
   ]
 }

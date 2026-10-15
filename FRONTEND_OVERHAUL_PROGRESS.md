@@ -1,6 +1,10 @@
 # OFELIYA — Frontend overhaul progress
 
-Updated15 October2026 (Europe/Moscow). **Phase0 has a verified inventory and baseline; Phase1 has implemented candidate PRs. Neither the entire master task nor all acceptance gates are complete.**
+Updated 16 October 2026 (Europe/Moscow). **Phase0 has a verified inventory and baseline; Phase1 has implemented candidate PRs. Neither the entire master task nor all physical-device acceptance gates are complete.**
+
+Continuation recovered the interrupted release work. Final candidate is `44c657935f3124724fe6a3191d1b29c35189e4f2`; its only test delta from `d5cae44` waits for the real boss presentation before checking contextual host hints. No production source changed during continuation. The full six-viewport comprehension smoke passed twice, and an isolated no-wait run reproduced the original stale-hint CI failure. All fifteen earlier reviewed file digests remain identical; the refreshed review manifest includes the changed sixteenth test file. Fresh presentation contracts and TypeScript passed. Exact-head CI and live release results are recorded in the release section below; older candidate/pending statements further down preserve the previous snapshot.
+
+**Published and verified:** all exact-head CI jobs and the twelve-case visual matrix passed. Render deployment `dep-db8ko259fdbs739ncmsg` became live on 16 October at00:57:09 Moscow, exact candidate44c6579. Public marker/assets/readiness/persistence and preservation of74 scores/4 profiles were verified. Public desktop Chrome confirms menu startup at320/360/390 and mutation choice, live field and joystick/onboarding progression at390; no page/console/CSP/HTTP errors. Five optional art requests were cancelled and their three resources independently returned200. [Final release evidence, browser captures and limits](docs/frontend-overhaul/release/RELEASE_20261016.md). Main and service settings remain unchanged; PRs remain open. Physical-device/newcomer/later-phase gates remain open.
 
 The candidate replaces broad bright bloodstream lanes with a quieter vascular field, gives antibody/host interiors structure, and applies a coherent specimen presentation to menu, HUD, mutation, boss reveal and results. Narrow menu/result layout and primary-action readability were corrected. These are reviewable code changes and production-build captures, not only recommendations.
 
@@ -11,7 +15,7 @@ The candidate replaces broad bright bloodstream lanes with a quieter vascular fi
 |Starting main|`aba70324d13592fbcd86894fb29f395ac201f48a`; initial clean checkout|
 |Public marker at Phase0 readback|`30a534fbf1656979c20434d4f4d724eea69c385f`; does not establish candidate publication|
 |World PR|[#213](https://github.com/timoshinoleg-eng/ofeliya/pull/213), head `ee19eea`, base main|
-|UI PR|[#214](https://github.com/timoshinoleg-eng/ofeliya/pull/214), head `d5cae44ac969b88607179d2693100380226a53b3`, base PR213 world branch|
+|UI PR|[#214](https://github.com/timoshinoleg-eng/ofeliya/pull/214), head `44c657935f3124724fe6a3191d1b29c35189e4f2`, base PR213 world branch|
 |Documentation|This branch `docs/frontend-overhaul-20261015`; no product source copied here|
 |Merge|**Not authorized.** Do not merge either candidate or existing open work into main|
 |Deployment|Owner separately authorized deployment after validation. Permission is not evidence that deployment is done; exact-SHA CI and live readback remain separate gates|
