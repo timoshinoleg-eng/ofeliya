@@ -1,0 +1,38 @@
+[
+  {
+    "w": 320,
+    "h": 568,
+    "cadence": {
+      "samples": 120,
+      "p50": 16.699999999999818,
+      "p95": 17.099999999999454,
+      "longRatio": 0
+    },
+    "errors": [],
+    "fixture": "frozen rendering + synthetic display states; not live gameplay/device benchmark"
+  },
+  {
+    "w": 360,
+    "h": 640,
+    "cadence": {
+      "samples": 120,
+      "p50": 16.699999999999818,
+      "p95": 16.800000000000182,
+      "longRatio": 0
+    },
+    "errors": [],
+    "fixture": "frozen rendering + synthetic display states; not live gameplay/device benchmark"
+  },
+  {
+    "w": 390,
+    "h": 740,
+    "cadence": {
+      "samples": 120,
+      "p50": 16.699999999999818,
+      "p95": 16.800000000000182,
+      "longRatio": 0
+    },
+    "errors": [],
+    "fixture": "frozen rendering + synthetic display states; not live gameplay/device benchmark"
+  }
+]

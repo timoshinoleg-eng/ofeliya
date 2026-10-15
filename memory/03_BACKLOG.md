@@ -1,3 +1,15 @@
+# Frontend overhaul remaining gates — 15October2026
+
+- [ ] Finish full exact-head CI for213/214 and bind final code-review hashes to final files.
+- [ ] Independent blind before/after visual review; full production-build browser walkthrough including rich result/legendary/async/keyboard states.
+- [ ] Refresh docs/frontend-overhaul/media/after after final captures; append final CI/review/readback evidence.
+- [ ] Execute authorized exact-tested-SHA deployment only after candidate checks; backup/state continuity, live marker/API/assets/browser validation. Main merge remains prohibited without separate permission.
+- [ ] Physical S20+/MAX/TG/iOS, live density/frame-time/memory/thermals and newcomer acceptance.
+- [ ] Later scoped integration with204/207/208/209/210/212; no blind cherry-picks.
+- [ ] Remaining social typography, authored additional enemy animation/role kit and gated HiDPI phases; current concepts are not production asset acceptance.
+
+## Preserved earlier snapshots
+
 # Review follow-ups — 2026-10-15
 
 Branch fix/review-followups-20261015 starts from main30a534f. Owner asked to continue remaining review recommendations. Four targeted follow-ups: Boot/Menu startup recovery now waits for the first usable Menu frame and catches scene exceptions/stalls; CI builds the actual telegram-bot target and imports it with networking disabled and a deadline; registry mirror-write failures lower health until a successful write; profile migration publishes a staged candidate only after its atomic disk write.

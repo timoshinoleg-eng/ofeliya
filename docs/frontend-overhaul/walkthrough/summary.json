@@ -1,0 +1,16 @@
+{
+  "sourceSha": "b7399458394ee3f9e08c9d26f6eae67320b1ae99",
+  "renderer": "Canvas",
+  "recording": "real canvas MediaRecorder VP8 at15fps, silent; desktop touch emulation; API fixtures; video downloads deliberately blocked",
+  "segments": 34,
+  "segmentMs": 2100,
+  "events": [
+    "Real touch CTA reached Game/UI after blocked-video fallback",
+    "Touch mutation choice at segment1",
+    "Touch mutation choice at segment23",
+    "Touch mutation choice at segment29",
+    "Touch result restart at segment32",
+    "Touch mutation choice at segment33"
+  ],
+  "errors": []
+}

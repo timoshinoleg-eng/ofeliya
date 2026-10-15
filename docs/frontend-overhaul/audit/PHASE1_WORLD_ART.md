@@ -1,0 +1,11 @@
+# Phase 1 procedural world art
+
+Source owner: `src/game/StrainZeroTextures.ts` only. Original procedural drawing authored for OFELIYA in this pass; no external art, generated media or asset-byte changes. Packaged WebP provenance remains unchanged.
+
+The old `blood-plasma` four broad evenly spaced sinusoidal lanes dominate the inspected390-gameplay baseline. The new256×256 tile uses ink `#080f14`, four soft vascular tissue volumes with wrapped copies, two sparse branching capillary paths and19 low-alpha microscopic points. Existing atmosphere provides moving erythrocytes and host decor. The tile remains deterministic, boot-baked and uses the same key/dimensions; no RNG, scene-loop, entity, physics, object-pool or quality change.
+
+Antibody now receives a cool internal receptor scaffold and three warm internal receptor points. Host cell receives an offset dark nucleus, green-grey nuclear envelope, three broken internal membrane arcs and four sparse organelles. Both overlays use Canvas `source-atop` after either packaged art or procedural fallback: original alpha/exterior and backing dimensions remain unchanged. The existing six-frame biological atlas consumes the same resulting bounded source.
+
+Validation during parallel development: TypeScript passes; core-art15/16 pass (remaining Menu source fixture requires new coordinator-owned VISUAL injection); VFX12 contracts pass; biological deterministic pixels/12 invariant frames/fallback pass; atmosphere8/9 pass (old test specifically requires thick broad sinusoidal lanes removed by this redesign). Coordinator owns appropriate fixture updates and fresh visual comparisons. No mobile/FPS/perceptual sign-off claimed.
+
+Final rerun after authorized fixture updates: `npm run test:presentation` exit0: core-art16/16, VFX12, atmosphere9/9, audio20/20, biological pixels/12 frames/fallback, and23 pinned audio assets PASS. Atmosphere now executes real bake with RNG throwing and checks bounded low-contrast tissue gradients, exact nine toroidal copies per cloud, transparent finite edge, retained256×256 dimensions and rejection of wide lane stripes. Other Heart/pool/lifecycle assertions retained. Root updated Menu fixture injection separately. TypeScript repeated exit0.

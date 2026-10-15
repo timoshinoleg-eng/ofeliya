@@ -1,0 +1,1042 @@
+{
+  "observedAt": "2026-10-14T21:58:31.1558334+00:00",
+  "main": {
+    "date": "2026-10-14T21:28:41Z",
+    "message": "Fix startup recovery and persistence failures (#211)\n\nScene exceptions or stalled scene loaders could leave startup without a retry screen because the failure boundary ended before Boot/Menu finished. Keep it open through the first usable Menu frame and dispose scoped listeners on success, error and abort. Real Phaser browser fixtures cover thrown errors, rejected promises, stalls, late completion and healthy startup.\n\nA failed profile migration disk write could leave an unpersisted claim visible in memory. Stage the candidate and publish it only after the atomic local write; fault tests verify signed reads remain unchanged, retry claims once, and durable restore retains the result. Telegram registry mirror-write failures now lower health until a successful write; rejected registration remains uncommitted.\n\nCI additionally builds the standalone telegram-bot Docker target and imports it with networking disabled, fake credentials and a deadline, preventing missing module dependencies from escaping the existing text guard.\n\nValidation: six real-browser startup cases, existing review-browser scenarios, TypeScript, startup contracts, Telegram bot contract and the full server suite (75 core checks plus security/durable/hosting suites) passed locally. New behavior regressions failed before their fixes. Independent Luna review found no P1/P2. Production-config build of exact head545b0c2 passed without QA hooks. Local Docker Desktop could not start; the actual image build and offline import both passed hosted production-contract job in CI38639132437. The separate Render Density QA38639132496 also passed; the full browser job and publication remain pending. A fresh private backup revision142 (74 scores) passed hash round-trip and isolated restore. Physical MAX/Telegram, S20+, iOS, FPS and newcomer acceptance remain open.",
+    "sha": "aba70324d13592fbcd86894fb29f395ac201f48a"
+  },
+  "publicRelease": {
+    "release": "30a534fbf1656979c20434d4f4d724eea69c385f",
+    "version": "0.4.1-rc.1",
+    "indexSha256": "1f25f492a4cb2d2d0dc53b421355e7d72c7291d5f939ddda206dcb8948946c0b",
+    "serviceWorkerSha256": "6f8d8a46fe50c6864fa46316bceb7c56ba77822e6fdbd00a97baddb25f67e022",
+    "runtimeConfigSha256": "40061b55598b4338a4bcc6b122534afa84cf7cf23f41bdb93d6c0604be7058f3"
+  },
+  "pullRequests": [
+    {
+      "baseRefName": "main",
+      "files": [
+        {
+          "path": ".gitignore",
+          "additions": 1,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "THIRD_PARTY_NOTICES.md",
+          "additions": 17,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "VIDEO_STAGE4_PREP.md",
+          "additions": 11,
+          "deletions": 8,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "docs/AUDIO_MASTERING.md",
+          "additions": 37,
+          "deletions": 0,
+          "changeType": "ADDED"
+        },
+        {
+          "path": "package.json",
+          "additions": 2,
+          "deletions": 2,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "public/art/mutation-halo.webp",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "ADDED"
+        },
+        {
+          "path": "public/art/mutation-prism.webp",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "ADDED"
+        },
+        {
+          "path": "public/art/mutation-singularity.webp",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "ADDED"
+        },
+        {
+          "path": "public/art/provenance.json",
+          "additions": 22,
+          "deletions": 1,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "public/audio/audio-manifest.json",
+          "additions": 306,
+          "deletions": 0,
+          "changeType": "ADDED"
+        },
+        {
+          "path": "public/audio/music/loop0.ogg",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "public/audio/music/loop1.ogg",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "public/audio/music/loop2.ogg",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "public/audio/music/loop3.mp3",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "public/audio/music/loop4.mp3",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "public/audio/music/loop5.mp3",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "public/audio/music/loop6.mp3",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "public/audio/sfx/bossphase.mp3",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "ADDED"
+        },
+        {
+          "path": "public/audio/sfx/infect.mp3",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "ADDED"
+        },
+        {
+          "path": "public/audio/sfx/lysis.mp3",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "ADDED"
+        },
+        {
+          "path": "public/audio/sfx/pickup2.mp3",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "ADDED"
+        },
+        {
+          "path": "public/audio/sfx/pickup3.mp3",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "ADDED"
+        },
+        {
+          "path": "public/icons/icon-180.png",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "public/icons/icon-192.png",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "public/icons/icon-512.png",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "public/icons/icon-master.webp",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "ADDED"
+        },
+        {
+          "path": "public/icons/provenance.json",
+          "additions": 7,
+          "deletions": 0,
+          "changeType": "ADDED"
+        },
+        {
+          "path": "public/video/01_start_intro.mp4",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "DELETED"
+        },
+        {
+          "path": "public/video/01_start_intro_v2.mp4",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "DELETED"
+        },
+        {
+          "path": "public/video/04_defeat.mp4",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "DELETED"
+        },
+        {
+          "path": "public/video/04_defeat_v2.mp4",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "DELETED"
+        },
+        {
+          "path": "public/video/07_immune_prime_intro.mp4",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "DELETED"
+        },
+        {
+          "path": "public/video/08_cardiac_titan_intro.mp4",
+          "additions": 0,
+          "deletions": 0,
+          "changeType": "DELETED"
+        },
+        {
+          "path": "scripts/check-adaptive-audio.mjs",
+          "additions": 27,
+          "deletions": 2,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "scripts/check-audio-assets.mjs",
+          "additions": 91,
+          "deletions": 0,
+          "changeType": "ADDED"
+        },
+        {
+          "path": "scripts/gen-icons.mjs",
+          "additions": 0,
+          "deletions": 155,
+          "changeType": "DELETED"
+        },
+        {
+          "path": "scripts/hud-hierarchy-smoke.cjs",
+          "additions": 3,
+          "deletions": 3,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "scripts/visual-p1-capture.cjs",
+          "additions": 273,
+          "deletions": 0,
+          "changeType": "ADDED"
+        },
+        {
+          "path": "src/game/ArtMetrics.ts",
+          "additions": 4,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "src/game/Enemy.ts",
+          "additions": 14,
+          "deletions": 10,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "src/game/Player.ts",
+          "additions": 49,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "src/scenes/GameScene.ts",
+          "additions": 22,
+          "deletions": 2,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "src/scenes/MenuScene.ts",
+          "additions": 66,
+          "deletions": 6,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "src/scenes/UIScene.ts",
+          "additions": 43,
+          "deletions": 10,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "src/systems/AdaptiveAudioDirector.ts",
+          "additions": 20,
+          "deletions": 8,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "src/systems/SaveSystem.ts",
+          "additions": 14,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "src/systems/Sfx.ts",
+          "additions": 70,
+          "deletions": 7,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "src/systems/adaptiveAudioMath.ts",
+          "additions": 39,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "src/systems/audioMixMath.ts",
+          "additions": 32,
+          "deletions": 3,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "src/ui/hudTokens.ts",
+          "additions": 4,
+          "deletions": 4,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "tests/audio-mix.mjs",
+          "additions": 58,
+          "deletions": 13,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "tests/core-art.mjs",
+          "additions": 6,
+          "deletions": 6,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "tests/startup-art-fallback.mjs",
+          "additions": 2,
+          "deletions": 2,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "tools/audio/master_audio.py",
+          "additions": 231,
+          "deletions": 0,
+          "changeType": "ADDED"
+        }
+      ],
+      "headRefName": "feat/av-polish-plan",
+      "headRefOid": "7a6fc1f113033ef4698641c76370dd08e5ed50c5",
+      "isDraft": false,
+      "mergeCommit": {
+        "oid": "9f3788a7e78a841914e98c237e9e9581358875d4"
+      },
+      "mergedAt": "2026-10-09T09:05:48Z",
+      "number": 185,
+      "state": "MERGED",
+      "statusCheckRollup": [
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-09T03:59:15Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/37881701092/job/113662611313",
+          "name": "build",
+          "startedAt": "2026-10-09T03:58:23Z",
+          "status": "COMPLETED",
+          "workflowName": "CI"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-09T04:07:20Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/37881701092/job/113662822431",
+          "name": "browser-smoke",
+          "startedAt": "2026-10-09T03:59:17Z",
+          "status": "COMPLETED",
+          "workflowName": "CI"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-09T03:59:52Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/37881701092/job/113662822397",
+          "name": "production-contract",
+          "startedAt": "2026-10-09T03:59:17Z",
+          "status": "COMPLETED",
+          "workflowName": "CI"
+        }
+      ],
+      "title": "AV polish: mastered music, act-based beds, signature SFX, volume sliders, mutation art",
+      "updatedAt": "2026-10-09T09:31:17Z",
+      "url": "https://github.com/timoshinoleg-eng/ofeliya/pull/185"
+    },
+    {
+      "baseRefName": "main",
+      "files": [
+        {
+          "path": "src/game/WaveDirector.ts",
+          "additions": 0,
+          "deletions": 4,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "src/scenes/GameScene.ts",
+          "additions": 0,
+          "deletions": 5,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "src/scenes/UIScene.ts",
+          "additions": 85,
+          "deletions": 35,
+          "changeType": "MODIFIED"
+        }
+      ],
+      "headRefName": "codex/frontend-hud-dirty-20261014",
+      "headRefOid": "41cd0101b88355ef9d0c479ee425c6203254c62c",
+      "isDraft": false,
+      "mergeCommit": null,
+      "mergedAt": null,
+      "number": 204,
+      "state": "OPEN",
+      "statusCheckRollup": [
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-14T16:32:58Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38598781739/job/115972272725",
+          "name": "build",
+          "startedAt": "2026-10-14T16:31:21Z",
+          "status": "COMPLETED",
+          "workflowName": "CI"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-14T16:47:33Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38598781739/job/115973103821",
+          "name": "browser-smoke",
+          "startedAt": "2026-10-14T16:33:00Z",
+          "status": "COMPLETED",
+          "workflowName": "CI"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-14T16:33:41Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38598781739/job/115973104106",
+          "name": "production-contract",
+          "startedAt": "2026-10-14T16:33:00Z",
+          "status": "COMPLETED",
+          "workflowName": "CI"
+        }
+      ],
+      "title": "perf(frontend): eliminate unused adaptiveThreat writes and redraw HUD bars on changes",
+      "updatedAt": "2026-10-14T17:50:18Z",
+      "url": "https://github.com/timoshinoleg-eng/ofeliya/pull/204"
+    },
+    {
+      "baseRefName": "main",
+      "files": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "additions": 3,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "package.json",
+          "additions": 1,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "src/systems/VideoInterstitial.ts",
+          "additions": 24,
+          "deletions": 2,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "tests/video-interstitial-a11y.mjs",
+          "additions": 150,
+          "deletions": 0,
+          "changeType": "ADDED"
+        }
+      ],
+      "headRefName": "agents/a11y-20261014",
+      "headRefOid": "d9d7f5ef75661662b571f05fb4588f110fea092a",
+      "isDraft": false,
+      "mergeCommit": null,
+      "mergedAt": null,
+      "number": 207,
+      "state": "OPEN",
+      "statusCheckRollup": [
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-14T17:43:40Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38608976068/job/116007111033",
+          "name": "build",
+          "startedAt": "2026-10-14T17:42:50Z",
+          "status": "COMPLETED",
+          "workflowName": "CI"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-14T17:58:04Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38608976068/job/116007546809",
+          "name": "browser-smoke",
+          "startedAt": "2026-10-14T17:43:45Z",
+          "status": "COMPLETED",
+          "workflowName": "CI"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-14T17:44:18Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38608976068/job/116007546931",
+          "name": "production-contract",
+          "startedAt": "2026-10-14T17:43:45Z",
+          "status": "COMPLETED",
+          "workflowName": "CI"
+        }
+      ],
+      "title": "fix(a11y): keyboard-accessible video interstitial skip",
+      "updatedAt": "2026-10-14T18:01:34Z",
+      "url": "https://github.com/timoshinoleg-eng/ofeliya/pull/207"
+    },
+    {
+      "baseRefName": "main",
+      "files": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "additions": 7,
+          "deletions": 2,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": ".github/workflows/release-visual-matrix.yml",
+          "additions": 5,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "package.json",
+          "additions": 1,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "scripts/frame-cadence.cjs",
+          "additions": 85,
+          "deletions": 0,
+          "changeType": "ADDED"
+        },
+        {
+          "path": "scripts/frame-cadence.md",
+          "additions": 56,
+          "deletions": 0,
+          "changeType": "ADDED"
+        },
+        {
+          "path": "scripts/frame-cadence.schema.json",
+          "additions": 71,
+          "deletions": 0,
+          "changeType": "ADDED"
+        },
+        {
+          "path": "scripts/release-visual-matrix.cjs",
+          "additions": 51,
+          "deletions": 2,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "tests/frame-cadence.cjs",
+          "additions": 82,
+          "deletions": 0,
+          "changeType": "ADDED"
+        }
+      ],
+      "headRefName": "agents/perf-ci-20261014",
+      "headRefOid": "0e606ca322ad14e00494a2defc2dafe61d254367",
+      "isDraft": false,
+      "mergeCommit": null,
+      "mergedAt": null,
+      "number": 208,
+      "state": "OPEN",
+      "statusCheckRollup": [
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-14T21:06:07Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38637428146/job/116104051543",
+          "name": "build",
+          "startedAt": "2026-10-14T21:05:02Z",
+          "status": "COMPLETED",
+          "workflowName": "CI"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-14T21:08:12Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38637428154/job/116104051596",
+          "name": "visual-matrix",
+          "startedAt": "2026-10-14T21:05:02Z",
+          "status": "COMPLETED",
+          "workflowName": "Release Visual Matrix"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-14T21:25:04Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38637428146/job/116104563828",
+          "name": "browser-smoke",
+          "startedAt": "2026-10-14T21:06:10Z",
+          "status": "COMPLETED",
+          "workflowName": "CI"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-14T21:06:59Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38637428146/job/116104563892",
+          "name": "production-contract",
+          "startedAt": "2026-10-14T21:06:09Z",
+          "status": "COMPLETED",
+          "workflowName": "CI"
+        }
+      ],
+      "title": "test(perf): capture rAF cadence evidence in production visual matrix",
+      "updatedAt": "2026-10-14T21:44:51Z",
+      "url": "https://github.com/timoshinoleg-eng/ofeliya/pull/208"
+    },
+    {
+      "baseRefName": "main",
+      "files": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "additions": 3,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "package.json",
+          "additions": 1,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "src/legal/LegalOverlay.ts",
+          "additions": 37,
+          "deletions": 3,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "tests/legal-overlay-focus.mjs",
+          "additions": 135,
+          "deletions": 0,
+          "changeType": "ADDED"
+        }
+      ],
+      "headRefName": "agents/legal-dialog-a11y-20261014",
+      "headRefOid": "6adab4bf5a9ebee849bf3c6ef64b6dbf710fe3ca",
+      "isDraft": false,
+      "mergeCommit": null,
+      "mergedAt": null,
+      "number": 209,
+      "state": "OPEN",
+      "statusCheckRollup": [
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-14T18:08:47Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38612489743/job/116019116108",
+          "name": "build",
+          "startedAt": "2026-10-14T18:07:38Z",
+          "status": "COMPLETED",
+          "workflowName": "CI"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-14T18:23:32Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38612489743/job/116019688430",
+          "name": "browser-smoke",
+          "startedAt": "2026-10-14T18:08:49Z",
+          "status": "COMPLETED",
+          "workflowName": "CI"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-14T18:09:36Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38612489743/job/116019688429",
+          "name": "production-contract",
+          "startedAt": "2026-10-14T18:08:49Z",
+          "status": "COMPLETED",
+          "workflowName": "CI"
+        }
+      ],
+      "title": "fix(a11y): trap and restore focus in LegalOverlay",
+      "updatedAt": "2026-10-14T20:52:41Z",
+      "url": "https://github.com/timoshinoleg-eng/ofeliya/pull/209"
+    },
+    {
+      "baseRefName": "main",
+      "files": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "additions": 3,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "package.json",
+          "additions": 1,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "src/scenes/GameScene.ts",
+          "additions": 3,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "src/scenes/MenuScene.ts",
+          "additions": 7,
+          "deletions": 6,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "src/scenes/UIScene.ts",
+          "additions": 2,
+          "deletions": 1,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "src/systems/MotionPreferences.ts",
+          "additions": 9,
+          "deletions": 0,
+          "changeType": "ADDED"
+        },
+        {
+          "path": "tests/core-art.mjs",
+          "additions": 9,
+          "deletions": 1,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "tests/reduced-motion.mjs",
+          "additions": 31,
+          "deletions": 0,
+          "changeType": "ADDED"
+        }
+      ],
+      "headRefName": "agents/reduced-motion-20261014",
+      "headRefOid": "aae35c9c7f75f47c6ba9ac03b81a7431aca8cf3c",
+      "isDraft": false,
+      "mergeCommit": null,
+      "mergedAt": null,
+      "number": 210,
+      "state": "OPEN",
+      "statusCheckRollup": [
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-14T20:59:28Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38636546972/job/116101061894",
+          "name": "build",
+          "startedAt": "2026-10-14T20:58:30Z",
+          "status": "COMPLETED",
+          "workflowName": "CI"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-14T21:10:51Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38636546972/job/116101513241",
+          "name": "browser-smoke",
+          "startedAt": "2026-10-14T20:59:30Z",
+          "status": "COMPLETED",
+          "workflowName": "CI"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-14T21:00:07Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38636546972/job/116101513220",
+          "name": "production-contract",
+          "startedAt": "2026-10-14T20:59:31Z",
+          "status": "COMPLETED",
+          "workflowName": "CI"
+        }
+      ],
+      "title": "fix(a11y): respect reduced-motion preference for menu and camera effects",
+      "updatedAt": "2026-10-14T21:42:52Z",
+      "url": "https://github.com/timoshinoleg-eng/ofeliya/pull/210"
+    },
+    {
+      "baseRefName": "agents/legal-dialog-a11y-20261014",
+      "files": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "additions": 22,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "package.json",
+          "additions": 1,
+          "deletions": 0,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "src/scenes/MenuScene.ts",
+          "additions": 89,
+          "deletions": 48,
+          "changeType": "MODIFIED"
+        },
+        {
+          "path": "src/ui/MenuKeyboard.ts",
+          "additions": 135,
+          "deletions": 0,
+          "changeType": "ADDED"
+        },
+        {
+          "path": "tests/menu-keyboard-smoke.mjs",
+          "additions": 288,
+          "deletions": 0,
+          "changeType": "ADDED"
+        }
+      ],
+      "headRefName": "agents/menu-keyboard-on-legal-20261015",
+      "headRefOid": "729e5a482b8b88566ea2df996bf441461a591fe2",
+      "isDraft": false,
+      "mergeCommit": null,
+      "mergedAt": null,
+      "number": 212,
+      "state": "OPEN",
+      "statusCheckRollup": [
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-14T21:38:15Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38641715749/job/116118585626",
+          "name": "menu-keyboard-smoke",
+          "startedAt": "2026-10-14T21:37:49Z",
+          "status": "COMPLETED",
+          "workflowName": "CI"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-14T21:38:54Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38641715749/job/116118585398",
+          "name": "build",
+          "startedAt": "2026-10-14T21:37:49Z",
+          "status": "COMPLETED",
+          "workflowName": "CI"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-14T21:47:16Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38641715749/job/116119066066",
+          "name": "browser-smoke",
+          "startedAt": "2026-10-14T21:38:56Z",
+          "status": "COMPLETED",
+          "workflowName": "CI"
+        },
+        {
+          "__typename": "CheckRun",
+          "completedAt": "2026-10-14T21:39:49Z",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38641715749/job/116119066082",
+          "name": "production-contract",
+          "startedAt": "2026-10-14T21:38:56Z",
+          "status": "COMPLETED",
+          "workflowName": "CI"
+        }
+      ],
+      "title": "feat(a11y): keyboard navigation and focus for primary menu",
+      "updatedAt": "2026-10-14T21:53:13Z",
+      "url": "https://github.com/timoshinoleg-eng/ofeliya/pull/212"
+    }
+  ],
+  "intersections": [
+    {
+      "from": 185,
+      "to": 204,
+      "files": [
+        "src/scenes/GameScene.ts",
+        "src/scenes/UIScene.ts"
+      ],
+      "oneMerged": true
+    },
+    {
+      "from": 185,
+      "to": 207,
+      "files": [
+        "package.json"
+      ],
+      "oneMerged": true
+    },
+    {
+      "from": 185,
+      "to": 208,
+      "files": [
+        "package.json"
+      ],
+      "oneMerged": true
+    },
+    {
+      "from": 185,
+      "to": 209,
+      "files": [
+        "package.json"
+      ],
+      "oneMerged": true
+    },
+    {
+      "from": 185,
+      "to": 210,
+      "files": [
+        "package.json",
+        "src/scenes/GameScene.ts",
+        "src/scenes/MenuScene.ts",
+        "src/scenes/UIScene.ts",
+        "tests/core-art.mjs"
+      ],
+      "oneMerged": true
+    },
+    {
+      "from": 185,
+      "to": 212,
+      "files": [
+        "package.json",
+        "src/scenes/MenuScene.ts"
+      ],
+      "oneMerged": true
+    },
+    {
+      "from": 204,
+      "to": 210,
+      "files": [
+        "src/scenes/GameScene.ts",
+        "src/scenes/UIScene.ts"
+      ],
+      "oneMerged": false
+    },
+    {
+      "from": 207,
+      "to": 208,
+      "files": [
+        ".github/workflows/ci.yml",
+        "package.json"
+      ],
+      "oneMerged": false
+    },
+    {
+      "from": 207,
+      "to": 209,
+      "files": [
+        ".github/workflows/ci.yml",
+        "package.json"
+      ],
+      "oneMerged": false
+    },
+    {
+      "from": 207,
+      "to": 210,
+      "files": [
+        ".github/workflows/ci.yml",
+        "package.json"
+      ],
+      "oneMerged": false
+    },
+    {
+      "from": 207,
+      "to": 212,
+      "files": [
+        ".github/workflows/ci.yml",
+        "package.json"
+      ],
+      "oneMerged": false
+    },
+    {
+      "from": 208,
+      "to": 209,
+      "files": [
+        ".github/workflows/ci.yml",
+        "package.json"
+      ],
+      "oneMerged": false
+    },
+    {
+      "from": 208,
+      "to": 210,
+      "files": [
+        ".github/workflows/ci.yml",
+        "package.json"
+      ],
+      "oneMerged": false
+    },
+    {
+      "from": 208,
+      "to": 212,
+      "files": [
+        ".github/workflows/ci.yml",
+        "package.json"
+      ],
+      "oneMerged": false
+    },
+    {
+      "from": 209,
+      "to": 210,
+      "files": [
+        ".github/workflows/ci.yml",
+        "package.json"
+      ],
+      "oneMerged": false
+    },
+    {
+      "from": 209,
+      "to": 212,
+      "files": [
+        ".github/workflows/ci.yml",
+        "package.json"
+      ],
+      "oneMerged": false
+    },
+    {
+      "from": 210,
+      "to": 212,
+      "files": [
+        ".github/workflows/ci.yml",
+        "package.json",
+        "src/scenes/MenuScene.ts"
+      ],
+      "oneMerged": false
+    }
+  ],
+  "visualConfirmation": "none in read-only source audit",
+  "handoff20261014": "not found in repo/workspace or Downloads OFELIYA handoff matches"
+}

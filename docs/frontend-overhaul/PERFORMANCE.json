@@ -1,0 +1,231 @@
+{
+  "cpu": "AMD Ryzen 5 5500U with Radeon Graphics         ",
+  "totalRamBytes": 16469520384,
+  "platform": "win32",
+  "release": "10.0.26300",
+  "browser": "155.0.8059.40",
+  "renderer": "Chrome forced ANGLE SwiftShader software; Canvas/WebGL, DPR2",
+  "beforeSha": "aba70324d13592fbcd86894fb29f395ac201f48a",
+  "afterSha": "b7399458394ee3f9e08c9d26f6eae67320b1ae99",
+  "fixture": "release visual matrix: frozen Game.update, paused physics/tweens, fixed sprite pose",
+  "measurement": "requestAnimationFrame consecutive intervals; not GPU time or guaranteed gameplay FPS",
+  "poseMatches": true,
+  "rows": [
+    {
+      "renderer": "webgl",
+      "tier": "full",
+      "density": 100,
+      "before": {
+        "p50": 116.60000000000036,
+        "p95": 116.79999999999927,
+        "long": 1,
+        "samples": 60
+      },
+      "after": {
+        "p50": 116.60000000000036,
+        "p95": 116.70000000000073,
+        "long": 1,
+        "samples": 60
+      },
+      "p95DeltaMs": -0.09999999999854481
+    },
+    {
+      "renderer": "webgl",
+      "tier": "full",
+      "density": 150,
+      "before": {
+        "p50": 133.29999999999927,
+        "p95": 133.40000000000146,
+        "long": 1,
+        "samples": 60
+      },
+      "after": {
+        "p50": 133.29999999999927,
+        "p95": 150,
+        "long": 1,
+        "samples": 60
+      },
+      "p95DeltaMs": 16.599999999998545
+    },
+    {
+      "renderer": "webgl",
+      "tier": "full",
+      "density": 200,
+      "before": {
+        "p50": 150,
+        "p95": 166.69999999999726,
+        "long": 1,
+        "samples": 60
+      },
+      "after": {
+        "p50": 150,
+        "p95": 166.70000000000437,
+        "long": 1,
+        "samples": 60
+      },
+      "p95DeltaMs": 7.105427357601002e-12
+    },
+    {
+      "renderer": "webgl",
+      "tier": "reduced",
+      "density": 100,
+      "before": {
+        "p50": 100,
+        "p95": 116.69999999999982,
+        "long": 1,
+        "samples": 60
+      },
+      "after": {
+        "p50": 100,
+        "p95": 116.70000000000073,
+        "long": 1,
+        "samples": 60
+      },
+      "p95DeltaMs": 9.094947017729282e-13
+    },
+    {
+      "renderer": "webgl",
+      "tier": "reduced",
+      "density": 150,
+      "before": {
+        "p50": 133.25,
+        "p95": 133.40000000000146,
+        "long": 1,
+        "samples": 60
+      },
+      "after": {
+        "p50": 133.29999999999927,
+        "p95": 133.40000000000146,
+        "long": 1,
+        "samples": 60
+      },
+      "p95DeltaMs": 0
+    },
+    {
+      "renderer": "webgl",
+      "tier": "reduced",
+      "density": 200,
+      "before": {
+        "p50": 150,
+        "p95": 166.60500000000212,
+        "long": 0.9833333333333333,
+        "samples": 60
+      },
+      "after": {
+        "p50": 150,
+        "p95": 166.59999999999854,
+        "long": 1,
+        "samples": 60
+      },
+      "p95DeltaMs": -0.005000000003576588
+    },
+    {
+      "renderer": "canvas",
+      "tier": "full",
+      "density": 100,
+      "before": {
+        "p50": 74.95000000000027,
+        "p95": 83.40000000000055,
+        "long": 0.9833333333333333,
+        "samples": 60
+      },
+      "after": {
+        "p50": 66.69999999999982,
+        "p95": 83.40000000000055,
+        "long": 0.9833333333333333,
+        "samples": 60
+      },
+      "p95DeltaMs": 0
+    },
+    {
+      "renderer": "canvas",
+      "tier": "full",
+      "density": 150,
+      "before": {
+        "p50": 100,
+        "p95": 100.10000000000218,
+        "long": 1,
+        "samples": 60
+      },
+      "after": {
+        "p50": 100,
+        "p95": 100.09999999999863,
+        "long": 1,
+        "samples": 60
+      },
+      "p95DeltaMs": -3.552713678800501e-12
+    },
+    {
+      "renderer": "canvas",
+      "tier": "full",
+      "density": 200,
+      "before": {
+        "p50": 116.70000000000073,
+        "p95": 133.39999999999782,
+        "long": 1,
+        "samples": 60
+      },
+      "after": {
+        "p50": 133.1999999999989,
+        "p95": 133.40000000000146,
+        "long": 1,
+        "samples": 60
+      },
+      "p95DeltaMs": 3.637978807091713e-12
+    },
+    {
+      "renderer": "canvas",
+      "tier": "reduced",
+      "density": 100,
+      "before": {
+        "p50": 66.69999999999982,
+        "p95": 83.40000000000055,
+        "long": 0.9833333333333333,
+        "samples": 60
+      },
+      "after": {
+        "p50": 66.69999999999982,
+        "p95": 83.39999999999964,
+        "long": 0.9833333333333333,
+        "samples": 60
+      },
+      "p95DeltaMs": -9.094947017729282e-13
+    },
+    {
+      "renderer": "canvas",
+      "tier": "reduced",
+      "density": 150,
+      "before": {
+        "p50": 100,
+        "p95": 100.10000000000036,
+        "long": 1,
+        "samples": 60
+      },
+      "after": {
+        "p50": 100,
+        "p95": 116.60000000000045,
+        "long": 1,
+        "samples": 60
+      },
+      "p95DeltaMs": 16.500000000000085
+    },
+    {
+      "renderer": "canvas",
+      "tier": "reduced",
+      "density": 200,
+      "before": {
+        "p50": 116.69999999999709,
+        "p95": 133.29999999999927,
+        "long": 1,
+        "samples": 60
+      },
+      "after": {
+        "p50": 133.20000000000073,
+        "p95": 133.40000000000146,
+        "long": 1,
+        "samples": 60
+      },
+      "p95DeltaMs": 0.10000000000218279
+    }
+  ]
+}

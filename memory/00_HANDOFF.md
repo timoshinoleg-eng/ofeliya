@@ -1,3 +1,13 @@
+# Frontend overhaul candidate — 15October2026
+
+Read `FRONTEND_OVERHAUL_PROGRESS.md` first; full evidence/design under `docs/frontend-overhaul/`. Starting main aba70324, initial public marker30a534f. World PR213 ee19eea; dependent UI PR214334f946 (base213). This documentation branch is code-free. Do not overwrite parallel PR204/207/208/209/210/212 or claim they are integrated. Main merge remains unauthorized; owner separately authorized deployment after candidate validation. Exact-head CI, blind visual review, full walkthrough, live deployment verification and physical-device/performance gates are not yet complete in this snapshot.
+
+Phase1 implements quiet deterministic vascular world/cell interiors plus menu/HUD/mutation/boss/result specimen surfaces and compact layout fixes. Local presentation, TypeScript and listed gameplay/UI contracts passed; frozen production QA has27before+27after captures with zero page errors. Capture cadence is not live combat/device FPS. Independent code review resolved difficulty decoration masking active state. Requested external routes all failed; Kimi/OpenCode did not implement/review. Available Codex agents completed slices.
+
+Coordinator is still refreshing tests/captures. Refresh copied `media/after` and append final reviewed hashes/CI/live evidence before final claims. This branch changes only documentation/media/repository memory. No personal cross-agent memories edited. Preserve prior snapshots below.
+
+## Preserved earlier snapshots
+
 # Review follow-ups — 2026-10-15
 
 Branch fix/review-followups-20261015 starts from main30a534f. Owner asked to continue remaining review recommendations. Four targeted follow-ups: Boot/Menu startup recovery now waits for the first usable Menu frame and catches scene exceptions/stalls; CI builds the actual telegram-bot target and imports it with networking disabled and a deadline; registry mirror-write failures lower health until a successful write; profile migration publishes a staged candidate only after its atomic disk write.

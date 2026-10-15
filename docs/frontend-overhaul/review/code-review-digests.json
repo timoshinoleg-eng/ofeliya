@@ -1,0 +1,68 @@
+{
+  "head": "d5cae44ac969b88607179d2693100380226a53b3",
+  "base": "aba70324d13592fbcd86894fb29f395ac201f48a",
+  "branch": "visual/phase1-ui-20261015",
+  "capturedAt": "2026-10-15T08:38:46.0948317Z",
+  "files": [
+    {
+      "path": "src/scenes/MenuScene.ts",
+      "sha256": "5d1267daf682ba8e15913fb2970376c6ec4b39cab0acada1e182df318b8c6e05"
+    },
+    {
+      "path": "src/scenes/UIScene.ts",
+      "sha256": "ea9e870c8f73a7147dd6dfee59eb11693bf3af4cc039f1a6c889856ecdf393b5"
+    },
+    {
+      "path": "src/ui/visualTokens.ts",
+      "sha256": "26db6771dbabe55db7c630c026139f9a391a39761e23ce976c2f91460d8a85b3"
+    },
+    {
+      "path": "src/ui/specimenSurface.ts",
+      "sha256": "6e16df5311a684048e3c8ed00998a35e2d417f8d86620243b561cdda669f3c08"
+    },
+    {
+      "path": "src/ui/tokens.ts",
+      "sha256": "c230745d85e37ea02523f20766be1bea8c91660f0da5e3aba7354c362b483508"
+    },
+    {
+      "path": "src/ui/MobileLayoutGuard.ts",
+      "sha256": "9eda6ccc8e663d572f28683b4f67589525ea2110e0c35537e9566109310426d7"
+    },
+    {
+      "path": "src/game/StrainZeroTextures.ts",
+      "sha256": "70c12c0294778acb144738ab6bee0d307c1c7eeb969f0f40c89e5590e98060ca"
+    },
+    {
+      "path": "tests/core-art.mjs",
+      "sha256": "16f3bdcb2a211bc6b7f1208d3c98e7a4802853d9c10ce4c855056e37b7080328"
+    },
+    {
+      "path": "tests/atmosphere-presentation.mjs",
+      "sha256": "fca023927a0d1c71e0adfa54b6c734f08d259bba0dc17b22bfa49875be9680a5"
+    },
+    {
+      "path": "tests/tokens-contract.mjs",
+      "sha256": "b700ae7a3e6d60f640a79c359bc2cf09757ff2a8fab200cbb649308228c9bff5"
+    },
+    {
+      "path": "tests/boss-presentation.mjs",
+      "sha256": "014e24de6e6e630d78a2c68b873b7ae831c169de0ec6f3026b1686fe4c7f939c"
+    },
+    {
+      "path": "scripts/ui-readability-smoke.cjs",
+      "sha256": "3c16ec8a589a717ee4a4a19ea552374186c5a61a9f54638fc8d020c6d83a39f6"
+    },
+    {
+      "path": "package.json",
+      "sha256": "dac2e00d01cb84d078c92bf1e23dfdd036a58f26a267a6dc1eddf0ceab6227c2"
+    },
+    {
+      "path": "src/ui/hudTokens.ts",
+      "sha256": "8e29aa97590ef4f0fd525292c94bf13709fe35d8d8cb42655959a2eca9c34877"
+    },
+    {
+      "path": "scripts/hud-hierarchy-smoke.cjs",
+      "sha256": "add84b45b3c4ea6c564d995866f403794738a1255f1579cb54f5613d38402a66"
+    }
+  ]
+}

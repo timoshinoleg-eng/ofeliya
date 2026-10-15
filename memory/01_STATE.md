@@ -1,3 +1,14 @@
+# Frontend overhaul candidate state — 15October2026
+
+- Initial main aba70324d13592fbcd86894fb29f395ac201f48a; public readback30a534fbf1656979c20434d4f4d724eea69c385f. PR213 ee19eea world; PR214334f946 UI depends on213. Snapshot only; query again before integration.
+- Implementation: deterministic toroidal background/interior overlays, shared static membrane palette/surface, coherent menu/HUD/mutation/boss/result, compact records and title/time/stats, primaryFill0.95. No balance/RNG/checkpoint/server change.
+- Local TypeScript/UI/gameplay contract/presentation checks passed as listed in root progress.27before+27after synthetic production-build captures;3widths; no page errors. This is not device FPS or full campaign acceptance.
+- Independent source review resolved P2 difficulty surface hiding active fill. Final exact-head hosted CI, visualblind, walkthrough, live/device/performance gates remain separate and pending.
+- External route probes failed (gateway listeners absent, provider reject/error/timeout, Kimi429). No claim external agents participated.
+- docs/frontend-overhaul holds sanitized audit/routes/design/media only; final after refresh is coordinator-owned. Owner authorized validated deployment; main merge not authorized. No deployment success claimed here.
+
+## Preserved earlier snapshots
+
 # Review follow-ups — 2026-10-15
 
 Branch fix/review-followups-20261015 starts from main30a534f. Owner asked to continue remaining review recommendations. Four targeted follow-ups: Boot/Menu startup recovery now waits for the first usable Menu frame and catches scene exceptions/stalls; CI builds the actual telegram-bot target and imports it with networking disabled and a deadline; registry mirror-write failures lower health until a successful write; profile migration publishes a staged candidate only after its atomic disk write.

@@ -1,3 +1,14 @@
+# Frontend overhaul decisions — 15October2026
+
+- Choose Vascular Archive: ink/matte/ivory, restrained player rose/host celadon/immune cyan, quiet membrane seams. Glass Cytology and Living Tissue remain editable alternatives; no benchmarked performance comparison claimed.
+- Separate small PR213world from dependent PR214UI and documentation. Preserve open204HUD/207skip/208matrix/209focus/210motion/212keyboard; later integration needs explicit conflict/behavior review.
+- Keep HUD geometry and input/modal lifecycle. Static Graphics owns decoration only; no new fullscreen filters, frame allocations, RNG or emitters. Intended primary action alpha0.95 replaces old0.18 contract.
+- Preserve original world texture geometry/exterior alpha with source-atop interiors and deterministic boot bake; update obsolete lane assertion with executed wrapped-cloud invariants.
+- Treat synthetic screenshots/cadence, source review, blind visual judgment, full walkthrough, exact-head CI, public deployment identity and real-device FPS as different evidence.
+- Owner later authorized deployment after validation; main merge remains unauthorized. Permission alone does not establish published candidate. No paid/unknown fallback routes or credential publication.
+
+## Preserved earlier snapshots
+
 # Review follow-ups — 2026-10-15
 
 Branch fix/review-followups-20261015 starts from main30a534f. Owner asked to continue remaining review recommendations. Four targeted follow-ups: Boot/Menu startup recovery now waits for the first usable Menu frame and catches scene exceptions/stalls; CI builds the actual telegram-bot target and imports it with networking disabled and a deadline; registry mirror-write failures lower health until a successful write; profile migration publishes a staged candidate only after its atomic disk write.
