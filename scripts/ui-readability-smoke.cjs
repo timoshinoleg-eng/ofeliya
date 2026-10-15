@@ -78,7 +78,7 @@ async function openCase(browser, size) {
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (error) => errors.push(String(error)));
-  await page.goto('http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
+  await page.goto(process.env.OFELIYA_BASE_URL || 'http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
   await sleep(120);
   return { ctx, page, errors };
@@ -94,6 +94,7 @@ async function inspectMenu(page, size) {
       if (!obj || typeof obj.text !== 'string' || obj.visible === false || (obj.alpha ?? 1) <= 0.05) return null;
       const b = obj.getBounds();
       return {
+        name: obj.name,
         text: obj.text,
         size: parseFloat(String(obj.style?.fontSize ?? '0')) || 0,
         family: String(obj.style?.fontFamily ?? ''),
@@ -106,7 +107,7 @@ async function inspectMenu(page, size) {
     const rows = [
       pickNamed('ofeliya-menu-difficulty-value'),
       pickNamed('ofeliya-menu-control-value'),
-      pick((t) => t.startsWith('Мутируй быстрее')),
+      pickNamed('ofeliya-menu-subtitle'),
       pick((t) => t.startsWith('Носитель:')),
       pick((t) => t.startsWith('Выживание ')),
       pick((t) => t === 'Базовый ритм кампании'),
@@ -137,7 +138,7 @@ function assertMenu(contract, compact) {
     throw new Error('readability menu undersized: ' + JSON.stringify(undersized));
   }
   const bodyRows = contract.rows.filter((row) =>
-    row.text.startsWith('Мутируй') ||
+    row.name === 'ofeliya-menu-subtitle' ||
     row.text.startsWith('Носитель:') ||
     row.text.startsWith('Выживание') ||
     row.text === 'Базовый ритм кампании' ||
@@ -154,7 +155,7 @@ function assertMenu(contract, compact) {
 
   if (!compact) {
     const required = [
-      [(row) => row.text.startsWith('Мутируй'), 15, 'menu hook body'],
+      [(row) => row.name === 'ofeliya-menu-subtitle', 15, 'menu hook body'],
       [(row) => row.text.startsWith('Носитель:'), 14, 'carrier'],
       [(row) => row.text.startsWith('Выживание'), 14, 'records'],
       [(row) => row.text === 'Базовый ритм кампании', 13, 'difficulty description'],
@@ -293,7 +294,10 @@ async function closeCodex(page) {
 async function openMutation(page) {
   await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
   await page.waitForFunction(() =>
-    window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI')
+    // A fast first offer can pause Game before this polling callback runs.
+    // The following gate still requires the real three-choice modal.
+    (window.__game.scene.isActive('Game') || window.__game.scene.isPaused('Game')) &&
+      window.__game.scene.isActive('UI')
   );
   await page.evaluate(() => {
     const gs = window.__game.scene.getScene('Game');

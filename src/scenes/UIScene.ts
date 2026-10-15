@@ -14,6 +14,7 @@ import {
 import { COLORS, COMBO, FONT, JUICE, UI_FONT, UI_TEXT, fmtTime } from '../game/config';
 import { BORDER, BUTTON, ROLE, SCRIM } from '../ui/tokens';
 import { HUD } from '../ui/hudTokens';
+import { artScale, CORE_ART } from '../game/ArtMetrics';
 import { VISUAL, VISUAL_TEXT } from '../ui/visualTokens';
 import { createSpecimenSurface, drawSpecimenSurface } from '../ui/specimenSurface';
 import { getEvolutionDef } from '../game/EvolutionSystem';
@@ -145,6 +146,7 @@ export class UIScene extends Phaser.Scene {
   private manualPaused = false;
   private modalOpen = false;
   private pendingBossReveal: PendingBossReveal | null = null;
+  private activeBossReveals = 0;
   private modalGeneration = 0;
   private overShown = false;
   private uiBlocked = false;
@@ -164,6 +166,7 @@ export class UIScene extends Phaser.Scene {
     this.gs = this.scene.get('Game') as GameScene;
     this.modalOpen = false;
     this.pendingBossReveal = null;
+    this.activeBossReveals = 0;
     this.modalGeneration = 0;
     this.overShown = false;
     this.uiBlocked = false;
@@ -522,7 +525,7 @@ export class UIScene extends Phaser.Scene {
       duration,
       onComplete: options.onComplete,
     };
-    if (this.modalOpen || this.uiBlocked || this.transitionOverlay || this.overShown) {
+    if (this.modalOpen || this.uiBlocked || this.transitionOverlay || this.overShown || this.activeBossReveals > 0) {
       if (!this.pendingContextHints.some((pending) => pending.key === next.key)) {
         this.pendingContextHints.push(next);
       }
@@ -600,6 +603,7 @@ export class UIScene extends Phaser.Scene {
       this.modalOpen ||
       this.uiBlocked ||
       this.transitionOverlay ||
+      this.activeBossReveals > 0 ||
       this.overShown
     ) {
       return;
@@ -824,16 +828,13 @@ export class UIScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
     const compact = H < 620;
+    this.activeBossReveals += 1;
     this.setHudCinematicAlpha(0.12);
     // Full-field dim guarantees the title zone stays legible over any boss art
     // or live combat behind the reveal; the HUD itself is already faded above.
     const dim = this.add
       .rectangle(W / 2, H / 2, W, H, 0x030208, 0.62)
       .setDepth(149);
-    const hintsWereVisible = {
-      context: this.contextHintContainer?.visible ?? false,
-      onboarding: this.onboardingContainer?.visible ?? false,
-    };
     this.contextHintContainer?.setVisible(false);
     this.onboardingContainer?.setVisible(false);
     const c = this.add.container(0, 0).setDepth(150).setAlpha(0);
@@ -860,11 +861,13 @@ export class UIScene extends Phaser.Scene {
         .setDisplaySize(W, bandH)
         .setAlpha(0.5);
       c.add(art);
-      art.setScale(1.04, 1.04);
+      const fittedScaleX = art.scaleX;
+      const fittedScaleY = art.scaleY;
+      art.setScale(fittedScaleX * 1.04, fittedScaleY * 1.04);
       this.tweens.add({
         targets: art,
-        scaleX: 1,
-        scaleY: 1,
+        scaleX: fittedScaleX,
+        scaleY: fittedScaleY,
         alpha: 0.64,
         duration: 760,
         ease: 'Quad.Out',
@@ -872,15 +875,23 @@ export class UIScene extends Phaser.Scene {
     }
 
     if (this.textures.exists(textureKey)) {
+      const logical = CORE_ART[textureKey as keyof typeof CORE_ART];
+      const texture = this.textures.getFrame(textureKey);
+      // Reserve room for the 1.08 entrance growth inside the left copy-free column.
+      const portraitMaxW = W * 0.42;
+      const portraitMaxH = bandH - 20;
+      const portraitScale = logical
+        ? artScale(textureKey, Math.min(portraitMaxW / logical.width, portraitMaxH / logical.height) / 1.08)
+        : Math.min(portraitMaxW / texture.width, portraitMaxH / texture.height) / 1.08;
       const portrait = this.add
-        .image(W * 0.28, H / 2, textureKey)
-        .setScale(compact ? 1.22 : 1.48)
+        .image(W * 0.26, H / 2, textureKey)
+        .setScale(portraitScale)
         .setAlpha(0.92);
       c.add(portrait);
-      portrait.setX(W * 0.22);
+      portrait.setX(W * 0.24);
       this.tweens.add({
         targets: portrait,
-        x: W * 0.3,
+        x: W * 0.26,
         scale: portrait.scaleX * 1.08,
         duration: 760,
         ease: 'Quad.Out',
@@ -930,6 +941,7 @@ export class UIScene extends Phaser.Scene {
         .setResolution(2)
     );
 
+    let revealComplete = false;
     this.tweens.add({
       targets: c,
       alpha: 1,
@@ -938,11 +950,19 @@ export class UIScene extends Phaser.Scene {
       hold: 700,
       ease: 'Quad.Out',
       onComplete: () => {
+        if (revealComplete) return;
+        revealComplete = true;
         c.destroy(true);
         dim.destroy();
-        if (hintsWereVisible.context) this.contextHintContainer?.setVisible(true);
-        if (hintsWereVisible.onboarding) this.onboardingContainer?.setVisible(true);
-        this.setHudCinematicAlpha(1);
+        this.activeBossReveals = Math.max(0, this.activeBossReveals - 1);
+        if (this.activeBossReveals === 0) {
+          this.setHudCinematicAlpha(1);
+          if (this.contextHintKey !== null && !this.modalOpen && !this.uiBlocked && !this.overShown && !this.transitionOverlay) {
+            this.contextHintContainer?.setVisible(true);
+          }
+          this.flushContextHint();
+          this.renderOnboarding();
+        }
       },
     });
 
@@ -1167,7 +1187,7 @@ export class UIScene extends Phaser.Scene {
     const copy = ONBOARDING_COPY[step.id];
     const W = this.scale.width;
     const hidden =
-      this.contextHintKey !== null || this.pendingContextHints.length > 0 || this.overShown || this.modalOpen;
+      this.contextHintKey !== null || this.pendingContextHints.length > 0 || this.overShown || this.modalOpen || this.activeBossReveals > 0;
     if (!this.onboardingContainer) {
       const panelW = Math.min(W - 28, 380);
       const panel = this.add
@@ -1526,7 +1546,7 @@ export class UIScene extends Phaser.Scene {
       const effectY = ch / 2 - (compact ? (effectNeedsThirdLine ? 41 : 37) : 44);
       const effectPlateHeight = compact ? (effectNeedsThirdLine ? 42 : 30) : 32;
       const effectPlate = this.add
-        .rectangle(tx + effectW / 2, effectY, effectW, effectPlateHeight, accent, 0.11)
+        .rectangle(tx + effectW / 2, effectY, effectW, effectPlateHeight, VISUAL.panelRaised, 0.98)
         .setStrokeStyle(1, accent, 0.3);
       card.add(effectPlate);
       card.add(effectText.setPosition(tx + 8, effectY).setOrigin(0, 0.5).setResolution(2));
