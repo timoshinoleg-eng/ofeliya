@@ -66,6 +66,54 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
     } else {
       draw(ctx, width, height);
     }
+    // Original procedural detail, authored for OFELIYA. Source-atop preserves every existing
+    // alpha pixel, including packaged/fallback silhouette and the biological atlas envelope.
+    // Baked once; no extra textures, runtime drawing, asset replacement or collision changes.
+    if (key === 'immune-antibody' || key === 'host-cell-shadow') {
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-atop';
+      ctx.shadowBlur = 0;
+      if (key === 'immune-antibody') {
+        // A continuous cool inner scaffold makes the Y readable as one receptor structure.
+        ctx.strokeStyle = 'rgba(25,57,66,0.7)';
+        ctx.lineWidth = 1.7;
+        ctx.beginPath();
+        ctx.moveTo(19, 33); ctx.lineTo(19, 20);
+        ctx.moveTo(8, 7); ctx.quadraticCurveTo(13, 15, 19, 20);
+        ctx.quadraticCurveTo(25, 15, 30, 7); ctx.stroke();
+        ctx.strokeStyle = 'rgba(145,203,210,0.94)';
+        ctx.lineWidth = 0.75;
+        ctx.beginPath();
+        ctx.moveTo(18, 31); ctx.lineTo(18, 21);
+        ctx.moveTo(9, 8); ctx.lineTo(17, 17);
+        ctx.moveTo(22, 17); ctx.lineTo(29, 9); ctx.stroke();
+        ctx.fillStyle = 'rgba(217,186,121,0.84)';
+        for (const [x, y] of [[10, 9], [28, 9], [19, 27]]) {
+          ctx.beginPath(); ctx.arc(x, y, 1.15, 0, Math.PI * 2); ctx.fill();
+        }
+      } else {
+        // Offset nuclear envelope + sparse organelles distinguish healthy tissue from RNA
+        // and immune white. Broken arcs keep the cell organic, without a second outer ring.
+        ctx.fillStyle = 'rgba(8,15,20,0.46)';
+        ctx.beginPath(); ctx.ellipse(57, 58, 20, 17, 0.2, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(164,203,181,0.68)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.ellipse(57, 58, 22, 19, 0.2, 0.2, Math.PI * 1.65); ctx.stroke();
+        ctx.strokeStyle = 'rgba(164,203,181,0.34)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i < 3; i++) {
+          ctx.beginPath(); ctx.ellipse(56, 56, 33 + i * 3, 30 + i * 2,
+            -0.3, 3.45 + i * 0.24, 4.45 + i * 0.18); ctx.stroke();
+        }
+        for (const [x, y, r] of [[33, 43, 3.1], [77, 38, 2.5], [79, 72, 3.4], [37, 78, 2.8]]) {
+          ctx.strokeStyle = 'rgba(164,203,181,0.53)';
+          ctx.beginPath(); ctx.ellipse(x, y, r * 1.5, r, -0.5, 0, Math.PI * 2); ctx.stroke();
+        }
+        ctx.fillStyle = 'rgba(217,186,121,0.58)';
+        ctx.beginPath(); ctx.ellipse(52, 55, 5, 3.5, -0.4, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
     texture.refresh();
     // The canonical bake now owns its pixels; release the larger raw GPU upload only afterwards.
     if (factor > 1 && scene.textures.exists(rawKey)) scene.textures.remove(rawKey);
@@ -691,38 +739,55 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
   });
 
   // ---------------------------------------------------------------------------
-  // PLASMA BACKDROP — periodic warm capillary flow baked once, no shader/blur required.
+  // PLASMA BACKDROP — original microscopic tissue study, authored in procedural code.
+  // Wrapped cloud/trace copies tile on both axes; no RNG, external art or runtime work.
   // ---------------------------------------------------------------------------
   const plasma = scene.textures.exists('blood-plasma') ? null : scene.textures.createCanvas('blood-plasma', 256, 256);
   if (plasma) {
     const ctx = plasma.getContext();
-    const bg = ctx.createLinearGradient(0, 0, 0, 256);
-    bg.addColorStop(0, '#18090f');
-    bg.addColorStop(0.5, '#260d15');
-    bg.addColorStop(1, '#18090f');
-    ctx.fillStyle = bg;
+    ctx.fillStyle = '#080f14';
     ctx.fillRect(0, 0, 256, 256);
-
-    // Smooth periodic lanes wrap across both tile axes; broad dark walls and warm
-    // central plasma read as a vessel instead of unrelated small background rings.
-    for (let i = 0; i < 4; i++) {
-      for (const wrapY of [-256, 0, 256]) {
-        const trace = () => {
-          ctx.beginPath();
-          for (let x = 0; x <= 256; x += 8) {
-            const y = i * 64 + wrapY + 13 * Math.sin(x * Math.PI * 2 / 256);
-            if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-          }
-        };
-        trace(); ctx.strokeStyle = 'rgba(6,2,6,0.3)'; ctx.lineWidth = 46; ctx.stroke();
-        trace(); ctx.strokeStyle = 'rgba(171,52,53,0.12)'; ctx.lineWidth = 30; ctx.stroke();
-        trace(); ctx.strokeStyle = 'rgba(255,151,102,0.055)'; ctx.lineWidth = 15; ctx.stroke();
+    // Large overlapping tissue volumes supply depth without a repetitive bright lane grid.
+    // All color changes stay below actors' contrast; atmosphere owns the moving erythrocytes.
+    const tissue = [[27, 48, 120], [178, 112, 105], [92, 226, 98], [239, 244, 79]] as const;
+    for (const [x, y, radius] of tissue) {
+      for (const ox of [-256, 0, 256]) {
+        for (const oy of [-256, 0, 256]) {
+          const haze = ctx.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, radius);
+          haze.addColorStop(0, 'rgba(63,25,37,0.38)');
+          haze.addColorStop(0.5, 'rgba(35,21,30,0.22)');
+          haze.addColorStop(1, 'rgba(35,21,30,0)');
+          ctx.fillStyle = haze;
+          ctx.fillRect(x + ox - radius, y + oy - radius, radius * 2, radius * 2);
+        }
       }
     }
-    for (let i = 0; i < 24; i++) {
-      ctx.fillStyle = `rgba(255,185,151,${0.022 + (i % 3) * 0.008})`;
+    ctx.lineCap = 'round';
+    for (const ox of [-256, 0, 256]) {
+      for (const oy of [-256, 0, 256]) {
+        ctx.save(); ctx.translate(ox, oy);
+        // Irregular short capillary branches, rather than full-width sinusoidal stripes.
+        for (let branch = 0; branch < 2; branch++) {
+          ctx.beginPath();
+          if (branch === 0) {
+            ctx.moveTo(9, 8); ctx.bezierCurveTo(34, 43, 27, 73, 65, 102);
+            ctx.bezierCurveTo(78, 113, 94, 131, 99, 155);
+            ctx.moveTo(48, 87); ctx.bezierCurveTo(67, 80, 90, 87, 105, 75);
+          } else {
+            ctx.moveTo(159, 148); ctx.bezierCurveTo(175, 167, 180, 191, 204, 206);
+            ctx.bezierCurveTo(219, 216, 237, 218, 248, 240);
+            ctx.moveTo(191, 195); ctx.bezierCurveTo(180, 207, 165, 222, 167, 244);
+          }
+          ctx.strokeStyle = 'rgba(35,21,30,0.3)'; ctx.lineWidth = 10; ctx.stroke();
+          ctx.strokeStyle = 'rgba(98,56,64,0.065)'; ctx.lineWidth = 2; ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+    for (let i = 0; i < 19; i++) {
+      ctx.fillStyle = `rgba(164,203,181,${0.018 + (i % 3) * 0.006})`;
       ctx.beginPath();
-      ctx.arc((i * 37 + 11) % 256, (i * 71 + 5) % 256, 0.8 + (i % 3) * 0.4, 0, Math.PI * 2);
+      ctx.arc((i * 73 + 17) % 256, (i * 109 + 29) % 256, 0.55 + (i % 3) * 0.25, 0, Math.PI * 2);
       ctx.fill();
     }
     plasma.refresh();

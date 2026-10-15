@@ -164,27 +164,63 @@ test('resize adjusts all retained screen layers and shutdown destroys each resou
   assert.ok(f.objects.every(o => o.destroys === 1));
   assert.equal(f.tweens.length, 0); assert.equal(f.timers.length, 0);
 });
-test('baked organ sources preserve 256px geometry with broad vessel flow and oblique Heart fibres', () => {
+test('baked organ sources preserve bounded seamless low-contrast plasma and oblique Heart fibres', () => {
   const recipes = new Map();
   const scene = { textures: {
     exists: () => false,
     createCanvas(key, width, height) {
-      const paths = []; let path = [];
+      const paths = [], gradients = [], fills = []; let path = [];
       const context = new Proxy({
-        createLinearGradient: () => ({ addColorStop() {} }), createRadialGradient: () => ({ addColorStop() {} }),
+        createLinearGradient: () => ({ addColorStop() {} }),
+        createRadialGradient: (...args) => {
+          const gradient = { args, stops: [], addColorStop(position, color) { this.stops.push([position, color]); } };
+          gradients.push(gradient); return gradient;
+        },
+        fillRect(...bounds) { fills.push({ bounds, style: context.fillStyle }); },
         beginPath() { path = []; }, moveTo(x, y) { path.push([x, y]); }, lineTo(x, y) { path.push([x, y]); },
         stroke() { paths.push({ points: [...path], width: context.lineWidth, color: context.strokeStyle }); },
       }, { get(target, name) { return name in target ? target[name] : () => {}; } });
-      recipes.set(key, { width, height, paths });
+      recipes.set(key, { width, height, paths, gradients, fills });
       return { getContext: () => context, refresh() {}, add() {} };
     },
   } };
-  load('src/game/StrainZeroTextures.ts').ensureStrainZeroTextures(scene);
+  const priorRandom = Math.random, priorFloat = phaser.Math.FloatBetween;
+  try {
+    Math.random = phaser.Math.FloatBetween = () => { throw new Error('boot texture art must not consume RNG'); };
+    load('src/game/StrainZeroTextures.ts').ensureStrainZeroTextures(scene);
+  } finally { Math.random = priorRandom; phaser.Math.FloatBetween = priorFloat; }
   for (const key of ['blood-plasma', 'heart-plasma', 'cardiac-fiber']) {
     assert.equal(recipes.get(key).width, 256); assert.equal(recipes.get(key).height, 256);
   }
-  const broad = recipes.get('blood-plasma').paths.filter(p => p.width >= 28 && p.points.length >= 20);
-  assert.ok(broad.length >= 3, 'broad coherent flow must be baked rather than thin scattered circles');
+  const blood = recipes.get('blood-plasma');
+  assert.equal(blood.fills[0].style, '#080f14', 'the actor plane needs a dark neutral base');
+  assert.deepEqual(blood.fills[0].bounds, [0, 0, 256, 256]);
+  assert.ok(blood.paths.length > 0 && blood.paths.length <= 48, 'capillary drawing remains bounded');
+  assert.ok(blood.paths.every(p => p.width <= 12), 'wide repeating lane stripes must not return');
+  assert.ok(blood.gradients.length >= 9 && blood.gradients.length <= 45, 'tissue clouds remain boot-bounded');
+  const clouds = new Map();
+  const periodic = v => ((v % 256) + 256) % 256;
+  for (const gradient of blood.gradients) {
+    const [x0, y0, r0, x, y, radius] = gradient.args;
+    assert.deepEqual([x0, y0, r0], [x, y, 0]);
+    assert.ok(radius > 0 && radius <= 128, 'nine wrapped copies cover the finite radial support');
+    const centerX = periodic(x), centerY = periodic(y);
+    const key = `${centerX},${centerY},${radius}`;
+    if (!clouds.has(key)) clouds.set(key, []);
+    clouds.get(key).push([x - centerX, y - centerY]);
+    assert.deepEqual(gradient.stops.map(s => s[0]), [0, 0.5, 1]);
+    for (const [, color] of gradient.stops) {
+      const rgba = color.match(/^rgba\((\d+),(\d+),(\d+),([\d.]+)\)$/);
+      assert.ok(rgba, 'explicit bounded tissue color');
+      assert.ok(Math.max(...rgba.slice(1, 4).map(Number)) <= 70 && Number(rgba[4]) <= 0.4,
+        'tissue cloud contrast must stay below bright actor details');
+    }
+    assert.equal(Number(gradient.stops.at(-1)[1].match(/,([\d.]+)\)$/)[1]), 0,
+      'cloud ends transparent before the finite wrapping boundary');
+  }
+  const wraps = [-256, 0, 256].flatMap(x => [-256, 0, 256].map(y => `${x},${y}`)).sort();
+  for (const positions of clouds.values()) assert.deepEqual(positions.map(p => p.join(',')).sort(), wraps,
+    'each cloud repeats identically across both tile axes: no seam or unpaired edge haze');
   const fibres = recipes.get('cardiac-fiber').paths.filter(p => p.points.length >= 20);
   assert.ok(fibres.length >= 8);
   for (const p of fibres) {
