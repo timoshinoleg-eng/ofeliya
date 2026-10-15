@@ -197,7 +197,7 @@ export class UIScene extends Phaser.Scene {
     const W = this.scale.width;
 
     this.hudBackdrop = this.add
-      .rectangle(W / 2, 50, W - 12, 90, VISUAL.ink, 0.8)
+      .rectangle(W / 2, 50, W - 12, 90, VISUAL.ink, HUD.plateAlpha)
       .setStrokeStyle(BORDER.hair, VISUAL.line, 0.35)
       .setDepth(DEPTH - 2);
     this.hudMembrane = createSpecimenSurface(this, W / 2, 50, W - 12, 90, {
