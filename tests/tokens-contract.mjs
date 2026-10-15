@@ -62,7 +62,7 @@ try {
   eq(SCRIM.evolution.alpha, 0.9, 'SCRIM.evolution.alpha');
   eq(SCRIM.result.color, 0x05070f, 'SCRIM.result.color');
   eq(SCRIM.result.alpha, 0.84, 'SCRIM.result.alpha');
-  eq(BUTTON.primaryFill, 0.18, 'BUTTON.primaryFill');
+  eq(BUTTON.primaryFill, 0.95, 'BUTTON.primaryFill (opaque primary action)');
   eq(BUTTON.secondaryFill, 0.95, 'BUTTON.secondaryFill');
   eq(BUTTON.strokeWidth, 2, 'BUTTON.strokeWidth');
   eq(BUTTON.strokeAlpha, 1, 'BUTTON.strokeAlpha');

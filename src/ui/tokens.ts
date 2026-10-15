@@ -42,7 +42,8 @@ export const SCRIM = {
 
 /** Shared result-button recipe (the HUD pause control is owned by SLICE-HUD-01). */
 export const BUTTON = {
-  primaryFill: 0.18,
+  // Phase 1: dark primary-action text requires an opaque celadon surface.
+  primaryFill: 0.95,
   secondaryFill: 0.95,
   strokeWidth: 2,
   strokeAlpha: 1,
