@@ -318,6 +318,13 @@ async function bootGame(page) {
     assert.equal(pickup.text, '+5 РНК', `aggregated RNA feedback is incorrect: ${JSON.stringify(pickup)}`);
     assert.ok(!pickup.visible || pickup.right <= pickup.timerLeft - 4, `RNA pickup overlaps timer: ${JSON.stringify(pickup)}`);
 
+    // The earlier local-health-bar probe starts a real boss presentation. Host-cell
+    // copy is intentionally queued behind that presentation; test the host lesson
+    // after its real completion instead of depending on screenshot/CI latency.
+    await page.waitForFunction(() => {
+      const ui = window.__game.scene.getScene('UI');
+      return ui.activeBossReveals === 0;
+    }, null, { timeout: 3000 });
     const interaction = await page.evaluate(({ x, y }) => {
       const gs = window.__game.scene.getScene('Game');
       const ui = window.__game.scene.getScene('UI');

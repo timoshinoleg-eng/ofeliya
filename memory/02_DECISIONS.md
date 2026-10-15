@@ -1,3 +1,11 @@
+# Phase1 presentation and verification decisions — 16 October 2026
+Phase0/1 product work is on visual/phase1-ui-20261015, based on main aba70324. Open PR213 contains world art; dependent PR214 contains menu/HUD/mutation/boss/result presentation. Source head d5cae44 is followed by a test-only comprehension synchronization fix: wait for the actual boss reveal to finish before host-lesson assertions. This preserves production behavior and every gameplay assertion. Independent review found no actionable issue in this test delta. Presentation contracts, TypeScript and whitespace checks passed on continuation. Full browser rerun and exact new-head CI must be recorded before publication.
+
+Owner authorized deployment after candidate validation; main merge remains prohibited. Refresh the private pre-deployment backup, deploy the exact green pushed SHA on the existing Render Free service, and verify live SHA/assets/browser/state preservation. Until then production remains the separately verified 30a534f release. Final release/readback evidence belongs in companion PR215 (docs/frontend-overhaul-20261015), starting at FRONTEND_OVERHAUL_PROGRESS.md. Do not deploy the documentation branch.
+
+PR204/207/208/209/210/212 remain separate integration work. Physical MAX/Telegram/iOS, phone readability/input/FPS/thermals, full campaign and newcomer acceptance remain open; later visual phases are not claimed complete. Preserve all prior work and do not infer phone acceptance from desktop fixtures.
+
+## Previous snapshots
 # Review follow-ups — 2026-10-15
 
 Branch fix/review-followups-20261015 starts from main30a534f. Owner asked to continue remaining review recommendations. Four targeted follow-ups: Boot/Menu startup recovery now waits for the first usable Menu frame and catches scene exceptions/stalls; CI builds the actual telegram-bot target and imports it with networking disabled and a deadline; registry mirror-write failures lower health until a successful write; profile migration publishes a staged candidate only after its atomic disk write.

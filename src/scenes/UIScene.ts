@@ -14,6 +14,9 @@ import {
 import { COLORS, COMBO, FONT, JUICE, UI_FONT, UI_TEXT, fmtTime } from '../game/config';
 import { BORDER, BUTTON, ROLE, SCRIM } from '../ui/tokens';
 import { HUD } from '../ui/hudTokens';
+import { artScale, CORE_ART } from '../game/ArtMetrics';
+import { VISUAL, VISUAL_TEXT } from '../ui/visualTokens';
+import { createSpecimenSurface, drawSpecimenSurface } from '../ui/specimenSurface';
 import { getEvolutionDef } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
 import { assessRunIdentity } from '../game/RunIdentity';
@@ -98,6 +101,7 @@ export class UIScene extends Phaser.Scene {
   private gs: GameScene | null = null;
 
   private hudBackdrop!: Phaser.GameObjects.Rectangle;
+  private hudMembrane!: Phaser.GameObjects.Graphics;
   private xpBack!: Phaser.GameObjects.Graphics;
   private xpFill!: Phaser.GameObjects.Graphics;
   private hpBack!: Phaser.GameObjects.Graphics;
@@ -142,6 +146,7 @@ export class UIScene extends Phaser.Scene {
   private manualPaused = false;
   private modalOpen = false;
   private pendingBossReveal: PendingBossReveal | null = null;
+  private activeBossReveals = 0;
   private modalGeneration = 0;
   private overShown = false;
   private uiBlocked = false;
@@ -161,6 +166,7 @@ export class UIScene extends Phaser.Scene {
     this.gs = this.scene.get('Game') as GameScene;
     this.modalOpen = false;
     this.pendingBossReveal = null;
+    this.activeBossReveals = 0;
     this.modalGeneration = 0;
     this.overShown = false;
     this.uiBlocked = false;
@@ -191,9 +197,12 @@ export class UIScene extends Phaser.Scene {
     const W = this.scale.width;
 
     this.hudBackdrop = this.add
-      .rectangle(W / 2, 50, W - 12, 90, 0x05070f, HUD.plateAlpha)
-      .setStrokeStyle(BORDER.hair, ROLE.faction.immune, 0.22)
+      .rectangle(W / 2, 50, W - 12, 90, VISUAL.ink, HUD.plateAlpha)
+      .setStrokeStyle(BORDER.hair, VISUAL.line, 0.35)
       .setDepth(DEPTH - 2);
+    this.hudMembrane = createSpecimenSurface(this, W / 2, 50, W - 12, 90, {
+      accent: VISUAL.player, fill: VISUAL.ink, alpha: 0, detail: 'quiet',
+    }).setDepth(DEPTH - 1);
     this.xpBack = this.add.graphics().setDepth(DEPTH);
     this.xpFill = this.add.graphics().setDepth(DEPTH + 1);
     this.hpBack = this.add.graphics().setDepth(DEPTH);
@@ -215,10 +224,10 @@ export class UIScene extends Phaser.Scene {
         .setResolution(2)
         .setDepth(DEPTH + 1);
 
-    this.timerText = text(W / 2, HUD.row.timerY, '00:00', HUD.type.timer, '#f4fbff')
+    this.timerText = text(W / 2, HUD.row.timerY, '00:00', HUD.type.timer, VISUAL_TEXT.ivory)
       .setFontStyle('bold')
       .setShadow(0, 1, '#02030a', 4, true, true);
-    this.levelText = text(16, HUD.row.levelY, 'МУТАЦИЯ 1', HUD.type.level, '#ff8fd0', 0)
+    this.levelText = text(16, HUD.row.levelY, 'МУТАЦИЯ 1', HUD.type.level, VISUAL_TEXT.player, 0)
       .setFontStyle('bold')
       .setStroke('#2a0a1e', 2)
       .setShadow(0, 1, '#02030a', 3, true, true);
@@ -244,10 +253,10 @@ export class UIScene extends Phaser.Scene {
       .container(W / 2, 116, [this.contextHintPanel, this.contextHintText])
       .setDepth(DEPTH + 8)
       .setVisible(false);
-    this.killsText = text(W - 16, HUD.row.killsY, 'УНИЧТОЖЕНО 0', HUD.type.kills, '#e9fbff', 1)
+    this.killsText = text(W - 16, HUD.row.killsY, 'УНИЧТОЖЕНО 0', HUD.type.kills, VISUAL_TEXT.muted, 1)
       .setFontStyle('bold')
       .setShadow(0, 1, '#02030a', 3, true, true);
-    this.hpText = text(W / 2, HUD.row.hpTextY, '', HUD.type.hp, '#f4fbff')
+    this.hpText = text(W / 2, HUD.row.hpTextY, '', HUD.type.hp, VISUAL_TEXT.ivory)
       .setFontStyle('bold')
       .setShadow(0, 1, '#02030a', 3, true, true);
     this.bossLabel = text(W / 2, HUD.row.bossLabelY, IDENTITY.boss, 12, '#ff5472')
@@ -370,14 +379,14 @@ export class UIScene extends Phaser.Scene {
       this.tickOnboarding(run);
       const m = this.hudMetrics(W);
       this.xpBack.clear();
-      this.xpBack.fillStyle(HUD.barBack, 0.9);
+      this.xpBack.fillStyle(VISUAL.panelRaised, 0.9);
       this.xpBack.fillRoundedRect(m.xpX, HUD.row.xpY, m.xpW, HUD.row.xpH, 5);
-      this.xpBack.lineStyle(1, ROLE.faction.immune, 0.28);
+      this.xpBack.lineStyle(1, VISUAL.line, 0.55);
       this.xpBack.strokeRoundedRect(m.xpX, HUD.row.xpY, m.xpW, HUD.row.xpH, 5);
       this.xpFill.clear();
       const xf = Phaser.Math.Clamp(run.xp / run.xpNext, 0, 1);
       if (xf > 0) {
-        this.xpFill.fillStyle(COLORS.magenta, 1);
+        this.xpFill.fillStyle(VISUAL.player, 1);
         this.xpFill.fillRoundedRect(m.xpX, HUD.row.xpY, Math.max(m.xpW * xf, 10), HUD.row.xpH, 5);
         this.drawBarHighlight(this.xpFill, m.xpX, HUD.row.xpY, Math.max(m.xpW * xf, 10));
       }
@@ -416,12 +425,12 @@ export class UIScene extends Phaser.Scene {
       const bw = m.hpW;
       const bx = m.hpX;
       this.hpBack.clear();
-      this.hpBack.fillStyle(HUD.barBack, 0.9);
+      this.hpBack.fillStyle(VISUAL.panelRaised, 0.9);
       this.hpBack.fillRoundedRect(bx, HUD.row.hpY, bw, HUD.row.hpH, 6);
       this.hpFill.clear();
       const hf = Phaser.Math.Clamp(run.hp / run.maxHp, 0, 1);
       if (hf > 0) {
-        this.hpFill.fillStyle(hf > 0.35 ? COLORS.green : HUD.lowHp, 1);
+        this.hpFill.fillStyle(hf > 0.35 ? VISUAL.host : HUD.lowHp, 1);
         this.hpFill.fillRoundedRect(bx, HUD.row.hpY, Math.max(bw * hf, 10), HUD.row.hpH, 6);
         this.drawBarHighlight(this.hpFill, bx, HUD.row.hpY, Math.max(bw * hf, 10));
       }
@@ -516,7 +525,7 @@ export class UIScene extends Phaser.Scene {
       duration,
       onComplete: options.onComplete,
     };
-    if (this.modalOpen || this.uiBlocked || this.transitionOverlay || this.overShown) {
+    if (this.modalOpen || this.uiBlocked || this.transitionOverlay || this.overShown || this.activeBossReveals > 0) {
       if (!this.pendingContextHints.some((pending) => pending.key === next.key)) {
         this.pendingContextHints.push(next);
       }
@@ -594,6 +603,7 @@ export class UIScene extends Phaser.Scene {
       this.modalOpen ||
       this.uiBlocked ||
       this.transitionOverlay ||
+      this.activeBossReveals > 0 ||
       this.overShown
     ) {
       return;
@@ -818,16 +828,13 @@ export class UIScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
     const compact = H < 620;
+    this.activeBossReveals += 1;
     this.setHudCinematicAlpha(0.12);
     // Full-field dim guarantees the title zone stays legible over any boss art
     // or live combat behind the reveal; the HUD itself is already faded above.
     const dim = this.add
       .rectangle(W / 2, H / 2, W, H, 0x030208, 0.62)
       .setDepth(149);
-    const hintsWereVisible = {
-      context: this.contextHintContainer?.visible ?? false,
-      onboarding: this.onboardingContainer?.visible ?? false,
-    };
     this.contextHintContainer?.setVisible(false);
     this.onboardingContainer?.setVisible(false);
     const c = this.add.container(0, 0).setDepth(150).setAlpha(0);
@@ -838,7 +845,9 @@ export class UIScene extends Phaser.Scene {
       .setStrokeStyle(1, accent, 0.4);
     const lineTop = this.add.rectangle(W / 2, H / 2 - bandH / 2, W, 2, accent, 0.82);
     const lineBottom = this.add.rectangle(W / 2, H / 2 + bandH / 2, W, 2, accent, 0.5);
-    c.add([band, lineTop, lineBottom]);
+    c.add([band, createSpecimenSurface(this, W / 2, H / 2, W - 12, bandH, {
+      accent, fill: VISUAL.ink, alpha: 0.85, detail: 'quiet',
+    }), lineTop, lineBottom]);
 
     const cinematicKey =
       textureKey === 'immune-prime'
@@ -852,11 +861,13 @@ export class UIScene extends Phaser.Scene {
         .setDisplaySize(W, bandH)
         .setAlpha(0.5);
       c.add(art);
-      art.setScale(1.04, 1.04);
+      const fittedScaleX = art.scaleX;
+      const fittedScaleY = art.scaleY;
+      art.setScale(fittedScaleX * 1.04, fittedScaleY * 1.04);
       this.tweens.add({
         targets: art,
-        scaleX: 1,
-        scaleY: 1,
+        scaleX: fittedScaleX,
+        scaleY: fittedScaleY,
         alpha: 0.64,
         duration: 760,
         ease: 'Quad.Out',
@@ -864,16 +875,23 @@ export class UIScene extends Phaser.Scene {
     }
 
     if (this.textures.exists(textureKey)) {
+      const logical = CORE_ART[textureKey as keyof typeof CORE_ART];
+      const texture = this.textures.getFrame(textureKey);
+      // Reserve room for the 1.08 entrance growth inside the left copy-free column.
+      const portraitMaxW = W * 0.42;
+      const portraitMaxH = bandH - 20;
+      const portraitScale = logical
+        ? artScale(textureKey, Math.min(portraitMaxW / logical.width, portraitMaxH / logical.height) / 1.08)
+        : Math.min(portraitMaxW / texture.width, portraitMaxH / texture.height) / 1.08;
       const portrait = this.add
-        .image(W * 0.28, H / 2, textureKey)
-        .setScale(compact ? 1.22 : 1.48)
-        .setAlpha(0.92)
-        .setBlendMode(Phaser.BlendModes.ADD);
+        .image(W * 0.26, H / 2, textureKey)
+        .setScale(portraitScale)
+        .setAlpha(0.92);
       c.add(portrait);
-      portrait.setX(W * 0.22);
+      portrait.setX(W * 0.24);
       this.tweens.add({
         targets: portrait,
-        x: W * 0.3,
+        x: W * 0.26,
         scale: portrait.scaleX * 1.08,
         duration: 760,
         ease: 'Quad.Out',
@@ -910,7 +928,7 @@ export class UIScene extends Phaser.Scene {
         })
         .setOrigin(0, 0.5)
         .setResolution(2)
-        .setShadow(0, 0, `#${accent.toString(16).padStart(6, '0')}`, 12, true, true)
+        .setShadow(0, 2, '#080f14', 2, true, true)
     );
     c.add(
       this.add
@@ -923,6 +941,7 @@ export class UIScene extends Phaser.Scene {
         .setResolution(2)
     );
 
+    let revealComplete = false;
     this.tweens.add({
       targets: c,
       alpha: 1,
@@ -931,11 +950,19 @@ export class UIScene extends Phaser.Scene {
       hold: 700,
       ease: 'Quad.Out',
       onComplete: () => {
+        if (revealComplete) return;
+        revealComplete = true;
         c.destroy(true);
         dim.destroy();
-        if (hintsWereVisible.context) this.contextHintContainer?.setVisible(true);
-        if (hintsWereVisible.onboarding) this.onboardingContainer?.setVisible(true);
-        this.setHudCinematicAlpha(1);
+        this.activeBossReveals = Math.max(0, this.activeBossReveals - 1);
+        if (this.activeBossReveals === 0) {
+          this.setHudCinematicAlpha(1);
+          if (this.contextHintKey !== null && !this.modalOpen && !this.uiBlocked && !this.overShown && !this.transitionOverlay) {
+            this.contextHintContainer?.setVisible(true);
+          }
+          this.flushContextHint();
+          this.renderOnboarding();
+        }
       },
     });
 
@@ -996,6 +1023,7 @@ export class UIScene extends Phaser.Scene {
     const value = Phaser.Math.Clamp(alpha, 0, 1);
     for (const obj of [
       this.hudBackdrop,
+      this.hudMembrane,
       this.xpBack,
       this.xpFill,
       this.hpBack,
@@ -1023,6 +1051,10 @@ export class UIScene extends Phaser.Scene {
     this.hudBackdrop
       .setPosition(W / 2, HUD.plate.top + HUD.plate.height / 2)
       .setDisplaySize(W - 12, HUD.plate.height);
+    this.hudMembrane.setPosition(W / 2, HUD.plate.top + HUD.plate.height / 2);
+    drawSpecimenSurface(this.hudMembrane, W - 12, HUD.plate.height, {
+      accent: VISUAL.player, fill: VISUAL.ink, alpha: 0, detail: 'quiet',
+    });
     this.timerText.setPosition(W / 2, HUD.row.timerY).setFontSize(HUD.type.timer);
     this.levelText.setPosition(HUD.row.levelX, HUD.row.levelY).setFontSize(HUD.type.level);
     const metrics = this.hudMetrics(W);
@@ -1155,7 +1187,7 @@ export class UIScene extends Phaser.Scene {
     const copy = ONBOARDING_COPY[step.id];
     const W = this.scale.width;
     const hidden =
-      this.contextHintKey !== null || this.pendingContextHints.length > 0 || this.overShown || this.modalOpen;
+      this.contextHintKey !== null || this.pendingContextHints.length > 0 || this.overShown || this.modalOpen || this.activeBossReveals > 0;
     if (!this.onboardingContainer) {
       const panelW = Math.min(W - 28, 380);
       const panel = this.add
@@ -1316,7 +1348,7 @@ export class UIScene extends Phaser.Scene {
 
     const ring = this.add
       .circle(W / 2, H / 2, 20)
-      .setStrokeStyle(3, legendaryReward ? COLORS.gold : COLORS.magenta, 0.92)
+      .setStrokeStyle(2, legendaryReward ? VISUAL.warning : VISUAL.player, 0.28)
       .setDepth(101);
     this.tweens.add({
       targets: ring,
@@ -1334,20 +1366,13 @@ export class UIScene extends Phaser.Scene {
         fontFamily: FONT,
         fontSize: compact ? '23px' : '27px',
         fontStyle: 'bold',
-        color: legendaryReward ? '#ffe066' : '#ff78c8',
+        color: legendaryReward ? VISUAL_TEXT.warning : VISUAL_TEXT.ivory,
         align: 'center',
         wordWrap: { width: W - 24 },
       })
       .setOrigin(0.5)
       .setResolution(2)
-      .setShadow(
-        0,
-        0,
-        legendaryReward ? 'rgba(255,224,102,0.82)' : 'rgba(255,79,181,0.72)',
-        16,
-        true,
-        true
-      );
+      .setShadow(0, 2, '#080f14', 2, true, true);
     c.add(titleT);
     titleT.setScale(0.7);
     this.tweens.add({ targets: titleT, scale: 1, duration: 260, ease: 'Back.Out' });
@@ -1405,25 +1430,22 @@ export class UIScene extends Phaser.Scene {
       const card = this.add.container(W / 2, y);
       const evolution = def.kind === 'evolution';
       const legendary = def.kind === 'legendary';
-      const accent = legendary
-        ? COLORS.gold
-        : evolution
-          ? COLORS.gold
-          : def.rarity === 'rare'
-            ? COLORS.purple
-            : COLORS.cyan;
+      const accent = legendary || evolution
+        ? VISUAL.warning
+        : def.rarity === 'rare' ? VISUAL.rare : VISUAL.host;
       const progress = getUpgradeProgress(gs.runState, def);
       const special = evolution || legendary;
       const bg = this.add
-        .rectangle(0, 0, cw, ch, special ? 0x1b1217 : COLORS.panel, 1)
-        .setStrokeStyle(1, special ? COLORS.gold : COLORS.stroke, special ? 0.62 : 0.42);
-      card.add(bg);
+        .rectangle(0, 0, cw, ch, VISUAL.panel, 0);
+      const membrane = createSpecimenSurface(this, 0, 0, cw, ch, { accent });
+      card.add([bg, membrane]);
 
       // Visual-impact pass: cards read as biological modules instead of neon-outlined tables.
       // The accent rail carries rarity/family identity while the surface border stays quiet.
       const rail = this.add
-        .rectangle(-cw / 2 + 5, 0, 7, ch - 10, accent, special ? 0.98 : 0.88)
+        .rectangle(-cw / 2 + 5, 0, 3, ch - 26, accent, special ? 0.8 : 0.58)
         .setOrigin(0.5);
+      card.add(rail);
       const iconX = -cw / 2 + 39;
       const iconSize = compact ? 46 : 52;
 
@@ -1472,7 +1494,7 @@ export class UIScene extends Phaser.Scene {
             fontFamily: FONT,
             fontSize: compact ? '11px' : '12px',
             fontStyle: 'bold',
-            color: legendary || evolution ? '#ffe066' : def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
+            color: legendary || evolution ? VISUAL_TEXT.warning : def.rarity === 'rare' ? VISUAL_TEXT.rare : VISUAL_TEXT.host,
           })
           .setResolution(2)
       );
@@ -1483,7 +1505,7 @@ export class UIScene extends Phaser.Scene {
             fontFamily: FONT,
             fontSize: legendary || evolution ? (compact ? '17px' : '20px') : compact ? '16px' : '19px',
             fontStyle: 'bold',
-            color: legendary || evolution ? '#ffe066' : UI_TEXT.primary,
+            color: VISUAL_TEXT.ivory,
             lineSpacing: -2,
             maxLines: 2,
             wordWrap: { width: Math.max(112, right - tx - 4), useAdvancedWrap: true },
@@ -1499,7 +1521,7 @@ export class UIScene extends Phaser.Scene {
             fontFamily: UI_FONT,
             fontSize: compact ? '11px' : '12px',
             fontStyle: '500',
-            color: special ? '#ddd6c3' : '#c8c1cf',
+            color: VISUAL_TEXT.muted,
             lineSpacing: 1,
             maxLines: 2,
             wordWrap: { width: effectW, useAdvancedWrap: true },
@@ -1511,7 +1533,7 @@ export class UIScene extends Phaser.Scene {
         fontFamily: UI_FONT,
         fontSize: compact ? '11px' : '12px',
         fontStyle: '700',
-        color: legendary || evolution ? '#fff1ac' : def.rarity === 'rare' ? '#ddd0ff' : '#9ef1ff',
+        color: legendary || evolution ? VISUAL_TEXT.warning : def.rarity === 'rare' ? VISUAL_TEXT.rare : VISUAL_TEXT.host,
         align: 'left',
         lineSpacing: -1,
         maxLines: legendary && ch === expandedCardHeight ? 3 : 2,
@@ -1524,7 +1546,7 @@ export class UIScene extends Phaser.Scene {
       const effectY = ch / 2 - (compact ? (effectNeedsThirdLine ? 41 : 37) : 44);
       const effectPlateHeight = compact ? (effectNeedsThirdLine ? 42 : 30) : 32;
       const effectPlate = this.add
-        .rectangle(tx + effectW / 2, effectY, effectW, effectPlateHeight, accent, 0.11)
+        .rectangle(tx + effectW / 2, effectY, effectW, effectPlateHeight, VISUAL.panelRaised, 0.98)
         .setStrokeStyle(1, accent, 0.3);
       card.add(effectPlate);
       card.add(effectText.setPosition(tx + 8, effectY).setOrigin(0, 0.5).setResolution(2));
@@ -1609,8 +1631,8 @@ export class UIScene extends Phaser.Scene {
           this.scene.resume('Game');
         }
       });
-      bg.on('pointerover', () => bg.setFillStyle(special ? 0x2a1b20 : 0x20101c, 1));
-      bg.on('pointerout', () => bg.setFillStyle(special ? 0x1b1217 : COLORS.panel, 1));
+      bg.on('pointerover', () => drawSpecimenSurface(membrane, cw, ch, { accent, fill: VISUAL.panelRaised }));
+      bg.on('pointerout', () => drawSpecimenSurface(membrane, cw, ch, { accent }));
 
       c.add(card);
       card.setScale(0.94).setAlpha(0);
@@ -2090,7 +2112,7 @@ export class UIScene extends Phaser.Scene {
 
     c.add(
       this.add
-        .rectangle(W / 2, H / 2, W, H, SCRIM.result.color, SCRIM.result.alpha)
+        .rectangle(W / 2, H / 2, W, H, VISUAL.ink, 0.95)
         .setName('ofeliya-result-scrim')
         .setInteractive()
     );
@@ -2104,24 +2126,34 @@ export class UIScene extends Phaser.Scene {
     }
 
     const titleY = compact ? H * 0.1 : H * 0.13;
-    c.add(
-      this.add
+    c.add(createSpecimenSurface(this, W / 2, titleY + (compact ? 74 : 96), W - 28, compact ? 168 : 206, {
+      accent: res.win ? VISUAL.host : VISUAL.player, alpha: 0.72,
+    }));
+    c.add(this.add.text(W / 2, titleY - (compact ? 25 : 30), 'STRAIN ZERO / ИТОГ ЦИКЛА', {
+      fontFamily: FONT, fontSize: '10px', letterSpacing: 2, color: VISUAL_TEXT.muted,
+    }).setOrigin(0.5).setResolution(2));
+    const resultTitle = this.add
         .text(W / 2, titleY, res.win ? 'ИММУНИТЕТ ПОДАВЛЕН' : 'ШТАММ УНИЧТОЖЕН', {
           fontFamily: FONT,
           fontSize: res.win ? (compact ? '22px' : '27px') : compact ? '27px' : '32px',
           fontStyle: 'bold',
-          color: res.win ? '#ffe066' : '#ff3860',
+          color: VISUAL_TEXT.ivory,
           align: 'center',
+          wordWrap: { width: W - 40 },
         })
         .setOrigin(0.5)
         .setResolution(2)
         .setName('ofeliya-result-title')
-        .setShadow(0, 0, res.win ? 'rgba(255,224,102,0.7)' : 'rgba(255,56,96,0.7)', 16, true, true)
+        .setShadow(0, 2, '#080f14', 2, true, true);
+    c.add(resultTitle);
+    const timeY = Math.max(
+      titleY + (compact ? 42 : 54),
+      resultTitle.getBounds().bottom + (compact ? 24 : 28),
     );
 
     c.add(
       this.add
-        .text(W / 2, titleY + (compact ? 42 : 54), fmtTime(res.timeMs), {
+        .text(W / 2, timeY, fmtTime(res.timeMs), {
           fontFamily: FONT,
           fontSize: compact ? '38px' : '46px',
           fontStyle: 'bold',
@@ -2132,17 +2164,20 @@ export class UIScene extends Phaser.Scene {
         .setName('ofeliya-result-time')
     );
 
-    const statY = titleY + (compact ? 79 : 100);
+    const statY = timeY + (compact ? 37 : 46);
     c.add(
       this.add
         .text(
           W / 2,
           statY,
-          `${IDENTITY.kills}: ${res.kills}   ·   Заражено: ${res.hostCellsInfected}   ·   Пик мутации: ${res.highestLevel}   ·   Комбо ×${res.comboBest}`,
+          `${IDENTITY.kills}: ${res.kills}  ·  Заражено: ${res.hostCellsInfected}\nПик мутации: ${res.highestLevel}  ·  Комбо ×${res.comboBest}`,
           {
             fontFamily: FONT,
             fontSize: compact ? '11px' : '13px',
-            color: '#aab4d4',
+            color: VISUAL_TEXT.muted,
+            align: 'center',
+            wordWrap: { width: W - 40 },
+            lineSpacing: 2,
           }
         )
         .setOrigin(0.5)
@@ -2150,7 +2185,7 @@ export class UIScene extends Phaser.Scene {
         .setName('ofeliya-result-stats')
     );
 
-    let detailY = statY + 27;
+    let detailY = statY + 35;
     const evoText = res.evolutions.length > 0
       ? res.evolutions.map((id) => EVOLUTION_NAMES[id]).join(' · ')
       : 'нет';
@@ -2547,24 +2582,25 @@ export class UIScene extends Phaser.Scene {
   ): void {
     const w = 230;
     const h = 46;
+    // Keep one named visual/input target so the responsive layout moves it atomically.
     const bg = this.add
-      .rectangle(x, y, w, h, primary ? COLORS.magenta : COLORS.panel, primary ? BUTTON.primaryFill : BUTTON.secondaryFill)
-      .setStrokeStyle(BUTTON.strokeWidth, primary ? COLORS.magenta : COLORS.stroke, BUTTON.strokeAlpha);
+      .rectangle(x, y, w, h, primary ? VISUAL.host : VISUAL.panel, primary ? BUTTON.primaryFill : BUTTON.secondaryFill)
+      .setStrokeStyle(BUTTON.strokeWidth, primary ? VISUAL.host : VISUAL.line, BUTTON.strokeAlpha);
     if (layoutName) bg.setName(layoutName + '-bg');
     const t = this.add
       .text(x, y, label, {
         fontFamily: FONT,
         fontSize: '16px',
         fontStyle: 'bold',
-        color: primary ? '#ff78c8' : '#fff4ec',
+        color: primary ? '#080f14' : VISUAL_TEXT.ivory,
       })
       .setOrigin(0.5)
       .setResolution(2);
     if (layoutName) t.setName(layoutName + '-label');
     bg.setInteractive({ useHandCursor: true }).on('pointerup', () => cb());
-    bg.on('pointerover', () => bg.setFillStyle(COLORS.panelHover, 1));
+    bg.on('pointerover', () => bg.setFillStyle(primary ? VISUAL.ivory : VISUAL.panelRaised, 1));
     bg.on('pointerout', () =>
-      bg.setFillStyle(primary ? COLORS.magenta : COLORS.panel, primary ? BUTTON.primaryFill : BUTTON.secondaryFill)
+      bg.setFillStyle(primary ? VISUAL.host : VISUAL.panel, primary ? BUTTON.primaryFill : BUTTON.secondaryFill)
     );
     c.add([bg, t]);
   }

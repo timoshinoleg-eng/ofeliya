@@ -109,11 +109,12 @@ function methodBody(path, name) {
 test('Menu host and hero keep the original large portraits and tween endpoints', () => {
  const { artScale } = load('src/game/ArtMetrics.ts');
  const { ROLE, BORDER, PANEL } = load('src/ui/tokens.ts');
+ const { VISUAL } = load('src/ui/visualTokens.ts');
  const source = readFileSync('src/scenes/MenuScene.ts', 'utf8');
  const body = source.slice(source.indexOf('    const host ='), source.indexOf('    const titleY ='));
  for (const H of [568, 844]) {
   const f = fixture(); bake(f);
-  new Function('W', 'H', 'artScale', 'ROLE', 'BORDER', 'PANEL', body).call(f.scene, 390, H, artScale, ROLE, BORDER, PANEL);
+  new Function('W', 'H', 'artScale', 'ROLE', 'BORDER', 'PANEL', 'VISUAL', body).call(f.scene, 390, H, artScale, ROLE, BORDER, PANEL, VISUAL);
   const host = f.objects.find(o => o.texture?.key === 'host-cell-shadow');
   const hero = f.objects.find(o => o.texture?.key === 'virus-player');
   const hostScale = H < 650 ? 1.1 : 1.4, heroScale = H < 650 ? 1.8 : 2.15;

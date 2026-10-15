@@ -32,6 +32,8 @@ import { clearDailyIntent, launchDailyRun } from '../game/DailyRunIntent';
 import { showLegalOverlay } from '../legal/LegalOverlay';
 import { SocialHub } from '../ui/SocialHub';
 import { BORDER, PANEL, ROLE } from '../ui/tokens';
+import { VISUAL, VISUAL_TEXT } from '../ui/visualTokens';
+import { createSpecimenSurface, drawSpecimenSurface } from '../ui/specimenSurface';
 import { FOUNDER_BADGE_LABEL, hasFounderBadge } from '../ui/FounderBadge';
 import { PlatformBridge } from '../platform';
 import { RELEASE_SHORT } from '../release';
@@ -144,11 +146,11 @@ export class MenuScene extends Phaser.Scene {
 
     // Retained specimen framing sits below the portrait and all copy/input targets.
     // Only the halo's opacity breathes; no scene objects are spawned by animation.
-    const specimenRadius = Math.min(82, H * 0.105);
-    const specimen = this.add.graphics().setPosition(W / 2, H * 0.28).setDepth(0);
+    const specimenRadius = Math.min(82, H * 0.088);
+    const specimen = this.add.graphics().setPosition(W / 2, H * 0.27).setDepth(0);
     specimen.fillStyle(ROLE.surface.panel, PANEL.plate * 0.5);
     specimen.fillCircle(0, 0, specimenRadius);
-    specimen.lineStyle(BORDER.hair, ROLE.faction.immune, 0.22);
+    specimen.lineStyle(BORDER.hair, VISUAL.immune, 0.36);
     specimen.strokeCircle(0, 0, specimenRadius);
     for (const angle of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
       const inner = specimenRadius - 5;
@@ -156,17 +158,17 @@ export class MenuScene extends Phaser.Scene {
       specimen.lineBetween(Math.cos(angle) * inner, Math.sin(angle) * inner,
         Math.cos(angle) * outer, Math.sin(angle) * outer);
     }
-    const halo = this.add.graphics().setPosition(W / 2, H * 0.28).setDepth(1);
-    halo.lineStyle(BORDER.heavyLg, ROLE.faction.player, 0.1);
+    const halo = this.add.graphics().setPosition(W / 2, H * 0.27).setDepth(1);
+    halo.lineStyle(BORDER.heavyLg, VISUAL.player, 0.1);
     halo.strokeCircle(0, 0, specimenRadius - 11);
-    halo.lineStyle(BORDER.hair, ROLE.faction.player, 0.32);
+    halo.lineStyle(BORDER.hair, VISUAL.player, 0.32);
     halo.strokeCircle(0, 0, specimenRadius - 11);
     halo.setAlpha(0.55);
     this.tweens.add({ targets: halo, alpha: 1, duration: 2400, yoyo: true,
       repeat: -1, ease: 'Sine.InOut' });
 
     const virus = this.add
-      .image(W / 2, H * 0.28, 'virus-player')
+      .image(W / 2, H * 0.27, 'virus-player')
       .setScale(artScale('virus-player', H < 650 ? 1.8 : 2.15))
       .setDepth(2);
     this.tweens.add({
@@ -189,22 +191,22 @@ export class MenuScene extends Phaser.Scene {
     const title = this.add
       .text(W / 2, titleY, 'OFELIYA', {
         fontFamily: FONT,
-        fontSize: H < 650 ? '42px' : '50px',
+        fontSize: H < 650 ? '39px' : '48px',
         fontStyle: 'bold',
-        color: '#fff4ec',
+        color: VISUAL_TEXT.ivory,
       })
       .setOrigin(0.5)
       .setResolution(2)
       .setName('ofeliya-menu-title')
       .setDepth(5);
-    title.setShadow(0, 0, 'rgba(255,79,181,0.48)', 7, true, true);
+    title.setShadow(0, 2, '#080f14', 0, true, true);
 
     this.add
       .text(W / 2, titleY + (H < 650 ? 38 : 46), 'STRAIN ZERO', {
         fontFamily: FONT,
         fontSize: '12px',
         fontStyle: 'bold',
-        color: '#ff78c8',
+        color: VISUAL_TEXT.player,
         letterSpacing: 4,
       })
       .setOrigin(0.5)
@@ -237,13 +239,13 @@ export class MenuScene extends Phaser.Scene {
       this.founderBadge = badge;
     });
 
-    const hookY = H * 0.43;
+    const hookY = H * 0.405;
     this.add
-      .text(W / 2, hookY, 'ОРГАНИЗМ ЕЩЁ НЕ ЗНАЕТ,\nЧТО ТЫ ЗДЕСЬ', {
+      .text(W / 2, hookY, 'СИНТЕТИЧЕСКИЙ ВИРУС.\nЖИВОЙ ОРГАНИЗМ.', {
         fontFamily: FONT,
-        fontSize: H < 650 ? '14px' : '16px',
+        fontSize: H < 650 ? '15px' : '18px',
         fontStyle: 'bold',
-        color: '#fff4ec',
+        color: VISUAL_TEXT.ivory,
         align: 'center',
         lineSpacing: 5,
       })
@@ -253,11 +255,11 @@ export class MenuScene extends Phaser.Scene {
       .setDepth(5);
 
     this.add
-      .text(W / 2, hookY + 46, 'Мутируй быстрее, чем иммунитет адаптируется.', {
+      .text(W / 2, hookY + 38, 'Выживай. Собирай РНК. Меняй штамм.', {
         fontFamily: UI_FONT,
         fontSize: H < 650 ? '12px' : '15px',
         fontStyle: '600',
-        color: UI_TEXT.primary,
+        color: VISUAL_TEXT.muted,
         align: 'center',
       })
       .setOrigin(0.5)
@@ -268,11 +270,13 @@ export class MenuScene extends Phaser.Scene {
     const displayName = PlatformBridge.getDisplayName();
     if (PlatformBridge.available && displayName) {
       this.add
-        .text(W / 2, hookY + 70, `Носитель: ${displayName}`, {
+        .text(W / 2, hookY + 62, `Носитель: ${displayName}`, {
           fontFamily: UI_FONT,
           fontSize: H < 650 ? '12px' : '14px',
           fontStyle: '700',
           color: '#9deeff',
+          wordWrap: { width: W - 40, useAdvancedWrap: true },
+          maxLines: 1,
         })
         .setOrigin(0.5)
         .setResolution(2)
@@ -284,7 +288,7 @@ export class MenuScene extends Phaser.Scene {
     let challengeTargetText: Phaser.GameObjects.Text | null = null;
     let challengeDetailText: Phaser.GameObjects.Text | null = null;
     if (incomingChallenge || incomingDuelId) {
-      const challengeY = H * 0.57;
+      const challengeY = H * 0.54;
       const panelW = Math.min(W - 42, 330);
       this.add
         .rectangle(W / 2, challengeY, panelW, 58, 0x251020, 0.9)
@@ -343,7 +347,7 @@ export class MenuScene extends Phaser.Scene {
       this.add
         .text(
           W / 2,
-          H * 0.57,
+          H * 0.54,
           `НЕЗАВЕРШЁННЫЙ ЗАБЕГ\n${resumeStage.name} · ${fmtTime(resumeCheckpoint.runState.run.timeMs)} · МУТАЦИЯ ${resumeCheckpoint.runState.stage.level} · ${resumeDifficulty.shortLabel}`,
           {
             fontFamily: UI_FONT,
@@ -368,11 +372,11 @@ export class MenuScene extends Phaser.Scene {
           ? `Выживание ${survival} · ПРАЙМ ${boss1}\nКампания ${campaign} · клетки ${save.bestKills}`
           : 'STRAIN-0 · ПЕРВЫЙ ЦИКЛ ЗАРАЖЕНИЯ';
       this.add
-        .text(W / 2, H * 0.57, records, {
+        .text(W / 2, H * 0.54, records, {
           fontFamily: UI_FONT,
           fontSize: H < 650 ? '12px' : '14px',
           fontStyle: '650',
-          color: UI_TEXT.primary,
+          color: VISUAL_TEXT.muted,
           align: 'center',
           lineSpacing: 5,
           wordWrap: { width: W - 42 },
@@ -394,11 +398,13 @@ export class MenuScene extends Phaser.Scene {
     const difficultyLeft = difficultyX - selectorW / 2;
     const difficultyRight = difficultyX + selectorW / 2;
     const difficultyBg = this.add
-      .rectangle(difficultyX, difficultyY, selectorW, selectorH, 0x171018, 0.97)
+      .rectangle(difficultyX, difficultyY, selectorW, selectorH, VISUAL.panel, 0.97)
       .setStrokeStyle(1, COLORS.stroke, 0.46)
       .setDepth(5)
       .setName('ofeliya-menu-difficulty-selector')
       .setInteractive({ useHandCursor: true });
+    const difficultySurface = createSpecimenSurface(this, difficultyX, difficultyY, selectorW, selectorH,
+      { fill: VISUAL.panel, accent: VISUAL.immune, detail: 'quiet' }).setDepth(5);
     const difficultyRail = this.add
       .rectangle(difficultyLeft + 5, difficultyY, 5, selectorH - 10, COLORS.cyan, 0.92)
       .setDepth(6);
@@ -476,7 +482,11 @@ export class MenuScene extends Phaser.Scene {
       difficultyRail.setFillStyle(difficultyAccent, 0.94);
       difficultyBg
         .setStrokeStyle(1, difficultyAccent, challengeLocked || profile.id === 'strained' ? 0.5 : 0.34)
-        .setFillStyle(profile.id === 'strained' ? 0x1f1714 : 0x171018, 0.97);
+        .setFillStyle(profile.id === 'strained' ? 0x29251e : VISUAL.panel, 0.97);
+      drawSpecimenSurface(difficultySurface, selectorW, selectorH, {
+        fill: profile.id === 'strained' ? 0x29251e : VISUAL.panel,
+        accent: difficultyAccent, detail: 'quiet',
+      });
     };
     renderDifficulty();
     difficultyBg.on('pointerup', () => {
@@ -497,11 +507,13 @@ export class MenuScene extends Phaser.Scene {
     const controlLeft = controlX - selectorW / 2;
     const controlRight = controlX + selectorW / 2;
     const controlBg = this.add
-      .rectangle(controlX, controlY, selectorW, controlH, 0x121820, 0.96)
+      .rectangle(controlX, controlY, selectorW, controlH, VISUAL.panel, 0.96)
       .setStrokeStyle(1, COLORS.stroke, 0.44)
       .setDepth(5)
       .setName('ofeliya-menu-control-selector')
       .setInteractive({ useHandCursor: true });
+    const controlSurface = createSpecimenSurface(this, controlX, controlY, selectorW, controlH,
+      { fill: VISUAL.panel, accent: VISUAL.player, detail: 'quiet' }).setDepth(5);
     const controlRail = this.add
       .rectangle(controlLeft + 5, controlY, 5, controlH - 10, COLORS.magenta, 0.94)
       .setDepth(6);
@@ -575,6 +587,8 @@ export class MenuScene extends Phaser.Scene {
             : COLORS.magenta;
       controlRail.setFillStyle(controlAccent, 0.95);
       controlBg.setStrokeStyle(1, controlAccent, selectedControlMode === 'one-hand' ? 0.34 : 0.5);
+      drawSpecimenSurface(controlSurface, selectorW, controlH,
+        { fill: VISUAL.panel, accent: controlAccent, detail: 'quiet' });
       if (incomingDuel) {
         startHint?.setText(`тот же забег · быстрее ${fmtTime(incomingDuel.targetTimeMs)}`);
       } else if (resumeCheckpoint) {
@@ -603,16 +617,18 @@ export class MenuScene extends Phaser.Scene {
     const btnY = H * (resumeCheckpoint ? 0.785 : 0.805);
     const btnW = Math.min(W - 30, 338);
     const btnH = resumeCheckpoint ? 58 : 66;
-    const btnAccent = incomingChallenge ? COLORS.gold : COLORS.magenta;
+    const btnAccent = incomingChallenge ? VISUAL.warning : VISUAL.player;
     this.add
       .rectangle(W / 2 + 3, btnY + 4, btnW, btnH, 0x050308, 0.58)
       .setDepth(4);
     const btnBg = this.add
-      .rectangle(W / 2, btnY, btnW, btnH, 0x5c143e, 0.95)
+      .rectangle(W / 2, btnY, btnW, btnH, 0x472a38, 0.95)
       .setStrokeStyle(1, btnAccent, 0.58)
       .setDepth(5);
+    const actionSurface = createSpecimenSurface(this, W / 2, btnY, btnW, btnH,
+      { fill: 0x472a38, accent: btnAccent, detail: 'specimen' }).setDepth(5);
     this.add
-      .rectangle(W / 2, btnY - btnH / 2 + 3, btnW - 10, 4, btnAccent, 0.96)
+      .rectangle(W / 2, btnY - btnH / 2 + 3, btnW - 16, 1, btnAccent, 0.72)
       .setDepth(6);
     const startButtonText = this.add
       .text(
@@ -705,8 +721,10 @@ export class MenuScene extends Phaser.Scene {
       }
       startFreshRun();
     });
-    btnBg.on('pointerover', () => btnBg.setFillStyle(0x7a1a52, 1));
-    btnBg.on('pointerout', () => btnBg.setFillStyle(0x5c143e, 0.92));
+    btnBg.on('pointerover', () => { btnBg.setFillStyle(0x654050, 1); actionSurface.setAlpha(0.72); });
+    btnBg.on('pointerout', () => { btnBg.setFillStyle(0x472a38, 0.95); actionSurface.setAlpha(1); });
+    btnBg.on('pointerdown', () => actionSurface.setAlpha(0.55));
+    btnBg.on('pointerup', () => actionSurface.setAlpha(1));
 
     if (incomingDuelId) {
       void loadDuelChallenge(incomingDuelId).then((challenge) => {

@@ -53,8 +53,10 @@ const HUD = {
   bossPad: 32,
   bossMaxW: 280,
   type: { timer: 26, level: 16, kills: 14, hp: 12, boss: 13, combo: 18 },
-  plateAlphaMin: 0.45,
-  plateAlphaMax: 0.5,
+  // Deliberate Phase 1 recipe: dense combat must not bleed through the reading plane.
+  // Geometry/occlusion and all other A1-A11 assertions remain unchanged.
+  plateAlphaMin: 0.8,
+  plateAlphaMax: 0.8,
   hit: { primary: 44, secondary: 24, secondaryH: 44 },
   pauseRight: 52,
   pauseY: 65,
