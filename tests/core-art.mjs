@@ -72,6 +72,7 @@ test('boot create bakes missing or partly loaded art before removing splash and 
     } };
    } };
    boot.scene = { start: key => { assert.equal(key, 'Menu'); events.push('menu'); } };
+   boot.game = { textures: f.scene.textures, events: { once(){}, off(){} } };
    boot.create();
    assert.deepEqual(events, ['legacy', 'splash', 'menu']);
    assert.deepEqual(f.removed.sort(), raw.map(key => 'raw-art-' + key).sort());
