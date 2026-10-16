@@ -1,0 +1,52 @@
+{
+  "checkedAt": "2026-10-16T12:35:13.165Z",
+  "expectedSha": "abdb10c19d17de074f2be90e52d59cd9485c5b1b",
+  "deploy": {
+    "id": "dep-db91jcff3r2c73fpgvs0",
+    "status": "live",
+    "sha": "abdb10c19d17de074f2be90e52d59cd9485c5b1b"
+  },
+  "service": {
+    "id": "srv-db5ro5vlk1mc73b0v0eg",
+    "plan": "free",
+    "settingsUnchanged": true
+  },
+  "public": {
+    "release": "abdb10c19d17de074f2be90e52d59cd9485c5b1b",
+    "ready": true,
+    "healthy": true,
+    "persistenceHealthy": true,
+    "htmlHashMatches": true,
+    "runtimeHashMatches": true,
+    "serviceWorkerHashMatches": true,
+    "mainScripts": [
+      {
+        "path": "/ofeliya/assets/index-CcgMXEWf.js",
+        "status": 200,
+        "bytes": 421473,
+        "sha256": "3a1610e696faccd373413617389b3190675cb82f792c1018af23d29e42e74b28"
+      }
+    ]
+  },
+  "state": {
+    "baselineRevision": 170,
+    "revision": 171,
+    "baselineScores": 74,
+    "scores": 74,
+    "newScores": 0,
+    "baselineProfiles": 4,
+    "profiles": 4,
+    "newProfiles": 0,
+    "baselineRegistrations": 1,
+    "registrations": 1,
+    "newRegistrations": 0,
+    "immutableScoresRetained": true,
+    "profileKeysRetained": true,
+    "registrationKeysRetained": true,
+    "existingProfileValuesChanged": 0,
+    "existingRegistrationValuesChanged": 0
+  },
+  "privateAfterSnapshotSha256": "f7fb94d7057866993abc6a7194e99c67297ee2c7d55c68b18b3e9719a0d80db0",
+  "browserQaHookAbsence": "root browser verification required",
+  "readOnlyRemote": true
+}

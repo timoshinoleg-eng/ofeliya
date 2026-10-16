@@ -1,3 +1,51 @@
+# Published visual completion handoff — 16 October 2026
+
+Product `abdb10c19d17de074f2be90e52d59cd9485c5b1b` ([PR217](https://github.com/timoshinoleg-eng/ofeliya/pull/217)) is published on the existing Render Free service, deployment `dep-db91jcff3r2c73fpgvs0`. Exact-head [CI38899978641](https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38899978641) and [visual matrix38899973748](https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38899973748) passed. Public release/HTML/runtime/service-worker hashes agree; main JS loads, readiness and remote persistence are healthy. State revision 170→171; 74 scores, 4 profiles and 1 registration remain, with all baseline scores and keys retained. Existing profile values changed: 0; registration values changed: 0. Main remains aba70324 and service settings are unchanged; PRs remain open.
+
+Completed the confirmed visual gaps: distinct combinable mutation silhouettes, consistent SocialHub/Codex/pause surfaces, readable measured result rows with bounded scrolling and pinned actions, measured header spacing and safe pointer ownership. Full local presentation/TypeScript, five-size mobile/rotation/resume, six-size HUD and three-size Canvas/WebGL rich-screen checks passed. Independent source and native-image reviews found no remaining P1/P2.
+
+Read docs/frontend-overhaul/completion/README.md and PUBLICATION.md. Physical MAX/Telegram/iOS phone readability/input, sustained dense-combat performance/thermals, newcomer and full-campaign acceptance remain separate unperformed checks. Short desktop motion cadence and controlled screenshots do not establish those results. Main integration remains separately unauthorized. A future successful main auto-deploy can supersede this pinned release.
+
+## Historical snapshots
+
+# Mutation art recovery published — 16 October 2026
+
+Product7a0d8292a47a42dae9eeb8d7623ced9affa75c20 (PR216, base PR214 branch) is live on Render Free, deploy dep-db8sqinf3r2c73f9u5f0 at10:08:41 Moscow. All exact-head CI38863701636 and visual-matrix38863701150 checks passed. Three packaged mutation images now recover after first render if Boot fell back; same256px texture/canvas refs and existing Player update, bounded attempts and destruction cleanup. No gameplay/assets/service settings/main changes.
+
+Read docs/frontend-overhaul/release/mutation-art/RECOVERY.md and README.md for16paired Canvas/WebGL frames, independent reviews and sanitized exact-head/backup/live evidence. Public browser320/360/390 passes with QA globals absent and zero page/console/HTTP/CSP errors. At320and390two aborted Boot XHRs each recover via HTTP200image requests. Real touch390reaches field/onboarding; all74scores,4profiles and1registration preserved unchanged, revision152→153. Private snapshots excluded.
+
+Main aba70324 and PR213/214/215/216 remain separate/open. Physical phone/MAX/Telegram/iOS, sustained performance/thermals, dense-motion perceptual and newcomer acceptance remain open. Halo/singularity/combined art similarity is a separate visual backlog; existing scale/alpha were retained. The original product fix's pending verification headers are superseded by this final documentation snapshot. No further product commit is required for this documentation update.
+
+## Previous snapshots
+# Verified Phase0/1 publication — 16 October 2026
+
+Product candidate44c657935f3124724fe6a3191d1b29c35189e4f2 is live on the existing Render Free service, deploy dep-db8ko259fdbs739ncmsg, finished00:57:09 Moscow. Exact-head CI38812038028 and visual matrix38812172355 passed all jobs. PR213/214/215 remain open; main is unchanged aba70324. No merge or service-setting change was made. The seven-line comprehension wait is reviewed and passed twice locally; production source did not change during this continuation.
+
+Read docs/frontend-overhaul/release/RELEASE_20261016.md for final evidence and limitations, including public release/assets hash parity, healthy readiness/persistence, preserved74 immutable scores/4 profiles/registration keys and revision150→151. Public desktop menu startup320/360/390 and touch gameplay390 passed, QA globals absent; visual inspection at390 confirmed card choice, field/joystick and onboarding progression. Five optional mutation-art requests were cancelled; all3 resources independently returned200. Zero page/console/CSP/HTTP errors. Raw private state backups and credentials are excluded.
+
+Completed: test synchronization, exact-head CI/review binding, fresh backup, authorized pinned deployment, public/state/browser verification and documentation. Remaining: physical MAX/Telegram/iOS and phone FPS/thermals/input/newcomer acceptance; rich/full campaign device coverage; separate PR204/207/208/209/210/212 integration and later visual phases. API deployment leaves main auto-deploy enabled, so a future successful main release can supersede this pin. Do not deploy the documentation branch or claim the entire master task complete.
+
+## Previous snapshots
+# Frontend overhaul continuation — 16 October 2026
+
+Continue Phase0/1 from the implemented candidate; do not restart the visual work. Main snapshot is `aba70324d13592fbcd86894fb29f395ac201f48a`. PR213 (world), PR214 (dependent UI), and PR215 (documentation) are open. Product checkout is `../repo` on `visual/phase1-ui-20261015`; this documentation checkout is `docs/frontend-overhaul-20261015`. Candidate recorded head is `d5cae44ac969b88607179d2693100380226a53b3`; a test-only comprehension synchronization fix is pending. Refresh exact heads/checks before release and append final SHA here after verification.
+
+Owner authorized deployment after validation and explicitly prohibited main merges. Deployment is pending; preparation/readback from 15 October is historical evidence, not candidate publication. Refresh the pre-deployment backup/baseline, require exact-head CI, then verify live identity, assets/API/browser and state continuity. Keep PR204/207/208/209/210/212 separate; no integration is implicitly authorized.
+
+Read `FRONTEND_OVERHAUL_PROGRESS.md` and `docs/frontend-overhaul/` for source audit, concepts, captures, reviews, walkthrough and performance limitations. Independent source review accepted the saved comprehension fix: waiting for actual `activeBossReveals === 0` removes fixture interference from an earlier spawned boss, preserves all host assertions and fails if completion stalls. Local rerun and hosted CI remain separate required evidence. Physical S20+/MAX/TG/iOS, live combat density/FPS/memory/thermals, newcomer acceptance and full campaign coverage remain open. Future phases are not completed by Phase1.
+
+## Previous snapshots
+
+# Frontend overhaul candidate — 15October2026
+
+Read `FRONTEND_OVERHAUL_PROGRESS.md` first; full evidence/design under `docs/frontend-overhaul/`. Starting main aba70324, initial public marker30a534f. World PR213 ee19eea; dependent UI PR214334f946 (base213). This documentation branch is code-free. Do not overwrite parallel PR204/207/208/209/210/212 or claim they are integrated. Main merge remains unauthorized; owner separately authorized deployment after candidate validation. Exact-head CI, blind visual review, full walkthrough, live deployment verification and physical-device/performance gates are not yet complete in this snapshot.
+
+Phase1 implements quiet deterministic vascular world/cell interiors plus menu/HUD/mutation/boss/result specimen surfaces and compact layout fixes. Local presentation, TypeScript and listed gameplay/UI contracts passed; frozen production QA has27before+27after captures with zero page errors. Capture cadence is not live combat/device FPS. Independent code review resolved difficulty decoration masking active state. Requested external routes all failed; Kimi/OpenCode did not implement/review. Available Codex agents completed slices.
+
+Coordinator is still refreshing tests/captures. Refresh copied `media/after` and append final reviewed hashes/CI/live evidence before final claims. This branch changes only documentation/media/repository memory. No personal cross-agent memories edited. Preserve prior snapshots below.
+
+## Preserved earlier snapshots
+
 # Review follow-ups — 2026-10-15
 
 Branch fix/review-followups-20261015 starts from main30a534f. Owner asked to continue remaining review recommendations. Four targeted follow-ups: Boot/Menu startup recovery now waits for the first usable Menu frame and catches scene exceptions/stalls; CI builds the actual telegram-bot target and imports it with networking disabled and a deadline; registry mirror-write failures lower health until a successful write; profile migration publishes a staged candidate only after its atomic disk write.

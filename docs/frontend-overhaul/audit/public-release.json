@@ -1,0 +1,7 @@
+{
+  "release": "30a534fbf1656979c20434d4f4d724eea69c385f",
+  "version": "0.4.1-rc.1",
+  "indexSha256": "1f25f492a4cb2d2d0dc53b421355e7d72c7291d5f939ddda206dcb8948946c0b",
+  "serviceWorkerSha256": "6f8d8a46fe50c6864fa46316bceb7c56ba77822e6fdbd00a97baddb25f67e022",
+  "runtimeConfigSha256": "40061b55598b4338a4bcc6b122534afa84cf7cf23f41bdb93d6c0604be7058f3"
+}

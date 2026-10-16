@@ -1,0 +1,15 @@
+{
+  "date": "2026-10-14T21:57:32.753Z",
+  "results": [
+    {
+      "model": "opencode/space-bunny-free",
+      "startedAt": "2026-10-14T21:57:14.581Z",
+      "durationMs": 18171,
+      "exitCode": 1,
+      "success": false,
+      "text": "",
+      "error": "OpenCode's free tier can only be used from within OpenCode. Download it at https://opencode.ai and keep building.",
+      "tools": 0
+    }
+  ]
+}

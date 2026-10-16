@@ -1,0 +1,37 @@
+{
+  "baseline": true,
+  "source": "7a0d829 Player module only versus working Player, same scripted workload; 100 seeded spawns with live AI/physics/game loop, elevated HP test fixture",
+  "limits": "Desktop software-rendered rAF scheduling; not GPU timings, equal surviving-AI count, physical phone FPS, thermal or perceptual acceptance",
+  "results": [
+    {
+      "renderer": "canvas",
+      "samples": 240,
+      "windowMs": 4003.499999999999,
+      "p50": 16.699999999999818,
+      "p95": 16.800000000000182,
+      "over33": 0,
+      "activeEnemies": 104,
+      "sceneActive": true,
+      "bodyRadius": 52,
+      "rendererType": 1,
+      "objects": 282,
+      "textureCount": 95,
+      "errors": []
+    },
+    {
+      "renderer": "webgl",
+      "samples": 240,
+      "windowMs": 4103.5,
+      "p50": 16.699999999999818,
+      "p95": 16.800000000000182,
+      "over33": 0.008333333333333333,
+      "activeEnemies": 103,
+      "sceneActive": true,
+      "bodyRadius": 52,
+      "rendererType": 2,
+      "objects": 282,
+      "textureCount": 95,
+      "errors": []
+    }
+  ]
+}

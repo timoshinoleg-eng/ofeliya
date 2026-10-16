@@ -1,0 +1,106 @@
+[
+  {
+    "renderer": "canvas",
+    "renderType": 1,
+    "before": [
+      {
+        "key": "mutation-prism",
+        "hash": 1605153800,
+        "width": 256,
+        "height": 256
+      },
+      {
+        "key": "mutation-halo",
+        "hash": -590714171,
+        "width": 256,
+        "height": 256
+      },
+      {
+        "key": "mutation-singularity",
+        "hash": 35484804,
+        "width": 256,
+        "height": 256
+      }
+    ],
+    "after": [
+      {
+        "key": "mutation-prism",
+        "sameTexture": true,
+        "sameSource": true,
+        "width": 256,
+        "height": 256,
+        "packagedPixelsMatch": true
+      },
+      {
+        "key": "mutation-halo",
+        "sameTexture": true,
+        "sameSource": true,
+        "width": 256,
+        "height": 256,
+        "packagedPixelsMatch": true
+      },
+      {
+        "key": "mutation-singularity",
+        "sameTexture": true,
+        "sameSource": true,
+        "width": 256,
+        "height": 256,
+        "packagedPixelsMatch": true
+      }
+    ],
+    "pageErrors": [],
+    "fixture": "Real Phaser Player displayed at320x568 over the existing field texture; animation frozen for comparison, not gameplay/performance evidence"
+  },
+  {
+    "renderer": "webgl",
+    "renderType": 2,
+    "before": [
+      {
+        "key": "mutation-prism",
+        "hash": 1605153800,
+        "width": 256,
+        "height": 256
+      },
+      {
+        "key": "mutation-halo",
+        "hash": -590714171,
+        "width": 256,
+        "height": 256
+      },
+      {
+        "key": "mutation-singularity",
+        "hash": 35484804,
+        "width": 256,
+        "height": 256
+      }
+    ],
+    "after": [
+      {
+        "key": "mutation-prism",
+        "sameTexture": true,
+        "sameSource": true,
+        "width": 256,
+        "height": 256,
+        "packagedPixelsMatch": true
+      },
+      {
+        "key": "mutation-halo",
+        "sameTexture": true,
+        "sameSource": true,
+        "width": 256,
+        "height": 256,
+        "packagedPixelsMatch": true
+      },
+      {
+        "key": "mutation-singularity",
+        "sameTexture": true,
+        "sameSource": true,
+        "width": 256,
+        "height": 256,
+        "packagedPixelsMatch": true
+      }
+    ],
+    "pageErrors": [],
+    "fixture": "Real Phaser Player displayed at320x568 over the existing field texture; animation frozen for comparison, not gameplay/performance evidence"
+  }
+]

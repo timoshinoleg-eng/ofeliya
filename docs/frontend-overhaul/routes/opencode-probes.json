@@ -1,0 +1,35 @@
+{
+  "date": "2026-10-14T21:56:46.530Z",
+  "results": [
+    {
+      "model": "opencode/space-bunny-free",
+      "startedAt": "2026-10-14T21:55:51.426Z",
+      "durationMs": 5027,
+      "exitCode": 1,
+      "success": false,
+      "text": "",
+      "error": "\u001b[91m\u001b[1mError: \u001b[0mUnexpected error\r\n\r\ndatabase is locked\r\n",
+      "tools": 0
+    },
+    {
+      "model": "opencode/big-pickle",
+      "startedAt": "2026-10-14T21:55:51.481Z",
+      "durationMs": 55048,
+      "exitCode": null,
+      "success": false,
+      "text": "",
+      "error": "timeout after 55000 ms",
+      "tools": 0
+    },
+    {
+      "model": "opencode/mimo-v2.5-free",
+      "startedAt": "2026-10-14T21:55:51.518Z",
+      "durationMs": 16354,
+      "exitCode": 1,
+      "success": false,
+      "text": "",
+      "error": "Unexpected server error. Check server logs for details.",
+      "tools": 0
+    }
+  ]
+}

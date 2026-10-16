@@ -1,0 +1,18 @@
+{
+  "model": "kimi-k3:free",
+  "via": "configured tokenharbor direct fallback",
+  "startedAt": "2026-10-14T21:57:35.7100408Z",
+  "request": {
+    "messages": [
+      {
+        "content": "Reply only ROUTE_OK. No tools.",
+        "role": "user"
+      }
+    ],
+    "max_tokens": 20
+  },
+  "success": false,
+  "errorType": "HttpResponseException",
+  "httpStatus": 429,
+  "error": "Request failed; detailed response excluded to protect credentials"
+}

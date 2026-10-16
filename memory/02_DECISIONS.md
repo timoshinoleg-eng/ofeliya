@@ -1,3 +1,51 @@
+# Visual completion decisions — 16 October 2026
+
+Product `abdb10c19d17de074f2be90e52d59cd9485c5b1b` ([PR217](https://github.com/timoshinoleg-eng/ofeliya/pull/217)) is published on the existing Render Free service, deployment `dep-db91jcff3r2c73fpgvs0`. Exact-head [CI38899978641](https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38899978641) and [visual matrix38899973748](https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38899973748) passed. Public release/HTML/runtime/service-worker hashes agree; main JS loads, readiness and remote persistence are healthy. State revision 170→171; 74 scores, 4 profiles and 1 registration remain, with all baseline scores and keys retained. Existing profile values changed: 0; registration values changed: 0. Main remains aba70324 and service settings are unchanged; PRs remain open.
+
+Completed the confirmed visual gaps: distinct combinable mutation silhouettes, consistent SocialHub/Codex/pause surfaces, readable measured result rows with bounded scrolling and pinned actions, measured header spacing and safe pointer ownership. Full local presentation/TypeScript, five-size mobile/rotation/resume, six-size HUD and three-size Canvas/WebGL rich-screen checks passed. Independent source and native-image reviews found no remaining P1/P2.
+
+Read docs/frontend-overhaul/completion/README.md and PUBLICATION.md. Physical MAX/Telegram/iOS phone readability/input, sustained dense-combat performance/thermals, newcomer and full-campaign acceptance remain separate unperformed checks. Short desktop motion cadence and controlled screenshots do not establish those results. Main integration remains separately unauthorized. A future successful main auto-deploy can supersede this pinned release.
+
+## Historical snapshots
+
+# Mutation art recovery published — 16 October 2026
+
+Product7a0d8292a47a42dae9eeb8d7623ced9affa75c20 (PR216, base PR214 branch) is live on Render Free, deploy dep-db8sqinf3r2c73f9u5f0 at10:08:41 Moscow. All exact-head CI38863701636 and visual-matrix38863701150 checks passed. Three packaged mutation images now recover after first render if Boot fell back; same256px texture/canvas refs and existing Player update, bounded attempts and destruction cleanup. No gameplay/assets/service settings/main changes.
+
+Read docs/frontend-overhaul/release/mutation-art/RECOVERY.md and README.md for16paired Canvas/WebGL frames, independent reviews and sanitized exact-head/backup/live evidence. Public browser320/360/390 passes with QA globals absent and zero page/console/HTTP/CSP errors. At320and390two aborted Boot XHRs each recover via HTTP200image requests. Real touch390reaches field/onboarding; all74scores,4profiles and1registration preserved unchanged, revision152→153. Private snapshots excluded.
+
+Main aba70324 and PR213/214/215/216 remain separate/open. Physical phone/MAX/Telegram/iOS, sustained performance/thermals, dense-motion perceptual and newcomer acceptance remain open. Halo/singularity/combined art similarity is a separate visual backlog; existing scale/alpha were retained. The original product fix's pending verification headers are superseded by this final documentation snapshot. No further product commit is required for this documentation update.
+
+## Previous snapshots
+# Verified Phase0/1 publication — 16 October 2026
+
+Product candidate44c657935f3124724fe6a3191d1b29c35189e4f2 is live on the existing Render Free service, deploy dep-db8ko259fdbs739ncmsg, finished00:57:09 Moscow. Exact-head CI38812038028 and visual matrix38812172355 passed all jobs. PR213/214/215 remain open; main is unchanged aba70324. No merge or service-setting change was made. The seven-line comprehension wait is reviewed and passed twice locally; production source did not change during this continuation.
+
+Read docs/frontend-overhaul/release/RELEASE_20261016.md for final evidence and limitations, including public release/assets hash parity, healthy readiness/persistence, preserved74 immutable scores/4 profiles/registration keys and revision150→151. Public desktop menu startup320/360/390 and touch gameplay390 passed, QA globals absent; visual inspection at390 confirmed card choice, field/joystick and onboarding progression. Five optional mutation-art requests were cancelled; all3 resources independently returned200. Zero page/console/CSP/HTTP errors. Raw private state backups and credentials are excluded.
+
+Completed: test synchronization, exact-head CI/review binding, fresh backup, authorized pinned deployment, public/state/browser verification and documentation. Remaining: physical MAX/Telegram/iOS and phone FPS/thermals/input/newcomer acceptance; rich/full campaign device coverage; separate PR204/207/208/209/210/212 integration and later visual phases. API deployment leaves main auto-deploy enabled, so a future successful main release can supersede this pin. Do not deploy the documentation branch or claim the entire master task complete.
+
+## Previous snapshots
+# Frontend overhaul continuation decisions — 16 October 2026
+
+- Resume the existing Phase0/1 candidate and preserve PR213/214/215 separation. Main snapshot `aba70324`, candidate `d5cae44`; refresh these mutable references before acting. Existing PR204/207/208/209/210/212 remain separate work.
+- Deployment after validation is authorized; main merges are prohibited. Publish only the final tested pushed SHA, with a fresh baseline/backup and post-publication identity/state verification. Preparation is not a successful deployment.
+- Accept the comprehension synchronization approach: await the real presentation counter before the unrelated host-cell lesson. Do not reset presentation state, bypass queue policy, replace production callbacks or weaken host/analytics assertions. Independent source review found no actionable P0/P1/P2; successful local execution and exact-head CI still need recording.
+- Keep source contracts, still-image review, desktop touch walkthrough, software rendering cadence, hosted CI, publication and physical-device/newcomer acceptance distinct. Phase1 does not complete future social/type, motion/keyboard integration, animation/asset or HiDPI phases.
+
+## Previous snapshots
+
+# Frontend overhaul decisions — 15October2026
+
+- Choose Vascular Archive: ink/matte/ivory, restrained player rose/host celadon/immune cyan, quiet membrane seams. Glass Cytology and Living Tissue remain editable alternatives; no benchmarked performance comparison claimed.
+- Separate small PR213world from dependent PR214UI and documentation. Preserve open204HUD/207skip/208matrix/209focus/210motion/212keyboard; later integration needs explicit conflict/behavior review.
+- Keep HUD geometry and input/modal lifecycle. Static Graphics owns decoration only; no new fullscreen filters, frame allocations, RNG or emitters. Intended primary action alpha0.95 replaces old0.18 contract.
+- Preserve original world texture geometry/exterior alpha with source-atop interiors and deterministic boot bake; update obsolete lane assertion with executed wrapped-cloud invariants.
+- Treat synthetic screenshots/cadence, source review, blind visual judgment, full walkthrough, exact-head CI, public deployment identity and real-device FPS as different evidence.
+- Owner later authorized deployment after validation; main merge remains unauthorized. Permission alone does not establish published candidate. No paid/unknown fallback routes or credential publication.
+
+## Preserved earlier snapshots
+
 # Review follow-ups — 2026-10-15
 
 Branch fix/review-followups-20261015 starts from main30a534f. Owner asked to continue remaining review recommendations. Four targeted follow-ups: Boot/Menu startup recovery now waits for the first usable Menu frame and catches scene exceptions/stalls; CI builds the actual telegram-bot target and imports it with networking disabled and a deadline; registry mirror-write failures lower health until a successful write; profile migration publishes a staged candidate only after its atomic disk write.

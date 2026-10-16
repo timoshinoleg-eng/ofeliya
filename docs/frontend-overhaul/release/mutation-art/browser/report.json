@@ -1,0 +1,243 @@
+{
+  "checkedAt": "2026-10-16T07:08:53.984Z",
+  "url": "https://ofeliya.freeveol.dpdns.org/ofeliya/",
+  "scope": "Desktop Chrome mobile touch emulation: startup, public canvas changes and touch delivery only. Screenshots require visual review; this does not prove full gameplay, real MAX/Telegram, device FPS or newcomer acceptance.",
+  "mockedNetwork": false,
+  "fakeInitData": false,
+  "cases": [
+    {
+      "viewport": {
+        "width": 320,
+        "height": 568
+      },
+      "pageErrors": [],
+      "consoleErrorCount": 0,
+      "failedRequests": [
+        {
+          "url": "https://ofeliya.freeveol.dpdns.org/ofeliya/art/mutation-prism.webp",
+          "resourceType": "xhr",
+          "reason": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://ofeliya.freeveol.dpdns.org/ofeliya/art/mutation-singularity.webp",
+          "resourceType": "xhr",
+          "reason": "net::ERR_ABORTED"
+        }
+      ],
+      "httpErrors": [],
+      "mutationArtResponses": [
+        {
+          "url": "https://ofeliya.freeveol.dpdns.org/ofeliya/art/mutation-singularity.webp",
+          "type": "xhr",
+          "status": 200
+        },
+        {
+          "url": "https://ofeliya.freeveol.dpdns.org/ofeliya/art/mutation-prism.webp",
+          "type": "xhr",
+          "status": 200
+        },
+        {
+          "url": "https://ofeliya.freeveol.dpdns.org/ofeliya/art/mutation-halo.webp",
+          "type": "xhr",
+          "status": 200
+        },
+        {
+          "url": "https://ofeliya.freeveol.dpdns.org/ofeliya/art/mutation-prism.webp",
+          "type": "image",
+          "status": 200
+        },
+        {
+          "url": "https://ofeliya.freeveol.dpdns.org/ofeliya/art/mutation-singularity.webp",
+          "type": "image",
+          "status": 200
+        }
+      ],
+      "cspViolations": 0,
+      "pass": true,
+      "menuDom": {
+        "qaHooksAbsent": true,
+        "canvas": {
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 568,
+          "backingWidth": 320,
+          "backingHeight": 568
+        },
+        "splashVisible": false,
+        "visibleVideos": 0,
+        "visibleButtons": []
+      },
+      "menu": {
+        "file": "320-menu.png",
+        "sha256": "3665082748b3285d5e4254571fa0a49ba388812c7aba31ba260a0196f74fa2f1",
+        "bytes": 145838
+      }
+    },
+    {
+      "viewport": {
+        "width": 360,
+        "height": 640
+      },
+      "pageErrors": [],
+      "consoleErrorCount": 0,
+      "failedRequests": [],
+      "httpErrors": [],
+      "mutationArtResponses": [
+        {
+          "url": "https://ofeliya.freeveol.dpdns.org/ofeliya/art/mutation-prism.webp",
+          "type": "xhr",
+          "status": 200
+        },
+        {
+          "url": "https://ofeliya.freeveol.dpdns.org/ofeliya/art/mutation-singularity.webp",
+          "type": "xhr",
+          "status": 200
+        },
+        {
+          "url": "https://ofeliya.freeveol.dpdns.org/ofeliya/art/mutation-halo.webp",
+          "type": "xhr",
+          "status": 200
+        }
+      ],
+      "cspViolations": 0,
+      "pass": true,
+      "menuDom": {
+        "qaHooksAbsent": true,
+        "canvas": {
+          "x": 0,
+          "y": 0,
+          "width": 360,
+          "height": 640,
+          "backingWidth": 360,
+          "backingHeight": 640
+        },
+        "splashVisible": false,
+        "visibleVideos": 0,
+        "visibleButtons": []
+      },
+      "menu": {
+        "file": "360-menu.png",
+        "sha256": "1ed61e6556d52e17db65338a3098bc27cba8d075ed33a7de3ba931905dda08df",
+        "bytes": 174562
+      }
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 740
+      },
+      "pageErrors": [],
+      "consoleErrorCount": 0,
+      "failedRequests": [
+        {
+          "url": "https://ofeliya.freeveol.dpdns.org/ofeliya/art/mutation-prism.webp",
+          "resourceType": "xhr",
+          "reason": "net::ERR_ABORTED"
+        },
+        {
+          "url": "https://ofeliya.freeveol.dpdns.org/ofeliya/art/mutation-singularity.webp",
+          "resourceType": "xhr",
+          "reason": "net::ERR_ABORTED"
+        }
+      ],
+      "httpErrors": [],
+      "mutationArtResponses": [
+        {
+          "url": "https://ofeliya.freeveol.dpdns.org/ofeliya/art/mutation-halo.webp",
+          "type": "xhr",
+          "status": 200
+        },
+        {
+          "url": "https://ofeliya.freeveol.dpdns.org/ofeliya/art/mutation-singularity.webp",
+          "type": "xhr",
+          "status": 200
+        },
+        {
+          "url": "https://ofeliya.freeveol.dpdns.org/ofeliya/art/mutation-prism.webp",
+          "type": "xhr",
+          "status": 200
+        },
+        {
+          "url": "https://ofeliya.freeveol.dpdns.org/ofeliya/art/mutation-prism.webp",
+          "type": "image",
+          "status": 200
+        },
+        {
+          "url": "https://ofeliya.freeveol.dpdns.org/ofeliya/art/mutation-singularity.webp",
+          "type": "image",
+          "status": 200
+        }
+      ],
+      "cspViolations": 0,
+      "pass": true,
+      "menuDom": {
+        "qaHooksAbsent": true,
+        "canvas": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 740,
+          "backingWidth": 390,
+          "backingHeight": 740
+        },
+        "splashVisible": false,
+        "visibleVideos": 0,
+        "visibleButtons": []
+      },
+      "menu": {
+        "file": "390-menu.png",
+        "sha256": "0b8af13e87012e5dcd857a35263b0cac12a9089c144316aff38a3041d30bb9b3",
+        "bytes": 223734
+      },
+      "startTouch": {
+        "x": 195,
+        "y": 595.7
+      },
+      "afterStartDom": {
+        "qaHooksAbsent": true,
+        "canvas": {
+          "x": 0,
+          "y": 0,
+          "width": 390,
+          "height": 740,
+          "backingWidth": 390,
+          "backingHeight": 740
+        },
+        "splashVisible": false,
+        "visibleVideos": 0,
+        "visibleButtons": []
+      },
+      "afterStart": {
+        "file": "390-after-start.png",
+        "sha256": "60312fbae3bdfed3e50f39389f5ecb0d8b35be61f99130f6b4e33e73ab28e4af",
+        "bytes": 76861
+      },
+      "duringTouch": {
+        "file": "390-during-touch.png",
+        "sha256": "be31b50b454949f3ba850ea6e93a925f6da45c1535c649b438bf7044960af5f9",
+        "bytes": 77201
+      },
+      "afterTouch": {
+        "file": "390-after-touch.png",
+        "sha256": "361b440c55b6c15ca1414cafe04339a5102261bf9a5573126e45c37df035fb9e",
+        "bytes": 203145
+      },
+      "secondDrag": {
+        "file": "390-second-drag.png",
+        "sha256": "6e6832988a9cd1d634cde95e6c8a3f8f866c582620eedc73d7c14305621d7587",
+        "bytes": 211347
+      },
+      "afterSecondDrag": {
+        "file": "390-after-second-drag.png",
+        "sha256": "8e1a0609a59da7272f7e0f3a44592ef89b91e17c309a3d840a1fd2eb78366b5d",
+        "bytes": 246329
+      },
+      "canvasChangedDuringTouch": true,
+      "canvasChangedAfterTouch": true,
+      "touchLimitation": "Input delivered through CDP real touch events; screenshot changes can include animation and do not alone prove player displacement or Game scene identity."
+    }
+  ],
+  "pass": true,
+  "finishedAt": "2026-10-16T07:09:26.688Z"
+}

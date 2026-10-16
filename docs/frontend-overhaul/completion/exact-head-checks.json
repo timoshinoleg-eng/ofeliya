@@ -1,0 +1,33 @@
+{
+  "checkedAt": "2026-10-16T12:33:51.7707749Z",
+  "check_runs": [
+    {
+      "name": "production-contract",
+      "head_sha": "abdb10c19d17de074f2be90e52d59cd9485c5b1b",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38899978641/job/116969857983"
+    },
+    {
+      "name": "browser-smoke",
+      "head_sha": "abdb10c19d17de074f2be90e52d59cd9485c5b1b",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38899978641/job/116969857919"
+    },
+    {
+      "name": "build",
+      "head_sha": "abdb10c19d17de074f2be90e52d59cd9485c5b1b",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38899978641/job/116969530695"
+    },
+    {
+      "name": "visual-matrix",
+      "head_sha": "abdb10c19d17de074f2be90e52d59cd9485c5b1b",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38899973748/job/116969520633"
+    }
+  ]
+}

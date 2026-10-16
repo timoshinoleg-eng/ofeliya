@@ -1,0 +1,17 @@
+[
+  {
+    "asset": "mutation-prism.webp",
+    "status": 200,
+    "contentType": "image/webp"
+  },
+  {
+    "asset": "mutation-halo.webp",
+    "status": 200,
+    "contentType": "image/webp"
+  },
+  {
+    "asset": "mutation-singularity.webp",
+    "status": 200,
+    "contentType": "image/webp"
+  }
+]
