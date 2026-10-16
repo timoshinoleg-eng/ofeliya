@@ -17,6 +17,7 @@ import { HUD } from '../ui/hudTokens';
 import { artScale, CORE_ART } from '../game/ArtMetrics';
 import { VISUAL, VISUAL_TEXT } from '../ui/visualTokens';
 import { createSpecimenSurface, drawSpecimenSurface } from '../ui/specimenSurface';
+import { createResultReport } from '../ui/ResultReport';
 import { getEvolutionDef } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
 import { assessRunIdentity } from '../game/RunIdentity';
@@ -1282,12 +1283,12 @@ export class UIScene extends Phaser.Scene {
           fontFamily: FONT,
           fontSize: compact ? '32px' : '38px',
           fontStyle: 'bold',
-          color: '#e8f4ff',
+          color: VISUAL_TEXT.ivory,
           letterSpacing: 3,
         })
         .setOrigin(0.5)
         .setResolution(2)
-        .setShadow(0, 0, 'rgba(53,224,255,0.45)', 12, true, true)
+        .setShadow(0, 2, '#080f14', 2, true, true)
     );
     c.add(
       this.add
@@ -1295,7 +1296,7 @@ export class UIScene extends Phaser.Scene {
           fontFamily: UI_FONT,
           fontSize: compact ? '12px' : '14px',
           fontStyle: '650',
-          color: '#c7d3ec',
+          color: VISUAL_TEXT.muted,
         })
         .setOrigin(0.5)
         .setResolution(2)
@@ -2126,14 +2127,15 @@ export class UIScene extends Phaser.Scene {
     }
 
     const titleY = compact ? H * 0.1 : H * 0.13;
-    c.add(createSpecimenSurface(this, W / 2, titleY + (compact ? 74 : 96), W - 28, compact ? 168 : 206, {
+    const summarySurface = createSpecimenSurface(this, W / 2, titleY + (compact ? 74 : 96), W - 28, compact ? 168 : 206, {
       accent: res.win ? VISUAL.host : VISUAL.player, alpha: 0.72,
-    }));
+    });
+    c.add(summarySurface);
     c.add(this.add.text(W / 2, titleY - (compact ? 25 : 30), 'STRAIN ZERO / ИТОГ ЦИКЛА', {
       fontFamily: FONT, fontSize: '10px', letterSpacing: 2, color: VISUAL_TEXT.muted,
     }).setOrigin(0.5).setResolution(2));
     const resultTitle = this.add
-        .text(W / 2, titleY, res.win ? 'ИММУНИТЕТ ПОДАВЛЕН' : 'ШТАММ УНИЧТОЖЕН', {
+        .text(W / 2, titleY, res.win ? (W < 360 ? 'ИММУНИТЕТ\nПОДАВЛЕН' : 'ИММУНИТЕТ ПОДАВЛЕН') : 'ШТАММ УНИЧТОЖЕН', {
           fontFamily: FONT,
           fontSize: res.win ? (compact ? '22px' : '27px') : compact ? '27px' : '32px',
           fontStyle: 'bold',
@@ -2185,6 +2187,7 @@ export class UIScene extends Phaser.Scene {
         .setName('ofeliya-result-stats')
     );
 
+    const reportStart = c.list.length;
     let detailY = statY + 35;
     const evoText = res.evolutions.length > 0
       ? res.evolutions.map((id) => EVOLUTION_NAMES[id]).join(' · ')
@@ -2454,9 +2457,16 @@ export class UIScene extends Phaser.Scene {
     }
 
     const gap = compact ? 50 : 56;
-    const desiredY = Math.max(H * (compact ? 0.66 : 0.68), detailY + (compact ? 54 : 62));
+    const desiredY = H * (compact ? 0.71 : 0.73);
     const maxFirstY = H - 24 - gap * 2;
     let y = Math.min(desiredY, maxFirstY);
+    const statsBottom = (c.getByName('ofeliya-result-stats') as Phaser.GameObjects.Text).getBounds().bottom;
+    const summaryTop = resultTitle.getBounds().top - 10;
+    summarySurface.setPosition(W / 2, (summaryTop + statsBottom + 14) / 2);
+    drawSpecimenSurface(summarySurface, W - 28, statsBottom + 14 - summaryTop, {accent: res.win ? VISUAL.host : VISUAL.player, alpha:0.72});
+    const reportTop = Math.max(statY + 36, statsBottom + 24);
+    const reportRows = c.list.slice(reportStart).filter((child): child is Phaser.GameObjects.Text => child instanceof Phaser.GameObjects.Text);
+    createResultReport(this, c, reportRows, W / 2, reportTop, W - 32, Math.max(50, y - 49 - reportTop), scoreStatus);
     this.button(c, 'ЕЩЁ ОДИН ЦИКЛ', W / 2, y, true, () => {
       const gameScene = this.gs;
       if (!gameScene) return;
@@ -2597,11 +2607,21 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setResolution(2);
     if (layoutName) t.setName(layoutName + '-label');
-    bg.setInteractive({ useHandCursor: true }).on('pointerup', () => cb());
+    if (t.width > w - 20) t.setFontSize(14);
+    if (t.width > w - 20) t.setFontSize(13);
+    let armedPointer: number | null = null;
+    bg.setInteractive({ useHandCursor: true });
+    bg.on('pointerdown', (pointer: Phaser.Input.Pointer) => { armedPointer = pointer.id; });
+    bg.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      if (armedPointer !== pointer.id) return;
+      armedPointer = null;
+      cb();
+    });
     bg.on('pointerover', () => bg.setFillStyle(primary ? VISUAL.ivory : VISUAL.panelRaised, 1));
-    bg.on('pointerout', () =>
-      bg.setFillStyle(primary ? VISUAL.host : VISUAL.panel, primary ? BUTTON.primaryFill : BUTTON.secondaryFill)
-    );
+    bg.on('pointerout', () => {
+      armedPointer = null;
+      bg.setFillStyle(primary ? VISUAL.host : VISUAL.panel, primary ? BUTTON.primaryFill : BUTTON.secondaryFill);
+    });
     c.add([bg, t]);
   }
 

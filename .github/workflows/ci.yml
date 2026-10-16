@@ -223,6 +223,11 @@ jobs:
       - name: Optional art missing and stalled startup fallback
         run: npm run test:art-startup
 
+      - name: Rich result report and social presentation
+        env:
+          OFELIYA_VISUAL_EVIDENCE: /tmp/visual-completion
+        run: node tests/visual-completion.mjs
+
       - name: Non-blocking MAX bridge smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/max-bridge-nonblocking-smoke.cjs
 
@@ -348,6 +353,7 @@ jobs:
           name: max-browser-smoke
           path: |
             /tmp/browser-smoke/*.png
+            /tmp/visual-completion/*.png
             /tmp/release-visual-matrix/**/*.png
             /tmp/release-visual-matrix/**/matrix.json
           if-no-files-found: ignore

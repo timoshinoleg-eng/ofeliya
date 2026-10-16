@@ -10,9 +10,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private readonly spikeCrown: Phaser.GameObjects.Graphics;
   private readonly capsidShell: Phaser.GameObjects.Graphics;
   private readonly lysisCore: Phaser.GameObjects.Graphics;
-  // Critical-mutation silhouette underlays: baked key art (procedural emblem fallback) that
-  // materially extends the silhouette under the animated virion. The ADD-blend overlays above
-  // keep the telegraph language; the hitbox never changes.
+  // Packaged art stays a quiet inner detail; the retained Graphics carry three distinct
+  // silhouettes at separate radii. Canonical texture objects remain available for late recovery.
   private readonly prismUnderlay: Phaser.GameObjects.Image;
   private readonly haloUnderlay: Phaser.GameObjects.Image;
   private readonly singularityUnderlay: Phaser.GameObjects.Image;
@@ -42,21 +41,21 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.spikeCrown = scene.add
       .graphics()
       .setDepth(14)
-      .setBlendMode(Phaser.BlendModes.ADD)
+      .setBlendMode(Phaser.BlendModes.NORMAL)
       .setVisible(false);
     this.drawSpikeCrown(this.spikeCrown);
 
     this.capsidShell = scene.add
       .graphics()
-      .setDepth(16)
-      .setBlendMode(Phaser.BlendModes.ADD)
+      .setDepth(14.2)
+      .setBlendMode(Phaser.BlendModes.NORMAL)
       .setVisible(false);
     this.drawCapsidShell(this.capsidShell);
 
     this.lysisCore = scene.add
       .graphics()
       .setDepth(16)
-      .setBlendMode(Phaser.BlendModes.ADD)
+      .setBlendMode(Phaser.BlendModes.NORMAL)
       .setVisible(false);
     this.drawLysisCore(this.lysisCore);
 
@@ -65,16 +64,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.singularityUnderlay = this.makeMutationUnderlay('mutation-singularity');
   }
 
-  /**
-   * Mutation silhouettes render at ~1.44x the 64-logical emblem base (≈92 px aura) so the
-   * virion body covers the art's own core and only the identifying extremities read.
-   */
+  /** Inner artwork never covers the graphic perimeter identifying each critical mutation. */
   private makeMutationUnderlay(key: string): Phaser.GameObjects.Image {
     return this.scene.add
       .image(this.x, this.y, key)
       .setDepth(13.5)
-      .setAlpha(0.9)
-      .setScale(artScale(key, 1.44))
+      .setAlpha(0.26)
+      .setScale(artScale(key, key === 'mutation-prism' ? 1.12 : key === 'mutation-halo' ? 0.9 : 0.76))
       .setVisible(false);
   }
 
@@ -117,39 +113,39 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       .setPosition(this.x, this.y)
       .setRotation(-time * 0.00062)
       .setScale(0.96 + Math.sin(time * 0.0048) * 0.04)
-      .setAlpha(0.7 + Math.sin(time * 0.006) * 0.16);
+      .setAlpha(0.9 + Math.sin(time * 0.006) * 0.06);
 
     this.capsidShell
       .setPosition(this.x, this.y)
       .setRotation(time * 0.00046)
       .setScale(0.98 + Math.sin(time * 0.0034) * 0.028)
-      .setAlpha(0.58 + Math.sin(time * 0.0041) * 0.12);
+      .setAlpha(0.9 + Math.sin(time * 0.0041) * 0.06);
 
     this.lysisCore
       .setPosition(this.x, this.y)
       .setRotation(-time * 0.0004)
       .setScale(0.92 + Math.sin(time * 0.0054) * 0.08)
-      .setAlpha(0.56 + Math.sin(time * 0.0054) * 0.2);
+      .setAlpha(0.86 + Math.sin(time * 0.0054) * 0.1);
 
     // Silhouette underlays counter-rotate against the body so the mutation reads in motion,
     // not only in a still frame. Distinct speeds keep the three identities separable.
     this.prismUnderlay
       .setPosition(this.x, this.y)
       .setRotation(-time * 0.00062)
-      .setScale(artScale('mutation-prism', 1.44 + Math.sin(time * 0.0048) * 0.05))
-      .setAlpha(0.82 + Math.sin(time * 0.006) * 0.08);
+      .setScale(artScale('mutation-prism', 1.12 + Math.sin(time * 0.0048) * 0.05))
+      .setAlpha(0.26 + Math.sin(time * 0.006) * 0.03);
 
     this.haloUnderlay
       .setPosition(this.x, this.y)
       .setRotation(time * 0.00046)
-      .setScale(artScale('mutation-halo', 1.44 + Math.sin(time * 0.0034) * 0.04))
-      .setAlpha(0.86 + Math.sin(time * 0.0041) * 0.06);
+      .setScale(artScale('mutation-halo', 0.9 + Math.sin(time * 0.0034) * 0.04))
+      .setAlpha(0.22 + Math.sin(time * 0.0041) * 0.03);
 
     this.singularityUnderlay
       .setPosition(this.x, this.y)
       .setRotation(-time * 0.0004)
-      .setScale(artScale('mutation-singularity', 1.5 + Math.sin(time * 0.0054) * 0.09))
-      .setAlpha(0.8 + Math.sin(time * 0.0054) * 0.1);
+      .setScale(artScale('mutation-singularity', 0.76 + Math.sin(time * 0.0054) * 0.09))
+      .setAlpha(0.2 + Math.sin(time * 0.0054) * 0.03);
   }
 
   markHurt(now: number): void {
@@ -172,75 +168,62 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private drawSpikeCrown(g: Phaser.GameObjects.Graphics): void {
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2 - Math.PI / 2;
-      const inner = 22;
-      const outer = i % 2 === 0 ? 36 : 32;
-      const color = i % 2 === 0 ? COLORS.green : COLORS.gold;
-      g.lineStyle(i % 2 === 0 ? 2.4 : 1.8, color, 0.78);
+      const outer = i % 2 === 0 ? 46 : 42;
+      // Broad, dark-rooted spear blades stay legible over both bright cells and plasma.
+      const left = a - 0.15;
+      const right = a + 0.15;
+      g.fillStyle(0x7dbda5, 0.92);
+      g.fillTriangle(Math.cos(left) * 25, Math.sin(left) * 25,
+        Math.cos(a) * outer, Math.sin(a) * outer,
+        Math.cos(right) * 25, Math.sin(right) * 25);
+      g.lineStyle(1.3, 0xe1f2df, 0.94);
       g.beginPath();
-      g.moveTo(Math.cos(a) * inner, Math.sin(a) * inner);
+      g.moveTo(Math.cos(left) * 25, Math.sin(left) * 25);
       g.lineTo(Math.cos(a) * outer, Math.sin(a) * outer);
+      g.lineTo(Math.cos(right) * 25, Math.sin(right) * 25);
       g.strokePath();
-
-      const tx = Math.cos(a) * outer;
-      const ty = Math.sin(a) * outer;
-      g.fillStyle(color, 0.82);
-      g.fillCircle(tx, ty, i % 2 === 0 ? 2.5 : 2);
-      if (i % 2 === 0) {
-        const tangent = a + Math.PI / 2;
-        g.lineStyle(1.1, COLORS.white, 0.38);
-        g.beginPath();
-        g.moveTo(tx, ty);
-        g.lineTo(tx + Math.cos(tangent) * 3, ty + Math.sin(tangent) * 3);
-        g.moveTo(tx, ty);
-        g.lineTo(tx - Math.cos(tangent) * 3, ty - Math.sin(tangent) * 3);
-        g.strokePath();
-      }
     }
   }
 
   /** СВЕРХКАПСИД: segmented armour wraps the virion with a heavy golden membrane. */
   private drawCapsidShell(g: Phaser.GameObjects.Graphics): void {
-    for (let i = 0; i < 4; i++) {
-      const centre = (i / 4) * Math.PI * 2 + Math.PI / 4;
-      const a0 = centre - 0.42;
-      const a1 = centre + 0.42;
-      g.lineStyle(4.6, COLORS.gold, 0.76);
+    for (let i = 0; i < 6; i++) {
+      const centre = (i / 6) * Math.PI * 2 + Math.PI / 6;
+      const a0 = centre - 0.34;
+      const a1 = centre + 0.34;
+      g.lineStyle(7, 0x67533b, 0.94);
       g.beginPath();
-      g.arc(0, 0, 27.5, a0, a1, false);
+      g.arc(0, 0, 34, a0, a1, false);
       g.strokePath();
-      g.fillStyle(COLORS.white, 0.5);
-      g.fillCircle(Math.cos(centre) * 27.5, Math.sin(centre) * 27.5, 1.7);
+      g.lineStyle(4.2, 0xf1dfae, 0.96);
+      g.beginPath();
+      g.arc(0, 0, 34, a0, a1, false);
+      g.strokePath();
+      g.fillStyle(0xfff3d1, 1);
+      g.fillCircle(Math.cos(centre) * 34, Math.sin(centre) * 34, 2);
     }
-    g.lineStyle(1.1, COLORS.gold, 0.18);
-    g.strokeCircle(0, 0, 25);
   }
 
-  /** ЛИЗИС: an unstable replication core plus three budding daughter virions. */
+  /** ЛИЗИС: three separated outer arcs and a small violet replication core. */
   private drawLysisCore(g: Phaser.GameObjects.Graphics): void {
-    g.fillStyle(COLORS.green, 0.12);
-    g.fillCircle(0, 0, 13);
-    g.lineStyle(2.2, COLORS.green, 0.68);
-    g.strokeCircle(0, 0, 11);
-
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * Math.PI * 2;
-      g.lineStyle(1.1, i % 2 ? COLORS.magenta : COLORS.green, 0.42);
-      g.beginPath();
-      g.moveTo(Math.cos(a) * 6, Math.sin(a) * 6);
-      g.lineTo(Math.cos(a + 0.2) * 14, Math.sin(a + 0.2) * 14);
-      g.strokePath();
-    }
-
+    g.fillStyle(0x22172e, 0.94);
+    g.fillCircle(0, 0, 7);
+    g.lineStyle(1.8, 0xc5a9e8, 0.96);
+    g.strokeCircle(0, 0, 7);
+    g.fillStyle(0xf0e3fc, 0.96);
+    g.fillCircle(0, 0, 2.4);
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * Math.PI * 2 + 0.35;
-      const x = Math.cos(a) * 30;
-      const y = Math.sin(a) * 30;
-      g.fillStyle(COLORS.magenta, 0.24);
-      g.fillCircle(x, y, 5.6);
-      g.lineStyle(1.4, COLORS.green, 0.64);
-      g.strokeCircle(x, y, 4.4);
-      g.fillStyle(COLORS.white, 0.62);
-      g.fillCircle(x - 1.2, y - 1.2, 1);
+      g.lineStyle(5, 0x30213f, 0.95);
+      g.beginPath();
+      g.arc(0, 0, 51, a - 0.38, a + 0.38, false);
+      g.strokePath();
+      g.lineStyle(2.4, 0xb79add, 0.96);
+      g.beginPath();
+      g.arc(0, 0, 51, a - 0.38, a + 0.38, false);
+      g.strokePath();
+      g.fillStyle(0xe8d4f6, 0.96);
+      g.fillCircle(Math.cos(a + 0.38) * 51, Math.sin(a + 0.38) * 51, 2.6);
     }
   }
 }

@@ -1046,14 +1046,16 @@ export class MenuScene extends Phaser.Scene {
     this.codexOverlay = overlay;
 
     const dim = this.add
-      .rectangle(W / 2, H / 2, W, H, 0x03040a, 0.95)
+      .rectangle(W / 2, H / 2, W, H, VISUAL.ink, 0.95)
       .setInteractive();
     const panelW = Math.min(W - 22, 370);
     const panelH = Math.min(H - 34, 650);
     const panel = this.add
-      .rectangle(W / 2, H / 2, panelW, panelH, 0x100d16, 0.995)
-      .setStrokeStyle(2, COLORS.cyan, 0.72);
-    overlay.add([dim, panel]);
+      .rectangle(W / 2, H / 2, panelW, panelH, VISUAL.panel, 0.995)
+      .setStrokeStyle(1, VISUAL.line, 0.8);
+    overlay.add([dim, panel, createSpecimenSurface(this, W / 2, H / 2, panelW, panelH, {
+      accent: VISUAL.host, detail: 'quiet',
+    })]);
 
     const top = H / 2 - panelH / 2;
     const left = W / 2 - panelW / 2;
@@ -1063,7 +1065,7 @@ export class MenuScene extends Phaser.Scene {
           fontFamily: FONT,
           fontSize: compact ? '19px' : '22px',
           fontStyle: 'bold',
-          color: '#fff4ec',
+          color: VISUAL_TEXT.ivory,
           letterSpacing: 1,
         })
         .setOrigin(0.5)
@@ -1077,7 +1079,7 @@ export class MenuScene extends Phaser.Scene {
           fontFamily: UI_FONT,
           fontSize: compact ? '11px' : '13px',
           fontStyle: '700',
-          color: '#b8f3ff',
+          color: VISUAL_TEXT.host,
         })
         .setOrigin(0.5)
         .setResolution(2)
@@ -1087,7 +1089,7 @@ export class MenuScene extends Phaser.Scene {
       .text(left + panelW - 18, top + 14, '×', {
         fontFamily: FONT,
         fontSize: '26px',
-        color: '#c89aaf',
+        color: VISUAL_TEXT.muted,
       })
       .setOrigin(0.5)
       .setResolution(2)
@@ -1117,7 +1119,7 @@ export class MenuScene extends Phaser.Scene {
       body.removeAll(true);
       for (const tab of tabs) {
         const active = tab.id === page;
-        tab.text.setColor(active ? '#ffe066' : '#c9c1d3');
+        tab.text.setColor(active ? VISUAL_TEXT.warning : VISUAL_TEXT.muted);
         tab.text.setAlpha(active ? 1 : 0.95);
         tab.underline.setVisible(active);
       }
@@ -1128,7 +1130,7 @@ export class MenuScene extends Phaser.Scene {
         y: number,
         value: string,
         size: number = compact ? 12 : 14,
-        color: string = UI_TEXT.primary,
+        color: string = VISUAL_TEXT.ivory,
         width: number = panelW - 42,
         align: 'left' | 'center' = 'left'
       ) => {
@@ -1148,28 +1150,22 @@ export class MenuScene extends Phaser.Scene {
       };
 
       if (page === 'mutations') {
-        addText(W / 2, bodyTop, 'КРИТИЧЕСКИЕ МУТАЦИИ', compact ? 13 : 15, '#ffe066', panelW - 42, 'center');
+        addText(W / 2, bodyTop, 'КРИТИЧЕСКИЕ МУТАЦИИ', compact ? 13 : 15, VISUAL_TEXT.warning, panelW - 42, 'center');
         const evolutionIds: EvolutionId[] = ['prism', 'halo', 'singularity'];
         evolutionIds.forEach((id, index) => {
           const found = save.evolutionsSeen.includes(id);
           const y = bodyTop + 40 + index * (compact ? 76 : 86);
-          const row = this.add
-            .rectangle(
-              W / 2,
-              y + (compact ? 24 : 28),
-              panelW - 34,
-              compact ? 62 : 72,
-              0x19151f,
-              0.78
-            )
-            .setStrokeStyle(1, found ? COLORS.gold : COLORS.stroke, found ? 0.4 : 0.55);
+          const row = createSpecimenSurface(
+            this, W / 2, y + (compact ? 24 : 28), panelW - 34, compact ? 62 : 72,
+            { fill: VISUAL.panelRaised, accent: found ? VISUAL.warning : VISUAL.line, detail: 'quiet' },
+          );
           body.add(row);
           addText(
             left + 28,
             y,
             `${found ? '◆' : '◇'}  ${found ? EVOLUTION_NAMES[id] : 'НЕ ОТКРЫТО'}`,
             compact ? 13 : 15,
-            found ? '#ffe066' : '#c9c1d3'
+            found ? VISUAL_TEXT.warning : VISUAL_TEXT.muted
           );
           addText(
             left + 49,
@@ -1178,21 +1174,24 @@ export class MenuScene extends Phaser.Scene {
               ? 'Критическая форма зарегистрирована в КОДЕКСЕ.'
               : 'Развивай совместимые ветви мутаций.',
             compact ? 12 : 13,
-            found ? UI_TEXT.secondary : '#d0c7d8',
+            found ? VISUAL_TEXT.muted : VISUAL_TEXT.muted,
             panelW - 76
           );
         });
       } else if (page === 'legendary') {
-        addText(W / 2, bodyTop, 'ЛЕГЕНДАРНЫЕ ИЗМЕНЕНИЯ ПРАВИЛ', compact ? 12 : 15, '#ffe066', panelW - 42, 'center');
+        addText(W / 2, bodyTop, 'ЛЕГЕНДАРНЫЕ ИЗМЕНЕНИЯ ПРАВИЛ', compact ? 12 : 15, VISUAL_TEXT.warning, panelW - 42, 'center');
         LEGENDARIES.forEach((def, index) => {
           const found = save.legendarySeen.includes(def.id);
           const y = bodyTop + 32 + index * (compact ? 46 : 51);
+          body.add(createSpecimenSurface(this, W / 2, y + (compact ? 16 : 18), panelW - 34, compact ? 44 : 49, {
+            fill: VISUAL.panelRaised, accent: found ? VISUAL.warning : VISUAL.line, detail: 'quiet',
+          }));
           addText(
             left + 28,
             y,
             `${found ? '◆' : '◇'}  ${found ? def.title : '???'}`,
             compact ? 12 : 14,
-            found ? '#fff1ac' : '#c9c1d3',
+            found ? VISUAL_TEXT.warning : VISUAL_TEXT.muted,
             panelW - 54
           );
           if (found) {
@@ -1201,7 +1200,7 @@ export class MenuScene extends Phaser.Scene {
               y + 18,
               def.effect,
               compact ? 11 : 13,
-              '#d8d1e2',
+              VISUAL_TEXT.ivory,
               panelW - 78
             ).setFontStyle('600');
           }
@@ -1210,34 +1209,34 @@ export class MenuScene extends Phaser.Scene {
         const standardBest = save.bestCampaignClearMs > 0 ? fmtTime(save.bestCampaignClearMs) : '—';
         const strainedBest =
           save.bestStrainedCampaignClearMs > 0 ? fmtTime(save.bestStrainedCampaignClearMs) : '—';
-        addText(W / 2, bodyTop, 'МАСТЕРСТВО КАМПАНИИ', compact ? 13 : 15, '#ffe066', panelW - 42, 'center');
-        const standardRow = this.add
-          .rectangle(W / 2, bodyTop + 50, panelW - 34, 40, 0x151b24, 0.72)
-          .setStrokeStyle(1, save.standardCampaignClears > 0 ? COLORS.cyan : COLORS.stroke, 0.5);
-        const strainedRow = this.add
-          .rectangle(W / 2, bodyTop + 92, panelW - 34, 40, 0x1f1714, 0.72)
-          .setStrokeStyle(1, save.strainedCampaignClears > 0 ? COLORS.gold : COLORS.stroke, 0.5);
+        addText(W / 2, bodyTop, 'МАСТЕРСТВО КАМПАНИИ', compact ? 13 : 15, VISUAL_TEXT.warning, panelW - 42, 'center');
+        const standardRow = createSpecimenSurface(this, W / 2, bodyTop + 50, panelW - 34, 40, {
+          fill: VISUAL.panelRaised, accent: save.standardCampaignClears > 0 ? VISUAL.immune : VISUAL.line, detail: 'quiet',
+        });
+        const strainedRow = createSpecimenSurface(this, W / 2, bodyTop + 92, panelW - 34, 40, {
+          fill: VISUAL.panelRaised, accent: save.strainedCampaignClears > 0 ? VISUAL.warning : VISUAL.line, detail: 'quiet',
+        });
         body.add([standardRow, strainedRow]);
         addText(
           left + 28,
           bodyTop + 39,
           `${save.standardCampaignClears > 0 ? '◆' : '◇'} СТАНДАРТ · пройдено ${save.standardCampaignClears} · рекорд ${standardBest}`,
           compact ? 12 : 13,
-          save.standardCampaignClears > 0 ? '#8fe8ff' : '#c7bfd0'
+          save.standardCampaignClears > 0 ? VISUAL_TEXT.immune : VISUAL_TEXT.muted
         );
         addText(
           left + 28,
           bodyTop + 81,
           `${save.strainedCampaignClears > 0 ? '◆' : '◇'} НАПРЯЖЕНИЕ · пройдено ${save.strainedCampaignClears} · рекорд ${strainedBest}`,
           compact ? 12 : 13,
-          save.strainedCampaignClears > 0 ? '#ffe066' : '#c7bfd0'
+          save.strainedCampaignClears > 0 ? VISUAL_TEXT.warning : VISUAL_TEXT.muted
         );
         addText(
           left + 28,
           bodyTop + 130,
           'ВЕТКИ ШТАММА',
           compact ? 12 : 14,
-          UI_TEXT.primary
+          VISUAL_TEXT.ivory
         ).setFontStyle('700');
         const tracks = masteryTracks({
           evolutionsSeen: save.evolutionsSeen,
@@ -1250,7 +1249,7 @@ export class MenuScene extends Phaser.Scene {
             y,
             `${track.complete ? '◆' : '◇'} ${track.label} · ${track.progress}/${track.max}`,
             compact ? 11 : 13,
-            track.complete ? '#7fffa1' : '#d8d1e2',
+            track.complete ? VISUAL_TEXT.host : VISUAL_TEXT.ivory,
             panelW - 56
           ).setFontStyle('700');
           addText(
@@ -1258,7 +1257,7 @@ export class MenuScene extends Phaser.Scene {
             y + (compact ? 17 : 19),
             track.complete ? track.objective : track.nextGoal,
             compact ? 11 : 13,
-            track.complete ? '#9fd9aa' : UI_TEXT.secondary,
+            track.complete ? VISUAL_TEXT.host : VISUAL_TEXT.muted,
             panelW - 78
           );
         });
@@ -1267,14 +1266,14 @@ export class MenuScene extends Phaser.Scene {
           bodyTop + (compact ? 286 : 302),
           `ДОСТИЖЕНИЯ · ${save.achievements.length}/${ACHIEVEMENTS.length}`,
           compact ? 11 : 13,
-          '#d8d1e2'
+          VISUAL_TEXT.ivory
         );
         addText(
           left + 28,
           top + panelH - 82,
           `ЦИКЛОВ: ${save.runs}   ·   УНИЧТОЖЕНО КЛЕТОК: ${save.totalKills}`,
           compact ? 11 : 13,
-          '#d8d1e2'
+          VISUAL_TEXT.ivory
         );
       }
     };
@@ -1285,7 +1284,7 @@ export class MenuScene extends Phaser.Scene {
           fontFamily: FONT,
           fontSize: compact ? '11px' : '13px',
           fontStyle: 'bold',
-          color: '#c9c1d3',
+          color: VISUAL_TEXT.muted,
         })
         .setOrigin(0.5)
         .setResolution(2)
@@ -1296,7 +1295,7 @@ export class MenuScene extends Phaser.Scene {
           render();
         });
       const underline = this.add
-        .rectangle(x, tabY + (compact ? 13 : 14), Math.min(88, Math.max(52, tabText.width + 14)), 3, COLORS.gold, 1)
+        .rectangle(x, tabY + (compact ? 13 : 14), Math.min(88, Math.max(52, tabText.width + 14)), 3, VISUAL.warning, 1)
         .setVisible(false);
       tabs.push({ id, label, x, text: tabText, underline });
       overlay.add([tabText, underline]);
@@ -1308,7 +1307,7 @@ export class MenuScene extends Phaser.Scene {
           fontFamily: UI_FONT,
           fontSize: compact ? '11px' : '12px',
           fontStyle: '650',
-          color: '#d8d1e2',
+          color: VISUAL_TEXT.ivory,
           align: 'center',
           wordWrap: { width: panelW - 46 },
         })

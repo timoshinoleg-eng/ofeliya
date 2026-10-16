@@ -109,6 +109,9 @@ function guardGameOver(scene: Phaser.Scene): void {
   const H = scene.scale.height;
   if (W <= 0 || H <= 0) return;
 
+  // Measured report layouts own their header, clipped details and pinned actions.
+  // The legacy flatten-and-shrink pass would move their hint and detach header spacing.
+  if (container.getByName('ofeliya-result-report')) return;
   const texts = container.list.filter(
     (obj): obj is Phaser.GameObjects.Text => obj instanceof Phaser.GameObjects.Text
   );
