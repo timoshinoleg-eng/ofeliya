@@ -1,0 +1,107 @@
+{
+  "checkedAt": "2026-10-16T12:28:08.574Z",
+  "service": {
+    "id": "srv-db5ro5vlk1mc73b0v0eg",
+    "ownerId": "tea-d8iruouq1p3s73f30a90",
+    "name": "ofeliya-game",
+    "repo": "https://github.com/timoshinoleg-eng/ofeliya",
+    "branch": "main",
+    "plan": "free",
+    "region": "frankfurt",
+    "autoDeploy": "yes",
+    "autoDeployTrigger": "checksPass",
+    "rootDir": "",
+    "healthCheckPath": "/ready",
+    "buildFilter": {
+      "ignoredPaths": [
+        "memory/**",
+        "PROJECT_IDENTITY.md",
+        "deploy/RENDER.md"
+      ],
+      "paths": []
+    }
+  },
+  "deployments": [
+    {
+      "id": "dep-db8sqinf3r2c73f9u5f0",
+      "status": "live",
+      "sha": "7a0d8292a47a42dae9eeb8d7623ced9affa75c20",
+      "trigger": "api",
+      "createdAt": "2026-10-16T07:07:54.930255Z",
+      "finishedAt": "2026-10-16T07:08:41.804073Z"
+    },
+    {
+      "id": "dep-db8ko259fdbs739ncmsg",
+      "status": "deactivated",
+      "sha": "44c657935f3124724fe6a3191d1b29c35189e4f2",
+      "trigger": "api",
+      "createdAt": "2026-10-15T21:56:24.342707Z",
+      "finishedAt": "2026-10-15T21:57:09.499551Z"
+    },
+    {
+      "id": "dep-db7ndmm7bikc73d860lg",
+      "status": "deactivated",
+      "sha": "30a534fbf1656979c20434d4f4d724eea69c385f",
+      "trigger": "new_commit",
+      "createdAt": "2026-10-14T12:34:34.975163Z",
+      "finishedAt": "2026-10-14T12:35:24.792836Z"
+    },
+    {
+      "id": "dep-db7l3j7avr4c738l7mqg",
+      "status": "deactivated",
+      "sha": "a0faa496ce9c7770d27c549684c6c41000df947f",
+      "trigger": "manual",
+      "createdAt": "2026-10-14T09:56:29.053633Z",
+      "finishedAt": "2026-10-14T09:57:19.081482Z"
+    },
+    {
+      "id": "dep-db6vmg4s728c73cv4010",
+      "status": "deactivated",
+      "sha": "c0c72fa81690b562e15c1d87580c66af842b3f3b",
+      "trigger": "api",
+      "createdAt": "2026-10-13T09:34:56.521724Z",
+      "finishedAt": "2026-10-13T09:35:45.852543Z"
+    }
+  ],
+  "release": {
+    "release": "7a0d8292a47a42dae9eeb8d7623ced9affa75c20",
+    "version": "0.4.1-rc.1",
+    "indexSha256": "46126e7fe7a5e2f22a69b2a7ca9594e4ca1c2a2bf5d449becd5defca4d799a99",
+    "serviceWorkerSha256": "620adc14dcf848cfe9269e31d047dc6b8cc18a6a820b5e364a4583511be27745",
+    "runtimeConfigSha256": "a9d1d8d7d3afc471761933180e513c8f2d909f0f6bec75edda5a4c4c6ab5dc12"
+  },
+  "ready": {
+    "ok": true
+  },
+  "health": {
+    "ok": true,
+    "scores": 74,
+    "storePersistence": {
+      "dirty": false,
+      "healthy": true,
+      "lastFlushAt": null,
+      "mode": "remote",
+      "revision": 170
+    }
+  },
+  "state": {
+    "revision": 170,
+    "scores": 74,
+    "profiles": 4,
+    "migrationMarkers": 0,
+    "registryEntries": 1
+  },
+  "backup": {
+    "localFresh": true,
+    "sha256": "0e6eb44ce5c80ec51a650e1fe6e4ee585947c29718f0e16e4ede3235351949ac",
+    "roundTrip": true,
+    "path": "private/before-deployment.json.gz",
+    "priorS3Proof": {
+      "proofModifiedAt": "2026-10-15T17:00:12.024Z",
+      "revision": 148,
+      "sha256": "9628222a3fcca68f2a8da6f04fa6f8fbcbd28442a76f524430bb79231c34ff0a"
+    }
+  },
+  "persistenceConfigured": true,
+  "readOnlyRemote": true
+}

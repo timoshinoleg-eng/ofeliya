@@ -1,3 +1,13 @@
+# Current published state — 16 October 2026
+
+Product `abdb10c19d17de074f2be90e52d59cd9485c5b1b` ([PR217](https://github.com/timoshinoleg-eng/ofeliya/pull/217)) is published on the existing Render Free service, deployment `dep-db91jcff3r2c73fpgvs0`. Exact-head [CI38899978641](https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38899978641) and [visual matrix38899973748](https://github.com/timoshinoleg-eng/ofeliya/actions/runs/38899973748) passed. Public release/HTML/runtime/service-worker hashes agree; main JS loads, readiness and remote persistence are healthy. State revision 170→171; 74 scores, 4 profiles and 1 registration remain, with all baseline scores and keys retained. Existing profile values changed: 0; registration values changed: 0. Main remains aba70324 and service settings are unchanged; PRs remain open.
+
+Completed the confirmed visual gaps: distinct combinable mutation silhouettes, consistent SocialHub/Codex/pause surfaces, readable measured result rows with bounded scrolling and pinned actions, measured header spacing and safe pointer ownership. Full local presentation/TypeScript, five-size mobile/rotation/resume, six-size HUD and three-size Canvas/WebGL rich-screen checks passed. Independent source and native-image reviews found no remaining P1/P2.
+
+Read docs/frontend-overhaul/completion/README.md and PUBLICATION.md. Physical MAX/Telegram/iOS phone readability/input, sustained dense-combat performance/thermals, newcomer and full-campaign acceptance remain separate unperformed checks. Short desktop motion cadence and controlled screenshots do not establish those results. Main integration remains separately unauthorized. A future successful main auto-deploy can supersede this pinned release.
+
+## Historical snapshots
+
 # Mutation art recovery published — 16 October 2026
 
 Product7a0d8292a47a42dae9eeb8d7623ced9affa75c20 (PR216, base PR214 branch) is live on Render Free, deploy dep-db8sqinf3r2c73f9u5f0 at10:08:41 Moscow. All exact-head CI38863701636 and visual-matrix38863701150 checks passed. Three packaged mutation images now recover after first render if Boot fell back; same256px texture/canvas refs and existing Player update, bounded attempts and destruction cleanup. No gameplay/assets/service settings/main changes.

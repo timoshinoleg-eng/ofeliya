@@ -1,3 +1,11 @@
+# Completion update — 16 October 2026
+
+Completed the confirmed visual gaps: distinct combinable mutation silhouettes, consistent SocialHub/Codex/pause surfaces, readable measured result rows with bounded scrolling and pinned actions, measured header spacing and safe pointer ownership. Full local presentation/TypeScript, five-size mobile/rotation/resume, six-size HUD and three-size Canvas/WebGL rich-screen checks passed. Independent source and native-image reviews found no remaining P1/P2.
+
+The confirmed mutation distinction, SocialHub/Codex and rich-result implementation gaps are closed by published abdb10c / PR217. [Evidence](completion/README.md). Physical MAX/Telegram/iOS phone readability/input, sustained dense-combat performance/thermals, newcomer and full-campaign acceptance remain separate unperformed checks. Short desktop motion cadence and controlled screenshots do not establish those results. Main integration remains separately unauthorized. A future successful main auto-deploy can supersede this pinned release.
+
+## Original slice plan and historical acceptance ledger
+
 # Phase0/Phase1 implementation and acceptance plan
 
 15October2026. Scope is actual implemented slices plus remaining acceptance; checked items describe completed evidence only. Main merge remains unauthorized; owner separately authorized deployment after candidate validation.
