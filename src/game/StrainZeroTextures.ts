@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { COLORS } from './config';
 import { CORE_ART, artSourceFactor, rawArtKey } from './ArtMetrics';
+import { trackMutationArtSource } from './MutationArtRecovery';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -115,6 +116,7 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
       ctx.restore();
     }
     texture.refresh();
+    trackMutationArtSource(key, texture, factor > 1 && scene.textures.exists(rawKey));
     // The canonical bake now owns its pixels; release the larger raw GPU upload only afterwards.
     if (factor > 1 && scene.textures.exists(rawKey)) scene.textures.remove(rawKey);
   };

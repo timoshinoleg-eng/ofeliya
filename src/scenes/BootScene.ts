@@ -4,6 +4,7 @@ import { CORE_ART, rawArtKey } from '../game/ArtMetrics';
 import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
 import { ensureBiologicalAnimations } from '../game/BiologicalAnimation';
 import { StartupTrace } from '../systems/StartupTrace';
+import { startMutationArtRecovery } from '../game/MutationArtRecovery';
 
 /** Load optional core art; procedural textures keep startup usable when a file fails. */
 export class BootScene extends Phaser.Scene {
@@ -39,6 +40,7 @@ export class BootScene extends Phaser.Scene {
     StartupTrace.mark('splash.removed');
     StartupTrace.mark('menu.start.request');
     this.scene.start('Menu');
+    startMutationArtRecovery(this.game);
   }
 
   private makeTextures(): void {
