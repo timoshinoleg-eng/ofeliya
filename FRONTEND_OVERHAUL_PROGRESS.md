@@ -1,5 +1,8 @@
 # OFELIYA — Frontend overhaul progress
 
+**Mutation-art follow-up published:** product7a0d829 (dependent PR216) restores packaged mutation textures after Boot fallback while preserving first-render startup and existing Player references. All exact-head CI jobs and the12-case matrix passed; Render Free deploy dep-db8sqinf3r2c73f9u5f0 is live at10:08:41 Moscow. Public hash/health/state checks retain74scores and4profiles unchanged. [Paired frames, independent reviews and release evidence](docs/frontend-overhaul/release/mutation-art/RECOVERY.md). Device/FPS/newcomer gates and distinct mutation-palette work remain open.
+
+
 Updated 16 October 2026 (Europe/Moscow). **Phase0 has a verified inventory and baseline; Phase1 has implemented candidate PRs. Neither the entire master task nor all physical-device acceptance gates are complete.**
 
 Continuation recovered the interrupted release work. Final candidate is `44c657935f3124724fe6a3191d1b29c35189e4f2`; its only test delta from `d5cae44` waits for the real boss presentation before checking contextual host hints. No production source changed during continuation. The full six-viewport comprehension smoke passed twice, and an isolated no-wait run reproduced the original stale-hint CI failure. All fifteen earlier reviewed file digests remain identical; the refreshed review manifest includes the changed sixteenth test file. Fresh presentation contracts and TypeScript passed. Exact-head CI and live release results are recorded in the release section below; older candidate/pending statements further down preserve the previous snapshot.

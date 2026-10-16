@@ -1,0 +1,12 @@
+{
+  "triggeredAt": "2026-10-16T07:07:55.635Z",
+  "serviceId": "srv-db5ro5vlk1mc73b0v0eg",
+  "requestedSha": "7a0d8292a47a42dae9eeb8d7623ced9affa75c20",
+  "id": "dep-db8sqinf3r2c73f9u5f0",
+  "status": "build_in_progress",
+  "sha": "7a0d8292a47a42dae9eeb8d7623ced9affa75c20",
+  "trigger": "api",
+  "createdAt": "2026-10-16T07:07:54.930255Z",
+  "configChanged": false,
+  "mainMerged": false
+}

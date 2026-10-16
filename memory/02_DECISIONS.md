@@ -1,3 +1,12 @@
+# Mutation art recovery published — 16 October 2026
+
+Product7a0d8292a47a42dae9eeb8d7623ced9affa75c20 (PR216, base PR214 branch) is live on Render Free, deploy dep-db8sqinf3r2c73f9u5f0 at10:08:41 Moscow. All exact-head CI38863701636 and visual-matrix38863701150 checks passed. Three packaged mutation images now recover after first render if Boot fell back; same256px texture/canvas refs and existing Player update, bounded attempts and destruction cleanup. No gameplay/assets/service settings/main changes.
+
+Read docs/frontend-overhaul/release/mutation-art/RECOVERY.md and README.md for16paired Canvas/WebGL frames, independent reviews and sanitized exact-head/backup/live evidence. Public browser320/360/390 passes with QA globals absent and zero page/console/HTTP/CSP errors. At320and390two aborted Boot XHRs each recover via HTTP200image requests. Real touch390reaches field/onboarding; all74scores,4profiles and1registration preserved unchanged, revision152→153. Private snapshots excluded.
+
+Main aba70324 and PR213/214/215/216 remain separate/open. Physical phone/MAX/Telegram/iOS, sustained performance/thermals, dense-motion perceptual and newcomer acceptance remain open. Halo/singularity/combined art similarity is a separate visual backlog; existing scale/alpha were retained. The original product fix's pending verification headers are superseded by this final documentation snapshot. No further product commit is required for this documentation update.
+
+## Previous snapshots
 # Verified Phase0/1 publication — 16 October 2026
 
 Product candidate44c657935f3124724fe6a3191d1b29c35189e4f2 is live on the existing Render Free service, deploy dep-db8ko259fdbs739ncmsg, finished00:57:09 Moscow. Exact-head CI38812038028 and visual matrix38812172355 passed all jobs. PR213/214/215 remain open; main is unchanged aba70324. No merge or service-setting change was made. The seven-line comprehension wait is reviewed and passed twice locally; production source did not change during this continuation.
