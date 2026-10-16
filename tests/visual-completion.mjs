@@ -36,10 +36,12 @@ try {
       const viewport = c.list.find(o => o.name === 'ofeliya-result-report');
       const rows = viewport ? viewport.list.filter(o => o.type === 'Text') : details;
       const hit = c.getByName('ofeliya-result-report-hit').getBounds(), retry = c.getByName('ofeliya-result-retry-bg').getBounds(), stats = c.getByName('ofeliya-result-stats').getBounds();
+      const title = c.getByName('ofeliya-result-title').getBounds(), time = c.getByName('ofeliya-result-time').getBounds();
       window.__completionResult = c;
-      return { rows: rows.map(o => ({text:o.text,font:parseFloat(o.style.fontSize),top:o.y,bottom:o.y+o.height})), overflow:!!c.getByName('ofeliya-result-scroll-hint').text, height:window.innerHeight, hit:{x:hit.centerX,y:hit.centerY,top:hit.top,bottom:hit.bottom}, retry:{x:retry.centerX,y:retry.centerY,top:retry.top}, statsBottom:stats.bottom };
+      return { headerOrder: title.bottom + 8 <= time.top && time.bottom + 8 <= stats.top, rows: rows.map(o => ({text:o.text,font:parseFloat(o.style.fontSize),top:o.y,bottom:o.y+o.height})), overflow:!!c.getByName('ofeliya-result-scroll-hint').text, height:window.innerHeight, hit:{x:hit.centerX,y:hit.centerY,top:hit.top,bottom:hit.bottom}, retry:{x:retry.centerX,y:retry.centerY,top:retry.top}, statsBottom:stats.bottom };
     });
     assert.ok(report.rows.length >= 6, JSON.stringify(report));
+    assert.ok(report.headerOrder, 'measured title/time/stats must retain 8px separation');
     assert.ok(report.rows.every(o => o.font >= 11), 'result metadata must stay readable at11px');
     assert.ok(report.rows.every((o,i,a) => i === 0 || o.top >= a[i-1].bottom + 3), 'wrapped report rows must never overlap');
     assert.ok(report.hit.top > report.statsBottom && report.hit.bottom + 16 < report.retry.top, 'report must stay between header and pinned actions');

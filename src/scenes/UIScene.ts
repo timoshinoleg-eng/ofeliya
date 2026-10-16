@@ -2131,9 +2131,10 @@ export class UIScene extends Phaser.Scene {
       accent: res.win ? VISUAL.host : VISUAL.player, alpha: 0.72,
     });
     c.add(summarySurface);
-    c.add(this.add.text(W / 2, titleY - (compact ? 25 : 30), 'STRAIN ZERO / ИТОГ ЦИКЛА', {
+    const resultBrand = this.add.text(W / 2, titleY - (compact ? 25 : 30), 'STRAIN ZERO / ИТОГ ЦИКЛА', {
       fontFamily: FONT, fontSize: '10px', letterSpacing: 2, color: VISUAL_TEXT.muted,
-    }).setOrigin(0.5).setResolution(2));
+    }).setOrigin(0.5).setResolution(2);
+    c.add(resultBrand);
     const resultTitle = this.add
         .text(W / 2, titleY, res.win ? (W < 360 ? 'ИММУНИТЕТ\nПОДАВЛЕН' : 'ИММУНИТЕТ ПОДАВЛЕН') : 'ШТАММ УНИЧТОЖЕН', {
           fontFamily: FONT,
@@ -2148,7 +2149,8 @@ export class UIScene extends Phaser.Scene {
         .setName('ofeliya-result-title')
         .setShadow(0, 2, '#080f14', 2, true, true);
     c.add(resultTitle);
-    const timeY = Math.max(
+    resultBrand.setY(resultTitle.getBounds().top - 6 - resultBrand.height / 2);
+    let timeY = Math.max(
       titleY + (compact ? 42 : 54),
       resultTitle.getBounds().bottom + (compact ? 24 : 28),
     );
@@ -2166,7 +2168,10 @@ export class UIScene extends Phaser.Scene {
         .setName('ofeliya-result-time')
     );
 
-    const statY = timeY + (compact ? 37 : 46);
+    const timeText = c.getByName('ofeliya-result-time') as Phaser.GameObjects.Text;
+    timeY += Math.max(0, resultTitle.getBounds().bottom + 8 - timeText.getBounds().top);
+    timeText.setY(timeY);
+    let statY = timeY + (compact ? 37 : 46);
     c.add(
       this.add
         .text(
@@ -2187,6 +2192,9 @@ export class UIScene extends Phaser.Scene {
         .setName('ofeliya-result-stats')
     );
 
+    const statsText = c.getByName('ofeliya-result-stats') as Phaser.GameObjects.Text;
+    statY += Math.max(0, timeText.getBounds().bottom + 8 - statsText.getBounds().top);
+    statsText.setY(statY);
     const reportStart = c.list.length;
     let detailY = statY + 35;
     const evoText = res.evolutions.length > 0
@@ -2466,7 +2474,7 @@ export class UIScene extends Phaser.Scene {
     drawSpecimenSurface(summarySurface, W - 28, statsBottom + 14 - summaryTop, {accent: res.win ? VISUAL.host : VISUAL.player, alpha:0.72});
     const reportTop = Math.max(statY + 36, statsBottom + 24);
     const reportRows = c.list.slice(reportStart).filter((child): child is Phaser.GameObjects.Text => child instanceof Phaser.GameObjects.Text);
-    createResultReport(this, c, reportRows, W / 2, reportTop, W - 32, Math.max(50, y - 49 - reportTop), scoreStatus);
+    createResultReport(this, c, reportRows, W / 2, reportTop, W - 32, Math.max(50, y - 55 - reportTop), scoreStatus);
     this.button(c, 'ЕЩЁ ОДИН ЦИКЛ', W / 2, y, true, () => {
       const gameScene = this.gs;
       if (!gameScene) return;

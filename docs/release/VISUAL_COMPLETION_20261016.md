@@ -23,3 +23,5 @@ Matched desktop motion probe uses100seeded enemy spawns, running AI/physics/Game
 ## Completion boundaries
 
 Confirmed implementation gaps in mutation distinction, SocialHub/Codex consistency and expanded result readability are addressed. Existing biological atlases, reward/projectile kit and production density gate are retained: an absent additional atlas is not proof of a visual defect, and unmeasured global2x density is not enabled. Physical MAX/Telegram/iOS, phone readability/input/thermals, sustained dense combat and newcomer/full-campaign acceptance remain separate real-world checks. Main integration still needs its own permission.
+
+Hosted CI exposed two remaining result-header spacing defects hidden by the former legacy guard. Header time/stats now use measured 8px minimum gaps; report/scroll hint reserves additional CTA separation. Legacy challenge/layout smoke contracts now inspect nested report rows and actual world bounds, retaining verdict/share semantics, readable fonts, clip containment, button padding and pointer ownership. The original challenge/share smoke passed locally after the fix; final hosted results are recorded in companion PR215.
