@@ -1,3 +1,12 @@
+# Visual implementation completion — 16 October 2026
+
+Branch visual/completion-20261016 extends verified public7a0d829 (PR216). Implemented distinct Player mutation geometry/combined composition, unified SocialHub and Codex, measured11px scrolling result report with pinned actions, pointer ownership and long-share fit, quieter pause. Existing gameplay/RNG/physics/score/network/assets/service settings are retained. Main integration is not authorized.
+
+Read docs/release/VISUAL_COMPLETION_20261016.md. Root executed rich result/resumed/share/social/error/allCodex browser320/360/390; presentation and TypeScript passed. Independent source and native visual reviews resolved concrete issues and found no remaining P1/P2. Short live100-spawn AI/physics desktop before/after has p95~16.8ms in Canvas/WebGL, explicitly not device FPS. Final exact-head hosted CI/matrix, fresh backup and pinned deployment/readback are still pending; do not claim publication from this snapshot.
+
+The implementation gaps from the earlier Phase1 ledger are addressed in this branch; old pending statements below are historical snapshots. Device MAX/TG/iOS, sustained performance/thermals, newcomer/full-campaign acceptance remain open. Preserve other PRs and private state backups. Companion documentation branch carries final evidence without changing the tested product SHA after publication.
+
+## Previous snapshots
 # Mutation art recovery continuation — 16 October 2026
 Branch fix/mutation-art-recovery-20261016 starts from the verified live visual candidate44c6579 (PR214). Cold-start optional mutation requests can exceed Boot1800ms; fallback previously remained permanent. The scoped fix records canonical texture provenance and recovers only mutation-prism/halo/singularity after first render. Same256px CanvasTexture objects refresh in place; Player/physics/gameplay/assets remain unchanged. Two8000ms attempts/key,750ms backoff; per-game dedup and destruction cancellation. Five module contracts, full presentation and TypeScript passed. Read docs/release/MUTATION_ART_RECOVERY_20261016.md.
 

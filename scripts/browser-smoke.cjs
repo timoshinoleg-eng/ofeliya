@@ -164,7 +164,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const time = modalTexts.find((obj) => /^\d{2}:\d{2}$/.test(obj.text));
     const stats = modalTexts.find((obj) => obj.text.startsWith('УНИЧТОЖЕНО:') && obj.text.includes('Заражено:'));
     const shareText = modalTexts.find((obj) => obj.text === 'БРОСИТЬ ВЫЗОВ');
-    const verdict = modalTexts.find((obj) => obj.text.includes('ВЫЗОВ ПРЕВЗОЙДЁН'));
+    const report = container?.getByName('ofeliya-result-report');
+    const reportHit = container?.getByName('ofeliya-result-report-hit');
+    const reportRows = report?.list?.filter((obj) => typeof obj.text === 'string') ?? [];
+    const verdict = reportRows.find((obj) => obj.text.includes('ВЫЗОВ ПРЕВЗОЙДЁН'));
     const buttons = modalTexts.filter((obj) => ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В МЕНЮ'].includes(obj.text));
     const buttonSet = new Set(buttons);
     const details = modalTexts
@@ -220,7 +223,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       };
     });
     const firstButtonTop = Math.min(...buttonChecks.map((item) => item.top ?? Infinity));
-    const detailBottom = details.length ? Math.max(...details.map((obj) => obj.getBounds().bottom)) : statsBounds?.bottom ?? 0;
+    const detailBottom = Math.max(reportHit?.getBounds().bottom ?? 0, details.length ? Math.max(...details.map((obj) => obj.getBounds().bottom)) : statsBounds?.bottom ?? 0);
     const contentButtonGap = firstButtonTop - detailBottom;
 
     let shareControl = null;
@@ -240,6 +243,9 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       detailsOrderOk,
       buttonChecks,
       contentButtonGap: Math.round(contentButtonGap),
+      reportRowsReadable: reportRows.length > 0 && reportRows.every((obj) => parseFloat(obj.style.fontSize) >= 11),
+      reportRowsOrdered: reportRows.every((obj, i) => i === 0 || reportRows[i - 1].getBounds().bottom + 3 <= obj.getBounds().top),
+      reportBelowStats: !!reportHit && reportHit.getBounds().top >= statsBounds.bottom + 8,
       viewport: [ui.scale.width, ui.scale.height],
     };
   });
@@ -251,6 +257,9 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     resultState.overflow.length > 0 ||
     !resultState.keyOrderOk ||
     !resultState.detailsOrderOk ||
+    !resultState.reportRowsReadable ||
+    !resultState.reportRowsOrdered ||
+    !resultState.reportBelowStats ||
     resultState.buttonChecks.length !== 3 ||
     resultState.buttonChecks.some((item) => !item.ok) ||
     resultState.contentButtonGap < 12
@@ -272,7 +281,9 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       obj !== shareText && obj.input?.enabled && Math.abs((obj.y ?? -9999) - shareText.y) < 1
     );
     if (!control) throw new Error('interactive share control missing');
-    control.emit('pointerup');
+    const pointer = { id: 0 };
+    control.emit('pointerdown', pointer);
+    control.emit('pointerup', pointer);
   });
   await page.waitForFunction(() => !!window.__shared);
 

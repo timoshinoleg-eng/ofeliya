@@ -336,12 +336,14 @@ async function assertCompactResumeMenu(browser) {
         const bb = bg?.getBounds?.();
         return {
           label,
+          top: bb?.top,
+          bottom: bb?.bottom,
           ok: !!tb && !!bb && tb.left >= bb.left + 4 && tb.right <= bb.right - 4 && tb.top >= bb.top + 1 && tb.bottom <= bb.bottom - 1,
         };
       });
 
       const sorted = visible
-        .filter((obj) => !buttonLabels.includes(obj.text))
+        .filter((obj) => !buttonLabels.includes(obj.text) && !measured.find((entry) => entry.object === obj).masked)
         .map((obj) => ({ text: obj.text, bounds: obj.getBounds() }))
         .sort((a, b) => a.bounds.top - b.bounds.top);
       const overlaps = [];
@@ -351,14 +353,33 @@ async function assertCompactResumeMenu(browser) {
         }
       }
 
-      return { overflow, buttons, overlaps };
+      const report = container.getByName('ofeliya-result-report');
+      const hit = container.getByName('ofeliya-result-report-hit')?.getBounds();
+      const stats = container.getByName('ofeliya-result-stats')?.getBounds();
+      const hint = container.getByName('ofeliya-result-scroll-hint');
+      const firstButton = container.getByName('ofeliya-result-retry-bg')?.getBounds();
+      const rows = report?.list?.filter((obj) => typeof obj.text === 'string') ?? [];
+      const maskCommands = report?.mask?.geometryMask?.commandBuffer ?? [];
+      const clip = maskCommands.slice(-5);
+      const reportOk = Boolean(report && hit && stats && firstButton && rows.length && clip[0] === 3) &&
+        hit.left >= 1 && hit.right <= width - 1 && hit.top >= stats.bottom + 4 && hit.bottom + 12 <= firstButton.top &&
+        (!hint?.text || (hint.getBounds().top >= hit.bottom && hint.getBounds().bottom + 6 <= firstButton.top)) &&
+        Math.abs(clip[1] - hit.left) <= 1 && Math.abs(clip[2] - hit.top) <= 1 &&
+        Math.abs(clip[3] - hit.width) <= 1 && Math.abs(clip[4] - hit.height) <= 1 &&
+        rows.every((row, index) => {
+          const bounds = row.getBounds();
+          return parseFloat(row.style.fontSize) >= 11 && bounds.left >= hit.left + 4 && bounds.right <= hit.right - 4 &&
+            (index === 0 || rows[index - 1].getBounds().bottom + 1 <= bounds.top);
+        });
+      const buttonsOrdered = buttons.every((button, index) => index === 0 || buttons[index - 1].bottom + 1 <= button.top);
+      return { overflow, buttons, overlaps, reportOk, buttonsOrdered };
     }, { ...size, buttonLabels: BUTTONS });
 
     if (
       result.missing ||
       result.overflow?.length ||
       result.buttons?.some((item) => !item.ok) ||
-      result.overlaps?.length
+      result.overlaps?.length || !result.reportOk || !result.buttonsOrdered
     ) {
       throw new Error(`result ${size.width}x${size.height} failed: ${JSON.stringify(result)}`);
     }
@@ -393,37 +414,48 @@ async function assertCompactResumeMenu(browser) {
           'ofeliya-result-share-label',
           'ofeliya-result-menu-label',
         ];
-        const expectedYs = [402, 456, 510];
-        const buttons = names.map((name, index) => {
+        const buttons = names.map((name) => {
           const text = byName(name);
           const bg = byName(name.replace('-label', '-bg'));
           const tb = text?.getBounds?.();
           const bb = bg?.getBounds?.();
           return {
             name,
-            y: text?.y ?? null,
-            expectedY: expectedYs[index],
+            top: bb?.top ?? null,
+            bottom: bb?.bottom ?? null,
+            left: bb?.left ?? null,
+            right: bb?.right ?? null,
             textInside:
               Boolean(tb && bb) &&
               tb.left >= bb.left + 4 &&
               tb.right <= bb.right - 4 &&
               tb.top >= bb.top + 1 &&
               tb.bottom <= bb.bottom - 1,
-            bgWidth: bg?.width ?? null,
+            bgWidth: bb?.width ?? null,
           };
         });
         const scrim = byName('ofeliya-result-scrim');
+        const report = byName('ofeliya-result-report');
+        const hit = byName('ofeliya-result-report-hit')?.getBounds();
+        const stats = byName('ofeliya-result-stats')?.getBounds();
+        const hint = byName('ofeliya-result-scroll-hint');
+        const rows = report?.list?.filter((obj) => typeof obj.text === 'string') ?? [];
+        const clip = (report?.mask?.geometryMask?.commandBuffer ?? []).slice(-5);
+        const reportOk = Boolean(hit && stats && rows.length && clip[0] === 3) &&
+          hit.left >= 1 && hit.right <= 319 && hit.top >= stats.bottom + 4 && hit.bottom + 6 <= buttons[0].top &&
+          (!hint?.text || (hint.getBounds().top >= hit.bottom && hint.getBounds().bottom + 3 <= buttons[0].top)) &&
+          Math.abs(clip[1] - hit.left) <= 1 && Math.abs(clip[2] - hit.top) <= 1 &&
+          Math.abs(clip[3] - hit.width) <= 1 && Math.abs(clip[4] - hit.height) <= 1 &&
+          rows.every((row, index) => {
+            const bounds = row.getBounds();
+            return bounds.left >= hit.left + 2 && bounds.right <= hit.right - 2 &&
+              (index === 0 || rows[index - 1].getBounds().bottom + 0.5 <= bounds.top);
+          });
         return {
           scale: [ui.scale.width, ui.scale.height],
           buttons,
-          scrim: scrim
-            ? {
-                x: scrim.x,
-                y: scrim.y,
-                width: scrim.displayWidth,
-                height: scrim.displayHeight,
-              }
-            : null,
+          reportOk,
+          scrim: scrim?.getBounds() ?? null,
         };
       });
       if (
@@ -431,14 +463,15 @@ async function assertCompactResumeMenu(browser) {
         resizedResult.scale?.[0] !== 320 ||
         resizedResult.scale?.[1] !== 568 ||
         resizedResult.buttons?.some(
-          (item) =>
-            Math.abs((item.y ?? -9999) - item.expectedY) > 1 ||
+          (item, index, items) =>
             !item.textInside ||
-            (item.bgWidth ?? 9999) > 272
+            (item.bgWidth ?? 9999) > 272 || item.left < 1 || item.right > 319 || item.top < 1 || item.bottom > 567 ||
+            (index > 0 && items[index - 1].bottom + 1 > item.top)
         ) ||
+        !resizedResult.reportOk ||
         !resizedResult.scrim ||
-        Math.abs(resizedResult.scrim.x - 160) > 1 ||
-        Math.abs(resizedResult.scrim.y - 284) > 1 ||
+        Math.abs(resizedResult.scrim.x) > 1 ||
+        Math.abs(resizedResult.scrim.y) > 1 ||
         Math.abs(resizedResult.scrim.width - 320) > 1 ||
         Math.abs(resizedResult.scrim.height - 568) > 1
       ) {

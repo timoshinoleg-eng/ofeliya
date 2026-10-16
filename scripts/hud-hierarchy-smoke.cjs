@@ -390,6 +390,7 @@ async function resultContract(page) {
     const W = window.__game.scale.width;
     const H = window.__game.scale.height;
     const container = ui.children.list.find((obj) => obj?.name === 'ofeliya-result');
+    const report = container.getByName('ofeliya-result-report');
     const texts = container.list.filter((obj) => typeof obj.text === 'string');
     const visible = texts.filter((obj) => obj.visible !== false && (obj.alpha ?? 1) > 0.01 && typeof obj.getBounds === 'function');
     const overflow = visible
@@ -401,9 +402,27 @@ async function resultContract(page) {
       const bg = text && container.list.find((obj) => obj !== text && obj.input?.enabled && Math.abs((obj.y ?? -9999) - text.y) < 1 && typeof obj.getBounds === 'function');
       const tb = text?.getBounds?.();
       const bb = bg?.getBounds?.();
-      return { label, ok: !!tb && !!bb && tb.left >= bb.left + 4 && tb.right <= bb.right - 4 && tb.top >= bb.top + 1 && tb.bottom <= bb.bottom - 1 };
+      return { label, top: bb?.top, bottom: bb?.bottom, ok: !!tb && !!bb && tb.left >= bb.left + 4 && tb.right <= bb.right - 4 && tb.top >= bb.top + 1 && tb.bottom <= bb.bottom - 1 };
     });
-    return { W, H, overflow, buttons };
+    const hit = container.getByName('ofeliya-result-report-hit')?.getBounds();
+    const stats = container.getByName('ofeliya-result-stats')?.getBounds();
+    const hint = container.getByName('ofeliya-result-scroll-hint');
+    const rows = report?.list?.filter((obj) => typeof obj.text === 'string') ?? [];
+    // Phaser 3.90 Graphics FILL_RECT opcode is 3; the retained mask must match
+    // the viewport's world bounds, rather than the full unscrolled content.
+    const clip = (report?.mask?.geometryMask?.commandBuffer ?? []).slice(-5);
+    const reportOk = Boolean(report && hit && stats && rows.length && clip[0] === 3) &&
+      hit.left >= 1 && hit.right <= W - 1 && hit.top >= stats.bottom + 4 && hit.bottom + 12 <= buttons[0].top &&
+      (!hint?.text || (hint.getBounds().top >= hit.bottom && hint.getBounds().bottom + 6 <= buttons[0].top)) &&
+      Math.abs(clip[1] - hit.left) <= 1 && Math.abs(clip[2] - hit.top) <= 1 &&
+      Math.abs(clip[3] - hit.width) <= 1 && Math.abs(clip[4] - hit.height) <= 1 &&
+      rows.every((row, index) => {
+        const bounds = row.getBounds();
+        return parseFloat(row.style.fontSize) >= 11 && bounds.left >= hit.left + 4 && bounds.right <= hit.right - 4 &&
+          (index === 0 || rows[index - 1].getBounds().bottom + 1 <= bounds.top);
+      });
+    const buttonsOrdered = buttons.every((button, index) => index === 0 || buttons[index - 1].bottom + 1 <= button.top);
+    return { W, H, overflow, buttons, reportOk, buttonsOrdered };
   }, RESULT_BUTTONS);
 }
 
@@ -420,6 +439,8 @@ function assertContainment(kind, label, contract) {
   } else {
     for (const o of contract.overflow) failures.push(`result overflow: ${JSON.stringify(o)}`);
     for (const b of contract.buttons) if (!b.ok) failures.push(`result button padding failed: ${b.label}`);
+    if (!contract.reportOk) failures.push('result report mask, row spacing or header/action containment failed');
+    if (!contract.buttonsOrdered) failures.push('result actions overlap or are out of order');
   }
   if (failures.length) {
     throw new Error(`${kind} containment failed at ${label}: ${JSON.stringify(failures)}`);

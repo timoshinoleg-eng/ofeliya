@@ -3,13 +3,16 @@ import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
+import { execFileSync } from 'node:child_process';
 
 // Removing the Loader XHR timeout or procedural fallback must fail these real Boot cases.
 const red = process.env.OFELIYA_ART_RECOVERY_RED === '1';
+const baselinePlayer = process.env.OFELIYA_ART_PLAYER_BASELINE === '1'
+  ? execFileSync('git', ['show','7a0d829:src/game/Player.ts'], {encoding:'utf8',windowsHide:true}) : null;
 const server = await createServer({ server: { host: '127.0.0.1', port: 0 }, plugins: red ? [{
   name: 'art-recovery-negative-control', enforce: 'pre',
   transform(code, id) { if (id.endsWith('/BootScene.ts')) return code.replace('startMutationArtRecovery(this.game);', ''); },
-}] : [] });
+}] : baselinePlayer ? [{name:'paired-player-baseline',enforce:'pre',transform(_code,id){if(id.endsWith('/game/Player.ts'))return baselinePlayer;}}] : [] });
 let browser;
 try {
   await server.listen();
@@ -73,6 +76,7 @@ try {
       for (const child of scene.children.list) child.setVisible?.(false);
       scene.add.tileSprite(160, 284, 320, 568, 'blood-plasma').setDepth(-1);
       const player = new Player(scene, 160, 284);
+      player.preUpdate(0, 0); // Place attached Graphics before freezing this comparison pose.
       // Freeze only this display fixture's animation; runtime recovery still uses real game events.
       player.preUpdate = () => {};
       window.__artFixture = { player, textures: keys.map(k => game.textures.get(k)), sources: keys.map(k => game.textures.get(k).getSourceImage()) };

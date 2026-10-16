@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS, FONT, UI_FONT, UI_TEXT, fmtTime } from '../game/config';
+import { FONT, UI_FONT, fmtTime } from '../game/config';
 import type { PlatformAdapter } from '../platform/PlatformBridge';
 import {
   loadSocialSnapshotDetailed,
@@ -11,6 +11,8 @@ import {
 import type { DailyTicketStatus } from '../systems/DailyRunClient';
 import { dailyStreakSummary } from '../systems/DailyHistory';
 import { dailyPreviewTitle, dailyPreviewRefreshDelay } from './DailyPreview';
+import { VISUAL, VISUAL_TEXT } from './visualTokens';
+import { createSpecimenSurface } from './specimenSurface';
 
 const MAX_ROWS = 3;
 
@@ -36,11 +38,11 @@ function errorCopy(status: RemoteStatus): string | null {
 }
 
 function seasonRow(entry: SocialTopEntry): string {
-  return `#${entry.rank} · ${platformLabel(entry.platform)} · ${fmtTime(entry.timeMs)} · УНИЧТОЖЕНО ${entry.kills}`;
+  return `#${entry.rank} · ${platformLabel(entry.platform)}\n${fmtTime(entry.timeMs)} · УНИЧТОЖЕНО ${entry.kills}`;
 }
 
 function friendRow(entry: FriendSnapshot): string {
-  return `${relationLabel(entry.relation)} · ${platformLabel(entry.platform)} · ${fmtTime(entry.timeMs)} · УНИЧТОЖЕНО ${entry.kills}`;
+  return `${relationLabel(entry.relation)} · ${platformLabel(entry.platform)}\n${fmtTime(entry.timeMs)} · УНИЧТОЖЕНО ${entry.kills}`;
 }
 
 export class SocialHub {
@@ -71,14 +73,16 @@ export class SocialHub {
 
     this.root = scene.add.container(0, 0).setDepth(46).setName('ofeliya-social-hub');
     const dim = scene.add
-      .rectangle(W / 2, H / 2, W, H, 0x03040a, 0.96)
+      .rectangle(W / 2, H / 2, W, H, VISUAL.ink, 0.96)
       .setInteractive()
       .setName('ofeliya-social-dim');
     const panel = scene.add
-      .rectangle(W / 2, H / 2, this.panelW, this.panelH, 0x100d16, 0.995)
-      .setStrokeStyle(2, COLORS.cyan, 0.72)
+      .rectangle(W / 2, H / 2, this.panelW, this.panelH, VISUAL.panel, 0.995)
+      .setStrokeStyle(1, VISUAL.line, 0.8)
       .setName('ofeliya-social-panel');
-    this.root.add([dim, panel]);
+    this.root.add([dim, panel, createSpecimenSurface(scene, W / 2, H / 2, this.panelW, this.panelH, {
+      accent: VISUAL.host, detail: 'quiet',
+    }).setName('ofeliya-social-membrane')]);
 
     this.root.add(
       scene.add
@@ -86,7 +90,7 @@ export class SocialHub {
           fontFamily: FONT,
           fontSize: H < 650 ? '18px' : '21px',
           fontStyle: 'bold',
-          color: '#fff4ec',
+          color: VISUAL_TEXT.ivory,
           letterSpacing: 1,
         })
         .setOrigin(0.5)
@@ -98,9 +102,9 @@ export class SocialHub {
       scene.add
         .text(W / 2, this.panelTop + 47, 'СЕГОДНЯ · СЕЗОН · ДРУЗЬЯ', {
           fontFamily: UI_FONT,
-          fontSize: H < 650 ? '10px' : '11px',
+          fontSize: '11px',
           fontStyle: '700',
-          color: '#b8f3ff',
+          color: VISUAL_TEXT.host,
         })
         .setOrigin(0.5)
         .setResolution(2)
@@ -116,7 +120,7 @@ export class SocialHub {
       .text(closeX, closeY - 1, '×', {
         fontFamily: FONT,
         fontSize: '27px',
-        color: '#c89aaf',
+        color: VISUAL_TEXT.muted,
       })
       .setOrigin(0.5)
       .setResolution(2)
@@ -150,7 +154,7 @@ export class SocialHub {
     y: number,
     value: string,
     size: number,
-    color: string = UI_TEXT.primary,
+    color: string = VISUAL_TEXT.ivory,
     align: 'left' | 'center' = 'left',
     width: number = this.panelW - 34,
     name?: string
@@ -173,12 +177,16 @@ export class SocialHub {
   }
 
   private sectionTitle(y: number, value: string, name: string): void {
+    this.body.add(createSpecimenSurface(
+      this.scene, this.scene.scale.width / 2, y + 58, this.panelW - 20, 132,
+      { accent: VISUAL.host, fill: VISUAL.ink, alpha: 0.58, detail: 'quiet' },
+    ));
     this.addText(
       this.panelLeft + 17,
       y,
       value,
       this.scene.scale.height < 650 ? 11 : 12,
-      '#ffe066',
+      VISUAL_TEXT.host,
       'left',
       this.panelW - 34,
       name
@@ -187,21 +195,20 @@ export class SocialHub {
 
   private renderLoading(): void {
     this.body.removeAll(true);
-    const compact = this.scene.scale.height < 650;
     const left = this.panelLeft + 17;
     const width = this.panelW - 34;
     const todayY = this.panelTop + 70;
     this.sectionTitle(todayY, 'СЕГОДНЯ', 'ofeliya-social-today-title');
-    this.addText(left, todayY + 22, 'ЗАГРУЗКА ЛИЧНОГО РЕЗУЛЬТАТА…', compact ? 10 : 11, UI_TEXT.secondary, 'left', width);
+    this.addText(left, todayY + 22, 'ЗАГРУЗКА ЛИЧНОГО РЕЗУЛЬТАТА…', 11, VISUAL_TEXT.muted, 'left', width);
     this.addDailyButton(todayY + 74, true);
 
     const seasonY = todayY + 136;
     this.sectionTitle(seasonY, 'СЕЗОН', 'ofeliya-social-season-title');
-    this.addText(left, seasonY + 22, 'ЗАГРУЗКА ТАБЛИЦЫ…', compact ? 10 : 11, UI_TEXT.secondary, 'left', width);
+    this.addText(left, seasonY + 22, 'ЗАГРУЗКА ТАБЛИЦЫ…', 11, VISUAL_TEXT.muted, 'left', width);
 
-    const friendsY = seasonY + 124;
+    const friendsY = seasonY + 136;
     this.sectionTitle(friendsY, 'ДРУЗЬЯ', 'ofeliya-social-friends-title');
-    this.addText(left, friendsY + 22, 'ЗАГРУЗКА СВЯЗЕЙ…', compact ? 10 : 11, UI_TEXT.secondary, 'left', width);
+    this.addText(left, friendsY + 22, 'ЗАГРУЗКА СВЯЗЕЙ…', 11, VISUAL_TEXT.muted, 'left', width);
   }
 
   private canLaunchDaily(): boolean {
@@ -222,71 +229,71 @@ export class SocialHub {
       return {
         label: 'ПОЛУЧАЕМ ЕЖЕДНЕВНЫЙ ЗАБЕГ…',
         enabled: false,
-        color: '#a99eac',
-        fill: 0x1a1520,
-        stroke: COLORS.stroke,
+        color: VISUAL_TEXT.muted,
+        fill: VISUAL.panelRaised,
+        stroke: VISUAL.line,
       };
     }
     if (!this.canLaunchDaily() || this.dailyLaunchStatus === 'unavailable') {
       return {
         label: 'НУЖЕН ВХОД ЧЕРЕЗ MAX ИЛИ TG',
         enabled: false,
-        color: '#a99eac',
-        fill: 0x1a1520,
-        stroke: COLORS.stroke,
+        color: VISUAL_TEXT.muted,
+        fill: VISUAL.panelRaised,
+        stroke: VISUAL.line,
       };
     }
     if (this.dailyLaunchStatus === 'denied') {
       return {
         label: 'НУЖЕН ПОДТВЕРЖДЁННЫЙ ВХОД',
         enabled: false,
-        color: '#ffb095',
-        fill: 0x1a1520,
-        stroke: COLORS.stroke,
+        color: VISUAL_TEXT.danger,
+        fill: VISUAL.panelRaised,
+        stroke: VISUAL.line,
       };
     }
     if (this.dailyLaunchStatus === 'incompatible') {
       return {
         label: 'ОБНОВИТЕ ИГРУ И ПОВТОРИТЕ',
         enabled: false,
-        color: '#ffb095',
-        fill: 0x1a1520,
-        stroke: COLORS.stroke,
+        color: VISUAL_TEXT.danger,
+        fill: VISUAL.panelRaised,
+        stroke: VISUAL.line,
       };
     }
     if (this.dailyLaunchStatus === 'capacity') {
       return {
         label: 'ЗАБЕГ НЕДОСТУПЕН · ПОВТОРИТЬ',
         enabled: true,
-        color: '#ffe7a6',
-        fill: 0x292115,
-        stroke: COLORS.gold,
+        color: VISUAL_TEXT.warning,
+        fill: VISUAL.panelRaised,
+        stroke: VISUAL.warning,
       };
     }
     if (this.dailyLaunchStatus === 'http') {
       return {
         label: 'СЕРВЕР НЕ ОТВЕТИЛ · ПОВТОРИТЬ',
         enabled: true,
-        color: '#ffcfb8',
-        fill: 0x291817,
-        stroke: 0xff8f66,
+        color: VISUAL_TEXT.danger,
+        fill: VISUAL.panelRaised,
+        stroke: VISUAL.danger,
       };
     }
     if (this.dailyLaunchStatus === 'network') {
       return {
         label: 'НЕТ СОЕДИНЕНИЯ · ПОВТОРИТЬ',
         enabled: true,
-        color: '#ffcfb8',
-        fill: 0x291817,
-        stroke: 0xff8f66,
+        color: VISUAL_TEXT.danger,
+        fill: VISUAL.panelRaised,
+        stroke: VISUAL.danger,
       };
     }
     return {
       label: 'НАЧАТЬ ЕЖЕДНЕВНЫЙ ЗАБЕГ',
       enabled: true,
-      color: '#c9f6ff',
-      fill: 0x14212a,
-      stroke: COLORS.cyan,
+      color: '#080f14',
+      fill: VISUAL.ivory,
+      stroke: VISUAL.host,
     };
   }
 
@@ -306,7 +313,7 @@ export class SocialHub {
     const label = this.scene.add
       .text(W / 2, y, state.label, {
         fontFamily: FONT,
-        fontSize: this.scene.scale.height < 650 ? '10px' : '11px',
+        fontSize: '11px',
         fontStyle: 'bold',
         color: state.color,
       })
@@ -314,11 +321,11 @@ export class SocialHub {
       .setResolution(2)
       .setName('ofeliya-social-daily-label');
     const mutatorText = this.scene.add
-      .text(W / 2, y + 20, dailyPreviewTitle(loadingView ? null : this.lastDetail?.snapshot.daily ?? null), {
+      .text(W / 2, y + 28, dailyPreviewTitle(loadingView ? null : this.lastDetail?.snapshot.daily ?? null), {
         fontFamily: FONT,
-        fontSize: this.scene.scale.height < 650 ? '9px' : '10px',
+        fontSize: '11px',
         fontStyle: 'bold',
-        color: '#e8f4ff',
+        color: VISUAL_TEXT.ivory,
       })
       .setOrigin(0.5)
       .setResolution(2)
@@ -328,11 +335,11 @@ export class SocialHub {
     const streak = dailyStreakSummary();
     if (streak.current > 0 || streak.best > 0) {
       const streakText = this.scene.add
-        .text(W / 2, y + 34, `СЕРИЯ ${streak.current} · РЕКОРД ${streak.best}`, {
+        .text(W / 2, y + 43, `СЕРИЯ ${streak.current} · РЕКОРД ${streak.best}`, {
           fontFamily: FONT,
-          fontSize: this.scene.scale.height < 650 ? '9px' : '10px',
+          fontSize: '11px',
           fontStyle: 'bold',
-          color: '#b8f3ff',
+          color: VISUAL_TEXT.host,
         })
         .setOrigin(0.5)
         .setResolution(2)
@@ -364,11 +371,10 @@ export class SocialHub {
   private render(detail: SocialSnapshotDetailed): void {
     this.lastDetail = detail;
     this.body.removeAll(true);
-    const compact = this.scene.scale.height < 650;
     const left = this.panelLeft + 17;
     const width = this.panelW - 34;
-    const rowSize = compact ? 9 : 10;
-    const bodySize = compact ? 10 : 11;
+    const rowSize = 11;
+    const bodySize = 11;
     const todayY = this.panelTop + 70;
 
     this.sectionTitle(todayY, 'СЕГОДНЯ', 'ofeliya-social-today-title');
@@ -389,7 +395,7 @@ export class SocialHub {
           'ЛИЧНЫЙ РЕЗУЛЬТАТ ДОСТУПЕН ПОСЛЕ ВХОДА ЧЕРЕЗ MAX ИЛИ Telegram'
         );
     }
-    this.addText(left, todayY + 22, dailyLine, bodySize, dailyError ? '#ffb095' : UI_TEXT.primary, 'left', width, 'ofeliya-social-today-status');
+    this.addText(left, todayY + 22, dailyLine, bodySize, dailyError ? VISUAL_TEXT.danger : VISUAL_TEXT.ivory, 'left', width, 'ofeliya-social-today-status');
     this.addDailyButton(todayY + 74);
 
     const seasonY = todayY + 136;
@@ -400,14 +406,14 @@ export class SocialHub {
     this.sectionTitle(seasonY, seasonTitle, 'ofeliya-social-season-title');
     const seasonError = errorCopy(detail.status.seasonTop) ?? errorCopy(detail.status.season);
     if (seasonError) {
-      this.addText(left, seasonY + 22, seasonError, bodySize, '#ffb095', 'left', width, 'ofeliya-social-season-status');
+      this.addText(left, seasonY + 22, seasonError, bodySize, VISUAL_TEXT.danger, 'left', width, 'ofeliya-social-season-status');
     } else if (detail.status.seasonTop === 'ok' && detail.snapshot.seasonTop.length > 0) {
       detail.snapshot.seasonTop.slice(0, MAX_ROWS).forEach((entry, index) => {
-        this.addText(left, seasonY + 20 + index * 21, seasonRow(entry), rowSize, '#d8d1e2', 'left', width, `ofeliya-social-season-row-${index}`);
+        this.addText(left, seasonY + 20 + index * 32, seasonRow(entry), rowSize, VISUAL_TEXT.ivory, 'left', width, `ofeliya-social-season-row-${index}`);
       });
       const hidden = detail.snapshot.seasonTop.length - MAX_ROWS;
       if (hidden > 0) {
-        this.addText(left, seasonY + 83, `ЕЩЁ +${hidden}`, rowSize, UI_TEXT.secondary, 'left', width, 'ofeliya-social-season-more');
+        this.addText(left, seasonY + 116, `ЕЩЁ +${hidden}`, rowSize, VISUAL_TEXT.muted, 'left', width, 'ofeliya-social-season-more');
       }
     } else {
       this.addText(
@@ -415,36 +421,36 @@ export class SocialHub {
         seasonY + 22,
         'В СЕЗОНЕ ПОКА НЕТ РЕЗУЛЬТАТОВ',
         bodySize,
-        UI_TEXT.secondary,
+        VISUAL_TEXT.muted,
         'left',
         width,
         'ofeliya-social-season-status'
       );
     }
 
-    const friendsY = seasonY + 124;
+    const friendsY = seasonY + 136;
     this.sectionTitle(friendsY, 'ДРУЗЬЯ', 'ofeliya-social-friends-title');
     const friendsError = errorCopy(detail.status.friends);
     if (friendsError) {
-      this.addText(left, friendsY + 22, friendsError, bodySize, '#ffb095', 'left', width, 'ofeliya-social-friends-status');
+      this.addText(left, friendsY + 22, friendsError, bodySize, VISUAL_TEXT.danger, 'left', width, 'ofeliya-social-friends-status');
     } else if (detail.status.friends === 'skipped') {
       this.addText(
         left,
         friendsY + 22,
         'ДРУЗЬЯ ДОСТУПНЫ ПОСЛЕ ВХОДА ЧЕРЕЗ MAX ИЛИ Telegram',
         bodySize,
-        UI_TEXT.secondary,
+        VISUAL_TEXT.muted,
         'left',
         width,
         'ofeliya-social-friends-status'
       );
     } else if (detail.status.friends === 'ok' && detail.snapshot.friends.length > 0) {
       detail.snapshot.friends.slice(0, MAX_ROWS).forEach((entry, index) => {
-        this.addText(left, friendsY + 20 + index * 21, friendRow(entry), rowSize, '#d8d1e2', 'left', width, `ofeliya-social-friend-row-${index}`);
+        this.addText(left, friendsY + 20 + index * 32, friendRow(entry), rowSize, VISUAL_TEXT.ivory, 'left', width, `ofeliya-social-friend-row-${index}`);
       });
       const hidden = detail.snapshot.friends.length - MAX_ROWS;
       if (hidden > 0) {
-        this.addText(left, friendsY + 83, `ЕЩЁ +${hidden}`, rowSize, UI_TEXT.secondary, 'left', width, 'ofeliya-social-friends-more');
+        this.addText(left, friendsY + 116, `ЕЩЁ +${hidden}`, rowSize, VISUAL_TEXT.muted, 'left', width, 'ofeliya-social-friends-more');
       }
     } else {
       this.addText(
@@ -452,7 +458,7 @@ export class SocialHub {
         friendsY + 22,
         'ПОКА НЕТ РЕЗУЛЬТАТОВ ДРУЗЕЙ',
         bodySize,
-        UI_TEXT.secondary,
+        VISUAL_TEXT.muted,
         'left',
         width,
         'ofeliya-social-friends-status'
@@ -468,16 +474,16 @@ export class SocialHub {
     const y = this.panelTop + this.panelH - 31;
     const w = Math.min(this.panelW - 48, 230);
     const bg = this.scene.add
-      .rectangle(W / 2, y, w, 44, 0x14212a, 0.97)
-      .setStrokeStyle(1.5, COLORS.cyan, 0.82)
+      .rectangle(W / 2, y, w, 44, VISUAL.panelRaised, 0.97)
+      .setStrokeStyle(1, VISUAL.host, 0.82)
       .setInteractive({ useHandCursor: true })
       .setName('ofeliya-social-retry-bg');
     const label = this.scene.add
       .text(W / 2, y, 'ПОВТОРИТЬ ЗАГРУЗКУ', {
         fontFamily: FONT,
-        fontSize: this.scene.scale.height < 650 ? '10px' : '11px',
+        fontSize: '11px',
         fontStyle: 'bold',
-        color: '#c9f6ff',
+        color: VISUAL_TEXT.ivory,
       })
       .setOrigin(0.5)
       .setResolution(2)
