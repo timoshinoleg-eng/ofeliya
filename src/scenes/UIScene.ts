@@ -109,6 +109,7 @@ export class UIScene extends Phaser.Scene {
   private hpFill!: Phaser.GameObjects.Graphics;
   private bossBack!: Phaser.GameObjects.Graphics;
   private bossFill!: Phaser.GameObjects.Graphics;
+  private bossFrame!: Phaser.GameObjects.Graphics;
   private bossLabel!: Phaser.GameObjects.Text;
   private timerText!: Phaser.GameObjects.Text;
   private levelText!: Phaser.GameObjects.Text;
@@ -210,6 +211,7 @@ export class UIScene extends Phaser.Scene {
     this.hpFill = this.add.graphics().setDepth(DEPTH + 1);
     this.bossBack = this.add.graphics().setDepth(DEPTH);
     this.bossFill = this.add.graphics().setDepth(DEPTH + 1);
+    this.bossFrame = this.add.graphics().setDepth(DEPTH + 1);
 
     const text = (
       x: number,
@@ -447,6 +449,7 @@ export class UIScene extends Phaser.Scene {
       const boss = run.bossMax > 0;
       this.bossBack.setVisible(boss);
       this.bossFill.setVisible(boss);
+      this.bossFrame.setVisible(boss);
       this.bossLabel.setVisible(boss);
       if (boss) {
         this.bossLabel.setText(run.bossName);
@@ -464,6 +467,27 @@ export class UIScene extends Phaser.Scene {
         );
         this.drawBarHighlight(this.bossFill, m.bossX, HUD.row.bossBarY,
           Math.max(m.bossW * Phaser.Math.Clamp(run.bossHp / run.bossMax, 0, 1), 8));
+        // One identity system with the boss aura: hairline frame, six segment
+        // ticks and a diamond emblem, tinted by the boss phase so the HUD
+        // echoes the world ceremony (armored=white, recovery=gold, broken=green).
+        const mode = this.gs?.getBossPhaseMode?.() ?? 'armored';
+        const phaseColor =
+          mode === 'broken' ? COLORS.green : mode === 'recovery' ? COLORS.gold : COLORS.white;
+        const phaseAlpha = mode === 'armored' ? 0.38 : 0.85;
+        this.bossFrame.clear();
+        this.bossFrame.lineStyle(1, COLORS.white, 0.32);
+        this.bossFrame.strokeRoundedRect(m.bossX - 1, HUD.row.bossBarY - 1, m.bossW + 2, HUD.row.bossBarH + 2, 4);
+        this.bossFrame.lineStyle(1.4, phaseColor, phaseAlpha);
+        for (let i = 1; i < 6; i++) {
+          const x = m.bossX + (m.bossW / 6) * i;
+          this.bossFrame.lineBetween(x, HUD.row.bossBarY - 5, x, HUD.row.bossBarY - 1);
+        }
+        this.bossFrame.fillStyle(COLORS.red, 0.95);
+        this.bossFrame.fillTriangle(
+          m.bossX - 10, HUD.row.bossBarY + HUD.row.bossBarH / 2,
+          m.bossX - 5, HUD.row.bossBarY + 1,
+          m.bossX - 5, HUD.row.bossBarY + HUD.row.bossBarH - 1
+        );
       }
     }
 

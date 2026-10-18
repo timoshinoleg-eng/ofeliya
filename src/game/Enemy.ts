@@ -930,6 +930,17 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     return actualDamage;
   }
 
+  /** Phase identity for the unified boss ceremony (HUD ticks read this). */
+  getPhaseMode(): 'armored' | 'recovery' | 'broken' | null {
+    if (!this.isBoss || this.bossBehavior !== 'pressure-wave') return null;
+    const time = this.scene.time.now;
+    return time <= this.primeBrokenUntil
+      ? 'broken'
+      : this.bossAttackState === 'recovery'
+        ? 'recovery'
+        : 'armored';
+  }
+
   private drawPrimeAura(
     g: Phaser.GameObjects.Graphics,
     radius: number,
@@ -960,6 +971,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     for (const offset of [0, Math.PI]) {
       g.beginPath();
       g.arc(0, 0, radius, offset + gap, offset + Math.PI - gap, false);
+      g.strokePath();
+    }
+    // Same six-tick vocabulary as the armored phase (and the HUD boss bar),
+    // so every phase reads as one system rather than three unrelated rings.
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
+      g.lineStyle(2, color, 0.55);
+      g.beginPath();
+      g.moveTo(Math.cos(a) * (radius - 7), Math.sin(a) * (radius - 7));
+      g.lineTo(Math.cos(a) * (radius + 7), Math.sin(a) * (radius + 7));
       g.strokePath();
     }
     g.lineStyle(1.5, COLORS.white, mode === 'broken' ? 0.62 : 0.42);

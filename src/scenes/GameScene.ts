@@ -1340,6 +1340,12 @@ export class GameScene extends Phaser.Scene {
     return this.visualEnemyDensity;
   }
 
+  /** Boss phase identity for the HUD ceremony (null when no live boss). */
+  getBossPhaseMode(): 'armored' | 'recovery' | 'broken' | null {
+    const boss = this.wave.boss;
+    return boss && boss.active ? boss.getPhaseMode() : null;
+  }
+
   private updateHeartbeatSignature(stage: StageDefinition, stageTimeMs: number): void {
     if (stage.signatureMechanic !== 'heartbeat-pulse') return;
     const bossActive =
