@@ -1,3 +1,13 @@
+# Handoff update — visual integration 2026-10-18
+
+**Canonical product commit:** `abdb10c19d17de074f2be90e52d59cd9485c5b1b`. On 2026-10-18 `main` was fast-forwarded to that previously shipped commit, preserving all original source SHAs. PR #217/#213 are merged; dependent #214/#216 closed with explicit "already included via #217" comments, no branches deleted. The latest read-only production release manifest returned exactly `abdb10c`; readiness/remote persistence healthy. This handoff is a documentation-only update and is not a new product release.
+
+**Verify before future releases:** push CI 39082984884 final status, current `main` and production `release.json` SHA, real Render deploy state and auto-deploy/build-filter configuration (workspace authorization required), `/ready` and `/health`. Latest witnessed pre/post fast-forward health: 76 scores, revision 228; do not assume counters remain static. Do not overwrite remote state, rotate keys, or remove existing branches.
+
+**Next code owner:** implement D1 (owner/runId-scoped daily outbox with no silent loss), D2 (accepted/queued/rejected/unavailable ranked outcomes with truthful messages), D3 (resume selectors reflect checkpoint settings); write RED→GREEN regression tests and do not change gameplay/RNG/score contracts except intentional bug fixes. Keep #204/#207–#212 and #183 on separate review tracks. Physical Android/iOS and MAX/Telegram full acceptance is still outstanding.
+
+---
+
 # Visual implementation completion — 16 October 2026
 
 Branch visual/completion-20261016 extends verified public7a0d829 (PR216). Implemented distinct Player mutation geometry/combined composition, unified SocialHub and Codex, measured11px scrolling result report with pinned actions, pointer ownership and long-share fit, quieter pause. Existing gameplay/RNG/physics/score/network/assets/service settings are retained. Main integration is not authorized.
