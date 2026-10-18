@@ -1450,9 +1450,32 @@ export class UIScene extends Phaser.Scene {
       const iconX = -cw / 2 + 39;
       const iconSize = compact ? 46 : 52;
 
+      // Rarity must read before the name does: tier pips in the header band
+      // (1=common, 2=rare, 3=legendary/evolution) plus a frame whose strength
+      // scales with the tier. Words alone (СТАНДАРТ/РЕДКИЙ in 11-12px) were
+      // measured indistinguishable at a glance in the Phase A audit.
+      const tier = special ? 3 : def.rarity === 'rare' ? 2 : 1;
+      for (let p = 0; p < tier; p++) {
+        card.add(
+          this.add
+            .circle(cw / 2 - 18 - (tier - 1 - p) * 13, -ch / 2 + 13, p === tier - 1 ? 4 : 3.2, accent, special ? 0.95 : 0.45 + tier * 0.12)
+            .setStrokeStyle(1, accent, special ? 0.6 : 0.3)
+        );
+      }
       if (special) {
         card.add(
-          this.add.rectangle(3, 0, cw - 20, ch - 8, COLORS.gold, legendary ? 0.055 : 0.025)
+          this.add
+            .rectangle(0, 0, cw - 2, ch - 2)
+            .setStrokeStyle(legendary ? 2.2 : 1.6, accent, legendary ? 0.9 : 0.6)
+        );
+        card.add(
+          this.add.rectangle(3, 0, cw - 20, ch - 8, VISUAL.warning, legendary ? 0.07 : 0.035)
+        );
+      } else if (def.rarity === 'rare') {
+        card.add(
+          this.add
+            .rectangle(0, 0, cw - 2, ch - 2)
+            .setStrokeStyle(1.2, accent, 0.5)
         );
       }
 
@@ -1479,7 +1502,7 @@ export class UIScene extends Phaser.Scene {
               fontFamily: FONT,
               fontSize: compact ? '22px' : '26px',
               fontStyle: 'bold',
-              color: special ? '#ffe066' : def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
+              color: special ? VISUAL_TEXT.warning : def.rarity === 'rare' ? VISUAL_TEXT.rare : VISUAL_TEXT.immune,
             })
             .setOrigin(0.5)
             .setResolution(2)
@@ -1593,7 +1616,7 @@ export class UIScene extends Phaser.Scene {
               fontFamily: UI_FONT,
               fontSize: compact ? '11px' : '12px',
               fontStyle: legendary || evolution ? '700' : '650',
-              color: legendary || evolution ? '#ffe066' : '#98ff8f',
+              color: legendary || evolution ? VISUAL_TEXT.warning : '#98ff8f',
             })
             .setOrigin(1, 0)
             .setResolution(2)
