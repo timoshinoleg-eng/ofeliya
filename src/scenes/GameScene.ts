@@ -792,6 +792,7 @@ export class GameScene extends Phaser.Scene {
       boss: e.isBoss,
     });
     this.captureAchievements(false, true);
+    if (e.kind === 'swarm') this.vfx.biologicalDeath(e);
     this.vfx.kill(
       e.x, e.y, e.color, e.isBoss ? 'boss' : e.isElite ? 'elite' : 'normal', undefined, e.radius
     );
