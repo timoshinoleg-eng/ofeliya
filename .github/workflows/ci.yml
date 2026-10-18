@@ -169,8 +169,9 @@ jobs:
   browser-smoke:
     needs: build
     runs-on: ubuntu-22.04
-    # The additional 18 Legendary layout cases need headroom beyond the existing suite.
-    timeout-minutes: 15
+    # Full browser matrix exceeded 15 min on main push run 39082984884;
+    # allow completion plus artifact upload without reducing coverage.
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
