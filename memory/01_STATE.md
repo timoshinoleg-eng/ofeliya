@@ -1,3 +1,8 @@
+# Visual upgrade Phase B3 state — 19 October 2026
+
+Branch head 8164f5f (B3 on top of B1+B2). Bundle 429.68 kB vs prod 420.85 kB (+2.1%). Rarity hierarchy on choice cards: tier pips (1/2/3) + graduated frame, VISUAL.host/rare/warning tokens; card-flow legacy hex (COLORS.gold, #ffe066) migrated to VISUAL.warning. Modal-scoped only, no per-frame cost, no copy changes. Tests PASS: tsc, tokens, language (1597 literals), ui-copy, legendary, layout-diagnostics, presentation. Paired captures: screenshots/b3-before|after-{mixed,common-rare,legendary}.png (driver scripts/mutation-cards-capture.cjs with synthetic defs). Donor: none (prior MIT donor has no rarity system). B1/B2 facts below remain valid.
+
+## Previous snapshots
 # Visual upgrade Phase B2 state — 19 October 2026
 
 Branch feat/visual-combat-20261018 head 27f914d (B2 on top of B1). Bundle 429.35 kB vs prod 420.85 kB (+2.0%). Silhouette paired (182 enemies, seed 424242): coreLum 62.4→195.2, rgbDelta 48.1→144.4, annulusCalm 0.558→0.687. Perf 60s paired: Canvas median 60.5/60.5 (min 56.0/56.4), WebGL-SwiftShader 22.2/21.2 (noise band ±2). tsc clean; impact-budget, runtime-quality, test:presentation PASS. Layers: silhouetteClearing depth 11 (over enemies 10, under elite 12/health 13/bullets 14/player 15), playerGlow depth 14.5; both gated visualEnemyDensity≥110, ramp 110-200. Evidence in AUDIT_2026-10-18/: screenshots/silhouette-b2-*, iso-*, b2-*-zoom; evidence/silhouette-b2-*.json, perf-combat-b2-*.json; scripts/analyze-silhouette-b2.py, silhouette-video.cjs. B1 facts below remain valid.

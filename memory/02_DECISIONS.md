@@ -1,3 +1,13 @@
+# Visual upgrade Phase B3 decisions — 19 October 2026
+
+1. Non-word tier signal chosen (pips + frame strength) over text badges: new visible words would burden the copy catalog/language guard and still need parsing; pips read pre-attentively and need no localization.
+2. Existing VISUAL tokens (host/rare/warning) reused; no new palette entries — keeps B5 migration surface from growing.
+3. Legacy hexes (COLORS.gold, #ffe066) migrated to VISUAL.warning inside the card flow as part of B3 since the hierarchy touched exactly those lines — partial B5 contribution, documented as such.
+4. Synthetic-def capture driver (mutation-cards-capture.cjs) chosen over organic level-ups: identical defs in both builds give a true pair; balance/RNG untouched.
+5. No perf run per standard: modal-scoped objects, nothing in the game loop; bundle gate (+2.1%) substitutes.
+6. Donor convention satisfied by documented absence: prior MIT donor has no rarity system; implementation original.
+
+## Previous snapshots
 # Visual upgrade Phase B2 decisions — 19 October 2026
 
 1. Root cause chosen over cosmetic patch: playerHalo rendered below enemies (depth 7.5 < 10) — fix = new layer at depth 11 above the swarm, not tweaking halo alpha/radius.
