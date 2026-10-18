@@ -153,6 +153,15 @@ export class GameScene extends Phaser.Scene {
   private aimMarker!: Phaser.GameObjects.Image;
   private playerBar!: Phaser.GameObjects.Graphics;
   private playerHalo!: Phaser.GameObjects.Graphics;
+  // Second-stage readability layer: draws ABOVE the enemy mass (depth 11) to
+  // carve a calm pocket around the player at high visual density. Unlike
+  // playerHalo (7.5, backdrop only) this one actually covers nearby enemies.
+  private silhouetteClearing!: Phaser.GameObjects.Graphics;
+  // Light pool directly under the player (depth 14.5): the virion body is a
+  // dark gear, so on the dark clearing it would read only by luck (hurt
+  // flash). A soft glow beneath lifts the figure into a stable bright-on-dark
+  // anchor without touching player art or gameplay state.
+  private playerGlow!: Phaser.GameObjects.Graphics;
 
   private nextFireAt = 0;
   private novaAcc = 0;
@@ -404,6 +413,13 @@ export class GameScene extends Phaser.Scene {
     // contrast zone against the enemy mass. Sits above atmosphere (negative
     // depths) but below telegraphs (8), enemies (10) and the player (28).
     this.playerHalo = this.add.graphics().setDepth(7.5);
+    // Above enemies (10) and their auras/rings (9), below elite markers (12),
+    // enemy health bars (13), bullets (14) and the player (15): nearby foes
+    // are dimmed into a dark pocket while everything identity-critical stays
+    // readable. Role/boss telegraphs (8) inside the pocket are dimmed too —
+    // accepted: their actionable range is far larger than this radius.
+    this.silhouetteClearing = this.add.graphics().setDepth(11);
+    this.playerGlow = this.add.graphics().setDepth(14.5);
 
     this.bullets = this.physics.add.group({ classType: Bullet, maxSize: 160 });
     this.enemies = this.physics.add.group({ classType: Enemy, maxSize: 260 });
@@ -690,6 +706,8 @@ export class GameScene extends Phaser.Scene {
 
     this.playerBar.clear();
     this.playerHalo.clear();
+    this.silhouetteClearing.clear();
+    this.playerGlow.clear();
     if (this.visualEnemyDensity >= 110) {
       // Ramp 0..1 across the 110..200 stress band; elites/bosses keep their own
       // boosted identity marks above this bubble, so only the backdrop recedes.
@@ -699,6 +717,21 @@ export class GameScene extends Phaser.Scene {
       this.playerHalo.fillCircle(this.player.x, this.player.y, r);
       this.playerHalo.lineStyle(1.6, COLORS.cyan, 0.3 + f * 0.28);
       this.playerHalo.strokeCircle(this.player.x, this.player.y, r);
+      // Front layer over the swarm itself: darken whatever piled up inside
+      // the pocket so the bright player figure (depth 15) pops at a glance.
+      const r2 = 46 + f * 8;
+      this.silhouetteClearing.fillStyle(0x05070f, 0.5 + f * 0.22);
+      this.silhouetteClearing.fillCircle(this.player.x, this.player.y, r2);
+      this.silhouetteClearing.lineStyle(1.4, COLORS.cyan, 0.2 + f * 0.22);
+      this.silhouetteClearing.strokeCircle(this.player.x, this.player.y, r2);
+      // Light pool under the dark virion gear: three soft steps so the body
+      // reads as a stable dark-on-light silhouette even between hurt flashes.
+      this.playerGlow.fillStyle(0x9fd8e8, 0.26 + f * 0.08);
+      this.playerGlow.fillCircle(this.player.x, this.player.y, 18);
+      this.playerGlow.fillStyle(0x9fd8e8, 0.15 + f * 0.05);
+      this.playerGlow.fillCircle(this.player.x, this.player.y, 25);
+      this.playerGlow.fillStyle(0x9fd8e8, 0.08 + f * 0.03);
+      this.playerGlow.fillCircle(this.player.x, this.player.y, 33);
     }
     if (st.hp < st.maxHp) {
       const w = 34;
@@ -1778,6 +1811,8 @@ export class GameScene extends Phaser.Scene {
     this.aimMarker.setVisible(false);
     this.playerBar.clear();
     this.playerHalo.clear();
+    this.silhouetteClearing.clear();
+    this.playerGlow.clear();
     this.registry.set('joy', { x: 0, y: 0 });
   }
 
