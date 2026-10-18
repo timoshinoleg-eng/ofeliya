@@ -1,3 +1,12 @@
+# Visual upgrade Phase B4 decisions — 19 October 2026
+
+1. Shape vocabulary shared, semantics preserved: HUD adopts the aura's ring/tick/diamond language, but the critical telegraph stays untouched — its red language is a combat contract (test:telegraphs), not identity chrome.
+2. Phase color mirrored in HUD via new getters (Enemy.getPhaseMode, GameScene.getBossPhaseMode) rather than extending the run snapshot: additive-free, no checkpoint/save shape risk.
+3. Recovery/broken auras get the armored 6-tick ring so all phases read as one system; cardiac (heartbeat) boss deliberately excluded — it has its own visual language and different behavior contract.
+4. QA-only wave.boss substitution used for the HUD bar capture (documented) because the real wave boss needs minutes of play; the substitution exercises the identical render path.
+5. Perf handled by bound argument (<=6 stroke primitives in recovery/broken windows) plus a control 60s combat run — boss-specific perf harness deemed disproportionate.
+
+## Previous snapshots
 # Visual upgrade Phase B3 decisions — 19 October 2026
 
 1. Non-word tier signal chosen (pips + frame strength) over text badges: new visible words would burden the copy catalog/language guard and still need parsing; pips read pre-attentively and need no localization.

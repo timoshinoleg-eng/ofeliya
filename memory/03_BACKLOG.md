@@ -1,9 +1,8 @@
-# Visual upgrade backlog status — 19 October 2026 (updated twice)
+# Visual upgrade backlog status — 19 October 2026 (updated ×3)
 
-Phase B progress: **B1 DONE** (combat feedback), **B2 DONE** (silhouette), **B3 DONE** (rarity hierarchy, commit 8164f5f) on feat/visual-combat-20261018; evidence in AUDIT_2026-10-18/ (REPORT_VISUAL_UPGRADE.md §0.3, §0). Owner acceptance pending (build:max in owner env, device gates, human glance checks). Remaining, in mandated order:
+Phase B progress: **B1–B4 DONE** on feat/visual-combat-20261018 (head c672a00): B1 combat feedback, B2 silhouette, B3 rarity hierarchy, B4 boss identity — evidence in AUDIT_2026-10-18/ (REPORT_VISUAL_UPGRADE.md §0.4–§0). Owner acceptance pending (build:max in owner env, device gates, human checks). Remaining, in mandated order:
 
-- **B4 — идентичность боссов:** согласованная с HUD и церемонией смены фазы единая художественная система. Рекомендуется следующим.
-- **B5 — завершение миграции токенов:** один словарь палитр (hudTokens/visualTokens как источник), устранение inline-наследия. Бой сейчас целиком на COLORS (GameScene 44×, Enemy 31×); B3 закрыл часть UIScene.
+- **B5 — завершение миграции токенов:** один словарь палитр (hudTokens/visualTokens как источник), устранение inline-наследия. Бой сейчас целиком на COLORS (GameScene 44×, Enemy 31×); B3 закрыл часть UIScene. Рекомендуется следующим — это самый объёмный пункт, стоит резать на подэтапы.
 - **B6 — мобильная оптичность:** размеры шрифтов, safe area, hit-area ≥44 px; HiDPI только по замерам.
 
 Метод для каждого пункта: пара «до/после» (одинаковый сид/вьюпорт/состояние; движущееся — видео), перф-замер при правке в игровом цикле, метод доноров с provenance, регрессии после каждого пункта.

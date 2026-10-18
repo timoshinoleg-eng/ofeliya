@@ -1,3 +1,8 @@
+# Visual upgrade Phase B4 state — 19 October 2026
+
+Branch head c672a00 (B4 on B1+B2+B3). Bundle 430.83 kB vs prod 420.85 kB (+2.4%). Boss identity system: HUD bar frame + 6 phase-tinted ticks + diamond emblem; Enemy.getPhaseMode()/GameScene.getBossPhaseMode() (armored/recovery/broken); recovery/broken aura modes now draw the armored 6-tick vocabulary. Telegraph contract untouched. Tests PASS: tsc, presentation, telegraphs, boss-presentation, mini-boss, wave-events. Control perf 60s: median 20.3 FPS (noise). Evidence: screenshots/b4-* (driver scripts/boss-capture.cjs, wave.boss QA substitution for bar). Donor: none (prior donor bosses single-color, no phase ceremony). B1–B3 facts below remain valid.
+
+## Previous snapshots
 # Visual upgrade Phase B3 state — 19 October 2026
 
 Branch head 8164f5f (B3 on top of B1+B2). Bundle 429.68 kB vs prod 420.85 kB (+2.1%). Rarity hierarchy on choice cards: tier pips (1/2/3) + graduated frame, VISUAL.host/rare/warning tokens; card-flow legacy hex (COLORS.gold, #ffe066) migrated to VISUAL.warning. Modal-scoped only, no per-frame cost, no copy changes. Tests PASS: tsc, tokens, language (1597 literals), ui-copy, legendary, layout-diagnostics, presentation. Paired captures: screenshots/b3-before|after-{mixed,common-rare,legendary}.png (driver scripts/mutation-cards-capture.cjs with synthetic defs). Donor: none (prior MIT donor has no rarity system). B1/B2 facts below remain valid.
