@@ -1,3 +1,14 @@
+# Current canonical state — 2026-10-18 (integration of visual release)
+
+- **Product source:** `main` advanced by non-force fast-forward from `aba70324` to `abdb10c19d17de074f2be90e52d59cd9485c5b1b` on 2026-10-18. Nine original commits and all 35 changed files from PR #213 → #214 → #216 → #217 are in main without a new product merge commit.
+- **GitHub PR status:** #217 was automatically marked merged at `abdb10c`, #213 automatically marked merged; #214/#216 were closed as already included in #217 (GitHub rejected retarget to main with "no new commits"). The branches were preserved. PR #215 is the separate release evidence and remains open.
+- **Production verification (2026-10-18):** `/ofeliya/release.json` still reports `abdb10c` with `indexSha256=9a3dac08…`, `serviceWorkerSha256=b119a4f8…`, `runtimeConfigSha256=84803ecd…`; `/ready` returns `ok:true` with MAX+Telegram configured. Read-only `/health` showed 76 scores, healthy remote persistence, revision 228. These are timestamped observations, not proof of future availability or physical device acceptance.
+- **CI:** exact product-head PR CI run 38899978641 and Release Visual Matrix run 38899973748 passed before integration; push-to-main CI run 39082984884 was triggered by the fast-forward (check its final status before declaring release fully verified).
+- **Scope:** product code was not changed by this integration; server/bot sources match the predecessor main, and no DB migration was performed. Render auto-deploy may redeploy the same product SHA; direct Render workspace/deploy-id verification remains pending workspace authorization. The documentation-only commit containing this note will make `main` SHA newer than the deployed `abdb10c` without altering executable release content. `memory/**` is documented as excluded by Render build filters, but the live filter setting has not yet been reconfirmed.
+- **Next:** finish post-push CI/Render readback; resolve P1 daily/ranked/resume defects D1-D3 via isolated PRs; review independent #204/#207–#212 and combat feedback #183; mobile MAX/TG/iOS acceptance remains unperformed. No unreviewed parallel code merges.
+
+---
+
 # Visual implementation completion — 16 October 2026
 
 Branch visual/completion-20261016 extends verified public7a0d829 (PR216). Implemented distinct Player mutation geometry/combined composition, unified SocialHub and Codex, measured11px scrolling result report with pinned actions, pointer ownership and long-share fit, quieter pause. Existing gameplay/RNG/physics/score/network/assets/service settings are retained. Main integration is not authorized.
