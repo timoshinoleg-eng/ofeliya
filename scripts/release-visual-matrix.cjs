@@ -2,9 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright-core');
 const { PNG } = require('pngjs');
+const { SAMPLE_POLICY, summarize, collectFrameCadence } = require('./frame-cadence.cjs');
 
 const chrome = [process.env.OFELIYA_CHROME_PATH, chromium.executablePath(), '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].filter(Boolean).find(fs.existsSync);
-if (!chrome) throw new Error('Chrome not found');
 
 const BASE = process.env.OFELIYA_BASE_URL || 'http://127.0.0.1:4173/';
 const CAPTURE_DIR = process.env.OFELIYA_MATRIX_DIR || '/tmp/release-visual-matrix';
@@ -20,6 +20,24 @@ const CASES = [
 ];
 
 fs.mkdirSync(CAPTURE_DIR, { recursive: true });
+
+// Persist each completed row; a later browser/visual failure must retain evidence.
+const cadenceEvidence = {
+  schemaVersion: 1,
+  sourceSha: process.env.VITE_RELEASE_SHA || process.env.GITHUB_SHA || null,
+  generatedAt: new Date().toISOString(),
+  status: 'running',
+  measurement: 'requestAnimationFrame consecutive intervals; not GPU time or guaranteed gameplay FPS',
+  fixture: 'release visual matrix: frozen Game.update, paused physics/tweens, fixed sprite pose',
+  policy: SAMPLE_POLICY,
+  browserVersion: null,
+  results: [],
+  error: null,
+};
+const writeCadence = () => fs.writeFileSync(
+  path.join(CAPTURE_DIR, 'frame-cadence.json'), JSON.stringify(cadenceEvidence, null, 2)
+);
+writeCadence();
 
 function imageMetrics(file) {
   const png = PNG.sync.read(fs.readFileSync(file));
@@ -110,7 +128,14 @@ async function openCase(browser, spec) {
     hasTouch: true,
     isMobile: true,
   });
+  try {
+    return await captureCase(ctx, spec);
+  } finally {
+    await ctx.close();
+  }
+}
 
+async function captureCase(ctx, spec) {
   await ctx.route('https://st.max.ru/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/javascript', body: '' })
   );
@@ -427,17 +452,35 @@ async function openCase(browser, spec) {
       throw new Error(`visual inputs changed during ${spec.renderer}/${spec.tier}/${density} capture`);
     }
     rows.push({ density, ...state, visualInputs, file });
+
+    // Screenshot first: cadence probing never alters the existing visual capture.
+    const intervalsMs = await page.evaluate(collectFrameCadence, {
+      policy: SAMPLE_POLICY, ...spec, enemyCount: density,
+    });
+    const sampledInputs = await page.evaluate(() => window.__releaseMatrixInputs());
+    if (JSON.stringify(capturedInputs) !== JSON.stringify(sampledInputs)) {
+      throw new Error(`visual fixture changed during ${spec.renderer}/${spec.tier}/${density} cadence sample`);
+    }
+    cadenceEvidence.results.push({
+      ...spec,
+      enemyCount: density,
+      viewport: { width: MATRIX_WIDTH, height: MATRIX_HEIGHT },
+      deviceScaleFactor: 2,
+      ...summarize(intervalsMs),
+      intervalsMs,
+    });
+    writeCadence();
   }
 
   if (errors.length) {
     throw new Error(`${spec.renderer}/${spec.tier} page errors: ${errors.join(' | ')}`);
   }
 
-  await ctx.close();
   return { ...spec, baseContract, rows };
 }
 
 (async () => {
+  if (!chrome) throw new Error('Chrome not found');
   const browser = await chromium.launch({
     executablePath: chrome,
     headless: true,
@@ -450,6 +493,7 @@ async function openCase(browser, spec) {
     ],
   });
 
+  cadenceEvidence.browserVersion = browser.version();
   const results = [];
   try {
     for (const spec of CASES) results.push(await openCase(browser, spec));
@@ -494,7 +538,12 @@ async function openCase(browser, spec) {
   console.log(
     `release visual matrix: ok; viewport=${MATRIX_WIDTH}x${MATRIX_HEIGHT}; captures=${CASES.length * DENSITIES.length}; visual-parity=ok`
   );
+  cadenceEvidence.status = 'complete';
+  writeCadence();
 })().catch((error) => {
+  cadenceEvidence.status = 'failed';
+  cadenceEvidence.error = String(error.stack || error);
+  writeCadence();
   console.error(error.stack || error);
   process.exit(1);
 });
