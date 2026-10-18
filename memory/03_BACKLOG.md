@@ -1,3 +1,16 @@
+# Visual upgrade backlog status — 19 October 2026
+
+Phase B (owner approved 18.10, «действуй»): B1 DONE as pilot on feat/visual-combat-20261018 (head 7be28d6) — paired evidence, perf, provenance, report in workspace AUDIT_2026-10-18/ (REPORT_VISUAL_UPGRADE.md). Owner acceptance pending: build:max in owner env, device gates, playtest. Remaining, in mandated order:
+
+- **B2 — читаемость боя:** силуэт игрока vs враги vs свои эффекты vs окружение; тест «5 секунд на силуэт» при 150–200 врагах; приоритет опасных атак в цвете/контрасте. Замеры готовы: кольцо 16–26 px занято на 99.3% при 182 врагах, halo (density≥110) недостаточен. Рекомендуется следующим.
+- **B3 — иерархия мутаций:** обычная/редкая/легендарная различимы с первого взгляда (карточка, иконка, свечение). Замечено: плоские карточки, редкостные акценты на старой палитре (UIScene COLORS.gold/#ffe066).
+- **B4 — идентичность боссов:** согласованная с HUD и церемонией смены фазы единая художественная система.
+- **B5 — завершение миграции токенов:** один словарь палитр (hudTokens/visualTokens как источник), устранение inline-наследия. Бой сейчас целиком на COLORS (GameScene 44×, Enemy 31×).
+- **B6 — мобильная оптичность:** размеры шрифтов, safe area, hit-area ≥44 px; HiDPI только по замерам.
+
+Метод для каждого пункта: пара «до/после» (одинаковый сид/вьюпорт/состояние; движущееся — видео), перф-замер при правке в игровом цикле, метод доноров с provenance, регрессии после каждого пункта.
+
+## Previous snapshots
 # Visual implementation completion — 16 October 2026
 
 Branch visual/completion-20261016 extends verified public7a0d829 (PR216). Implemented distinct Player mutation geometry/combined composition, unified SocialHub and Codex, measured11px scrolling result report with pinned actions, pointer ownership and long-share fit, quieter pause. Existing gameplay/RNG/physics/score/network/assets/service settings are retained. Main integration is not authorized.

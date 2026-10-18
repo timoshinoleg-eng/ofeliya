@@ -1,3 +1,14 @@
+# Visual upgrade Phase B1 decisions — 19 October 2026
+
+1. Donor for B1 = own PR #183 (commit 0e3269c), adapted by isolated port (`git show`), not merged — branch predates the 16.10 main convergence (#213–#217) and a merge would reintroduce superseded structure.
+2. Scope cut from donor: documentation/CI files/video artifacts not ported (out of visual scope; fresh evidence generated instead); cardiac-hazard hit point left at donor default (donor itself passed no direction there).
+3. Two donor defects fixed in adaptation: swapped Phaser renderer constants (CANVAS=1, WEBGL=2) and smoke waits assuming vfx.biologicalGhosts on builds where it doesn't exist (guards enable baseline evidence capture).
+4. Commits separated by concern (atlas+tests / hit reaction / death collapse / test infra); `[skip render]` on the infra commit; local git identity Kimi <kimi@moonshot.local> in the worktree only.
+5. Balance is off-limits: hit reaction and death collapse are visual-only; damage/HP/enemy counts untouched. Performance budget: any new in-loop VFX requires paired measurement (done: no regression).
+6. Phase A mislabeled renderer is corrected in evidence docs rather than silently rewritten — own error stated explicitly.
+7. No merge/push/deploy; production accessed read-only (GET). Next phases B2–B6 await owner decision; B2 recommended (measurements ready).
+
+## Previous snapshots
 # Visual implementation completion — 16 October 2026
 
 Branch visual/completion-20261016 extends verified public7a0d829 (PR216). Implemented distinct Player mutation geometry/combined composition, unified SocialHub and Codex, measured11px scrolling result report with pinned actions, pointer ownership and long-share fit, quieter pause. Existing gameplay/RNG/physics/score/network/assets/service settings are retained. Main integration is not authorized.

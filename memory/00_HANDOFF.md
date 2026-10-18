@@ -1,3 +1,16 @@
+# Visual upgrade Phase B1 (combat feedback pilot) — 19 October 2026
+
+Branch feat/visual-combat-20261018 (worktree worktrees/visual-combat-20261018) starts at origin/main abdb10c (= production). Owner approved Phase A audit (18.10) and Phase B execution. Pilot B1 ports the combat-feedback core of own stale PR #183 (commit 0e3269c) by adaptation, not merge: BiologicalImpact hit-deform atlas (24 frames, 3 speed tiers, 180 ms hold, BootScene load, ArtMetrics bio-hit-*), directional hit reaction (Enemy.takeDamage → biologicalHitAt/Direction, Player.markHurt; GameScene passes directions in 4 of 5 points, cardiac hazard left at donor default) and VfxSystem.biologicalDeath ghost pool (collapse 180/120 ms, cap 4 / 2 at density≥150, full skip ≥150). Commits: 91891f7 (atlas+tests), 7d2aac2 (hit reaction), 81049f2 (death collapse), 7be28d6 (smoke driver port + THIRD_PARTY_NOTICES provenance). Balance untouched (damage/HP/enemy counts); Joystick.ts untouched; no new dependencies; Phaser only.
+
+Gates: tsc clean; biological-impact/biological-animation/vfx-presentation/core-art/atmosphere/boss-presentation/mutation-art-recovery/social-hub/tokens-contract/checkpoint-resume/impact-budget/runtime-quality/visual-completion/startup-art-fallback all PASS; browser-smoke legal-config failure confirmed pre-existing on untouched abdb10c (local build lacks release env — not a B1 regression). Bundle 428.56 kB vs prod 420.85 kB = +1.8% (limit 5%). Paired perf 60 s: WebGL-SwiftShader 19.8→19.3 median, true Canvas 59.1→59.5 — no measurable regression. Impact smoke: baseline abdb10c 21 contract deviations (all 3 cells), branch strict 0 deviations; paired screenshots/videos in workspace AUDIT_2026-10-18/screenshots/impact-before|after/.
+
+Correction to Phase A: its combat numbers labeled "Canvas" were actually WebGL-SwiftShader (swapped ternary in perf driver; Phaser CANVAS=1/WEBGL=2); true Canvas first measured in B1 (~59 FPS). Both evidence docs corrected.
+
+Owner-side open items: build:max + release-env smokes (require owner env), device gates, playtest of the branch. B2 (silhouette readability at 150+ enemies; halo insufficient per 99.3% ring occupancy measurement) is the next highest-value item and its measurements already exist. No merge/push/deploy performed; merge to main remains prohibited without owner authorization.
+
+Read AUDIT_2026-10-18/REPORT_VISUAL_UPGRADE.md and evidence/DONOR_PROVENANCE.md for the full pilot record.
+
+## Previous snapshots
 # Visual implementation completion — 16 October 2026
 
 Branch visual/completion-20261016 extends verified public7a0d829 (PR216). Implemented distinct Player mutation geometry/combined composition, unified SocialHub and Codex, measured11px scrolling result report with pinned actions, pointer ownership and long-share fit, quieter pause. Existing gameplay/RNG/physics/score/network/assets/service settings are retained. Main integration is not authorized.

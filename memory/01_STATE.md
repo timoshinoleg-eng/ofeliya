@@ -1,3 +1,10 @@
+# Visual upgrade Phase B1 state — 19 October 2026
+
+Facts (measured 2026-10-18/19, workspace AUDIT_2026-10-18/): origin/main = abdb10c = production. Branch feat/visual-combat-20261018: 91891f7 atlas+tests, 7d2aac2 hit reaction, 81049f2 death collapse, 7be28d6 smoke driver + notices; head 7be28d6. Bundle 428.56 kB vs 420.85 kB prod (+1.8%). Paired 60 s combat perf: WebGL-SwiftShader median 19.8 (before) / 19.3 (after), min 18.4/18.1; true Canvas (?renderer=canvas, type=1) median 59.1/59.5, min 54.4/56.2; enemiesMax 19/21 and 32/26 (seed variance). Impact smoke 3 cells: before 21 contract deviations, after 0 (strict). tsc clean; listed presentation/contract suites PASS. browser-smoke legal failure reproduces on untouched abdb10c (pre-existing, local build lacks release env). build:max not run (owner env only).
+
+Correction of 18.10 measurements: combat/silhouette/loading runs labeled Canvas were WebGL-SwiftShader (type=2) — driver label bug; plain headless launches WebGL. True Canvas first measured in B1.
+
+## Previous snapshots
 # Visual implementation completion — 16 October 2026
 
 Branch visual/completion-20261016 extends verified public7a0d829 (PR216). Implemented distinct Player mutation geometry/combined composition, unified SocialHub and Codex, measured11px scrolling result report with pinned actions, pointer ownership and long-share fit, quieter pause. Existing gameplay/RNG/physics/score/network/assets/service settings are retained. Main integration is not authorized.
