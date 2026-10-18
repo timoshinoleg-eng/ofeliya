@@ -1,9 +1,8 @@
-# Visual upgrade backlog status — 19 October 2026
+# Visual upgrade backlog status — 19 October 2026 (updated)
 
-Phase B (owner approved 18.10, «действуй»): B1 DONE as pilot on feat/visual-combat-20261018 (head 7be28d6) — paired evidence, perf, provenance, report in workspace AUDIT_2026-10-18/ (REPORT_VISUAL_UPGRADE.md). Owner acceptance pending: build:max in owner env, device gates, playtest. Remaining, in mandated order:
+Phase B progress: **B1 DONE** (combat feedback, head stack) and **B2 DONE** (silhouette readability, commit 27f914d) on feat/visual-combat-20261018; paired evidence + perf + provenance in workspace AUDIT_2026-10-18/ (REPORT_VISUAL_UPGRADE.md §0). Owner acceptance pending (build:max in owner env, device gates, human 5-s silhouette check). Remaining, in mandated order:
 
-- **B2 — читаемость боя:** силуэт игрока vs враги vs свои эффекты vs окружение; тест «5 секунд на силуэт» при 150–200 врагах; приоритет опасных атак в цвете/контрасте. Замеры готовы: кольцо 16–26 px занято на 99.3% при 182 врагах, halo (density≥110) недостаточен. Рекомендуется следующим.
-- **B3 — иерархия мутаций:** обычная/редкая/легендарная различимы с первого взгляда (карточка, иконка, свечение). Замечено: плоские карточки, редкостные акценты на старой палитре (UIScene COLORS.gold/#ffe066).
+- **B3 — иерархия мутаций:** обычная/редкая/легендарная различимы с первого взгляда (карточка, иконка, свечение). Замечено: плоские карточки, редкостные акценты на старой палитре (UIScene COLORS.gold/#ffe066). Рекомендуется следующим.
 - **B4 — идентичность боссов:** согласованная с HUD и церемонией смены фазы единая художественная система.
 - **B5 — завершение миграции токенов:** один словарь палитр (hudTokens/visualTokens как источник), устранение inline-наследия. Бой сейчас целиком на COLORS (GameScene 44×, Enemy 31×).
 - **B6 — мобильная оптичность:** размеры шрифтов, safe area, hit-area ≥44 px; HiDPI только по замерам.

@@ -1,3 +1,8 @@
+# Visual upgrade Phase B2 state — 19 October 2026
+
+Branch feat/visual-combat-20261018 head 27f914d (B2 on top of B1). Bundle 429.35 kB vs prod 420.85 kB (+2.0%). Silhouette paired (182 enemies, seed 424242): coreLum 62.4→195.2, rgbDelta 48.1→144.4, annulusCalm 0.558→0.687. Perf 60s paired: Canvas median 60.5/60.5 (min 56.0/56.4), WebGL-SwiftShader 22.2/21.2 (noise band ±2). tsc clean; impact-budget, runtime-quality, test:presentation PASS. Layers: silhouetteClearing depth 11 (over enemies 10, under elite 12/health 13/bullets 14/player 15), playerGlow depth 14.5; both gated visualEnemyDensity≥110, ramp 110-200. Evidence in AUDIT_2026-10-18/: screenshots/silhouette-b2-*, iso-*, b2-*-zoom; evidence/silhouette-b2-*.json, perf-combat-b2-*.json; scripts/analyze-silhouette-b2.py, silhouette-video.cjs. B1 facts below remain valid.
+
+## Previous snapshots
 # Visual upgrade Phase B1 state — 19 October 2026
 
 Facts (measured 2026-10-18/19, workspace AUDIT_2026-10-18/): origin/main = abdb10c = production. Branch feat/visual-combat-20261018: 91891f7 atlas+tests, 7d2aac2 hit reaction, 81049f2 death collapse, 7be28d6 smoke driver + notices; head 7be28d6. Bundle 428.56 kB vs 420.85 kB prod (+1.8%). Paired 60 s combat perf: WebGL-SwiftShader median 19.8 (before) / 19.3 (after), min 18.4/18.1; true Canvas (?renderer=canvas, type=1) median 59.1/59.5, min 54.4/56.2; enemiesMax 19/21 and 32/26 (seed variance). Impact smoke 3 cells: before 21 contract deviations, after 0 (strict). tsc clean; listed presentation/contract suites PASS. browser-smoke legal failure reproduces on untouched abdb10c (pre-existing, local build lacks release env). build:max not run (owner env only).

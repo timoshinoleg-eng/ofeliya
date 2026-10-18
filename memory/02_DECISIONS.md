@@ -1,3 +1,13 @@
+# Visual upgrade Phase B2 decisions — 19 October 2026
+
+1. Root cause chosen over cosmetic patch: playerHalo rendered below enemies (depth 7.5 < 10) — fix = new layer at depth 11 above the swarm, not tweaking halo alpha/radius.
+2. Layer order preserves identity marks: clearing at 11 stays below elite markers (12), enemy health (13), bullets (14), player (15); only the swarm mass and its auras are dimmed. Accepted tradeoff: telegraphs (8) inside r≤52 pocket dim — their actionable range is far larger than the pocket.
+3. playerGlow added after isolation probe showed the virion body is a dark gear that would read only by hurt-flash luck on the dark clearing; glow is 3-step soft disc (≤3 extra primitives), same density gate.
+4. No donor code: searched prior MIT donor repo for a player-visibility mechanism; none exists; implementation original, documented in DONOR_PROVENANCE to satisfy the donor-method convention.
+5. Measurement protocol extended (annulus 30-40px, core luminance) because ring 16-26px after the fix measures player's own cosmetics, not the surround — old metric alone would mislead.
+6. Commit separation kept: B2 is one functional-visual commit; evidence/analyzer scripts stay outside the repo (workspace AUDIT dir), only the B2 code is committed.
+
+## Previous snapshots
 # Visual upgrade Phase B1 decisions — 19 October 2026
 
 1. Donor for B1 = own PR #183 (commit 0e3269c), adapted by isolated port (`git show`), not merged — branch predates the 16.10 main convergence (#213–#217) and a merge would reintroduce superseded structure.
