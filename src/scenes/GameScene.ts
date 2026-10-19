@@ -63,7 +63,8 @@ import {
 import { STAGES, difficultyForStage, type StageDefinition } from '../game/StageDefinitions';
 import type { EvolutionId, UpgradeDef } from '../game/UpgradeSystem';
 import { WaveDirector } from '../game/WaveDirector';
-import { drawRadialCombatTelegraph } from '../game/CombatTelegraphRenderer';
+import { drawRadialCombatTelegraph, drawDirectionalCombatTelegraph } from '../game/CombatTelegraphRenderer';
+import { DANGER_ECHO_POOL, echoIntersectsPocket } from '../game/DangerEcho';
 import type { WaveEventDefinition, WaveEventTelegraph } from '../game/WaveEvents';
 import type { MiniBossDefinition } from '../game/AnomalyPrime';
 import { AtmosphereSystem } from '../systems/AtmosphereSystem';
@@ -157,6 +158,11 @@ export class GameScene extends Phaser.Scene {
   // carve a calm pocket around the player at high visual density. Unlike
   // playerHalo (7.5, backdrop only) this one actually covers nearby enemies.
   private silhouetteClearing!: Phaser.GameObjects.Graphics;
+  // Danger-echo pool: warnings already drawn at depth 8 get re-stroked at
+  // depth 11.5 (above the clearing, below elite markers at 12) whenever their
+  // geometry intersects the silhouette pocket, so the dark bubble dims the
+  // swarm but never mutes actionable attack cues. Bounded pool, lazily grown.
+  private telegraphEchoPool: Phaser.GameObjects.Graphics[] = [];
   // Light pool directly under the player (depth 14.5): the virion body is a
   // dark gear, so on the dark clearing it would read only by luck (hurt
   // flash). A soft glow beneath lifts the figure into a stable bright-on-dark
@@ -416,8 +422,9 @@ export class GameScene extends Phaser.Scene {
     // Above enemies (10) and their auras/rings (9), below elite markers (12),
     // enemy health bars (13), bullets (14) and the player (15): nearby foes
     // are dimmed into a dark pocket while everything identity-critical stays
-    // readable. Role/boss telegraphs (8) inside the pocket are dimmed too —
-    // accepted: their actionable range is far larger than this radius.
+    // readable. Role/boss/anomaly warnings (8) inside the pocket are NOT left
+    // dimmed: telegraphEchoPool (11.5) re-strokes any warning that geometrically
+    // reaches the pocket, so danger cues survive the bubble (B2 review fix).
     this.silhouetteClearing = this.add.graphics().setDepth(11);
     this.playerGlow = this.add.graphics().setDepth(14.5);
 
@@ -708,6 +715,7 @@ export class GameScene extends Phaser.Scene {
     this.playerHalo.clear();
     this.silhouetteClearing.clear();
     this.playerGlow.clear();
+    for (const echoGraphics of this.telegraphEchoPool) echoGraphics.setVisible(false);
     if (this.visualEnemyDensity >= 110) {
       // Ramp 0..1 across the 110..200 stress band; elites/bosses keep their own
       // boosted identity marks above this bubble, so only the backdrop recedes.
@@ -724,6 +732,29 @@ export class GameScene extends Phaser.Scene {
       this.silhouetteClearing.fillCircle(this.player.x, this.player.y, r2);
       this.silhouetteClearing.lineStyle(1.4, COLORS.cyan, 0.2 + f * 0.22);
       this.silhouetteClearing.strokeCircle(this.player.x, this.player.y, r2);
+      // Danger echo: any live warning whose geometry reaches the pocket is
+      // re-stroked above the clearing in its own grammar, so the bubble can
+      // dim bodies without hiding attack cues. Pool-capped, no allocations.
+      let echoCount = 0;
+      const children = this.enemies.getChildren();
+      for (let i = 0; i < children.length && echoCount < DANGER_ECHO_POOL; i++) {
+        const enemy = children[i] as Enemy;
+        if (!enemy.active) continue;
+        const echo = enemy.getDangerEcho();
+        if (!echo || !echoIntersectsPocket(echo, this.player.x, this.player.y, r2)) continue;
+        let slot = this.telegraphEchoPool[echoCount];
+        if (!slot) {
+          slot = this.add.graphics().setDepth(11.5);
+          this.telegraphEchoPool.push(slot);
+        }
+        slot.clear().setVisible(true).setPosition(echo.x, echo.y);
+        if (echo.shape === 'lane') {
+          drawDirectionalCombatTelegraph(slot, echo.dirX, echo.dirY, echo.start, echo.end, echo.level, echo.color);
+        } else {
+          drawRadialCombatTelegraph(slot, echo.radius, echo.level, echo.color, echo.level === 'critical' ? 0.05 : 0);
+        }
+        echoCount += 1;
+      }
       // Light pool under the dark virion gear: three soft steps so the body
       // reads as a stable dark-on-light silhouette even between hurt flashes.
       this.playerGlow.fillStyle(0x9fd8e8, 0.26 + f * 0.08);
@@ -1819,6 +1850,7 @@ export class GameScene extends Phaser.Scene {
     this.playerHalo.clear();
     this.silhouetteClearing.clear();
     this.playerGlow.clear();
+    for (const echoGraphics of this.telegraphEchoPool) echoGraphics.setVisible(false);
     this.registry.set('joy', { x: 0, y: 0 });
   }
 
