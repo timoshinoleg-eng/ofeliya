@@ -62,6 +62,13 @@ const poolCreate = gameClass.members
 assert.ok(poolCreate, 'pooled echo Graphics at depth 11.5 (above clearing 11, below elite markers 12)');
 assert.match(updateMethod, /telegraphEchoPool/, 'update() drives the echo pool');
 assert.match(updateMethod, /DANGER_ECHO_POOL|echoCount\s*<\s*4/, 'echo count is capped by the pool size');
+// Critical boss warnings must win priority over older role windups when the
+// four-slot pool is saturated. A restarted Scene must never reuse dead Graphics.
+assert.match(updateMethod, /for\s*\(let priority = 0; priority < 2/, 'critical danger priority pass exists');
+assert.match(updateMethod, /echo\.level !== 'critical'/, 'critical boss warnings are selected first');
+const createMethod = gameClass.members.find(n => ts.isMethodDeclaration(n) && n.name?.getText(gameAst) === 'create')?.getText(gameAst);
+assert.ok(createMethod, 'create() found');
+assert.match(createMethod, /this\.telegraphEchoPool\s*=\s*\[\]/, 'restart invalidates stale graphics from prior Scene lifecycle');
 
 // --- 3. Enemy exposes a danger-echo descriptor for every actionable warning grammar ---
 const enemySource = readFileSync('src/game/Enemy.ts', 'utf8');

@@ -413,6 +413,9 @@ export class GameScene extends Phaser.Scene {
     this.vignette.setVisible(!fxEnabled);
 
     this.player = new Player(this, W / 2, H / 2);
+    // Scene instances can be restarted. Phaser tears down the previous display
+    // list, so do not retain references to its destroyed echo Graphics.
+    this.telegraphEchoPool = [];
     this.aimMarker = this.add.image(0, 0, 'marker').setDepth(16).setVisible(false);
     this.playerBar = this.add.graphics().setDepth(17);
     // Dense-combat readability: a soft dark bubble under the player carves a
@@ -737,23 +740,29 @@ export class GameScene extends Phaser.Scene {
       // dim bodies without hiding attack cues. Pool-capped, no allocations.
       let echoCount = 0;
       const children = this.enemies.getChildren();
-      for (let i = 0; i < children.length && echoCount < DANGER_ECHO_POOL; i++) {
-        const enemy = children[i] as Enemy;
-        if (!enemy.active) continue;
-        const echo = enemy.getDangerEcho();
-        if (!echo || !echoIntersectsPocket(echo, this.player.x, this.player.y, r2)) continue;
-        let slot = this.telegraphEchoPool[echoCount];
-        if (!slot) {
-          slot = this.add.graphics().setDepth(11.5);
-          this.telegraphEchoPool.push(slot);
+      // Always reserve space for critical boss warnings. A boss spawned later
+      // in the enemy pool must not lose its echo to four older role windups.
+      // Two bounded passes avoid sorting or allocating a per-frame queue.
+      for (let priority = 0; priority < 2 && echoCount < DANGER_ECHO_POOL; priority++) {
+        for (let i = 0; i < children.length && echoCount < DANGER_ECHO_POOL; i++) {
+          const enemy = children[i] as Enemy;
+          if (!enemy.active) continue;
+          const echo = enemy.getDangerEcho();
+          if (!echo || (priority === 0 ? echo.level !== 'critical' : echo.level === 'critical')) continue;
+          if (!echoIntersectsPocket(echo, this.player.x, this.player.y, r2)) continue;
+          let slot = this.telegraphEchoPool[echoCount];
+          if (!slot) {
+            slot = this.add.graphics().setDepth(11.5);
+            this.telegraphEchoPool.push(slot);
+          }
+          slot.clear().setVisible(true).setPosition(echo.x, echo.y);
+          if (echo.shape === 'lane') {
+            drawDirectionalCombatTelegraph(slot, echo.dirX, echo.dirY, echo.start, echo.end, echo.level, echo.color);
+          } else {
+            drawRadialCombatTelegraph(slot, echo.radius, echo.level, echo.color, echo.level === 'critical' ? 0.05 : 0);
+          }
+          echoCount += 1;
         }
-        slot.clear().setVisible(true).setPosition(echo.x, echo.y);
-        if (echo.shape === 'lane') {
-          drawDirectionalCombatTelegraph(slot, echo.dirX, echo.dirY, echo.start, echo.end, echo.level, echo.color);
-        } else {
-          drawRadialCombatTelegraph(slot, echo.radius, echo.level, echo.color, echo.level === 'critical' ? 0.05 : 0);
-        }
-        echoCount += 1;
       }
       // Light pool under the dark virion gear: three soft steps so the body
       // reads as a stable dark-on-light silhouette even between hurt flashes.
