@@ -98,3 +98,12 @@ export function combatTelegraphCountdown(
     scale: pattern.scaleMax - (pattern.scaleMax - pattern.scaleMin) * eased,
   };
 }
+
+/** Shared radial geometry; safe to consume without Phaser. */
+export function combatTelegraphRingRatio(level: CombatTelegraphLevel, ring: number): number {
+  return 1 - ring * (level === 'critical' ? 0.13 : 0.19);
+}
+export const COMBAT_TELEGRAPH_TICK_INNER = 3;
+export function combatTelegraphTickOuter(level: CombatTelegraphLevel): number {
+  return level === 'critical' ? 15 : 11;
+}
