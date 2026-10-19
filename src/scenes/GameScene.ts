@@ -163,6 +163,9 @@ export class GameScene extends Phaser.Scene {
   // geometry intersects the silhouette pocket, so the dark bubble dims the
   // swarm but never mutes actionable attack cues. Bounded pool, lazily grown.
   private telegraphEchoPool: Phaser.GameObjects.Graphics[] = [];
+  // Fixed-size "already echoed this frame" markers for the nearest-first
+  // selection scan; preallocated so the per-frame pass never allocates.
+  private readonly echoTaken: (Enemy | null)[] = Array.from({ length: DANGER_ECHO_POOL }, () => null);
   // Light pool directly under the player (depth 14.5): the virion body is a
   // dark gear, so on the dark clearing it would read only by luck (hurt
   // flash). A soft glow beneath lifts the figure into a stable bright-on-dark
@@ -736,30 +739,56 @@ export class GameScene extends Phaser.Scene {
       this.silhouetteClearing.lineStyle(1.4, COLORS.cyan, 0.2 + f * 0.22);
       this.silhouetteClearing.strokeCircle(this.player.x, this.player.y, r2);
       // Danger echo: any live warning whose geometry reaches the pocket is
-      // re-stroked above the clearing in its own grammar, so the bubble can
-      // dim bodies without hiding attack cues. Pool-capped, no allocations.
+      // re-stroked above the clearing in its own grammar — same shape, color,
+      // level AND live countdown scale/alpha as the depth-8 original — so the
+      // bubble can dim bodies without hiding or distorting attack cues.
+      // Allocation-free: descriptors come from each enemy's reusable scratch.
       let echoCount = 0;
       const children = this.enemies.getChildren();
-      // Always reserve space for critical boss warnings. A boss spawned later
-      // in the enemy pool must not lose its echo to four older role windups.
-      // Two bounded passes avoid sorting or allocating a per-frame queue.
+      // Pass 1 reserves pool slots for critical boss warnings (a boss spawned
+      // late in the enemy pool must not lose its echo to older role windups);
+      // pass 2 fills the rest. Within a priority the NEAREST warnings win, so
+      // an early-pooled far windup cannot starve a close one: per-slot nearest
+      // scans over the fixed pool bound keep this free of sorts and queues.
       for (let priority = 0; priority < 2 && echoCount < DANGER_ECHO_POOL; priority++) {
-        for (let i = 0; i < children.length && echoCount < DANGER_ECHO_POOL; i++) {
-          const enemy = children[i] as Enemy;
-          if (!enemy.active) continue;
-          const echo = enemy.getDangerEcho();
-          if (!echo || (priority === 0 ? echo.level !== 'critical' : echo.level === 'critical')) continue;
-          if (!echoIntersectsPocket(echo, this.player.x, this.player.y, r2)) continue;
+        const wantCritical = priority === 0;
+        while (echoCount < DANGER_ECHO_POOL) {
+          let bestEnemy: Enemy | null = null;
+          let bestEcho: ReturnType<Enemy['getDangerEcho']> | null = null;
+          let bestDistSq = Infinity;
+          for (let i = 0; i < children.length; i++) {
+            const enemy = children[i] as Enemy;
+            if (!enemy.active) continue;
+            let taken = false;
+            for (let k = 0; k < echoCount; k++) {
+              if (this.echoTaken[k] === enemy) { taken = true; break; }
+            }
+            if (taken) continue;
+            const echo = enemy.getDangerEcho(time);
+            if (!echo || (wantCritical ? echo.level !== 'critical' : echo.level === 'critical')) continue;
+            if (!echoIntersectsPocket(echo, this.player.x, this.player.y, r2)) continue;
+            const dx = enemy.x - this.player.x;
+            const dy = enemy.y - this.player.y;
+            const distSq = dx * dx + dy * dy;
+            if (distSq < bestDistSq) { bestDistSq = distSq; bestEnemy = enemy; bestEcho = echo; }
+          }
+          if (!bestEnemy || !bestEcho) break;
+          this.echoTaken[echoCount] = bestEnemy;
           let slot = this.telegraphEchoPool[echoCount];
           if (!slot) {
             slot = this.add.graphics().setDepth(11.5);
             this.telegraphEchoPool.push(slot);
           }
-          slot.clear().setVisible(true).setPosition(echo.x, echo.y);
-          if (echo.shape === 'lane') {
-            drawDirectionalCombatTelegraph(slot, echo.dirX, echo.dirY, echo.start, echo.end, echo.level, echo.color);
+          slot
+            .clear()
+            .setVisible(true)
+            .setPosition(bestEcho.x, bestEcho.y)
+            .setScale(bestEcho.scale ?? 1)
+            .setAlpha(bestEcho.alpha ?? 1);
+          if (bestEcho.shape === 'lane') {
+            drawDirectionalCombatTelegraph(slot, bestEcho.dirX, bestEcho.dirY, bestEcho.start, bestEcho.end, bestEcho.level, bestEcho.color);
           } else {
-            drawRadialCombatTelegraph(slot, echo.radius, echo.level, echo.color, echo.level === 'critical' ? 0.05 : 0);
+            drawRadialCombatTelegraph(slot, bestEcho.radius, bestEcho.level, bestEcho.color, bestEcho.level === 'critical' ? 0.05 : 0);
           }
           echoCount += 1;
         }

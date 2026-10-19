@@ -22,6 +22,13 @@ export interface DangerEcho {
   radius: number;
   level: CombatTelegraphLevel;
   color: number;
+  /**
+   * Live motion sampled from the original telegraph animation (countdown
+   * scale/alpha) so the echo cannot drift from the warning it mirrors. Both
+   * default to 1 when absent.
+   */
+  scale?: number;
+  alpha?: number;
 }
 
 /**

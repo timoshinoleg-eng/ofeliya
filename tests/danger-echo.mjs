@@ -64,8 +64,19 @@ assert.match(updateMethod, /telegraphEchoPool/, 'update() drives the echo pool')
 assert.match(updateMethod, /DANGER_ECHO_POOL|echoCount\s*<\s*4/, 'echo count is capped by the pool size');
 // Critical boss warnings must win priority over older role windups when the
 // four-slot pool is saturated. A restarted Scene must never reuse dead Graphics.
-assert.match(updateMethod, /for\s*\(let priority = 0; priority < 2/, 'critical danger priority pass exists');
+assert.match(updateMethod, /for\s*\(let priority = 0; priority < 2 && echoCount < DANGER_ECHO_POOL/, 'critical danger priority pass exists');
 assert.match(updateMethod, /echo\.level !== 'critical'/, 'critical boss warnings are selected first');
+// Mutation-hardening (review P3-5): these three asserts must fail when the
+// priority is inverted, the pool cap is lifted, or the echo drifts from the
+// original telegraph animation.
+assert.match(updateMethod, /wantCritical\s*=\s*priority\s*===\s*0/, 'pass 0 is the critical pass');
+assert.match(updateMethod, /wantCritical\s*\?\s*echo\.level !== 'critical'\s*:\s*echo\.level === 'critical'/, 'priority filter direction is exact');
+assert.match(updateMethod, /while \(echoCount < DANGER_ECHO_POOL\)/, 'per-slot scan is pool-capped on every pick');
+assert.match(updateMethod, /bestDistSq/, 'selection compares distance to the pocket, not pool order');
+assert.match(updateMethod, /this\.echoTaken\[echoCount\] = bestEnemy/, 'picked enemies are excluded from later slots');
+assert.match(updateMethod, /enemy\.getDangerEcho\(time\)/, 'echo motion is sampled at the current frame time');
+assert.match(updateMethod, /setScale\(bestEcho\.scale \?\? 1\)/, 'echo slot replays the original countdown scale');
+assert.match(updateMethod, /setAlpha\(bestEcho\.alpha \?\? 1\)/, 'echo slot replays the original countdown alpha');
 const createMethod = gameClass.members.find(n => ts.isMethodDeclaration(n) && n.name?.getText(gameAst) === 'create')?.getText(gameAst);
 assert.ok(createMethod, 'create() found');
 assert.match(createMethod, /this\.telegraphEchoPool\s*=\s*\[\]/, 'restart invalidates stale graphics from prior Scene lifecycle');
@@ -76,6 +87,7 @@ const enemyAst = ts.createSourceFile('Enemy.ts', enemySource, ts.ScriptTarget.La
 const enemyClass = enemyAst.statements.find(n => ts.isClassDeclaration(n) && n.name?.text === 'Enemy');
 const echoMethod = enemyClass.members.find(n => ts.isMethodDeclaration(n) && n.name?.getText(enemyAst) === 'getDangerEcho')?.getText(enemyAst);
 assert.ok(echoMethod, 'Enemy.getDangerEcho() exists');
+assert.match(echoMethod, /getDangerEcho\(now: number\)/, 'echo motion is sampled at frame time');
 assert.match(echoMethod, /'windup'/, 'runner/brute windups echo');
 assert.match(echoMethod, /COLORS\.cyan/, 'runner lane keeps the cyan dangerous grammar');
 assert.match(echoMethod, /COLORS\.orange/, 'brute radial keeps the orange dangerous grammar');
@@ -83,6 +95,24 @@ assert.match(echoMethod, /bossAttackState\s*===\s*'telegraph'/, 'boss pressure t
 assert.match(echoMethod, /'critical'/, 'boss echo keeps the critical level');
 assert.match(echoMethod, /anomalyAttackState\s*===\s*'telegraph'/, 'anomaly telegraphs echo');
 assert.match(echoMethod, /COLORS\.purple/, 'anomaly echo keeps the purple grammar');
+// Motion parity with the depth-8 originals (review P3-1): role warnings pulse,
+// boss/anomaly warnings count down; geometry comes from the same helpers the
+// original telegraph drawers use (review P3-6), and the descriptor is filled
+// into a reusable scratch — no per-frame allocation (review P3-6 comment fix).
+assert.match(echoMethod, /combatTelegraphPulse\('dangerous', now\)/, 'role echo mirrors the live pulse of updateRoleTelegraph');
+assert.match(echoMethod, /combatTelegraphCountdown\('critical', progress\)/, 'boss echo mirrors the original countdown squeeze');
+assert.match(echoMethod, /combatTelegraphCountdown\('dangerous', progress\)/, 'anomaly echo mirrors the original countdown squeeze');
+assert.match(echoMethod, /dangerEchoScratch/, 'descriptor is reused, not allocated per call');
+const roleDraw = enemyClass.members.find(n => ts.isMethodDeclaration(n) && n.name?.getText(enemyAst) === 'drawRoleTelegraph')?.getText(enemyAst);
+assert.match(roleDraw, /this\.roleLaneStart\(\)/, 'original runner lane reads the same lane geometry as the echo');
+assert.match(roleDraw, /this\.roleRadialRadius\(\)/, 'original brute radial reads the same radius as the echo');
+const anomalyDraw = enemyClass.members.find(n => ts.isMethodDeclaration(n) && n.name?.getText(enemyAst) === 'drawAnomalyTelegraph')?.getText(enemyAst);
+assert.match(anomalyDraw, /this\.anomalyLaneStart\(\)/, 'original anomaly lane reads the same lane geometry as the echo');
+// P3-4: pooled enemies reactivated without a stage reset must not carry a
+// stale phase into the first aura update (spurious ceremony flash).
+const activateMethod = enemyClass.members.find(n => ts.isMethodDeclaration(n) && n.name?.getText(enemyAst) === 'activate')?.getText(enemyAst);
+assert.match(activateMethod, /primePhaseLast = 'armored'/, 'activate() resets the remembered phase');
+assert.match(activateMethod, /primePhaseTransitionAt = -1/, 'activate() resets the transition timestamp');
 
 // --- 4. Boss aura reads the single authoritative phase getter (B4) ---
 const auraMethod = enemyClass.members.find(n => ts.isMethodDeclaration(n) && n.name?.getText(enemyAst) === 'updatePrimeAura')?.getText(enemyAst);

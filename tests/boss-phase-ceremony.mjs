@@ -38,6 +38,15 @@ assert.ok(sceneClass, 'UIScene class found');
 const frameMethod = sceneClass.members.find(n => ts.isMethodDeclaration(n) && n.name?.getText(ast) === 'drawBossIdentityFrame')?.getText(ast);
 assert.ok(frameMethod, 'drawBossIdentityFrame() exists (was: inline block in update)');
 
+// Review P3-5/P3-3 hardening: the HUD bar MUST read the authoritative
+// getBossPhaseMode(), and a null phase (boss dead/dying, bar still draining)
+// must suppress the ceremony pulse instead of flashing a fake transition.
+const updateMethod = sceneClass.members.find(n => ts.isMethodDeclaration(n) && n.name?.getText(ast) === 'update')?.getText(ast);
+assert.ok(updateMethod, 'update() found');
+assert.match(updateMethod, /this\.gs\?\.getBossPhaseMode\?\.\(\)/, 'HUD phase comes from the authoritative GameScene getter');
+assert.match(updateMethod, /const liveMode = /, 'null phase is distinguished from a real armored phase');
+assert.match(updateMethod, /liveMode !== null\s*\?\s*phaseTransitionPulse/, 'ceremony pulse is gated on a live boss');
+
 const COLORS = { white: 0xffffff, gold: 0xffd56a, green: 0x7fffa1, red: 0xff3e5f };
 const HUD = { row: { bossBarY: 68, bossBarH: 8 } };
 

@@ -482,12 +482,17 @@ export class UIScene extends Phaser.Scene {
         // echoes the world ceremony (armored=white, recovery=gold, broken=green).
         // A short pulse fires on every phase transition, synchronized with the
         // expanding ring the world aura draws from the same getPhaseMode source.
-        const mode = this.gs?.getBossPhaseMode?.() ?? 'armored';
-        if (mode !== this.bossPhaseLast) {
+        // A null phase means "no live boss" (dead/dying reference between HP
+        // zero and pool cleanup) — it is NOT a transition to armored, so no
+        // ceremony pulse may fire while the bar is still draining away.
+        const liveMode = this.gs?.getBossPhaseMode?.() ?? null;
+        const mode = liveMode ?? 'armored';
+        if (liveMode !== null && mode !== this.bossPhaseLast) {
           this.bossPhaseLast = mode;
           this.bossPhaseTransitionAt = this.time.now;
         }
-        const bossPulse = phaseTransitionPulse(this.time.now - this.bossPhaseTransitionAt);
+        const bossPulse =
+          liveMode !== null ? phaseTransitionPulse(this.time.now - this.bossPhaseTransitionAt) : 0;
         this.drawBossIdentityFrame(m, mode, bossPulse);
       }
     }

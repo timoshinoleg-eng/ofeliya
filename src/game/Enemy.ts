@@ -85,6 +85,22 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private primeBrokenUntil = 0;
   private primePhaseLast: 'armored' | 'recovery' | 'broken' = 'armored';
   private primePhaseTransitionAt = -1;
+  // Reusable echo descriptor: getDangerEcho fills this in place and returns it,
+  // so the hot loop above density 110 does not allocate per enemy per frame.
+  // The reference is only valid until this enemy's next getDangerEcho call —
+  // GameScene consumes it synchronously.
+  private readonly dangerEchoScratch: DangerEcho = {
+    shape: 'lane',
+    x: 0,
+    y: 0,
+    dirX: 0,
+    dirY: 0,
+    start: 0,
+    end: 0,
+    radius: 0,
+    level: 'dangerous',
+    color: 0,
+  };
   anomalyPhase: AnomalyPhase = 1;
   anomalyAttackState: AnomalyAttackState = 'pursuit';
   private anomalyAttackKind: AnomalyAttackKind = 'radial-burst';
@@ -146,6 +162,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.biologicalPhase = Math.abs(x * 3 + y * 5 + this.spawnSerial * 97) % 720;
     this.isElite = opts.elite;
     this.isBoss = kind === 'boss';
+    // Pooled objects can be reactivated as another enemy (or another boss)
+    // without deactivateForStageReset running in between; stale phase fields
+    // would fire a spurious transition ceremony on the first aura update.
+    this.primePhaseLast = 'armored';
+    this.primePhaseTransitionAt = -1;
     this.eliteModifier = opts.elite ? (opts.eliteModifier ?? null) : null;
     this.eliteVisualSignature =
       this.eliteModifier === 'regenerator'
@@ -627,8 +648,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.anomalyTelegraph,
       this.anomalyLockedDirX,
       this.anomalyLockedDirY,
-      Math.max(26, this.radius + 8),
-      190,
+      this.anomalyLaneStart(),
+      this.anomalyLaneEnd(),
       'dangerous',
       COLORS.purple
     );
@@ -803,8 +824,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.roleTelegraph.clear().setVisible(true).setPosition(this.x, this.y);
 
     if (this.kind === 'runner') {
-      const laneStart = Math.max(18, this.radius + 5);
-      const laneEnd = 154;
+      const laneStart = this.roleLaneStart();
+      const laneEnd = this.roleLaneEnd();
       drawDirectionalCombatTelegraph(
         this.roleTelegraph,
         this.lockedDirX,
@@ -820,7 +841,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     } else {
       drawRadialCombatTelegraph(
         this.roleTelegraph,
-        Math.max(58, this.radius + 38),
+        this.roleRadialRadius(),
         'dangerous',
         COLORS.orange,
         0.035
@@ -953,76 +974,113 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
    * (depth 11) instead of letting the dark pocket mute it. Pure observation:
    * no state changes; timing, hitboxes and warning grammar are untouched.
    */
-  getDangerEcho(): DangerEcho | null {
+  // Shared geometry for role warnings: the depth-8 telegraph and the danger
+  // echo must agree exactly, so both read these helpers instead of
+  // duplicating magic numbers in two places.
+  private roleLaneStart(): number {
+    return Math.max(18, this.radius + 5);
+  }
+  private roleLaneEnd(): number {
+    return 154;
+  }
+  private roleRadialRadius(): number {
+    return Math.max(58, this.radius + 38);
+  }
+  private anomalyLaneStart(): number {
+    return Math.max(26, this.radius + 8);
+  }
+  private anomalyLaneEnd(): number {
+    return 190;
+  }
+
+  getDangerEcho(now: number): DangerEcho | null {
     if (!this.active) return null;
-    const base = { x: this.x, y: this.y };
+    const echo = this.dangerEchoScratch;
+    echo.x = this.x;
+    echo.y = this.y;
+    echo.scale = undefined;
+    echo.alpha = undefined;
 
     if (this.rolePhase === 'windup') {
+      // Mirror the live pulse the depth-8 role telegraph breathes with
+      // (updateRoleTelegraph) so the echo cannot drift in size or alpha.
+      const motion = combatTelegraphPulse('dangerous', now);
+      echo.scale = motion.scale;
+      echo.alpha = motion.alpha;
       if (this.kind === 'runner') {
-        return {
-          ...base,
-          shape: 'lane',
-          dirX: this.lockedDirX,
-          dirY: this.lockedDirY,
-          start: Math.max(18, this.radius + 5),
-          end: 154,
-          radius: 0,
-          level: 'dangerous',
-          color: COLORS.cyan,
-        };
+        echo.shape = 'lane';
+        echo.dirX = this.lockedDirX;
+        echo.dirY = this.lockedDirY;
+        echo.start = this.roleLaneStart();
+        echo.end = this.roleLaneEnd();
+        echo.radius = 0;
+        echo.level = 'dangerous';
+        echo.color = COLORS.cyan;
+        return echo;
       }
-      return {
-        ...base,
-        shape: 'radial',
-        dirX: 0,
-        dirY: 0,
-        start: 0,
-        end: 0,
-        radius: Math.max(58, this.radius + 38),
-        level: 'dangerous',
-        color: COLORS.orange,
-      };
+      echo.shape = 'radial';
+      echo.dirX = 0;
+      echo.dirY = 0;
+      echo.start = 0;
+      echo.end = 0;
+      echo.radius = this.roleRadialRadius();
+      echo.level = 'dangerous';
+      echo.color = COLORS.orange;
+      return echo;
     }
 
     if (this.isBoss && this.bossBehavior === 'pressure-wave' && this.bossAttackState === 'telegraph') {
-      return {
-        ...base,
-        shape: 'radial',
-        dirX: 0,
-        dirY: 0,
-        start: 0,
-        end: 0,
-        radius: primeAttackPhasePacing(this.bossPhase).radius,
-        level: 'critical',
-        color: COLORS.red,
-      };
+      // Mirror the countdown squeeze the original pressure ring animates with
+      // (updateBossPressureTelegraph), including the 13px end-of-windup scale.
+      const progress = Phaser.Math.Clamp(
+        (now - this.bossAttackStartedAt) / Math.max(1, this.bossAttackUntil - this.bossAttackStartedAt),
+        0,
+        1
+      );
+      const motion = combatTelegraphCountdown('critical', progress);
+      echo.scale = motion.scale;
+      echo.alpha = motion.alpha;
+      echo.shape = 'radial';
+      echo.dirX = 0;
+      echo.dirY = 0;
+      echo.start = 0;
+      echo.end = 0;
+      echo.radius = primeAttackPhasePacing(this.bossPhase).radius;
+      echo.level = 'critical';
+      echo.color = COLORS.red;
+      return echo;
     }
 
     if (this.kind === 'anomaly' && this.anomalyAttackState === 'telegraph' && this.anomalyCommittedPacing) {
+      // Mirror the anomaly countdown exactly as updateAnomalyTelegraph does.
+      const progress = Phaser.Math.Clamp(
+        (now - this.anomalyAttackStartedAt) / Math.max(1, this.anomalyStateUntil - this.anomalyAttackStartedAt),
+        0,
+        1
+      );
+      const motion = combatTelegraphCountdown('dangerous', progress);
+      echo.scale = motion.scale;
+      echo.alpha = motion.alpha;
       if (this.anomalyAttackKind === 'radial-burst') {
-        return {
-          ...base,
-          shape: 'radial',
-          dirX: 0,
-          dirY: 0,
-          start: 0,
-          end: 0,
-          radius: this.anomalyCommittedPacing.burstRadius,
-          level: 'dangerous',
-          color: COLORS.purple,
-        };
+        echo.shape = 'radial';
+        echo.dirX = 0;
+        echo.dirY = 0;
+        echo.start = 0;
+        echo.end = 0;
+        echo.radius = this.anomalyCommittedPacing.burstRadius;
+        echo.level = 'dangerous';
+        echo.color = COLORS.purple;
+        return echo;
       }
-      return {
-        ...base,
-        shape: 'lane',
-        dirX: this.anomalyLockedDirX,
-        dirY: this.anomalyLockedDirY,
-        start: Math.max(26, this.radius + 8),
-        end: 190,
-        radius: 0,
-        level: 'dangerous',
-        color: COLORS.purple,
-      };
+      echo.shape = 'lane';
+      echo.dirX = this.anomalyLockedDirX;
+      echo.dirY = this.anomalyLockedDirY;
+      echo.start = this.anomalyLaneStart();
+      echo.end = this.anomalyLaneEnd();
+      echo.radius = 0;
+      echo.level = 'dangerous';
+      echo.color = COLORS.purple;
+      return echo;
     }
 
     return null;
