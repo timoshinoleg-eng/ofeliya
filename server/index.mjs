@@ -1622,7 +1622,31 @@ const server = createServer(async (req, res) => {
           return send(res, 403, { ok: false, error: 'verified messenger daily identity required' });
         }
         dailyRun = findDailyRun(payload.dailyRunId);
-        if (!dailyRun) return send(res, 422, { ok: false, error: 'daily run not found' });
+        if (!dailyRun) {
+          // Closed tickets are compacted on issuance; accepted scores retain the receipt.
+          // This can only acknowledge an existing verified score, never authorize a new one.
+          const previous = submissionId && store.scores.find((score) =>
+            score.verified === true && score.daily === true &&
+            typeof score.scoreId === 'string' && score.scoreId.length > 0 &&
+            score.platform === platform && score.uid === uid &&
+            score.dailyRunId === payload.dailyRunId && score.submissionId === submissionId
+          );
+          if (!previous) return send(res, 422, { ok: false, error: 'daily run not found' });
+          if (previous.submissionHash !== submissionHash) {
+            return send(res, 409, { ok: false, error: 'submissionId already used for another score' });
+          }
+          const previousTop = getTop({ period: 'daily', rulesetVersion: previous.rulesetVersion });
+          const rank = previousTop.find((row) => row.uid === previous.uid && row.platform === previous.platform)?.rank ?? null;
+          return send(res, 200, {
+            ok: true,
+            rank,
+            ranked: previous.ranked === true,
+            rulesetVersion: previous.rulesetVersion,
+            campaignVersion: previous.campaignVersion,
+            dailyRunAccepted: true,
+            scoreId: previous.scoreId,
+          });
+        }
         if (dailyRun.platform !== platform || dailyRun.uid !== uid) {
           return send(res, 403, { ok: false, error: 'daily run owner mismatch' });
         }

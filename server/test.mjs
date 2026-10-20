@@ -972,6 +972,73 @@ await ok('Daily V2: сервер выдаёт identity-bound ticket и пере�
   assert.equal(next.ticket.runSeed, first.ticket.runSeed);
 }));
 
+await ok('Daily V2: accepted receipts survive ticket compaction and remain owner/payload/run bound', async () => {
+  const post = (path, body) => fetch(`${BASE}${path}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  for (const platform of ['telegram', 'max']) {
+    const token = platform === 'telegram' ? TG_TOKEN : MAX_TOKEN;
+    const auth = { platform, initData: signInitData({ id: 44101 }, token) };
+    const ticket = (await j(await post('/api/daily/run', auth))).ticket;
+    const request = { ...auth, submissionId: `daily-receipt-${platform}-0001`, payload: {
+      ...campaignPayload({ seed: ticket.runSeed, timeMs: 1000, win: false }),
+      daily: true, dailyRunId: ticket.runId, kills: 1, level: 1, hostCellsInfected: 0,
+    } };
+    const accepted = await post('/api/score', request);
+    assert.equal(accepted.status, 200, JSON.stringify(await accepted.clone().json()));
+    const receipt = await j(accepted);
+    assert.equal(receipt.dailyRunAccepted, true);
+    const next = (await j(await post('/api/daily/run', auth))).ticket;
+    assert.notEqual(next.runId, ticket.runId);
+    await flushStoreNow();
+    const { readFileSync, writeFileSync } = await import('node:fs');
+    const before = JSON.parse(readFileSync(join(DATA_DIR, 'store.json'), 'utf8'));
+    assert.ok(!before.dailyRuns.some(run => run.runId === ticket.runId));
+    // Persisted legacy/corrupt rows must never acknowledge a score that has no receipt ID.
+    for (const damaged of ['missing-score-row', 'missing-score-id']) {
+      const isolatedDir = mkdtempSync(join(tmpdir(), 'ofeliya-receipt-damaged-'));
+      const snapshot = structuredClone(before);
+      const matches = score => score.platform === platform && score.uid === '44101' && score.submissionId === request.submissionId;
+      if (damaged === 'missing-score-row') snapshot.scores = snapshot.scores.filter(score => !matches(score));
+      else { const row = snapshot.scores.find(matches); assert.ok(row); delete row.scoreId; }
+      writeFileSync(join(isolatedDir, 'store.json'), JSON.stringify(snapshot));
+      const childScript = `
+        import assert from 'node:assert/strict';
+        const {server}=await import(${JSON.stringify(new URL('./index.mjs', import.meta.url).href)});
+        if(!server.listening)await new Promise(resolve=>server.once('listening',resolve));
+        const response=await fetch('http://127.0.0.1:'+server.address().port+'/api/score',{
+          method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(${JSON.stringify(request)})
+        });
+        const body=await response.json();
+        try {assert.equal(response.status,422,${JSON.stringify(platform + ' ' + damaged)}+': '+JSON.stringify(body));}
+        finally {await new Promise(resolve=>server.close(resolve));}
+      `;
+      const child=spawnSync(process.execPath,['--input-type=module','-e',childScript],{
+        env:{...process.env,DATA_DIR:isolatedDir,PORT:'0'},encoding:'utf8',timeout:10000
+      });
+      try {assert.equal(child.status,0,child.stdout+child.stderr);}
+      finally {rmSync(isolatedDir,{recursive:true,force:true});}
+    }
+    const replay = await post('/api/score', request);
+    assert.equal(replay.status, 200, 'persisted accepted score must acknowledge replay after compaction');
+    const acknowledged = await j(replay);
+    for (const key of ['ok', 'rank', 'ranked', 'rulesetVersion', 'campaignVersion', 'dailyRunAccepted', 'scoreId']) {
+      assert.equal(acknowledged[key], receipt[key], key);
+    }
+    assert.equal((await post('/api/score', { ...request, payload: { ...request.payload, kills: 2 } })).status, 409);
+    assert.equal((await post('/api/score', { ...request, initData: signInitData({ id: 44102 }, token) })).status, 422);
+    const otherPlatform = platform === 'telegram' ? 'max' : 'telegram';
+    assert.equal((await post('/api/score', { ...request, platform: otherPlatform,
+      initData: signInitData({ id: 44101 }, otherPlatform === 'telegram' ? TG_TOKEN : MAX_TOKEN),
+    })).status, 422);
+    assert.equal((await post('/api/score', { ...request, payload: { ...request.payload, dailyRunId: 'missing-daily-run-0001' } })).status, 422);
+    assert.equal((await post('/api/score', { ...request, submissionId: 'unused-daily-submission-0001' })).status, 422);
+    await flushStoreNow();
+    const after = JSON.parse(readFileSync(join(DATA_DIR, 'store.json'), 'utf8'));
+    assert.equal(after.scores.length, before.scores.length, 'receipt replay and rejected requests never award another score');
+  }
+});
+
 await ok('Daily V2: instant forged long result is rejected and closes ticket without a score', async () => withServerClock(async () => {
   const auth = {
     platform: 'max',
