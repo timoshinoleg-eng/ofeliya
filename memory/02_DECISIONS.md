@@ -455,3 +455,11 @@ User permits skipping old player-data migration. Preserve the canonical origin
 and deploy both Telegram and dedicated MAX handlers before old hosting retirement.
 Preview hosting startup must never modify MAX subscriptions or begin polling.
 Keep unrelated Cloud.ru workloads separate from OFELIYA retirement.
+# B2/B4 integration decisions — 20 October 2026
+
+1. Reused PR #210's `MotionPreferences` cached media query policy in `src/systems/`; it is live-updating and avoids allocating/checking matchMedia each frame.
+2. Reduced-motion only removes decorative camera and boss identity motion. Boss phase colors, HUD phase ticks, attack warning timing/shape, and Danger Echo remain available/actionable.
+3. Applied review's CI gate patch; extended existing B2/B4 gate with reduced-motion regression instead of creating a parallel command.
+4. Root owns browser/pixel adaptation in `scripts/biological-impact-smoke.cjs`; no edits by this worker. No commit until root review.
+
+Root validation: actual Canvas/WebGL echo matrix 16/16 passed at320/390/768/1080 with both motion preferences; world/HUD phase and live-preference checks4/4 passed. Adapted repo41 two-postrender/native-decoded screenshot pixel check without pngjs; strict3-cell impact passed, WebGL idle0/hit3982 white pixels. Negative control clearing tint fails as expected. Independent source review found no actionable P1/P2. Final-head full tests/build are tracked externally in12_INTEGRATION_PREP.

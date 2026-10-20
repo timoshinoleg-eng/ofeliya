@@ -45,7 +45,8 @@ const updateMethod = sceneClass.members.find(n => ts.isMethodDeclaration(n) && n
 assert.ok(updateMethod, 'update() found');
 assert.match(updateMethod, /this\.gs\?\.getBossPhaseMode\?\.\(\)/, 'HUD phase comes from the authoritative GameScene getter');
 assert.match(updateMethod, /const liveMode = /, 'null phase is distinguished from a real armored phase');
-assert.match(updateMethod, /liveMode !== null\s*\?\s*phaseTransitionPulse/, 'ceremony pulse is gated on a live boss');
+assert.match(updateMethod, /liveMode !== null && !prefersReducedMotion\(\)\s*\?\s*phaseTransitionPulse/,
+  'ceremony pulse is gated on a live boss and disabled for reduced motion');
 
 const COLORS = { white: 0xffffff, gold: 0xffd56a, green: 0x7fffa1, red: 0xff3e5f };
 const HUD = { row: { bossBarY: 68, bossBarH: 8 } };

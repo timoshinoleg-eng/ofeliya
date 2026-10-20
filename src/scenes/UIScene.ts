@@ -21,6 +21,7 @@ import { createResultReport } from '../ui/ResultReport';
 import { getEvolutionDef } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
 import { phaseTransitionPulse } from '../game/BossPhaseCeremony';
+import { prefersReducedMotion } from '../systems/MotionPreferences';
 import { assessRunIdentity } from '../game/RunIdentity';
 import { Joystick } from '../game/Joystick';
 import { DualMoveControls } from '../game/DualMoveControls';
@@ -492,7 +493,9 @@ export class UIScene extends Phaser.Scene {
           this.bossPhaseTransitionAt = this.time.now;
         }
         const bossPulse =
-          liveMode !== null ? phaseTransitionPulse(this.time.now - this.bossPhaseTransitionAt) : 0;
+          liveMode !== null && !prefersReducedMotion()
+            ? phaseTransitionPulse(this.time.now - this.bossPhaseTransitionAt)
+            : 0;
         this.drawBossIdentityFrame(m, mode, bossPulse);
       }
     }

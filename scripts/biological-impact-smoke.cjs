@@ -18,6 +18,40 @@ const OUT = process.env.OFELIYA_IMPACT_DIR || path.resolve('artifacts/biological
 const TOLERANCE = process.env.IMPACT_TOLERANCE === 'baseline' ? 'baseline' : 'strict';
 fs.mkdirSync(OUT, { recursive: true });
 
+// Synchronize with real Phaser renders, rather than a fixed screenshot delay.
+async function renderedPose(page) {
+  await page.evaluate(() => new Promise((resolve, reject) => {
+    const game = window.__game; let frames = 0;
+    const timer = setTimeout(() => { game.events.off('postrender', render); reject(Error('pose render timeout')); }, 5000);
+    function render() { if (++frames < 2) return; clearTimeout(timer); game.events.off('postrender', render); resolve(); }
+    game.events.on('postrender', render);
+  }));
+}
+// Decode actual screenshot pixels with the browser's native PNG decoder. No
+// transitive pngjs dependency or absolute device-specific white-pixel threshold.
+async function heroWhitePixels(page, image) {
+  return page.evaluate(async data => {
+    const game = window.__game, p = window.__impactFixture.gs.player;
+    const cam = window.__impactFixture.gs.cameras.main;
+    const point = cam.matrix.transformPoint(p.x - cam.scrollX, p.y - cam.scrollY);
+    const rect = game.canvas.getBoundingClientRect();
+    const img = new Image(); img.src = data; await img.decode();
+    const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height;
+    const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0);
+    const pixels = ctx.getImageData(0, 0, img.width, img.height).data;
+    const ratio = img.width / innerWidth;
+    const cx = rect.left + point.x * rect.width / game.scale.width;
+    const cy = rect.top + point.y * rect.height / game.scale.height;
+    let white = 0;
+    for (let y = Math.max(0, Math.floor((cy - 32) * ratio)); y < Math.min(img.height, (cy + 32) * ratio); y++)
+      for (let x = Math.max(0, Math.floor((cx - 32) * ratio)); x < Math.min(img.width, (cx + 32) * ratio); x++) {
+        const i = (y * img.width + x) * 4;
+        if (pixels[i] > 235 && pixels[i + 1] > 235 && pixels[i + 2] > 235 && pixels[i + 3] > 200) white++;
+      }
+    return white;
+  }, 'data:image/png;base64,' + image.toString('base64'));
+}
+
 (async () => {
   const { chromium, executablePath } = browserDriver();
   const browser = await chromium.launch({
@@ -42,7 +76,12 @@ fs.mkdirSync(OUT, { recursive: true });
           ? { recordVideo: { dir: OUT, size: { width: 390, height: 740 } } }
           : {}),
       });
-      await context.route('https://st.max.ru/**', (route) => route.fulfill({ body: '' }));
+      await context.route('**/*', route => {
+        const url = new URL(route.request().url());
+        const local = url.origin === new URL(BASE).origin;
+        return !local || url.pathname.startsWith('/api/')
+          ? route.fulfill({ contentType: 'application/json', body: '{}' }) : route.continue();
+      });
       await context.addInitScript(
         (tier) => {
           localStorage.setItem('ofeliya_performance_tier', tier);
@@ -170,7 +209,10 @@ fs.mkdirSync(OUT, { recursive: true });
         document.body.append(label);
         return { renderer, tier, actualType, phases, before, damage, iframe, snapshot, contractFailures: soft };
       }, { renderer, tier });
-      await page.screenshot({ path: path.join(OUT, `${renderer}-${tier}-idle.png`) });
+      await page.evaluate(() => { const { gs, enemy } = window.__impactFixture; gs.player.clearTint(); enemy.clearTint(); });
+      await renderedPose(page);
+      const idleImage = await page.screenshot({ path: path.join(OUT, `${renderer}-${tier}-idle.png`) });
+      const idleWhite = await heroWhitePixels(page, idleImage);
       await page.evaluate(() => {
         const { gs, enemy } = window.__impactFixture;
         gs.player.markHurt(gs.time.now, 1, 0);
@@ -178,7 +220,11 @@ fs.mkdirSync(OUT, { recursive: true });
         gs.player.preUpdate(600, 0);
         enemy.preUpdate(600, 0);
       });
-      await page.screenshot({ path: path.join(OUT, `${renderer}-${tier}-impact.png`) });
+      await renderedPose(page);
+      const impactImage = await page.screenshot({ path: path.join(OUT, `${renderer}-${tier}-impact.png`) });
+      const hitWhite = await heroWhitePixels(page, impactImage);
+      result.heroFlashPixels = { idle: idleWhite, hit: hitWhite };
+      if (renderer === 'webgl') assert.ok(hitWhite > idleWhite, `actual ${renderer} hero hit flash must increase white pixels: ${idleWhite} -> ${hitWhite}`);
       await page.evaluate(() => {
         const { gs, enemy } = window.__impactFixture;
         enemy.takeDamage(99999);

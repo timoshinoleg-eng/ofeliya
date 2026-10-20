@@ -12,6 +12,7 @@ import {
   WEAPON,
   type EnemyKind,
 } from '../game/config';
+import { prefersReducedMotion } from '../systems/MotionPreferences';
 import {
   evaluateAchievements,
   getAchievementDef,
@@ -2826,6 +2827,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private shake(duration: number, intensity: number, preGranted = false): void {
+    if (prefersReducedMotion()) return;
     if (preGranted || this.impact.allowCameraShake(this.time.now)) {
       this.cameras.main.shake(duration, intensity);
     }

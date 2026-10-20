@@ -28,6 +28,7 @@ import {
 } from './CombatTelegraphRenderer';
 import type { DangerEcho } from './DangerEcho';
 import { phaseTransitionPulse } from './BossPhaseCeremony';
+import { prefersReducedMotion } from '../systems/MotionPreferences';
 import {
   ANOMALY_ATTACK_PACING,
   anomalyAttackPacing,
@@ -546,15 +547,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (this.isBoss && this.bossBehavior === 'pressure-wave' && this.bossAura) {
       this.updatePrimeAura(time);
     } else if (this.isBoss && this.bossBehavior === 'heartbeat-pulse' && this.bossAura) {
+      const reducedMotion = prefersReducedMotion();
       const phase = this.heartbeatMs > 0 ? (time % this.heartbeatMs) / this.heartbeatMs : 0;
       const secondBeat = phase >= 0.22 ? Math.exp(-(phase - 0.22) * 20) * 0.55 : 0;
       const beat = Math.max(Math.exp(-phase * 15), secondBeat);
       this.bossAura
         .setVisible(true)
         .setPosition(this.x, this.y)
-        .setRotation(time * 0.0008)
-        .setScale((this.bossPhase === 2 ? 1.08 : 0.98) + beat * (this.bossPhase === 2 ? 0.2 : 0.16))
-        .setAlpha((this.bossPhase === 2 ? 0.72 : 0.62) + beat * 0.28);
+        .setRotation(reducedMotion ? 0 : time * 0.0008)
+        .setScale(reducedMotion ? (this.bossPhase === 2 ? 1.08 : 0.98) : (this.bossPhase === 2 ? 1.08 : 0.98) + beat * (this.bossPhase === 2 ? 0.2 : 0.16))
+        .setAlpha(reducedMotion ? (this.bossPhase === 2 ? 0.72 : 0.62) : (this.bossPhase === 2 ? 0.72 : 0.62) + beat * 0.28);
     }
 
     if (this.kind === 'anomaly' && this.anomalyAura) {
@@ -1144,6 +1146,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
     const radius = Math.max(62, this.radius + 36);
     this.drawPrimeAura(this.bossAura, radius, mode);
+    if (prefersReducedMotion()) {
+      const alpha = mode === 'broken' ? 0.82 : mode === 'recovery' ? 0.72 : 0.56;
+      this.bossAura.setVisible(true).setPosition(this.x, this.y).setRotation(0).setScale(1).setAlpha(alpha);
+      return;
+    }
     // One synchronized ceremony for armored -> recovery/broken: a short
     // expanding ring that decays with the same envelope the HUD bar pulses
     // with. Pure stroked geometry, no allocations, no gameplay state.

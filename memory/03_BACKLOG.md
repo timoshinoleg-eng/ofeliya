@@ -485,3 +485,12 @@ Density fixture now waits two actual Scene POST_UPDATE frames with cache>=target
 - [ ] CI/review/merge hosted MAX correction and deploy from main with dedicated credentials.
 - [ ] Bind canonical domain, verify TLS/DNS and both messenger bots/identity/state restart.
 - [ ] Retire only verified OFELIYA Cloud.ru resources; do not claim billing stopped before inventory readback.
+# B2/B4 integration follow-up — 20 October 2026
+
+- [x] Apply B2/B4 CI gate patch and add reduced-motion regression.
+- [x] Local focused tests, presentation, tokens/copy, telegraphs, impact budget, strict TypeScript and build.
+- [ ] Root browser 16-cell reduced/no-preference and boss fixture QA; root-owned biological pixel gate evaluation.
+- [ ] Root independent review and scoped fixes if needed.
+- [ ] Hosted exact-head CI and owner release/device acceptance remain separate gates; no merge/push/deploy authorized.
+
+Root validation: actual Canvas/WebGL echo matrix 16/16 passed at320/390/768/1080 with both motion preferences; world/HUD phase and live-preference checks4/4 passed. Adapted repo41 two-postrender/native-decoded screenshot pixel check without pngjs; strict3-cell impact passed, WebGL idle0/hit3982 white pixels. Negative control clearing tint fails as expected. Independent source review found no actionable P1/P2. Final-head full tests/build are tracked externally in12_INTEGRATION_PREP.
