@@ -14,6 +14,13 @@ function browserDriver() {
 // Defaults to the same dev-server origin the other browser gates use.
 const BASE_URL = process.env.OFELIYA_BASE_URL || 'http://127.0.0.1:5173/';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const diagnosticDeadline = (promise) => {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('diagnostic capture exceeded 3000ms')), 3000); }),
+  ]).finally(() => clearTimeout(timer));
+};
 
 // A1-A11 viewports (the ladder named by the HUD slice) plus two optional capture sizes.
 const ASSERT_VIEWPORTS = [
@@ -289,6 +296,46 @@ async function contextFor(browser, size) {
   return ctx;
 }
 
+async function installHudCiDiagnostics(page) {
+  await page.evaluate(() => {
+    const game = window.__game;
+    const trace = { scenes: {}, events: [], snapshots: 0, lastSnapshotAt: null };
+    window.__hudCiTrace = trace;
+    const record = (scene, event) => {
+      const gs = game.scene.getScene('Game');
+      const ui = game.scene.getScene('UI');
+      const run = game.registry.get('run');
+      trace.events.push({
+        at: performance.now(), scene, event, frame: game.loop.frame,
+        phase: gs?.stageDirector?.phase, hitStopped: gs?.hitStopped,
+        bossActive: gs?.wave?.boss?.active, bossHp: gs?.wave?.boss?.hp,
+        runBossMax: run?.bossMax, labelVisible: ui?.bossLabel?.visible,
+      });
+      if (trace.events.length > 32) trace.events.shift();
+    };
+    for (const key of ['Game', 'UI']) {
+      const scene = game.scene.getScene(key);
+      const info = trace.scenes[key] = { updates: 0, lastUpdateAt: null, lastLifecycle: null };
+      scene.events.on('postupdate', () => {
+        info.updates += 1;
+        info.lastUpdateAt = performance.now();
+        record(key, 'postupdate');
+      });
+      for (const event of ['pause', 'resume', 'sleep', 'wake', 'shutdown']) {
+        scene.events.on(event, () => {
+          info.lastLifecycle = { event, at: performance.now() };
+          record(key, event);
+        });
+      }
+    }
+    game.registry.events.on('changedata-run', () => {
+      trace.snapshots += 1;
+      trace.lastSnapshotAt = performance.now();
+      record('registry', 'changedata-run');
+    });
+  });
+}
+
 async function bootFrozen(page) {
   await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'), null, { timeout: 45000 });
@@ -301,6 +348,7 @@ async function bootFrozen(page) {
       game.scene.isActive('UI')
     );
   }, null, { timeout: 45000 });
+  await installHudCiDiagnostics(page);
   await page.evaluate(() => {
     const gs = window.__game.scene.getScene('Game');
     const ui = window.__game.scene.getScene('UI');
@@ -505,7 +553,50 @@ function assertContainment(kind, label, contract) {
         boss.dmg = 0;
         gs.wave.boss = boss;
       });
-      await page.waitForFunction(() => window.__game.scene.getScene('UI').bossLabel.visible === true, null, { timeout: 15000 });
+      try {
+        await page.waitForFunction(() => window.__game.scene.getScene('UI').bossLabel.visible === true, null, { timeout: 15000 });
+      } catch (error) {
+        // Preserve the failed assertion and timeout; capture state before teardown so
+        // a stalled scene can be distinguished from a boss/HUD regression on CI.
+        const diagnostic = await diagnosticDeadline(page.evaluate(() => {
+          const game = window.__game;
+          const gs = game?.scene.getScene('Game');
+          const ui = game?.scene.getScene('UI');
+          const boss = gs?.wave?.boss;
+          return {
+            gameActive: game?.scene.isActive('Game'),
+            gamePaused: game?.scene.isPaused('Game'),
+            gameSleeping: game?.scene.isSleeping('Game'),
+            gameStatus: gs?.sys?.settings?.status,
+            uiActive: game?.scene.isActive('UI'),
+            uiPaused: game?.scene.isPaused('UI'),
+            uiSleeping: game?.scene.isSleeping('UI'),
+            uiStatus: ui?.sys?.settings?.status,
+            documentVisibility: document.visibilityState,
+            capturedAt: performance.now(),
+            frame: game?.loop.frame,
+            stagePhase: gs?.stageDirector?.phase,
+            hitStopped: gs?.hitStopped,
+            hitStopUntil: gs?.hitStopUntil,
+            run: game?.registry.get('run'),
+            boss: boss ? { active: boss.active, hp: boss.hp, maxHp: boss.maxHp, kind: boss.kind } : null,
+            bossLabelVisible: ui?.bossLabel?.visible,
+            bossLabelActive: ui?.bossLabel?.active,
+            bossLabelAlpha: ui?.bossLabel?.alpha,
+            bossLabelText: ui?.bossLabel?.text,
+            modalOpen: ui?.modalOpen,
+            overShown: ui?.overShown,
+            activeBossReveals: ui?.activeBossReveals,
+            hasTransitionOverlay: Boolean(ui?.transitionOverlay),
+            awaitingChoice: gs?.awaitingChoice,
+            trace: window.__hudCiTrace,
+          };
+        })).catch((captureError) => ({ captureError: String(captureError) }));
+        console.error('HUD boss wait failed:', JSON.stringify({ viewport: size, diagnostic, pageErrors }));
+        await page.screenshot({ path: path.join(captureDir, '05-hud-boss-wait-failure.png'), timeout: 3000 })
+          .catch((captureError) => console.error('HUD failure screenshot:', String(captureError)));
+        throw error;
+      }
       await sleep(1500);
       const bossState = await readHud(page);
       const bossFailures = [];

@@ -294,3 +294,24 @@ Any new third-party binary asset must add, in the same change:
 4. local file mapping.
 
 This prevents repeating the incomplete per-file provenance of the early audio import.
+
+## Project-internal adaptation: biological impact smoke (PR #183)
+
+File: `scripts/biological-impact-smoke.cjs`.
+
+- Upstream: this repository's own PR #183 (branch predating the 2026-10-16 main
+  convergence), combat feedback commit `0e3269c`
+  (`feat: add bounded biological hit and antibody death feedback`).
+- License: project-internal code (same repository, same owner); no external
+  license applies.
+- What was adapted: the Playwright smoke driver idea (three renderer/tier cells,
+  controlled fixture, contract checks, idle/impact screenshots and optional
+  video) was ported onto the current main architecture instead of merging the
+  stale branch.
+- Why adaptation instead of merge: PR #183's branch diverged before the
+  #213–#217 convergence that moved combat onto main; a straight merge would
+  reintroduce superseded structure. The ported file also fixes two defects of
+  the donor: swapped renderer constants (Phaser CANVAS=1 / WEBGL=2) and
+  waits that assume the new `vfx.biologicalGhosts` pool, which does not exist
+  on pre-B1 builds (guards added so the same script can capture baseline
+  evidence against old builds in `IMPACT_TOLERANCE=baseline` mode).

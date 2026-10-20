@@ -115,7 +115,7 @@ test('Menu host and hero keep the original large portraits and tween endpoints',
  const body = source.slice(source.indexOf('    const host ='), source.indexOf('    const titleY ='));
  for (const H of [568, 844]) {
   const f = fixture(); bake(f);
-  new Function('W', 'H', 'artScale', 'ROLE', 'BORDER', 'PANEL', 'VISUAL', body).call(f.scene, 390, H, artScale, ROLE, BORDER, PANEL, VISUAL);
+  new Function('W', 'H', 'artScale', 'ROLE', 'BORDER', 'PANEL', 'VISUAL', 'prefersReducedMotion', body).call(f.scene, 390, H, artScale, ROLE, BORDER, PANEL, VISUAL, () => false);
   const host = f.objects.find(o => o.texture?.key === 'host-cell-shadow');
   const hero = f.objects.find(o => o.texture?.key === 'virus-player');
   const hostScale = H < 650 ? 1.1 : 1.4, heroScale = H < 650 ? 1.8 : 2.15;
@@ -123,6 +123,24 @@ test('Menu host and hero keep the original large portraits and tween endpoints',
   assert.equal(hero.displayWidth, 56 * heroScale);
   assert.ok(Math.abs(f.tweens.find(t => t.targets === host && t.scale !== undefined).scale * host.width - 112 * hostScale * 1.07) < 1e-9);
   assert.ok(Math.abs(f.tweens.find(t => t.targets === hero && t.scale !== undefined).scale * hero.width - 56 * heroScale * 1.06) < 1e-9);
+ }
+});
+test('Menu reduced-motion portraits keep dimensions and register no decorative tweens', () => {
+ const { artScale } = load('src/game/ArtMetrics.ts');
+ const { ROLE, BORDER, PANEL } = load('src/ui/tokens.ts');
+ const { VISUAL } = load('src/ui/visualTokens.ts');
+ const source = readFileSync('src/scenes/MenuScene.ts', 'utf8');
+ const body = source.slice(source.indexOf('    const host ='), source.indexOf('    const titleY ='));
+ for (const H of [568, 844]) {
+  const f = fixture(); bake(f);
+  new Function('W', 'H', 'artScale', 'ROLE', 'BORDER', 'PANEL', 'VISUAL', 'prefersReducedMotion', body).call(f.scene, 390, H, artScale, ROLE, BORDER, PANEL, VISUAL, () => true);
+  const host = f.objects.find(o => o.texture?.key === 'host-cell-shadow');
+  const hero = f.objects.find(o => o.texture?.key === 'virus-player');
+  assert.equal(host.displayWidth, 112 * (H < 650 ? 1.1 : 1.4));
+  assert.equal(hero.displayWidth, 56 * (H < 650 ? 1.8 : 2.15));
+  assert.equal(host.alpha, .1);
+  assert.equal(hero.rotation, 0);
+  assert.deepEqual(f.tweens, []);
  }
 });
 test('Game trail initial/fade endpoints and organ reset retain their world footprint', () => {

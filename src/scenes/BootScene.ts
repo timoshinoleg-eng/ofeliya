@@ -3,6 +3,7 @@ import { COLORS } from '../game/config';
 import { CORE_ART, rawArtKey } from '../game/ArtMetrics';
 import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
 import { ensureBiologicalAnimations } from '../game/BiologicalAnimation';
+import { ensureBiologicalImpacts } from '../game/BiologicalImpact';
 import { StartupTrace } from '../systems/StartupTrace';
 import { startMutationArtRecovery } from '../game/MutationArtRecovery';
 
@@ -35,6 +36,7 @@ export class BootScene extends Phaser.Scene {
     this.makeTextures();
     ensureStrainZeroTextures(this);
     ensureBiologicalAnimations(this);
+    ensureBiologicalImpacts(this);
     StartupTrace.mark('boot.textures.end');
     document.getElementById('splash')?.remove();
     StartupTrace.mark('splash.removed');

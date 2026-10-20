@@ -1,6 +1,9 @@
 import Phaser from 'phaser';
 import {
   COMBAT_TELEGRAPH_PATTERNS,
+  combatTelegraphRingRatio,
+  combatTelegraphTickOuter,
+  COMBAT_TELEGRAPH_TICK_INNER,
   type CombatTelegraphLevel,
 } from './CombatTelegraphLanguage';
 
@@ -45,7 +48,7 @@ export function drawRadialCombatTelegraph(
   graphics.strokeCircle(0, 0, r);
 
   for (let ring = 1; ring < pattern.ringCount; ring++) {
-    const ratio = 1 - ring * (level === 'critical' ? 0.13 : 0.19);
+    const ratio = combatTelegraphRingRatio(level, ring);
     graphics.lineStyle(Math.max(1.2, pattern.lineWidth - ring * 0.8), ring % 2 ? WHITE : color, 0.58);
     graphics.strokeCircle(0, 0, r * ratio);
   }
@@ -56,8 +59,8 @@ export function drawRadialCombatTelegraph(
   }
 
   if (pattern.tickCount <= 0) return;
-  const tickInner = r + 3;
-  const tickOuter = r + (level === 'critical' ? 15 : 11);
+  const tickInner = r + COMBAT_TELEGRAPH_TICK_INNER;
+  const tickOuter = r + combatTelegraphTickOuter(level);
   for (let i = 0; i < pattern.tickCount; i++) {
     const angle = (i / pattern.tickCount) * Math.PI * 2;
     const innerX = Math.cos(angle) * tickInner;

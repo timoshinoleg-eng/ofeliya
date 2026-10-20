@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { artScale, artSourceFactor } from './ArtMetrics';
 import { biologicalAtlasKey, biologicalFrameAt } from './BiologicalAnimation';
+import { biologicalHitAtlasKey, biologicalHitDirection, biologicalHitFrame } from './BiologicalImpact';
 import { COLORS, ELITE, ENEMY_DEFS, type EnemyKind } from './config';
 import type { GameScene } from '../scenes/GameScene';
 import type { Player } from './Player';
@@ -25,6 +26,9 @@ import {
   drawDirectionalCombatTelegraph,
   drawRadialCombatTelegraph,
 } from './CombatTelegraphRenderer';
+import type { DangerEcho } from './DangerEcho';
+import { phaseTransitionPulse } from './BossPhaseCeremony';
+import { prefersReducedMotion } from '../systems/MotionPreferences';
 import {
   ANOMALY_ATTACK_PACING,
   anomalyAttackPacing,
@@ -80,6 +84,24 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private nextBossAttackAt = 0;
   private bossTelegraph: Phaser.GameObjects.Graphics | null = null;
   private primeBrokenUntil = 0;
+  private primePhaseLast: 'armored' | 'recovery' | 'broken' = 'armored';
+  private primePhaseTransitionAt = -1;
+  // Reusable echo descriptor: getDangerEcho fills this in place and returns it,
+  // so the hot loop above density 110 does not allocate per enemy per frame.
+  // The reference is only valid until this enemy's next getDangerEcho call —
+  // GameScene consumes it synchronously.
+  private readonly dangerEchoScratch: DangerEcho = {
+    shape: 'lane',
+    x: 0,
+    y: 0,
+    dirX: 0,
+    dirY: 0,
+    start: 0,
+    end: 0,
+    radius: 0,
+    level: 'dangerous',
+    color: 0,
+  };
   anomalyPhase: AnomalyPhase = 1;
   anomalyAttackState: AnomalyAttackState = 'pursuit';
   private anomalyAttackKind: AnomalyAttackKind = 'radial-burst';
@@ -95,6 +117,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private anomalyTelegraph: Phaser.GameObjects.Graphics | null = null;
   private anomalyAura: Phaser.GameObjects.Graphics | null = null;
   private biologicalFrame = -1;
+  private biologicalHitAt = -Infinity;
+  private biologicalHitDirection = 0;
   private biologicalCycle = false;
   private biologicalPhase = 0;
 
@@ -134,10 +158,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.enableBody(true, x, y, true, true);
     this.setTexture(opts.textureKey ?? def.tex).setScale(artScale(opts.textureKey ?? def.tex, scale));
     this.biologicalFrame = -1;
+    this.biologicalHitAt = -Infinity;
     this.biologicalCycle = (opts.textureKey ?? def.tex) === 'immune-antibody';
     this.biologicalPhase = Math.abs(x * 3 + y * 5 + this.spawnSerial * 97) % 720;
     this.isElite = opts.elite;
     this.isBoss = kind === 'boss';
+    // Pooled objects can be reactivated as another enemy (or another boss)
+    // without deactivateForStageReset running in between; stale phase fields
+    // would fire a spurious transition ceremony on the first aura update.
+    this.primePhaseLast = 'armored';
+    this.primePhaseTransitionAt = -1;
     this.eliteModifier = opts.elite ? (opts.eliteModifier ?? null) : null;
     this.eliteVisualSignature =
       this.eliteModifier === 'regenerator'
@@ -284,10 +314,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       // Enemy owns gameplay telegraphs: keep this observer independent of the runtime governor.
       const reduced = this.scene.registry.get('performanceTier') === 'reduced';
       const frame = biologicalFrameAt(time, this.biologicalPhase, reduced);
-      if (frame !== this.biologicalFrame) {
-        this.setTexture(atlas, `bio-${frame}`);
-        this.biologicalFrame = frame;
-      }
+      const hitAtlas = biologicalHitAtlasKey('immune-antibody');
+      const hitFrame = biologicalHitFrame(this.scene.time.now - this.biologicalHitAt, this.biologicalHitDirection, reduced);
+      const texture = hitFrame && this.scene.textures.exists(hitAtlas) ? hitAtlas : atlas;
+      const pose = texture === hitAtlas ? hitFrame! : `bio-${frame}`;
+      if (this.texture.key !== texture || this.frame.name !== pose) this.setTexture(texture, pose);
+      this.biologicalFrame = frame;
     }
 
     if (time < this.flashUntil) this.setTintFill(0xffffff);
@@ -515,15 +547,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (this.isBoss && this.bossBehavior === 'pressure-wave' && this.bossAura) {
       this.updatePrimeAura(time);
     } else if (this.isBoss && this.bossBehavior === 'heartbeat-pulse' && this.bossAura) {
+      const reducedMotion = prefersReducedMotion();
       const phase = this.heartbeatMs > 0 ? (time % this.heartbeatMs) / this.heartbeatMs : 0;
       const secondBeat = phase >= 0.22 ? Math.exp(-(phase - 0.22) * 20) * 0.55 : 0;
       const beat = Math.max(Math.exp(-phase * 15), secondBeat);
       this.bossAura
         .setVisible(true)
         .setPosition(this.x, this.y)
-        .setRotation(time * 0.0008)
-        .setScale((this.bossPhase === 2 ? 1.08 : 0.98) + beat * (this.bossPhase === 2 ? 0.2 : 0.16))
-        .setAlpha((this.bossPhase === 2 ? 0.72 : 0.62) + beat * 0.28);
+        .setRotation(reducedMotion ? 0 : time * 0.0008)
+        .setScale(reducedMotion ? (this.bossPhase === 2 ? 1.08 : 0.98) : (this.bossPhase === 2 ? 1.08 : 0.98) + beat * (this.bossPhase === 2 ? 0.2 : 0.16))
+        .setAlpha(reducedMotion ? (this.bossPhase === 2 ? 0.72 : 0.62) : (this.bossPhase === 2 ? 0.72 : 0.62) + beat * 0.28);
     }
 
     if (this.kind === 'anomaly' && this.anomalyAura) {
@@ -617,8 +650,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.anomalyTelegraph,
       this.anomalyLockedDirX,
       this.anomalyLockedDirY,
-      Math.max(26, this.radius + 8),
-      190,
+      this.anomalyLaneStart(),
+      this.anomalyLaneEnd(),
       'dangerous',
       COLORS.purple
     );
@@ -793,8 +826,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.roleTelegraph.clear().setVisible(true).setPosition(this.x, this.y);
 
     if (this.kind === 'runner') {
-      const laneStart = Math.max(18, this.radius + 5);
-      const laneEnd = 154;
+      const laneStart = this.roleLaneStart();
+      const laneEnd = this.roleLaneEnd();
       drawDirectionalCombatTelegraph(
         this.roleTelegraph,
         this.lockedDirX,
@@ -810,7 +843,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     } else {
       drawRadialCombatTelegraph(
         this.roleTelegraph,
-        Math.max(58, this.radius + 38),
+        this.roleRadialRadius(),
         'dangerous',
         COLORS.orange,
         0.035
@@ -848,6 +881,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.anomalyLockedDirX = 0;
     this.anomalyLockedDirY = 0;
     this.primeBrokenUntil = 0;
+    this.primePhaseLast = 'armored';
+    this.primePhaseTransitionAt = -1;
     this.target = null;
     this.gs = null;
     this.knockX = 0;
@@ -897,6 +932,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.hp -= actualDamage;
     if (actualDamage > 0) {
       this.lastDamageAt = now;
+      if (this.biologicalCycle) {
+        this.biologicalHitAt = now;
+        this.biologicalHitDirection = biologicalHitDirection(kx, ky, this.rotation);
+      }
       this.gs?.onEnemyDamaged(this, actualDamage);
     }
     this.flashUntil = now + 70;
@@ -918,6 +957,135 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.gs?.onEnemyDied(this);
     }
     return actualDamage;
+  }
+
+  /** Phase identity for the unified boss ceremony (HUD ticks read this). */
+  getPhaseMode(): 'armored' | 'recovery' | 'broken' | null {
+    if (!this.isBoss || this.bossBehavior !== 'pressure-wave') return null;
+    const time = this.scene.time.now;
+    return time <= this.primeBrokenUntil
+      ? 'broken'
+      : this.bossAttackState === 'recovery'
+        ? 'recovery'
+        : 'armored';
+  }
+
+  /**
+   * Descriptor of this enemy's currently actionable warning, so the
+   * dense-combat echo layer can re-stroke it above the silhouette clearing
+   * (depth 11) instead of letting the dark pocket mute it. Pure observation:
+   * no state changes; timing, hitboxes and warning grammar are untouched.
+   */
+  // Shared geometry for role warnings: the depth-8 telegraph and the danger
+  // echo must agree exactly, so both read these helpers instead of
+  // duplicating magic numbers in two places.
+  private roleLaneStart(): number {
+    return Math.max(18, this.radius + 5);
+  }
+  private roleLaneEnd(): number {
+    return 154;
+  }
+  private roleRadialRadius(): number {
+    return Math.max(58, this.radius + 38);
+  }
+  private anomalyLaneStart(): number {
+    return Math.max(26, this.radius + 8);
+  }
+  private anomalyLaneEnd(): number {
+    return 190;
+  }
+
+  getDangerEcho(now: number): DangerEcho | null {
+    if (!this.active) return null;
+    const echo = this.dangerEchoScratch;
+    echo.x = this.x;
+    echo.y = this.y;
+    echo.scale = undefined;
+    echo.alpha = undefined;
+
+    if (this.rolePhase === 'windup') {
+      // Mirror the live pulse the depth-8 role telegraph breathes with
+      // (updateRoleTelegraph) so the echo cannot drift in size or alpha.
+      const motion = combatTelegraphPulse('dangerous', now);
+      echo.scale = motion.scale;
+      echo.alpha = motion.alpha;
+      if (this.kind === 'runner') {
+        echo.shape = 'lane';
+        echo.dirX = this.lockedDirX;
+        echo.dirY = this.lockedDirY;
+        echo.start = this.roleLaneStart();
+        echo.end = this.roleLaneEnd();
+        echo.radius = 0;
+        echo.level = 'dangerous';
+        echo.color = COLORS.cyan;
+        return echo;
+      }
+      echo.shape = 'radial';
+      echo.dirX = 0;
+      echo.dirY = 0;
+      echo.start = 0;
+      echo.end = 0;
+      echo.radius = this.roleRadialRadius();
+      echo.level = 'dangerous';
+      echo.color = COLORS.orange;
+      return echo;
+    }
+
+    if (this.isBoss && this.bossBehavior === 'pressure-wave' && this.bossAttackState === 'telegraph') {
+      // Mirror the countdown squeeze the original pressure ring animates with
+      // (updateBossPressureTelegraph), including the 13px end-of-windup scale.
+      const progress = Phaser.Math.Clamp(
+        (now - this.bossAttackStartedAt) / Math.max(1, this.bossAttackUntil - this.bossAttackStartedAt),
+        0,
+        1
+      );
+      const motion = combatTelegraphCountdown('critical', progress);
+      echo.scale = motion.scale;
+      echo.alpha = motion.alpha;
+      echo.shape = 'radial';
+      echo.dirX = 0;
+      echo.dirY = 0;
+      echo.start = 0;
+      echo.end = 0;
+      echo.radius = primeAttackPhasePacing(this.bossPhase).radius;
+      echo.level = 'critical';
+      echo.color = COLORS.red;
+      return echo;
+    }
+
+    if (this.kind === 'anomaly' && this.anomalyAttackState === 'telegraph' && this.anomalyCommittedPacing) {
+      // Mirror the anomaly countdown exactly as updateAnomalyTelegraph does.
+      const progress = Phaser.Math.Clamp(
+        (now - this.anomalyAttackStartedAt) / Math.max(1, this.anomalyStateUntil - this.anomalyAttackStartedAt),
+        0,
+        1
+      );
+      const motion = combatTelegraphCountdown('dangerous', progress);
+      echo.scale = motion.scale;
+      echo.alpha = motion.alpha;
+      if (this.anomalyAttackKind === 'radial-burst') {
+        echo.shape = 'radial';
+        echo.dirX = 0;
+        echo.dirY = 0;
+        echo.start = 0;
+        echo.end = 0;
+        echo.radius = this.anomalyCommittedPacing.burstRadius;
+        echo.level = 'dangerous';
+        echo.color = COLORS.purple;
+        return echo;
+      }
+      echo.shape = 'lane';
+      echo.dirX = this.anomalyLockedDirX;
+      echo.dirY = this.anomalyLockedDirY;
+      echo.start = this.anomalyLaneStart();
+      echo.end = this.anomalyLaneEnd();
+      echo.radius = 0;
+      echo.level = 'dangerous';
+      echo.color = COLORS.purple;
+      return echo;
+    }
+
+    return null;
   }
 
   private drawPrimeAura(
@@ -952,27 +1120,56 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       g.arc(0, 0, radius, offset + gap, offset + Math.PI - gap, false);
       g.strokePath();
     }
+    // Same six-tick vocabulary as the armored phase (and the HUD boss bar),
+    // so every phase reads as one system rather than three unrelated rings.
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
+      g.lineStyle(2, color, 0.55);
+      g.beginPath();
+      g.moveTo(Math.cos(a) * (radius - 7), Math.sin(a) * (radius - 7));
+      g.lineTo(Math.cos(a) * (radius + 7), Math.sin(a) * (radius + 7));
+      g.strokePath();
+    }
     g.lineStyle(1.5, COLORS.white, mode === 'broken' ? 0.62 : 0.42);
     g.strokeCircle(0, 0, radius + 10);
   }
 
   private updatePrimeAura(time: number): void {
     if (!this.bossAura) return;
-    const broken = time <= this.primeBrokenUntil;
-    const mode = broken
-      ? 'broken'
-      : this.bossAttackState === 'recovery'
-        ? 'recovery'
-        : 'armored';
+    // Single authoritative phase source: HUD ticks, this aura and the
+    // transition ceremony all read getPhaseMode() so world and HUD can never
+    // disagree about which phase the boss is in.
+    const mode = this.getPhaseMode() ?? 'armored';
+    if (mode !== this.primePhaseLast) {
+      this.primePhaseLast = mode;
+      this.primePhaseTransitionAt = time;
+    }
     const radius = Math.max(62, this.radius + 36);
     this.drawPrimeAura(this.bossAura, radius, mode);
-    const pulse = 1 + Math.sin(time * (broken ? 0.012 : 0.005)) * (broken ? 0.065 : 0.025);
+    if (prefersReducedMotion()) {
+      const alpha = mode === 'broken' ? 0.82 : mode === 'recovery' ? 0.72 : 0.56;
+      this.bossAura.setVisible(true).setPosition(this.x, this.y).setRotation(0).setScale(1).setAlpha(alpha);
+      return;
+    }
+    // One synchronized ceremony for armored -> recovery/broken: a short
+    // expanding ring that decays with the same envelope the HUD bar pulses
+    // with. Pure stroked geometry, no allocations, no gameplay state.
+    const pulse = phaseTransitionPulse(time - this.primePhaseTransitionAt);
+    if (pulse > 0) {
+      this.bossAura.lineStyle(2.5, COLORS.white, 0.55 * pulse);
+      this.bossAura.strokeCircle(0, 0, radius + (1 - pulse) * 26);
+    }
+    const pulseBoost = pulse * 0.15;
+    const broken = mode === 'broken';
+    const pulseRate = broken ? 0.012 : 0.005;
+    const pulseAmp = broken ? 0.065 : 0.025;
+    const wavePulse = 1 + Math.sin(time * pulseRate) * pulseAmp;
     this.bossAura
       .setVisible(true)
       .setPosition(this.x, this.y)
       .setRotation(mode === 'armored' ? -time * 0.00045 : time * 0.00085)
-      .setScale(pulse)
-      .setAlpha(broken ? 0.94 : mode === 'recovery' ? 0.82 : 0.62);
+      .setScale(wavePulse + pulseBoost)
+      .setAlpha(Math.min(1, (broken ? 0.94 : mode === 'recovery' ? 0.82 : 0.62) + pulseBoost));
   }
 
   private drawCardiacAura(g: Phaser.GameObjects.Graphics, radius: number, color: number): void {
