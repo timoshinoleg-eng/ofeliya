@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { startCombatFixture } = require('./lib/combat-fixture.cjs');
 const path = require('path');
 
 function browserDriver() {
@@ -56,7 +57,7 @@ function browserDriver() {
     throw new Error('Menu did not restore Strained selection: ' + JSON.stringify(menuMode));
   }
 
-  await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
+  await startCombatFixture(page);
   await page.waitForFunction(() =>
     window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI')
   );

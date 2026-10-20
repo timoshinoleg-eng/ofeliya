@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { installCombatFixture } = require('./lib/combat-fixture.cjs');
 const { chromium } = require('playwright-core');
 
 const chrome = ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(fs.existsSync);
@@ -8,6 +9,7 @@ const VIEWPORT = { width: 390, height: 740 };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function touchAt(ctx, page, point) {
+  await page.evaluate(() => window.__recordVideoTiming?.('touch-dispatch'));
   const cdp = await ctx.newCDPSession(page);
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchStart',
@@ -150,6 +152,32 @@ async function bootMenu(ctx, requests) {
   });
   await page.goto('http://127.0.0.1:5173/?video=1', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
+  await installCombatFixture(page);
+  // Same-realm timing, independent of Node/CDP scheduling; no credentials are recorded.
+  await page.evaluate(() => {
+    window.__videoTiming = [];
+    const record = (event, detail = {}) => window.__videoTiming.push({ event, at: performance.now(), ...detail });
+    window.__recordVideoTiming = record;
+    const gs = window.__game.scene.getScene('Game'), create = gs.create;
+    gs.create = function (...args) {
+      record('game-create-start');
+      const value = create.apply(this, args);
+      record('game-create-end');
+      return value;
+    };
+    const play = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function (...args) {
+      record('video-play');
+      this.addEventListener('timeupdate', () => record('video-progress', { currentTime: this.currentTime }));
+      this.addEventListener('ended', () => record('video-ended'));
+      return play.apply(this, args);
+    };
+    const remove = Element.prototype.remove;
+    Element.prototype.remove = function (...args) {
+      if (this.matches?.('[data-ofeliya-video]')) record('video-finish');
+      return remove.apply(this, args);
+    };
+  });
   return { page, errors };
 }
 
@@ -240,6 +268,11 @@ async function visibleUiText(page, wanted) {
     }
     await page.waitForFunction(() => window.__game.scene.isActive('Game'), null, { timeout: 2800 });
     const elapsed = Date.now() - startedAt;
+    const timing = await page.evaluate(() => {
+      window.__recordVideoTiming('game-wait-success');
+      return window.__videoTiming;
+    });
+    console.log('VIDEO_CAP_TIMING', JSON.stringify({ elapsed, timing }));
     if (elapsed > 2600) throw new Error('stall fallback exceeded watchdog budget: ' + elapsed);
     if (errors.length) throw new Error('stall fallback caused page errors: ' + errors.join(' | '));
     await ctx.close();
