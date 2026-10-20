@@ -140,7 +140,10 @@ async function heroWhitePixels(page, image) {
             s.body.center.x - s.x, s.body.center.y - s.y,
           ];
         };
-        const sampleTime = gs.time.now;
+        // Use an exact fixture epoch: fractional Phaser timestamps can round
+        // (sampleTime + 180) - sampleTime below 180 and select the prior pose.
+        const sampleTime = Math.floor(gs.time.now);
+        gs.time.now = sampleTime;
         gs.player.preUpdate(600, 0);
         enemy.preUpdate(600, 0);
         const before = { player: geometry(gs.player), enemy: geometry(enemy) };
