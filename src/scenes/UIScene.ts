@@ -448,7 +448,7 @@ export class UIScene extends Phaser.Scene {
 
       this.hpWarn.clear();
       if (run.hp > 0 && hf <= JUICE.lowHpFraction) {
-        const a = 0.22 + 0.22 * Math.sin(this.time.now / 120);
+        const a = prefersReducedMotion() ? 0.22 : 0.22 + 0.22 * Math.sin(this.time.now / 120);
         this.hpWarn.lineStyle(16, COLORS.red, a);
         this.hpWarn.strokeRect(8, 8, W - 16, H - 16);
       }
