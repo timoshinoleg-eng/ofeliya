@@ -264,6 +264,9 @@ jobs:
       - name: Real-touch pause smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/pause-smoke.cjs
 
+      - name: Video cap deterministic product clock contract
+        run: npm run test:video-cap-clock
+
       - name: Video interstitial fail-safe smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/video-interstitial-smoke.cjs
 
