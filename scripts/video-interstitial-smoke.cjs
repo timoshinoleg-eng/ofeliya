@@ -1,5 +1,6 @@
 const fs = require('fs');
 const { installCombatFixture } = require('./lib/combat-fixture.cjs');
+const { installVideoTiming, waitForVideoGame } = require('./lib/video-timing.cjs');
 const { chromium } = require('playwright-core');
 
 const chrome = ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(fs.existsSync);
@@ -149,42 +150,7 @@ async function bootMenu(ctx, requests) {
   await page.goto('http://127.0.0.1:5173/?video=1', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
   await installCombatFixture(page);
-  // Same-realm timing, independent of Node/CDP scheduling; no credentials are recorded.
-  await page.evaluate(() => {
-    window.__videoTiming = [];
-    const record = (event, detail = {}) => window.__videoTiming.push({ event, at: performance.now(), ...detail });
-    window.__recordVideoTiming = record;
-    document.addEventListener('pointerdown', () => record('touch-received'), {capture:true});
-    const timeout = window.setTimeout;
-    window.setTimeout = function (callback, delay, ...args) {
-      if (delay !== 3200) return timeout.call(this, callback, delay, ...args);
-      record('video-cap-arm', { delay });
-      return timeout.call(this, (...values) => { record('video-cap-fire'); callback(...values); }, delay, ...args);
-    };
-    new MutationObserver(() => {
-      const overlay = document.querySelector('[data-ofeliya-video]');
-      if (overlay?.style.opacity === '1' && !overlay.__timingVisible) { overlay.__timingVisible = true; record('video-visible'); }
-    }).observe(document.body, {childList:true,subtree:true,attributes:true,attributeFilter:['style']});
-    const gs = window.__game.scene.getScene('Game'), create = gs.create;
-    gs.create = function (...args) {
-      record('game-create-start');
-      const value = create.apply(this, args);
-      record('game-create-end');
-      return value;
-    };
-    const play = HTMLMediaElement.prototype.play;
-    HTMLMediaElement.prototype.play = function (...args) {
-      record('video-play');
-      this.addEventListener('timeupdate', () => record('video-progress', { currentTime: this.currentTime }));
-      this.addEventListener('ended', () => record('video-ended'));
-      return play.apply(this, args);
-    };
-    const remove = Element.prototype.remove;
-    Element.prototype.remove = function (...args) {
-      if (this.matches?.('[data-ofeliya-video]')) record('video-finish');
-      return remove.apply(this, args);
-    };
-  });
+  await installVideoTiming(page);
   return { page, errors };
 }
 
@@ -263,7 +229,7 @@ async function visibleUiText(page, wanted) {
     const { page, errors } = await bootMenu(ctx, requests);
     const point = await startButtonCenter(page);
     if (!point) throw new Error('stall start button hit target missing');
-    const startedAt = Date.now();
+    const startedAt = performance.now();
     await touchAt(ctx, page, point);
     await sleep(350);
     const flashState = await page.evaluate(() => {
@@ -273,14 +239,7 @@ async function visibleUiText(page, wanted) {
     if (flashState !== '0') {
       throw new Error('unprogressed video became visible before fallback: ' + flashState);
     }
-    await page.waitForFunction(() => window.__game.scene.isActive('Game'), null, { timeout: 2800 });
-    const elapsed = Date.now() - startedAt;
-    const timing = await page.evaluate(() => {
-      window.__recordVideoTiming('game-wait-success');
-      return window.__videoTiming;
-    });
-    console.log('VIDEO_STALL_TIMING', JSON.stringify({ elapsed, timing }));
-    if (elapsed > 2600) throw new Error('stall fallback exceeded watchdog budget: ' + elapsed);
+    await waitForVideoGame(page, { mode: 'stall', startedAt });
     if (errors.length) throw new Error('stall fallback caused page errors: ' + errors.join(' | '));
     await ctx.close();
   }
@@ -324,15 +283,9 @@ async function visibleUiText(page, wanted) {
     const { page, errors } = await bootMenu(ctx, requests);
     const point = await startButtonCenter(page);
     if (!point) throw new Error('duration-cap start button hit target missing');
-    const startedAt = Date.now();
+    const startedAt = performance.now();
     await touchAt(ctx, page, point);
-    await page.waitForFunction(() => window.__game.scene.isActive('Game'), null, { timeout: 4300 });
-    const elapsed = Date.now() - startedAt;
-    const timing = await page.evaluate(() => { window.__recordVideoTiming('game-wait-success'); return window.__videoTiming; });
-    console.log('VIDEO_CAP_TIMING', JSON.stringify({ elapsed, timing }));
-    if (elapsed > 3900) {
-      throw new Error('maxDurationMs was not honored as an upper bound: ' + elapsed);
-    }
+    await waitForVideoGame(page, { mode: 'cap', startedAt });
     if (errors.length) throw new Error('duration-cap path caused page errors: ' + errors.join(' | '));
     await ctx.close();
   }
