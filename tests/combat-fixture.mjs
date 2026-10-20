@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+const {installCombatFixture,startCombatFixture}=createRequire(import.meta.url)('../scripts/lib/combat-fixture.cjs');
+let calls=0,stage={xp:9,xpNext:15};const update=()=>{},waveUpdate=()=>{};
+const gs={runState:{stage,resetStageProgression(){this.stage={xp:0,xpNext:15};}},update,wave:{update:waveUpdate},create(...args){calls++;assert.equal(this,gs);assert.equal(this.create,original);assert.deepEqual(args,['arg']);this.awaitingChoice=false;}};
+const original=gs.create,ui={modalOpen:false};const game={scene:{getScene:k=>k==='Game'?gs:k==='UI'?ui:{scene:{start(){gs.create('arg');}}}}};
+global.window={__game:game};const page={evaluate:(fn,arg)=>Promise.resolve(fn(arg))};
+await startCombatFixture(page,{isolateStageResets:true});assert.equal(calls,1);assert.equal(gs.create,original);assert.equal(gs.runState.stage.xpNext,1_000_000);assert.equal(gs.update,update);assert.equal(gs.wave.update,waveUpdate);gs.runState.resetStageProgression();assert.equal(gs.runState.stage.xpNext,1_000_000);
+await installCombatFixture(page);await assert.rejects(installCombatFixture(page),/already pending/);gs.create('arg');assert.equal(calls,2);assert.equal(gs.create,original);
+console.log('combat fixture: one-shot this/args/restoration, pre-update state, genuine update/wave preserved, stage-reset isolation PASS');

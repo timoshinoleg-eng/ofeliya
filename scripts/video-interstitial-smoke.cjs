@@ -8,15 +8,11 @@ if (!chrome) throw new Error('Chrome not found');
 const VIEWPORT = { width: 390, height: 740 };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function touchAt(ctx, page, point) {
+async function touchAt(_ctx, page, point) {
   await page.evaluate(() => window.__recordVideoTiming?.('touch-dispatch'));
-  const cdp = await ctx.newCDPSession(page);
-  await cdp.send('Input.dispatchTouchEvent', {
-    type: 'touchStart',
-    touchPoints: [{ x: point.x, y: point.y, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
-  });
-  await sleep(35);
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  // Real touchStart/touchEnd via Playwright; avoid serial CDP ACK waits + Node sleep
+  // that stretched a tap into several frames inside the unrelated video budget.
+  await page.touchscreen.tap(point.x, point.y);
 }
 
 async function startButtonCenter(page) {
@@ -158,6 +154,17 @@ async function bootMenu(ctx, requests) {
     window.__videoTiming = [];
     const record = (event, detail = {}) => window.__videoTiming.push({ event, at: performance.now(), ...detail });
     window.__recordVideoTiming = record;
+    document.addEventListener('pointerdown', () => record('touch-received'), {capture:true});
+    const timeout = window.setTimeout;
+    window.setTimeout = function (callback, delay, ...args) {
+      if (delay !== 3200) return timeout.call(this, callback, delay, ...args);
+      record('video-cap-arm', { delay });
+      return timeout.call(this, (...values) => { record('video-cap-fire'); callback(...values); }, delay, ...args);
+    };
+    new MutationObserver(() => {
+      const overlay = document.querySelector('[data-ofeliya-video]');
+      if (overlay?.style.opacity === '1' && !overlay.__timingVisible) { overlay.__timingVisible = true; record('video-visible'); }
+    }).observe(document.body, {childList:true,subtree:true,attributes:true,attributeFilter:['style']});
     const gs = window.__game.scene.getScene('Game'), create = gs.create;
     gs.create = function (...args) {
       record('game-create-start');
@@ -272,7 +279,7 @@ async function visibleUiText(page, wanted) {
       window.__recordVideoTiming('game-wait-success');
       return window.__videoTiming;
     });
-    console.log('VIDEO_CAP_TIMING', JSON.stringify({ elapsed, timing }));
+    console.log('VIDEO_STALL_TIMING', JSON.stringify({ elapsed, timing }));
     if (elapsed > 2600) throw new Error('stall fallback exceeded watchdog budget: ' + elapsed);
     if (errors.length) throw new Error('stall fallback caused page errors: ' + errors.join(' | '));
     await ctx.close();
@@ -321,6 +328,8 @@ async function visibleUiText(page, wanted) {
     await touchAt(ctx, page, point);
     await page.waitForFunction(() => window.__game.scene.isActive('Game'), null, { timeout: 4300 });
     const elapsed = Date.now() - startedAt;
+    const timing = await page.evaluate(() => { window.__recordVideoTiming('game-wait-success'); return window.__videoTiming; });
+    console.log('VIDEO_CAP_TIMING', JSON.stringify({ elapsed, timing }));
     if (elapsed > 3900) {
       throw new Error('maxDurationMs was not honored as an upper bound: ' + elapsed);
     }

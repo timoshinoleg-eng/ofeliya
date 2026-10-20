@@ -44,7 +44,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   page.on('pageerror', (error) => errors.push(String(error)));
   await page.goto('http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
-  await startCombatFixture(page);
+  await startCombatFixture(page, { isolateStageResets: true });
   await page.waitForFunction(() =>
     window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI')
   );

@@ -1,4 +1,4 @@
-﻿name: CI
+name: CI
 
 on:
   pull_request:
@@ -88,6 +88,9 @@ jobs:
 
       - name: Run identity and mastery deterministic smoke
         run: npm run test:run-identity
+
+      - name: Combat fixture and integration visual contracts
+        run: npm run test:combat-fixture && npm run test:integration-visual
 
       - name: Presentation art, VFX, atmosphere and audio regressions
         run: npm run test:presentation
@@ -255,6 +258,9 @@ jobs:
       - name: Real-touch result actions smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/result-actions-smoke.cjs
 
+      - name: Natural startup and mutation progression
+        run: npm run test:natural-progression
+
       - name: Real-touch pause smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/pause-smoke.cjs
 
@@ -272,6 +278,9 @@ jobs:
 
       - name: Daily CTA runtime browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/daily-cta-smoke.cjs
+
+      - name: Utility text extremes and reduced-motion browser contracts
+        run: npm run test:integration-visual-browser
 
       - name: MAX compact viewport matrix
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/mobile-layout-matrix.cjs
