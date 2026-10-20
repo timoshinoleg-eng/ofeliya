@@ -76,6 +76,12 @@ function removeDailyOutboxEntry(submissionId: string): void {
   if (readDailyOutbox()?.submissionId === submissionId) writeDailyOutbox(null);
 }
 
+// An in-flight Daily request may have moved to the general queue while awaiting
+// HTTP. Settle only its own ID in both locations, preserving any newer ticket.
+function settleDailyOutboxEntry(submissionId: string): void {
+  removeDailyOutboxEntry(submissionId);
+  removeScoreOutboxEntry(submissionId);
+}
 function persistentEntry(entry: DailyScoreOutboxEntry): DailyScoreOutboxEntry {
   const { initData: _launchCredential, ...submission } = entry.submission;
   return { ...entry, submission, queuedAt: entry.queuedAt ?? Date.now() };
@@ -145,14 +151,16 @@ function readScoreOutbox(): DailyScoreOutboxEntry[] {
   }
 }
 
-function writeScoreOutbox(entries: DailyScoreOutboxEntry[]): void {
-  if (typeof localStorage === 'undefined') return;
+function writeScoreOutbox(entries: DailyScoreOutboxEntry[]): boolean {
+  if (typeof localStorage === 'undefined') return false;
   try {
     const bounded = entries.slice(-MAX_SCORE_OUTBOX_ENTRIES).map(persistentEntry);
     if (bounded.length) localStorage.setItem(SCORE_OUTBOX_KEY, JSON.stringify(bounded));
     else localStorage.removeItem(SCORE_OUTBOX_KEY);
+    return true;
   } catch {
     // Submission is still attempted; persistence is best-effort on restricted WebViews.
+    return false;
   }
 }
 
@@ -355,6 +363,11 @@ async function postScoreSubmission(
     ) {
       return { status: 'retry' };
     }
+    // Daily entries can also wait in the bounded general outbox. A successful
+    // HTTP response alone must not discard a ticket the server did not accept.
+    if (submission.payload.daily && body.dailyRunAccepted !== true) {
+      return { status: 'retry' };
+    }
     return {
       status: 'accepted',
       response: {
@@ -446,7 +459,20 @@ export async function submitDailyRunScoreDetailed(
     previous = null;
   }
   if (previous && previous.submission.payload.dailyRunId !== ticket.runId) {
-    return { response: null, status: 'network' };
+    // Keep the previous same-owner ticket retryable without blocking this result.
+    // Preserve its idempotency key and owner; persistentEntry strips initData.
+    // Append before releasing the Daily slot. Replays re-read the queue after
+    // awaiting HTTP, so an in-flight retry cannot overwrite this append.
+    const previousEntry = previous;
+    const pending = readScoreOutbox();
+    if (!pending.some((entry) => entry.submissionId === previousEntry.submissionId)) {
+      pending.push(previousEntry);
+      // Restricted/quota-full storage cannot retain two tickets. Preserve the
+      // existing durable result and report a retryable outcome without erasing it.
+      if (!writeScoreOutbox(pending)) return { response: null, status: 'network' };
+    }
+    removeDailyOutboxEntry(previous.submissionId);
+    previous = null;
   }
   const entry = previous ?? {
     submissionId: createSubmissionId(),
@@ -469,15 +495,15 @@ export async function submitDailyRunScoreDetailed(
     });
     if (response.status === 403) return { response: null, status: 'denied' };
     if (response.status === 409) {
-      removeDailyOutboxEntry(entry.submissionId);
+      settleDailyOutboxEntry(entry.submissionId);
       return { response: null, status: 'closed' };
     }
     if (response.status === 410) {
-      removeDailyOutboxEntry(entry.submissionId);
+      settleDailyOutboxEntry(entry.submissionId);
       return { response: null, status: 'expired' };
     }
     if (response.status === 422) {
-      removeDailyOutboxEntry(entry.submissionId);
+      settleDailyOutboxEntry(entry.submissionId);
       return { response: null, status: 'rejected' };
     }
     if (!response.ok) return { response: null, status: 'http' };
@@ -505,7 +531,7 @@ export async function submitDailyRunScoreDetailed(
         typeof body.dailyRunAccepted === 'boolean' ? body.dailyRunAccepted : undefined,
     };
     if (normalized.dailyRunAccepted !== true) return { response: null, status: 'rejected' };
-    removeDailyOutboxEntry(entry.submissionId);
+    settleDailyOutboxEntry(entry.submissionId);
     return { response: normalized, status: 'ok' };
   } catch {
     return { response: null, status: 'network' };
@@ -531,7 +557,7 @@ export async function retryPendingDailySubmission(platform: PlatformAdapter): Pr
     };
     const result = await submitDailySubmissionBody(submission);
     if (result === 'accepted' || result === 'expired' || result === 'rejected') {
-      removeDailyOutboxEntry(dailyEntry.submissionId);
+      settleDailyOutboxEntry(dailyEntry.submissionId);
     } else {
       // If the network is unhealthy, do not immediately spend more timeout budget
       // replaying lower-priority ordinary scores.

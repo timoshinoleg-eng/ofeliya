@@ -1,3 +1,11 @@
+# Daily outbox integration preparation — 20 October 2026
+
+Branch fix/daily-outbox-integration-20261020 is isolated from main abdb10c. Applied audited daily-outbox-fix-v3.patch; added exact-ID settlement of migrated in-flight Daily requests and two behavioral regressions. MAX and Telegram coverage checks two offline tickets, account ownership, refreshed credentials, quota failure, missing Daily acknowledgement, lost response/idempotency, concurrent A/B settlement. Focused29/29 passes on Node22.23.3. Broader validation and publication readiness are recorded externally in OFELIYA_MASTER/12_INTEGRATION_PREP; no publication, merge or deploy authorized.
+
+Storage is bounded8+one Daily and best-effort in restricted WebViews. At failed migration/quota, old ticket is retained and network is returned for the new ticket; cannot promise durable storage when localStorage refuses writes. Real MAX/Telegram device acceptance and hosted CI remain pending.
+
+## Previous context
+
 # Visual implementation completion — 16 October 2026
 
 Branch visual/completion-20261016 extends verified public7a0d829 (PR216). Implemented distinct Player mutation geometry/combined composition, unified SocialHub and Codex, measured11px scrolling result report with pinned actions, pointer ownership and long-share fit, quieter pause. Existing gameplay/RNG/physics/score/network/assets/service settings are retained. Main integration is not authorized.
