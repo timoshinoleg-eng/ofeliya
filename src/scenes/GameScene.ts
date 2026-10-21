@@ -12,6 +12,7 @@ import {
   WEAPON,
   type EnemyKind,
 } from '../game/config';
+import { prefersReducedMotion } from '../systems/MotionPreferences';
 import {
   evaluateAchievements,
   getAchievementDef,
@@ -63,7 +64,8 @@ import {
 import { STAGES, difficultyForStage, type StageDefinition } from '../game/StageDefinitions';
 import type { EvolutionId, UpgradeDef } from '../game/UpgradeSystem';
 import { WaveDirector } from '../game/WaveDirector';
-import { drawRadialCombatTelegraph } from '../game/CombatTelegraphRenderer';
+import { drawRadialCombatTelegraph, drawDirectionalCombatTelegraph } from '../game/CombatTelegraphRenderer';
+import { DANGER_ECHO_POOL, echoIntersectsPocket } from '../game/DangerEcho';
 import type { WaveEventDefinition, WaveEventTelegraph } from '../game/WaveEvents';
 import type { MiniBossDefinition } from '../game/AnomalyPrime';
 import { AtmosphereSystem } from '../systems/AtmosphereSystem';
@@ -153,6 +155,23 @@ export class GameScene extends Phaser.Scene {
   private aimMarker!: Phaser.GameObjects.Image;
   private playerBar!: Phaser.GameObjects.Graphics;
   private playerHalo!: Phaser.GameObjects.Graphics;
+  // Second-stage readability layer: draws ABOVE the enemy mass (depth 11) to
+  // carve a calm pocket around the player at high visual density. Unlike
+  // playerHalo (7.5, backdrop only) this one actually covers nearby enemies.
+  private silhouetteClearing!: Phaser.GameObjects.Graphics;
+  // Danger-echo pool: warnings already drawn at depth 8 get re-stroked at
+  // depth 11.5 (above the clearing, below elite markers at 12) whenever their
+  // geometry intersects the silhouette pocket, so the dark bubble dims the
+  // swarm but never mutes actionable attack cues. Bounded pool, lazily grown.
+  private telegraphEchoPool: Phaser.GameObjects.Graphics[] = [];
+  // Fixed-size "already echoed this frame" markers for the nearest-first
+  // selection scan; preallocated so the per-frame pass never allocates.
+  private readonly echoTaken: (Enemy | null)[] = Array.from({ length: DANGER_ECHO_POOL }, () => null);
+  // Light pool directly under the player (depth 14.5): the virion body is a
+  // dark gear, so on the dark clearing it would read only by luck (hurt
+  // flash). A soft glow beneath lifts the figure into a stable bright-on-dark
+  // anchor without touching player art or gameplay state.
+  private playerGlow!: Phaser.GameObjects.Graphics;
 
   private nextFireAt = 0;
   private novaAcc = 0;
@@ -398,12 +417,23 @@ export class GameScene extends Phaser.Scene {
     this.vignette.setVisible(!fxEnabled);
 
     this.player = new Player(this, W / 2, H / 2);
+    // Scene instances can be restarted. Phaser tears down the previous display
+    // list, so do not retain references to its destroyed echo Graphics.
+    this.telegraphEchoPool = [];
     this.aimMarker = this.add.image(0, 0, 'marker').setDepth(16).setVisible(false);
     this.playerBar = this.add.graphics().setDepth(17);
     // Dense-combat readability: a soft dark bubble under the player carves a
     // contrast zone against the enemy mass. Sits above atmosphere (negative
     // depths) but below telegraphs (8), enemies (10) and the player (28).
     this.playerHalo = this.add.graphics().setDepth(7.5);
+    // Above enemies (10) and their auras/rings (9), below elite markers (12),
+    // enemy health bars (13), bullets (14) and the player (15): nearby foes
+    // are dimmed into a dark pocket while everything identity-critical stays
+    // readable. Role/boss/anomaly warnings (8) inside the pocket are NOT left
+    // dimmed: telegraphEchoPool (11.5) re-strokes any warning that geometrically
+    // reaches the pocket, so danger cues survive the bubble (B2 review fix).
+    this.silhouetteClearing = this.add.graphics().setDepth(11);
+    this.playerGlow = this.add.graphics().setDepth(14.5);
 
     this.bullets = this.physics.add.group({ classType: Bullet, maxSize: 160 });
     this.enemies = this.physics.add.group({ classType: Enemy, maxSize: 260 });
@@ -690,6 +720,9 @@ export class GameScene extends Phaser.Scene {
 
     this.playerBar.clear();
     this.playerHalo.clear();
+    this.silhouetteClearing.clear();
+    this.playerGlow.clear();
+    for (const echoGraphics of this.telegraphEchoPool) echoGraphics.setVisible(false);
     if (this.visualEnemyDensity >= 110) {
       // Ramp 0..1 across the 110..200 stress band; elites/bosses keep their own
       // boosted identity marks above this bubble, so only the backdrop recedes.
@@ -699,6 +732,76 @@ export class GameScene extends Phaser.Scene {
       this.playerHalo.fillCircle(this.player.x, this.player.y, r);
       this.playerHalo.lineStyle(1.6, COLORS.cyan, 0.3 + f * 0.28);
       this.playerHalo.strokeCircle(this.player.x, this.player.y, r);
+      // Front layer over the swarm itself: darken whatever piled up inside
+      // the pocket so the bright player figure (depth 15) pops at a glance.
+      const r2 = 46 + f * 8;
+      this.silhouetteClearing.fillStyle(0x05070f, 0.5 + f * 0.22);
+      this.silhouetteClearing.fillCircle(this.player.x, this.player.y, r2);
+      this.silhouetteClearing.lineStyle(1.4, COLORS.cyan, 0.2 + f * 0.22);
+      this.silhouetteClearing.strokeCircle(this.player.x, this.player.y, r2);
+      // Danger echo: any live warning whose geometry reaches the pocket is
+      // re-stroked above the clearing in its own grammar — same shape, color,
+      // level AND live countdown scale/alpha as the depth-8 original — so the
+      // bubble can dim bodies without hiding or distorting attack cues.
+      // Allocation-free: descriptors come from each enemy's reusable scratch.
+      let echoCount = 0;
+      const children = this.enemies.getChildren();
+      // Pass 1 reserves pool slots for critical boss warnings (a boss spawned
+      // late in the enemy pool must not lose its echo to older role windups);
+      // pass 2 fills the rest. Within a priority the NEAREST warnings win, so
+      // an early-pooled far windup cannot starve a close one: per-slot nearest
+      // scans over the fixed pool bound keep this free of sorts and queues.
+      for (let priority = 0; priority < 2 && echoCount < DANGER_ECHO_POOL; priority++) {
+        const wantCritical = priority === 0;
+        while (echoCount < DANGER_ECHO_POOL) {
+          let bestEnemy: Enemy | null = null;
+          let bestEcho: ReturnType<Enemy['getDangerEcho']> | null = null;
+          let bestDistSq = Infinity;
+          for (let i = 0; i < children.length; i++) {
+            const enemy = children[i] as Enemy;
+            if (!enemy.active) continue;
+            let taken = false;
+            for (let k = 0; k < echoCount; k++) {
+              if (this.echoTaken[k] === enemy) { taken = true; break; }
+            }
+            if (taken) continue;
+            const echo = enemy.getDangerEcho(time);
+            if (!echo || (wantCritical ? echo.level !== 'critical' : echo.level === 'critical')) continue;
+            if (!echoIntersectsPocket(echo, this.player.x, this.player.y, r2)) continue;
+            const dx = enemy.x - this.player.x;
+            const dy = enemy.y - this.player.y;
+            const distSq = dx * dx + dy * dy;
+            if (distSq < bestDistSq) { bestDistSq = distSq; bestEnemy = enemy; bestEcho = echo; }
+          }
+          if (!bestEnemy || !bestEcho) break;
+          this.echoTaken[echoCount] = bestEnemy;
+          let slot = this.telegraphEchoPool[echoCount];
+          if (!slot) {
+            slot = this.add.graphics().setDepth(11.5);
+            this.telegraphEchoPool.push(slot);
+          }
+          slot
+            .clear()
+            .setVisible(true)
+            .setPosition(bestEcho.x, bestEcho.y)
+            .setScale(bestEcho.scale ?? 1)
+            .setAlpha(bestEcho.alpha ?? 1);
+          if (bestEcho.shape === 'lane') {
+            drawDirectionalCombatTelegraph(slot, bestEcho.dirX, bestEcho.dirY, bestEcho.start, bestEcho.end, bestEcho.level, bestEcho.color);
+          } else {
+            drawRadialCombatTelegraph(slot, bestEcho.radius, bestEcho.level, bestEcho.color, bestEcho.level === 'critical' ? 0.05 : 0);
+          }
+          echoCount += 1;
+        }
+      }
+      // Light pool under the dark virion gear: three soft steps so the body
+      // reads as a stable dark-on-light silhouette even between hurt flashes.
+      this.playerGlow.fillStyle(0x9fd8e8, 0.26 + f * 0.08);
+      this.playerGlow.fillCircle(this.player.x, this.player.y, 18);
+      this.playerGlow.fillStyle(0x9fd8e8, 0.15 + f * 0.05);
+      this.playerGlow.fillCircle(this.player.x, this.player.y, 25);
+      this.playerGlow.fillStyle(0x9fd8e8, 0.08 + f * 0.03);
+      this.playerGlow.fillCircle(this.player.x, this.player.y, 33);
     }
     if (st.hp < st.maxHp) {
       const w = 34;
@@ -792,6 +895,7 @@ export class GameScene extends Phaser.Scene {
       boss: e.isBoss,
     });
     this.captureAchievements(false, true);
+    if (e.kind === 'swarm') this.vfx.biologicalDeath(e);
     this.vfx.kill(
       e.x, e.y, e.color, e.isBoss ? 'boss' : e.isElite ? 'elite' : 'normal', undefined, e.radius
     );
@@ -863,7 +967,7 @@ export class GameScene extends Phaser.Scene {
     this.runState.stage.hp -= damage;
     this.wave.recordPlayerDamage(damage, this.runState.stage.maxHp);
     this.runState.resetNoDamage();
-    this.player.markHurt(now);
+    this.player.markHurt(now, this.player.x - enemy.x, this.player.y - enemy.y);
     Sfx.play('hurt');
     PlatformBridge.haptic('medium');
     this.cameras.main.flash(110, 255, 60, 90);
@@ -1281,7 +1385,7 @@ export class GameScene extends Phaser.Scene {
     this.runState.stage.hp -= appliedDamage;
     this.wave.recordPlayerDamage(appliedDamage, this.runState.stage.maxHp);
     this.runState.resetNoDamage();
-    this.player.markHurt(now);
+    this.player.markHurt(now, this.player.x - boss.x, this.player.y - boss.y);
     Sfx.play('hurt');
     PlatformBridge.haptic('medium');
     this.cameras.main.flash(110, 255, 64, 92);
@@ -1304,6 +1408,12 @@ export class GameScene extends Phaser.Scene {
 
   getCombatVisualDensity(): number {
     return this.visualEnemyDensity;
+  }
+
+  /** Boss phase identity for the HUD ceremony (null when no live boss). */
+  getBossPhaseMode(): 'armored' | 'recovery' | 'broken' | null {
+    const boss = this.wave.boss;
+    return boss && boss.active ? boss.getPhaseMode() : null;
   }
 
   private updateHeartbeatSignature(stage: StageDefinition, stageTimeMs: number): void {
@@ -1777,6 +1887,9 @@ export class GameScene extends Phaser.Scene {
     this.aimMarker.setVisible(false);
     this.playerBar.clear();
     this.playerHalo.clear();
+    this.silhouetteClearing.clear();
+    this.playerGlow.clear();
+    for (const echoGraphics of this.telegraphEchoPool) echoGraphics.setVisible(false);
     this.registry.set('joy', { x: 0, y: 0 });
   }
 
@@ -1995,7 +2108,7 @@ export class GameScene extends Phaser.Scene {
     this.runState.stage.hp -= appliedDamage;
     this.wave.recordPlayerDamage(appliedDamage, this.runState.stage.maxHp);
     this.runState.resetNoDamage();
-    this.player.markHurt(this.time.now);
+    this.player.markHurt(this.time.now, this.player.x - anomaly.x, this.player.y - anomaly.y);
     Sfx.play('hurt');
     PlatformBridge.haptic('medium');
     this.cameras.main.flash(110, 190, 90, 255);
@@ -2527,7 +2640,7 @@ export class GameScene extends Phaser.Scene {
     this.runState.stage.hp -= e.dmg;
     this.wave.recordPlayerDamage(e.dmg, this.runState.stage.maxHp);
     this.runState.resetNoDamage();
-    this.player.markHurt(now);
+    this.player.markHurt(now, this.player.x - e.x, this.player.y - e.y);
     Sfx.play('hurt');
     PlatformBridge.haptic('medium');
     this.cameras.main.flash(140, 255, 60, 100);
@@ -2714,6 +2827,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private shake(duration: number, intensity: number, preGranted = false): void {
+    if (prefersReducedMotion()) return;
     if (preGranted || this.impact.allowCameraShake(this.time.now)) {
       this.cameras.main.shake(duration, intensity);
     }

@@ -20,6 +20,8 @@ import { createSpecimenSurface, drawSpecimenSurface } from '../ui/specimenSurfac
 import { createResultReport } from '../ui/ResultReport';
 import { getEvolutionDef } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
+import { phaseTransitionPulse } from '../game/BossPhaseCeremony';
+import { prefersReducedMotion } from '../systems/MotionPreferences';
 import { assessRunIdentity } from '../game/RunIdentity';
 import { Joystick } from '../game/Joystick';
 import { DualMoveControls } from '../game/DualMoveControls';
@@ -109,7 +111,13 @@ export class UIScene extends Phaser.Scene {
   private hpFill!: Phaser.GameObjects.Graphics;
   private bossBack!: Phaser.GameObjects.Graphics;
   private bossFill!: Phaser.GameObjects.Graphics;
+  private bossFrame!: Phaser.GameObjects.Graphics;
   private bossLabel!: Phaser.GameObjects.Text;
+  // B4 ceremony: last observed boss phase + when it changed, so the HUD bar
+  // flashes in sync with the world aura on armored -> recovery/broken.
+  // Both sides read the same Enemy.getPhaseMode() via GameScene's proxy.
+  private bossPhaseLast: 'armored' | 'recovery' | 'broken' | null = null;
+  private bossPhaseTransitionAt = -1;
   private timerText!: Phaser.GameObjects.Text;
   private levelText!: Phaser.GameObjects.Text;
   private rnaPickupText!: Phaser.GameObjects.Text;
@@ -210,6 +218,7 @@ export class UIScene extends Phaser.Scene {
     this.hpFill = this.add.graphics().setDepth(DEPTH + 1);
     this.bossBack = this.add.graphics().setDepth(DEPTH);
     this.bossFill = this.add.graphics().setDepth(DEPTH + 1);
+    this.bossFrame = this.add.graphics().setDepth(DEPTH + 1);
 
     const text = (
       x: number,
@@ -439,7 +448,7 @@ export class UIScene extends Phaser.Scene {
 
       this.hpWarn.clear();
       if (run.hp > 0 && hf <= JUICE.lowHpFraction) {
-        const a = 0.22 + 0.22 * Math.sin(this.time.now / 120);
+        const a = prefersReducedMotion() ? 0.22 : 0.22 + 0.22 * Math.sin(this.time.now / 120);
         this.hpWarn.lineStyle(16, COLORS.red, a);
         this.hpWarn.strokeRect(8, 8, W - 16, H - 16);
       }
@@ -447,7 +456,12 @@ export class UIScene extends Phaser.Scene {
       const boss = run.bossMax > 0;
       this.bossBack.setVisible(boss);
       this.bossFill.setVisible(boss);
+      this.bossFrame.setVisible(boss);
       this.bossLabel.setVisible(boss);
+      if (!boss) {
+        this.bossPhaseLast = null;
+        this.bossPhaseTransitionAt = -1;
+      }
       if (boss) {
         this.bossLabel.setText(run.bossName);
         this.bossBack.clear();
@@ -464,6 +478,25 @@ export class UIScene extends Phaser.Scene {
         );
         this.drawBarHighlight(this.bossFill, m.bossX, HUD.row.bossBarY,
           Math.max(m.bossW * Phaser.Math.Clamp(run.bossHp / run.bossMax, 0, 1), 8));
+        // One identity system with the boss aura: hairline frame, six segment
+        // ticks and a diamond emblem, tinted by the boss phase so the HUD
+        // echoes the world ceremony (armored=white, recovery=gold, broken=green).
+        // A short pulse fires on every phase transition, synchronized with the
+        // expanding ring the world aura draws from the same getPhaseMode source.
+        // A null phase means "no live boss" (dead/dying reference between HP
+        // zero and pool cleanup) — it is NOT a transition to armored, so no
+        // ceremony pulse may fire while the bar is still draining away.
+        const liveMode = this.gs?.getBossPhaseMode?.() ?? null;
+        const mode = liveMode ?? 'armored';
+        if (liveMode !== null && mode !== this.bossPhaseLast) {
+          this.bossPhaseLast = mode;
+          this.bossPhaseTransitionAt = this.time.now;
+        }
+        const bossPulse =
+          liveMode !== null && !prefersReducedMotion()
+            ? phaseTransitionPulse(this.time.now - this.bossPhaseTransitionAt)
+            : 0;
+        this.drawBossIdentityFrame(m, mode, bossPulse);
       }
     }
 
@@ -1020,6 +1053,52 @@ export class UIScene extends Phaser.Scene {
     fill.fillRoundedRect(x + 3, y + 2, width - 6, 2, 1);
   }
 
+  /**
+   * Boss-bar identity: hairline frame, six phase-tinted segment ticks and a
+   * red diamond emblem — one visual system with the world aura. `pulse` (0..1)
+   * is the shared phase-transition envelope: ticks thicken and brighten, the
+   * hairline frame lifts and the emblem outline flashes in the phase color,
+   * so armored -> recovery/broken reads as an event, not a quiet recolor.
+   */
+  private drawBossIdentityFrame(
+    m: { bossX: number; bossW: number },
+    mode: 'armored' | 'recovery' | 'broken',
+    pulse: number
+  ): void {
+    const phaseColor =
+      mode === 'broken' ? COLORS.green : mode === 'recovery' ? COLORS.gold : COLORS.white;
+    const phaseAlpha = mode === 'armored' ? 0.38 : 0.85;
+    const p = Number.isFinite(pulse) ? Math.min(1, Math.max(0, pulse)) : 0;
+    const tickAlpha = Math.min(1, phaseAlpha + 0.45 * p);
+    const tickWidth = 1.4 + 1.2 * p;
+    this.bossFrame.clear();
+    this.bossFrame.lineStyle(1, COLORS.white, 0.32 + 0.5 * p);
+    this.bossFrame.strokeRoundedRect(m.bossX - 1, HUD.row.bossBarY - 1, m.bossW + 2, HUD.row.bossBarH + 2, 4);
+    this.bossFrame.lineStyle(tickWidth, phaseColor, tickAlpha);
+    for (let i = 1; i < 6; i++) {
+      const x = m.bossX + (m.bossW / 6) * i;
+      this.bossFrame.lineBetween(x, HUD.row.bossBarY - 5, x, HUD.row.bossBarY - 1);
+    }
+    // Red diamond emblem at the bar's left: two triangles, matching the
+    // "prime" mark vocabulary (was a single triangle before this pass).
+    const midY = HUD.row.bossBarY + HUD.row.bossBarH / 2;
+    const tipX = m.bossX - 11;
+    const coreX = m.bossX - 6;
+    const rightX = m.bossX - 1;
+    const topY = HUD.row.bossBarY + 1;
+    const bottomY = HUD.row.bossBarY + HUD.row.bossBarH - 1;
+    this.bossFrame.fillStyle(COLORS.red, 0.95);
+    this.bossFrame.fillTriangle(tipX, midY, coreX, topY, rightX, midY);
+    this.bossFrame.fillTriangle(tipX, midY, rightX, midY, coreX, bottomY);
+    if (p > 0.01) {
+      this.bossFrame.lineStyle(1.2, phaseColor, 0.85 * p);
+      this.bossFrame.lineBetween(tipX, midY, coreX, topY);
+      this.bossFrame.lineBetween(coreX, topY, rightX, midY);
+      this.bossFrame.lineBetween(rightX, midY, coreX, bottomY);
+      this.bossFrame.lineBetween(coreX, bottomY, tipX, midY);
+    }
+  }
+
   private setHudCinematicAlpha(alpha: number): void {
     const value = Phaser.Math.Clamp(alpha, 0, 1);
     for (const obj of [
@@ -1031,6 +1110,7 @@ export class UIScene extends Phaser.Scene {
       this.hpFill,
       this.bossBack,
       this.bossFill,
+      this.bossFrame,
       this.bossLabel,
       this.timerText,
       this.levelText,
@@ -1450,9 +1530,32 @@ export class UIScene extends Phaser.Scene {
       const iconX = -cw / 2 + 39;
       const iconSize = compact ? 46 : 52;
 
+      // Rarity must read before the name does: tier pips in the header band
+      // (1=common, 2=rare, 3=legendary/evolution) plus a frame whose strength
+      // scales with the tier. Words alone (СТАНДАРТ/РЕДКИЙ in 11-12px) were
+      // measured indistinguishable at a glance in the Phase A audit.
+      const tier = special ? 3 : def.rarity === 'rare' ? 2 : 1;
+      for (let p = 0; p < tier; p++) {
+        card.add(
+          this.add
+            .circle(cw / 2 - 18 - (tier - 1 - p) * 13, -ch / 2 + 13, p === tier - 1 ? 4 : 3.2, accent, special ? 0.95 : 0.45 + tier * 0.12)
+            .setStrokeStyle(1, accent, special ? 0.6 : 0.3)
+        );
+      }
       if (special) {
         card.add(
-          this.add.rectangle(3, 0, cw - 20, ch - 8, COLORS.gold, legendary ? 0.055 : 0.025)
+          this.add
+            .rectangle(0, 0, cw - 2, ch - 2)
+            .setStrokeStyle(legendary ? 2.2 : 1.6, accent, legendary ? 0.9 : 0.6)
+        );
+        card.add(
+          this.add.rectangle(3, 0, cw - 20, ch - 8, VISUAL.warning, legendary ? 0.07 : 0.035)
+        );
+      } else if (def.rarity === 'rare') {
+        card.add(
+          this.add
+            .rectangle(0, 0, cw - 2, ch - 2)
+            .setStrokeStyle(1.2, accent, 0.5)
         );
       }
 
@@ -1479,7 +1582,7 @@ export class UIScene extends Phaser.Scene {
               fontFamily: FONT,
               fontSize: compact ? '22px' : '26px',
               fontStyle: 'bold',
-              color: special ? '#ffe066' : def.rarity === 'rare' ? '#cbb6ff' : '#73eaff',
+              color: special ? VISUAL_TEXT.warning : def.rarity === 'rare' ? VISUAL_TEXT.rare : VISUAL_TEXT.immune,
             })
             .setOrigin(0.5)
             .setResolution(2)
@@ -1593,7 +1696,7 @@ export class UIScene extends Phaser.Scene {
               fontFamily: UI_FONT,
               fontSize: compact ? '11px' : '12px',
               fontStyle: legendary || evolution ? '700' : '650',
-              color: legendary || evolution ? '#ffe066' : '#98ff8f',
+              color: legendary || evolution ? VISUAL_TEXT.warning : '#98ff8f',
             })
             .setOrigin(1, 0)
             .setResolution(2)

@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { startCombatFixture } = require('./lib/combat-fixture.cjs');
 const { chromium } = require('playwright-core');
 
 const chrome = ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(fs.existsSync);
@@ -65,7 +66,7 @@ async function textCenter(page, label) {
   page.on('pageerror', (error) => errors.push(String(error)));
   await page.goto('http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
-  await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
+  await startCombatFixture(page);
   await page.waitForFunction(
     () => window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI')
   );

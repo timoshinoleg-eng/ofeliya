@@ -1,4 +1,6 @@
 const fs = require('fs');
+const { installCombatFixture } = require('./lib/combat-fixture.cjs');
+const { installVideoTiming, waitForVideoGame } = require('./lib/video-timing.cjs');
 const { chromium } = require('playwright-core');
 
 const chrome = ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(fs.existsSync);
@@ -7,14 +9,11 @@ if (!chrome) throw new Error('Chrome not found');
 const VIEWPORT = { width: 390, height: 740 };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function touchAt(ctx, page, point) {
-  const cdp = await ctx.newCDPSession(page);
-  await cdp.send('Input.dispatchTouchEvent', {
-    type: 'touchStart',
-    touchPoints: [{ x: point.x, y: point.y, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
-  });
-  await sleep(35);
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+async function touchAt(_ctx, page, point) {
+  await page.evaluate(() => window.__recordVideoTiming?.('touch-dispatch'));
+  // Real touchStart/touchEnd via Playwright; avoid serial CDP ACK waits + Node sleep
+  // that stretched a tap into several frames inside the unrelated video budget.
+  await page.touchscreen.tap(point.x, point.y);
 }
 
 async function startButtonCenter(page) {
@@ -150,6 +149,8 @@ async function bootMenu(ctx, requests) {
   });
   await page.goto('http://127.0.0.1:5173/?video=1', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
+  await installCombatFixture(page);
+  await installVideoTiming(page);
   return { page, errors };
 }
 
@@ -228,7 +229,7 @@ async function visibleUiText(page, wanted) {
     const { page, errors } = await bootMenu(ctx, requests);
     const point = await startButtonCenter(page);
     if (!point) throw new Error('stall start button hit target missing');
-    const startedAt = Date.now();
+    const startedAt = performance.now();
     await touchAt(ctx, page, point);
     await sleep(350);
     const flashState = await page.evaluate(() => {
@@ -238,9 +239,7 @@ async function visibleUiText(page, wanted) {
     if (flashState !== '0') {
       throw new Error('unprogressed video became visible before fallback: ' + flashState);
     }
-    await page.waitForFunction(() => window.__game.scene.isActive('Game'), null, { timeout: 2800 });
-    const elapsed = Date.now() - startedAt;
-    if (elapsed > 2600) throw new Error('stall fallback exceeded watchdog budget: ' + elapsed);
+    await waitForVideoGame(page, { mode: 'stall', startedAt });
     if (errors.length) throw new Error('stall fallback caused page errors: ' + errors.join(' | '));
     await ctx.close();
   }
@@ -284,13 +283,9 @@ async function visibleUiText(page, wanted) {
     const { page, errors } = await bootMenu(ctx, requests);
     const point = await startButtonCenter(page);
     if (!point) throw new Error('duration-cap start button hit target missing');
-    const startedAt = Date.now();
+    const startedAt = performance.now();
     await touchAt(ctx, page, point);
-    await page.waitForFunction(() => window.__game.scene.isActive('Game'), null, { timeout: 4300 });
-    const elapsed = Date.now() - startedAt;
-    if (elapsed > 3900) {
-      throw new Error('maxDurationMs was not honored as an upper bound: ' + elapsed);
-    }
+    await waitForVideoGame(page, { mode: 'cap', startedAt });
     if (errors.length) throw new Error('duration-cap path caused page errors: ' + errors.join(' | '));
     await ctx.close();
   }

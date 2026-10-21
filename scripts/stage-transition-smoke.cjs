@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { startCombatFixture } = require('./lib/combat-fixture.cjs');
 const path = require('path');
 
 function browserDriver() {
@@ -43,7 +44,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   page.on('pageerror', (error) => errors.push(String(error)));
   await page.goto('http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
-  await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
+  await startCombatFixture(page, { isolateStageResets: true });
   await page.waitForFunction(() =>
     window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI')
   );

@@ -268,6 +268,102 @@ try {
       assert.equal(stored.submission.payload.dailyRunId,'new-ticket');
     }
   });
+  await test('same account later Daily result is attempted and both offline tickets survive', async () => {
+    for (const kind of ['telegram', 'max']) {
+      local.clear(); const dailyKey = 'ofeliya_daily_score_outbox_v1';
+      const messenger = { kind, initData: 'test-current-credential', getUser: () => ({ id: 101 }) };
+      const ticket = (id) => ({ runId: id, runSeed: result.runSeed, dateKey: '2026-10-20', issuedAt: Date.now(), expiresAt: Date.now() + 3600000 });
+      const requests = [];
+      global.fetch = async (_url, options) => { requests.push(JSON.parse(options.body)); return response(503); };
+      await submitDailyRunScoreDetailed(result, messenger, ticket('ticket-A'));
+      const old = JSON.parse(local.get(dailyKey));
+      await submitDailyRunScoreDetailed(result, messenger, ticket('ticket-B'));
+      assert.equal(requests.length, 2, 'new ticket must be attempted despite an older pending Daily');
+      const current = JSON.parse(local.get(dailyKey));
+      assert.equal(current.submission.payload.dailyRunId, 'ticket-B');
+      assert.equal(queue().find(e => e.submissionId === old.submissionId)?.submission.payload.dailyRunId, 'ticket-A');
+      assert.ok([...local.values()].every(v => !v.includes(messenger.initData)), 'credentials must not persist');
+      const settled = [];
+      global.fetch = async (_url, options) => { const body = JSON.parse(options.body); settled.push(body); return response(200, { ...accepted, dailyRunAccepted: true }); };
+      await retryPendingDailySubmission({ kind, initData: 'test-other-owner', getUser: () => ({ id: 102 }) });
+      assert.equal(settled.length, 0, 'other owner cannot replay either ticket');
+      await retryPendingDailySubmission({ ...messenger, initData: 'test-refreshed-credential' });
+      assert.deepEqual(settled.map(e => e.payload.dailyRunId).sort(), ['ticket-A', 'ticket-B']);
+      assert.ok(settled.every(e => e.initData === 'test-refreshed-credential'));
+      assert.ok(settled.some(e => e.submissionId === old.submissionId), 'old idempotency key survives');
+      assert.equal(local.has(dailyKey), false); assert.deepEqual(queue(), []);
+    }
+  });
+  await test('Daily migration keeps old ticket if the general outbox cannot persist it', async () => {
+    local.clear(); const dailyKey = 'ofeliya_daily_score_outbox_v1';
+    const messenger = { kind: 'telegram', initData: 'test-credential', getUser: () => ({ id: 101 }) };
+    const ticket = (id) => ({ runId: id, runSeed: result.runSeed, dateKey: '2026-10-20', issuedAt: Date.now(), expiresAt: Date.now() + 3600000 });
+    global.fetch = async () => response(503);
+    await submitDailyRunScoreDetailed(result, messenger, ticket('quota-A'));
+    const old = JSON.parse(local.get(dailyKey));
+    const setItem = global.localStorage.setItem;
+    global.localStorage.setItem = (k, v) => { if (k === key) throw new Error('QuotaExceededError'); setItem(k, v); };
+    try {
+      const outcome = await submitDailyRunScoreDetailed(result, messenger, ticket('quota-B'));
+      assert.equal(JSON.parse(local.get(dailyKey)).submissionId, old.submissionId, 'never release the old slot before durable migration');
+      assert.equal(outcome.status, 'network');
+    } finally { global.localStorage.setItem = setItem; }
+  });
+  await test('migrated Daily requires explicit acknowledgement and preserves ID after lost response', async () => {
+    for (const kind of ['telegram', 'max']) {
+      local.clear(); const dailyKey = 'ofeliya_daily_score_outbox_v1';
+      const messenger = { kind, initData: 'fresh-only-in-memory', getUser: () => ({ id: 101 }) };
+      const ticket = id => ({ runId: id, runSeed: result.runSeed, dateKey: '2026-10-20' });
+      global.fetch = async () => response(503);
+      await submitDailyRunScoreDetailed(result, messenger, ticket('ack-A'));
+      await submitDailyRunScoreDetailed(result, messenger, ticket('ack-B'));
+      const firstId = queue()[0].submissionId;
+      global.fetch = async (_url, options) => {
+        const body = JSON.parse(options.body);
+        return response(200, body.payload.dailyRunId === 'ack-B' ? { ...accepted, dailyRunAccepted: true } : accepted);
+      };
+      await retryPendingDailySubmission(messenger);
+      assert.equal(local.has(dailyKey), false);
+      assert.equal(queue()[0].submissionId, firstId, 'HTTP200 without Daily acknowledgement keeps ticket');
+      const acceptedIds = new Set(); const replayIds = [];
+      global.fetch = async (_url, options) => {
+        const body = JSON.parse(options.body); replayIds.push(body.submissionId);
+        if (!acceptedIds.has(body.submissionId)) {
+          acceptedIds.add(body.submissionId); throw new Error('response lost after server accepted');
+        }
+        return response(200, { ...accepted, dailyRunAccepted: true });
+      };
+      await retryPendingDailySubmission(messenger);
+      assert.equal(queue()[0].submissionId, firstId);
+      await retryPendingDailySubmission(messenger);
+      assert.deepEqual(replayIds, [firstId, firstId]);
+      assert.equal(acceptedIds.size, 1, 'same idempotency key models one server-side effect');
+      assert.deepEqual(queue(), []);
+      assert.ok([...local.values()].every(v => !v.includes(messenger.initData)));
+    }
+  });
+  await test('accepted direct Daily settles its migrated copy without removing the newer ticket', async () => {
+    for (const kind of ['telegram', 'max']) {
+      local.clear(); const dailyKey = 'ofeliya_daily_score_outbox_v1';
+      const messenger = { kind, initData: 'overlap-credential', getUser: () => ({ id: 101 }) };
+      const ticket = (id) => ({ runId: id, runSeed: result.runSeed, dateKey: '2026-10-20' });
+      const gate = deferred(); const requests = [];
+      global.fetch = async (_url, options) => {
+        const body = JSON.parse(options.body); requests.push(body);
+        return body.payload.dailyRunId === 'overlap-A' ? gate.promise : response(503);
+      };
+      const first = submitDailyRunScoreDetailed(result, messenger, ticket('overlap-A'));
+      const firstId = JSON.parse(local.get(dailyKey)).submissionId;
+      await submitDailyRunScoreDetailed(result, messenger, ticket('overlap-B'));
+      const secondId = JSON.parse(local.get(dailyKey)).submissionId;
+      assert.ok(queue().some(e => e.submissionId === firstId));
+      gate.resolve(response(200, { ...accepted, dailyRunAccepted: true }));
+      assert.equal((await first).status, 'ok');
+      assert.equal(JSON.parse(local.get(dailyKey)).submissionId, secondId);
+      assert.deepEqual(queue(), [], 'accepted migrated ticket must not remain queued');
+      assert.equal(requests.length, 2);
+    }
+  });
   await test('completed Daily retry cannot remove a replacement appended while awaiting response', async () => {
     local.clear();const dailyKey='ofeliya_daily_score_outbox_v1';
     local.set(dailyKey,JSON.stringify({submissionId:'old',ownerId:'101',submission:{platform:'telegram',payload:{dailyRunId:'old'}}}));

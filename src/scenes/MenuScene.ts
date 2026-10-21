@@ -41,6 +41,7 @@ import { SaveSystem } from '../systems/SaveSystem';
 import { fetchServerProfile } from '../systems/ProfileClient';
 import { RunCheckpoint } from '../systems/RunCheckpoint';
 import { Sfx } from '../systems/Sfx';
+import { prefersReducedMotion } from '../systems/MotionPreferences';
 import { StartupTrace } from '../systems/StartupTrace';
 import { VideoInterstitial } from '../systems/VideoInterstitial';
 import { loadDuelChallenge, trackDuelEvent } from '../systems/DuelClient';
@@ -95,7 +96,7 @@ export class MenuScene extends Phaser.Scene {
       .tileSprite(0, 0, W, H, 'blood-plasma')
       .setOrigin(0)
       .setDepth(-20);
-    this.tweens.add({
+    if (!prefersReducedMotion()) this.tweens.add({
       targets: plasma,
       tilePositionX: -120,
       duration: 9000,
@@ -117,7 +118,7 @@ export class MenuScene extends Phaser.Scene {
         .setAlpha(d.alpha)
         .setDepth(-12)
         .setRotation(Phaser.Math.FloatBetween(-Math.PI, Math.PI));
-      this.tweens.add({
+      if (!prefersReducedMotion()) this.tweens.add({
         targets: cell,
         x: cell.x + (i % 2 === 0 ? 28 : -22),
         y: cell.y + Phaser.Math.Between(-10, 10),
@@ -134,7 +135,7 @@ export class MenuScene extends Phaser.Scene {
       .setScale(artScale('host-cell-shadow', H < 650 ? 1.1 : 1.4))
       .setAlpha(0.1)
       .setDepth(-10);
-    this.tweens.add({
+    if (!prefersReducedMotion()) this.tweens.add({
       targets: host,
       scale: host.scaleX * 1.07,
       alpha: 0.14,
@@ -164,21 +165,21 @@ export class MenuScene extends Phaser.Scene {
     halo.lineStyle(BORDER.hair, VISUAL.player, 0.32);
     halo.strokeCircle(0, 0, specimenRadius - 11);
     halo.setAlpha(0.55);
-    this.tweens.add({ targets: halo, alpha: 1, duration: 2400, yoyo: true,
+    if (!prefersReducedMotion()) this.tweens.add({ targets: halo, alpha: 1, duration: 2400, yoyo: true,
       repeat: -1, ease: 'Sine.InOut' });
 
     const virus = this.add
       .image(W / 2, H * 0.27, 'virus-player')
       .setScale(artScale('virus-player', H < 650 ? 1.8 : 2.15))
       .setDepth(2);
-    this.tweens.add({
+    if (!prefersReducedMotion()) this.tweens.add({
       targets: virus,
       rotation: Math.PI * 2,
       duration: 12000,
       repeat: -1,
       ease: 'Linear',
     });
-    this.tweens.add({
+    if (!prefersReducedMotion()) this.tweens.add({
       targets: virus,
       scale: virus.scaleX * 1.06,
       duration: 1150,
@@ -386,6 +387,10 @@ export class MenuScene extends Phaser.Scene {
         .setDepth(5);
     }
 
+    // 320px cannot fit five utility labels at the minimum readable font, even
+    // after measuring. Reflow only on truly narrow viewports.
+    const narrowFooter = W < 344;
+    const compactStackShift = narrowFooter && H < 650 ? 24 : 0;
     const splitSelectors = W >= 360 && H >= 650;
     const selectorGap = splitSelectors ? 10 : 0;
     const selectorW = splitSelectors
@@ -393,7 +398,7 @@ export class MenuScene extends Phaser.Scene {
       : Math.min(W - 34, 330);
     const selectorH = splitSelectors ? 84 : H < 650 ? 46 : 54;
     const selectorY = splitSelectors ? H * 0.685 : 0;
-    const difficultyY = splitSelectors ? selectorY : H * 0.635;
+    const difficultyY = splitSelectors ? selectorY : H * 0.635 - compactStackShift;
     const difficultyX = splitSelectors ? W / 2 - selectorW / 2 - selectorGap / 2 : W / 2;
     const difficultyLeft = difficultyX - selectorW / 2;
     const difficultyRight = difficultyX + selectorW / 2;
@@ -501,7 +506,7 @@ export class MenuScene extends Phaser.Scene {
     difficultyBg.on('pointerover', () => difficultyBg.setAlpha(1));
     difficultyBg.on('pointerout', () => difficultyBg.setAlpha(0.97));
 
-    const controlY = splitSelectors ? selectorY : H * 0.715;
+    const controlY = splitSelectors ? selectorY : H * 0.715 - compactStackShift;
     const controlX = splitSelectors ? W / 2 + selectorW / 2 + selectorGap / 2 : W / 2;
     const controlH = splitSelectors ? selectorH : H < 650 ? 44 : 52;
     const controlLeft = controlX - selectorW / 2;
@@ -614,9 +619,9 @@ export class MenuScene extends Phaser.Scene {
     controlBg.on('pointerover', () => controlBg.setAlpha(1));
     controlBg.on('pointerout', () => controlBg.setAlpha(0.96));
 
-    const btnY = H * (resumeCheckpoint ? 0.785 : 0.805);
+    const btnY = H * (resumeCheckpoint ? 0.785 : 0.805) - (compactStackShift ? 20 : 0);
     const btnW = Math.min(W - 30, 338);
-    const btnH = resumeCheckpoint ? 58 : 66;
+    const btnH = resumeCheckpoint || compactStackShift ? 58 : 66;
     const btnAccent = incomingChallenge ? VISUAL.warning : VISUAL.player;
     this.add
       .rectangle(W / 2 + 3, btnY + 4, btnW, btnH, 0x050308, 0.58)
@@ -624,6 +629,7 @@ export class MenuScene extends Phaser.Scene {
     const btnBg = this.add
       .rectangle(W / 2, btnY, btnW, btnH, 0x472a38, 0.95)
       .setStrokeStyle(1, btnAccent, 0.58)
+      .setName('ofeliya-menu-action-bg')
       .setDepth(5);
     const actionSurface = createSpecimenSurface(this, W / 2, btnY, btnW, btnH,
       { fill: 0x472a38, accent: btnAccent, detail: 'specimen' }).setDepth(5);
@@ -813,22 +819,38 @@ export class MenuScene extends Phaser.Scene {
       let slotTotal = slotWidths.reduce((a, b) => a + b, 0);
       // Linux Chrome renders these labels measurably wider than local metrics. The
       // readability contract floors the row at 11px (compact) / 12px (tall), so only
-      // when the row cannot fit at all do we step one pixel down and re-measure.
-      if ((W - 16 - slotTotal) / (utilitySlots.length - 1) < 2) {
-        utilitySlots.forEach((t) => t.setFontSize(H < 650 ? 10 : 11));
+      // when the 4px gaps cannot fit do we normalize larger labels to that floor.
+      if ((W - 16 - slotTotal) / (utilitySlots.length - 1) < 4) {
+        utilitySlots.forEach((t) => t.setFontSize(H < 650 ? 11 : 12));
         slotWidths = utilitySlots.map((t) => t.width);
         slotTotal = slotWidths.reduce((a, b) => a + b, 0);
       }
-      const slotGap = Math.max(2, Math.min(28, (W - 16 - slotTotal) / (utilitySlots.length - 1)));
-      let slotX = (W - (slotTotal + slotGap * (utilitySlots.length - 1))) / 2;
-      utilitySlots.forEach((t, i) => {
-        t.setX(slotX + slotWidths[i] / 2);
-        slotX += slotWidths[i] + slotGap;
-        // setInteractive() snapshots the hit Rectangle once (InputPlugin
-        // setHitAreaFromTexture), so a grown label keeps its stale tap area
-        // unless the rectangle is resized here.
-        const hit = t.input?.hitArea;
-        if (hit && typeof hit.setSize === 'function') hit.setSize(t.width, t.height);
+      // A five-item row of 11px labels can require >320px once its margins
+      // and tap gaps are included. Keep the readable font and reflow 3+2.
+      const needsTwoRows = (W - 16 - slotTotal) / (utilitySlots.length - 1) < 4;
+      const groups = needsTwoRows ? [[0, 1, 2], [3, 4]] : [[0, 1, 2, 3, 4]];
+      // The first utility row must clear both the start button and optional
+      // resume/new-run button. On 360px tall layouts its old y overlapped START.
+      const rowStep = resumeCheckpoint ? 18 : 22;
+      const occupiedBottom = Math.max(btnY + btnH / 2, resumeCheckpoint ? btnY + 53 : -Infinity);
+      const firstRowHalfHeight = Math.max(...utilitySlots.slice(0, 3).map(t => t.height / 2));
+      const firstRowY = needsTwoRows
+        ? Math.max(utilityY - rowStep, occupiedBottom + 4 + firstRowHalfHeight)
+        : utilityY;
+      groups.forEach((indices, rowIndex) => {
+        const widths = indices.map((i) => slotWidths[i]);
+        const total = widths.reduce((a, b) => a + b, 0);
+        const slotGap = Math.max(4, Math.min(28, (W - 16 - total) / (indices.length - 1)));
+        let slotX = (W - total - slotGap * (indices.length - 1)) / 2;
+        for (const index of indices) {
+          const t = utilitySlots[index];
+          t.setX(slotX + slotWidths[index] / 2);
+          t.setY(needsTwoRows ? firstRowY + rowIndex * rowStep : utilityY);
+          slotX += slotWidths[index] + slotGap;
+          // setInteractive() snapshots the text hit area before later setText().
+          const hit = t.input?.hitArea;
+          if (hit && typeof hit.setSize === 'function') hit.setSize(t.width, t.height);
+        }
       });
     }
     const musicVolText = this.add
