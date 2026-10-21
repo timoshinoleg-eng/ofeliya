@@ -5,8 +5,16 @@ try{for(const viewport of [{width:320,height:568},{width:360,height:640},{width:
  const page=await browser.newPage({viewport,reducedMotion:'reduce'});const errors=[];page.on('pageerror',e=>errors.push(String(e)));await page.route('https://st.max.ru/**',route=>route.fulfill({body:'',contentType:'application/javascript'}));
  await page.addInitScript(({volume,muted})=>localStorage.setItem('ofeliya_save_v1',JSON.stringify({runs:1,muted,musicVolume:volume,sfxVolume:volume})),{volume,muted});
  await page.goto(process.env.OFELIYA_BASE_URL||'http://127.0.0.1:5173/',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>window.__game?.scene.isActive('Menu'));
- const row=await page.evaluate(()=>{const menu=window.__game.scene.getScene('Menu');return menu.children.list.filter(o=>o.type==='Text'&&/^(муз[·ы]|звук:|эфф[·е]|СВОДКА$|КОДЕКС )/.test(o.text)).map(o=>({text:o.text,font:parseFloat(o.style.fontSize),b:JSON.parse(JSON.stringify(o.getBounds()))})).sort((a,b)=>a.b.x-b.b.x);});
- assert.equal(row.length,5,JSON.stringify(row));for(let i=1;i<row.length;i++)assert.ok(row[i].b.x-(row[i-1].b.x+row[i-1].b.width)>=4-1e-6,JSON.stringify({viewport,volume,muted,row}));for(const item of row){assert.ok(item.font>=(viewport.height<650?11:12));assert.ok(item.b.x>=8-1e-6&&item.b.x+item.b.width<=viewport.width-8+1e-6,JSON.stringify({viewport,volume,muted,row}));}
+ const {row,button,freshRun}=await page.evaluate(()=>{const menu=window.__game.scene.getScene('Menu');const bounds=o=>o?JSON.parse(JSON.stringify(o.getBounds())):null;return {row:menu.children.list.filter(o=>o.type==='Text'&&/^(муз[·ы]|звук:|эфф[·е]|СВОДКА$|КОДЕКС )/.test(o.text)).map(o=>({text:o.text,font:parseFloat(o.style.fontSize),b:bounds(o)})),button:bounds(menu.children.list.find(o=>o.name==='ofeliya-menu-action-bg')),freshRun:bounds(menu.children.list.find(o=>o.name==='ofeliya-menu-new-run'))};});
+ assert.equal(row.length,5,JSON.stringify(row));
+ const bands=[];for(const item of row){let band=bands.find(b=>Math.abs(b[0].b.y-item.b.y)<3);if(!band){band=[];bands.push(band)}band.push(item)}
+ bands.sort((a,b)=>a[0].b.y-b[0].b.y);for(const band of bands)band.sort((a,b)=>a.b.x-b.b.x);
+ const required=row.reduce((sum,item)=>sum+item.b.width,0)+16+4*(row.length-1);
+ assert.equal(bands.length,required>viewport.width+1e-6?2:1,JSON.stringify({viewport,volume,muted,row,required}));
+ if(bands.length===2)assert.deepEqual(bands.map(b=>b.length),[3,2],JSON.stringify({viewport,row}));
+ for(const band of bands)for(let i=1;i<band.length;i++)assert.ok(band[i].b.x-(band[i-1].b.x+band[i-1].b.width)>=4-1e-6,JSON.stringify({viewport,volume,muted,row}));
+ if(bands.length>1){const upperBottom=Math.max(...bands[0].map(o=>o.b.y+o.b.height));const lowerTop=Math.min(...bands[1].map(o=>o.b.y));assert.ok(lowerTop-upperBottom>=4-1e-6,JSON.stringify({viewport,row}));const upperTop=Math.min(...bands[0].map(o=>o.b.y));assert.ok(upperTop-(freshRun?freshRun.y+freshRun.height:button.y+button.height)>=4-1e-6,JSON.stringify({viewport,row,button,freshRun}));}
+ for(const item of row){assert.ok(item.font>=(viewport.height<650?11:12));assert.ok(item.b.x>=8-1e-6&&item.b.x+item.b.width<=viewport.width-8+1e-6,JSON.stringify({viewport,volume,muted,row}));}
  assert.deepEqual(errors,[]);console.log('utility variants PASS '+JSON.stringify({viewport,volume,muted}));await page.close();
  }
  for(const reducedMotion of ['reduce','no-preference']){
