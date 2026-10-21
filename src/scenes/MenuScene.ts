@@ -829,6 +829,14 @@ export class MenuScene extends Phaser.Scene {
       // and tap gaps are included. Keep the readable font and reflow 3+2.
       const needsTwoRows = (W - 16 - slotTotal) / (utilitySlots.length - 1) < 4;
       const groups = needsTwoRows ? [[0, 1, 2], [3, 4]] : [[0, 1, 2, 3, 4]];
+      // The first utility row must clear both the start button and optional
+      // resume/new-run button. On 360px tall layouts its old y overlapped START.
+      const rowStep = resumeCheckpoint ? 18 : 22;
+      const occupiedBottom = Math.max(btnY + btnH / 2, resumeCheckpoint ? btnY + 53 : -Infinity);
+      const firstRowHalfHeight = Math.max(...utilitySlots.slice(0, 3).map(t => t.height / 2));
+      const firstRowY = needsTwoRows
+        ? Math.max(utilityY - rowStep, occupiedBottom + 4 + firstRowHalfHeight)
+        : utilityY;
       groups.forEach((indices, rowIndex) => {
         const widths = indices.map((i) => slotWidths[i]);
         const total = widths.reduce((a, b) => a + b, 0);
@@ -837,7 +845,7 @@ export class MenuScene extends Phaser.Scene {
         for (const index of indices) {
           const t = utilitySlots[index];
           t.setX(slotX + slotWidths[index] / 2);
-          t.setY(utilityY - (needsTwoRows && rowIndex === 0 ? (resumeCheckpoint ? 18 : 22) : 0));
+          t.setY(needsTwoRows ? firstRowY + rowIndex * rowStep : utilityY);
           slotX += slotWidths[index] + slotGap;
           // setInteractive() snapshots the text hit area before later setText().
           const hit = t.input?.hitArea;
