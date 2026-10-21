@@ -14,7 +14,10 @@ test('utility measured layout preserves four pixel gaps, font floors and refresh
         setX(x){this.x=x;},setY(y){this.y=y;},
         setFontSize(size){this.width*=size/this.size;this.size=size;}
       }));
-      new Function('utilitySlots','W','H','utilityY','resumeCheckpoint',body)(slots,W,H,utilityY,resumeCheckpoint);
+      const shift=W<344&&H<650?24:0;
+      const btnY=H*(resumeCheckpoint?.785:.805)-(shift?20:0);
+      const btnH=resumeCheckpoint||shift?58:66;
+      new Function('utilitySlots','W','H','utilityY','resumeCheckpoint','btnY','btnH',body)(slots,W,H,utilityY,resumeCheckpoint,btnY,btnH);
       const required=slots.reduce((sum,s)=>sum+s.width,0)+16+4*(slots.length-1);
       const rows=[...new Set(slots.map(s=>s.y))].sort((a,b)=>a-b);
       assert.equal(rows.length,required>W+1e-6?2:1,'reflow only when a single row cannot fit');
@@ -23,10 +26,8 @@ test('utility measured layout preserves four pixel gaps, font floors and refresh
         const upperBottom=Math.max(...slots.filter(s=>s.y===rows[0]).map(s=>s.y+s.height/2));
         const lowerTop=Math.min(...slots.filter(s=>s.y===rows[1]).map(s=>s.y-s.height/2));
         assert.ok(lowerTop-upperBottom>=4-1e-9,'minimum vertical row gap4');
-        const shift=W<344&&H<650?24:0;
-        const buttonY=H*(resumeCheckpoint?.785:.805)-(shift?20:0);
-        const buttonBottom=buttonY+(resumeCheckpoint||shift?58:66)/2;
-        const newRunBottom=resumeCheckpoint?buttonY+42+11:buttonBottom;
+        const buttonBottom=btnY+btnH/2;
+        const newRunBottom=resumeCheckpoint?btnY+53:buttonBottom;
         assert.ok(rows[0]-7-Math.max(buttonBottom,newRunBottom)>=4-1e-9,'footer clear of action/new-run buttons');
       }
       for(const s of slots) {
