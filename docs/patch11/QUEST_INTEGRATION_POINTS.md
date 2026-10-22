@@ -163,7 +163,7 @@ the local bookkeeping that keeps a receipt one-shot.
 * `baseline` — see §5.
 * `seenEventIds` — the idempotency key set, bounded at 1024 entries.
 
-The record is versioned (`version: 3`). A record of an older version is migrated, not
+The record is versioned (`version: 4`). A record of an older version is migrated, not
 discarded; a Muse record (a plain map of day to day state, no version field) is read as
 well, so a player who already has one on disk keeps it. A record of a **newer** version
 is read as far as it can be and never written back: the newer build owns it.
