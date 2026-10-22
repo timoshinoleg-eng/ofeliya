@@ -44,6 +44,7 @@
     "test:audio-assets": "node scripts/check-audio-assets.mjs",
     "test:result-actions": "node scripts/result-actions-smoke.cjs",
     "test:video": "node scripts/video-interstitial-smoke.cjs",
+    "test:video-a11y": "node tests/video-interstitial-a11y.mjs",
     "test:duel": "node scripts/check-duel.mjs",
     "test:telegram-share": "node scripts/check-telegram-share.mjs",
     "test:telegram-runtime": "node scripts/check-telegram-runtime.mjs",
