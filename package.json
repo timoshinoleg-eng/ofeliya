@@ -80,6 +80,7 @@
     "test:telegram-bot": "node scripts/check-telegram-bot.mjs",
     "test:caddy-edge": "node scripts/check-caddy-edge.mjs",
     "test:telegram-api": "node scripts/check-telegram-api-transport.mjs",
+    "test:telegram-tma": "node scripts/check-telegram-tma.mjs",
     "test:presentation": "node tests/core-art.mjs && node tests/vfx-presentation.mjs && node tests/atmosphere-presentation.mjs && node tests/audio-mix.mjs && node tests/biological-animation.mjs && node tests/biological-impact.mjs && node scripts/check-audio-assets.mjs && node tests/boss-presentation.mjs && node tests/mutation-art-recovery.mjs && node tests/social-hub-presentation.mjs",
     "test:art-startup": "node tests/startup-art-fallback.mjs",
     "test:mutation-art-recovery": "node tests/mutation-art-recovery.mjs",
@@ -87,7 +88,9 @@
     "test:integration-visual": "node tests/integration-visual-contracts.mjs",
     "test:natural-progression": "node scripts/natural-progression-smoke.cjs",
     "test:integration-visual-browser": "node scripts/integration-visual-smoke.cjs",
-    "test:video-cap-clock": "node tests/video-cap-clock.mjs"
+    "test:video-cap-clock": "node tests/video-cap-clock.mjs",
+    "test:quest-core": "node scripts/check-quest-core.mjs",
+    "test:quest-core-mutations": "node scripts/check-quest-core-mutations.mjs"
   },
   "overrides": {
     "source-map-js": "1.2.2"
