@@ -86,6 +86,9 @@ jobs:
       - name: B2 danger echo and B4 boss phase regressions
         run: npm run test:b2b4-fixes
 
+      - name: Quest core contract and mutation regressions
+        run: npm run test:quest-core && npm run test:quest-core-mutations
+
       - name: Run identity and mastery deterministic smoke
         run: npm run test:run-identity
 
