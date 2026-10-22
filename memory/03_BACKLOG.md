@@ -1,3 +1,35 @@
+# Patch 11 backlog, 2026-10-22
+
+Blocked on the owner:
+
+- The 14 Muse patch sources and the prepared Patch 11 material folder are not reachable from the implementation environment. They are not in the repository, not in git history and not in the Drive. They have to be supplied, by uploading them to the Drive or pushing them to a private repository, before the per-patch acceptance criteria for the remaining eight areas can be written. Until then the area list is derived from the owner brief plus the code, and no patch can be claimed as implemented.
+- MINIMAX_API_KEY is needed before Codex can execute against MiniMax. The provider profile is installed and verified up to exactly that boundary: the model and provider resolve, and the call stops on the missing credential.
+- The GitHub connector answers "invalid signature" on the connector catalog endpoint, continuing the outage that already cost the previous session 19+ hours. Until it recovers, or until a token is available, the stage 1 branch feat/patch11-tma-adaptation-20261022 and the integration branch docs/patch11-integration-map-20261022 cannot be pushed and their Draft PRs cannot be opened. A Draft PR body is prepared locally for each.
+- The sandbox egress is currently failing on two independent platform-side faults, both upstream of this environment. First, the intercepting proxy stopped rotating its leaf certificates: every intercepted host now serves a certificate whose 24 hour window has ended, so TLS fails for the connector API and for git alike, and even git fetch stops working. The certificate itself is genuine, it verifies against the trusted gateway CA with `Verify return code: 0 (ok)` when the clock is set inside its own validity window, and the sandbox clock is correct to within a second of the origin Date header, so this is a proxy issuance and rotation defect and not a substituted certificate. Second, with certificate verification relaxed the connector reaches the platform API and is still refused with `invalid signature` on the connector catalog endpoint, which is the sandbox egress identity held by the proxy and not reachable from inside the sandbox. The previous session lost 19+ hours to the same signature refusal. A plain git push would not help either: there is no GitHub token and no credential helper in this environment, so the connector is the only write path to GitHub.
+
+
+Sequencing, from the integration map:
+
+- Parallel-safe, because the files are disjoint: Telegram Mini App adaptation (done, stage 1), quests (greenfield), laboratory (greenfield), and the client side of analytics.
+- Sequential only, because GameScene.ts, UIScene.ts or MenuScene.ts is the single owner in each: core optimisation, Juice, achievements, skins, interfaces, and the server side of analytics.
+- Quests and laboratory must respect the PLAN.md deferral: permanent stat-grind meta progression is out of contract, and Codex/mastery progress stays informational and cosmetic. A laboratory that grants permanent damage, HP or movement is not a valid implementation.
+- Achievements must extend the existing nine ids in src/game/AchievementSystem.ts and the Codex screen in MenuScene.ts rather than introduce a second achievement store next to it.
+
+Verification still owed for stage 1, and owed for every stage the same way:
+
+- docker is unavailable in this environment, so test:telegram-compose and the image gates stay NOT_RUN and must be reported as NOT_RUN, never as PASS.
+- The browser-smoke job did not run here. A real device pass on a physical Samsung S20+ in a Telegram Mini App is the only way to confirm the vertical swipe lock and the viewport re-measure on the real host, and it is still open, as it is for every other stage.
+- The exact-head hosted CI on the pushed branch has not run, because the branch has not been pushed.
+
+Process notes for the next executor:
+
+- One worktree and one branch per stage, worktrees under /workspace/worktrees/, and no two stages may own the same file. The ownership table is in docs/patch11/INTEGRATION_MAP_20261022.md.
+- A stage adds its own npm script, but the CI wiring for all stages lands in one integration commit, so that stage branches never conflict on .github/workflows/ci.yml.
+- Every gate that did not execute is reported as NOT_RUN with the reason. A gate that was skipped is not a pass.
+- Two open questions from the stage 1 review, both deliberate and both recorded rather than silently dropped: whether the usable frame height should come from the Telegram --tg-viewport-height CSS variable instead of the raw viewportHeight, which matters only when the debug bottom bar is present, and whether the safeAreaChanged and contentSafeAreaChanged events should also be subscribed, because a rotation can change the safe area without changing the viewport height.
+
+---
+
 # Stage16 video CI continuation
 
 Stage16 video CI stabilization, 2026-10-20. Tested code 761fc01562165955e0b213bcb1d77b8f135f45f7, base c01a1ec1f0e5b89c4af59b5fae60bee9f89791ee.

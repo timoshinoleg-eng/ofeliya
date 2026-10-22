@@ -1,3 +1,38 @@
+# Patch 11 stage 1 — decisions, 2026-10-22
+
+Stage 1 is the Telegram Mini App adaptation, and it was chosen first because src/platform/ is the only already-shipped area that is isolated from every protected zone. Core optimisation, Juice, achievements, skins and interfaces all funnel through GameScene.ts, UIScene.ts and MenuScene.ts, so they cannot run in parallel worktrees without editing the same file, which is exactly the overlap the owner asked to avoid. Quests and laboratory do not exist at all, so they are greenfield and parallel-safe, but they are later in the owner sequence and their acceptance criteria depend on the patch material.
+
+The host capability is an optional adapter method, subscribeViewportChange?, rather than a required one. A required method would have forced a change in every adapter for a signal only the Telegram host produces. Optional keeps the MAX host and the generic browser host byte-identical in behaviour, which the MAX isolation assertion in the new gate pins down.
+
+The platform facade re-binds the viewport listener instead of pinning it to the adapter that happened to be active when the subscription was made, because the active adapter is resolved lazily and can change at runtime: a slow MAX bridge can appear after a Telegram Mini App, and a listener bound to the previous adapter would be silently lost.
+
+Unstable viewport events are ignored. Telegram reports isStateStable: false while the user is still dragging the Mini App open or closed, and the reported height is a moving target then. Re-measuring on those events would resize the Phaser canvas repeatedly during the gesture, which is a performance and visual-stability concern; the frame is now resized once, from the stable height. A negative control removes only that guard to prove the behaviour is covered.
+
+The legacy Telegram.WebApp.viewportChanged EventTarget branch was removed. The current SDK exposes the viewport event only through onEvent/offEvent; the branch could never run against a real client and its test coverage only proved that the test's own fabricated stub was handled, which is false confidence rather than a contract.
+
+The stage branch does not touch memory/**. The repository already excludes memory from the deploy and its own history records that scoped PR branches deliberately exclude shared memory, so two stages updating memory in parallel would guarantee a conflict. Memory is written once, here.
+
+Worktrees live at /workspace/worktrees/ rather than inside the checkout, because .worktrees is not in .gitignore and a worktree directory inside the repository would show up as untracked in the main tree, which is supposed to stay clean on main.
+
+Codex is wired to MiniMax M3.1 Flash through a Codex config profile, $CODEX_HOME/minimax.config.toml, activated with `codex -p minimax`. Codex 0.163 layers such a profile over the base config instead of editing it, so no existing Codex configuration, default model or default provider is touched, and removing the one file undoes the change. The API key is read from the MINIMAX_API_KEY environment variable and is never written into the profile.
+
+Real Telegram Stars and any paid credit path remain out of scope for Patch 11. Production, the main Telegram webhook and player data are untouched.
+
+The Telegram "shown again" signal is taken from the Telegram activated event, and the DOM visibility signal is kept as the generic fallback. The Telegram SDK derives its own visibility from the native webview message and emits activated; it does not listen to document.visibilitychange at all, so a DOM-only implementation would leave the swipe lock unapplied on the second open of the Mini App.
+
+The swipe lock is verified rather than assumed. Telegram defines disableVerticalSwipes on every client version, but below Bot API 7.7 the call only logs a warning and does nothing, so the code reads isVerticalSwipesEnabled afterwards and reports the case where the client ignored the request. The lock is still requested unconditionally on every show signal, because the host resets it and the client-side flag can be stale.
+
+A late Telegram SDK is adopted instead of being ignored. The SDK script is fetched at runtime, so it can land after the host adapter was first resolved, and the adapter is resolved lazily, so without a signal the Telegram host contract would never be applied. The loader now announces a present SDK through an ofeliya:telegram-bridge-ready signal and the platform facade re-resolves on it, mirroring the ofeliya:max-bridge-ready escape hatch the MAX host already had.
+
+Losing swipe-down-to-minimize and swipe-down-to-close is accepted, because the MAX host already does the same in MaxPlatform.ensureHostInitialized, and Telegram keeps the header swipe for closing. The alternative, keeping the swipe lock only while the game frame is not scrollable, is a later refinement, not a stage 1 requirement.
+
+The event bus stub in the new gate mirrors the shipped SDK: handlers are kept in an array per event type, onEvent deduplicates by reference, offEvent removes by reference, and an event invokes every registered handler. The earlier Map-of-one-callback stub could not see a double registration, which on the real SDK would fire the listener twice per event and resize the Phaser canvas twice. Twelve mutations of src/platform are all caught by the gate as it now stands.
+
+A stage branch carries its own CI step. The first draft of this rule moved the CI wiring to the integration branch, on the reasoning that every stage adds a gate and eight stage branches editing .github/workflows/ci.yml would guarantee a merge conflict. That was over-cautious: a stage PR that does not run its own gate in hosted CI is worth less than the convenience of never touching a shared file. The rule is now that no other file is shared, that each stage adds only its own named CI step and its own test:<name> npm script, and that the stages are rebased onto main in sequence at integration time, where the accumulated ci.yml steps are reconciled. The steps are independent one-line additions, so that reconciliation is trivial, and the stage branch and the integration branch were merge-tested to confirm they merge cleanly.
+
+
+---
+
 # Stage16 video CI continuation
 
 Stage16 video CI stabilization, 2026-10-20. Tested code 761fc01562165955e0b213bcb1d77b8f135f45f7, base c01a1ec1f0e5b89c4af59b5fae60bee9f89791ee.
