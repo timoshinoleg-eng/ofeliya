@@ -87,7 +87,9 @@
     "test:integration-visual": "node tests/integration-visual-contracts.mjs",
     "test:natural-progression": "node scripts/natural-progression-smoke.cjs",
     "test:integration-visual-browser": "node scripts/integration-visual-smoke.cjs",
-    "test:video-cap-clock": "node tests/video-cap-clock.mjs"
+    "test:video-cap-clock": "node tests/video-cap-clock.mjs",
+    "test:quest-core": "node scripts/check-quest-core.mjs",
+    "test:quest-core-mutations": "node scripts/check-quest-core-mutations.mjs"
   },
   "overrides": {
     "source-map-js": "1.2.2"

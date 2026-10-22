@@ -1,3 +1,81 @@
+# Patch 11 Stage 2 — quest core, second review closed
+
+Patch 11 Stage 2, second review closed, 2026-10-22. Tested code e0fa5d1 on base 6144b4d.
+D26. The no-damage quest counts the growth of the streak during the day, not the length of the streak. The record keeps streakLast, the day baseline of the streak is taken at the midnight, and a streak that continues over the boundary is counted only from the midnight on. The reason is a requirement, not a detail: the goal must be earned during the current UTC day, and a streak that started yesterday must not close today's goal for free. A streak that breaks is counted in full from its new start.
+D27. A restored run lowers the day baseline with the counter it restores. The baseline is the value the counter had at the day start; a checkpoint that is older than the quest record would otherwise leave the baseline above the counter, and the goal of the day would need the target plus the baseline. The survival time is a peak, so a restored run never lowers it.
+D28. The best value of the day is the progress of the day, and the snapshot exposes it. The raw counter of a run that crossed the midnight still holds yesterday's part, and the HUD has to show how the day went after the run metrics were reset.
+D29. The record format is version 4, and a version 3 record is read through the normal path with the streak count starting from zero. The old format could not tell a continuing streak from a broken one, so nothing can be recovered from it; the format never shipped.
+D30. A clock that jumps backwards must not block the writes. The coalescing window is measured in elapsed time, and a negative elapsed time is a clock fault, not a reason to keep the state in memory for an hour.
+D31. The harness catches a mutation only when the contract check fails with a genuine assertion error. A TypeScript diagnostic or any other failure is reported as a miss. A harness that catches everything is worse than no harness, because it reports a guarantee it does not test.
+D32. The constants of the quest core are pinned by literal in the contract check. Asserting a constant against the imported constant is a tautology, and the second review showed that six such guarantees survived the first harness untouched.
+D33. D22 and D25 are amended by the code that shipped. There is a day-scoped metric after all: the no-damage streak is day-scoped, because a streak that crossed the midnight must not close the new day's goal (D26). And not every other event writes through any more: every event write is coalesced over a second, and the day roll, the completion, the claim and the start of a run are the ones that write through. The second review found the old wording and the code in contradiction and the code is the truth.
+
+---
+
+## Previous recorded history (retained)
+
+# Patch 11 Stage 2 — quest core aligned with the Muse reference
+
+Patch 11 Stage 2, Muse alignment, 2026-10-22. Tested code 65f5e2a on base 6144b4d.
+D16. The quest vocabulary is the Muse reference. The ids, the Russian titles and descriptions, the counter names, the targets, the selection algorithm and the storage key ofeliya.quests.v1 are taken as they are, so the HUD copy, the analytics names and the daily set are the same on both sides. Changing an id is a catalog-only edit.
+D17. The Muse reward_rna is not taken. The client-side addRna on completion is a client-authoritative value grant and a second daily source next to the server Daily. The reward table belongs to the server, through a quest_completed grant with a server-side whitelist of quest ids. The quest core grants nothing and only produces a local receipt.
+D18. No inkjs. The Muse quests are counter goals, not branching narrative, so the content is transcribed as data. A dependency would collide with the integration diff and eat part of the five percent bundle budget for no gain.
+D19. The durations are in seconds, because the Muse targets are written in seconds. The product counters are in milliseconds, so the engine converts on the way in. The unit lives in the engine, not in the catalog, so there is one conversion and one place to get it wrong.
+D20. The Muse q_runs is not adopted as a counter. It is read at the start of the run, so it is one run behind. Here the lifetime total is mirrored from the product save through syncLifetime and is never counted by the quest core, and the mirror is never persisted, because a persisted copy could go stale.
+D21. A lifetime receipt is claimed once ever, not once per day. The lifetime quests measure a total that only grows, so a per-day claim would pay the milestone out again every day it is offered. The run-scoped quests are claimed once per day, as their counters reset with the run.
+D22. The day-scoped metric group is dropped. The Muse catalog has no day-scoped counter, and the per-day best/done/started state carries the day bookkeeping. One scope fewer, one source of truth fewer.
+D23. The record is version 3 and the key stays ofeliya.quests.v1. The key is the storage family of the Muse reference and is what the future server migration looks for; the authoritative version lives in the version field of the record, so a record written here is read through the migration path. A Muse record under that key is read too, so nothing on disk is thrown away.
+D24. The peak events are not remembered in the idempotency window. A run_tick carries the current value of a run counter rather than an occurrence, so a redelivery cannot change anything, and it arrives every frame. Only the discrete events fill the window of 1024 ids.
+D25. The peak writes are coalesced over a second, every other event writes through, and a day roll, a completion and a claim are written immediately. A synchronous localStorage write per frame is a frame-time hazard; a lost second of kills is not.
+D26. The grant idempotency key has to carry the day: ref = <dayKey>:<questId>. The quest id alone repeats across days, and the server grants on that key. This is a change to the server economy contract, so it is written into the integration document rather than applied here.
+D27. The daily set is the Muse set, pinned to five golden days. Determinism is a property of the algorithm, but a golden value is what proves that this build and the Muse build agree, and a golden value fails loudly when the algorithm drifts.
+D28. The port plan lists phase 3 as also to be ported, so the quest engine, the quest runtime and the quest state of the Muse stack are not ported as well. This subsystem replaces that layer. Porting them too would mean two quest systems, two daily sources and two save records.
+
+---
+
+## Previous recorded history (retained)
+
+# Patch 11 Stage 2 — quest core (local, unpublished)
+
+Patch 11 Stage 2 quest core, 2026-10-22. Tested code ff52980 on base 6144b4d, branch feat/patch11-quest-core-20261022.
+
+D1. The quest core is a standalone library, not a feature. Nothing in the game imports it in this stage, so the production bundle is unchanged and the product surfaces stay byte-identical. The integration stage wires it in. Rationale: the stage could be reviewed and rejected without touching a protected file, and the quest grant path is not part of the library at all.
+
+D2. No second daily source. The quest set is a rotation of goals, not a schedule of payouts: no quest calendar, no quest ticket, no RNA accrual, no client-authoritative value. The server Daily remains the only daily authority and the quest core imports nothing from it. The daily quest selection is global per UTC day and identical for every client, which makes it auditable and impossible to reroll by reinstalling.
+
+D3. The quest day is a UTC day and stays that way. The product's Daily ticket uses the server local calendar, so the two are different days for most players. The UTC day is kept because it is the only calendar that is identical for every client. The integration stage must not switch the quest day to the local calendar, because that would make the daily set differ per device and re-rollable by changing the device time zone.
+
+D4. Rewards are local-only. A finished quest produces a QuestLocalReceipt whose state is local_pending and never server_confirmed. QuestRewardGateway is defined as the seam for a future server check, but the core does not implement it and does not simulate it: without a gateway verifyWithServer answers unavailable, so a missing server check can never be mistaken for a confirmed one. No shop, no laboratory, no skins, no Stars, no Telegram Stars, no economy.
+
+D5. No second copy of a product counter. The lifetime totals are mirrored from the product save through syncLifetime and are never counted by the quest core, so the quest screen cannot drift away from SaveData. The mirror is not persisted, because a persisted copy could go stale; snapshot.lifetime.synced tells the HUD to hold the number back until the integration stage has applied it. The daily run counter moves only in the run_completed event, and the integration stage must emit that event at exactly one place, next to SaveSystem.recordRun, so the quest counter and the product counter move together and can never lag by one.
+
+D6. The metric scopes are run, day and lifetime, and they decide what resets when. Run-scoped metrics reset at run_started and keep their peak for the rest of the run. Day-scoped metrics reset at the UTC midnight. Lifetime is a mirror. The day counters are quest scope only: they count every run on the UTC calendar, while the product's per-day facts use the local calendar and cover daily runs only, so the two must never be rendered next to each other or added together.
+
+D7. The quest day only rolls forward. A device clock that jumps backwards, by a time zone correction or by hand, must not rewind the day: rewinding would wipe the progress of the day and allow a second receipt on the same UTC day.
+
+D8. A run-scoped quest has to improve during the day. The record keeps a baseline, the value every run-scoped metric had when the day started or when the run started, whichever is later, and the quest completes only when the run beats it. Without this, a run that reached its target yesterday completed today's quest for free the moment the game was opened.
+
+D9. The idempotency key is the event id and the guarantee is bounded, and the bound is written down. The engine remembers the last 1024 ids. The integration stage emits the events synchronously from the game loop, so a retry always lands inside the window; the bound exists to cap the size of the record, not to tolerate an arbitrarily late delivery. The document says exactly this rather than claiming an absolute guarantee.
+
+D10. No inkjs. The quests are counter goals, not branching narrative. A dependency change would have collided with the Codex integration diff and eaten into the 5% bundle budget for nothing. A .ink path stays a documented later option.
+
+D11. The save record has its own key, its own version and its own migration path. The quest record can never corrupt, migrate or shadow the product save, and the product save can never shadow the quest record. The version is 2; a version 1 record is migrated, and the migrated baseline is seeded with the run metrics the record was written with, so the migration cannot open the free-completion hole the baseline exists to close.
+
+D12. The contract is verified by a mutation harness, and the harness has to be honest. It restores the tree before every mutation, it refuses to count a catch that is only a TypeScript diagnostic, and it carries a control mutation that changes nothing and has to keep passing. A harness that fails on every edit would otherwise look like a working harness.
+
+D13. The isolation rules are checked at the source level, not by convention. Every module specifier has to be relative, so a static import, a re-export and a dynamic import are all caught; no quest file except questStorage.ts may use a browser global; and no quest file may declare a value field, compared per identifier segment so telegramStars and starBalance do not slip through. The scans look at code, not at prose: a doc comment that says the core never touches localStorage must not fail the check.
+
+D14. The stage branches stay independent. Stage 1 (TMA adaptation) and Stage 2 (quest core) touch disjoint files, so their patches do not conflict. package.json and .github/workflows/ci.yml are the two shared files and each stage adds its own script and its own CI step, so the branches are rebased sequentially at the integration stage rather than merged in parallel.
+
+D15. memory/** is updated at the end of every stage, because the repository convention is that a session ends with the four memory files updated and a commit. The entries are prepended and the recorded history is preserved byte for byte, so the integration stage rebases the branches in order and writes its own entry on top.
+
+---
+
+## Previous recorded history (retained)
+---
+
+## Previous recorded history (retained)
+
 # Stage16 video CI continuation
 
 Stage16 video CI stabilization, 2026-10-20. Tested code 761fc01562165955e0b213bcb1d77b8f135f45f7, base c01a1ec1f0e5b89c4af59b5fae60bee9f89791ee.
