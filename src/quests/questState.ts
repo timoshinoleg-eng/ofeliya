@@ -217,17 +217,20 @@ export function sanitizeQuestSaveData(
     }
   }
 
+  const baseline = sanitizeScopeValues(record.baseline, [
+    ...RUN_SCOPED_METRICS,
+    ...DAY_SCOPED_METRICS,
+  ]);
   return {
     version: QUEST_SAVE_VERSION,
     dayKey,
     days,
     runMetrics: sanitizeScopeValues(record.runMetrics, RUN_SCOPED_METRICS),
     dayMetrics: sanitizeScopeValues(record.dayMetrics, DAY_SCOPED_METRICS),
-    baseline: sanitizeScopeValues(record.baseline, [
-      ...RUN_SCOPED_METRICS,
-      ...DAY_SCOPED_METRICS,
-    ]),
-    streakLast: numberOrZero(record.streakLast),
+    baseline,
+    // v3 persisted the no-damage baseline but not the last observed streak.
+    // Seed last from that baseline, or a new clean streak can never reset it.
+    streakLast: numberOrZero(record.streakLast ?? baseline.q_nodmg),
     seenEventIds: stringList(record.seenEventIds).slice(-MAX_REMEMBERED_EVENT_IDS),
     claimedLifetime: stringList(record.claimedLifetime),
   };
@@ -384,7 +387,7 @@ function fromLegacyV1(
     runMetrics,
     dayMetrics: emptyScopeValues(DAY_SCOPED_METRICS),
     baseline,
-    streakLast: 0,
+    streakLast: numberOrZero(baseline.q_nodmg),
     seenEventIds: stringList(record.seenEventIds).slice(-MAX_REMEMBERED_EVENT_IDS),
     claimedLifetime: [],
   };
