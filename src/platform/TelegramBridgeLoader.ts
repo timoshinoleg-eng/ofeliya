@@ -60,11 +60,13 @@ export async function ensureTelegramBridge(timeoutMs = 2500): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     let settled = false;
     const finish = (): void => {
+      const ready = !!currentTelegramInitData();
+      // The timeout ends the boot wait, not the script request. Telegram's CDN may
+      // finish later; the already-resolved promise must not suppress host adoption.
+      if (ready) announceTelegramBridgeReady();
       if (settled) return;
       settled = true;
       window.clearTimeout(timer);
-      const ready = !!currentTelegramInitData();
-      if (ready) announceTelegramBridgeReady();
       resolve(ready);
     };
 
@@ -85,7 +87,12 @@ export async function ensureTelegramBridge(timeoutMs = 2500): Promise<boolean> {
       },
       { once: true }
     );
-    script.addEventListener('error', finish, { once: true });
+    script.addEventListener('error', () => {
+      // A failed request never emits 'load'. Leave no inert tag behind: a later
+      // invocation can issue a fresh request without reloading the Mini App.
+      script.remove();
+      finish();
+    }, { once: true });
     const timer = window.setTimeout(finish, timeoutMs);
   });
 }
