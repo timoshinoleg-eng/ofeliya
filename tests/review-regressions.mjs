@@ -90,8 +90,9 @@ try {
     failurePage.on('pageerror', error => pageErrors.push(String(error)));
     if (scenario.startsWith('bridge')) {
       await failurePage.route('**/src/platform/TelegramBridgeLoader.ts', route => route.fulfill({ contentType: 'application/javascript',
-        body: scenario === 'bridge-error' ? 'export async function ensureTelegramBridge(){throw new Error("fixture bridge failure")}'
-          : 'export async function ensureTelegramBridge(){await new Promise(()=>{})}' }));
+        body: 'export const TELEGRAM_BRIDGE_READY_EVENT = "ofeliya:telegram-bridge-ready";\n' +
+          (scenario === 'bridge-error' ? 'export async function ensureTelegramBridge(){throw new Error("fixture bridge failure")}'
+          : 'export async function ensureTelegramBridge(){await new Promise(()=>{})}') }));
     } else {
       await failurePage.route('**/src/platform/ViewportManager.ts', route => route.fulfill({ contentType: 'application/javascript',
         body: 'export class ViewportManager {start(){this.onResize=()=>window.__lateResize=true;window.addEventListener("resize",this.onResize)} async sync(){throw new Error("fixture boot failure")} destroy(){window.removeEventListener("resize",this.onResize);window.__viewportDestroyed=true}}' }));
