@@ -366,6 +366,19 @@ async function bootFrozen(page) {
     window.__game.registry.set('joy', { x: 0, y: 0 });
   });
   await sleep(220);
+  // This synthetic HUD-only run can receive a late progression pause after the
+  // first cleanup on slow CI hosts. Dismiss once more only for this frozen fixture;
+  // do not weaken any boss-label or scene assertions that follow.
+  await page.evaluate(() => {
+    const game = window.__game;
+    const ui = game.scene.getScene('UI');
+    if (game.scene.isPaused('Game')) ui.dismissProgressionForStageBoundary();
+  });
+  await page.waitForFunction(() => {
+    const game = window.__game;
+    const ui = game?.scene.getScene('UI');
+    return game?.scene.isActive('Game') && ui && !ui.modalOpen && !ui.transitionOverlay;
+  }, null, { timeout: 4000 });
 }
 
 async function setKills(page, kills) {

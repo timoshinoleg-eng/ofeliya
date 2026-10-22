@@ -674,7 +674,17 @@ async function bootGame(page) {
       const ui = game.scene.getScene('UI');
       return Boolean(gs?.enemyHealth && ui && (game.scene.isActive('Game') || game.scene.isPaused('Game')));
     }, null, { timeout: 15000 });
-    await resumePage.waitForTimeout(180);
+    // An interrupted tutorial hint is scheduled by the resumed UI scene.
+    // Wait for its real visibility rather than assuming a loaded CI runner
+    // always completes the cross-scene handoff within a fixed 180 ms.
+    await resumePage.waitForFunction(() => {
+      const game = window.__game;
+      const gs = game?.scene.getScene('Game');
+      const ui = game?.scene.getScene('UI');
+      return gs?.resumed === true &&
+        gs.pendingHostCellHints?.length === 2 &&
+        ui?.contextHintContainer?.visible === true;
+    }, null, { timeout: 3000 });
     const resumedFirstRun = await resumePage.evaluate(() => {
       const game = window.__game;
       const gs = game.scene.getScene('Game');
