@@ -34,6 +34,15 @@ const MUTATIONS = [
     ],
   },
 
+  {
+    name: 'v3 no-damage migration must seed previous streak from baseline',
+    edits: [{
+      file: 'questState.ts',
+      find: 'streakLast: numberOrZero(record.streakLast ?? baseline.q_nodmg),',
+      replace: 'streakLast: numberOrZero(record.streakLast),',
+    }],
+  },
+
   // --- the Muse compatibility -----------------------------------------------------------------
 
   {
@@ -936,7 +945,7 @@ try {
       const path = join(temp, 'src/quests', edit.file);
       const pristine = touched.has(edit.file)
         ? touched.get(edit.file)
-        : readFileSync(resolve('src/quests', edit.file), 'utf8');
+        : readFileSync(resolve('src/quests', edit.file), 'utf8').replace(/\r\n/g, '\n');
       if (!pristine.includes(edit.find)) {
         failures.push(`${mutation.name}: the mutation no longer matches the source of ${edit.file}`);
         applicable = false;

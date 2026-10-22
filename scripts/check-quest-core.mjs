@@ -1100,6 +1100,32 @@ try {
     );
   }
 
+  // --- 18c. version 3 migration must not inherit a ghost streak's previous baseline ---------
+  {
+    const older = JSON.stringify({
+      version: 3,
+      dayKey: DAY,
+      days: {},
+      runMetrics: { q_kills: 0 },
+      dayMetrics: { q_nodmg: 0 },
+      baseline: { q_nodmg: 45 },
+      seenEventIds: [],
+      claimedLifetime: [],
+    });
+    const { engine } = makeEngine({
+      storage: memoryStorage(older),
+      catalog: singleQuestCatalog('q_nodmg', 60),
+    });
+    const migrated = JSON.parse(recordOf(engine));
+    assert.equal(migrated.streakLast, 45,
+      'v3 migration should seed the last streak from the inherited baseline');
+    engine.ingest(tick('fresh-streak-start', 0, 0));
+    engine.ingest(tick('fresh-streak-60', 60_000, 60_000));
+    const ghost = progressOf(engine, 'only');
+    assert.equal(ghost.progress, 60, 'the old baseline must not mask new streak progress');
+    assert.equal(ghost.complete, true, 'ghost quest stays reachable after v3 to v4 migration');
+  }
+
   // --- 19. the version 1 record is migrated -------------------------------------------------------
 
   {
