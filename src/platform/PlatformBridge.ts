@@ -27,6 +27,17 @@ export interface PlatformAdapter {
   /** Build a platform-native app deeplink for a validated start payload, when configured. */
   buildStartLink(payload: string): string | null;
   getViewportSize(): Promise<{ width: number; height: number } | null>;
+  /**
+   * Optional host-driven viewport invalidation signal.
+   *
+   * Some hosts expose a virtual viewport that never fires a window resize event — the
+   * Telegram Mini App viewport changes when the keyboard opens, the app is expanded or the
+   * device rotates, and the host is the only component that knows about it. Adapters that
+   * can observe such a change push it here so the game can re-measure its frame.
+   *
+   * Returns an unsubscribe function. Hosts without such a signal simply omit the method.
+   */
+  subscribeViewportChange?(listener: () => void): () => void;
   setBackHandler(callback: (() => void) | null): void;
   shareResult(text: string, link?: string): Promise<boolean>;
   haptic(style?: HapticStyle): void;

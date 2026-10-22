@@ -61,6 +61,7 @@ export class ViewportManager {
   private game: Phaser.Game | null = null;
   private requestId = 0;
   private retryTimer: number | null = null;
+  private detachViewportListener: (() => void) | null = null;
 
   constructor(host: HTMLElement) {
     this.host = host;
@@ -76,6 +77,12 @@ export class ViewportManager {
     window.addEventListener('ofeliya:max-bridge-ready', this.onViewportSignal as EventListener);
     document.addEventListener('visibilitychange', this.onVisibility);
 
+    // A Telegram Mini App resizes its virtual viewport without firing a window resize event,
+    // so the host adapter can push an explicit invalidation signal.
+    this.detachViewportListener = PlatformBridge.subscribeViewportChange?.(() => {
+      void this.sync();
+    }) ?? null;
+
     // Covers the rare case where the MAX CDN bridge becomes available after the module bundle.
     this.retryTimer = window.setTimeout(() => void this.sync(), 350);
   }
@@ -85,6 +92,8 @@ export class ViewportManager {
     window.removeEventListener('orientationchange', this.onViewportSignal);
     window.removeEventListener('ofeliya:max-bridge-ready', this.onViewportSignal as EventListener);
     document.removeEventListener('visibilitychange', this.onVisibility);
+    this.detachViewportListener?.();
+    this.detachViewportListener = null;
     if (this.retryTimer !== null) window.clearTimeout(this.retryTimer);
     this.retryTimer = null;
     this.requestId += 1;

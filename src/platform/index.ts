@@ -7,6 +7,7 @@ import type {
 } from './PlatformBridge';
 import { BrowserPlatform } from './BrowserPlatform';
 import { MaxPlatform } from './MaxPlatform';
+import { TELEGRAM_BRIDGE_READY_EVENT } from './TelegramBridgeLoader';
 import { TelegramPlatform } from './TelegramPlatform';
 
 /**
@@ -20,6 +21,21 @@ class PlatformFacade implements PlatformAdapter {
   private telegram: TelegramPlatform | null = null;
   private activeAdapter: PlatformAdapter | null = null;
   private desiredBackHandler: (() => void) | null = null;
+  private desiredViewportListener: (() => void) | null = null;
+  private detachViewportListener: (() => void) | null = null;
+
+  constructor() {
+    // The Telegram SDK is fetched at runtime and can land after the first host resolution.
+    // Without this signal a slow load would keep the generic browser behaviour and the whole
+    // Telegram host contract would never be applied.
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener(TELEGRAM_BRIDGE_READY_EVENT, this.onTelegramBridgeReady);
+    }
+  }
+
+  private onTelegramBridgeReady = (): void => {
+    this.resolveAdapter();
+  };
 
   private resolveAdapter(): PlatformAdapter {
     let next: PlatformAdapter = this.browser;
@@ -34,8 +50,22 @@ class PlatformFacade implements PlatformAdapter {
       this.activeAdapter?.setBackHandler(null);
       this.activeAdapter = next;
       if (this.desiredBackHandler) next.setBackHandler(this.desiredBackHandler);
+      this.bindViewportListener();
     }
     return next;
+  }
+
+  /**
+   * Binds the pending viewport listener to the active adapter. The active adapter can change
+   * at runtime — a slow MAX bridge can appear after the Telegram Mini App — so the listener is
+   * re-bound instead of being pinned to the adapter that happened to be active at subscribe time.
+   */
+  private bindViewportListener(): void {
+    this.detachViewportListener?.();
+    this.detachViewportListener = null;
+    const adapter = this.activeAdapter;
+    if (!adapter || !this.desiredViewportListener) return;
+    this.detachViewportListener = adapter.subscribeViewportChange?.(this.desiredViewportListener) ?? null;
   }
 
   private get adapter(): PlatformAdapter {
@@ -58,6 +88,17 @@ class PlatformFacade implements PlatformAdapter {
   setBackHandler(callback: (() => void) | null): void {
     this.desiredBackHandler = callback;
     this.adapter.setBackHandler(callback);
+  }
+  subscribeViewportChange(listener: () => void): () => void {
+    this.desiredViewportListener = listener;
+    this.resolveAdapter();
+    this.bindViewportListener();
+    return () => {
+      if (this.desiredViewportListener !== listener) return;
+      this.desiredViewportListener = null;
+      this.detachViewportListener?.();
+      this.detachViewportListener = null;
+    };
   }
   shareResult(text: string, link?: string): Promise<boolean> {
     return this.adapter.shareResult(text, link);
