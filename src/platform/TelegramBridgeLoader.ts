@@ -1,5 +1,7 @@
 const TELEGRAM_SDK_URL = 'https://telegram.org/js/telegram-web-app.js?63';
 const SCRIPT_ID = 'ofeliya-telegram-web-app';
+/** Fired once the Telegram SDK is present, so a late load can still select the Telegram host. */
+export const TELEGRAM_BRIDGE_READY_EVENT = 'ofeliya:telegram-bridge-ready';
 
 export interface LocationLike {
   hash: string;
@@ -24,13 +26,36 @@ function currentTelegramInitData(): string {
   return host.Telegram?.WebApp?.initData ?? '';
 }
 
+/**
+ * Announces a late Telegram SDK.
+ *
+ * The Telegram script is fetched at runtime, so on a slow connection the SDK can land after
+ * the game has already resolved its host adapter. Without this signal the Telegram host
+ * contract would only be applied on the next unrelated host access, or not at all.
+ */
+function announceTelegramBridgeReady(): void {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+  try {
+    window.dispatchEvent(new Event(TELEGRAM_BRIDGE_READY_EVENT));
+  } catch {
+    // Safe no-op: the event is a hint, never a requirement.
+  }
+}
+
 export async function ensureTelegramBridge(timeoutMs = 2500): Promise<boolean> {
   if (typeof window === 'undefined' || typeof document === 'undefined') return false;
-  if (currentTelegramInitData()) return true;
+  if (currentTelegramInitData()) {
+    announceTelegramBridgeReady();
+    return true;
+  }
   if (!hasTelegramLaunchHint(window.location)) return false;
 
   const current = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
-  if (current?.dataset.loaded === '1') return !!currentTelegramInitData();
+  if (current?.dataset.loaded === '1') {
+    const ready = !!currentTelegramInitData();
+    if (ready) announceTelegramBridgeReady();
+    return ready;
+  }
 
   return new Promise<boolean>((resolve) => {
     let settled = false;
@@ -38,7 +63,9 @@ export async function ensureTelegramBridge(timeoutMs = 2500): Promise<boolean> {
       if (settled) return;
       settled = true;
       window.clearTimeout(timer);
-      resolve(!!currentTelegramInitData());
+      const ready = !!currentTelegramInitData();
+      if (ready) announceTelegramBridgeReady();
+      resolve(ready);
     };
 
     const script = current ?? document.createElement('script');
