@@ -1,0 +1,6 @@
+{
+  "command": "node scripts/check-quest-core.mjs",
+  "exitCode": 0,
+  "stdout": "quest core: Muse catalog and selection, UTC rotation, Muse storage key and record, run accounting, day progress, day streaks, lifetime mirror, forward-only day, event idempotency, single completion, single receipt, damaged saves, newer builds, coalesced writes, Daily isolation and catalog integrity PASS\n",
+  "stderr": ""
+}

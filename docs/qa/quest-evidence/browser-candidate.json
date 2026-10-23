@@ -1,0 +1,6 @@
+{
+  "candidate": true,
+  "exitCode": 0,
+  "stdout": "browser step 42\nbrowser step 43\nbrowser step 44\nbrowser step 95\nbrowser step 97\nbrowser step 103\nbrowser step 119\nbrowser step 120\nbrowser step 122\nbrowser step 134\nbrowser step 145\nbrowser step 269\nbrowser step 271\nbrowser step 288\nMAX browser smoke: ok\n",
+  "stderr": ""
+}

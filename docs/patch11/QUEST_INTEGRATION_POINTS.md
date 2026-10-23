@@ -4,8 +4,12 @@ This document is the contract between the quest core (`src/quests/`) and the pro
 It names every call site the integration stage has to touch, the exact event to emit
 there, and the rules that must not be broken.
 
-Nothing in this document has been applied. `src/quests/` is a standalone subsystem that
-is not imported by the game yet, so the production bundle is unchanged.
+Integration update (2026-10-23): GameScene now imports the local QuestRuntime producer,
+and Menu → Codex → Quests opens the read-only board. The original design below is
+historical where it describes integration as pending. Current event map, checkpoint
+semantics and actual PASS/FAIL/NOT_RUN evidence: [scene integration QA](../qa/QUEST_SCENE_INTEGRATION_20261023.md).
+The core stays isolated; the boundary adapter is src/quests/questRuntime.ts. There is
+no rewardGateway, claim UI or Daily mutation in this integration.
 
 ---
 

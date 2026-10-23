@@ -1,0 +1,58 @@
+[
+  {
+    "command": "npm run test:quest-core",
+    "exitCode": 1
+  },
+  {
+    "command": "npm run test:quest-runtime",
+    "exitCode": 1
+  },
+  {
+    "command": "npm run test:b2b4-fixes",
+    "exitCode": 1
+  },
+  {
+    "command": "npm run test:daily-v2",
+    "exitCode": 1
+  },
+  {
+    "command": "npm run test:score-outbox",
+    "exitCode": 1
+  },
+  {
+    "command": "npm run test:daily-history",
+    "exitCode": 1
+  },
+  {
+    "command": "npm run test:daily-cta",
+    "exitCode": 1
+  },
+  {
+    "command": "npm run test:daily-preview",
+    "exitCode": 1
+  },
+  {
+    "command": "npm run test:rng",
+    "exitCode": 1
+  },
+  {
+    "command": "npm run test:streaks",
+    "exitCode": 1
+  },
+  {
+    "command": "npm run test:integration-visual",
+    "exitCode": 1
+  },
+  {
+    "command": "npm run test:layout-diagnostics",
+    "exitCode": 1
+  },
+  {
+    "command": "npx tsc --noEmit",
+    "exitCode": 1
+  },
+  {
+    "command": "git diff --check",
+    "exitCode": 0
+  }
+]

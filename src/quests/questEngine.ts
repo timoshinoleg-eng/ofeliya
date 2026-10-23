@@ -234,6 +234,31 @@ export class QuestEngine {
     this.persist(true);
   }
 
+  /** Restore checkpoint counters without emitting a second run start. Day completions remain historical facts. */
+  restoreRunMetrics(values: { kills: number; timeMs: number; rna: number; mutations: number; elites: number }): void {
+    this.rollDayIfNeeded(this.clock.now());
+    const metrics = { q_kills: values.kills, q_time: Math.floor(values.timeMs / 1000),
+      q_rna: values.rna, q_mut: values.mutations, q_elites: values.elites };
+    for (const metric of RUN_SCOPED_METRICS) {
+      const value = Math.max(0, finiteOrZero(metrics[metric as keyof typeof metrics]));
+      this.state.runMetrics[metric] = value;
+      this.lowerBaseline(metric, value);
+    }
+    this.markDirty();
+    this.evaluateCompletion();
+    this.persist(true);
+  }
+
+  restoreNoDamageStreak(noDamageMs: number, previousDay: boolean): void {
+    this.rollDayIfNeeded(this.clock.now());
+    const current = Math.max(0, Math.floor(finiteOrZero(noDamageMs) / 1000));
+    // A checkpoint rewind is not a damage hit. In particular, yesterday's shorter
+    // checkpoint streak must not be mistaken for a new streak earned today.
+    this.state.streakLast = current;
+    this.state.baseline.q_nodmg = previousDay ? current : Math.min(this.state.baseline.q_nodmg ?? 0, current);
+    this.markDirty();
+  }
+
   /** Lowers the baseline of a counter to the value that was restored. */
   private lowerBaseline(metric: QuestMetric, value: number): void {
     const baseline = this.state.baseline[metric] ?? 0;

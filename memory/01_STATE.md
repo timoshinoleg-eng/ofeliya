@@ -1,3 +1,9 @@
+# Quest scene integration — 23.10.2026
+
+На feat/quest-scene-integration-20261023 от 66fc1a9 добавлены локальный typed producer, GameScene события, checkpoint metadata и read-only Menu→Codex→Quests. SaveSystem/Daily/outbox/Player/UIScene/Joystick/physics/RNG/server не изменены. Persistence использует существующие lifecycle listeners. Полная карта, tests/exit codes, screenshots и непройденные browser gates: docs/qa/QUEST_SCENE_INTEGRATION_20261023.md. Физический WebView и hosted CI NOT_RUN. Никаких публикаций.
+
+---
+
 # Stage16 video CI continuation
 
 Stage16 video CI stabilization, 2026-10-20. Tested code 761fc01562165955e0b213bcb1d77b8f135f45f7, base c01a1ec1f0e5b89c4af59b5fae60bee9f89791ee.

@@ -1,0 +1,6 @@
+{
+  "command": "node scripts/check-quest-runtime.mjs",
+  "exitCode": 0,
+  "stdout": "PASS quest producer persistence/resume/duplicate/UTC/terminal/restart/throttle\n",
+  "stderr": ""
+}

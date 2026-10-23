@@ -1,0 +1,6 @@
+
+> ofeliya@0.4.1-rc.1 test:rng
+> node scripts/check-rng.mjs && node scripts/check-checkpoint.mjs
+
+deterministic gameplay RNG smoke: ok
+checkpoint schema/validation smoke: ok

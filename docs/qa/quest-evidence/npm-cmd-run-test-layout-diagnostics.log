@@ -1,0 +1,5 @@
+
+> ofeliya@0.4.1-rc.1 test:layout-diagnostics
+> node tests/visible-text-bounds.mjs
+
+visible text bounds traversal: ok

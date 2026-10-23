@@ -1,0 +1,36 @@
+
+> ofeliya@0.4.1-rc.1 test:daily-cta
+> node scripts/check-daily-cta.mjs
+
+  ok  launchDailyRun writes the full registry block only on an ok ticket
+  ok  launchDailyRun leaves the registry untouched on 503 capacity
+  ok  launchDailyRun leaves the registry untouched on 403 denied
+  ok  launchDailyRun leaves the registry untouched on 500 http
+  ok  launchDailyRun leaves the registry untouched on malformed 200 http
+  ok  launchDailyRun leaves the registry untouched on old ruleset ticket
+  ok  launchDailyRun leaves the registry untouched on future campaign ticket
+  ok  launchDailyRun leaves the registry untouched on throw network
+  ok  launchDailyRun returns unavailable with no request for a browser identity
+  ok  submitDailyRunScoreDetailed 200 + dailyRunAccepted -> ok
+  ok  submitDailyRunScoreDetailed 200 without the flag -> rejected
+  ok  submitDailyRunScoreDetailed 403 -> denied
+  ok  submitDailyRunScoreDetailed 409 -> closed
+  ok  submitDailyRunScoreDetailed 410 -> expired
+  ok  submitDailyRunScoreDetailed 422 -> rejected
+  ok  submitDailyRunScoreDetailed 500 -> http
+  ok  submitDailyRunScoreDetailed throw -> network
+  ok  submitDailyRunScoreDetailed resumed result -> unavailable with zero requests
+  ok  submitDailyRunScoreDetailed seed mismatch -> unavailable with zero requests
+  ok  submitDailyRunScoreDetailed browser identity -> unavailable with zero requests
+  ok  submitDailyRunScore stays compatible (ok -> response, else null)
+  ok  resolveDailyResultBranch: resumed wins
+  ok  resolveDailyResultBranch: no intent -> inactive (ordinary/duel path)
+  ok  resolveDailyResultBranch: intent without ticket -> blocked (never ordinary)
+  ok  resolveDailyResultBranch: intent with mismatched runId -> blocked
+  ok  resolveDailyResultBranch: intent with mismatched seed -> blocked
+  ok  resolveDailyResultBranch: intent with expired ticket -> blocked
+  ok  resolveDailyResultBranch: intent with matching live ticket -> daily
+  ok  shouldCheckpoint: daily never checkpoints, ordinary always does
+  ok  every ticket/submit status maps to a non-empty copy slot
+  ok  DailyRunIntent source carries no initData/uid/logging
+daily cta contract: ok

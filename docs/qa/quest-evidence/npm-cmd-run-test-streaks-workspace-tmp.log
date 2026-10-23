@@ -1,0 +1,5 @@
+
+> ofeliya@0.4.1-rc.1 test:streaks
+> node scripts/check-no-damage-streak.mjs
+
+run-wide no-damage streak contract: ok

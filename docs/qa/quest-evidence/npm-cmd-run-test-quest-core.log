@@ -1,0 +1,5 @@
+
+> ofeliya@0.4.1-rc.1 test:quest-core
+> node scripts/check-quest-core.mjs
+
+quest core: Muse catalog and selection, UTC rotation, Muse storage key and record, run accounting, day progress, day streaks, lifetime mirror, forward-only day, event idempotency, single completion, single receipt, damaged saves, newer builds, coalesced writes, Daily isolation and catalog integrity PASS

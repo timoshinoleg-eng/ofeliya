@@ -1,0 +1,16 @@
+{
+  "baseHead": "66fc1a953409b90ed63b9acc9f9f55278b96c77f",
+  "dirtyCandidate": true,
+  "sha256": {
+    "package.json": "e7fff22e4523c6d7f76822cd83818a246a837d4745b3e78c24a6c6cd8132fe8c",
+    "src/quests/questRuntime.ts": "7059f40581ce250f0544cfb64beb646f4e3564b8cb0a9876323ec9f4d299768a",
+    "src/quests/questEngine.ts": "2c91ac2af2dfb7198a7b543b4af26f4e5ffd651db7786c3feb37327249efb1ab",
+    "src/quests/questTypes.ts": "8ebc0b8d6820b89e26fd239ce64239ad8fc2d6900fca94cffe5c6bb95c46c9e6",
+    "src/scenes/GameScene.ts": "e9f5262cc1302b527a5f99b4f954d6facf19bec354d55354f8aa2e8b5af7928c",
+    "src/scenes/MenuScene.ts": "80357458406ebd1afcac85032903fb62ad8e21a376a9dffa67dc0e33adc3c299",
+    "src/systems/RunCheckpoint.ts": "52e163a7d1fcbc9b66242fc7892f01a670ee45ffee9949e5f8889678bbf4cae0",
+    "src/ui/QuestBoard.ts": "84d5e587b70e31950f3a65d97e3939bf6552d9c793b53c09235304304eb74e62",
+    "scripts/check-quest-runtime.mjs": "019fd5312ce5ef6bf17d681fa906084c60ef6cbcc499eb00381e472d0efc7769",
+    "scripts/quest-scene-smoke.cjs": "b2af0c1d7545082a110ebe2e16c4cbf54c5b280a3dfbe9c4823df20ccbf52f0c"
+  }
+}
