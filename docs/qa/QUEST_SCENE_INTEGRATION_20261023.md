@@ -85,3 +85,10 @@ Storage best-effort: quota/запрет localStorage не гарантируют
 Для Vite/build установлены только dummy legal env: VITE_MAX_BOT_NAME=ofeliya_ci_bot; VITE_DEVELOPER_LEGAL_NAME=CI Test Developer; VITE_DEVELOPER_REGISTRATION=CI-REG-1; VITE_DEVELOPER_ADDRESS=CI Test Address; VITE_SUPPORT_EMAIL=qa@example.test. Release SHA брался git rev-parse HEAD. Сборка до коммита штампует исходный66fc1a9 при dirty candidate tree; это не опубликованный RC и не утверждение о final-head hosted CI. Финальные source hashes находятся в quest-evidence/source-manifest.json.
 
 Финальная проверка перед локальным коммитом: quest-core exit0; quest-runtime exit0; quest-core-mutations exit0 (83/83 + control); focused scenes exit0 (все четыре ширины + отдельный390 no-preference); npx tsc exit0; npm build exit0; diff --check exit0. Build warnings про runtime-config.js и font URL сохранены, настройки/порог проверок не менялись. Четыре project memory файла обновлены.
+
+## Post-commit preservation verification (2026-10-23)
+
+Codex detected that the previous commit replaced historical handoff context with a compact quest summary. Follow-up preserved the complete original 612-line handoff (base 66fc1a9) and full 21-line quest summary (7b5c435) as byte-exact substrings in memory/00_HANDOFF.md.
+Historical sha256: 4febee31573c5974ee24e838f11dd4e4671dd287a5de563dd84919ce0b7143de; 70956 bytes.
+Quest section sha256: 35fac3ed0b2196b43b1b8bd24fadd8c355ba7e03a138bc121f18fbbe9bed8f9e; 3625 bytes.
+No gameplay source changed in preservation follow-up. Full integration-visual-browser ETIMEDOUT remains unresolved. MiniMax post-review was based on excerpts and proves no general absence of defects. Second Codex audit session ended without final report; preservation was independently verified.
