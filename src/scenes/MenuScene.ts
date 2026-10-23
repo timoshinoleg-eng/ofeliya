@@ -1329,9 +1329,9 @@ export class MenuScene extends Phaser.Scene {
 
     overlay.add(
       this.add
-        .text(W / 2, top + panelH - 40, 'КВЕСТЫ · локальный прогресс', {
+        .text(W / 2, top + panelH - 40, 'КВЕСТЫ', {
           fontFamily: UI_FONT,
-          fontSize: compact ? '11px' : '12px',
+          fontSize: compact ? '13px' : '14px',
           fontStyle: '650',
           color: VISUAL_TEXT.ivory,
           align: 'center',
