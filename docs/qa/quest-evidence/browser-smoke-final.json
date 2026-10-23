@@ -1,0 +1,6 @@
+{
+  "command": "node scripts/browser-smoke.cjs",
+  "exitCode": 0,
+  "stdout": "MAX browser smoke: ok\n",
+  "stderr": ""
+}

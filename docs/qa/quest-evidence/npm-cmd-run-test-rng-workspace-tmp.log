@@ -1,0 +1,22 @@
+
+> ofeliya@0.4.1-rc.1 test:rng
+> node scripts/check-rng.mjs && node scripts/check-checkpoint.mjs
+
+file:///C:/Users/Public/ofeliya-quest-integration-20261023/.tmp-browser-smoke/quest-tmp/ofeliya-rng-PAnpcC/game/RunRng.js:2
+Object.defineProperty(exports, "__esModule", { value: true });
+                      ^
+
+ReferenceError: exports is not defined in ES module scope
+This file is being treated as an ES module because it has a '.js' file extension and 'C:\Users\Public\ofeliya-quest-integration-20261023\package.json' contains "type": "module". To treat it as a CommonJS script, rename it to use the '.cjs' file extension.
+    at file:///C:/Users/Public/ofeliya-quest-integration-20261023/.tmp-browser-smoke/quest-tmp/ofeliya-rng-PAnpcC/game/RunRng.js:2:23
+    at ModuleJobSync.runSync (node:internal/modules/esm/module_job:454:37)
+    at ModuleLoader.importSyncForRequire (node:internal/modules/esm/loader:445:47)
+    at loadESMFromCJS (node:internal/modules/cjs/loader:1600:24)
+    at Module._compile (node:internal/modules/cjs/loader:1763:5)
+    at Object..js (node:internal/modules/cjs/loader:1913:10)
+    at Module.load (node:internal/modules/cjs/loader:1505:32)
+    at Function._load (node:internal/modules/cjs/loader:1309:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+    at Module.require (node:internal/modules/cjs/loader:1527:12)
+
+Node.js v22.23.0

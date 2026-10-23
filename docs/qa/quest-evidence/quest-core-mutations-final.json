@@ -1,0 +1,6 @@
+{
+  "command": "node scripts/check-quest-core-mutations.mjs",
+  "exitCode": 0,
+  "stdout": "quest core mutations: 83/83 caught, 1 control unchanged (time zone Asia/Tokyo)\n",
+  "stderr": ""
+}

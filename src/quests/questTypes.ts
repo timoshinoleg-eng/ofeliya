@@ -144,7 +144,7 @@ export interface QuestEventBase {
 export type QuestEvent =
   | (QuestEventBase & { readonly kind: 'run_started' })
   | (QuestEventBase & { readonly kind: 'run_completed' })
-  | (QuestEventBase & { readonly kind: 'enemy_killed'; readonly elite?: boolean })
+  | (QuestEventBase & { readonly kind: 'enemy_killed'; readonly elite?: boolean; readonly enemyKind?: string })
   | (QuestEventBase & { readonly kind: 'rna_collected'; readonly delta: number })
   | (QuestEventBase & { readonly kind: 'mutation_chosen' })
   | (QuestEventBase & {

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { QuestRuntime } from '../quests/questRuntime';
 import { artScale } from '../game/ArtMetrics';
 import {
   COLORS,
@@ -126,6 +127,7 @@ interface ComprehensionPresentationState {
 const COMPREHENSION_STATE_KEY = 'ofeliya_comprehension_v1';
 
 export class GameScene extends Phaser.Scene {
+  private quests!: QuestRuntime;
   player!: Player;
   runState!: RunState;
 
@@ -313,6 +315,11 @@ export class GameScene extends Phaser.Scene {
     this.runState = new RunState(this.stageDirector.currentStage);
     if (resume) this.runState.restoreFromCheckpoint(resume.runState);
     this.resumed = resume !== null;
+    this.quests = new QuestRuntime();
+    this.quests.begin(SaveSystem.get().runs, resume?.quest, resume ? {
+      kills: this.runState.run.kills, timeMs: this.runState.run.timeMs,
+      noDamageMs: this.runState.stage.noDamageMs, savedAtEpochMs: resume.savedAtEpochMs,
+    } : undefined);
 
     // A ranked Standard run must prove that the server observed its start. Request
     // the capability here, after seed/control are final but before meaningful play.
@@ -562,6 +569,7 @@ export class GameScene extends Phaser.Scene {
     // Persist the latest safe checkpoint synchronously while the document is still alive.
     const flushLifecycleCheckpoint = (): void => {
       this.saveCheckpointNow();
+      this.quests.flush();
     };
     const flushHiddenCheckpoint = (): void => {
       if (document.visibilityState === 'hidden') flushLifecycleCheckpoint();
@@ -570,6 +578,7 @@ export class GameScene extends Phaser.Scene {
     document.addEventListener('visibilitychange', flushHiddenCheckpoint);
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.quests.flush();
       this.scale.off('resize', this.onResize, this);
       window.removeEventListener('pagehide', flushLifecycleCheckpoint);
       document.removeEventListener('visibilitychange', flushHiddenCheckpoint);
@@ -632,6 +641,7 @@ export class GameScene extends Phaser.Scene {
       this.applyRuntimeQuality(time);
     }
     this.runState.tick(delta);
+    this.quests.tick(this.runState.run.timeMs, this.runState.stage.noDamageMs);
     if (!this.resumed && this.runState.run.timeMs >= 60_000) {
       this.trackComprehensionOnce('run_60s', {
         runSeed: this.runSeed,
@@ -889,6 +899,7 @@ export class GameScene extends Phaser.Scene {
     this.enemyHealth?.hide(e);
     const st = this.runState.stage;
     this.runState.recordKill(COMBO.windowMs);
+    this.quests.kill(this.runState.run.kills, e.kind, e.isElite);
     this.trackComprehensionOnce('first_enemy_kill', {
       kind: e.kind,
       elite: e.isElite,
@@ -967,6 +978,7 @@ export class GameScene extends Phaser.Scene {
     this.runState.stage.hp -= damage;
     this.wave.recordPlayerDamage(damage, this.runState.stage.maxHp);
     this.runState.resetNoDamage();
+    this.quests.tick(this.runState.run.timeMs, 0, true);
     this.player.markHurt(now, this.player.x - enemy.x, this.player.y - enemy.y);
     Sfx.play('hurt');
     PlatformBridge.haptic('medium');
@@ -1238,6 +1250,7 @@ export class GameScene extends Phaser.Scene {
     Sfx.playPickupVariant();
     this.vfx.pickup(this.player.x, this.player.y);
     this.queuedLevels += this.runState.addXp(value);
+    this.quests.rna(value);
 
     // RNA pickup feedback is dispatched directly to the UI scene, while the main HUD reads the
     // registry snapshot. Keep both views of progression atomic so a skipped/paused Game update
@@ -1258,6 +1271,7 @@ export class GameScene extends Phaser.Scene {
     if (!def) return this.awaitingChoice;
     const rewardChoice = this.legendaryRewardPending;
     def.apply(this.runState);
+    this.quests.mutation();
     this.trackComprehensionOnce('first_mutation_selected', {
       id: def.id,
       kind: def.kind ?? 'upgrade',
@@ -1385,6 +1399,7 @@ export class GameScene extends Phaser.Scene {
     this.runState.stage.hp -= appliedDamage;
     this.wave.recordPlayerDamage(appliedDamage, this.runState.stage.maxHp);
     this.runState.resetNoDamage();
+    this.quests.tick(this.runState.run.timeMs, 0, true);
     this.player.markHurt(now, this.player.x - boss.x, this.player.y - boss.y);
     Sfx.play('hurt');
     PlatformBridge.haptic('medium');
@@ -1541,6 +1556,7 @@ export class GameScene extends Phaser.Scene {
     this.runState.stage.hp -= damage;
     this.wave.recordPlayerDamage(damage, this.runState.stage.maxHp);
     this.runState.resetNoDamage();
+    this.quests.tick(this.runState.run.timeMs, 0, true);
     this.player.markHurt(this.time.now);
     Sfx.play('hurt');
     PlatformBridge.haptic('medium');
@@ -1943,6 +1959,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     const checkpoint: RunCheckpointData = {
+      quest: this.quests.checkpoint(),
       schemaVersion: RUN_CHECKPOINT_SCHEMA_VERSION,
       rulesetVersion: SCORE_RULESET_VERSION,
       campaignVersion: SCORE_CAMPAIGN_VERSION,
@@ -1966,6 +1983,7 @@ export class GameScene extends Phaser.Scene {
           this.zeroPointNextAt > this.time.now ? this.zeroPointNextAt - this.time.now : 0,
       },
     };
+    this.quests.flush();
     return RunCheckpoint.save(checkpoint);
   }
 
@@ -2108,6 +2126,7 @@ export class GameScene extends Phaser.Scene {
     this.runState.stage.hp -= appliedDamage;
     this.wave.recordPlayerDamage(appliedDamage, this.runState.stage.maxHp);
     this.runState.resetNoDamage();
+    this.quests.tick(this.runState.run.timeMs, 0, true);
     this.player.markHurt(this.time.now, this.player.x - anomaly.x, this.player.y - anomaly.y);
     Sfx.play('hurt');
     PlatformBridge.haptic('medium');
@@ -2381,6 +2400,8 @@ export class GameScene extends Phaser.Scene {
       },
       this.difficulty.id === 'standard' && !this.resumed
     );
+    this.quests.tick(run.timeMs, stage.noDamageMs, true);
+    this.quests.end(SaveSystem.get().runs);
     this.captureAchievements(true, false);
     this.milestones.reset();
     this.registry.set('run', this.snapshot());
@@ -2640,6 +2661,7 @@ export class GameScene extends Phaser.Scene {
     this.runState.stage.hp -= e.dmg;
     this.wave.recordPlayerDamage(e.dmg, this.runState.stage.maxHp);
     this.runState.resetNoDamage();
+    this.quests.tick(this.runState.run.timeMs, 0, true);
     this.player.markHurt(now, this.player.x - e.x, this.player.y - e.y);
     Sfx.play('hurt');
     PlatformBridge.haptic('medium');

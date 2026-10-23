@@ -1,3 +1,12 @@
+# Quest integration backlog — 23.10.2026
+
+1. Разобрать/повторить полный integration-visual-browser: utility20 PASS, motion/Game часть не завершилась за внешний180s; причина пока не доказана. Не ослаблять тест.
+2. После отдельного разрешения публикации: hosted CI exact SHA и physical MAX/Telegram safe area/touch/thermal acceptance. Сейчас NOT_RUN.
+3. Необязательный компактный HUD — отдельная задача, текущий scope закрывает Menu→Codex→Quests.
+4. Известные границы: best-effort localStorage, single-tab local progress, legacy checkpoints без неизвестных RNA/mutation/elite counters; нет reward/server/account sync.
+
+---
+
 # Stage16 video CI continuation
 
 Stage16 video CI stabilization, 2026-10-20. Tested code 761fc01562165955e0b213bcb1d77b8f135f45f7, base c01a1ec1f0e5b89c4af59b5fae60bee9f89791ee.

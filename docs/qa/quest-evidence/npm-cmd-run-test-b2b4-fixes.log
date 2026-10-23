@@ -1,0 +1,8 @@
+
+> ofeliya@0.4.1-rc.1 test:b2b4-fixes
+> node tests/danger-echo.mjs && node tests/boss-phase-ceremony.mjs && node tests/reduced-motion.mjs
+
+behavioral geometry: 900/900 PASS; 0 FAIL
+danger echo: geometry 4-pool layer above clearing; runner/brute/boss/anomaly grammars echo; aura on single getter PASS
+boss phase ceremony: 420ms ease-out pulse on HUD frame + world aura; single getPhaseMode; bossFrame in cinematic dim; diamond emblem PASS
+reduced-motion contract passed (preference, camera shake, boss aura/HUD, actionable danger retained)

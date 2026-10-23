@@ -1,3 +1,4 @@
+import { validQuestCheckpoint, type QuestRunCheckpoint } from '../quests/questRuntime';
 import { STAGES } from '../game/StageDefinitions';
 import { xpForLevel, type RunStateCheckpoint, type StageBuildSnapshot } from '../game/RunState';
 import {
@@ -33,6 +34,7 @@ export interface RunCheckpointRuntime {
 }
 
 export interface RunCheckpointData {
+  quest?: QuestRunCheckpoint;
   schemaVersion: 1;
   rulesetVersion: number;
   campaignVersion: number;
@@ -355,7 +357,8 @@ export function validateRunCheckpoint(raw: unknown): RunCheckpointData | null {
     return null;
   }
 
-  return value as unknown as RunCheckpointData;
+  // Optional local quest metadata must never invalidate a valid gameplay checkpoint.
+  return { ...value, quest: validQuestCheckpoint(value.quest) ? value.quest : undefined } as unknown as RunCheckpointData;
 }
 
 function removeStoredCheckpoint(): void {

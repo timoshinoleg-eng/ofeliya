@@ -1,3 +1,13 @@
+# Quest integration decisions — 23.10.2026
+
+- Engine принадлежит GameScene producer; UI читает отдельный storage-backed view только в остановленном Menu. Singleton/новый глобальный event bus не понадобились. Для будущего одновременного HUD потребуется отдельный readonly subscription contract.
+- RNA — фактически собранный combat XP pickup; UI notify не источник. Elite определяется только e.isElite, тип врага передаётся отдельно.
+- Optional checkpoint.quest хранит run identity и дополнительные counters, без schema/score/ruleset bump. Невалидный payload не ломает gameplay resume. Новый delivery timeline при rollback исключает false dedup, day completion остаётся историческим фактом.
+- Resume вчерашнего shorter streak переустанавливает baseline без фиктивного сегодняшнего прогресса.
+- Только menu board, без HUD churn/наград/claim/Daily grant. Runtime terminal marker не является серверной reward receipt.
+
+---
+
 # Stage16 video CI continuation
 
 Stage16 video CI stabilization, 2026-10-20. Tested code 761fc01562165955e0b213bcb1d77b8f135f45f7, base c01a1ec1f0e5b89c4af59b5fae60bee9f89791ee.

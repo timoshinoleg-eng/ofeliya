@@ -1,0 +1,10 @@
+{
+  "command": "node scripts/quest-scene-smoke.cjs",
+  "env": {
+    "QUEST_WIDTH": "390",
+    "QUEST_MOTION": "no-preference"
+  },
+  "exitCode": 0,
+  "stdout": "PASS actual GameScene/Enemy/Gem/choice/damage/end + board x10 390\n",
+  "stderr": ""
+}

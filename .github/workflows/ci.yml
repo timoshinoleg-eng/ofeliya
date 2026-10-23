@@ -89,6 +89,9 @@ jobs:
       - name: Quest core contract and mutation regressions
         run: npm run test:quest-core && npm run test:quest-core-mutations
 
+      - name: Quest runtime and resume idempotency contracts
+        run: npm run test:quest-runtime
+
       - name: Run identity and mastery deterministic smoke
         run: npm run test:run-identity
 
@@ -211,6 +214,9 @@ jobs:
           for i in $(seq 1 40); do curl -fsS http://127.0.0.1:5173/ >/dev/null && exit 0; sleep .5; done
           cat /tmp/vite.log
           exit 1
+
+      - name: Muse quest-to-Phaser scenes and touch lifecycle
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:quest-scenes
 
       - name: Legendary nested-text layout across compact viewports
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:legendary-layout

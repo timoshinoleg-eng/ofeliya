@@ -1,0 +1,188 @@
+
+> ofeliya@0.4.1-rc.1 test:score-outbox
+> node scripts/check-score-outbox.mjs
+
+TAP version 13
+# Subtest: append during pending replay survives 200
+ok 1 - append during pending replay survives 200
+  ---
+  duration_ms: 13.3975
+  type: 'test'
+  ...
+# Subtest: append during pending replay survives 503
+ok 2 - append during pending replay survives 503
+  ---
+  duration_ms: 0.9889
+  type: 'test'
+  ...
+# Subtest: terminal 409 drops only the head and attempts the next entry
+ok 3 - terminal 409 drops only the head and attempts the next entry
+  ---
+  duration_ms: 1.472
+  type: 'test'
+  ...
+# Subtest: direct terminal 409 also removes its exact entry
+ok 4 - direct terminal 409 also removes its exact entry
+  ---
+  duration_ms: 1.4032
+  type: 'test'
+  ...
+# Subtest: terminal 410 drops only the head and attempts the next entry
+ok 5 - terminal 410 drops only the head and attempts the next entry
+  ---
+  duration_ms: 1.1935
+  type: 'test'
+  ...
+# Subtest: direct terminal 410 also removes its exact entry
+ok 6 - direct terminal 410 also removes its exact entry
+  ---
+  duration_ms: 0.9039
+  type: 'test'
+  ...
+# Subtest: terminal 422 drops only the head and attempts the next entry
+ok 7 - terminal 422 drops only the head and attempts the next entry
+  ---
+  duration_ms: 0.6842
+  type: 'test'
+  ...
+# Subtest: direct terminal 422 also removes its exact entry
+ok 8 - direct terminal 422 also removes its exact entry
+  ---
+  duration_ms: 0.4491
+  type: 'test'
+  ...
+# Subtest: transient 429 preserves order including an appended entry
+ok 9 - transient 429 preserves order including an appended entry
+  ---
+  duration_ms: 1.1837
+  type: 'test'
+  ...
+# Subtest: transient 500 preserves order including an appended entry
+ok 10 - transient 500 preserves order including an appended entry
+  ---
+  duration_ms: 0.6436
+  type: 'test'
+  ...
+# Subtest: transient 503 preserves order including an appended entry
+ok 11 - transient 503 preserves order including an appended entry
+  ---
+  duration_ms: 0.5336
+  type: 'test'
+  ...
+# Subtest: transient network preserves order including an appended entry
+ok 12 - transient network preserves order including an appended entry
+  ---
+  duration_ms: 1.1742
+  type: 'test'
+  ...
+# Subtest: transient abort preserves order including an appended entry
+ok 13 - transient abort preserves order including an appended entry
+  ---
+  duration_ms: 0.8103
+  type: 'test'
+  ...
+# Subtest: transient bad-json preserves order including an appended entry
+ok 14 - transient bad-json preserves order including an appended entry
+  ---
+  duration_ms: 0.7849
+  type: 'test'
+  ...
+# Subtest: transient invalid-body preserves order including an appended entry
+ok 15 - transient invalid-body preserves order including an appended entry
+  ---
+  duration_ms: 1.9084
+  type: 'test'
+  ...
+# Subtest: an older failed replay cannot resurrect an entry removed by overlapping replay
+ok 16 - an older failed replay cannot resurrect an entry removed by overlapping replay
+  ---
+  duration_ms: 0.6511
+  type: 'test'
+  ...
+# Subtest: bounded queue and replay IDs survive a stale pass and a lost response
+ok 17 - bounded queue and replay IDs survive a stale pass and a lost response
+  ---
+  duration_ms: 6.1042
+  type: 'test'
+  ...
+# Subtest: max credentials travel on the wire but never persist in either outbox
+ok 18 - max credentials travel on the wire but never persist in either outbox
+  ---
+  duration_ms: 1.8697
+  type: 'test'
+  ...
+# Subtest: max replay refreshes initData and preserves mismatched identity
+ok 19 - max replay refreshes initData and preserves mismatched identity
+  ---
+  duration_ms: 1.4474
+  type: 'test'
+  ...
+# Subtest: telegram credentials travel on the wire but never persist in either outbox
+ok 20 - telegram credentials travel on the wire but never persist in either outbox
+  ---
+  duration_ms: 0.6901
+  type: 'test'
+  ...
+# Subtest: telegram replay refreshes initData and preserves mismatched identity
+ok 21 - telegram replay refreshes initData and preserves mismatched identity
+  ---
+  duration_ms: 0.575
+  type: 'test'
+  ...
+# Subtest: v2 offline score remains v2 on replay and is removed after terminal rejection
+ok 22 - v2 offline score remains v2 on replay and is removed after terminal rejection
+  ---
+  duration_ms: 0.5627
+  type: 'test'
+  ...
+# Subtest: Daily terminal409 releases ordinary replay and overlapping Daily removal is exact
+ok 23 - Daily terminal409 releases ordinary replay and overlapping Daily removal is exact
+  ---
+  duration_ms: 0.9154
+  type: 'test'
+  ...
+# Subtest: fresh Daily submission supersedes legacy unknown or other-account slot
+ok 24 - fresh Daily submission supersedes legacy unknown or other-account slot
+  ---
+  duration_ms: 0.9743
+  type: 'test'
+  ...
+# Subtest: same account later Daily result is attempted and both offline tickets survive
+ok 25 - same account later Daily result is attempted and both offline tickets survive
+  ---
+  duration_ms: 2.596
+  type: 'test'
+  ...
+# Subtest: Daily migration keeps old ticket if the general outbox cannot persist it
+ok 26 - Daily migration keeps old ticket if the general outbox cannot persist it
+  ---
+  duration_ms: 0.7924
+  type: 'test'
+  ...
+# Subtest: migrated Daily requires explicit acknowledgement and preserves ID after lost response
+ok 27 - migrated Daily requires explicit acknowledgement and preserves ID after lost response
+  ---
+  duration_ms: 2.7702
+  type: 'test'
+  ...
+# Subtest: accepted direct Daily settles its migrated copy without removing the newer ticket
+ok 28 - accepted direct Daily settles its migrated copy without removing the newer ticket
+  ---
+  duration_ms: 1.329
+  type: 'test'
+  ...
+# Subtest: completed Daily retry cannot remove a replacement appended while awaiting response
+ok 29 - completed Daily retry cannot remove a replacement appended while awaiting response
+  ---
+  duration_ms: 0.472
+  type: 'test'
+  ...
+1..29
+# tests 29
+# suites 0
+# pass 29
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 134.3347
