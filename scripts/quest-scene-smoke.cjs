@@ -58,13 +58,16 @@ for(const viewport of [{width:320,height:568},{width:390,height:844},{width:768,
   const ui=game.scene.getScene('UI');ui.notifyRnaPickup(999);const presentation=state();
   gs.pendingChoices=[{id:'qa-choice',apply:()=>{},family:'weapon'}];gs.awaitingChoice=true;
   gs.chooseUpgrade('qa-choice');gs.chooseUpgrade('qa-choice');const mutation=state();
-  gs.runState.run.timeMs=65000;gs.runState.stage.noDamageMs=65000;gs.quests.tick(65000,65000,true);
+  gs.runState.run.timeMs=65950;gs.runState.stage.noDamageMs=65950;gs.quests.tick(65950,65950,true);
   const attacker=gs.spawnEnemy('swarm',gs.player.x+100,gs.player.y,false);gs.player.hurtUntil=0;
   gs.onPlayerHit(gs.player,attacker);const damage=state();
   const cp=gs.quests.checkpoint();
+  gs.quests.tick(125000,59050);
+  gs.runState.run.timeMs=125950;gs.runState.stage.noDamageMs=60000;
+  gs.quests.tick(125950,60000);const pendingTerminal=state();
   gs.finish(false);const end=state();const runs=JSON.parse(localStorage.getItem('ofeliya_save_v1')).runs;
   gs.finish(false);const duplicate=state();
-  return {liveTicks,baseline,killed,pickup,presentation,mutation,damage,end,duplicate,runs,cp};
+  return {liveTicks,baseline,killed,pickup,presentation,mutation,damage,pendingTerminal,end,duplicate,runs,cp};
  });
  assert.ok(result.liveTicks>=2,'actual Game.update must emit a tick after run_started');
  assert.equal(result.killed.runMetrics.q_kills-result.baseline.runMetrics.q_kills,1);
@@ -73,6 +76,9 @@ for(const viewport of [{width:320,height:568},{width:390,height:844},{width:768,
  assert.equal(result.presentation.runMetrics.q_rna,result.pickup.runMetrics.q_rna);
  assert.equal(result.mutation.runMetrics.q_mut-result.pickup.runMetrics.q_mut,1);
  assert.equal(result.damage.streakLast,0);assert.equal(result.end.runtime.ended,true);
+ assert.equal(result.pendingTerminal.lastTickTimeMs,125000,'scene final sample is suppressed before finish');
+ assert.equal(result.end.lastTickTimeMs,125950,'actual finish delivers pending tick');
+ assert.equal(result.end.streakLast,60,'actual damage then 60 real seconds survives finish');
  assert.deepEqual(result.end,result.duplicate);assert.equal(result.runs,2);
  const cycles=await page.evaluate(async()=>{
   const game=window.__game,gs=game.scene.getScene('Game'),menu=game.scene.getScene('Menu');
