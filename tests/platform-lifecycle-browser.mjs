@@ -8,6 +8,8 @@ const SDK = `
     initData: 'p11-synthetic-init', platform: 'android', version: '10.1',
     viewportHeight: 640, isVerticalSwipesEnabled: false,
     ready() {}, expand() {}, disableVerticalSwipes() {},
+    enableClosingConfirmation() { this.closingEnabled = true; },
+    disableClosingConfirmation() { this.closingEnabled = false; },
     onEvent(type, cb) { if (!handlers.has(type)) handlers.set(type, new Set()); handlers.get(type).add(cb); },
     offEvent(type, cb) { handlers.get(type)?.delete(cb); },
     emit(type) { for (const cb of [...(handlers.get(type) || [])]) cb({isStateStable:true}); },
@@ -100,10 +102,24 @@ export async function checkPlatformLifecycle(browser, url) {
     await page.evaluate(() => { window.Telegram = {WebApp:window.__p11Tg};window.dispatchEvent(new Event('resize')); });
     await page.waitForFunction(() => document.getElementById('game').dataset.viewportSource === 'telegram' && window.__game.scale.height === 600);
     assert.equal(await page.evaluate(() => window.__p11Tg.count('viewportChanged')), 1);
+    const adapterActivationHandlers = await page.evaluate(() => window.__p11Tg.count('activated'));
     await page.evaluate(() => {
       window.__game.scene.getScene('Menu').scene.start('Game');
     });
     await page.waitForFunction(() => window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI'));
+    assert.equal(await page.evaluate(()=>window.__p11Tg.closingEnabled),true,'Muse Game enables Telegram close confirmation');
+    await page.evaluate(()=>window.__p11Tg.emit('deactivated'));
+    await page.waitForFunction(()=>window.__game.scene.isPaused('Game'));
+    await page.evaluate(()=>window.__p11Tg.emit('activated'));
+    await page.waitForFunction(()=>window.__game.scene.isActive('Game'));
+    await page.evaluate(()=>window.__game.scene.getScene('UI').showPauseMenu());
+    await page.waitForFunction(()=>window.__game.scene.isPaused('Game'));
+    await page.evaluate(()=>{window.__p11Tg.emit('deactivated');window.__p11Tg.emit('activated');});
+    assert.equal(await page.evaluate(()=>window.__game.scene.isPaused('Game')),true,'host activation preserves manual pause');
+    await page.evaluate(()=>window.__game.scene.getScene('UI').closePauseMenu(true));
+    await page.evaluate(()=>window.__game.scene.getScene('Game').finish(false));
+    assert.equal(await page.evaluate(()=>window.__p11Tg.closingEnabled),false,'ending run disables close confirmation');
+    assert.equal(await page.evaluate(()=>window.__p11Tg.count('activated')),adapterActivationHandlers,'ending run removes only game activation callback');
     const final = await page.evaluate(async () => {
       const { ViewportManager } = await import('/src/platform/ViewportManager.ts');
       for (let i=0;i<3;i++) {
@@ -150,4 +166,35 @@ export async function checkPlatformLifecycle(browser, url) {
     assert.equal(retries,2);
     console.log('Browser: P11 real script network error + concurrent retry PASS');
   } finally { await retryPage.close(); }
+
+  const lateGame = await browser.newPage({viewport:{width:390,height:740}});
+  const lateErrors=[];lateGame.on('pageerror',e=>lateErrors.push(String(e)));
+  let releaseGameLoad;
+  const gameGate=new Promise(resolve=>{releaseGameLoad=resolve;});
+  await lateGame.route('https://st.max.ru/**',r=>r.fulfill({body:'',contentType:'application/javascript'}));
+  await lateGame.route('**/api/**',r=>r.fulfill({status:503,body:'{}'}));
+  await lateGame.route('https://telegram.org/js/**',async r=>{await gameGate;await r.fulfill({body:SDK,contentType:'application/javascript'});});
+  await lateGame.addInitScript(()=>localStorage.setItem('ofeliya_save_v1',JSON.stringify({runs:1,muted:true,tutorialDone:true})));
+  try {
+    await lateGame.goto(url,{waitUntil:'domcontentloaded'});
+    await lateGame.waitForFunction(()=>window.__game?.scene.isActive('Menu'));
+    await lateGame.evaluate(()=>{window.__game.scene.getScene('Menu').scene.start('Game');});
+    await lateGame.waitForFunction(()=>window.__game.scene.isActive('Game')&&window.__game.scene.isActive('UI'));
+    assert.equal(await lateGame.evaluate(async()=>{
+      location.hash='tgWebAppData=p11';
+      return (await import('/src/platform/TelegramBridgeLoader.ts')).ensureTelegramBridge(8);
+    }),false);
+    releaseGameLoad();
+    await lateGame.waitForFunction(()=>window.__p11Tg?.closingEnabled===true);
+    await lateGame.evaluate(()=>window.__p11Tg.emit('deactivated'));
+    await lateGame.waitForFunction(()=>window.__game.scene.isPaused('Game'));
+    await lateGame.evaluate(()=>window.__p11Tg.emit('activated'));
+    await lateGame.waitForFunction(()=>window.__game.scene.isActive('Game'));
+    await lateGame.evaluate(()=>window.__game.scene.getScene('Game').finish(false));
+    assert.equal(await lateGame.evaluate(()=>window.__p11Tg.closingEnabled),false);
+    console.log('Browser: Telegram SDK arriving after timeout during active Game binds pause/close and cleans up PASS');
+  } catch(error) {
+    console.error('late Game diagnostic',lateErrors,await lateGame.evaluate(()=>({scenes:window.__game.scene.scenes.map(s=>({key:s.scene.key,status:s.sys.settings.status})),splash:document.getElementById('splash')?.textContent})));
+    throw error;
+  } finally {releaseGameLoad();await lateGame.close();}
 }

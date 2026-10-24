@@ -75,6 +75,9 @@ try {
   assert.equal(invalidations, 3, 'both Telegram inset events reuse the viewport subscriber');
   detach(); assert.equal(supported.count('safeAreaChanged'), 0); assert.equal(supported.count('contentSafeAreaChanged'), 0);
   assert.equal(supported.count('viewportChanged'), 0);
+  const detachThrowing = telegram.subscribeViewportChange(() => { throw Error('consumer failure'); });
+  assert.doesNotThrow(() => supported.emit('safeAreaChanged'), 'safe-area callback failure cannot escape into host event bus');
+  detachThrowing();
 
   const malformed = fakeHost('8.0', {
     safeAreaInset: { top: NaN, right: 0, bottom: 0, left: 0 },

@@ -86,3 +86,11 @@ zoomScene.tweens.items[1].config.onComplete();
 assert.equal(zoomScene.cameras.main.zoom, 1.25);
 
 console.log('muse juice contract: OK');
+
+const destroyedScene = fakeScene();
+const destroyedPreview = Object.assign(new FakeEvents(), { alpha: 1, scaleX: 1, scaleY: 1 });
+assert.equal(rewardReveal(destroyedScene, destroyedPreview, { reduced: false }), true);
+destroyedPreview.emit('destroy');
+assert.equal(destroyedScene.events.count('shutdown'), 0, 'destroying a panel removes its effect shutdown listener');
+assert.equal(destroyedScene.tweens.items[0].tween.stopped, true, 'destroy stops the effect tween');
+assert.equal(destroyedPreview.count('destroy'), 0);

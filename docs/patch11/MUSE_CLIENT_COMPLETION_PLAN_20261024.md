@@ -37,3 +37,6 @@ Spec: user instruction dated 2026-10-24 and explicit scope answer: safe client o
 - Combined foundation created from verified platform head; two quest commits replayed without conflict as 5606ae4/e8c5197. No source edits beyond those verified PR deltas yet.
 - Ruling: failed network clone is preserved; independent local no-hardlink clone uses suffix -codex to avoid overwriting it.
 - Ruling: original Muse client-side grants and lab power are excluded by explicit user answer; cosmetic/observational equivalents are included and must be labeled honestly.
+- Safe client modules, collection integration, TMA lifecycle/theme and native effects implemented. Negative tests reproduced then fixed invalid mutation IDs, missing calendar history, optional telemetry automatic metadata, inset callback exception and tween target teardown.
+- Local mutation gate PASS: 86/86 and unchanged control. Quest scenes PASS all four viewport widths, 10 overlay cycles each; existing evidence PNG bytes preserved.
+- Local pre-existing startup-font 900ms splash check fails on this Windows host and on an in-memory baseline source probe; recorded as failure, no threshold relaxed. Other local/hosted gates tracked in docs/qa/MUSE_CLIENT_COMPLETION_20261024.md.

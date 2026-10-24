@@ -22,7 +22,7 @@ export interface OptionalWebAnalyticsOptions {
   websiteId?: string;
   /** Injection points for deterministic tests and embedded WebViews. */
   document?: Document;
-  window?: Window & { umami?: { track?: (event: string, properties?: Record<string, string | number | boolean>) => unknown } };
+  window?: Window & { umami?: { track?: (payload: Record<string, unknown>) => unknown } };
 }
 
 export interface OptionalWebAnalyticsClient {
@@ -103,10 +103,16 @@ function loadScript(documentRef: Document, src: string, websiteId: string): Prom
   script.src = src;
   script.setAttribute('data-website-id', websiteId);
   script.setAttribute('data-ofeliya-umami', key);
+  // Telegram launch credentials can live in query/hash. Never initialize automatic
+  // page/click tracking; manual events below use a complete, fixed URL-free payload.
+  script.setAttribute('data-auto-track', 'false');
+  script.setAttribute('data-exclude-search', 'true');
 
   const result = new Promise<boolean>((resolve) => {
-    script.onload = () => resolve(true);
+    const cleanup = () => { script.onload = null; script.onerror = null; };
+    script.onload = () => { cleanup();resolve(true); };
     script.onerror = () => {
+      cleanup();
       script.remove();
       byKey?.delete(key);
       resolve(false);
@@ -136,7 +142,8 @@ export function createOptionalWebAnalytics(options: OptionalWebAnalyticsOptions 
       const track = windowRef?.umami?.track;
       if (typeof track !== 'function') return false;
       try {
-        track.call(windowRef?.umami, event, safeProperties(properties));
+        track.call(windowRef?.umami, { website: config.websiteId, url: '/ofeliya',
+          title: 'OFELIYA', name: event, data: safeProperties(properties) });
         return true;
       } catch {
         return false;

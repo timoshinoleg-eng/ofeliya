@@ -54,13 +54,16 @@ assert.deepEqual(reloaded.observeRun({ id: 'kills-500', kills: 500 }), [], 'dupl
 assert.equal(reloaded.snapshot().achievements.find((a) => a.id === 'killer_500').unlocked, true);
 assert.equal(reloaded.snapshot().ownedSkinIds.includes('skin.gilded-prime'), true);
 
+const bogus = new ClientCollection(memoryStorage(), () => now);
+bogus.observeRun({id:'bogus',mutations:['a','b','c','d','e'],evolutions:['a','b','c','d','e']});
+assert.equal(bogus.snapshot().achievements.find(a=>a.id==='evo_5').unlocked,false,'unknown mutations cannot open cosmetic unlocks');
 const boundaries = new ClientCollection(memoryStorage(), () => now);
 boundaries.observeRun({ id: 'combo-49', combo: 49 });
 assert.equal(boundaries.snapshot().achievements.find((a) => a.id === 'combo_50').unlocked, false, 'combo 49 is below threshold');
-boundaries.observeRun({ id: 'combo-50', combo: 50, evolutions: ['a', 'b', 'c', 'd', 'e'] });
+boundaries.observeRun({ id: 'combo-50', combo: 50, evolutions: ['prism', 'halo', 'singularity'], mutations: ['dmg', 'rate', 'multi', 'pierce', 'speed'] });
 assert.equal(boundaries.snapshot().achievements.find((a) => a.id === 'combo_50').unlocked, true, 'combo 50 unlocks');
-assert.equal(boundaries.snapshot().achievements.find((a) => a.id === 'evo_5').unlocked, true, 'five distinct evolutions unlock');
-assert.equal(boundaries.selectSkin('skin.virulent-magenta'), true, 'evolution achievement earns a palette');
+assert.equal(boundaries.snapshot().achievements.find((a) => a.id === 'evo_5').unlocked, true, 'five real mutation kinds unlock (only three critical evolutions exist)');
+assert.equal(boundaries.selectSkin('skin.virulent-magenta'), true, 'mutation collection earns a palette');
 boundaries.observeRun({ id: 'ghost-119999', noDamageMs: 119_999 });
 assert.equal(boundaries.snapshot().achievements.find((a) => a.id === 'ghost_120').unlocked, false, '119999 ms is below threshold');
 boundaries.observeRun({ id: 'ghost-120000', noDamageMs: 120_000 });
@@ -97,6 +100,10 @@ now += 86400000;
 visits.visit();
 assert.equal(visits.snapshot().visitDays, 2, 'next UTC day counted as informational visit');
 assert.equal(visits.snapshot().visitStreak, 2, 'visit streak is informational');
+assert.deepEqual(visits.snapshot().recentVisitDays, ['2026-01-01','2026-01-02'], 'calendar stores actual visit dates only');
+now += 2*86400000;visits.visit();
+assert.equal(visits.snapshot().visitStreak,1,'a missed UTC day breaks current streak');
+assert.deepEqual(visits.snapshot().recentVisitDays, ['2026-01-01','2026-01-02','2026-01-04']);
 console.log('muse collection contract: OK');
 
 

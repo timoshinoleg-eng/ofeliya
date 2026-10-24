@@ -1,3 +1,5 @@
+import { UPGRADES, EVOLUTION_NAMES } from '../UpgradeSystem';
+import { LEGENDARIES } from '../LegendarySystem';
 /**
  * Local, observational achievements and cosmetic ownership.
  * This module never writes to SaveSystem, the wallet, or authoritative run state.
@@ -25,11 +27,13 @@ export interface RunObservation {
   evolutions: readonly string[];
   legendaryIds: readonly string[];
   won: boolean;
+  rnaCollected?: number;
 }
 
 type Metric =
   | 'kills' | 'runs' | 'evolutions' | 'visitDays' | 'hostCells' | 'elites'
-  | 'survivalMs' | 'combo' | 'noDamageMs' | 'wins' | 'mutations' | 'legendaries';
+  | 'survivalMs' | 'combo' | 'noDamageMs' | 'wins' | 'mutations' | 'legendaries'
+  | 'visitStreak' | 'losses' | 'rnaCollected';
 
 export interface AchievementDefinition {
   id: string;
@@ -64,6 +68,7 @@ export interface CollectionSnapshot {
   /** Informational UTC login-day counters. They do not grant anything. */
   visitDays: number;
   visitStreak: number;
+  recentVisitDays: string[];
   readOnly: boolean;
 }
 
@@ -71,10 +76,10 @@ const DEFAULT_SKIN_ID = 'strain-zero';
 
 /**
  * The Muse catalog's 24 IDs are retained for continuity. Original currency,
- * spend, claim, quest, and death criteria were replaced by observations this
- * client can measure. In particular, streak_* records distinct visit days,
- * not a claim or reward; quests_* records infected host cells; deaths_100 is
- * completed runs; stars_* records elite encounters; rna_* records survival.
+ * spend and claim criteria are replaced by client observations: quests_* records
+ * infected host cells, stars_* elite kills, and rna_* collected combat RNA (no grant).
+ * Streaks remain consecutive UTC visits. evo_5 measures five standard mutations,
+ * because this campaign has only three critical evolutions.
  */
 export const COLLECTION_CATALOG: readonly AchievementDefinition[] = [
   { id: 'killer_500', title: 'ЧИСТИЛЬЩИК', description: '500 уничтоженных противников суммарно', metric: 'kills', threshold: 500 },
@@ -85,18 +90,18 @@ export const COLLECTION_CATALOG: readonly AchievementDefinition[] = [
   { id: 'runs_10', title: 'ЗАВСЕГДАТАЙ', description: 'Завершить 10 забегов', metric: 'runs', threshold: 10 },
   { id: 'runs_50', title: 'ХРОНИК', description: 'Завершить 50 забегов', metric: 'runs', threshold: 50 },
   { id: 'runs_100', title: 'ЛЕГЕНДА ШТАММА', description: 'Завершить 100 забегов', metric: 'runs', threshold: 100 },
-  { id: 'evo_5', title: 'КОЛЛЕКЦИОНЕР МУТАЦИЙ', description: 'Увидеть 5 разных критических эволюций', metric: 'evolutions', threshold: 5, unlockSkinId: 'skin.virulent-magenta' },
+  { id: 'evo_5', title: 'КОЛЛЕКЦИОНЕР МУТАЦИЙ', description: 'Выбрать 5 разных видов мутаций', metric: 'mutations', threshold: 5, unlockSkinId: 'skin.virulent-magenta' },
   { id: 'daily_first', title: 'ВОЗВРАЩЕНИЕ', description: 'Посетить игру в первый UTC-день', metric: 'visitDays', threshold: 1 },
-  { id: 'streak_3', title: 'РЕГУЛЯРНОСТЬ', description: 'Посетить игру в 3 разных UTC-дня', metric: 'visitDays', threshold: 3 },
-  { id: 'streak_7', title: 'НЕДЕЛЯ ЗАРАЖЕНИЯ', description: 'Посетить игру в 7 разных UTC-дней', metric: 'visitDays', threshold: 7 },
-  { id: 'streak_30', title: 'МЕСЯЦ ПАНДЕМИИ', description: 'Посетить игру в 30 разных UTC-дней', metric: 'visitDays', threshold: 30 },
-  { id: 'quests_10', title: 'ИСПОЛНИТЕЛЬ', description: 'Инфицировать 10 клеток хозяина', metric: 'hostCells', threshold: 10 },
-  { id: 'quests_50', title: 'МАШИНА ЗАДАНИЙ', description: 'Инфицировать 100 клеток хозяина', metric: 'hostCells', threshold: 100 },
-  { id: 'stars_1', title: 'ПЕРВЫЙ ВКЛАД', description: 'Победить одного элитного противника', metric: 'elites', threshold: 1 },
-  { id: 'stars_500', title: 'ИНВЕСТОР', description: 'Победить 25 элитных противников', metric: 'elites', threshold: 25, unlockSkinId: 'skin.gilded-prime' },
-  { id: 'deaths_100', title: 'БЕССМЕРТНЫЙ', description: 'Завершить 20 забегов', metric: 'runs', threshold: 20 },
-  { id: 'rna_1k', title: 'НАКОПИТЕЛЬ', description: 'Выжить суммарно 1 час', metric: 'survivalMs', threshold: 3_600_000 },
-  { id: 'rna_10k', title: 'МАГНАТ RNA', description: 'Выжить суммарно 10 часов', metric: 'survivalMs', threshold: 36_000_000 },
+  { id: 'streak_3', title: 'РЕГУЛЯРНОСТЬ', description: 'Посетить игру 3 UTC-дня подряд', metric: 'visitStreak', threshold: 3 },
+  { id: 'streak_7', title: 'НЕДЕЛЯ ЗАРАЖЕНИЯ', description: 'Посетить игру 7 UTC-дней подряд', metric: 'visitStreak', threshold: 7 },
+  { id: 'streak_30', title: 'МЕСЯЦ ПАНДЕМИИ', description: 'Посетить игру 30 UTC-дней подряд', metric: 'visitStreak', threshold: 30 },
+  { id: 'quests_10', title: 'КЛЕТОЧНАЯ СЕТЬ', description: 'Инфицировать 10 клеток хозяина', metric: 'hostCells', threshold: 10 },
+  { id: 'quests_50', title: 'РАСШИРЕНИЕ СЕТИ', description: 'Инфицировать 50 клеток хозяина', metric: 'hostCells', threshold: 50 },
+  { id: 'stars_1', title: 'ПЕРВАЯ ЭЛИТА', description: 'Победить одного элитного противника', metric: 'elites', threshold: 1 },
+  { id: 'stars_500', title: 'ОХОТНИК НА ЭЛИТУ', description: 'Победить 25 элитных противников', metric: 'elites', threshold: 25, unlockSkinId: 'skin.gilded-prime' },
+  { id: 'deaths_100', title: 'БЕССМЕРТНЫЙ', description: 'Завершить 100 забегов без победы', metric: 'losses', threshold: 100 },
+  { id: 'rna_1k', title: 'НАКОПИТЕЛЬ', description: 'Собрать 1 000 РНК за завершённые забеги', metric: 'rnaCollected', threshold: 1_000 },
+  { id: 'rna_10k', title: 'СБОРЩИК РНК', description: 'Собрать 10 000 РНК за завершённые забеги', metric: 'rnaCollected', threshold: 10_000 },
   { id: 'combo_50', title: 'РЕЗНЯ', description: 'Достичь комбо ×50 за один забег', metric: 'combo', threshold: 50, unlockSkinId: 'skin.abyssal-teal' },
   { id: 'ghost_120', title: 'ПРИЗРАК', description: 'Выжить 120 секунд без урона за один забег', metric: 'noDamageMs', threshold: 120_000 },
   { id: 'winner', title: 'ИДЕАЛЬНЫЙ ЦИКЛ', description: 'Победить в забеге', metric: 'wins', threshold: 1 },
@@ -124,16 +129,21 @@ interface StoredState {
   visitDays: number;
   lastVisitDay: string;
   visitStreak: number;
+  recentVisitDays: string[];
 }
 
 const METRICS: readonly Metric[] = [
   'kills', 'runs', 'evolutions', 'visitDays', 'hostCells', 'elites',
   'survivalMs', 'combo', 'noDamageMs', 'wins', 'mutations', 'legendaries',
+  'visitStreak', 'losses', 'rnaCollected',
 ];
 const ACHIEVEMENT_IDS = new Set(COLLECTION_CATALOG.map((item) => item.id));
 const SKIN_BY_ID = new Map(SKIN_CATALOG.map((skin) => [skin.id, skin]));
 const DEFINITION_BY_ID = new Map(COLLECTION_CATALOG.map((item) => [item.id, item]));
 const MAX_COUNT = Number.MAX_SAFE_INTEGER;
+const MUTATION_IDS = new Set(UPGRADES.filter(u=>u.id!=='heal').map(u=>u.id));
+const EVOLUTION_IDS = new Set(Object.keys(EVOLUTION_NAMES));
+const LEGENDARY_IDS = new Set(LEGENDARIES.map(l=>l.id));
 
 function emptyCounters(): CounterState {
   return Object.fromEntries(METRICS.map((metric) => [metric, 0])) as CounterState;
@@ -153,12 +163,18 @@ function emptyState(): StoredState {
     visitDays: 0,
     lastVisitDay: '',
     visitStreak: 0,
+    recentVisitDays: [],
   };
 }
 
 function count(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return 0;
   return Math.min(MAX_COUNT, Math.floor(value));
+}
+function validDay(value:unknown):value is string {
+ if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;
+ const date=new Date(value+'T00:00:00Z');
+ return Number.isFinite(date.getTime())&&date.toISOString().slice(0,10)===value;
 }
 
 function validIds(value: unknown, known: Set<string>): string[] {
@@ -194,13 +210,15 @@ function parseState(raw: string | null): { state: StoredState; futureVersion: bo
       const counters = record.counters as Record<string, unknown>;
       for (const metric of METRICS) state.counters[metric] = count(counters[metric]);
     }
-    state.mutations = validObservedIds(record.mutations);
-    state.evolutions = validObservedIds(record.evolutions);
-    state.legendaries = validObservedIds(record.legendaries);
+    state.mutations = validIds(record.mutations,MUTATION_IDS);
+    state.evolutions = validIds(record.evolutions,EVOLUTION_IDS);
+    state.legendaries = validIds(record.legendaries,LEGENDARY_IDS);
     state.processedRunIds = validObservedIds(record.processedRunIds);
     state.visitDays = count(record.visitDays);
-    state.lastVisitDay = typeof record.lastVisitDay === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(record.lastVisitDay)
-      ? record.lastVisitDay : '';
+    state.lastVisitDay = validDay(record.lastVisitDay) ? record.lastVisitDay : '';
+    state.recentVisitDays=Array.isArray(record.recentVisitDays)
+      ? [...new Set(record.recentVisitDays.filter(validDay))].sort().slice(-31)
+      : state.lastVisitDay ? [state.lastVisitDay] : [];
     state.visitStreak = count(record.visitStreak);
     return { state, futureVersion: false };
   } catch {
@@ -255,9 +273,11 @@ export class ClientCollection {
     this.state.counters.combo = Math.max(this.state.counters.combo, count(input.combo));
     this.state.counters.noDamageMs = Math.max(this.state.counters.noDamageMs, count(input.noDamageMs));
     this.state.counters.wins = increment(this.state.counters.wins, input.won === true ? 1 : 0);
-    this.mergeSet('mutations', validObservedIds(input.mutations));
-    this.mergeSet('evolutions', validObservedIds(input.evolutions));
-    this.mergeSet('legendaries', validObservedIds(input.legendaryIds));
+    this.state.counters.losses = increment(this.state.counters.losses, input.won === false ? 1 : 0);
+    this.state.counters.rnaCollected = increment(this.state.counters.rnaCollected, count(input.rnaCollected));
+    this.mergeSet('mutations', validIds(input.mutations,MUTATION_IDS));
+    this.mergeSet('evolutions', validIds(input.evolutions,EVOLUTION_IDS));
+    this.mergeSet('legendaries', validIds(input.legendaryIds,LEGENDARY_IDS));
     this.state.counters.mutations = this.state.mutations.length;
     this.state.counters.evolutions = this.state.evolutions.length;
     this.state.counters.legendaries = this.state.legendaries.length;
@@ -279,8 +299,10 @@ export class ClientCollection {
     const today = Date.parse(`${day}T00:00:00Z`);
     this.state.visitStreak = today - previous === 86_400_000 ? this.state.visitStreak + 1 : 1;
     this.state.lastVisitDay = day;
+    this.state.recentVisitDays=[...this.state.recentVisitDays,day].slice(-31);
     this.state.visitDays = increment(this.state.visitDays, 1);
     this.state.counters.visitDays = this.state.visitDays;
+    this.state.counters.visitStreak = Math.max(this.state.counters.visitStreak, this.state.visitStreak);
     this.evaluateAchievements();
     this.persist();
   }
@@ -308,6 +330,7 @@ export class ClientCollection {
       selectedSkinId: this.state.selectedSkinId,
       visitDays: this.state.visitDays,
       visitStreak: this.state.visitStreak,
+      recentVisitDays: [...this.state.recentVisitDays],
       readOnly: this.readOnly,
     };
   }

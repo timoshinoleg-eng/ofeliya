@@ -1,3 +1,6 @@
+import { installGameHostLifecycle } from '../platform/GameHostLifecycle';
+import { clientCollection, clientFlags } from '../systems/ClientExperience';
+import { impactZoom } from '../ui/ClientJuice';
 import Phaser from 'phaser';
 import { QuestRuntime } from '../quests/questRuntime';
 import { artScale } from '../game/ArtMetrics';
@@ -186,6 +189,7 @@ export class GameScene extends Phaser.Scene {
   private pendingLegendaryCeremony: LegendaryId | null = null;
   private newAchievements: AchievementId[] = [];
   private achievementCheckAcc = 0;
+  private detachHostLifecycle: (()=>void) | null = null;
   private hitStopUntil = 0;
   private hitStopped = false;
   private dmgTexts: Phaser.GameObjects.Text[] = [];
@@ -564,6 +568,10 @@ export class GameScene extends Phaser.Scene {
 
     if (!resume && SaveSystem.get().runs === 0) this.showIntroHint();
 
+    this.events.once(Phaser.Scenes.Events.CREATE,()=>{
+      this.detachHostLifecycle?.();
+      this.detachHostLifecycle=installGameHostLifecycle(this,()=>this.stageDirector.phase!=='RUN_ENDED');
+    });
     this.scale.on('resize', this.onResize, this);
 
     // Mobile WebViews can discard a retained page without another animation frame.
@@ -579,6 +587,7 @@ export class GameScene extends Phaser.Scene {
     document.addEventListener('visibilitychange', flushHiddenCheckpoint);
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.detachHostLifecycle?.();this.detachHostLifecycle=null;
       this.quests.flush();
       this.scale.off('resize', this.onResize, this);
       window.removeEventListener('pagehide', flushLifecycleCheckpoint);
@@ -1297,6 +1306,7 @@ export class GameScene extends Phaser.Scene {
       if (def.legendaryId === 'zero-point') this.zeroPointNextAt = this.time.now + 12_000;
     } else {
       this.runState.bump(id);
+      impactZoom(this, { enabled: clientFlags().juice.enhanced, qualityScale: this.runtimeQuality?.profile.particleScale ?? 0 });
     }
     this.captureAchievements(false, false);
     Sfx.play('click');
@@ -2405,7 +2415,16 @@ export class GameScene extends Phaser.Scene {
       this.difficulty.id === 'standard' && !this.resumed
     );
     this.quests.tick(run.timeMs, stage.noDamageMs, true);
+    this.detachHostLifecycle?.();this.detachHostLifecycle=null;
     this.quests.end(SaveSystem.get().runs);
+    if (clientFlags().collection.enabled) {
+      const cp=this.quests.checkpoint();
+      if(cp) clientCollection().observeRun({id:cp.id,kills:run.kills,timeMs:run.timeMs,
+        noDamageMs:run.maxNoDamageMs,level:run.highestLevel,combo:run.comboBest,
+        mutations:[...new Set(Object.values(run.stageBuilds).flatMap(build=>Object.keys(build?.stacks??{})))],
+        elites:cp.elites,rnaCollected:cp.rna,hostCells:run.hostCellsInfected,
+        evolutions:[...run.evolutionsSeen],legendaryIds:[...run.legendaryIds],won:win});
+    }
     this.captureAchievements(true, false);
     this.milestones.reset();
     this.registry.set('run', this.snapshot());

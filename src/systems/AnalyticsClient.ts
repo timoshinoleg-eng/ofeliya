@@ -1,3 +1,4 @@
+import { trackClientEvent } from './ClientExperience';
 import type { PlatformAdapter } from '../platform/PlatformBridge';
 
 const ANALYTICS_TIMEOUT_MS = 1800;
@@ -64,6 +65,7 @@ export async function trackProductEvent(
   platform: PlatformAdapter,
   props: ProductEventProps = {}
 ): Promise<boolean> {
+  trackClientEvent(event, props);
   const submission = buildAnalyticsSubmission(event, platform, props);
   if (!submission || typeof fetch === 'undefined') return false;
 

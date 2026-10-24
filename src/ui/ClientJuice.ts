@@ -23,16 +23,19 @@ function canPlay(options: ClientJuiceOptions): boolean {
 function play(scene: Phaser.Scene, target: object, values: TweenValues, restore: () => void,
   duration: number, yoyo = false): boolean {
   if (activeEffects.has(target)) return false;
+  const emitter = target as { once?: (event: string, callback: () => void) => unknown; off?: (event: string, callback: () => void) => unknown };
   const effect: ActiveEffect = { tween: null, restore, shutdown: () => undefined };
   const finish = () => {
     if (activeEffects.get(target) !== effect) return;
     effect.restore();
     activeEffects.delete(target);
     scene.events.off('shutdown', effect.shutdown);
+    emitter.off?.('destroy', effect.shutdown);
   };
   effect.shutdown = () => { effect.tween?.stop(); finish(); };
   activeEffects.set(target, effect);
   scene.events.once('shutdown', effect.shutdown);
+  emitter.once?.('destroy', effect.shutdown);
   try {
     effect.tween = scene.tweens.add({ targets: target, ...values, duration, ease: 'Sine.Out', yoyo, onComplete: finish });
     return true;

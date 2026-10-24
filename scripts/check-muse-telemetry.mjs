@@ -113,6 +113,7 @@ const first = analyticsModule.createOptionalWebAnalytics(config);
 const second = analyticsModule.createOptionalWebAnalytics(config);
 assert.equal(document.scripts.length, 1, 'concurrent instances must share one script element');
 assert.equal(document.scripts[0].src, 'https://cloud.umami.is/script.js');
+assert.equal(document.scripts[0].getAttribute('data-auto-track'), 'false', 'Umami automatic page/click tracking must not leak launch URL');
 document.scripts[0].onload();
 assert.equal(await first.ready, true);
 assert.equal(await second.ready, true);
@@ -123,11 +124,11 @@ assert.equal(first.track('win', {
   arbitrary: true,
 }), true);
 assert.deepEqual(calls, [[
-  'win', { mode: 'daily', result: 'win', durationBucket: 'under_1m', questCount: 3 },
+  {website:config.websiteId,url:'/ofeliya',title:'OFELIYA',name:'win',data:{ mode: 'daily', result: 'win', durationBucket: 'under_1m', questCount: 3 }},
 ]], 'only allowlisted primitive event fields may reach Umami');
 assert.equal(first.track('unknown_event', { mode: 'daily' }), false);
 assert.equal(first.track('app_open', { mode: { unsafe: true } }), true);
-assert.deepEqual(calls.at(-1), ['app_open', {}], 'malformed values must be dropped before tracking');
+assert.deepEqual(calls.at(-1), [{website:config.websiteId,url:'/ofeliya',title:'OFELIYA',name:'app_open',data:{}}], 'malformed values must be dropped before tracking');
 
 const retryDocument = fakeDocument();
 const retry = analyticsModule.createOptionalWebAnalytics({ ...config, document: retryDocument, window: {} });

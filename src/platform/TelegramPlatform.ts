@@ -277,8 +277,8 @@ export class TelegramPlatform implements PlatformAdapter {
     if (!attached) return () => {};
     const detachSafe = this.isVersionAtLeast('8.0')
       ? [
-        this.onHostEvent('safeAreaChanged', () => listener()),
-        this.onHostEvent('contentSafeAreaChanged', () => listener()),
+        this.onHostEvent('safeAreaChanged', () => handler()),
+        this.onHostEvent('contentSafeAreaChanged', () => handler()),
       ]
       : [];
     let done = false;

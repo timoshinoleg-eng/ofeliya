@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 import { checkPlatformLifecycle } from './platform-lifecycle-browser.mjs';
+import { checkMuseClient } from './muse-client-browser.mjs';
 
 const server = await createServer({ server: { host: '127.0.0.1', port: 0 } });
 let browser;
@@ -12,6 +13,7 @@ try {
   browser = await chromium.launch({ executablePath, headless: true, args: process.platform === 'win32' ? [] : ['--no-sandbox', '--disable-dev-shm-usage'] });
   const url = server.resolvedUrls.local[0] + '?renderer=canvas';
   await checkPlatformLifecycle(browser, url);
+  await checkMuseClient(browser, url);
   const page = await browser.newPage({ viewport: { width: 390, height: 740 }, timezoneId: 'America/Los_Angeles' });
   const errors = [];
   page.on('pageerror', error => errors.push(String(error)));
