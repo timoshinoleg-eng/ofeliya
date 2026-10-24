@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { readdirSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -15,11 +15,24 @@ import { join, resolve } from 'node:path';
  * the device is not on UTC.
  */
 
+// Avoid native Windows cpSync overwrite/unlink failures; copy every fixture file.
+function copyFixture(source, target) {
+  mkdirSync(target, { recursive: true });
+  for (const entry of readdirSync(source, { withFileTypes: true })) {
+    const from = join(source, entry.name), to = join(target, entry.name);
+    if (entry.isDirectory()) copyFixture(from, to);
+    else writeFileSync(to, readFileSync(from));
+  }
+}
 const temp = mkdtempSync(join(tmpdir(), 'ofeliya-quest-mutants-'));
 const suite = resolve('scripts/check-quest-core.mjs');
 const TIME_ZONE = 'Asia/Tokyo';
 
 const MUTATIONS = [
+  {name:'F5 accepts stale tick',edits:[{file:'questEngine.ts',find:'event.timeMs <= this.state.lastTickTimeMs',replace:'event.timeMs < -1'}]},
+  {name:'F5 accepts equal tick',edits:[{file:'questEngine.ts',find:'event.timeMs <= this.state.lastTickTimeMs',replace:'event.timeMs < this.state.lastTickTimeMs'}]},
+  {name:'F5 drops persisted freshness',edits:[{file:'questState.ts',find:"lastTickTimeMs: typeof record.lastTickTimeMs === 'number' && Number.isFinite(record.lastTickTimeMs) && record.lastTickTimeMs >= 0 ? record.lastTickTimeMs : undefined,",replace:"lastTickTimeMs: undefined,"}]},
+
   {
     // A control. It changes nothing, so the contract check has to keep passing. It proves
     // the harness does not simply fail on every edit.
@@ -311,8 +324,8 @@ const MUTATIONS = [
     edits: [
       {
         file: 'questEngine.ts',
-        find: '        this.trackNoDamageStreak(Math.floor(finiteOrZero(event.noDamageMs) / 1000));',
-        replace: '        this.trackNoDamageStreak(Math.floor(finiteOrZero(event.noDamageMs)));',
+        find: '        this.trackNoDamageStreak(event.noDamageMs / 1000);',
+        replace: '        this.trackNoDamageStreak(event.noDamageMs);',
       },
     ],
   },
@@ -321,7 +334,7 @@ const MUTATIONS = [
     edits: [
       {
         file: 'questEngine.ts',
-        find: '        this.trackNoDamageStreak(Math.floor(finiteOrZero(event.noDamageMs) / 1000));',
+        find: '        this.trackNoDamageStreak(event.noDamageMs / 1000);',
         replace: '        // the streak of the day was not tracked',
       },
     ],
@@ -788,7 +801,7 @@ const MUTATIONS = [
     edits: [
       {
         file: 'questEngine.ts',
-        find: '        this.trackNoDamageStreak(Math.floor(finiteOrZero(event.noDamageMs) / 1000));',
+        find: '        this.trackNoDamageStreak(event.noDamageMs / 1000);',
         replace: '        // the streak was not tracked',
       },
     ],
@@ -915,9 +928,9 @@ let controls = 0;
 const failures = [];
 
 try {
-  cpSync(resolve('src/quests'), join(temp, 'src/quests'), { recursive: true });
-  cpSync(resolve('scripts'), join(temp, 'scripts'), { recursive: true });
-  symlinkSync(join(resolve('.'), 'node_modules'), join(temp, 'node_modules'), 'dir');
+  copyFixture(resolve('src/quests'), join(temp, 'src/quests'));
+  copyFixture(resolve('scripts'), join(temp, 'scripts'));
+  symlinkSync(join(resolve('.'), 'node_modules'), join(temp, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
   // A stub of the product save, so a mutation that imports it compiles and the isolation
   // check has to catch it on its own instead of the compiler catching it by accident.
   mkdirSync(join(temp, 'src/systems'), { recursive: true });
@@ -936,7 +949,7 @@ try {
   for (const mutation of MUTATIONS) {
     // The whole quest core is restored before every mutation. Without this a mutation
     // would inherit the previous mutation's content and would prove nothing at all.
-    cpSync(resolve('src/quests'), join(temp, 'src/quests'), { recursive: true });
+    copyFixture(resolve('src/quests'), join(temp, 'src/quests'));
 
     const touched = new Map();
     let applicable = true;
