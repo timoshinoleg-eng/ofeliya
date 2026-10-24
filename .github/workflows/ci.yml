@@ -218,6 +218,9 @@ jobs:
       - name: Muse quest-to-Phaser scenes and touch lifecycle
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:quest-scenes
 
+      - name: Combined Telegram SDK, viewport, QuestBoard and F-5 gameplay
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/p11-combined-crossflow-smoke.cjs
+
       - name: Legendary nested-text layout across compact viewports
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:legendary-layout
 
