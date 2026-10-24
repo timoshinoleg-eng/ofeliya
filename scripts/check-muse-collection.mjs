@@ -105,8 +105,3 @@ now += 2*86400000;visits.visit();
 assert.equal(visits.snapshot().visitStreak,1,'a missed UTC day breaks current streak');
 assert.deepEqual(visits.snapshot().recentVisitDays, ['2026-01-01','2026-01-02','2026-01-04']);
 console.log('muse collection contract: OK');
-
-
-
-
-
