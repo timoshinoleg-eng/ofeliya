@@ -113,7 +113,9 @@ const mark = (name, value, kind = 'real') => {
     page = await browser.newPage({
       viewport: { width: 390, height: 740 },
       hasTouch: true,
-      reducedMotion: 'reduce',
+      // Motion is deliberately left at the browser default so the suite exercises the
+      // same juice path as a real device; the reduced-motion contract is covered
+      // separately by tests/reduced-motion.mjs.
     });
 
     const pageErrors = [];
@@ -530,14 +532,32 @@ const mark = (name, value, kind = 'real') => {
       const menu = game.scene.getScene('Menu');
       const action = menu.children.getByName('ofeliya-menu-action-bg');
       const legal = menu.children.list.find(o => o.text === 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА');
+      const bounds = o => {
+        if (!o) return null;
+        const b = o.getBounds();
+        return { x: b.x, y: b.y, width: b.width, height: b.height };
+      };
       return {
         scale: [game.scale.width, game.scale.height],
-        action: action?.getBounds(),
-        legal: legal?.getBounds(),
+        action: bounds(action),
+        legal: bounds(legal),
         actionInteractive: Boolean(action?.input?.enabled),
         legalInteractive: Boolean(legal?.input?.enabled),
       };
     });
+
+    /**
+     * Read the CTA bounds twice and require them to be identical, so a measurement can
+     * never accidentally catch a control that is still animating into place.
+     */
+    const readStableMenuCtas = async () => {
+      const first = await readMenuCtas();
+      await page.waitForTimeout(140);
+      const second = await readMenuCtas();
+      assert.deepEqual(second.action, first.action, 'the action CTA must be settled before it is measured');
+      assert.deepEqual(second.legal, first.legal, 'the legal CTA must be settled before it is measured');
+      return first;
+    };
 
     const viewportMatrix = [];
     for (const [width, height] of [[320, 474], [320, 568], [390, 600], [390, 740], [390, 844]]) {
@@ -549,7 +569,7 @@ const mark = (name, value, kind = 'real') => {
       await waitUntil(sceneSnapshot, `the frame to reach ${width}x${height}`,
         size => window.__game.scale.width === size.width && window.__game.scale.height === size.height,
         { width, height });
-      const ctas = await readMenuCtas();
+      const ctas = await readStableMenuCtas();
       assert.deepEqual(ctas.scale, [width, height], `the frame must reach ${width}x${height}`);
       assert.equal(ctas.actionInteractive, true, `the action CTA must stay interactive at ${width}x${height}`);
       assert.equal(ctas.legalInteractive, true, `the legal CTA must stay interactive at ${width}x${height}`);
@@ -587,6 +607,24 @@ const mark = (name, value, kind = 'real') => {
     });
     await tap('ofeliya-menu-collection');
     await page.waitForFunction(() => Boolean(window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection')));
+    // The board must really have a reveal tween in flight, otherwise this case would
+    // prove nothing about tearing a board down mid-animation.
+    const revealInFlight = await page.evaluate(() => {
+      const menu = window.__game.scene.getScene('Menu');
+      const board = menu.children.getByName('ofeliya-collection');
+      // The board belongs to the Menu scene, so its reveal tween lives in the
+      // Menu tween manager, not the UI one.
+      const tweens = menu.tweens.getTweens();
+      return {
+        total: tweens.length,
+        onBoard: tweens.filter(t => Array.isArray(t.targets) && t.targets.includes(board)).length,
+        boardAlpha: board?.alpha ?? null,
+      };
+    });
+    assert.ok(revealInFlight.onBoard > 0,
+      `the collection reveal tween must be in flight (${JSON.stringify(revealInFlight)})`);
+    assert.ok(revealInFlight.boardAlpha < 1,
+      `the board must still be animating in when it is closed (${JSON.stringify(revealInFlight)})`);
     // Close immediately: the reward-reveal tween is still running at this point.
     await tap('ofeliya-collection-close');
     await page.waitForTimeout(120);
@@ -604,7 +642,8 @@ const mark = (name, value, kind = 'real') => {
       'closing during the reveal tween must not leak a shutdown listener');
     assert.equal(afterTweenTeardown.resize, tweenTeardown.resize,
       'closing during the reveal tween must not leak a resize listener');
-    mark('collection: closing the board during the reveal tween leaves no listener behind', afterTweenTeardown);
+    mark('collection: closing the board during the reveal tween leaves no listener behind',
+      { revealInFlight, after: afterTweenTeardown });
 
     // Teardown by a Menu restart: the viewport changes while the board is open.
     const restartBaseline = await page.evaluate(() => {
@@ -691,6 +730,14 @@ const mark = (name, value, kind = 'real') => {
     });
     assert.ok(cardInfo.cards > 0, 'the level-up modal must render real upgrade cards');
     assert.ok(cardInfo.choices.length > 0, 'the real level-up must offer real upgrade definitions');
+
+    // The cards animate in from alpha 0, and Phaser does not hit-test an invisible
+    // object. Wait for the card to be fully visible before computing the tap point.
+    await page.waitForFunction(() => {
+      const ui = window.__game.scene.getScene('UI');
+      const card = ui?.modal?.list?.filter(o => o.type === 'Container')[0];
+      return Boolean(card) && card.alpha >= 1;
+    });
 
     const cardPoint = await page.evaluate(() => {
       const ui = window.__game.scene.getScene('UI');
