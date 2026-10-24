@@ -51,3 +51,28 @@ No `build:max` or publication was requested or performed. Browser/device and hos
 ## Remaining limits
 
 No hosted CI, physical MAX/Telegram WebView acceptance or release validation was established during this local Codex run. This repair does not add a reward gateway or change score/ruleset/campaign versions. At Codex handoff, its single staging attempt failed with `.git/index.lock: Permission denied` inside its sandbox; the worktree was left unstaged on `fix/f5-q2-q3-20261024`, at original HEAD `5a2e04332ee3bc03b9683ef29543b81d121490bd`. Subsequent authorized QA-only git commits/pushes, if performed, must be verified separately against the actual Git history and CI; they are not claimed by this report. Existing unrelated untracked task/MiniMax artifacts were untouched. The local Vite server was stopped.
+
+## Terminal force follow-up — 2026-10-24
+
+Base/head before repair: `d4a73c1bbb41997aa3f57a47e758d224a9ac5b96`.
+Branch: `fix/f5-q2-q3-20261024`; existing Draft PR #233 targets `qa/ofeliya-muse-quests-staging-20261023` (verified through GitHub before edits).
+This section supersedes the earlier local-only handoff for this follow-up only.
+
+Cause: producer freshness (`lastTimeMs`) already included the suppressed 60950ms observation, so equal-time force returned before delivery even though engine freshness (`sentTimeMs`) remained 60000ms. The engine's strict increasing-time guard is unchanged. Equal-time force now accepts only the identical pending observation (or the existing trusted damage reset); it cannot increase the observed streak, replay delivered ticks or manufacture +1ms.
+
+RED before production edits: `npm.cmd run test:quest-runtime`, exit **1**, assertion `terminal force preserves 60 real seconds (not 59)`, actual **59**, expected **60**. Exact requested sequence: begin; 900/900; forced 950/0; 60000/59050; 60950/60000; forced 60950/60000; end.
+GREEN runtime: same command exit **0**, `q_nodmg=60`, `lastTickTimeMs=60950`. Added invalid/missing/NaN/stale/inflated force, duplicate final force, duplicate end, terminal checkpoint reload, no claims, active checkpoint across UTC midnight and equal-time damage reset regressions. Original tests retained.
+Browser scene regression additionally uses actual `onPlayerHit` and `finish` after an observed pending sample, asserts the exact final timestamp/streak, and retains duplicate-finish and LocalStorage checkpoint lifecycle checks at all four widths.
+
+Sequential local validation of this follow-up:
+- `npm.cmd run test:quest-core`: exit 0, full catalog/storage/UTC/accounting/idempotency suite PASS.
+- `npm.cmd run test:quest-runtime`: exit 0, original contracts and new terminal regressions PASS.
+- `npm.cmd run test:quest-core-mutations`: exit 0, **86/86 caught, 1 control unchanged**, Asia/Tokyo; no mutants/control/thresholds changed.
+- `npx.cmd --no-install tsc --noEmit`: exit 0.
+- `$env:VITE_RELEASE_SHA='d4a73c1bbb41997aa3f57a47e758d224a9ac5b96'; npm.cmd run build`: exit 0, 118 modules. SHA labels the base plus tested working-tree patch, not immutable release acceptance. Warnings: runtime-config.js lacks type=module; two Chakra Petch URLs resolve at runtime.
+
+Independent Luna read-only review approved the final runtime/test diff. Review conclusions were checked against the guard and passing assertions. No core/state/GameScene production changes were needed.
+
+Remaining limits: physical Telegram/MAX WebView **NOT_RUN**; local browser automation is not device/release acceptance. UTC accounting still uses the clock at event delivery; this narrow repair does not introduce per-observation wall-clock timestamps for subsecond samples across midnight. Hosted exact-commit CI must be checked separately after push. No rewards are granted by end; no merge/deploy, main, Render, server, payment, Daily, memory or user data mutations. Existing unrelated untracked artifacts remain untouched.
+- `npm.cmd run test:quest-scenes` with OFELIYA_BASE_URL=http://127.0.0.1:5187/: exit 0, PASS actual GameScene/Enemy/Gem/choice/damage/end + board x10 at 320/390/768/1080. Local Vite stopped; existing screenshot artifacts restored byte-for-byte.
+- Final git diff --check: exit 0. Delivery scope: exactly four files (runtime, runtime test, scene test, this report).

@@ -98,7 +98,10 @@ export class QuestRuntime {
     if (!this.active || !Number.isFinite(timeMs) || timeMs < 0 ||
       !Number.isFinite(noDamageMs) || noDamageMs < 0 || timeMs < this.lastTimeMs) return;
     const hit = noDamageMs < this.streakMs;
-    if (timeMs === this.lastTimeMs && (!force || !hit)) return;
+    // Equal-time force may flush only the exact sample still pending delivery.
+    // It cannot replace that observation with a larger streak or replay a sent tick.
+    const pending = this.lastTimeMs > this.sentTimeMs && noDamageMs === this.streakMs;
+    if (timeMs === this.lastTimeMs && (!force || (!hit && !pending))) return;
     // Flush a suppressed sample before a hit, including within the same second.
     if (hit && this.lastTimeMs > this.sentTimeMs) {
       this.send({kind:'run_tick',timeMs:this.lastTimeMs,noDamageMs:this.streakMs},`tick:${this.lastTimeMs}`);
