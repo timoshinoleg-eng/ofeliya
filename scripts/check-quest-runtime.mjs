@@ -40,6 +40,22 @@ try {
  r.tick(80000,0,true);r.tick(140000,60000);r.flush();
  assert.equal(JSON.parse(raw).version,4);assert.equal(JSON.parse(raw).dayMetrics.q_nodmg,60);
  assert.deepEqual(JSON.parse(raw).claimedLifetime,[]);assert.ok(Object.values(JSON.parse(raw).days).every(day=>day.claimed.length===0),'producer never claims');
+ // F5: a hit hidden in a rounded second must survive throttling.
+ let hitRaw=null; const hitStorage={read:()=>hitRaw,write:v=>hitRaw=v};
+ now=Date.parse('2026-10-23T23:59:00Z');
+ const h=new QuestRuntime(hitStorage,{now:()=>now});h.begin(0);
+ h.tick(100,100);h.tick(900,900);now+=60000;
+ const beforeHit=h.snapshot().processedEvents;
+ h.tick(950,0);assert.ok(h.snapshot().processedEvents>beforeHit,'F5 same-second hit delivered');
+ h.tick(1950,1000);h.flush();
+ assert.equal(JSON.parse(hitRaw).dayMetrics.q_nodmg,1,'F5 hidden subsecond hit');
+ h.tick(1900,0);h.tick(2950,2000);h.flush();
+ assert.equal(JSON.parse(hitRaw).dayMetrics.q_nodmg,2,'F5 producer rejects stale ticks');
+ // Equal-time ordinary redeliveries cannot impersonate the trusted hit hook.
+ h.tick(3000,2050);h.flush();const equalBefore=JSON.parse(hitRaw).streakLast;
+ h.tick(3000,0);h.flush();assert.equal(JSON.parse(hitRaw).streakLast,equalBefore);
+ h.tick(3000,0,true);h.flush();assert.equal(JSON.parse(hitRaw).streakLast,0,'F5 trusted equal-time hit is immediate');
+ h.tick(4000,1000);h.flush();assert.equal(JSON.parse(hitRaw).dayMetrics.q_nodmg,2,'F5 day peak survives trusted hit');
  const broken=new QuestRuntime({read:()=>{throw Error('denied')},write:()=>{throw Error('quota')}},{now:()=>now});broken.begin(0);broken.rna(1);broken.end(1);
  console.log('PASS quest producer persistence/resume/duplicate/UTC/terminal/restart/throttle');
 } finally { rmSync(temp,{recursive:true,force:true}); }
