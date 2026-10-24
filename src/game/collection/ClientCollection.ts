@@ -145,6 +145,19 @@ const MUTATION_IDS = new Set(UPGRADES.filter(u=>u.id!=='heal').map(u=>u.id));
 const EVOLUTION_IDS = new Set(Object.keys(EVOLUTION_NAMES));
 const LEGENDARY_IDS = new Set(LEGENDARIES.map(l=>l.id));
 
+/**
+ * How many observed run ids are remembered for idempotency.
+ *
+ * Every finished run appends its id so a repeated observation cannot be counted twice.
+ * Without a bound the ledger grows by one entry per run for the lifetime of the profile
+ * and the stored record eventually reaches the storage quota, after which the collection
+ * silently stops persisting and the player loses their observed progress.
+ *
+ * The bound keeps the record small. It does not tolerate an arbitrarily late duplicate:
+ * a run is observed when it finishes, and the game refuses to finish the same run twice.
+ */
+const MAX_OBSERVED_RUN_IDS = 1024;
+
 function emptyCounters(): CounterState {
   return Object.fromEntries(METRICS.map((metric) => [metric, 0])) as CounterState;
 }
@@ -213,7 +226,7 @@ function parseState(raw: string | null): { state: StoredState; futureVersion: bo
     state.mutations = validIds(record.mutations,MUTATION_IDS);
     state.evolutions = validIds(record.evolutions,EVOLUTION_IDS);
     state.legendaries = validIds(record.legendaries,LEGENDARY_IDS);
-    state.processedRunIds = validObservedIds(record.processedRunIds);
+    state.processedRunIds = validObservedIds(record.processedRunIds).slice(-MAX_OBSERVED_RUN_IDS);
     state.visitDays = count(record.visitDays);
     state.lastVisitDay = validDay(record.lastVisitDay) ? record.lastVisitDay : '';
     state.recentVisitDays=Array.isArray(record.recentVisitDays)
@@ -265,6 +278,8 @@ export class ClientCollection {
   observeRun(input: RunObservation): string[] {
     if (this.readOnly || !input || !validRunId(input.id) || this.state.processedRunIds.includes(input.id)) return [];
     this.state.processedRunIds.push(input.id);
+    const overflow = this.state.processedRunIds.length - MAX_OBSERVED_RUN_IDS;
+    if (overflow > 0) this.state.processedRunIds.splice(0, overflow);
     this.state.counters.kills = increment(this.state.counters.kills, count(input.kills));
     this.state.counters.runs = increment(this.state.counters.runs, 1);
     this.state.counters.survivalMs = increment(this.state.counters.survivalMs, count(input.timeMs));
