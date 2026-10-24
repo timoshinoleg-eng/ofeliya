@@ -10,6 +10,13 @@ import {
 /** Shared identity for a detach function that has nothing to detach. */
 const NOOP_DETACH = () => {};
 
+interface TelegramSafeAreaInsets {
+  top?: unknown;
+  right?: unknown;
+  bottom?: unknown;
+  left?: unknown;
+}
+
 interface TelegramBackButton {
   show?: () => void;
   hide?: () => void;
@@ -27,6 +34,11 @@ interface TelegramWebApp {
   version?: string;
   viewportHeight?: number;
   viewportStableHeight?: number;
+  safeAreaInset?: TelegramSafeAreaInsets;
+  contentSafeAreaInset?: TelegramSafeAreaInsets;
+  isVersionAtLeast?: (version: string) => boolean;
+  enableClosingConfirmation?: () => void;
+  disableClosingConfirmation?: () => void;
   BackButton?: TelegramBackButton;
   HapticFeedback?: {
     impactOccurred?: (style: HapticStyle) => void;
@@ -107,6 +119,48 @@ export class TelegramPlatform implements PlatformAdapter {
 
   getStartParam(): string | null {
     return this.wa?.initDataUnsafe?.start_param ?? null;
+  }
+
+  isVersionAtLeast(required: string): boolean {
+    try {
+      if (typeof this.wa?.isVersionAtLeast === 'function') {
+        return this.wa.isVersionAtLeast(required) === true;
+      }
+    } catch {
+      // Fall through to the stable version-string comparison.
+    }
+    const compare = (value: string): number[] | null => {
+      if (!/^\d+(?:\.\d+)*$/.test(value.trim())) return null;
+      return value.trim().split('.').map(Number);
+    };
+    const current = compare(this.version);
+    const minimum = compare(required);
+    if (!current || !minimum) return false;
+    for (let i = 0; i < Math.max(current.length, minimum.length); i++) {
+      const a = current[i] ?? 0;
+      const b = minimum[i] ?? 0;
+      if (a !== b) return a > b;
+    }
+    return true;
+  }
+
+  getSafeAreaInsets(): { top: number; right: number; bottom: number; left: number } | null {
+    if (!this.isVersionAtLeast('8.0')) return null;
+    const normalize = (value: TelegramSafeAreaInsets | undefined) => {
+      if (!value) return null;
+      const sides = [value.top, value.right, value.bottom, value.left];
+      if (!sides.every((side) => typeof side === 'number' && Number.isFinite(side) && side >= 0)) return null;
+      return { top: value.top as number, right: value.right as number, bottom: value.bottom as number, left: value.left as number };
+    };
+    const safe = normalize(this.wa?.safeAreaInset);
+    const content = normalize(this.wa?.contentSafeAreaInset);
+    if (!safe && !content) return null;
+    return {
+      top: Math.max(safe?.top ?? 0, content?.top ?? 0),
+      right: Math.max(safe?.right ?? 0, content?.right ?? 0),
+      bottom: Math.max(safe?.bottom ?? 0, content?.bottom ?? 0),
+      left: Math.max(safe?.left ?? 0, content?.left ?? 0),
+    };
   }
 
   buildStartLink(payload: string): string | null {
@@ -221,8 +275,19 @@ export class TelegramPlatform implements PlatformAdapter {
     // A client without the Telegram event bus cannot report viewport changes.
     attached = detach !== NOOP_DETACH;
     if (!attached) return () => {};
-
-    return detach;
+    const detachSafe = this.isVersionAtLeast('8.0')
+      ? [
+        this.onHostEvent('safeAreaChanged', () => listener()),
+        this.onHostEvent('contentSafeAreaChanged', () => listener()),
+      ]
+      : [];
+    let done = false;
+    return () => {
+      if (done) return;
+      done = true;
+      detach();
+      for (const off of detachSafe) off();
+    };
   }
 
   setBackHandler(callback: (() => void) | null): void {

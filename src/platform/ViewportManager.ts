@@ -34,6 +34,17 @@ function readSafeAreaInsets(): SafeAreaInsets {
   return safe;
 }
 
+/** Combine host and CSS measurements without subtracting overlapping device insets twice. */
+export function mergeSafeAreaInsets(css: SafeAreaInsets, host: SafeAreaInsets | null): SafeAreaInsets {
+  if (!host) return { ...css };
+  const side = (key: keyof SafeAreaInsets): number => {
+    const value = host[key];
+    const safeHost = Number.isFinite(value) && value >= 0 ? value : 0;
+    return Math.max(css[key], safeHost);
+  };
+  return { top: side('top'), right: side('right'), bottom: side('bottom'), left: side('left') };
+}
+
 function windowViewport(): ViewportSize {
   return {
     width: Math.max(1, Math.floor(window.innerWidth || document.documentElement.clientWidth || 1)),
@@ -125,7 +136,10 @@ export class ViewportManager {
     }
     if (id !== this.requestId) return;
 
-    const frame = computeViewportFrame(viewport, readSafeAreaInsets());
+    const frame = computeViewportFrame(
+      viewport,
+      mergeSafeAreaInsets(readSafeAreaInsets(), PlatformBridge.getSafeAreaInsets?.() ?? null)
+    );
     this.host.style.left = `${frame.left}px`;
     this.host.style.top = `${frame.top}px`;
     this.host.style.width = `${frame.width}px`;

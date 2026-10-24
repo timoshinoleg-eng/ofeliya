@@ -92,6 +92,9 @@ class PlatformFacade implements PlatformAdapter {
   getViewportSize(): Promise<{ width: number; height: number } | null> {
     return this.adapter.getViewportSize();
   }
+  getSafeAreaInsets() {
+    return this.adapter.getSafeAreaInsets?.() ?? null;
+  }
   setBackHandler(callback: (() => void) | null): void {
     this.desiredBackHandler = callback;
     this.adapter.setBackHandler(callback);
@@ -126,4 +129,5 @@ export type {
   PlatformAdapter,
   PlatformKind,
   PlatformUser,
+  PlatformSafeAreaInsets,
 } from './PlatformBridge';
