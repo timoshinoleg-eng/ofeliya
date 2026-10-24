@@ -590,4 +590,82 @@ function installDomListenerGuard() {
   }
 }
 
-console.log('telegram TMA adaptation: vertical swipe lock, swipe lock verification, activated re-apply, viewport change subscription, facade relay and re-bind, viewport re-measurement and MAX isolation PASS');
+// P11: the facade, not just the concrete Telegram adapter, must multicast.
+{
+  const { webApp, emit, liveCount, calls } = createWebApp();
+  const dom = installDom({});
+  const restore = applyDom(dom);
+  const { PlatformBridge } = loadModules();
+  try {
+    let a = 0, b = 0;
+    const detachA = PlatformBridge.subscribeViewportChange(() => { a++; });
+    const detachB = PlatformBridge.subscribeViewportChange(() => { b++; });
+    dom.window.Telegram = { WebApp: webApp };
+    dom.window.dispatchEvent({ type: 'ofeliya:telegram-bridge-ready' });
+    const before = [a, b];
+    emit('viewportChanged');
+    assert.deepEqual([a-before[0], b-before[1]], [1, 1], 'P11 facade must deliver viewport to A and B');
+    assert.equal(liveCount('viewportChanged'), 1, 'multicast uses one adapter subscription');
+    assert.equal(calls.onEvent.filter(type => type === 'viewportChanged').length, 1);
+    detachA();detachA();
+    const afterA = [a, b];emit('viewportChanged');
+    assert.deepEqual([a-afterA[0], b-afterA[1]], [0, 1], 'detaching A leaves B active');
+    dom.window.WebApp = { initData: 'max-init' };
+    assert.equal(PlatformBridge.kind, 'max');
+    assert.equal(liveCount('viewportChanged'), 0, 'MAX transfer releases Telegram signal');
+    dom.window.WebApp = undefined;
+    assert.equal(PlatformBridge.kind, 'telegram');
+    assert.equal(liveCount('viewportChanged'), 1);
+    const beforeReturn = b;emit('viewportChanged');assert.equal(b, beforeReturn+1);
+    delete dom.window.Telegram;
+    assert.equal(PlatformBridge.kind, 'browser');
+    assert.equal(liveCount('viewportChanged'), 0);
+    dom.window.Telegram = { WebApp: webApp };
+    dom.window.dispatchEvent({ type: 'ofeliya:telegram-bridge-ready' });
+    assert.equal(liveCount('viewportChanged'), 1);
+    detachB();assert.equal(liveCount('viewportChanged'), 0, 'last detach releases adapter');
+    const beforeDetached = b;emit('viewportChanged');assert.equal(b, beforeDetached);
+    const throwing = PlatformBridge.subscribeViewportChange(() => { throw Error('listener failure'); });
+    const good = PlatformBridge.subscribeViewportChange(() => { b++; });
+    emit('viewportChanged');assert.equal(b, beforeDetached+1, 'one failing subscriber cannot suppress others');
+    throwing();good();assert.equal(liveCount('viewportChanged'), 0);
+  } finally { restore(); }
+}
+
+{
+  const { webApp, emit, liveCount } = createWebApp();
+  const dom = installDom({ webApp });
+  const restore = applyDom(dom);
+  const { ViewportManager } = loadModules();
+  try {
+    // Reopen multiple managers; repeated start/destroy must not orphan a callback.
+    for (let i=0; i<3; i++) {
+      const hostA = { style: {}, dataset: {} }, hostB = { style: {}, dataset: {} };
+      const a = new ViewportManager(hostA), b = new ViewportManager(hostB);
+      a.start();a.start();b.start();
+      emit('viewportChanged');await new Promise(resolve => setTimeout(resolve, 0));
+      assert.equal(hostA.style.height, '640px');assert.equal(hostB.style.height, '640px');
+      assert.equal(liveCount('viewportChanged'), 1);
+      a.destroy();a.destroy();
+      webApp.viewportHeight=620;emit('viewportChanged');await new Promise(resolve => setTimeout(resolve, 0));
+      assert.equal(hostA.style.height, '640px', 'destroyed manager is not updated');
+      assert.equal(hostB.style.height, '620px');
+      b.destroy();assert.equal(liveCount('viewportChanged'), 0);
+      const oldHeight=hostB.style.height;await b.sync();
+      assert.equal(hostB.style.height, oldHeight, 'sync after destroy cannot touch host');
+      assert.equal(dom.windowListeners.get('resize')?.size ?? 0, 0);
+      assert.equal(dom.windowListeners.get('orientationchange')?.size ?? 0, 0);
+      // Telegram adapter owns one page-lifetime visibility listener; managers own none now.
+      assert.equal(dom.documentListeners.get('visibilitychange')?.size ?? 0, 1);
+      webApp.viewportHeight=640;
+    }
+    const host={style:{},dataset:{}};
+    const m=new ViewportManager(host);m.start();
+    const pending=m.sync();m.destroy();await pending;
+    assert.equal(host.style.height, undefined, 'in-flight sync is invalidated by destroy');
+    m.start();await m.sync();assert.equal(host.style.height,'640px');m.destroy();
+    assert.equal(liveCount('viewportChanged'),0);
+  } finally { restore(); }
+}
+
+console.log('telegram TMA adaptation: original contracts + P11 multicast/transfer/reopen/manager cleanup PASS');

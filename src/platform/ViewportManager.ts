@@ -62,6 +62,8 @@ export class ViewportManager {
   private requestId = 0;
   private retryTimer: number | null = null;
   private detachViewportListener: (() => void) | null = null;
+  private started = false;
+  private destroyed = false;
 
   constructor(host: HTMLElement) {
     this.host = host;
@@ -72,6 +74,9 @@ export class ViewportManager {
   }
 
   start(): void {
+    if (this.started) return;
+    this.started = true;
+    this.destroyed = false;
     window.addEventListener('resize', this.onViewportSignal, { passive: true });
     window.addEventListener('orientationchange', this.onViewportSignal, { passive: true });
     window.addEventListener('ofeliya:max-bridge-ready', this.onViewportSignal as EventListener);
@@ -84,10 +89,15 @@ export class ViewportManager {
     }) ?? null;
 
     // Covers the rare case where the MAX CDN bridge becomes available after the module bundle.
-    this.retryTimer = window.setTimeout(() => void this.sync(), 350);
+    this.retryTimer = window.setTimeout(() => {
+      this.retryTimer = null;
+      void this.sync();
+    }, 350);
   }
 
   destroy(): void {
+    this.started = false;
+    this.destroyed = true;
     window.removeEventListener('resize', this.onViewportSignal);
     window.removeEventListener('orientationchange', this.onViewportSignal);
     window.removeEventListener('ofeliya:max-bridge-ready', this.onViewportSignal as EventListener);
@@ -100,6 +110,7 @@ export class ViewportManager {
   }
 
   async sync(): Promise<void> {
+    if (this.destroyed) return;
     const id = ++this.requestId;
     const fallback = windowViewport();
     let viewport = fallback;
@@ -125,6 +136,9 @@ export class ViewportManager {
     document.documentElement.style.setProperty('--ofeliya-vh', `${frame.height}px`);
 
     if (this.game && (this.game.scale.width !== frame.width || this.game.scale.height !== frame.height)) {
+      // RESIZE uses cached parentSize during refresh(). Measure our new host frame
+      // before resizing, or Phaser can restore the previous viewport dimensions.
+      this.game.scale.getParentBounds();
       this.game.scale.resize(frame.width, frame.height);
     }
   }
