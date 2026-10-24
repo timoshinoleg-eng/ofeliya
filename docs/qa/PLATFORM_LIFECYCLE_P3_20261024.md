@@ -55,6 +55,8 @@ The additional independent local validation is the real Chromium contract suite 
 
 ## Delivery and limits
 
+First hosted run on `a4c9c84612af6babcaed032d31ae21bc3a109b62`: [40081947705](https://github.com/timoshinoleg-eng/ofeliya/actions/runs/40081947705). Build and production-contract PASS; browser-smoke failed the new action-CTA bounds assertion. Diagnostic scale/host were already 600px. Source inspection confirmed `Menu.onResize` queues `scene.restart()`; the shared ScaleManager changes before the next Menu generation creates its CTA. The browser fixture now waits for the real Menu create event at height 600 before reading CTA objects. It keeps the exact bounds assertion and original 30000ms timeout. Local `test:review-browser` passes with this lifecycle synchronization. This failed first CI run is not hidden or counted as a PASS; final-head CI is tracked separately in PR #236.
+
 Changed files: `src/platform/TelegramBridgeLoader.ts`, `src/platform/index.ts`, `src/platform/ViewportManager.ts`, `scripts/check-telegram-late-loader.mjs`, `scripts/check-telegram-tma.mjs`, `tests/platform-lifecycle-browser.mjs`, `tests/review-regressions.mjs`, this report.
 
 Draft PR targets the QA base only and links Issues #234/#235. Exact head SHA and hosted CI results are recorded in the PR/final handoff after commit; local PASS does not imply hosted CI PASS. No merge/deploy was requested or performed.

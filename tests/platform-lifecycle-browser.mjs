@@ -65,9 +65,15 @@ export async function checkPlatformLifecycle(browser, url) {
     assert.deepEqual(detached, [1, 2]);
 
     // Virtual Telegram resize updates the real Phaser host, action and lower CTA bounds.
+    await page.evaluate(() => {
+      const menu = window.__game.scene.getScene('Menu');
+      menu.events.on('create', () => { window.__p11MenuCreatedAt = [menu.scale.width, menu.scale.height]; });
+    });
     await page.setViewportSize({ width: 390, height: 640 });
     await page.evaluate(() => { window.__p11Tg.viewportHeight = 600;window.__p11Tg.emit('viewportChanged'); });
-    await page.waitForFunction(() => window.__game.scale.height === 600 && window.__game.scene.getScene('Menu').scale.height === 600);
+    // Scene.restart() is queued by Menu.onResize. A shared ScaleManager changing
+    // size is earlier than the next scene generation creating its new CTA objects.
+    await page.waitForFunction(() => window.__game.scale.height === 600 && window.__p11MenuCreatedAt?.[1] === 600);
     const layout = await page.evaluate(() => {
       const game = window.__game, menu = game.scene.getScene('Menu');
       const action = menu.children.getByName('ofeliya-menu-action');
