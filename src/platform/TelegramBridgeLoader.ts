@@ -18,13 +18,20 @@ export function hasTelegramLaunchHint(locationLike: LocationLike): boolean {
   );
 }
 
-function currentTelegramInitData(): string {
-  if (typeof window === 'undefined') return '';
+function currentTelegramWebApp(): { initData?: string } | undefined {
+  if (typeof window === 'undefined') return undefined;
   const host = window as Window & {
     Telegram?: { WebApp?: { initData?: string } };
   };
-  return host.Telegram?.WebApp?.initData ?? '';
+  return host.Telegram?.WebApp;
 }
+
+const announcedBridges = new WeakSet<object>();
+interface ScriptLoad {
+  result?: boolean;
+  waiters: Set<(ready: boolean) => void>;
+}
+const scriptLoads = new WeakMap<HTMLScriptElement, ScriptLoad>();
 
 /**
  * Announces a late Telegram SDK.
@@ -35,6 +42,10 @@ function currentTelegramInitData(): string {
  */
 function announceTelegramBridgeReady(): void {
   if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+  const bridge = currentTelegramWebApp();
+  if (!bridge?.initData || announcedBridges.has(bridge)) return;
+  // Mark before dispatch: a ready listener may synchronously probe the loader again.
+  announcedBridges.add(bridge);
   try {
     window.dispatchEvent(new Event(TELEGRAM_BRIDGE_READY_EVENT));
   } catch {
@@ -44,7 +55,7 @@ function announceTelegramBridgeReady(): void {
 
 export async function ensureTelegramBridge(timeoutMs = 2500): Promise<boolean> {
   if (typeof window === 'undefined' || typeof document === 'undefined') return false;
-  if (currentTelegramInitData()) {
+  if (currentTelegramWebApp()?.initData) {
     announceTelegramBridgeReady();
     return true;
   }
@@ -52,25 +63,38 @@ export async function ensureTelegramBridge(timeoutMs = 2500): Promise<boolean> {
 
   const current = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
   if (current?.dataset.loaded === '1') {
-    const ready = !!currentTelegramInitData();
-    if (ready) announceTelegramBridgeReady();
-    return ready;
+    return false;
   }
 
-  return new Promise<boolean>((resolve) => {
-    let settled = false;
-    const finish = (): void => {
-      const ready = !!currentTelegramInitData();
-      // The timeout ends the boot wait, not the script request. Telegram's CDN may
-      // finish later; the already-resolved promise must not suppress host adoption.
-      if (ready) announceTelegramBridgeReady();
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timer);
-      resolve(ready);
+  const script = current ?? document.createElement('script');
+  let loading = scriptLoads.get(script);
+  if (!loading) {
+    loading = { waiters: new Set() };
+    const state = loading;
+    const finish = (ready: boolean): void => {
+      state.result = ready;
+      for (const waiter of state.waiters) waiter(ready);
+      state.waiters.clear();
     };
-
-    const script = current ?? document.createElement('script');
+    const cleanup = (): void => {
+      script.removeEventListener('load', onLoad);
+      script.removeEventListener('error', onError);
+    };
+    const onLoad = (): void => {
+      cleanup();
+      script.dataset.loaded = '1';
+      announceTelegramBridgeReady();
+      finish(!!currentTelegramWebApp()?.initData);
+    };
+    const onError = (): void => {
+      cleanup();
+      // Remove the failed request so a later call can create a fresh script.
+      script.remove();
+      finish(false);
+    };
+    script.addEventListener('load', onLoad, { once: true });
+    script.addEventListener('error', onError, { once: true });
+    scriptLoads.set(script, loading);
     if (!current) {
       script.id = SCRIPT_ID;
       script.src = TELEGRAM_SDK_URL;
@@ -78,21 +102,22 @@ export async function ensureTelegramBridge(timeoutMs = 2500): Promise<boolean> {
       script.dataset.ofeliyaPlatformBridge = 'telegram';
       document.head.appendChild(script);
     }
+  }
 
-    script.addEventListener(
-      'load',
-      () => {
-        script.dataset.loaded = '1';
-        finish();
-      },
-      { once: true }
-    );
-    script.addEventListener('error', () => {
-      // A failed request never emits 'load'. Leave no inert tag behind: a later
-      // invocation can issue a fresh request without reloading the Mini App.
-      script.remove();
-      finish();
-    }, { once: true });
-    const timer = window.setTimeout(finish, timeoutMs);
+  // A caller's deadline ends only its boot wait. Keep the shared script handlers
+  // alive for late host adoption and for callers with a longer deadline.
+  const request = loading;
+  if (request.result !== undefined) return request.result;
+  return new Promise<boolean>((resolve) => {
+    const finish = (ready: boolean): void => {
+      window.clearTimeout(timer);
+      request.waiters.delete(finish);
+      resolve(ready);
+    };
+    const timer = window.setTimeout(() => {
+      announceTelegramBridgeReady();
+      finish(!!currentTelegramWebApp()?.initData);
+    }, timeoutMs);
+    request.waiters.add(finish);
   });
 }

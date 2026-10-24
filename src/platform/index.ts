@@ -21,7 +21,7 @@ class PlatformFacade implements PlatformAdapter {
   private telegram: TelegramPlatform | null = null;
   private activeAdapter: PlatformAdapter | null = null;
   private desiredBackHandler: (() => void) | null = null;
-  private desiredViewportListener: (() => void) | null = null;
+  private readonly viewportListeners = new Set<() => void>();
   private detachViewportListener: (() => void) | null = null;
 
   constructor() {
@@ -56,7 +56,7 @@ class PlatformFacade implements PlatformAdapter {
   }
 
   /**
-   * Binds the pending viewport listener to the active adapter. The active adapter can change
+   * Binds one multicast signal to the active adapter. The active adapter can change
    * at runtime — a slow MAX bridge can appear after the Telegram Mini App — so the listener is
    * re-bound instead of being pinned to the adapter that happened to be active at subscribe time.
    */
@@ -64,9 +64,16 @@ class PlatformFacade implements PlatformAdapter {
     this.detachViewportListener?.();
     this.detachViewportListener = null;
     const adapter = this.activeAdapter;
-    if (!adapter || !this.desiredViewportListener) return;
-    this.detachViewportListener = adapter.subscribeViewportChange?.(this.desiredViewportListener) ?? null;
+    if (!adapter || this.viewportListeners.size === 0) return;
+    this.detachViewportListener = adapter.subscribeViewportChange?.(this.onViewportChange) ?? null;
   }
+
+  private onViewportChange = (): void => {
+    for (const listener of [...this.viewportListeners]) {
+      if (!this.viewportListeners.has(listener)) continue;
+      try { listener(); } catch { /* One subscriber cannot break the host event bus. */ }
+    }
+  };
 
   private get adapter(): PlatformAdapter {
     return this.resolveAdapter();
@@ -90,12 +97,16 @@ class PlatformFacade implements PlatformAdapter {
     this.adapter.setBackHandler(callback);
   }
   subscribeViewportChange(listener: () => void): () => void {
-    this.desiredViewportListener = listener;
+    // Each registration owns its detach, even when the caller reuses a callback.
+    const subscription = () => listener();
+    this.viewportListeners.add(subscription);
+    const previousAdapter = this.activeAdapter;
     this.resolveAdapter();
-    this.bindViewportListener();
+    if (previousAdapter === this.activeAdapter && this.viewportListeners.size === 1) {
+      this.bindViewportListener();
+    }
     return () => {
-      if (this.desiredViewportListener !== listener) return;
-      this.desiredViewportListener = null;
+      if (!this.viewportListeners.delete(subscription) || this.viewportListeners.size > 0) return;
       this.detachViewportListener?.();
       this.detachViewportListener = null;
     };
