@@ -122,6 +122,9 @@ jobs:
       - name: Muse safe client contracts
         run: npm run test:muse-client
 
+      - name: Muse convergence adversarial contracts
+        run: npm run test:muse-convergence
+
       - name: Caddy edge rollout contract
         run: npm run test:caddy-edge
 
@@ -220,6 +223,9 @@ jobs:
 
       - name: Muse quest-to-Phaser scenes and touch lifecycle
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:quest-scenes
+
+      - name: Combined Muse convergence cross-flow (platform, collection, quests, cosmetics)
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:muse-convergence-crossflow
 
       - name: Legendary nested-text layout across compact viewports
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:legendary-layout
