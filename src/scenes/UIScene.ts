@@ -1331,6 +1331,11 @@ export class UIScene extends Phaser.Scene {
     this.onboarding = null;
   }
 
+  canResumeFromHost(): boolean {
+    return !this.manualPaused && !this.modalOpen && !this.transitionOverlay &&
+      !this.overShown && !this.uiBlocked && this.activeBossReveals === 0;
+  }
+
   private showPauseMenu(): void {
     if (
       this.manualPaused ||

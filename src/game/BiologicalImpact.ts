@@ -57,9 +57,9 @@ export function ensureBiologicalImpacts(scene: Phaser.Scene): void {
     let atlas: Phaser.Textures.CanvasTexture | null = null;
     try {
       const texture = scene.textures.get(key) as Phaser.Textures.CanvasTexture;
-      const size = key === 'virus-player' ? 224 : 152;
       const frame = texture.get();
-      if (frame.cutWidth !== size || frame.cutHeight !== size) continue;
+      const size = frame.cutWidth, logical = key === 'virus-player' ? 56 : 38;
+      if (![2, 3, 4].some(factor => size === logical * factor) || frame.cutHeight !== size) continue;
       const source = texture.getContext().getImageData(0, 0, size, size).data;
       if (source.length !== size * size * 4) continue;
       // 4 columns, 3 rows; largest dimension 896, below conservative mobile texture limits.

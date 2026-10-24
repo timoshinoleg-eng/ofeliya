@@ -59,7 +59,8 @@ export function ensureBiologicalAnimations(scene: Phaser.Scene): void {
       const frame = texture.get();
       const width = frame.cutWidth, height = frame.cutHeight;
       // Only canonical bounded backing is accepted; failure keeps the original art.
-      if (width !== (key === 'virus-player' ? 224 : 152) || height !== width) continue;
+      const logical = key === 'virus-player' ? 56 : 38;
+      if (![2, 3, 4].some(factor => width === logical * factor) || height !== width) continue;
       const source = texture.getContext().getImageData(0, 0, width, height);
       if (!source?.data || source.data.length !== width * height * 4) continue;
       atlas = scene.textures.createCanvas(atlasKey, width * BIOLOGICAL_FRAMES, height);

@@ -32,8 +32,8 @@ import type { QuestId, QuestMetric } from './questTypes';
  *   lifetime claim list.
  * - Version 4 added the streak bookkeeping of the no-damage counter: the last observed
  *   streak and the baseline it is measured against. A version 3 record is read through
- *   the normal path and starts its streak count from zero, because the old format
- *   could not tell a continuing streak from a broken one.
+ *   the normal path and seeds its last streak from the inherited baseline.
+ *   Optional lastTickTimeMs adds elapsed-millisecond freshness to v4 records.
  *
  * A record of a known older version is migrated, never thrown away.
  */
@@ -111,6 +111,8 @@ export interface QuestSaveData {
    * it has to survive a reload — otherwise a reload would restart the streak count.
    */
   streakLast: number;
+  /** Last accepted run-elapsed millisecond sample; absent in older v4/v3 records. */
+  lastTickTimeMs?: number;
   /** Recently processed event ids, used as the idempotency key set. */
   seenEventIds: string[];
   /**
@@ -231,6 +233,7 @@ export function sanitizeQuestSaveData(
     // v3 persisted the no-damage baseline but not the last observed streak.
     // Seed last from that baseline, or a new clean streak can never reset it.
     streakLast: numberOrZero(record.streakLast ?? baseline.q_nodmg),
+    lastTickTimeMs: typeof record.lastTickTimeMs === 'number' && Number.isFinite(record.lastTickTimeMs) && record.lastTickTimeMs >= 0 ? record.lastTickTimeMs : undefined,
     seenEventIds: stringList(record.seenEventIds).slice(-MAX_REMEMBERED_EVENT_IDS),
     claimedLifetime: stringList(record.claimedLifetime),
   };

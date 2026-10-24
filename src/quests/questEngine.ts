@@ -237,12 +237,13 @@ export class QuestEngine {
   /** Restore checkpoint counters without emitting a second run start. Day completions remain historical facts. */
   restoreRunMetrics(values: { kills: number; timeMs: number; rna: number; mutations: number; elites: number }): void {
     this.rollDayIfNeeded(this.clock.now());
+    delete this.state.lastTickTimeMs;
     const metrics = { q_kills: values.kills, q_time: Math.floor(values.timeMs / 1000),
       q_rna: values.rna, q_mut: values.mutations, q_elites: values.elites };
     for (const metric of RUN_SCOPED_METRICS) {
       const value = Math.max(0, finiteOrZero(metrics[metric as keyof typeof metrics]));
-      this.state.runMetrics[metric] = value;
-      this.lowerBaseline(metric, value);
+      this.state.runMetrics[metric] = metric === 'q_time' ? Math.max(this.state.runMetrics[metric] ?? 0, value) : value;
+      this.lowerBaseline(metric, this.state.runMetrics[metric] ?? 0);
     }
     this.markDirty();
     this.evaluateCompletion();
@@ -251,7 +252,7 @@ export class QuestEngine {
 
   restoreNoDamageStreak(noDamageMs: number, previousDay: boolean): void {
     this.rollDayIfNeeded(this.clock.now());
-    const current = Math.max(0, Math.floor(finiteOrZero(noDamageMs) / 1000));
+    const current = Math.max(0, finiteOrZero(noDamageMs)) / 1000;
     // A checkpoint rewind is not a damage hit. In particular, yesterday's shorter
     // checkpoint streak must not be mistaken for a new streak earned today.
     this.state.streakLast = current;
@@ -281,6 +282,10 @@ export class QuestEngine {
     }
 
     const isPeakEvent = event.kind === 'run_tick';
+    if (event.kind === 'run_tick' && (!Number.isFinite(event.timeMs) || event.timeMs < 0 ||
+      (this.state.lastTickTimeMs !== undefined && event.timeMs <= this.state.lastTickTimeMs))) {
+      return { accepted: false, duplicate: false, newlyCompleted: [] };
+    }
     if (!isPeakEvent) {
       if (this.isDuplicate(event.id)) {
         this.duplicateEvents += 1;
@@ -329,8 +334,12 @@ export class QuestEngine {
         break;
       }
       case 'run_tick': {
+        this.state.lastTickTimeMs = event.timeMs;
+        this.markDirty();
         this.peakRunMetric('q_time', Math.floor(finiteOrZero(event.timeMs) / 1000));
-        this.trackNoDamageStreak(Math.floor(finiteOrZero(event.noDamageMs) / 1000));
+        if (Number.isFinite(event.noDamageMs) && event.noDamageMs >= 0) {
+          this.trackNoDamageStreak(event.noDamageMs / 1000);
+        }
         break;
       }
       default:
@@ -484,6 +493,7 @@ export class QuestEngine {
   }
 
   private resetRunMetrics(): void {
+    delete this.state.lastTickTimeMs;
     for (const metric of RUN_SCOPED_METRICS) this.state.runMetrics[metric] = 0;
     this.markDirty();
   }
@@ -525,6 +535,8 @@ export class QuestEngine {
       progress = current - (this.state.baseline.q_nodmg ?? 0);
     }
     this.state.streakLast = current;
+    // Convert both operands to milliseconds before subtracting and rounding.
+    progress = Math.floor((Math.round(current * 1000) - Math.round((this.state.baseline.q_nodmg ?? 0) * 1000)) / 1000);
     if (progress <= 0) {
       this.markDirty();
       return;

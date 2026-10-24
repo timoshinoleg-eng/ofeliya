@@ -433,6 +433,73 @@ try {
     );
   }
 
+  // F5: malformed/late ticks must not manufacture progress, including after reload.
+  const f5Failures=[];
+  const f5 = fn => {try {fn();} catch(e) {console.error(e.message); f5Failures.push(e);}};
+  for (const bad of [undefined, NaN, 10000]) { f5(() => {
+    const clock = clockAt(DAY_START), storage = memoryStorage();
+    const options = {clock, storage, catalog: singleQuestCatalog('q_nodmg', 200)};
+    let {engine} = makeEngine(options);
+    engine.ingest(tick('before',100000,100000)); clock.set(NEXT_DAY);
+    engine.ingest(tick('today',101000,101000));
+    engine.ingest(tick('bad',bad === 10000 ? 50000 : 101500,bad));
+    engine.flush(); engine = makeEngine(options).engine;
+    engine.ingest(tick('next',102000,102000));
+    assert.equal(progressOf(engine,'only').value,2,`F5 malformed/stale ${bad}`);
+  }); }
+  f5(() => {
+    const {engine,clock} = makeEngine({catalog:singleQuestCatalog('q_nodmg',200)});
+    engine.ingest(tick('before',31001,31001)); clock.set(NEXT_DAY);
+    engine.ingest(tick('same-id',32001,32001));
+    assert.equal(progressOf(engine,'only').value,1,'F5 exact millisecond day subtraction');
+    for (const time of [32001,31010]) {
+      assert.equal(engine.ingest(tick('late',time,0)).accepted,false,'F5 stale/equal rejected');
+    }
+    engine.ingest(tick('same-id',32100,0)); engine.ingest(tick('next',33100,1000));
+    assert.equal(progressOf(engine,'only').value,1,'F5 valid subsecond hit');
+    engine.flush();
+    assert.equal(JSON.parse(recordOf(engine)).seenEventIds.includes('same-id'),false,'F5 peak IDs never remembered');
+    engine.restoreRunMetrics({kills:0,timeMs:1000,rna:0,mutations:0,elites:0});
+    engine.restoreNoDamageStreak(0,false);
+    assert.equal(engine.ingest(tick('resumed',1010,10)).accepted,true,'F5 restore opens timeline');
+    engine.flush();
+    assert.equal(JSON.parse(recordOf(engine)).runMetrics.q_time,33,'F5 restore preserves time peak');
+  });
+  f5(() => {
+    const {engine} = makeEngine(); engine.ingest(tick('a',1099,1099));
+    assert.equal(engine.ingest(tick('b',1010,0)).accepted,false,'F5 same-second stale milliseconds');
+  });
+  f5(() => {
+    const clock=clockAt(DAY_START),storage=memoryStorage();
+    const options={clock,storage,catalog:singleQuestCatalog('q_nodmg',200)};
+    let {engine}=makeEngine(options);
+    engine.ingest(tick('before',100000,100000));clock.set(NEXT_DAY);
+    engine.ingest(tick('today',101000,101000));engine.flush();
+    engine=makeEngine(options).engine;
+    assert.equal(engine.ingest(tick('late-after-reload',50000,50000)).accepted,false,'F5 reload retains freshness');
+    engine.ingest(tick('today-next',102000,102000));
+    assert.equal(progressOf(engine,'only').value,2,'F5 reload UTC streak remains bounded');
+  });
+  f5(() => {
+    const {engine,clock}=makeEngine({catalog:singleQuestCatalog('q_nodmg',200)});
+    engine.ingest(tick('before-hit',80000,80000));clock.set(NEXT_DAY);
+    engine.ingest(tick('pre-hit',80100,80100));engine.ingest(tick('hit',80101,0));
+    engine.ingest(tick('post-hit',81101,1000));
+    assert.equal(progressOf(engine,'only').value,1,'F5 valid increasing subsecond hit earns fresh second');
+  });
+  f5(() => {
+    const {engine}=makeEngine();engine.ingest(tick('peak',33000,0));
+    engine.restoreRunMetrics({kills:0,timeMs:1000,rna:0,mutations:0,elites:0});
+    assert.equal(engine.ingest(tick('resume',1010,0)).accepted,true,'F5 checkpoint rewind accepts new timeline');
+    engine.flush();assert.equal(JSON.parse(recordOf(engine)).runMetrics.q_time,33,'F5 checkpoint rewind keeps peak');
+    engine.ingest(runStarted('new-timeline'));
+    assert.equal(engine.ingest(tick('first',0,0)).accepted,true,'F5 new run accepts zero time');
+    for (const time of [undefined,NaN,Infinity,-1]) {
+      assert.equal(engine.ingest(tick('invalid-time',time,0)).accepted,false,'F5 invalid elapsed time rejected');
+    }
+  });
+  assert.equal(f5Failures.length,0,'F5 regressions');
+
   // --- 6. the no-damage counter is the longest streak of the day ---------------------------
 
   // The counter is fed with the *current* streak, not with the peak of the run: the goal
@@ -776,6 +843,8 @@ try {
     engine.ingest(tick('t1', 120_000, 0));
     assert.equal(progressOf(engine, 'test_time').value, 120, 'the peak is unchanged');
     assert.equal(engine.snapshot().duplicateEvents, 0, 'the peak event is not a duplicate');
+    engine.flush();
+    assert.equal(JSON.parse(recordOf(engine)).seenEventIds.includes('t1'),false,'peak event IDs are never remembered');
   }
 
   // The remembered ids are bounded, so the record cannot grow without limit.

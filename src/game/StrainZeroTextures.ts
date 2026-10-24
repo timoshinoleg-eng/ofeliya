@@ -19,7 +19,11 @@ export const COMBAT_PARTICLE_PALETTE = {
   immune: COLORS.immune,
 } as const;
 
+const particleFrames = new Map<string, string>();
 export function combatParticleFrame(color: number, kind: 'spark' | 'chip' = 'spark'): string {
+  const cacheKey = `${kind}:${color}`;
+  const cached = particleFrames.get(cacheKey);
+  if (cached) return cached;
   let nearest = 'white';
   let distance = Infinity;
   for (const [name, candidate] of Object.entries(COMBAT_PARTICLE_PALETTE)) {
@@ -32,7 +36,10 @@ export function combatParticleFrame(color: number, kind: 'spark' | 'chip' = 'spa
       nearest = name;
     }
   }
-  return `${kind}-${nearest}`;
+  const frame = `${kind}-${nearest}`;
+  if (particleFrames.size >= 128) particleFrames.clear();
+  particleFrames.set(cacheKey, frame);
+  return frame;
 }
 
 /**

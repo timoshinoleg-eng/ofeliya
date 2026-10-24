@@ -11,6 +11,13 @@ export interface PlatformUser {
   photo_url?: string;
 }
 
+export interface PlatformSafeAreaInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
 export interface PlatformAdapter {
   readonly kind: PlatformKind;
   /** True only when hosted by a supported messenger client. */
@@ -27,6 +34,8 @@ export interface PlatformAdapter {
   /** Build a platform-native app deeplink for a validated start payload, when configured. */
   buildStartLink(payload: string): string | null;
   getViewportSize(): Promise<{ width: number; height: number } | null>;
+  /** Telegram Bot API 8.0+ host insets; other adapters may omit this capability. */
+  getSafeAreaInsets?(): PlatformSafeAreaInsets | null;
   /**
    * Optional host-driven viewport invalidation signal.
    *

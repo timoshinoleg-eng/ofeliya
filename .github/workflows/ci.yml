@@ -119,6 +119,9 @@ jobs:
       - name: Telegram Mini App adaptation contract
         run: npm run test:telegram-tma
 
+      - name: Muse safe client contracts
+        run: npm run test:muse-client
+
       - name: Caddy edge rollout contract
         run: npm run test:caddy-edge
 

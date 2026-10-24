@@ -34,6 +34,17 @@ function readSafeAreaInsets(): SafeAreaInsets {
   return safe;
 }
 
+/** Combine host and CSS measurements without subtracting overlapping device insets twice. */
+export function mergeSafeAreaInsets(css: SafeAreaInsets, host: SafeAreaInsets | null): SafeAreaInsets {
+  if (!host) return { ...css };
+  const side = (key: keyof SafeAreaInsets): number => {
+    const value = host[key];
+    const safeHost = Number.isFinite(value) && value >= 0 ? value : 0;
+    return Math.max(css[key], safeHost);
+  };
+  return { top: side('top'), right: side('right'), bottom: side('bottom'), left: side('left') };
+}
+
 function windowViewport(): ViewportSize {
   return {
     width: Math.max(1, Math.floor(window.innerWidth || document.documentElement.clientWidth || 1)),
@@ -62,6 +73,8 @@ export class ViewportManager {
   private requestId = 0;
   private retryTimer: number | null = null;
   private detachViewportListener: (() => void) | null = null;
+  private started = false;
+  private destroyed = false;
 
   constructor(host: HTMLElement) {
     this.host = host;
@@ -72,6 +85,9 @@ export class ViewportManager {
   }
 
   start(): void {
+    if (this.started) return;
+    this.started = true;
+    this.destroyed = false;
     window.addEventListener('resize', this.onViewportSignal, { passive: true });
     window.addEventListener('orientationchange', this.onViewportSignal, { passive: true });
     window.addEventListener('ofeliya:max-bridge-ready', this.onViewportSignal as EventListener);
@@ -84,10 +100,15 @@ export class ViewportManager {
     }) ?? null;
 
     // Covers the rare case where the MAX CDN bridge becomes available after the module bundle.
-    this.retryTimer = window.setTimeout(() => void this.sync(), 350);
+    this.retryTimer = window.setTimeout(() => {
+      this.retryTimer = null;
+      void this.sync();
+    }, 350);
   }
 
   destroy(): void {
+    this.started = false;
+    this.destroyed = true;
     window.removeEventListener('resize', this.onViewportSignal);
     window.removeEventListener('orientationchange', this.onViewportSignal);
     window.removeEventListener('ofeliya:max-bridge-ready', this.onViewportSignal as EventListener);
@@ -100,6 +121,7 @@ export class ViewportManager {
   }
 
   async sync(): Promise<void> {
+    if (this.destroyed) return;
     const id = ++this.requestId;
     const fallback = windowViewport();
     let viewport = fallback;
@@ -114,7 +136,10 @@ export class ViewportManager {
     }
     if (id !== this.requestId) return;
 
-    const frame = computeViewportFrame(viewport, readSafeAreaInsets());
+    const frame = computeViewportFrame(
+      viewport,
+      mergeSafeAreaInsets(readSafeAreaInsets(), PlatformBridge.getSafeAreaInsets?.() ?? null)
+    );
     this.host.style.left = `${frame.left}px`;
     this.host.style.top = `${frame.top}px`;
     this.host.style.width = `${frame.width}px`;
@@ -125,6 +150,9 @@ export class ViewportManager {
     document.documentElement.style.setProperty('--ofeliya-vh', `${frame.height}px`);
 
     if (this.game && (this.game.scale.width !== frame.width || this.game.scale.height !== frame.height)) {
+      // RESIZE uses cached parentSize during refresh(). Measure our new host frame
+      // before resizing, or Phaser can restore the previous viewport dimensions.
+      this.game.scale.getParentBounds();
       this.game.scale.resize(frame.width, frame.height);
     }
   }
