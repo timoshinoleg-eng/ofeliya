@@ -17,13 +17,20 @@ function setup() {
     const callbacks = new Map();
     return {
       dataset: {},
-      addEventListener(type, cb) {
+      addEventListener(type, cb, options) {
         if (!callbacks.has(type)) callbacks.set(type, []);
-        callbacks.get(type).push(cb);
+        callbacks.get(type).push({ cb, once: options?.once });
+      },
+      removeEventListener(type, cb) {
+        callbacks.set(type, (callbacks.get(type) ?? []).filter(entry => entry.cb !== cb));
       },
       emit(type) {
-        for (const cb of callbacks.get(type) ?? []) cb({ type });
+        for (const entry of [...(callbacks.get(type) ?? [])]) {
+          if (entry.once) this.removeEventListener(type, entry.cb);
+          entry.cb({ type });
+        }
       },
+      listenerCount: () => [...callbacks.values()].reduce((n, list) => n + list.length, 0),
       remove() { scripts.delete(this.id); },
     };
   };
@@ -48,12 +55,15 @@ function setup() {
   return {
     window, document, events, ensure: mod.exports.ensureTelegramBridge,
     script: () => scripts.get('ofeliya-telegram-web-app') ?? null,
+    scriptCount: () => scripts.size,
     cleanup: () => { delete globalThis.window; delete globalThis.document; },
   };
 }
 
 let failures = 0;
+let cases = 0;
 async function caseRun(name, body) {
+  cases++;
   const env = setup();
   try {
     await body(env);
@@ -95,9 +105,63 @@ await caseRun('failed script request can retry without reloading the Mini App', 
   assert.equal(env.events.filter((x) => x === 'ofeliya:telegram-bridge-ready').length, 1);
 });
 
+await caseRun('concurrent callers retain separate deadlines but announce one late SDK load', async (env) => {
+  const early = env.ensure(8);
+  const late = env.ensure(25);
+  const script = env.script();
+  assert.deepEqual(await Promise.all([early, late]), [false, false]);
+  assert.equal(env.scriptCount(), 1, 'concurrent callers share one script');
+  env.window.Telegram = { WebApp: { initData: 'signed-user-data' } };
+  script.emit('load');
+  assert.equal(env.events.length, 1, 'one successful late SDK load emits one ready event');
+  assert.equal(script.listenerCount(), 0, 'both load and error handlers are released');
+  assert.equal(await env.ensure(8), true);
+  assert.equal(await env.ensure(25), true);
+  assert.equal(env.events.length, 1, 'probing the same SDK must not announce again');
+  env.window.Telegram.WebApp = { initData: 'replacement-sdk' };
+  assert.equal(await env.ensure(8), true);
+  assert.equal(env.events.length, 2, 'a replacement SDK can announce its own readiness');
+});
+
+await caseRun('one caller times out while another still observes a successful load', async (env) => {
+  const early = env.ensure(8), late = env.ensure(70);
+  assert.equal(await early, false);
+  env.window.Telegram = { WebApp: { initData: 'signed-user-data' } };
+  env.script().emit('load');
+  assert.equal(await late, true);
+  assert.equal(env.events.length, 1);
+  assert.equal(env.script().listenerCount(), 0);
+});
+
+await caseRun('concurrent network failure cleans handlers and retry remains single flight', async (env) => {
+  const a = env.ensure(70), b = env.ensure(90), failed = env.script();
+  failed.emit('error');
+  assert.deepEqual(await Promise.all([a, b]), [false, false]);
+  assert.equal(failed.listenerCount(), 0);
+  assert.equal(env.scriptCount(), 0);
+  assert.equal(env.events.length, 0);
+  const c = env.ensure(70), d = env.ensure(90), retry = env.script();
+  assert.notEqual(retry, failed);
+  env.window.Telegram = { WebApp: { initData: 'retry-sdk' } };
+  failed.emit('load');
+  assert.equal(env.events.length, 0, 'a failed request cannot announce after retry');
+  retry.emit('load');
+  assert.deepEqual(await Promise.all([c, d]), [true, true]);
+  assert.equal(env.events.length, 1);
+  assert.equal(retry.listenerCount(), 0);
+});
+
+await caseRun('browser and MAX without Telegram launch data never request Telegram SDK', async (env) => {
+  env.window.location.hash = '';
+  env.window.WebApp = { initData: 'max-init' };
+  assert.equal(await env.ensure(8), false);
+  assert.equal(env.scriptCount(), 0);
+  assert.equal(env.events.length, 0);
+});
+
 if (failures) {
   console.error('telegram late loader regressions:', failures, 'failed');
   process.exitCode = 1;
 } else {
-  console.log('telegram late loader regressions: 2/2 PASS');
+  console.log(`telegram late loader regressions: ${cases}/${cases} PASS`);
 }
