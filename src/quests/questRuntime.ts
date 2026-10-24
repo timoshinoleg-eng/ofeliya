@@ -28,7 +28,9 @@ export class QuestRuntime {
   private readonly engine: QuestEngine;
   private run: QuestRunCheckpoint | null = null;
   private second = -1;
-  private streakSecond = -1;
+  private lastTimeMs = -1;
+  private streakMs = -1;
+  private sentTimeMs = -1;
   private active = false;
   private deliveryId = identity().slice(0, 8);
   constructor(private readonly storage: QuestStorage = createQuestLocalStorage(),
@@ -44,7 +46,7 @@ export class QuestRuntime {
   }
   begin(completedRuns: number, resume?: QuestRunCheckpoint,
     progress?: { kills: number; timeMs: number; noDamageMs: number; savedAtEpochMs?: number }): void {
-    this.second = this.streakSecond = -1;
+    this.second = this.lastTimeMs = this.streakMs = this.sentTimeMs = -1;
     if (resume && this.run?.id === resume.id && this.run.ended) {
       this.active = false;
       this.engine.syncLifetime({ completedRuns });
@@ -93,11 +95,29 @@ export class QuestRuntime {
     this.send({kind:'mutation_chosen'},`mutation:${this.run.mutations}`);
   }
   tick(timeMs:number,noDamageMs:number,force=false): void {
-    const second=Math.floor(timeMs/1000), streak=Math.floor(noDamageMs/1000);
-    if (!force && second === this.second && streak >= this.streakSecond) return;
-    this.second=second; this.streakSecond=streak;
-    this.send({kind:'run_tick',timeMs,noDamageMs},`tick:${second}`);
+    if (!this.active || !Number.isFinite(timeMs) || timeMs < 0 ||
+      !Number.isFinite(noDamageMs) || noDamageMs < 0 || timeMs < this.lastTimeMs) return;
+    const hit = noDamageMs < this.streakMs;
+    if (timeMs === this.lastTimeMs && (!force || !hit)) return;
+    // Flush a suppressed sample before a hit, including within the same second.
+    if (hit && this.lastTimeMs > this.sentTimeMs) {
+      this.send({kind:'run_tick',timeMs:this.lastTimeMs,noDamageMs:this.streakMs},`tick:${this.lastTimeMs}`);
+      this.sentTimeMs = this.lastTimeMs;
+    }
+    const second = Math.floor(timeMs / 1000);
+    const emit = force || hit || second !== this.second;
+    this.lastTimeMs = timeMs; this.streakMs = noDamageMs;
+    if (!emit) return;
+    // A trusted damage hook can follow the update at the exact same elapsed time.
+    // Apply only its reset; ordinary equal-time core ticks remain rejected.
+    if (timeMs <= this.sentTimeMs) {
+      if (hit) this.engine.restoreNoDamageStreak(0, false);
+      return;
+    }
+    this.send({kind:'run_tick',timeMs,noDamageMs},`tick:${timeMs}`);
+    this.sentTimeMs = timeMs; this.second = second;
   }
+
   end(completedRuns:number): void {
     if (!this.active || !this.run) return;
     this.send({kind:'run_completed'},'completed');

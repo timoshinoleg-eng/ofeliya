@@ -150,6 +150,7 @@ export type QuestEvent =
   | (QuestEventBase & {
       readonly kind: 'run_tick';
       /** Milliseconds survived in the current run. */
+      /** Run-elapsed milliseconds; equal/older samples are ignored until checkpoint restore/new run. */
       readonly timeMs: number;
       /**
        * Milliseconds survived without taking damage in the current run — the current
