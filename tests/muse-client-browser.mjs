@@ -42,6 +42,28 @@ export async function checkMuseClient(browser,url) {
    for(let i=0;i<10;i++){const b=new CollectionBoard(m,()=>{});b.destroy();b.destroy();}
   });
   assert.deepEqual(await page.evaluate(()=>{const m=window.__game.scene.getScene('Menu');return [m.events.listenerCount('shutdown'),m.scale.listenerCount('resize')];}),await page.evaluate(()=>window.__collectionListeners),'repeated panel close removes all listeners');
+  await page.evaluate(()=>{window.__museMenuResized=false;window.__game.scene.getScene('Menu').events.once('create',()=>{window.__museMenuResized=true;});});
+  await page.setViewportSize({width:320,height:474});
+  await page.waitForFunction(()=>window.__museMenuResized);
+  await page.evaluate(()=>{window.__game.scene.getScene('Menu').showCodex();});
+  await tap('ofeliya-menu-collection');
+  await tap('ofeliya-collection-skins');
+  const overlaps=await page.evaluate(()=>{
+   const root=window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection');
+   const close=root.list.find(o=>o.name==='ofeliya-collection-close').getBounds();
+   return root.list.filter(o=>o.name?.startsWith('ofeliya-skin-')).filter(o=>{
+    const b=o.getBounds();return b.y<close.bottom&&b.bottom>close.y;
+   }).map(o=>o.name);
+  });
+  assert.deepEqual(overlaps,[],'safe-area-reduced viewport keeps skin controls separate from close');
+  await tap('ofeliya-collection-next');
+  assert.equal(await page.evaluate(()=>!!window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection').list.find(o=>o.name==='ofeliya-skin-skin.gilded-prime')),true,'pagination keeps last skin reachable');
+  await tap('ofeliya-collection-lab');
+  assert.equal(await page.evaluate(()=>{
+   const texts=window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection').list.filter(o=>o.type==='Text');
+   return texts.find(o=>o.text.startsWith('Исследование клеток')).getBounds().bottom<=texts.find(o=>o.text.startsWith('Открыто записей')).getBounds().y;
+  }),true,'safe-area-reduced lab research and status text do not overlap');
+  await tap('ofeliya-collection-close');
   const state=await page.evaluate(async()=>{
    const {ClientCollection}=await import('/src/game/collection/ClientCollection.ts');
    const c=new ClientCollection();c.observeRun({id:'qa-cosmetic-unlock',kills:0,timeMs:0,noDamageMs:0,level:1,combo:50,mutations:[],elites:0,hostCells:0,evolutions:[],legendaryIds:[],won:false});

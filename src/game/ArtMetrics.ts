@@ -17,6 +17,9 @@ export const CORE_ART = {
 const BAKE_FACTOR = typeof window === 'undefined' ? 4
   : window.devicePixelRatio >= 2.5 ? 4 : window.devicePixelRatio >= 1.5 ? 3 : 2;
 export function artSourceFactor(key: string): number {
+  // Late mutation recovery updates the same 256px canvas in place. Keep its
+  // packaged-pixel/texture-identity contract while adapting actor/animation art.
+  if (key === 'mutation-prism' || key === 'mutation-halo' || key === 'mutation-singularity') return 4;
   if (key === 'bio-cycle-virus-player' || key === 'bio-cycle-immune-antibody' || key === 'bio-hit-virus-player' || key === 'bio-hit-immune-antibody') return BAKE_FACTOR;
   return Object.prototype.hasOwnProperty.call(CORE_ART, key) ? BAKE_FACTOR : 1;
 }

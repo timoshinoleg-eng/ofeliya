@@ -42,5 +42,8 @@ for(const [dpr,want] of [[undefined,4],[1,2],[1.5,3],[2.5,4]]) {
   }
   if(context.window){context.window.devicePixelRatio=4;assert.equal(art.artSourceFactor('virus-player'),want,'bake factor cannot drift after boot');}
   assert.equal(art.artSourceFactor('combat-particles'),1);
+  for(const key of ['mutation-prism','mutation-halo','mutation-singularity']) {
+    assert.equal(art.artSourceFactor(key),4,'mutation recovery keeps the existing exact 256px source contract at every DPR');
+  }
 }
 console.log('PASS Muse phase0 raw governor/clamped simulation/modal keyboard/session DPR geometry');

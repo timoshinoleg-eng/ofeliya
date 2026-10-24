@@ -46,21 +46,18 @@ export class CollectionBoard {
    button('ofeliya-collection-'+tab,left+16+tabW*(i+0.5),top+88,tabW-3,
     tab==='achievements'?'ЦЕЛИ':tab==='skins'?'ШТАММЫ':'ЛАБОРАТОРИЯ',()=>{this.page=tab;this.offset=0;this.render();},tab!=='skins'||clientFlags().skins.gallery);
   }
-  const y0=top+122,rowH=compact?78:91;
+  const y0=top+122,rowH=this.page==='skins'?90:compact?78:91;
+  const pageSize=Math.max(1,Math.min(4,Math.floor((h-218)/rowH)));
   if(this.page==='achievements') {
-   const rows=state.achievements.slice(this.offset,this.offset+4);
+   const rows=state.achievements.slice(this.offset,this.offset+pageSize);
    rows.forEach((a,i)=>{
     const y=y0+i*rowH;
     text(left+16,y,`${a.unlocked?'◆':'◇'} ${a.title}`,13,a.unlocked?VISUAL_TEXT.host:VISUAL_TEXT.ivory);
     text(left+16,y+22,a.description,11,VISUAL_TEXT.muted);
     text(left+16,y+51,`${a.progress.toLocaleString('ru-RU')} / ${a.threshold.toLocaleString('ru-RU')}`,11,VISUAL_TEXT.host);
    });
-   const y=top+h-83;
-   button('ofeliya-collection-prev',left+43,y,54,'‹',()=>{this.offset-=4;this.render();},this.offset>0);
-   text(W/2,y,`${1+this.offset/4} / ${Math.ceil(state.achievements.length/4)}`,11).setOrigin(0.5);
-   button('ofeliya-collection-next',left+w-43,y,54,'›',()=>{this.offset+=4;this.render();},this.offset+4<state.achievements.length);
   } else if(this.page==='skins') {
-   SKIN_CATALOG.forEach((skin,i)=>{
+   SKIN_CATALOG.slice(this.offset,this.offset+pageSize).forEach((skin,i)=>{
     const y=y0+i*rowH,owned=state.ownedSkinIds.includes(skin.id);
     const orb=s.add.circle(left+32,y+22,15,cosmeticColor(skin.id),owned?0.95:0.25).setStrokeStyle(2,VISUAL.line);
     this.root.add(orb);
@@ -84,8 +81,15 @@ export class CollectionBoard {
    const branches=[['МЕТАБОЛИЗМ','Записи собранной РНК и длительности циклов.'],
     ['ХИТИН','История серий без урона и завершённых циклов.'],
     ['ХЕМОТАКСИС','Исследование клеток хозяина и элитных противников.']];
-   branches.forEach(([title,desc],i)=>{text(left+16,y0+57+i*68,title,14);text(left+16,y0+80+i*68,desc,12,VISUAL_TEXT.muted);});
+   const branchStep=Math.min(68,Math.max(48,(h-280)/3));
+   branches.forEach(([title,desc],i)=>{text(left+16,y0+57+i*branchStep,title,14);text(left+16,y0+80+i*branchStep,desc,12,VISUAL_TEXT.muted);});
    text(left+16,top+h-96,`Открыто записей: ${done} / ${state.achievements.length}\nУрон, здоровье, скорость и награды не меняются.`,11,VISUAL_TEXT.host);
+  }
+  if(this.page!=='lab') {
+   const total=this.page==='skins'?SKIN_CATALOG.length:state.achievements.length,y=top+h-83;
+   button('ofeliya-collection-prev',left+43,y,54,'‹',()=>{this.offset=Math.max(0,this.offset-pageSize);this.render();},this.offset>0);
+   text(W/2,y,`${1+Math.floor(this.offset/pageSize)} / ${Math.ceil(total/pageSize)}`,11).setOrigin(0.5);
+   button('ofeliya-collection-next',left+w-43,y,54,'›',()=>{this.offset+=pageSize;this.render();},this.offset+pageSize<total);
   }
   button('ofeliya-collection-close',W/2,top+h-29,w-32,'ЗАКРЫТЬ',()=>this.destroy());
  }
