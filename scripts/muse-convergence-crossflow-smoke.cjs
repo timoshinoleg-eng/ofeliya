@@ -255,57 +255,101 @@ const mark = (name, value, kind = 'real') => {
      * modal. That modal legitimately owns the game pause, so every phase that
      * needs a running game has to be able to clear it the way a player does.
      *
+     * Two things make a naive "tap once and wait for the modal to disappear"
+     * fragile, and both are real product behaviour:
+     *   - the cards fade and slide in, and Phaser does not hit-test an invisible
+     *     or still-moving object, so the tap needs a settled hit box;
+     *   - a queued level-up behind the open modal replaces it with the next card
+     *     when the first one is picked, so "closed" means "closed or replaced".
+     * The helper therefore taps until no modal is left, and reports what it saw
+     * if it cannot get there.
+     *
      * `required: true` waits for the modal to appear; otherwise the helper is a
      * no-op when no modal is open.
      */
+    const modalState = () => page.evaluate(() => {
+      const ui = window.__game.scene.getScene('UI');
+      const gs = window.__game.scene.getScene('Game');
+      return {
+        modal: Boolean(ui?.modal),
+        modalOpen: Boolean(ui?.modalOpen),
+        awaitingChoice: Boolean(gs?.awaitingChoice),
+        queuedLevels: gs?.queuedLevels ?? null,
+        choices: (gs?.pendingChoices ?? []).map(c => c.id),
+      };
+    });
     const resolveLevelUpModal = async ({ required = false } = {}) => {
-      const modalVisible = () => page.evaluate(() => {
-        const ui = window.__game.scene.getScene('UI');
-        const gs = window.__game.scene.getScene('Game');
-        return Boolean(ui?.modal) && gs?.awaitingChoice === true;
-      });
-      if (!await modalVisible()) {
+      let state = await modalState();
+      if (!state.modal) {
         if (!required) return null;
-        await page.waitForFunction(() => {
+        await page.waitForFunction(() => Boolean(window.__game.scene.getScene('UI')?.modal),
+          null, { timeout: 20000 });
+        state = await modalState();
+      }
+      let cardInfo = null;
+      for (let round = 0; round < 6; round++) {
+        const info = await page.evaluate(() => {
           const ui = window.__game.scene.getScene('UI');
           const gs = window.__game.scene.getScene('Game');
-          return Boolean(ui?.modal) && gs?.awaitingChoice === true;
+          if (!ui?.modal) return null;
+          return {
+            cards: ui.modal.list.filter(o => o.type === 'Container').length,
+            choices: gs.pendingChoices.map(c => ({ id: c.id, title: c.title, kind: c.kind })),
+          };
         });
+        if (!info) break;
+        cardInfo = cardInfo ?? info;
+        // Tag the modal instance and reset the motion probe: a replaced modal may
+        // have exactly the same hit box as the previous one.
+        await page.evaluate(() => {
+          const ui = window.__game.scene.getScene('UI');
+          window.__museModal = ui?.modal ?? null;
+          window.__museCardBox = null;
+        });
+        // Wait for a fully visible card whose hit box stopped moving.
+        await page.waitForFunction(() => {
+          const ui = window.__game.scene.getScene('UI');
+          const card = ui?.modal?.list?.filter(o => o.type === 'Container')[0];
+          if (!card || card.alpha < 1) return false;
+          const b = card.getBounds();
+          const prev = window.__museCardBox;
+          window.__museCardBox = { x: b.x, y: b.y, w: b.width, h: b.height };
+          if (!prev) return false;
+          // Sub-pixel idle motion must not keep the card from settling.
+          return Math.abs(prev.x - b.x) < 0.5 && Math.abs(prev.y - b.y) < 0.5 &&
+            Math.abs(prev.w - b.width) < 0.5 && Math.abs(prev.h - b.height) < 0.5;
+        }, null, { timeout: 20000 });
+        const cardPoint = await page.evaluate(() => {
+          const ui = window.__game.scene.getScene('UI');
+          const card = ui.modal.list.filter(o => o.type === 'Container')[0];
+          const hit = card.list.find(o => o.input && o.input.enabled);
+          if (!hit) throw Error('the first upgrade card has no interactive surface');
+          const b = hit.getBounds();
+          const canvas = window.__game.canvas.getBoundingClientRect();
+          const scene = window.__game.scene.getScene('UI');
+          return {
+            x: canvas.x + (b.x + b.width / 2) * canvas.width / scene.scale.width,
+            y: canvas.y + (b.y + b.height / 2) * canvas.height / scene.scale.height,
+          };
+        });
+        await page.touchscreen.tap(cardPoint.x, cardPoint.y);
+        // The modal must close. A queued level-up may replace it with the next
+        // card, which is a new modal and not a stuck one.
+        await page.waitForFunction(() => {
+          const ui = window.__game.scene.getScene('UI');
+          return !ui?.modal || ui.modal !== window.__museModal;
+        }, null, { timeout: 8000 });
+        state = await modalState();
+        if (!state.modal) break;
       }
-      const cardInfo = await page.evaluate(() => {
-        const ui = window.__game.scene.getScene('UI');
-        const gs = window.__game.scene.getScene('Game');
-        return {
-          cards: ui.modal.list.filter(o => o.type === 'Container').length,
-          choices: gs.pendingChoices.map(c => ({ id: c.id, title: c.title, kind: c.kind })),
-        };
-      });
-      // The cards animate in from alpha 0, and Phaser does not hit-test an
-      // invisible object. Wait for the card to be fully visible before tapping.
-      await page.waitForFunction(() => {
-        const ui = window.__game.scene.getScene('UI');
-        const card = ui?.modal?.list?.filter(o => o.type === 'Container')[0];
-        return Boolean(card) && card.alpha >= 1;
-      });
-      const cardPoint = await page.evaluate(() => {
-        const ui = window.__game.scene.getScene('UI');
-        const card = ui.modal.list.filter(o => o.type === 'Container')[0];
-        const hit = card.list.find(o => o.input && o.input.enabled);
-        if (!hit) throw Error('the first upgrade card has no interactive surface');
-        const b = hit.getBounds();
-        const canvas = window.__game.canvas.getBoundingClientRect();
-        const scene = window.__game.scene.getScene('UI');
-        return {
-          x: canvas.x + (b.x + b.width / 2) * canvas.width / scene.scale.width,
-          y: canvas.y + (b.y + b.height / 2) * canvas.height / scene.scale.height,
-        };
-      });
-      await page.touchscreen.tap(cardPoint.x, cardPoint.y);
-      await page.waitForFunction(() => {
-        const ui = window.__game.scene.getScene('UI');
-        const gs = window.__game.scene.getScene('Game');
-        return !ui.modal && gs.awaitingChoice === false;
-      });
+      const final = await modalState();
+      if (final.modal) {
+        const pointer = await page.evaluate(() => {
+          const p = window.__game?.input?.activePointer;
+          return p ? { x: p.x, y: p.y, worldX: p.worldX, worldY: p.worldY } : null;
+        });
+        throw new Error(`the level-up modal did not close: ${JSON.stringify({ final, pointer })}`);
+      }
       return cardInfo;
     };
 
@@ -314,6 +358,7 @@ const mark = (name, value, kind = 'real') => {
      * resolve an open level-up modal and wait for the game to run again.
      */
     const ensureRunningGame = async (label) => {
+      let last = null;
       for (let attempt = 0; attempt < 40; attempt++) {
         const state = await page.evaluate(() => {
           const ui = window.__game.scene.getScene('UI');
@@ -326,21 +371,17 @@ const mark = (name, value, kind = 'real') => {
             awaitingChoice: Boolean(gs?.awaitingChoice),
           };
         });
+        last = state;
         if (state.active && !state.modal && !state.modalOpen && state.canResumeFromHost === true) return state;
-        await resolveLevelUpModal();
+        try {
+          await resolveLevelUpModal();
+        } catch (error) {
+          // A modal that refuses to close is reported by the helper; keep trying
+          // until the budget is spent so the final message carries the state.
+          last = { ...state, resolveError: String(error) };
+        }
         await page.waitForTimeout(150);
       }
-      const last = await page.evaluate(() => {
-        const ui = window.__game.scene.getScene('UI');
-        const gs = window.__game.scene.getScene('Game');
-        return {
-          active: window.__game.scene.isActive('Game'),
-          modal: Boolean(ui?.modal),
-          modalOpen: Boolean(ui?.modalOpen),
-          canResumeFromHost: ui?.canResumeFromHost?.() ?? null,
-          awaitingChoice: Boolean(gs?.awaitingChoice),
-        };
-      });
       throw new Error(`the game did not reach a running, unblocked state for ${label}: ${JSON.stringify(last)}`);
     };
 
