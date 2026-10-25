@@ -1,505 +1,385 @@
-and it is built last so that it cannot be mistaken for the money system.
+| `updated_at` | The **only** mutable column on an operation row besides `status`. History is otherwise append-only |
+| RLS | `alter table ofeliya_pay.* enable row level security;` + `grant ... to service_role` — mirroring `ofeliya_private` |
+| RPC | One `ofeliya_pay_call(op text, ...)` function per the existing pattern, or a dedicated money gateway function |
 
-### 10.1 SKU model
+### 15.4 What can be reused from the existing migrations
 
-```sql
-ofeliya_pay.catalog_sku (
-  sku                 text primary key,      -- e.g. 'cosmetic.skin.gilded_prime.v1'
-  kind                text not null,         -- COSMETIC | LAB_BRANCH | LAB_LEVEL | PRESTIGE
-  title               text not null,
-  description         text not null default '',
-  price_stars         integer not null check (price_stars > 0),
-  currency            text not null default 'XTR' check (currency = 'XTR'),
-  entitlement_kind    text not null,         -- COSMETIC | STAT | PRESTIGE
-  entitlement_key     text not null,         -- e.g. 'skin.gilded_prime' | 'lab.magnet'
-  entitlement_level   integer,               -- NULL = level decided by server from current state
-  max_level           integer,               -- cap for leveled entitlements
-  one_time_per_user   boolean not null default false,
-  max_level_per_user  integer,               -- for repeatable levels
-  prerequisite_sku    text,                  -- FK to catalog_sku(sku)
-  version             integer not null default 1,
-  enabled             boolean not null default true,
-  created_at          timestamptz not null default now(),
-  updated_at          timestamptz not null default now()
-)
-```
+**There are no existing "migrations" in OFELIYA** in the DDL sense — `deploy/ofeliya-state.sql` is a
+single idempotent script with `create schema if not exists` / `create table` (no `if not exists` on the
+table) that is applied **once, manually**. So:
 
-### 10.2 Price authority
-
-| Rule | Statement |
-|---|---|
-| Server price | `catalog_sku.price_stars`. The **only** price that is ever charged |
-| Client price | **Informational.** Rendered from `/api/storefront/catalog`. May be stale by seconds |
-| Price mismatch at settlement | The server compares `SuccessfulPayment.total_amount` to its own recomputed amount. Mismatch → **do not grant**, mark the operation `PRICE_MISMATCH`, alert |
-| Price changes | Bump `catalog_sku.version`. A new version does **not** alter existing operations (`operations` stores the amount it was priced at) |
-
-### 10.3 Availability
-
-| State | Server behaviour |
-|---|---|
-| `enabled = false` | The SKU is not purchasable. `404` on purchase. It **stays visible** in the catalog with `available: false` so the client can render "coming soon" instead of a broken row |
-| Sold out / capped | `409` (one-time) or `422` (level maxed) |
-| `prerequisite_sku` unmet | `422` with the missing prerequisite id, so the client can render it |
-| Expired offer | `410` |
-
-### 10.4 SKU migration (old → new)
-
-Never mutate a SKU's meaning in place. Instead:
-
-1. Create a **new SKU row** (`version` bumped, or a new id).
-2. Leave the old row `enabled = false`.
-3. Keep a `catalog_sku.supersedes` / `superseded_by` link.
-4. **Entitlements are keyed by `entitlement_key` + `level`, not by SKU.** So a SKU rename or repricing
-   does not invalidate an existing grant.
-
-> This is the single most important schema decision: **entitlement identity ≠ purchase identity.**
-> It is what makes refunds, re-pricing, and SKU migration safe.
-
-### 10.5 Localization
-
-- The catalog carries `title`/`description` as **server-provided** strings for the active locale, or as
-  keys the client resolves locally.
-- **Prices are locale-independent** — Stars have no locale formatting. Display as `⭐ N`.
-- The client may localize the *description*; it may not localize the *price* or the *effect*.
-
-### 10.6 Restore purchases
-
-```
-POST /api/storefront/restore {platform, initData}
-→ identity → userKey → all ENTITLED entitlements → 200 {entitlements}
-```
-
-Restore is **not** a payment operation and **not** a grant — it is a read. It must not create, extend or
-mutate any entitlement. It must be safe to call repeatedly and from any device.
-
-### 10.7 Pending purchase UI states
-
-| Server state | Client rendering |
-|---|---|
-| `PENDING` | "Ожидание оплаты…" — a spinner, a cancel affordance that only cancels the *intent* |
-| `PAID` | "Оплата получена, выдаём…" — brief; the client should poll |
-| `ENTITLED` | Success + the newly unlocked item highlighted |
-| `REFUND_PENDING` | "Возврат в обработке" — **not** an error; the entitlement is shown as *pending revocation*, not as active |
-| `REFUNDED` | "Возврат оформлен" — entitlement shown as revoked |
-| `FAILED` / `REJECTED` | A clear error with a human-readable reason |
-| *(unknown / unreachable)* | **Fail closed**: show "не удалось подтвердить оплату" — **never** "оплачено" |
-
-### 10.8 Error states
-
-| Code | Client behaviour |
-|---|---|
-| `409 IDEMPOTENCY_KEY_REUSE` | "Этот запрос уже использован с другими параметрами." — do not auto-retry |
-| `409 ONE_TIME_ALREADY_OWNED` | "Уже приобретено." — re-read state and show the owned item |
-| `404 SKU_UNAVAILABLE` | Hide/disable the buy button |
-| `422 ENTITLEMENT_MAXED` | "Максимальный уровень достигнут." |
-| `422 PREREQUISITE_MISSING` | Show the prerequisite |
-| `410 OFFER_EXPIRED` | "Предложение истекло." — offer a refresh |
-| `503 LEDGER_UNAVAILABLE` | "Платёж временно недоступен. Попробуйте позже." — **and issue no invoice** |
+- There is **no migration framework** to reuse. The money schema should be a **separate, versioned,
+  ordered script set** (e.g. `deploy/ofeliya-pay/001_catalog.sql`, `002_operations.sql`, …) with a
+  `schema_migrations` table, because money DDL must be replayable and auditable.
+- The **discipline** is reusable verbatim: private schema, revoke from `public`/`anon`/`authenticated`,
+  grant to `service_role`, `security invoker`, `set search_path = ''`.
+- The `ofeliya_private.state` table is **untouched** by the money work.
 
 ---
 
-## 11. Permanent Lab progression
+## 16. API contracts
 
-The highest-risk game layer. The existing Lab is **informational only**
-(*"Урон, здоровье, скорость и награды не меняются."*) and that boundary is enforced by
-`scripts/check-muse-collection.mjs`.
+Minimal surface — six endpoints. Everything else is an implementation detail.
 
-### 11.1 Three tiers
-
-| Tier | Definition | Authority | v1 |
-|---|---|---|---|
-| **Safe informational Lab** | What exists today: 3 branches, no effect, no write | client presentation | ✅ shipped |
-| **Earned progression** | Progression the player earns in-game, not paid | client/server (existing) | ✅ shipped (quests, achievements) |
-| **Paid permanent progression** | Permanent stat/power bought with Stars | **server** | ⚠️ v1.1 — see §11.2 |
-
-### 11.2 The ordering risk (why paid power is v1.1, not v1)
-
-A paid permanent stat changes **gameplay**, which means:
-
-- It becomes a **balance** problem, not just a plumbing problem.
-- It can be **spent** in a run → a refund creates a "power without payment" or "payment without power"
-  window.
-- It interacts with the **seeded-duel / trusted-score** contract: a player with paid power and a player
-  without are not comparable. `server/index.mjs` already separates *Strained* from *Standard* ranking
-  (PR #43) for exactly this class of reason.
-
-**Recommendation:** v1 ships **paid cosmetics + a non-combat permanent Lab branch** (e.g. a collection
-branch, a badge, a prestige tier). Paid **combat power** (HP / damage / movement / magnet / income)
-waits until:
-
-1. the ledger has run in production with real money for a defined soak period, **and**
-2. a ranking policy exists that separates paid-power players from free players **and**
-3. a refund semantics decision is made: *does a refund remove power the player already used?* (it cannot
-   — so either power is non-combat, or refunds of used power are impossible by design).
-
-**If combat power must ship**, the answer is to make the grant **re-read at run start** and to record
-`paid_power_used_at` on the score, so ranked play can be partitioned.
-
-### 11.3 Per-parameter specification
-
-For every paid parameter, the server must be able to answer all ten questions:
-
-| Question | Rule |
-|---|---|
-| Server representation | `entitlements(user_key, entitlement_key='lab.<param>')` → `level integer`, `source_operation_id`, `granted_at`, `revoked_at` |
-| Validation | Server computes the legal next level from the current level. **The client never sends `newLevel`.** |
-| Max level | `catalog_sku.max_level` (and `max_level_per_user` for repeatable purchases) |
-| Pricing | `catalog_sku.price_stars` per level; a *level-up* SKU prices the **next** level, not an arbitrary one |
-| Prerequisite graph | `catalog_sku.prerequisite_sku`; the server checks the whole chain |
-| Refund behaviour | Soft-revoke the entitlement row; **the ledger row is never deleted**; the already-consumed effect is not clawed back (a documented, accepted asymmetry) |
-| Downgrade behaviour | On refund, the entitlement reverts to the highest level that is still paid-for. With a leveled entitlement, refunding level 3 while levels 1–2 remain paid → level 2 |
-| Save compatibility | The client save stores **nothing** that grants power. It may store a *cache* of the last known level, which is refreshed from the server on every run start |
-| Gameplay application point | The server-granted level is fetched at run start and passed into the run as read-only state; the run must not be able to mutate it |
-| Entitlement target in the fingerprint | `lab.<param>.level.<N>` — so the same `opId` cannot be reused for a different level |
-
-### 11.4 The client protocol (intent, not state)
+### 16.1 `GET /api/storefront/catalog`
 
 ```
-❌ FORBIDDEN                            ✅ REQUIRED
-POST {branch:'magnet', newLevel:7}      POST {opId:'...', sku:'lab.magnet.level.up'}
-                                         → server: lock user → read current level
-                                         → validate max/prereq/price
-                                         → fingerprint binds to lab.magnet.level.7
-                                         → charge → grant level
+→ no auth required for the catalog itself; auth required for "owned" decoration
+← 200 {
+    catalogVersion: 42,
+    skus: [
+      { sku, kind, title, description, priceStars, currency:'XTR',
+        entitlement: { kind, key, maxLevel },
+        available: true, unavailableReason: null,
+        oneTimePerUser: false, prerequisiteSku: null }
+    ]
+  }
 ```
+- Idempotency: N/A (read-only, no side effects).
+- Failure: `503` if the catalog cannot be read → the storefront renders "магазин временно недоступен".
+- The client treats `priceStars` as **informational** only.
 
-The server computes "the next legal level" and prices *that*. The client cannot ask for level 7 —
-it can only ask to **advance**, and the server decides by how much.
+### 16.2 `GET /api/storefront/state`
 
-### 11.5 What is *not* paid permanent power
+```
+→ { platform:'telegram', initData }
+← 200 {
+    userKey,                       // opaque, e.g. 'telegram:123…'
+    entitlements: [ { key, level, kind, revoked:false } ],
+    purchases: [ { opId, sku, status, amountStars, createdAt } ],
+    stateVersion: 1732            // monotonic; the client discards older responses
+  }
+```
+- Auth: `validateInitData` → `403` on an invalid signature.
+- Idempotency: N/A (read-only).
+- This is the **only** source the client renders entitlements from.
 
-For the avoidance of doubt, none of these may be sold in v1 or v1.1:
+### 16.3 `POST /api/storefront/purchase` — create the intent
 
-- Anything that alters a **ranked** score's comparability without partitioning (§11.2).
-- Anything that can be **bought twice** and stacked without a cap.
-- Anything that is only enforced **client-side** (the entire Muse `LabModifiers` failure mode).
+```
+→ { platform, initData, opId, sku }
+← 202 {
+    opId, sku, status:'PENDING',
+    payment: { currency:'XTR', amountStars, invoicePayload },
+    stateVersion
+  }
+```
+Server validation order: identity → `opId` shape → SKU exists & enabled → prerequisite → entitlement
+state → idempotency (fingerprint) → create the intent.
+- `200` if the operation already exists with the **same** fingerprint (replay, with `replayed:true`).
+- `409` `IDEMPOTENCY_KEY_REUSE` if the same `opId` has a different fingerprint.
+- `409` `ONE_TIME_ALREADY_OWNED` for a one-time SKU already owned.
+- `422` for unsatisfiable state (maxed, prerequisite missing).
+- `404` unknown/disabled SKU. `400` malformed `opId`. `503` ledger unavailable → **no intent created**.
+- `invoicePayload` is server-minted, ≤128 bytes, opaque, and encodes the operation id.
+
+### 16.4 `POST /api/storefront/fulfill` — the money endpoint
+
+This is the endpoint the **bot** calls when Telegram delivers `successful_payment`. It is **not** a
+public client endpoint.
+
+```
+→ { platform, initData, successfulPayment: {…} }   // or a bot-authenticated variant
+← 200 { opId, status:'ENTITLED', entitlement:{key,level}, stateVersion }
+```
+Server validation: identity → `currency === 'XTR'` → `total_amount === operations.amount_stars` →
+`invoice_payload` resolves to a live `PENDING` operation owned by this user → charge id not already
+used → transaction (§12.1).
+- `409` `CHARGE_ID_ALREADY_APPLIED` if the charge id exists → returns the **original** result (replay).
+- `409` `PRICE_MISMATCH` if the amount differs → the operation is marked `REJECTED`, **nothing is granted**, and an alert fires.
+- `422` if the intent is expired or already terminal.
+- `503` if the ledger is unavailable → **nothing is granted**. The charge-without-delivery guard (§14) handles the late arrival.
+
+### 16.5 `POST /api/storefront/restore`
+
+```
+→ { platform, initData }
+← 200 { entitlements: [ { key, level, kind } ] }
+```
+- Read-only. Never creates or mutates. Safe to call from any device, any number of times.
+- `403` on an invalid signature. No `503` fallback to local data — the client shows "не удалось
+  восстановить покупки" rather than a stale local copy.
+
+### 16.6 `POST /api/admin/reconcile` — admin only
+
+```
+→ { op:'scan' }                    → 200 { findings: [...] }
+→ { op:'repair', findingKey, reason, chargeReference? }
+                                     → 200 { applied:true } | 409 { error:'manual-review-required' }
+```
+- Auth: an **admin token**, not a game session. Separate from `OFELIYA_STATE_TOKEN`.
+- `scan` is read-only and idempotent. `repair` requires an explicit `reason` and writes `grants_log`.
+- Repairs that would grant value without a charge reference are **rejected** (§14.4).
+
+### 16.7 API summary
+
+| Endpoint | Auth | Method | Idempotent | Writes money state |
+|---|---|---|---|---|
+| `GET /catalog` | none | GET | n/a | no |
+| `GET /state` | initData | GET | n/a | no |
+| `POST /purchase` | initData | POST | ✅ by `opId` | creates the intent |
+| `POST /fulfill` | bot | POST | ✅ by charge id | ✅ grants |
+| `POST /restore` | initData | POST | ✅ read-only | no |
+| `POST /admin/reconcile` | admin token | POST | ✅ | only on explicit repair |
 
 ---
 
-## 12. Transaction design — the critical purchase
+## 17. Client/server trust matrix
 
-### 12.1 The transaction
+| Field | Client may send? | Server trusts? | Server recomputes? | Persisted where |
+|---|---|---|---|---|
+| `platform` | ✅ | ✅ (allowlist `max`/`telegram`) | — | — |
+| `initData` | ✅ | ✅ (signature) | — | — |
+| user id / uid | ❌ **derived only** | ✅ derived | ✅ from `validateInitData` | `operations.user_key`, `entitlements.user_key` |
+| `opId` | ✅ | ⚠️ only as a *proposal* | ✅ bound into the fingerprint | `operations.op_id` |
+| `opFingerprint` | ❌ | — | ✅ computed | `operations.op_fingerprint` |
+| SKU | ✅ (request) | ⚠️ only to *look up* | ✅ resolved → price + entitlement target | `operations.sku` |
+| price / amount | ❌ | ❌ | ✅ from `catalog_sku` | `operations.amount_stars` |
+| currency | ❌ | ❌ (always `XTR`) | ✅ | `operations.currency` |
+| branchId | ❌ (intent only) | ❌ | ✅ the server decides the next legal branch/level | `operations.entitlement_key/level` |
+| level / newLevel | ❌ | ❌ | ✅ server computes from the current entitlement | `entitlements.level` |
+| Stars transaction id | ❌ | ❌ from the client | ✅ from Telegram's `successful_payment` | `operations.telegram_payment_charge_id` (UNIQUE) |
+| invoice payload | ❌ | ❌ from the client | ✅ server-minted | `operations.invoice_payload` |
+| entitlement | ❌ | ❌ | ✅ derived from `entitlements` | `ofeliya_pay.entitlements` |
+| wallet balance | ❌ | ❌ | ✅ derived from the ledger | *(none in v1)* |
+| purchase status | ❌ | ❌ | ✅ | `operations.status` |
+| refund status | ❌ | ❌ | ✅ | `operations.status` (`REFUND_*`) |
+| catalog version | ❌ | ❌ | ✅ | `operations.catalog_version` |
+| `stateVersion` | ❌ (read) | — | ✅ monotonic | response only |
+| admin token / reason | ✅ (admin) | ✅ | — | `grants_log` |
 
-| # | Step | Inside the DB tx? | Fails how |
-|---|---|---|---|
-| 1 | **Validate user** — `validateInitData(initData)` → `userKey` | ✗ (before) | `401`/`403` |
-| 2 | **Validate SKU** — `catalog_sku` lookup, `enabled` check | ✗ (before) | `404` |
-| 3 | **Validate current entitlement** — read `entitlements` for the target key | ✗ (before, re-read inside) | `422` |
-| 4 | **Validate idempotency** — `opId` shape; fingerprint; existing operation lookup | **yes** | `400` / `409` |
-| 5 | **Verify external payment** — `successful_payment`: currency `XTR`, `total_amount` == server amount, `invoice_payload` → live `PENDING` op owned by this user | ✗ (before) | `409` / `422` |
-| 6 | **Create immutable operation** — `INSERT operations` (`kind='PURCHASE'`) | **yes** | `409` on unique violation |
-| 7 | **Grant entitlement** — `UPSERT entitlements` + `INSERT grants_log` | **yes** | rollback |
-| 8 | **Commit** | — | — |
-| 9 | **Return authoritative snapshot** | — | — |
-
-**Steps 4, 6, 7 are in one transaction.** Steps 1–3 and 5 are reads/validations that happen *before* and
-are *re-verified* inside the transaction (step 3) — but the money-bearing writes (6, 7) are atomic.
-
-### 12.2 The money-spend transaction (when a wallet exists, v2+)
-
-Additional steps inside the same transaction:
-
-```
-SELECT balance FROM wallet_derived WHERE user_key=$1 FOR UPDATE;   -- or ledger scan
-  → if insufficient: ROLLBACK, 422
-  → INSERT operations(kind='SPEND', amount_signed=-N)
-```
-
-The balance is derived from the ledger, so a `FOR UPDATE` on a materialized balance is a **cache lock**,
-not the authority. The authority is the ledger row.
-
-### 12.3 The 10-second constraint
-
-`pre_checkout_query` must be answered within 10 seconds. That rules out any DB path that can block.
-Therefore:
-
-- The `pre_checkout_query` handler must **not** take the user advisory lock or contend on the
-  operations table.
-- It must read the catalog and the operation row with a **short, bounded** query and a hard timeout
-  (e.g. 3s), then answer.
-- If the ledger is slow or unreachable → answer `false` (**fail closed**).
-- A sleeping host (Render Free sleeps after 15 idle minutes — `deploy/RENDER.md`) will blow the 10s
-  deadline. **The payment path needs a non-sleeping host** (see §16 Go/No-Go).
+**Reading the matrix:** every row where "Client may send" is ✅ and "Server trusts" is ⚠️ or ❌ is a
+place where the client *suggests* and the server *decides*. Those are the only legitimate request
+fields. Everything else is either derived or forbidden.
 
 ---
 
-## 13. Refund design
+## 18. Testing strategy
 
-### 13.1 State machine
+### 18.1 Unit (pure, fast, no DB)
 
-```
-        ┌──────────────┐
-        │ PENDING      │  intent created, invoice presented, not yet charged
-        └──────┬───────┘
-               │ successful_payment received & verified
-        ┌──────▼───────┐
-        │ PAID         │  Telegram charged. Ledger row written.
-        └──────┬───────┘
-               │ entitlement upserted (same transaction as PAID→ENTITLED)
-        ┌──────▼───────┐
-        │ ENTITLED     │  grant exists. User-visible.
-        └──────┬───────┘
-               │ refund requested
-        ┌──────▼────────────┐
-        │ REFUND_PENDING    │  Bot API call in flight. Entitlement ALREADY soft-revoked.
-        └──────┬────────────┘
-               │ refundStarPayment() returned true
-        ┌──────▼───────┐
-        │ REFUNDED     │  charge returned. Entitlement revoked.
-        └──────────────┘
-
-  Terminal-failure side: PENDING → FAILED (checkout rejected / TTL)  ·  PAID → REJECTED (amount mismatch)
-```
-
-**Invariant that must never break:** `REFUNDED` ⇒ the entitlement is revoked.
-The dangerous state is `refund completed → entitlement still active`. The design prevents it by
-**revoking the entitlement *before* calling Telegram**, not after:
-
-```
-BEGIN;
-  SELECT * FROM operations WHERE id=$purchase FOR UPDATE;
-  if status <> 'ENTITLED': ROLLBACK; return 409;
-  UPDATE entitlements SET revoked_at=now() WHERE ...;       -- ① revoke FIRST
-  UPDATE operations SET status='REFUND_PENDING' WHERE ...;   -- ② mark in-flight
-COMMIT;
-
-  result = telegram.refundStarPayment(user_id, telegram_payment_charge_id)   -- ③ outside tx
-  if result === true:
-      UPDATE operations SET status='REFUNDED' WHERE id=$purchase;           -- ④
-  else:
-      -- ⑤ the charge was NOT returned, but the entitlement is already revoked.
-      --    This is the SAFE direction (we under-deliver rather than over-deliver).
-      --    Mark REFUND_FAILED and alert; do NOT silently restore the entitlement.
-```
-
-**Why revoke-first:** if the process dies between ① and ④, the user has *less* than they paid for —
-annoying but safe and fixable. If we revoked *after* a successful refund, a crash in between leaves a
-refunded user with a live entitlement — money taken, value delivered, and no audit trail. **Fail
-toward under-delivery.**
-
-> The `coder_survival` implementation does the opposite (Bot API call first, inside the transaction).
-> **Do not port that ordering.** Port the shape, not the sequence.
-
-### 13.2 Permissible intermediate states
-
-| State | Meaning | User-visible | Safe? |
-|---|---|---|---|
-| `PENDING` | Intent exists, no charge | "Ожидание оплаты" | ✅ |
-| `PAID` | Charged, entitlement not yet written | transitional only | ⚠️ must not be observable — write `PAID` and `ENTITLED` in one tx (§13.3) |
-| `ENTITLED` | Grant live | ✅ | ✅ |
-| `REFUND_PENDING` | Revoked, Telegram call in flight | "Возврат в обработке" | ✅ (user sees revoked) |
-| `REFUNDED` | Charge returned | "Возврат оформлен" | ✅ |
-| `REFUND_FAILED` | Telegram call failed; entitlement stays revoked | "Возврат требует обработки" + alert | ✅ (under-delivery, recoverable) |
-| `REJECTED` | Amount/currency mismatch | "Оплата не распознана" + alert | ✅ |
-| `FAILED` | Intent expired / checkout rejected | "Оплата не завершена" | ✅ |
-
-### 13.3 Simplification: collapse `PAID` into `ENTITLED`
-
-Since the operation insert and the entitlement upsert happen in one transaction, an observer can never
-see `PAID` without `ENTITLED`. **Collapse them.** Keep `PAID` only as an internal sub-state of the
-transaction if it aids debugging — but never expose it as an API state. This is exactly the "don't
-complicate the state machine without necessity" rule.
-
-### 13.4 Refund race with spend
-
-In v1 there is no spend, so the race is impossible. In v2, the rule is:
-
-> A spend is refused if the entitlement it draws on has `revoked_at IS NOT NULL`.
-> The spend's transaction takes `pg_advisory_xact_lock(userKey)`, the same lock the refund takes.
-
-The lock is the whole defense. A spend that starts before the refund commits will complete and is
-**not** clawed back; a spend that starts after will be refused.
-
----
-
-## 14. Reconciliation
-
-### 14.1 What it must detect
-
-| Finding | Query (sketch) | Severity |
+| ID | Subject | Assertion |
 |---|---|---|
-| **Local operation without entitlement** | `operations.status='ENTITLED'` AND no matching `entitlements` row | 🔴 high — user paid, got nothing |
-| **Entitlement without payment** | `entitlements` rows with no non-revoked granting `operations` row | 🔴 high — free entitlement |
-| **Refund without revoke** | `operations.status='REFUNDED'` AND the entitlement row has `revoked_at IS NULL` | 🔴 high — refund paid out, value retained |
-| **Revoked without refund** | `entitlements.revoked_at IS NOT NULL` AND no `REFUNDED`/`REFUND_PENDING` operation | 🟠 medium — possibly a manual revoke |
-| **Duplicate external transaction** | prevented by `UNIQUE(telegram_payment_charge_id)`; the job re-checks for violations that predate the constraint | 🔴 high |
-| **Orphan intent** | `operations.status='PENDING'` older than the intent TTL | 🟢 low |
-| **Price mismatch** | `operations.amount_stars != catalog price at the operation's catalog version` | 🟠 medium |
-| **Telegram payment with no local operation** | ⚠️ **cannot be detected automatically** — see §14.3 | 🔴 high (manual only) |
-| **Entitlement level exceeds `max_level`** | `entitlements.level > catalog_sku.max_level` | 🔴 high — a grant bug |
+| T1 | fingerprint | The same inputs → the same fingerprint; any single changed input → a different fingerprint |
+| T2 | `opId` shape | `/^[A-Za-z0-9_-]{16,64}$/`; rejects empty, unicode, over-length, wrong charset |
+| T3 | charge-id uniqueness mapping | A duplicate `telegram_payment_charge_id` → `409`/replay, never a second grant |
+| T4 | idempotency resolver | Same key + same fingerprint → replay; same key + different fingerprint → `409` **and no write** |
+| T5 | SKU resolution | Unknown → 404; disabled → 404; wrong currency → rejected; amount recomputed from the catalog |
+| T6 | entitlement progression | The server computes the next legal level; an out-of-range request is refused; prerequisites are checked |
+| T7 | ledger derivation | The derived balance equals the sum of the ledger rows |
+| T8 | client-side distrust | A forged entitlement/price/balance in the request is ignored — the server value wins |
+| T9 | `decidePreCheckout` | Non-`XTR` → reject; `PAYMENTS_ENABLED !== 'true'` → reject; the rejection message carries no raw identifiers |
+| T10 | price mismatch | `total_amount != server amount` → `PRICE_MISMATCH`, no grant |
 
-### 14.2 Job shape
+### 18.2 Integration (real Postgres)
 
-- **Periodic** (e.g. hourly) and **on-demand** (admin endpoint).
-- **Read-only** — it *finds*; it does not *fix*. Findings are written to
-  `ofeliya_pay.reconcile_findings` with a `finding_key` (idempotent across runs).
-- The admin endpoint returns the findings; repair is a separate, explicit, audited operation.
+| ID | Subject | Assertion |
+|---|---|---|
+| I1 | atomic grant | Killing the transaction between the operation insert and the entitlement upsert leaves **neither** |
+| I2 | retry | The same `opId` twice → one operation, one entitlement, identical responses |
+| I3 | advisory lock | Two concurrent sessions for one user serialize |
+| I4 | charge-without-delivery | A `successful_payment` arriving after the intent TTL is still fulfilled (or explicitly parked), never silently dropped |
+| I5 | amount enforcement | A mismatched `total_amount` grants nothing |
+| I6 | reconcile | Each finding type is detected; the repair is idempotent and audited |
+| I7 | RLS / grants | `anon`/`authenticated`/`public` cannot read `ofeliya_pay`; only `service_role` can |
+| I8 | the edge gateway | An unauthorized token → `401`; an oversized body → `413`; an unknown op → `400` |
 
-### 14.3 The hard truth about Telegram reconciliation
+### 18.3 Contract (client ↔ server schema)
 
-**Telegram provides no API to list a bot's payments.** There is no "list my transactions" method.
-Therefore:
+| ID | Subject | Assertion |
+|---|---|---|
+| C1 | The client never authors value | The client's request schema **cannot express** a price, a level, an entitlement or a balance |
+| C2 | Response integrity | The client discards a response whose `opId`/SKU/branch does not match the request, and re-fetches |
+| C3 | Monotonic state | A response with a `stateVersion` lower than the applied one is ignored |
+| C4 | Fail-closed rendering | A failed/unreachable state never renders "оплачено" |
+| C5 | The Muse boundary still holds | The collection still has no wallet; the Lab still has no purchase control; the feature flags still have no economy entries |
 
-- **"Telegram payment with no local operation"** can only be found by:
-  - a **manual export** from the Telegram side (support/dispute resolution), or
-  - a **client-side report** ("I paid and got nothing") — which is *not* authoritative but is a useful
-    trigger, or
-  - the `successful_payment` webhook arriving **late** (after our intent TTL expired) — this *is*
-    detectable server-side, and is exactly the charge-without-delivery case.
-- **This is a real operational constraint, not an oversight.** It must be stated in the runbook and
-  reflected in the Go/No-Go criteria (§16): the operator needs a way to receive Telegram-side
-  transaction listings for dispute handling. Telegram's own live checklist says
-  *"Use backups to make sure that you don't lose data about your users' payments."*
+### 18.4 E2E synthetic (a fake payment provider)
 
-### 14.4 Safe repair strategy
+A `FakeStarsProvider` implements `sendInvoice` / `pre_checkout_query` / `successful_payment` /
+`refundStarPayment` with scriptable behaviours.
 
-```
-detect → record finding → human reviews → explicit repair command → audit log → re-run to confirm
-```
+| ID | Scenario |
+|---|---|
+| E1 | Happy path: purchase → entitlement → the client renders it |
+| E2 | Duplicate webhook → one grant, the second is a no-op |
+| E3 | Timeout after the server commits → the client retries → it converges, no double grant |
+| E4 | Reinstall / clear local storage → restore returns the same entitlements |
+| E5 | Refund → the entitlement is revoked → the client shows it as revoked |
+| E6 | A price change between the intent and the charge → `PRICE_MISMATCH`, no grant |
+| E7 | The provider confirms with a different `total_amount` → refused |
 
-Rules:
+### 18.5 Real Telegram Stars (test environment)
 
-1. **Never auto-repair.** A repair that grants an entitlement is a money action.
-2. Every repair writes to `grants_log` with `reason`, `finding_id`, and the operator identity.
-3. Repairs are **idempotent** — running them twice changes nothing the second time.
-4. A repair that would grant a value **without** a matching charge requires a charge reference
-   (from the Telegram-side export) — otherwise it is rejected.
-5. The reconcile job must be safe to run **during** a purchase (it reads; it must not take the advisory
-   lock for long, and must not block writes).
+Telegram provides a **dedicated test environment** for Stars payments
+(*"You can freely test payments in Telegram Stars by connecting your bot to Telegram's dedicated test
+environment"*).
+
+| ID | Scenario |
+|---|---|
+| R-T1 | A test-env invoice completes and the entitlement is granted |
+| R-T2 | The `pre_checkout_query` deadline is met with a measurable margin |
+| R-T3 | `refundStarPayment` in the test environment returns `true` and the entitlement is revoked |
+| R-T4 | The `successful_payment` fields match the documented contract exactly (field names, types) |
+
+**Precondition:** the bot must be connected to the test environment, and the production bot token must
+**never** be used for a test. No real payment is executed in this audit or in the pre-Go/No-Go phases.
+
+### 18.6 What is explicitly out of scope for testing
+
+- Real-money charges (production Stars) — only after §16's Go/No-Go.
+- Chargeback simulation — Telegram does not expose an API for it; handled procedurally.
 
 ---
 
-## 15. Database
+## 19. Race matrix
 
-### 15.1 The actual stack (verified — do not assume otherwise)
+| ID | Concurrency scenario | Expected result |
+|---|---|---|
+| R1 | The same purchase × 2 simultaneously (same `opId`) | Exactly **one** operation, **one** entitlement, **one** charge. The second gets a `200` replay. `UNIQUE(user_key,kind,op_id)` + the advisory lock enforce it |
+| R2 | The same `opId` × 2 with **different** `opId` values but the same SKU | Two operations, two entitlements, two charges — legal, because they are two intents. If the SKU is one-time → the second is `409 ONE_TIME_ALREADY_OWNED` |
+| R3 | The same `opId` with a **different subject** (SKU A vs SKU B) | The second is **`409 IDEMPOTENCY_KEY_REUSE`**, and **nothing is written**. The fingerprint differs |
+| R4 | The same `opId` from **two different users** | Two independent operations — `opId` is scoped by `user_key`. No cross-user effect |
+| R5 | A refund webhook arrives **before** the purchase fulfillment | The refund finds no terminal purchase → it is **parked** (`REFUND_PENDING`, no revoke) and retried. It never applies to a non-existent grant |
+| R6 | Refund vs **spend** | *(v1: no spend)*. In v2: the spend is refused if the entitlement is revoked; the advisory lock serializes both |
+| R7 | Refund vs **entitlement use** | The revoke is visible immediately (revoke-first, §13.1). A concurrent use may complete — documented asymmetry |
+| R8 | Two **different** SKUs purchased simultaneously by one user | Both succeed, serialized by the advisory lock. Both entitlements present |
+| R9 | Two **devices** purchase the same one-time SKU simultaneously | One succeeds; the other is `409 ONE_TIME_ALREADY_OWNED`. The partial unique index is the backstop even if the advisory lock is bypassed |
+| R10 | A **crash between the ledger write and the entitlement write** | Neither exists — one transaction (§12.1). Verified by I1 |
+| R11 | **Reconcile runs during a purchase** | The reconcile reads committed rows only. It may observe an operation in `PENDING` — it does not flag it, and it never blocks the write path |
+| R12 | Two `successful_payment` updates for the **same charge id**, concurrently | One insert wins; the other gets `409 CHARGE_ID_ALREADY_APPLIED` → replay of the original. One grant |
 
-| Fact | Evidence |
-|---|---|
-| The project uses **Supabase/Postgres** | `deploy/ofeliya-state.sql` — `create schema ofeliya_private`, `jsonb`, `bigint`, `timestamptz`, `plpgsql` |
-| It is **not** D1, **not** SQLite, **not** MySQL | Zero DB deps in `package.json`; zero D1/SQLite/Prisma references outside docs |
-| It is **not** on the app server | The Node app talks to a Deno Deploy edge function which calls PostgREST `/rest/v1/rpc/ofeliya_state_call` with `service_role` |
-| The state RPC returns `409` on conflict | `deploy/ofeliya-state-function.ts` — `return json(result, result.error ? 409 : 200)` |
-| Runtime deps | `@maxhub/max-bot-api`, `phaser` only — **a SQL client must be added** for the money path (or, preferably, money goes through the same edge-function pattern) |
+---
 
-> **Architectural consequence.** The money path **should mirror** the existing state path: a Postgres
-> schema + a `SECURITY INVOKER` RPC + a token-gated edge function + a thin client. That keeps the
-> service-role key **out of the app server**, which is the single most important property (a leak of
-> `SUPABASE_SERVICE_ROLE_KEY` from the game server would be catastrophic).
+## 20. Implementation roadmap
 
-### 15.2 Proposed schema
+Ordering is derived from the audit: the ledger substrate already exists (Supabase), so **S0 is schema,
+not infrastructure**. Each phase is independently mergeable and independently revertable.
 
-New schema `ofeliya_pay`, same project, same discipline:
+| Phase | Changed subsystem | Depends on | Tests | Acceptance criteria | Rollback | Parallelizable? |
+|---|---|---|---|---|---|---|
+| **S0 — authoritative schema + invariants** | `deploy/ofeliya-pay/*.sql` (new), a money RPC in the `ofeliya-state-function.ts` style | — | I1, I7, I8 | `ofeliya_pay` exists; RLS denies `anon`/`authenticated`; the unique constraints exist; a repeated `commit`-style write is rejected | Drop the schema; nothing else depends on it | ✅ yes — a separate agent can own `deploy/ofeliya-pay/**` |
+| **S1 — catalog + read model** | `catalog_sku` seeding, `GET /api/storefront/catalog` | S0 | T5, C1 | The catalog is the only price source; a disabled SKU is `404`; the client cannot express a price | Revert the endpoint | ✅ yes |
+| **S2 — idempotent purchase operation (no real Stars)** | `operations` write path, `POST /api/storefront/purchase`, a `FakeStarsProvider` | S0, S1 | T1–T4, I2, E1, E2 | The same `opId` twice → one row; a different SKU with the same `opId` → `409`; no grant without a charge | Disable the endpoint (503); the schema stays | ⚠️ shares `server/index.mjs` with other server work — **serialize with other server-touching agents** |
+| **S3 — entitlement** | `entitlements`, `grants_log`, `GET /api/storefront/state` | S2 | I1, T8, C1 | The grant is atomic with the operation; the client cannot author an entitlement | `GET /state` returns empty; purchases disabled | ⚠️ same file as S2 |
+| **S4 — synthetic payment adapter** | `FakeStarsProvider` → the real provider interface; the `pre_checkout_query` handler | S2, S3 | T9, T10, E3, E6, E7 | The 10s deadline is met with margin; the amount is re-read from the catalog; a mismatch grants nothing | Swap the adapter back to the fake | ✅ yes (a new file) |
+| **S5 — refunds** | `POST /api/admin/reconcile` (refund path), `refundStarPayment` | S3, S4 | T3, E5 | Revoke-first ordering; `REFUNDED` ⇒ revoked, always; a failed Telegram call leaves the entitlement revoked | Disable refunds | ⚠️ same file |
+| **S6 — reconciliation** | The scan job + `reconcile_findings` + the admin endpoint | S3, S5 | I6 | Each finding type is detected; repairs are manual and audited; the job is safe during a purchase | Disable the job | ✅ yes |
+| **S7 — Telegram Stars test environment** | The real provider, the bot wiring, the test-env bot | S4 | R-T1…R-T4 | A real test-env Stars payment completes end-to-end and grants exactly one entitlement | Keep the fake as the default; a flag selects the real one | ✅ yes — but **must not run concurrently with S5** on the same bot token |
+| **S8 — Storefront UI** | The client scene, the pending states, the error states | S1, S3, S4 | C2, C3, C4, E1, E4 | The client renders the server state only; an unreachable ledger never renders "оплачено"; the restore flow works | Hide the storefront tab | ✅ yes — **a different agent can own `src/**`** |
+| **S9 — paid Lab progression** | `LAB_BRANCH`/`LAB_LEVEL` SKUs, the server-computed next level, the client intent protocol | S2–S4 | T6, R3 | The client sends an *intent*; the server computes the level; the same `opId` cannot buy a different level; the refund/downgrade rule is implemented | Mark the Lab SKUs `enabled=false` | ⚠️ depends on the §11.2 decision (combat power ⇒ v1.1) |
 
-```sql
-create schema if not exists ofeliya_pay;
-revoke all on schema ofeliya_pay from public, anon, authenticated;
-grant usage on schema ofeliya_pay to service_role;
+### 20.1 Parallelism map
 
--- ---------- catalog ----------
-create table ofeliya_pay.catalog_sku (
-  sku                text primary key,
-  kind               text not null,
-  title              text not null,
-  description        text not null default '',
-  price_stars        integer not null check (price_stars > 0),
-  currency           text not null default 'XTR' check (currency = 'XTR'),
-  entitlement_kind   text not null,
-  entitlement_key    text not null,
-  entitlement_level  integer,
-  max_level          integer,
-  one_time_per_user  boolean not null default false,
-  prerequisite_sku   text references ofeliya_pay.catalog_sku(sku),
-  superseded_by      text references ofeliya_pay.catalog_sku(sku),
-  version            integer not null default 1,
-  enabled            boolean not null default true,
-  created_at         timestamptz not null default now(),
-  updated_at         timestamptz not null default now()
-);
-create index ix_ofeliya_catalog_enabled on ofeliya_pay.catalog_sku (enabled);
-
--- ---------- operation ledger (append-only) ----------
-create table ofeliya_pay.operations (
-  id                        uuid primary key default gen_random_uuid(),
-  kind                      text not null check (kind in ('PURCHASE','REFUND','SPEND','GRANT')),
-  user_key                  text not null,                    -- 'telegram:<uid>' | 'max:<uid>'
-  op_id                     text not null,                    -- client-proposed idempotency key
-  op_fingerprint            text not null,                    -- sha256 binding (§7.2)
-  sku                       text,
-  amount_stars              integer not null default 0,       -- signed for SPEND
-  currency                  text not null default 'XTR',
-  catalog_version           integer,
-  invoice_payload           text,
-  telegram_payment_charge_id text,
-  provider_payment_charge_id text,
-  entitlement_key           text,
-  entitlement_level         integer,
-  parent_operation_id       uuid references ofeliya_pay.operations(id),
-  status                    text not null,
-  entitlement_snapshot      jsonb,
-  raw_payload               jsonb,
-  created_at                timestamptz not null default now(),
-  updated_at                timestamptz not null default now(),
-  constraint uq_operations_user_op unique (user_key, kind, op_id)
-);
-create unique index uq_operations_charge
-  on ofeliya_pay.operations (telegram_payment_charge_id)
-  where telegram_payment_charge_id is not null;
-create unique index uq_operations_one_time_sku
-  on ofeliya_pay.operations (user_key, sku)
-  where sku is not null
-    and status in ('PENDING','PAID','ENTITLED')
-    and sku in (/* server-side one-time list, v1 literal — see §8.3 */);
-create index ix_operations_user_created on ofeliya_pay.operations (user_key, created_at desc);
-create index ix_operations_status on ofeliya_pay.operations (status);
-create index ix_operations_parent on ofeliya_pay.operations (parent_operation_id);
-create index ix_operations_user_fp on ofeliya_pay.operations (user_key, op_fingerprint);
-
--- ---------- entitlement read model ----------
-create table ofeliya_pay.entitlements (
-  user_key           text not null,
-  entitlement_key    text not null,
-  level              integer not null default 0,
-  source_operation_id uuid references ofeliya_pay.operations(id),
-  granted_at         timestamptz not null default now(),
-  revoked_at         timestamptz,
-  metadata           jsonb not null default '{}'::jsonb,
-  primary key (user_key, entitlement_key)
-);
-create index ix_entitlements_source on ofeliya_pay.entitlements (source_operation_id);
-create index ix_entitlements_revoked on ofeliya_pay.entitlements (revoked_at) where revoked_at is not null;
-
--- ---------- audit ----------
-create table ofeliya_pay.grants_log (
-  id            bigserial primary key,
-  user_key      text not null,
-  operation_id  uuid references ofeliya_pay.operations(id),
-  action        text not null,
-  reason        text,
-  actor         text not null default 'system',
-  context       jsonb not null default '{}'::jsonb,
-  created_at    timestamptz not null default now()
-);
-create index ix_grants_log_user on ofeliya_pay.grants_log (user_key, created_at desc);
-
--- ---------- reconciliation ----------
-create table ofeliya_pay.reconcile_findings (
-  finding_key   text primary key,
-  kind          text not null,
-  operation_id  uuid references ofeliya_pay.operations(id),
-  severity      text not null,
-  detail        jsonb not null default '{}'::jsonb,
-  first_seen_at timestamptz not null default now(),
-  resolved_at   timestamptz,
-  resolution    text
-);
+```
+S0 ──▶ S1 ──┬──▶ S2 ──┬──▶ S3 ──┬──▶ S4 ──┬──▶ S5 ──▶ S6
+             │         │         │         │         │
+             │         │         │         │         └──▶ S7 (needs S4)
+             │         │         │         │
+             └─────────┴─────────┴─────────┴──▶ S8 (client-only, needs S1+S3 read models)
+                                                └──▶ S9 (needs S2–S4 + the §11.2 decision)
 ```
 
-### 15.3 Constraint notes
+**File-ownership conflicts** (this is why S2/S3/S5 are marked ⚠️): they all touch `server/index.mjs`,
+which is the project's single hottest server file. **Do not run two agents on `server/index.mjs`
+simultaneously.** Either serialize them, or split `server/index.mjs` into a router that imports
+`server/routes/storefront.mjs` — a mechanical refactor worth doing in S0/S1 to unlock parallelism.
 
-| Item | Note |
-|---|---|
-| `gen_random_uuid()` | `pgcrypto`/`pg13+` built-in — confirm on the Supabase version |
-| `raw_payload` | The full `SuccessfulPayment` JSONB — needed for disputes and for the reconcile |
-| `op_fingerprint` | Stored and indexed; **not** unique (a legitimate different opId with the same params is fine) |
-| `uq_operations_one_time_sku` | The literal SKU list is a v1 compromise. Document it; migrate to a catalog-driven trigger later |
-| `parent_operation_id` | Self-FK: a refund points at its purchase |
+---
+
+## 21. Agent architecture for the next stage
+
+### 21.1 Principles
+
+1. **One owner per file.** No two agents edit the same file concurrently.
+2. **Producers never verify their own work.** Codex and Kimi audit; they do not write the audited code.
+3. **Shared authority files are single-writer.** `server/index.mjs`, the SQL schema, and `package.json`
+   are single-writer and are the integration bottleneck.
+4. **Gates are read-only.** A reviewer's first action is never to write.
+
+### 21.2 Ownership map
+
+| Area | Files | Owner | Reviewer |
+|---|---|---|---|
+| Money schema + RPC | `deploy/ofeliya-pay/**`, `deploy/ofeliya-pay-function.ts` | **MiniMax** (one agent, exclusive) | **Kimi** (adversarial: constraints, RLS, fail-open risks) |
+| Server routes | `server/routes/storefront.mjs` (new), `server/storefront/**` | **MiniMax** (exclusive) | **Codex** (gate: contracts, idempotency, error paths) |
+| `server/index.mjs` router wiring | `server/index.mjs` | **single integrator** (Codex) after the route module is merged | Codex self-check + Kimi diff review |
+| Bot / Telegram provider | `server/telegram-payments.mjs`, `server/bot.mjs` | **MiniMax** (exclusive) | **Kimi** (10s deadline, re-entrancy, redaction) |
+| Client Storefront | `src/scenes/StorefrontScene.ts`, `src/systems/StorefrontClient.ts`, `src/ui/**` | **MiniMax** (exclusive) | **Codex** (contract: the client renders only server state) |
+| Lab progression (client half) | `src/ui/CollectionBoard.ts`, `src/systems/LabClient.ts` | **MiniMax** (exclusive) | **Codex** |
+| Tests — unit/integration | `scripts/check-*.mjs`, `server/*.test.mjs` | **lightweight agents** (one per area, mechanical) | **Codex** (gate: the suite actually covers §7) |
+| Race/concurrency tests | `server/storefront-race.test.mjs` | **Kimi** (author + own review is replaced by Codex) | Codex |
+| Contract tests | `tests/storefront-contract.mjs` | **lightweight agent** | Codex |
+| Docs / runbook / threat model | `docs/**` | **lightweight agent** | Codex |
+| CI wiring | `package.json` scripts only (`.github/workflows/**` is **not writable** by the connected App) | **single integrator** | — |
+| Release gate | the whole PR series | — | **Codex** (independent gate, exact-head CI read) |
+
+### 21.3 Agent roles
+
+| Agent | Role | Explicitly forbidden |
+|---|---|---|
+| **MiniMax** | Large autonomous implementations: the schema, the server routes, the client scenes | Touching more than its owned file set; merging |
+| **Codex** | Independent gate/review: contract conformance, CI evidence, PR-series integration | Writing the code it reviews |
+| **Kimi** | Adversarial security & race review: the §7 threat model as executable tests, the concurrency matrix | Shipping fixes to its own findings without Codex's re-review |
+| **Lightweight agents** | Mechanical work: test scaffolding, docs, runbooks, the CI script wiring | Architectural decisions |
+
+### 21.4 Sequence
+
+```
+1. Codex gates the client physical acceptance (#241+#242+#243) → main.
+2. MiniMax: S0 schema (exclusive) → Codex gate → Kimi schema review.
+3. MiniMax: S1 catalog → Codex gate.
+4. MiniMax: S2+S3 (one agent, sequential — they share server/index.mjs) → Codex gate → Kimi race review.
+5. Kimi: race/concurrency test suite → Codex gate.
+6. MiniMax: S4 fake adapter + S5 refunds + S6 reconcile → Codex gate → Kimi threat-model review.
+7. MiniMax: S7 real Telegram test env (isolated bot) → Codex gate.
+8. MiniMax: S8 Storefront client → Codex contract gate.
+9. Decision point: §11.2 — combat power or not → then S9.
+```
+
+---
+
+## 22. Open questions
+
+| # | Question | Why it matters | Who decides | Blocking |
+|---|---|---|---|---|
+| Q1 | Do we sell **combat power** at all, or only cosmetics + non-combat Lab branches? | Determines whether paid power needs ranking partitioning and refund semantics (§11.2) | Product owner | S9 |
+| Q2 | Which host runs the payment path? Render Free sleeps after 15 idle minutes → the 10s `pre_checkout_query` deadline is at risk | A missed deadline = a cancelled checkout; a cold start could exceed 10s | Ops | **S7** |
+| Q3 | Do we move Supabase off the **Free** tier before real money? *"Supabase Free may pause inactive projects"* → the ledger becomes unreachable → purchases fail closed (correct, but revenue dies) | Availability of the financial system | Ops | **Go/No-Go** |
+| Q4 | Is `createInvoiceLink` or `sendInvoice` the right primitive? `sendInvoice` requires the bot to message the user; `createInvoiceLink` works inside a Mini App | Determines the client UX and the forwarding/multiple-payment risk | Product + UX | S7 |
+| Q5 | How do we obtain a **Telegram-side payment listing** for disputes? Telegram exposes no payment-list API | §14.3 — the only way to detect "paid but no local operation" | Ops | Go/No-Go |
+| Q6 | Do we add a spendable currency in v2? | The entire balance/refund-vs-spend class (§1.3) | Product | v2 |
+| Q7 | Is `premium_pass`-style **recurring** Stars in scope? (`createInvoiceLink` supports `subscription_period=2592000`, price ≤ 10000 Stars) | Recurring payments change the refund and the entitlement model entirely | Product | v2 |
+| Q8 | Which entity holds the money — OFELIYA directly, or a MAX-platform account? | Affects the account, the tax treatment and the reconciliation | Product + legal | Go/No-Go |
+| Q9 | Do we split `server/index.mjs` into modules before S2, to unblock parallel agents? | The ownership map is much cleaner if we do | Engineering | S0/S1 |
+| Q10 | What is the **refund policy** window and who may trigger it? | Determines `REFUND_PENDING` handling and the operator runbook | Product + support | S5 |
+
+---
+
+## 23. Go/No-Go criteria for real money
+
+All must be **true** before a single real Stars charge is accepted.
+
+### 23.1 Correctness
+
+- [ ] The §7 threat model is executable: every row has a passing test.
+- [ ] The §19 race matrix has a passing test per row (R1–R12).
+- [ ] The idempotency contract (§7) is proven: same key + different params → `409` + **no write**.
+- [ ] The refund invariant is proven: `REFUNDED` ⇒ the entitlement is revoked, in every path including
+      a crash between the revoke and the Telegram call.
+- [ ] The atomicity test (I1) proves no half-grant.
+- [ ] The reconcile job detects every finding type in §14.1 and its repair is audited + idempotent.
+
+### 23.2 Security
+
+- [ ] `ofeliya_pay` is unreadable by `anon` / `authenticated` / `public`; only `service_role` can.
+- [ ] The service-role key is **not** present on the game server (it lives only in the edge function).
+- [ ] Every RPC sets `search_path = ''` and is `security invoker`.
+- [ ] The admin reconcile endpoint requires a dedicated admin token, not a game session.
+- [ ] No log line contains a raw `initData`, `telegram_payment_charge_id`, or `invoice_payload` in a
+      user-visible or analytics context (the `redactedDisabledPaymentNotice` discipline).
+- [ ] An independent adversarial review (Kimi) has signed off on the whole money path.
+
+### 23.3 Operational
+
+- [ ] The ledger is on a **non-pausing** Postgres tier, with backups and a restore drill.
