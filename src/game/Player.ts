@@ -1,3 +1,4 @@
+import { clientCollection, clientFlags, cosmeticColor } from '../systems/ClientExperience';
 import Phaser from 'phaser';
 import { COLORS, PLAYER } from './config';
 import { artScale, artSourceFactor } from './ArtMetrics';
@@ -6,6 +7,7 @@ import { biologicalHitAtlasKey, biologicalHitDirection, biologicalHitFrame } fro
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   hurtUntil = 0;
+  private readonly cosmeticTint = clientFlags().skins.gallery ? cosmeticColor(clientCollection().snapshot().selectedSkinId) : 0xffffff;
 
   private readonly focusAnchor: Phaser.GameObjects.Arc;
   private readonly spikeCrown: Phaser.GameObjects.Graphics;
@@ -104,6 +106,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     // Slow virion drift + membrane breathing. The 0.9 visual scale keeps the richer 56px texture
     // close to the old footprint while preserving readable spikes on small phones.
+    if (this.scene.time.now >= this.hurtUntil && !this.tintFill) this.setTint(this.cosmeticTint);
     const baseRotation = time * 0.00014;
     const breathe = 0.9 + Math.sin(time * 0.0042) * 0.028;
     this.setRotation(baseRotation);

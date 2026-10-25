@@ -1,3 +1,28 @@
+# PR244 independent final gate - 2026-10-25
+
+Original de6a74afd80607e6df24801a819d7e6cfa60af4f is BLOCK: P2 mutation gate falsely classifies omitted pre-hit flush as equivalent. Real offset streak reaches q_nodmg60; the permitted mutant records59. Narrow tests-only repair on review/codex-pr244-final-gate-20261025; report docs/qa/CODEX_PR244_FINAL_GATE_20261025.md. UTC14/14 +2 equivalent +control passed; exact candidate CI40181931371 is genuinely green but cannot prove the false equivalence. Lifecycle and UTC/units historical RED/GREEN independently reproduced. Keep native memory failures and base-reproduced startup font assertion distinct from product findings. No merge/deploy. Next: Draft follow-up into #244 branch, new exact-head full CI and release decision. Physical native close inconclusive, eviction/MAX NOT_RUN.
+
+---
+
+# Final convergence state — 25.10.2026
+
+#241 5725cbed + #243 5ba7652 + exact #242 cherry-pick3bc9ef5; no changed-file intersection. Lifecycle remains exact#242. Additional confirmed P2: positive reset streak seconds divided as milliseconds, fixed edb8d0d with Runtime regression. UTC anchor v4/rollback-like resume checks pass; actual#241 parser probe preserves known fields and drops optional anchor. See final convergence report and PR for exact validation state.
+
+---
+
+# PR #241 independent gate — 25.10.2026
+
+Review base `5725cbed7ff425aa7789d45d98aeaf730a749361`; original exact-head workflows verified success, tested merge tree equals head tree. Independent host RED/GREEN and ledger eviction evidence are in `docs/qa/CODEX_PR241_GATE_20261025.md`.
+Product follow-up only adds resize binding/cleanup to GameHostLifecycle; crossflow now proves restored lifecycle/close confirmation and exact handler removal, rather than comparing a missing handler with itself. Original product RED and patched GREEN retained externally. Full results and remaining gates are in the report; do not infer all tests passed from this handoff.
+
+---
+
+# Quest scene integration — 23.10.2026
+
+На feat/quest-scene-integration-20261023 от 66fc1a9 добавлены локальный typed producer, GameScene события, checkpoint metadata и read-only Menu→Codex→Quests. SaveSystem/Daily/outbox/Player/UIScene/Joystick/physics/RNG/server не изменены. Persistence использует существующие lifecycle listeners. Полная карта, tests/exit codes, screenshots и непройденные browser gates: docs/qa/QUEST_SCENE_INTEGRATION_20261023.md. Физический WebView и hosted CI NOT_RUN. Никаких публикаций.
+
+---
+
 # Stage16 video CI continuation
 
 Stage16 video CI stabilization, 2026-10-20. Tested code 761fc01562165955e0b213bcb1d77b8f135f45f7, base c01a1ec1f0e5b89c4af59b5fae60bee9f89791ee.

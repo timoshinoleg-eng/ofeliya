@@ -1,0 +1,59 @@
+
+> ofeliya@0.4.1-rc.1 test:streaks
+> node scripts/check-no-damage-streak.mjs
+
+X [ERROR] Cannot read directory "../../0C4D~1": Access is denied.
+
+X [ERROR] Could not resolve "C:/Users/Public/ofeliya-quest-integration-20261023/src/game/RunState.ts"
+
+    ../../0C4D~1/AppData/Local/Temp/ofeliya-no-damage-0fee9p/entry.ts:1:25:
+      1 │ ...ate } from 'C:/Users/Public/ofeliya-quest-integration-20261023/s...
+        ╵               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+Error: Build failed with 2 errors:
+error: Cannot read directory "../../0C4D~1": Access is denied.
+../../0C4D~1/AppData/Local/Temp/ofeliya-no-damage-0fee9p/entry.ts:1:25: ERROR: Could not resolve "C:/Users/Public/ofeliya-quest-integration-20261023/src/game/RunState.ts"
+    at failureErrorWithLog (C:\Users\Public\ofeliya-quest-integration-20261023\node_modules\esbuild\lib\main.js:1467:15)
+    at C:\Users\Public\ofeliya-quest-integration-20261023\node_modules\esbuild\lib\main.js:926:25
+    at C:\Users\Public\ofeliya-quest-integration-20261023\node_modules\esbuild\lib\main.js:878:52
+    at buildResponseToResult (C:\Users\Public\ofeliya-quest-integration-20261023\node_modules\esbuild\lib\main.js:924:7)
+    at C:\Users\Public\ofeliya-quest-integration-20261023\node_modules\esbuild\lib\main.js:951:16
+    at responseCallbacks.<computed> (C:\Users\Public\ofeliya-quest-integration-20261023\node_modules\esbuild\lib\main.js:603:9)
+    at handleIncomingPacket (C:\Users\Public\ofeliya-quest-integration-20261023\node_modules\esbuild\lib\main.js:658:12)
+    at Socket.readFromStdout (C:\Users\Public\ofeliya-quest-integration-20261023\node_modules\esbuild\lib\main.js:581:7)
+    at Socket.emit (node:events:519:28)
+    at addChunk (node:internal/streams/readable:561:12) {
+  errors: [
+    {
+      detail: undefined,
+      id: '',
+      location: null,
+      notes: [],
+      pluginName: '',
+      text: 'Cannot read directory "../../0C4D~1": Access is denied.'
+    },
+    {
+      detail: undefined,
+      id: '',
+      location: {
+        column: 25,
+        file: '../../0C4D~1/AppData/Local/Temp/ofeliya-no-damage-0fee9p/entry.ts',
+        length: 73,
+        line: 1,
+        lineText: "export { RunState } from 'C:/Users/Public/ofeliya-quest-integration-20261023/src/game/RunState.ts';",
+        namespace: '',
+        suggestion: ''
+      },
+      notes: [],
+      pluginName: '',
+      text: 'Could not resolve "C:/Users/Public/ofeliya-quest-integration-20261023/src/game/RunState.ts"'
+    }
+  ],
+  warnings: []
+}
+
+Node.js v22.23.0

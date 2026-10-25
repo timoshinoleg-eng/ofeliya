@@ -1,3 +1,33 @@
+# PR244 independent final gate - 2026-10-25
+
+Original de6a74afd80607e6df24801a819d7e6cfa60af4f is BLOCK: P2 mutation gate falsely classifies omitted pre-hit flush as equivalent. Real offset streak reaches q_nodmg60; the permitted mutant records59. Narrow tests-only repair on review/codex-pr244-final-gate-20261025; report docs/qa/CODEX_PR244_FINAL_GATE_20261025.md. UTC14/14 +2 equivalent +control passed; exact candidate CI40181931371 is genuinely green but cannot prove the false equivalence. Lifecycle and UTC/units historical RED/GREEN independently reproduced. Keep native memory failures and base-reproduced startup font assertion distinct from product findings. No merge/deploy. Next: Draft follow-up into #244 branch, new exact-head full CI and release decision. Physical native close inconclusive, eviction/MAX NOT_RUN.
+
+---
+
+# Final convergence residual gates — 25.10.2026
+
+P3: Collection bounded1024 run-ID eviction; existing harness retry/network-filter breadth; paired environment flakes only when proven; old executable/optional anchor rollback semantics. Physical Telegram/MAX WebView, native closing dialog, Android keyboard/safe-area and OS eviction NOT_RUN. Next stage after exact-head GREEN: physical Telegram WebView acceptance on Samsung S20+. No new cosmetic redesign or unrelated P3 fixes in convergence.
+
+---
+
+# PR #241 gate backlog — 25.10.2026
+
+1. Review the separate Draft follow-up for restored Game host lifecycle; consult `docs/qa/CODEX_PR241_GATE_20261025.md` for exact tests/limitations and hosted status.
+2. After integrating that fix through the authorized QA process, perform physical Telegram/MAX acceptance: background/resume, close dialog, manual/modal pause, restart/Menu cycles, keyboard safe area, OS eviction.
+3. P3: narrow API503 error allowlist, preserve resolver errors, bound skins pagination; document finite Collection replay horizon and direct DESTROY cleanup gap. These are not extra code changes in this patch.
+4. No merge/main/production/Stars/payments/live D1/user-data action authorized.
+
+---
+
+# Quest integration backlog — 23.10.2026
+
+1. Разобрать/повторить полный integration-visual-browser: utility20 PASS, motion/Game часть не завершилась за внешний180s; причина пока не доказана. Не ослаблять тест.
+2. После отдельного разрешения публикации: hosted CI exact SHA и physical MAX/Telegram safe area/touch/thermal acceptance. Сейчас NOT_RUN.
+3. Необязательный компактный HUD — отдельная задача, текущий scope закрывает Menu→Codex→Quests.
+4. Известные границы: best-effort localStorage, single-tab local progress, legacy checkpoints без неизвестных RNA/mutation/elite counters; нет reward/server/account sync.
+
+---
+
 # Stage16 video CI continuation
 
 Stage16 video CI stabilization, 2026-10-20. Tested code 761fc01562165955e0b213bcb1d77b8f135f45f7, base c01a1ec1f0e5b89c4af59b5fae60bee9f89791ee.

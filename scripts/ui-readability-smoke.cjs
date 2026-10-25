@@ -212,9 +212,9 @@ async function inspectCodex(page, size) {
     const important = rows.filter((row) =>
       row.text !== '×' &&
       row.text !== 'КОДЕКС · STRAIN-0' &&
-      !row.text.startsWith('КОДЕКС хранит открытия')
+      !row.text.startsWith('КВЕСТЫ')
     );
-    const footer = rows.find((row) => row.text.startsWith('КОДЕКС хранит открытия')) ?? null;
+    const footer = rows.find((row) => row.text === 'КВЕСТЫ') ?? null;
     const overflow = rows.filter(({ bounds }) =>
       bounds.left < 2 || bounds.right > width - 2 || bounds.top < 2 || bounds.bottom > height - 2
     );
@@ -237,7 +237,7 @@ function assertCodex(contract, compact, pageName) {
   if (undersized.length) {
     throw new Error(`readability Codex ${pageName} undersized: ${JSON.stringify(undersized)}`);
   }
-  if (!compact && (!contract.footer || contract.footer.size < 12 || contract.footer.bounds.bottom > 715)) {
+  if (!contract.footer || contract.footer.size < (compact ? 13 : 14) || (!compact && contract.footer.bounds.bottom > 715)) {
     throw new Error(`readability Codex footer regression: ${JSON.stringify(contract.footer)}`);
   }
   const forbidden = contract.rows.filter((row) =>

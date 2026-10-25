@@ -1,3 +1,34 @@
+# PR244 independent final gate - 2026-10-25
+
+Original de6a74afd80607e6df24801a819d7e6cfa60af4f is BLOCK: P2 mutation gate falsely classifies omitted pre-hit flush as equivalent. Real offset streak reaches q_nodmg60; the permitted mutant records59. Narrow tests-only repair on review/codex-pr244-final-gate-20261025; report docs/qa/CODEX_PR244_FINAL_GATE_20261025.md. UTC14/14 +2 equivalent +control passed; exact candidate CI40181931371 is genuinely green but cannot prove the false equivalence. Lifecycle and UTC/units historical RED/GREEN independently reproduced. Keep native memory failures and base-reproduced startup font assertion distinct from product findings. No merge/deploy. Next: Draft follow-up into #244 branch, new exact-head full CI and release decision. Physical native close inconclusive, eviction/MAX NOT_RUN.
+
+---
+
+# Final convergence decisions — 25.10.2026
+
+Preserve linear #241 -> #243 -> #242 provenance; do not merge source branches. Expand existing crossflow rather than add a third harness. Keep product delta to proven P2 unit repair; do not redesign Collection eviction. Preserve full86+13 mutation matrices and equivalent controls. Exact combined-head hosted CI is mandatory; physical WebViews remain separate NOT_RUN gate. Report final immutable SHA/CI identity in Draft PR to avoid document self-hash recursion.
+
+---
+
+# PR #241 gate decisions — 25.10.2026
+
+- A lifecycle transfer must restore Game pause/close subscriptions as well as viewport listeners. Reuse the existing idempotent binder on resize and detach it on shutdown/finish.
+- Treat 1024 run IDs as a finite duplicate horizon. An evicted replay can cross cumulative cosmetic thresholds; no authoritative rewards/score/payment effects exist. No cap rewrite without an ordinary reachable old-result replay.
+- Record synthetic-transfer scope explicitly. Native remount and physical WebView behavior remain acceptance evidence to collect; do not relabel a synthetic finding as observed native failure.
+- Keep broad console error filters, swallowed/retried modal errors and direct DESTROY-without-SHUTDOWN cleanup as separate P3 observations. No unrelated product churn in this fix.
+
+---
+
+# Quest integration decisions — 23.10.2026
+
+- Engine принадлежит GameScene producer; UI читает отдельный storage-backed view только в остановленном Menu. Singleton/новый глобальный event bus не понадобились. Для будущего одновременного HUD потребуется отдельный readonly subscription contract.
+- RNA — фактически собранный combat XP pickup; UI notify не источник. Elite определяется только e.isElite, тип врага передаётся отдельно.
+- Optional checkpoint.quest хранит run identity и дополнительные counters, без schema/score/ruleset bump. Невалидный payload не ломает gameplay resume. Новый delivery timeline при rollback исключает false dedup, day completion остаётся историческим фактом.
+- Resume вчерашнего shorter streak переустанавливает baseline без фиктивного сегодняшнего прогресса.
+- Только menu board, без HUD churn/наград/claim/Daily grant. Runtime terminal marker не является серверной reward receipt.
+
+---
+
 # Stage16 video CI continuation
 
 Stage16 video CI stabilization, 2026-10-20. Tested code 761fc01562165955e0b213bcb1d77b8f135f45f7, base c01a1ec1f0e5b89c4af59b5fae60bee9f89791ee.

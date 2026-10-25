@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
+import { checkPlatformLifecycle } from './platform-lifecycle-browser.mjs';
+import { checkMuseClient } from './muse-client-browser.mjs';
 
 const server = await createServer({ server: { host: '127.0.0.1', port: 0 } });
 let browser;
@@ -10,6 +12,8 @@ try {
   const executablePath = process.platform === 'win32' ? undefined : ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(existsSync);
   browser = await chromium.launch({ executablePath, headless: true, args: process.platform === 'win32' ? [] : ['--no-sandbox', '--disable-dev-shm-usage'] });
   const url = server.resolvedUrls.local[0] + '?renderer=canvas';
+  await checkPlatformLifecycle(browser, url);
+  await checkMuseClient(browser, url);
   const page = await browser.newPage({ viewport: { width: 390, height: 740 }, timezoneId: 'America/Los_Angeles' });
   const errors = [];
   page.on('pageerror', error => errors.push(String(error)));
@@ -90,8 +94,9 @@ try {
     failurePage.on('pageerror', error => pageErrors.push(String(error)));
     if (scenario.startsWith('bridge')) {
       await failurePage.route('**/src/platform/TelegramBridgeLoader.ts', route => route.fulfill({ contentType: 'application/javascript',
-        body: scenario === 'bridge-error' ? 'export async function ensureTelegramBridge(){throw new Error("fixture bridge failure")}'
-          : 'export async function ensureTelegramBridge(){await new Promise(()=>{})}' }));
+        body: 'export const TELEGRAM_BRIDGE_READY_EVENT = "ofeliya:telegram-bridge-ready";\n' +
+          (scenario === 'bridge-error' ? 'export async function ensureTelegramBridge(){throw new Error("fixture bridge failure")}'
+          : 'export async function ensureTelegramBridge(){await new Promise(()=>{})}') }));
     } else {
       await failurePage.route('**/src/platform/ViewportManager.ts', route => route.fulfill({ contentType: 'application/javascript',
         body: 'export class ViewportManager {start(){this.onResize=()=>window.__lateResize=true;window.addEventListener("resize",this.onResize)} async sync(){throw new Error("fixture boot failure")} destroy(){window.removeEventListener("resize",this.onResize);window.__viewportDestroyed=true}}' }));

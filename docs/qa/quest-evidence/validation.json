@@ -1,0 +1,120 @@
+[
+  {
+    "command": "npm.cmd run test:quest-core",
+    "exitCode": 0
+  },
+  {
+    "command": "npm.cmd run test:quest-runtime",
+    "exitCode": 0
+  },
+  {
+    "command": "npm.cmd run test:b2b4-fixes",
+    "exitCode": 0
+  },
+  {
+    "command": "npm.cmd run test:daily-v2",
+    "exitCode": 0
+  },
+  {
+    "command": "npm.cmd run test:score-outbox",
+    "exitCode": 0
+  },
+  {
+    "command": "npm.cmd run test:daily-history",
+    "exitCode": 0
+  },
+  {
+    "command": "npm.cmd run test:daily-cta",
+    "exitCode": 0
+  },
+  {
+    "command": "npm.cmd run test:daily-preview",
+    "exitCode": 0
+  },
+  {
+    "command": "npm.cmd run test:rng",
+    "exitCode": 1
+  },
+  {
+    "command": "npm.cmd run test:streaks",
+    "exitCode": 1
+  },
+  {
+    "command": "npm.cmd run test:integration-visual",
+    "exitCode": 0
+  },
+  {
+    "command": "npm.cmd run test:layout-diagnostics",
+    "exitCode": 0
+  },
+  {
+    "command": "npx.cmd tsc --noEmit",
+    "exitCode": 0
+  },
+  {
+    "command": "git diff --check",
+    "exitCode": 0
+  },
+  {
+    "command": "npm.cmd run test:rng",
+    "environment": "workspace TMP; package.json type=commonjs",
+    "exitCode": 0
+  },
+  {
+    "command": "npm.cmd run test:streaks",
+    "environment": "workspace TMP",
+    "exitCode": 0
+  },
+  {
+    "command": "node scripts/browser-smoke.cjs",
+    "exitCode": 0
+  },
+  {
+    "command": "node scripts/integration-visual-smoke.cjs",
+    "exitCode": null,
+    "status": "ETIMEDOUT outer 180000ms; partial PASS only"
+  },
+  {
+    "command": "node scripts/quest-scene-smoke.cjs",
+    "exitCode": 0
+  },
+  {
+    "command": "QUEST_WIDTH=390 QUEST_MOTION=no-preference node scripts/quest-scene-smoke.cjs",
+    "exitCode": 0
+  },
+  {
+    "command": "node scripts/check-quest-core-mutations.mjs",
+    "exitCode": 0,
+    "mutationsCaught": 83,
+    "controls": 1
+  },
+  {
+    "command": "npx.cmd tsc --noEmit",
+    "exitCode": 0
+  },
+  {
+    "command": "npm.cmd run build",
+    "environment": "GOMAXPROCS=2; dummy legal env; VITE_RELEASE_SHA=66fc1a953409b90ed63b9acc9f9f55278b96c77f",
+    "exitCode": 0
+  },
+  {
+    "command": "npm run test:viewport",
+    "exitCode": 0
+  },
+  {
+    "command": "npm run test:runtime-quality",
+    "exitCode": 0
+  },
+  {
+    "command": "npm run test:impact-budget",
+    "exitCode": 0
+  },
+  {
+    "command": "npm run test:ui-copy",
+    "exitCode": 0
+  },
+  {
+    "command": "npm run test:language",
+    "exitCode": 0
+  }
+]

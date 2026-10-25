@@ -1,0 +1,5 @@
+
+> ofeliya@0.4.1-rc.1 test:daily-v2
+> node scripts/check-daily-v2.mjs
+
+Daily V2 client contract: ok

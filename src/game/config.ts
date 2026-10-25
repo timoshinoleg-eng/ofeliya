@@ -69,6 +69,8 @@ export const JUICE = {
   trailPool: 8,
 };
 
+/** Quality governor sees wall time; gameplay advances by at most 50ms per frame. */
+export const SIMULATION = { maxDeltaMs: 50 } as const;
 export const COMBO = { windowMs: 2500, showFrom: 3 };
 export const PLAYER = { hp: 100, speed: 180, iframeMs: 700 };
 export const WEAPON = {

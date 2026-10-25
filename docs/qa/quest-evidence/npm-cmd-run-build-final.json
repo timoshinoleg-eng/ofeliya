@@ -1,0 +1,7 @@
+{
+  "command": "npm.cmd run build",
+  "releaseSha": "66fc1a953409b90ed63b9acc9f9f55278b96c77f",
+  "exitCode": 0,
+  "stdout": "\n> ofeliya@0.4.1-rc.1 build\n> tsc --noEmit && vite build && node scripts/stamp-release.mjs\n\nvite v6.4.3 building for production...\ntransforming...\n✓ 118 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                            3.83 kB │ gzip:   1.44 kB\ndist/assets/index-GD66L4FX.js            455.80 kB │ gzip: 134.04 kB\ndist/assets/vendor-phaser-DIUF0PZB.js  1,481.79 kB │ gzip: 339.85 kB\n✓ built in 14.73s\nStamped OFELIYA release 66fc1a953409b90ed63b9acc9f9f55278b96c77f\n",
+  "stderr": "<script src=\"./runtime-config.js\"> in \"/index.html\" can't be bundled without type=\"module\" attribute\n\nfonts/chakra-petch-1.woff2 referenced in fonts/chakra-petch-1.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\nfonts/chakra-petch-2.woff2 referenced in fonts/chakra-petch-2.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n"
+}

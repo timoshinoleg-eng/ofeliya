@@ -1,3 +1,6 @@
+import { CollectionBoard } from '../ui/CollectionBoard';
+import { clientCollection, clientFlags } from '../systems/ClientExperience';
+import { QuestBoard } from '../ui/QuestBoard';
 import Phaser from 'phaser';
 import { artScale } from '../game/ArtMetrics';
 import { parseChallengePayload } from '../game/Challenge';
@@ -48,6 +51,8 @@ import { loadDuelChallenge, trackDuelEvent } from '../systems/DuelClient';
 import { trackProductEvent } from '../systems/AnalyticsClient';
 
 export class MenuScene extends Phaser.Scene {
+  private collectionBoard: CollectionBoard | null = null;
+  private questBoard: QuestBoard | null = null;
   private codexOverlay: Phaser.GameObjects.Container | null = null;
   private socialHub: SocialHub | null = null;
   private founderBadge: Phaser.GameObjects.Container | null = null;
@@ -58,6 +63,7 @@ export class MenuScene extends Phaser.Scene {
   }
 
   create(): void {
+    if (clientFlags().collection.enabled) clientCollection().visit();
     StartupTrace.mark('menu.create.start');
     StartupTrace.mark('menu.cinematicTextures.start');
     ensureCinematicTextures(this);
@@ -1016,6 +1022,9 @@ export class MenuScene extends Phaser.Scene {
     this.scale.on('resize', this.onResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.onResize, this);
+      this.collectionBoard?.destroy();this.collectionBoard=null;
+      this.questBoard?.destroy();
+      this.questBoard = null;
       this.socialHub?.destroy();
       this.socialHub = null;
       this.profileLoadGeneration += 1;
@@ -1035,7 +1044,7 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private showSocialHub(): void {
-    if (this.socialHub || this.codexOverlay) return;
+    if (this.socialHub || this.codexOverlay || this.questBoard || this.collectionBoard) return;
     this.socialHub = new SocialHub(
       this,
       PlatformBridge,
@@ -1058,7 +1067,7 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private showCodex(): void {
-    if (this.codexOverlay || this.socialHub) return;
+    if (this.codexOverlay || this.socialHub || this.questBoard || this.collectionBoard) return;
 
     const W = this.scale.width;
     const H = this.scale.height;
@@ -1325,9 +1334,9 @@ export class MenuScene extends Phaser.Scene {
 
     overlay.add(
       this.add
-        .text(W / 2, top + panelH - 40, 'КОДЕКС хранит открытия · без постоянных бонусов', {
+        .text(W / 2 - panelW / 4 + 8, top + panelH - 40, 'КВЕСТЫ', {
           fontFamily: UI_FONT,
-          fontSize: compact ? '11px' : '12px',
+          fontSize: compact ? '13px' : '14px',
           fontStyle: '650',
           color: VISUAL_TEXT.ivory,
           align: 'center',
@@ -1343,6 +1352,19 @@ export class MenuScene extends Phaser.Scene {
       overlay.destroy();
       this.codexOverlay = null;
     };
+    const questHit = this.add.rectangle(W / 2 - panelW / 4 + 8, top + panelH - 40, panelW / 2 - 24, 44, VISUAL.ink, 0.001)
+      .setInteractive({ useHandCursor: true }).setName('ofeliya-menu-quests');
+    overlay.add(questHit);
+    questHit.on('pointerup', () => {
+      dismiss();
+      this.questBoard = new QuestBoard(this, () => { this.questBoard = null; });
+    });
+    if (clientFlags().collection.enabled) {
+      const x=W/2+panelW/4-8,y=top+panelH-40;
+      overlay.add(this.add.text(x,y,'КОЛЛЕКЦИЯ',{fontFamily:UI_FONT,fontSize:compact?'12px':'14px',color:VISUAL_TEXT.ivory}).setOrigin(0.5).setResolution(2));
+      const hit=this.add.rectangle(x,y,panelW/2-24,44,VISUAL.ink,0.001).setInteractive({useHandCursor:true}).setName('ofeliya-menu-collection');
+      overlay.add(hit);hit.on('pointerup',()=>{dismiss();this.collectionBoard=new CollectionBoard(this,()=>{this.collectionBoard=null;});});
+    }
     PlatformBridge.setBackHandler(dismiss);
     close.on('pointerup', dismiss);
     dim.on('pointerup', () => {

@@ -1,3 +1,51 @@
+# PR244 independent final gate - 2026-10-25
+
+Original de6a74afd80607e6df24801a819d7e6cfa60af4f is BLOCK: P2 mutation gate falsely classifies omitted pre-hit flush as equivalent. Real offset streak reaches q_nodmg60; the permitted mutant records59. Narrow tests-only repair on review/codex-pr244-final-gate-20261025; report docs/qa/CODEX_PR244_FINAL_GATE_20261025.md. UTC14/14 +2 equivalent +control passed; exact candidate CI40181931371 is genuinely green but cannot prove the false equivalence. Lifecycle and UTC/units historical RED/GREEN independently reproduced. Keep native memory failures and base-reproduced startup font assertion distinct from product findings. No merge/deploy. Next: Draft follow-up into #244 branch, new exact-head full CI and release decision. Physical native close inconclusive, eviction/MAX NOT_RUN.
+
+---
+
+# Final convergence QA — 2026-10-25
+
+Branch qa/ofeliya-p11-final-convergence-20261025 starts at exact #243, then cherry-picks #242 (3bc9ef5). Canonical report: docs/qa/OFELIYA_FINAL_CONVERGENCE_20261025.md. Independent review found positive-reset streak unit regression in #243; RED0!==1, one-line millisecond fix edb8d0d, targeted GREEN. Combined crossflow retains run ID through host transfer/midnight and terminal59->60; final local/hosted status is in the report and Draft PR. Only QA consolidation authorized. No merge/deploy/production actions. Physical Samsung S20+ acceptance NOT_RUN.
+
+---
+
+# Independent PR #241 integration gate — 2026-10-25
+
+Isolated review branch `review/codex-pr241-gate-20261025` from exact #241 `5725cbed7ff425aa7789d45d98aeaf730a749361`.
+Review/evidence and current validation status: `docs/qa/CODEX_PR241_GATE_20261025.md`.
+Confirmed original host pause RED on #240 / GREEN on #241 with real Phaser3.90; cap is bounded-window idempotency, not lifetime dedup.
+Found inherited loss of Game lifecycle after the explicitly tested MAX/Browser/same-Telegram adapter transfer. Original crossflow missed it; stronger assertions RED0!==1. Minimal resize bind/unbind fix and strict subscription/finish assertions GREEN locally. Further full regression status is recorded in the report before publication.
+Only a Draft follow-up targeting `qa/minimax-muse-convergence-20261025` is authorized. Do not update #240/#241/main or deploy. Native host transfer/physical acceptance NOT_RUN; P2 classification is against the explicit adapter-transfer gate contract, not a claim of observed native-client failure.
+
+---
+
+# Quest scene integration — 2026-10-23
+
+Рабочая ветка: feat/quest-scene-integration-20261023. Исходный HEAD: 66fc1a953409b90ed63b9acc9f9f55278b96c77f (#231). Только локальная задача, без push/merge/deploy и production запросов.
+
+Реализованы src/quests/questRuntime.ts, тонкие GameScene hooks и src/ui/QuestBoard.ts. Вход: Menu → Codex → Quests. Нет HUD/rewardGateway/claim/награды. Runtime mirror runs вызывается после recordRun; optional checkpoint.quest сохраняет identity и counters. Resume не отправляет run_started. Core v4 metadata runtime записывается вместе с quest JSON; старый/повреждённый checkpoint без этого payload сохраняет игровой resume, но неизвестные RNA/mutation/elite counters не выдумываются.
+
+Главный отчёт: docs/qa/QUEST_SCENE_INTEGRATION_20261023.md; команды/exit codes и четыре реальные headless screenshots — docs/qa/quest-evidence/. Перед выводами читать отчёт, включая исходные FAIL/timeout и ограничения. Более старый handoff сохранён в исходном Git commit.
+
+## Проверки и границы
+
+Focused producer и реальные Enemy/Gem/choice/damage/finish/Game.update/UI lifecycle tests проходили; core mutations 83/83 + control, TypeScript и отдельная build проходили. Последние точные результаты финального дерева — в QA-отчёте. RNG/checkpoint и no-damage contracts проходят с workspace TMP/CommonJS boundary; исходный user TMP недоступен esbuild в sandbox.
+
+MAX browser-smoke PASS, в том числе paired initial source/candidate диагностические прогоны. Общий integration-visual-browser не получил полного PASS: 20 utility вариантов проходят, следующие motion/Game сценарии зависают; внешний runner 180s даёт ETIMEDOUT. Попытка native Chrome path adapter тоже не завершилась. Не понижать thresholds и не выдавать partial PASS за full PASS. Причина stall не установлена.
+
+Physical MAX/Telegram WebView и hosted CI NOT_RUN; production release/build:max не выполнялись. Следующий блокер — полный visual browser gate, затем hosted CI и физическая приёмка. Дополнительный HUD — отдельный необязательный scope.
+
+## Режим проверки
+
+Формат ответа: подтверждено / опровергнуто / вопросы. Проверять source и QA evidence, особенно checkpoint rollback/UTC streak, terminal idempotency, ID length <=64, repeated scene/board listeners, Daily isolation. MiniMax scenes review end_turn был прочитан, но исходно покрывал фрагменты; partial max_tokens review provisional. Итоговый diff не прошёл новое MiniMax review, не утверждать обратное.
+
+Не менять Joystick/physics/RNG/score versions, не трогать другие worktrees, реальный бот/webhook, Render, D1 или player data. Не публиковать ветку: локальный commit разрешён только после focused + tsc + build GREEN.
+
+---
+
+## Preserved full base handoff — 2026-10-23 (66fc1a9, verbatim)
+
 # Stage16 video CI continuation
 
 Stage16 video CI stabilization, 2026-10-20. Tested code 761fc01562165955e0b213bcb1d77b8f135f45f7, base c01a1ec1f0e5b89c4af59b5fae60bee9f89791ee.

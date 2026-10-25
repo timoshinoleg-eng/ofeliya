@@ -1,3 +1,5 @@
+import { installTelegramTheme } from './platform/TelegramTheme';
+import { configureClientExperience } from './systems/ClientExperience';
 import Phaser from 'phaser';
 import { renderSnapshot } from './systems/RenderSnapshot';
 import { installRenderDensityExperiment } from './systems/RenderDensityExperiment';
@@ -23,6 +25,11 @@ declare global {
   }
 }
 
+configureClientExperience({qaTools:import.meta.env.VITE_QA_TOOLS === '1',search:window.location.search,
+  analyticsEnabled:import.meta.env.VITE_UMAMI_ENABLED === '1',src:import.meta.env.VITE_UMAMI_SRC,
+  websiteId:import.meta.env.VITE_UMAMI_WEBSITE_ID});
+const detachTelegramTheme = installTelegramTheme();
+window.addEventListener('pagehide',e=>{if(!e.persisted)detachTelegramTheme();});
 const FONT_READY_TIMEOUT_MS = 700;
 
 const RELEASE_REFRESH_KEY = 'ofeliya_release_refresh_v1';

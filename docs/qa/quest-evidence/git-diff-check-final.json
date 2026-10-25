@@ -1,0 +1,7 @@
+{
+  "command": "git diff --check",
+  "releaseSha": "66fc1a953409b90ed63b9acc9f9f55278b96c77f",
+  "exitCode": 0,
+  "stdout": "",
+  "stderr": ""
+}
