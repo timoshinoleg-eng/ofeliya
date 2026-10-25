@@ -9,9 +9,12 @@
 - Branch: `qa/ofeliya-p11-final-convergence-20261025`.
 - Base: `qa/minimax-muse-convergence-20261025`, never main.
 - Final product/test commit: `08ec7c1e01a28185eddeeb8a5ae62feeb2fb6b65` (subsequent commits only QA report/project memory).
-- Draft PR / final exact HEAD / hosted conclusions: PENDING. The final immutable
-  SHA and run IDs will also be recorded in the Draft PR body, avoiding a document
-  self-hash cycle. Do not infer a final verdict from this pending snapshot.
+- Draft PR: [#244](https://github.com/timoshinoleg-eng/ofeliya/pull/244).
+- Validated integration HEAD before the final report-only update:
+  `42208240bd977ff56cf0b74878711286a1a240f2`.
+- Final SHA: the immutable `headRefOid` and terminal workflow IDs are recorded in
+  the Draft PR body after the final report commit. This avoids a document self-hash
+  cycle while preserving an exact final publication identity and clean worktree.
 
 ## Provenance
 
@@ -77,9 +80,8 @@ crossflow gates; the existing quest-core commands include both UTC gates.
 | `npm run test:telegram-share` | PASS | 1.1 |
 | `npm run test:telegram-tma` | PASS | 6.4 |
 | `npm run test:viewport` | PASS | 2.3 |
-| 
-px tsc --noEmit | PASS | separate explicit invocation |
-| git diff --check | PASS | structural + final |
+| `npx tsc --noEmit` | PASS | separate explicit invocation |
+| `git diff --check` | PASS | structural + final |
 
 Raw local logs are retained outside the repository in
 `C:/Users/Имярек/Downloads/ofeliya-final-evidence-20261025/`.
@@ -123,9 +125,26 @@ source of such late redelivery has been identified: existing P3, no redesign.
 
 ## CI
 
-PENDING exact combined HEAD. Previous #242/#243 GREEN runs are provenance only.
-Release Visual Matrix and Render Density QA have path filters; record NOT_TRIGGERED
-if this PR does not touch their paths, never claim those workflows passed.
+Exact combined integration HEAD `42208240bd977ff56cf0b74878711286a1a240f2`:
+
+| Workflow / job | Run ID | Terminal conclusion |
+|---|---|---|
+| CI | [40180506211](https://github.com/timoshinoleg-eng/ofeliya/actions/runs/40180506211) | SUCCESS |
+| CI / build | 40180506211 | SUCCESS |
+| CI / browser-smoke | 40180506211 | SUCCESS |
+| CI / production-contract | 40180506211 | SUCCESS |
+| Release Visual Matrix | none | NOT_TRIGGERED (path filter) |
+| Render Density QA Experiment | none | NOT_TRIGGERED (path filter) |
+
+Hosted quest scene and combined Muse convergence steps passed, including the
+same-run lifecycle/midnight/terminal regression. All remaining browser steps,
+startup, visual matrices and isolated Docker contracts passed. Previous #242/#243
+GREEN runs are provenance only and were not substituted for this combined run.
+
+The only subsequent change is this final report. The final report-only HEAD must
+also receive terminal SUCCESS before delivery. Its exact immutable SHA, workflow
+ID and conclusions are recorded in the Draft PR body after completion; no further
+commit is made solely to insert its own hash or CI identity into this file.
 
 ## Remaining P3 / physical gate
 
@@ -145,5 +164,9 @@ Initial local build omitted mandatory `VITE_RELEASE_SHA` and failed only at stam
 No merge to main, production deploy, Render production action, real Stars/payment,
 live D1 or live user data access. #241/#242/#243 branches remain unchanged.
 
-Local gates: GREEN. Verdict: PENDING exact-head hosted CI. The next acceptance stage is physical Telegram
-WebView on Samsung S20+; desktop Chromium is not physical acceptance.
+Local gates and exact integration-head hosted gates: GREEN. No reproducible P1/P2
+remains after the documented reset-unit repair and independent follow-up review.
+Verdict: **READY_FOR_PHYSICAL_ACCEPTANCE**, effective for the final report-only HEAD
+once its exact-head terminal CI SUCCESS is recorded in Draft PR #244.
+
+The next gate is physical Telegram WebView acceptance on Samsung S20+, not more desktop QA.
