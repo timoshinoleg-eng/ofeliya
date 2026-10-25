@@ -596,33 +596,94 @@ const mark = (name, value, kind = 'real') => {
      * The Menu, the Collection board, the level-up modal and the result overlay all
      * live in different scenes, so the lookup is generic on purpose.
      */
-    const tapControl = async (sceneKey, name) => {
-      const point = await page.evaluate(({ sceneKey, name }) => {
-        const scene = window.__game.scene.getScene(sceneKey);
-        const visit = o => {
-          if (o.name === name) return o;
-          for (const child of (o.list || [])) {
-            const found = visit(child);
-            if (found) return found;
-          }
-          return null;
-        };
-        let target = null;
-        for (const child of scene.children.list) {
-          target = visit(child);
-          if (target) break;
+    /**
+     * The canvas coordinates of a named control, together with its current bounds.
+     */
+    const controlPoint = (sceneKey, name) => page.evaluate(({ sceneKey, name }) => {
+      const scene = window.__game.scene.getScene(sceneKey);
+      const visit = o => {
+        if (o.name === name) return o;
+        for (const child of (o.list || [])) {
+          const found = visit(child);
+          if (found) return found;
         }
-        if (!target) throw Error(`missing control ${name} in scene ${sceneKey}`);
-        const b = target.getBounds();
-        const canvas = window.__game.canvas.getBoundingClientRect();
-        return {
-          x: canvas.x + (b.x + b.width / 2) * canvas.width / scene.scale.width,
-          y: canvas.y + (b.y + b.height / 2) * canvas.height / scene.scale.height,
-        };
-      }, { sceneKey, name });
+        return null;
+      };
+      let target = null;
+      for (const child of scene.children.list) {
+        target = visit(child);
+        if (target) break;
+      }
+      if (!target) throw Error(`missing control ${name} in scene ${sceneKey}`);
+      const b = target.getBounds();
+      const canvas = window.__game.canvas.getBoundingClientRect();
+      return {
+        x: canvas.x + (b.x + b.width / 2) * canvas.width / scene.scale.width,
+        y: canvas.y + (b.y + b.height / 2) * canvas.height / scene.scale.height,
+        bounds: { x: b.x, y: b.y, width: b.width, height: b.height },
+      };
+    }, { sceneKey, name });
+
+    /**
+     * Tap a named control.
+     *
+     * A control can still be moving when it first exists: the Codex overlay and the
+     * Collection board both play an entrance tween, so the bounds read in one round
+     * trip can be stale by the time the tap arrives and the tap misses the control
+     * entirely. The helper therefore waits until the bounds stop moving and only
+     * then aims.
+     *
+     * The settle budget is bounded, so a control that never comes to rest (a
+     * permanent idle animation) is still tapped, at its current position. A caller
+     * that deliberately wants to touch a control *while* it animates passes
+     * `settleMs: 0`.
+     */
+    const tapControl = async (sceneKey, name, { settleMs = 1200 } = {}) => {
+      const started = Date.now();
+      let point = await controlPoint(sceneKey, name);
+      while (Date.now() - started < settleMs) {
+        const previous = point;
+        await page.waitForTimeout(60);
+        point = await controlPoint(sceneKey, name);
+        if (Math.abs(previous.bounds.x - point.bounds.x) < 0.5
+          && Math.abs(previous.bounds.y - point.bounds.y) < 0.5
+          && Math.abs(previous.bounds.width - point.bounds.width) < 0.5
+          && Math.abs(previous.bounds.height - point.bounds.height) < 0.5) break;
+      }
       await page.touchscreen.tap(point.x, point.y);
     };
-    const tap = name => tapControl('Menu', name);
+    const tap = (name, options) => tapControl('Menu', name, options);
+
+    /**
+     * Close the open Collection board the way a player does, and prove it closed.
+     *
+     * The tap can still be swallowed while the board is re-rendering, so the helper
+     * re-aims at the current position and retries for a bounded budget instead of
+     * waiting out a bare timeout with nothing to report.
+     */
+    const closeCollectionBoard = async (budgetMs = 10000) => {
+      const started = Date.now();
+      let last = null;
+      while (Date.now() - started < budgetMs) {
+        last = await page.evaluate(() => {
+          const menu = window.__game.scene.getScene('Menu');
+          const board = menu.children.getByName('ofeliya-collection');
+          return {
+            open: Boolean(board),
+            alpha: board ? Number(board.alpha.toFixed(3)) : null,
+            visible: board ? board.visible : null,
+          };
+        });
+        if (!last.open) return last;
+        try {
+          await tap('ofeliya-collection-close');
+        } catch (error) {
+          last = { ...last, tapError: String(error) };
+        }
+        await page.waitForTimeout(120);
+      }
+      throw new Error(`the Collection board did not close: ${JSON.stringify(last)}`);
+    };
 
     const storageSnapshot = () => page.evaluate(() => {
       const out = {};
@@ -748,8 +809,7 @@ const mark = (name, value, kind = 'real') => {
       'the lab must not expose a purchase control');
     mark('collection: lab tab is informational and exposes no permanent power control', lab);
 
-    await tap('ofeliya-collection-close');
-    await page.waitForFunction(() => !window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection'));
+    await closeCollectionBoard();
 
     const storageAfterCollection = await storageSnapshot();
     const changedKeys = Object.keys({
@@ -773,8 +833,7 @@ const mark = (name, value, kind = 'real') => {
       await page.evaluate(() => { window.__game.scene.getScene('Menu').showCodex(); });
       await tap('ofeliya-menu-collection');
       await page.waitForFunction(() => Boolean(window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection')));
-      await tap('ofeliya-collection-close');
-      await page.waitForFunction(() => !window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection'));
+      await closeCollectionBoard();
     }
     const listenerAfter = await page.evaluate(() => {
       const menu = window.__game.scene.getScene('Menu');
@@ -915,7 +974,9 @@ const mark = (name, value, kind = 'real') => {
     assert.ok(revealInFlight.boardAlpha < 1,
       `the board must still be animating in when it is closed (${JSON.stringify(revealInFlight)})`);
     // Close immediately: the reward-reveal tween is still running at this point.
-    await tap('ofeliya-collection-close');
+    // The tap must not wait for the board to settle - that is the whole point of
+    // this case - so the settle budget is switched off here on purpose.
+    await tap('ofeliya-collection-close', { settleMs: 0 });
     await page.waitForTimeout(120);
     const afterTweenTeardown = await page.evaluate(() => {
       const menu = window.__game.scene.getScene('Menu');
