@@ -5,14 +5,20 @@ import { TELEGRAM_BRIDGE_READY_EVENT } from './TelegramBridgeLoader';
 
 /** Keep host pauses separate from UI/modal/manual pause ownership. */
 export function installGameHostLifecycle(scene:Phaser.Scene,isRunning:()=>boolean):()=>void {
+ // Phaser 3.90 queues `ScenePlugin.pause/resume` for the next Scene Manager update, while the
+ // pause ownership below is tracked synchronously. A deferred pause lets a host activation arrive
+ // before the pause is applied: the ownership is then dropped, the queued pause lands anyway and
+ // the run stays frozen with nobody able to release it. The Scene Manager applies pause/resume
+ // immediately, so ownership and scene state always agree inside the same host event.
+ const manager=scene.sys.game.scene;
  let controller:TelegramLifecycle<object>|null=null;
  let host:object|undefined;
  let owner:object|null=null;
  let stopped=false;
- const active=()=>!stopped&&isRunning()&&(scene.scene.isActive('Game')||scene.scene.isPaused('Game'));
+ const active=()=>!stopped&&isRunning()&&(manager.isActive('Game')||manager.isPaused('Game'));
  const canResume=()=>{
-  const ui=scene.scene.get('UI') as Phaser.Scene & {canResumeFromHost?:()=>boolean};
-  return ui.canResumeFromHost?.()??true;
+  const ui=manager.getScene('UI') as Phaser.Scene & {canResumeFromHost?:()=>boolean}|null;
+  return ui?.canResumeFromHost?.()??true;
  };
  const owns=(token:object)=>{
   if(owner!==token)return false;
@@ -20,15 +26,15 @@ export function installGameHostLifecycle(scene:Phaser.Scene,isRunning:()=>boolea
   return true;
  };
  const resume=(token:object)=>{
-  if(active()&&scene.scene.isPaused('Game')&&owns(token)){owner=null;scene.scene.resume('Game');}
+  if(active()&&manager.isPaused('Game')&&owns(token)){owner=null;manager.resume('Game');}
  };
  const bind=()=>{
   const wa=PlatformBridge.kind==='telegram'?window.Telegram?.WebApp:undefined;
   if(wa===host)return;
   controller?.destroy();controller=null;host=wa;
   if(!wa||!active())return;
-  controller=new TelegramLifecycle(wa,document,{isGameActive:active,isPaused:()=>scene.scene.isPaused('Game'),
-   pause:()=>{owner={};scene.scene.pause('Game');return owner;},isPauseOwned:owns,resume});
+  controller=new TelegramLifecycle(wa,document,{isGameActive:active,isPaused:()=>manager.isPaused('Game'),
+   pause:()=>{owner={};manager.pause('Game');return owner;},isPauseOwned:owns,resume});
   controller.start();
  };
  // If the adapter disappears while hidden, release only our own pause when the page
