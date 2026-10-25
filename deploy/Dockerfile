@@ -12,6 +12,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 RUN mkdir -p /app/server/data && chown -R node:node /app/server
 COPY --chown=node:node server/index.mjs ./server/index.mjs
+COPY --chown=node:node server/analytics-summary.mjs ./server/analytics-summary.mjs
 COPY --chown=node:node server/durable-state.mjs ./server/durable-state.mjs
 COPY --chown=node:node server/telegram-users.mjs ./server/telegram-users.mjs
 COPY --chown=node:node server/request-policy.mjs ./server/request-policy.mjs
