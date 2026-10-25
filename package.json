@@ -92,6 +92,8 @@
     "test:quest-core": "node scripts/check-quest-core.mjs",
     "test:quest-core-mutations": "node scripts/check-quest-core-mutations.mjs",
     "test:quest-runtime": "node scripts/check-quest-runtime.mjs",
+    "test:quest-utc-attribution": "node scripts/check-quest-utc-attribution.mjs",
+    "test:quest-utc-attribution-mutations": "node scripts/check-quest-utc-attribution-mutations.mjs",
     "test:quest-scenes": "node scripts/quest-scene-smoke.cjs",
     "test:muse-client": "node scripts/check-muse-performance.mjs && node scripts/check-muse-collection.mjs && node scripts/check-muse-telemetry.mjs && node scripts/check-muse-tma.mjs && node scripts/check-muse-theme.mjs && node scripts/check-muse-juice.mjs",
     "test:muse-convergence": "node scripts/check-muse-convergence-adversarial.mjs",
