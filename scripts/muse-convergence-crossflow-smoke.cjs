@@ -103,6 +103,58 @@ const mark = (name, value, kind = 'real') => {
 (async () => {
   let browser;
   let page;
+
+  /**
+   * Frame-level recorder.
+   *
+   * The host-lifecycle contract lives between two host events that can be
+   * milliseconds apart, and a pause can be re-applied by any subsystem in
+   * between. A failing assertion must therefore be able to show what the
+   * game, the UI and the document were doing on every single frame, instead
+   * of a single snapshot that hides the race.
+   */
+  const installFrameRecorder = async () => {
+    await page.evaluate(() => {
+      const buffer = [];
+      window.__museFrames = buffer;
+      const record = () => {
+        const gs = window.__game?.scene?.getScene('Game');
+        const ui = window.__game?.scene?.getScene('UI');
+        buffer.push({
+          t: Math.round(performance.now()),
+          vis: document.visibilityState,
+          st: gs?.sys?.settings?.status ?? null,
+          sa: gs?.sys?.settings?.active ?? null,
+          act: window.__game?.scene?.isActive('Game') ?? null,
+          pau: window.__game?.scene?.isPaused('Game') ?? null,
+          ph: gs?.stageDirector?.phase ?? null,
+          aw: gs?.awaitingChoice ?? null,
+          ql: gs?.queuedLevels ?? null,
+          lv: gs?.runState?.stage?.level ?? null,
+          xp: gs?.runState?.stage?.xp ?? null,
+          mo: ui?.modalOpen ?? null,
+          ub: ui?.uiBlocked ?? null,
+          ov: ui?.overShown ?? null,
+          br: ui?.activeBossReveals ?? null,
+          to: ui?.transitionOverlay ? 1 : 0,
+          mp: ui?.manualPaused ?? null,
+          cr: ui?.canResumeFromHost?.() ?? null,
+        });
+        if (buffer.length > 900) buffer.shift();
+      };
+      window.__game?.events?.on('step', record);
+    });
+  };
+  const frameTail = async (count = 150) => page.evaluate(n =>
+    (window.__museFrames || []).slice(-n), count);
+  const printFrameTail = (frames) => {
+    if (!frames || !frames.length) return;
+    console.error('--- frame tail (t | vis | status | act | pau | phase | await | queued | level | xp | modal | blocked | over | boss | overlay | manual | canResume) ---');
+    for (const f of frames) {
+      console.error(`${f.t} | ${f.vis} | ${f.st} | ${f.act} | ${f.pau} | ${f.ph} | ${f.aw} | ${f.ql} | ${f.lv} | ${f.xp} | ${f.mo} | ${f.ub} | ${f.ov} | ${f.br} | ${f.to} | ${f.mp} | ${f.cr}`);
+    }
+  };
+
   try {
     browser = await chromium.launch({
       executablePath: chrome,
@@ -125,6 +177,16 @@ const mark = (name, value, kind = 'real') => {
       if (message.type() === 'error') consoleErrors.push(message.text());
     });
 
+    // Optional CPU throttling: the hosted CI runner is slower than a developer
+    // machine, and the host-lifecycle contract must hold under a slower frame
+    // budget, not only on a fast desktop. The throttle is a reproduction aid
+    // for the diagnosis, never a way to relax an assertion.
+    const cpuThrottle = Number(process.env.MUSEFLOW_CPU_THROTTLE || 0);
+    if (cpuThrottle > 0) {
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send('Emulation.setCPUThrottlingRate', { rate: cpuThrottle });
+    }
+
     await page.route('https://st.max.ru/**', route =>
       route.fulfill({ body: '', contentType: 'application/javascript' }));
     // The product must survive an unavailable backend without turning it into a crash.
@@ -140,8 +202,7 @@ const mark = (name, value, kind = 'real') => {
 
     let sdkRequests = 0;
     let releaseSdk;
-    const sdkGate = new Promise(resolve => { releaseSdk = resolve; });
-    await page.route('https://telegram.org/js/**', async route => {
+    const sdkGate = new Promise(resolve => { releaseSdk = resolve; });    await page.route('https://telegram.org/js/**', async route => {
       sdkRequests++;
       await sdkGate;
       await route.fulfill({ body: SDK, contentType: 'application/javascript' });
@@ -186,11 +247,109 @@ const mark = (name, value, kind = 'real') => {
       };
     };
 
+    /**
+     * Resolve a real level-up modal through the real UI.
+     *
+     * The run keeps playing while this suite walks it: the player auto-fires,
+     * killed enemies drop XP gems, and a collected gem opens the real mutation
+     * modal. That modal legitimately owns the game pause, so every phase that
+     * needs a running game has to be able to clear it the way a player does.
+     *
+     * `required: true` waits for the modal to appear; otherwise the helper is a
+     * no-op when no modal is open.
+     */
+    const resolveLevelUpModal = async ({ required = false } = {}) => {
+      const modalVisible = () => page.evaluate(() => {
+        const ui = window.__game.scene.getScene('UI');
+        const gs = window.__game.scene.getScene('Game');
+        return Boolean(ui?.modal) && gs?.awaitingChoice === true;
+      });
+      if (!await modalVisible()) {
+        if (!required) return null;
+        await page.waitForFunction(() => {
+          const ui = window.__game.scene.getScene('UI');
+          const gs = window.__game.scene.getScene('Game');
+          return Boolean(ui?.modal) && gs?.awaitingChoice === true;
+        });
+      }
+      const cardInfo = await page.evaluate(() => {
+        const ui = window.__game.scene.getScene('UI');
+        const gs = window.__game.scene.getScene('Game');
+        return {
+          cards: ui.modal.list.filter(o => o.type === 'Container').length,
+          choices: gs.pendingChoices.map(c => ({ id: c.id, title: c.title, kind: c.kind })),
+        };
+      });
+      // The cards animate in from alpha 0, and Phaser does not hit-test an
+      // invisible object. Wait for the card to be fully visible before tapping.
+      await page.waitForFunction(() => {
+        const ui = window.__game.scene.getScene('UI');
+        const card = ui?.modal?.list?.filter(o => o.type === 'Container')[0];
+        return Boolean(card) && card.alpha >= 1;
+      });
+      const cardPoint = await page.evaluate(() => {
+        const ui = window.__game.scene.getScene('UI');
+        const card = ui.modal.list.filter(o => o.type === 'Container')[0];
+        const hit = card.list.find(o => o.input && o.input.enabled);
+        if (!hit) throw Error('the first upgrade card has no interactive surface');
+        const b = hit.getBounds();
+        const canvas = window.__game.canvas.getBoundingClientRect();
+        const scene = window.__game.scene.getScene('UI');
+        return {
+          x: canvas.x + (b.x + b.width / 2) * canvas.width / scene.scale.width,
+          y: canvas.y + (b.y + b.height / 2) * canvas.height / scene.scale.height,
+        };
+      });
+      await page.touchscreen.tap(cardPoint.x, cardPoint.y);
+      await page.waitForFunction(() => {
+        const ui = window.__game.scene.getScene('UI');
+        const gs = window.__game.scene.getScene('Game');
+        return !ui.modal && gs.awaitingChoice === false;
+      });
+      return cardInfo;
+    };
+
+    /**
+     * Bring the game back to a running, unblocked state the way a player does:
+     * resolve an open level-up modal and wait for the game to run again.
+     */
+    const ensureRunningGame = async (label) => {
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const state = await page.evaluate(() => {
+          const ui = window.__game.scene.getScene('UI');
+          const gs = window.__game.scene.getScene('Game');
+          return {
+            active: window.__game.scene.isActive('Game'),
+            modal: Boolean(ui?.modal),
+            modalOpen: Boolean(ui?.modalOpen),
+            canResumeFromHost: ui?.canResumeFromHost?.() ?? null,
+            awaitingChoice: Boolean(gs?.awaitingChoice),
+          };
+        });
+        if (state.active && !state.modal && !state.modalOpen && state.canResumeFromHost === true) return state;
+        await resolveLevelUpModal();
+        await page.waitForTimeout(150);
+      }
+      const last = await page.evaluate(() => {
+        const ui = window.__game.scene.getScene('UI');
+        const gs = window.__game.scene.getScene('Game');
+        return {
+          active: window.__game.scene.isActive('Game'),
+          modal: Boolean(ui?.modal),
+          modalOpen: Boolean(ui?.modalOpen),
+          canResumeFromHost: ui?.canResumeFromHost?.() ?? null,
+          awaitingChoice: Boolean(gs?.awaitingChoice),
+        };
+      });
+      throw new Error(`the game did not reach a running, unblocked state for ${label}: ${JSON.stringify(last)}`);
+    };
+
     // ---------------------------------------------------------------- Phase 1
     // Platform startup: no Telegram SDK at boot, two concurrent bridge calls,
     // both time out, the SDK arrives late, readiness is announced exactly once.
     await page.goto(url, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
+    await installFrameRecorder();
     assert.equal(sdkRequests, 0, 'browser launch must not request the Telegram SDK');
 
     // Checkpoint: the browser-only frame starts at the real window size.
@@ -715,49 +874,9 @@ const mark = (name, value, kind = 'real') => {
       'one real RNA pickup must produce exactly seven quest RNA');
 
     // The mutation is chosen through the real level-up modal, by touching a real card.
-    await page.waitForFunction(() => {
-      const ui = window.__game.scene.getScene('UI');
-      return Boolean(ui?.modal) && window.__game.scene.getScene('Game').awaitingChoice === true;
-    });
-    const cardInfo = await page.evaluate(() => {
-      const ui = window.__game.scene.getScene('UI');
-      const cards = ui.modal.list.filter(o => o.type === 'Container');
-      const gs = window.__game.scene.getScene('Game');
-      return {
-        cards: cards.length,
-        choices: gs.pendingChoices.map(c => ({ id: c.id, title: c.title, kind: c.kind })),
-      };
-    });
+    const cardInfo = await resolveLevelUpModal({ required: true });
     assert.ok(cardInfo.cards > 0, 'the level-up modal must render real upgrade cards');
     assert.ok(cardInfo.choices.length > 0, 'the real level-up must offer real upgrade definitions');
-
-    // The cards animate in from alpha 0, and Phaser does not hit-test an invisible
-    // object. Wait for the card to be fully visible before computing the tap point.
-    await page.waitForFunction(() => {
-      const ui = window.__game.scene.getScene('UI');
-      const card = ui?.modal?.list?.filter(o => o.type === 'Container')[0];
-      return Boolean(card) && card.alpha >= 1;
-    });
-
-    const cardPoint = await page.evaluate(() => {
-      const ui = window.__game.scene.getScene('UI');
-      const card = ui.modal.list.filter(o => o.type === 'Container')[0];
-      const hit = card.list.find(o => o.input && o.input.enabled);
-      if (!hit) throw Error('the first upgrade card has no interactive surface');
-      const b = hit.getBounds();
-      const canvas = window.__game.canvas.getBoundingClientRect();
-      const scene = window.__game.scene.getScene('UI');
-      return {
-        x: canvas.x + (b.x + b.width / 2) * canvas.width / scene.scale.width,
-        y: canvas.y + (b.y + b.height / 2) * canvas.height / scene.scale.height,
-      };
-    });
-    await page.touchscreen.tap(cardPoint.x, cardPoint.y);
-    await page.waitForFunction(() => {
-      const ui = window.__game.scene.getScene('UI');
-      const gs = window.__game.scene.getScene('Game');
-      return !ui.modal && gs.awaitingChoice === false;
-    });
 
     // Damage, a clean streak, a suppressed pending sample and the forced terminal tick.
     const gameplay = await page.evaluate(() => {
@@ -891,56 +1010,173 @@ const mark = (name, value, kind = 'real') => {
     mark('cosmetic: earned palette changes appearance while collision body and silhouette stay authoritative', appearance);
 
     // ---------------------------------------------------------------- Phase 7
-    // Host lifecycle: a host pause is resumable, a manual pause is not.
-    // The host deliberately refuses to own a pause it did not create, so the game
-    // must be running before the host deactivates it.
-    const phase7State = await page.evaluate(() => {
+    // Host lifecycle: a host pause is resumable, a UI-owned pause is not.
+    //
+    // The whole cycle is measured inside one browser turn. The host pause and
+    // the host resume are synchronous inside the Telegram event handler, while
+    // the run itself keeps playing: the player auto-fires, killed enemies drop
+    // XP gems, and a collected gem opens the real level-up modal, which
+    // legitimately owns the pause and blocks `canResumeFromHost()`. Polling for
+    // the paused or the active state therefore races the game's own
+    // progression, so the contract is read in the same turn that produces it.
+    await ensureRunningGame('the host lifecycle phase');
+
+    const hostCycle = () => page.evaluate(() => {
       const gs = window.__game.scene.getScene('Game');
-      const before = {
-        status: gs.sys.settings.status,
-        visibility: document.visibilityState,
+      const ui = window.__game.scene.getScene('UI');
+      const state = () => ({
+        active: window.__game.scene.isActive('Game'),
+        paused: window.__game.scene.isPaused('Game'),
+        canResumeFromHost: ui.canResumeFromHost(),
+        modalOpen: ui.modalOpen,
+        uiBlocked: ui.uiBlocked,
+        overShown: ui.overShown,
+        manualPaused: ui.manualPaused,
+        awaitingChoice: gs.awaitingChoice,
+        queuedLevels: gs.queuedLevels,
         phase: gs.stageDirector?.phase,
-      };
-      // The manager-level resume is immediate, so the host contract below is tested
-      // from a deterministic running state instead of a queued one.
-      window.__game.scene.resume('Game');
-      return before;
-    });
-    await page.waitForTimeout(200);
-    const phase7Final = await page.evaluate(() => ({
-      status: window.__game.scene.getScene('Game').sys.settings.status,
-      isActive: window.__game.scene.isActive('Game'),
-    }));
-    assert.equal(phase7Final.isActive, true,
-      `the game must be running before the host deactivates it (${JSON.stringify({ phase7State, phase7Final })})`);
-    await page.evaluate(() => { window.__p11Tg.emit('deactivated'); });
-    const pausedSnapshot = await waitUntil(sceneSnapshot, 'the host deactivation to pause the game',
-      () => window.__game.scene.isPaused('Game'));
-    assert.equal(pausedSnapshot.gamePaused, true,
-      'a Telegram deactivation must pause the running game');
-    await page.evaluate(() => { window.__p11Tg.emit('activated'); });
-    const resumedSnapshot = await waitUntil(sceneSnapshot, 'the host activation to resume the game',
-      () => window.__game.scene.isActive('Game'));
-    assert.equal(resumedSnapshot.gameActive, true,
-      'a Telegram activation must resume the host-owned pause');
-    mark('host lifecycle: Telegram deactivated pauses and activated resumes the host-owned pause', {
-      afterDeactivated: pausedSnapshot,
-      afterActivated: resumedSnapshot,
+        sceneStatus: gs.sys?.settings?.status,
+        deactivatedHandlers: window.__p11Tg?.count('deactivated') ?? null,
+        activatedHandlers: window.__p11Tg?.count('activated') ?? null,
+      });
+      const before = state();
+      const ready = before.active && !before.paused && before.canResumeFromHost === true &&
+        !before.modalOpen && !before.uiBlocked && !before.overShown && !before.manualPaused;
+      if (!ready) return { ready: false, before };
+      window.__p11Tg.emit('deactivated');
+      const afterDeactivate = state();
+      window.__p11Tg.emit('activated');
+      const afterActivate = state();
+      return { ready: true, before, afterDeactivate, afterActivate };
     });
 
+    // A host deactivation and a host activation inside the same browser turn must not leave
+    // the run frozen. The host owns the pause it created, so it also owns releasing it.
+    // A deferred pause used to drop that ownership while the pause was still pending, so the
+    // queued pause landed afterwards and left the game paused with nobody able to resume it.
+    // The precondition and the two host events are read in the same turn, so the run cannot
+    // change underneath the measurement.
+    await ensureRunningGame('the same-turn host cycle');
+    const sameTurn = await page.evaluate(() => {
+      const ui = window.__game.scene.getScene('UI');
+      const gs = window.__game.scene.getScene('Game');
+      const before = {
+        active: window.__game.scene.isActive('Game'),
+        paused: window.__game.scene.isPaused('Game'),
+        canResumeFromHost: ui.canResumeFromHost(),
+        modalOpen: ui.modalOpen,
+        awaitingChoice: gs.awaitingChoice,
+      };
+      window.__p11Tg.emit('deactivated');
+      window.__p11Tg.emit('activated');
+      return { before };
+    });
+    await page.waitForTimeout(200);
+    const sameTurnEnd = await page.evaluate(() => {
+      const ui = window.__game.scene.getScene('UI');
+      return {
+        active: window.__game.scene.isActive('Game'),
+        paused: window.__game.scene.isPaused('Game'),
+        modalOpen: ui.modalOpen,
+        canResumeFromHost: ui.canResumeFromHost(),
+      };
+    });
+    // The failure mode is an ownerless pause: the game is paused, the UI would allow a
+    // resume, and neither the host nor the UI owns that pause. A pause that a level-up
+    // modal owns is a legitimate pause and must survive.
+    assert.equal(sameTurnEnd.paused && sameTurnEnd.canResumeFromHost, false,
+      `a same-turn deactivated -> activated cycle must not leave the game paused with no owner (${JSON.stringify({ sameTurn, sameTurnEnd })})`);
+    mark('host lifecycle: a same-turn deactivate/activate never leaves the run frozen', {
+      before: sameTurn.before,
+      after: sameTurnEnd,
+    });
+
+    let hostCycleResult = null;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      hostCycleResult = await hostCycle();
+      if (hostCycleResult.ready) break;
+      // A UI blocker owns the pause at this instant: clear it the way a player
+      // does and take the measurement again.
+      await resolveLevelUpModal();
+      await page.waitForTimeout(150);
+    }
+    assert.equal(hostCycleResult.ready, true,
+      `the host cycle needs a running game with an unblocked UI (${JSON.stringify(hostCycleResult)})`);
+    assert.equal(hostCycleResult.afterDeactivate.paused, true,
+      `a Telegram deactivation must pause the running game (${JSON.stringify(hostCycleResult)})`);
+    assert.equal(hostCycleResult.afterDeactivate.active, false,
+      'a Telegram deactivation must stop the running game');
+    assert.equal(hostCycleResult.afterActivate.active, true,
+      `a Telegram activation must resume the host-owned pause (${JSON.stringify(hostCycleResult)})`);
+    assert.equal(hostCycleResult.afterActivate.paused, false,
+      'a Telegram activation must release the host-owned pause');
+    mark('host lifecycle: Telegram deactivated pauses and activated resumes the host-owned pause', hostCycleResult);
+
+    // The host must never own a pause it did not create. A real level-up modal
+    // owns the pause while it is open, so a host cycle in that state has to
+    // leave both the game and the modal exactly as they are.
+    await ensureRunningGame('the blocked host contract');
+    await page.evaluate(() => { window.__game.scene.getScene('Game').queuedLevels = 1; });
+    await page.waitForFunction(() => {
+      const ui = window.__game.scene.getScene('UI');
+      const gs = window.__game.scene.getScene('Game');
+      return Boolean(ui?.modal) && gs?.awaitingChoice === true && window.__game.scene.isPaused('Game');
+    });
+    const blocked = await page.evaluate(() => {
+      const gs = window.__game.scene.getScene('Game');
+      const ui = window.__game.scene.getScene('UI');
+      const before = {
+        paused: window.__game.scene.isPaused('Game'),
+        modalOpen: ui.modalOpen,
+        awaitingChoice: gs.awaitingChoice,
+      };
+      window.__p11Tg.emit('deactivated');
+      window.__p11Tg.emit('activated');
+      return {
+        before,
+        after: {
+          paused: window.__game.scene.isPaused('Game'),
+          active: window.__game.scene.isActive('Game'),
+          modalOpen: ui.modalOpen,
+          awaitingChoice: gs.awaitingChoice,
+          canResumeFromHost: ui.canResumeFromHost(),
+        },
+      };
+    });
+    assert.equal(blocked.after.paused, true, 'the host must not release a pause it does not own');
+    assert.equal(blocked.after.active, false, 'the host must not resume a UI-owned pause');
+    assert.equal(blocked.after.modalOpen, true, 'the host must not close a UI-owned modal');
+    mark('host lifecycle: the host never takes over or releases a UI-owned pause', blocked);
+    await resolveLevelUpModal();
+
     // A manual pause owns the game: the host must neither take it over nor release it.
+    await ensureRunningGame('the manual pause contract');
     await page.evaluate(() => { window.__game.scene.getScene('UI').showPauseMenu(); });
     await waitUntil(sceneSnapshot, 'the manual pause menu to pause the game',
       () => window.__game.scene.isPaused('Game'));
-    await page.evaluate(() => { window.__p11Tg.emit('deactivated'); window.__p11Tg.emit('activated'); });
-    await page.waitForTimeout(300);
-    const manualSnapshot = await page.evaluate(sceneSnapshot);
-    assert.equal(manualSnapshot.gamePaused, true,
-      'host activation must not resume a manual pause');
+    const manual = await page.evaluate(() => {
+      const gs = window.__game.scene.getScene('Game');
+      const ui = window.__game.scene.getScene('UI');
+      const before = { paused: window.__game.scene.isPaused('Game'), manualPaused: ui.manualPaused };
+      window.__p11Tg.emit('deactivated');
+      window.__p11Tg.emit('activated');
+      return {
+        before,
+        after: {
+          paused: window.__game.scene.isPaused('Game'),
+          active: window.__game.scene.isActive('Game'),
+          manualPaused: ui.manualPaused,
+          modalOpen: ui.modalOpen,
+          awaitingChoice: gs.awaitingChoice,
+        },
+      };
+    });
+    assert.equal(manual.after.paused, true, 'host activation must not resume a manual pause');
+    assert.equal(manual.after.manualPaused, true, 'the manual pause must stay owned by the UI');
     await page.evaluate(() => { window.__game.scene.getScene('UI').closePauseMenu(true); });
     await waitUntil(sceneSnapshot, 'the manual pause menu to release the game',
       () => window.__game.scene.isActive('Game'));
-    mark('host lifecycle: a manual pause survives deactivated -> activated', { manualPausePreserved: true });
+    mark('host lifecycle: a manual pause survives deactivated -> activated', manual);
 
     // ---------------------------------------------------------------- Phase 8
     // Platform transfer: Telegram -> MAX -> Browser -> Telegram.
@@ -1084,6 +1320,11 @@ const mark = (name, value, kind = 'real') => {
     console.error('FAILED', error);
     if (page) {
       try {
+        const frames = await frameTail(240);
+        report.frames = frames;
+        printFrameTail(frames);
+      } catch (inner) { console.error('FRAME DIAGNOSTIC ERROR', String(inner)); }
+      try {
         report.diagnostics = await page.evaluate(() => ({
           ready: window.__p11BridgeReady,
           adapter: window.__p11Platform?.kind,
@@ -1092,7 +1333,7 @@ const mark = (name, value, kind = 'real') => {
           scenes: window.__game?.scene?.scenes?.map(s => ({ key: s.scene.key, status: s.sys.settings.status })),
           collection: Boolean(window.__game?.scene?.getScene('Menu')?.children?.getByName('ofeliya-collection')),
         }));
-      } catch { /* page may already be gone */ }
+      } catch (inner) { console.error('SNAPSHOT DIAGNOSTIC ERROR', String(inner)); }
     }
   } finally {
     report.finishedAt = new Date().toISOString();
