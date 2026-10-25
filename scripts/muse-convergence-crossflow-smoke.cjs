@@ -433,6 +433,12 @@ const mark = (name, value, kind = 'real') => {
         });
         throw new Error(`the level-up modal did not close: ${JSON.stringify({ final, pointer })}`);
       }
+      if (required && !cardInfo) {
+        // A required level-up that never offered a card is a failure of the
+        // hand-off, not a missing assertion: report the state instead of
+        // dereferencing null further up.
+        throw new Error(`the level-up modal never offered an upgrade card: ${JSON.stringify(await modalSnapshot())}`);
+      }
       return cardInfo;
     };
 
