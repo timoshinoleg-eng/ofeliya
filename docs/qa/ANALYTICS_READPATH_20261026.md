@@ -218,10 +218,66 @@ The summary is served from the **live in-memory ring**, not from disk. Therefore
 | `server/analytics-summary.mjs` | **NEW** — pure helpers: token matcher, strict query parser, aggregator, gap list | +288 |
 | `server/index.mjs` | env read, module import, one GET route | +36 / −0 |
 | `tests/analytics-readpath.test.mjs` | **NEW** — 13 tests (9 unit + 4 HTTP-level) | +420 |
-| `package.json` | `test:analytics-readpath` script | +1 |
-| `.github/workflows/ci.yml` | new CI step "Analytics read path contract" | +3 |
+| `scripts/check-server-image-modules.mjs` | **NEW** — production-image module contract guard | +150 |
+| `deploy/Dockerfile` | **NEW** — `COPY server/analytics-summary.mjs` into the `score` stage | +1 |
+| `package.json` | `test:analytics-readpath`, `test:server-image`; `server:test` chain extended | +2 / −1 |
+| `.github/workflows/ci.yml` | new CI step "Analytics read path contract" — **could not be pushed, see §8.4** | +3 (local only) |
 
 No client file, no game file, no config, no dependency, no lockfile change.
+
+---
+
+## 7.1 ⚠ A real defect the production-contract gate caught
+
+**The first CI run on this branch FAILED** — run `40241321105`, job `production-contract`, step 18 *"Smoke production score image runtime"*.
+
+**Root cause — mine.** `deploy/Dockerfile` does **not** copy the whole `server/` tree. The `score` stage copies the individual modules it needs:
+
+```dockerfile
+COPY --chown=node:node server/index.mjs          ./server/index.mjs
+COPY --chown=node:node server/durable-state.mjs   ./server/durable-state.mjs
+COPY --chown=node:node server/telegram-users.mjs  ./server/telegram-users.mjs
+COPY --chown=node:node server/request-policy.mjs  ./server/request-policy.mjs
+COPY --chown=node:node server/telegram-share.mjs  ./server/telegram-share.mjs
+COPY --chown=node:node server/telegram-api.mjs    ./server/telegram-api.mjs
+COPY --chown=node:node server/telegram-webhook.mjs ./server/telegram-webhook.mjs
+```
+
+Adding a module to `server/` therefore does **not** add it to the image. `server/index.mjs` imported `./analytics-summary.mjs`, which was absent from the image ⇒ the container would have died with `ERR_MODULE_NOT_FOUND` ⇒ the smoke step failed.
+
+**Blast radius, checked precisely:**
+
+| deployment | affected? | why |
+|---|---|---|
+| Render (the live production host) | **NO** | `deploy/RENDER.md:36` — `Start: node server/hosting.mjs`, run from the repository checkout, where the whole `server/` tree is present |
+| Docker `score` stage / Cloud.ru compose | **YES** | `deploy/compose.production.yml:79-85` builds `target: score` and runs `node server/index.mjs` |
+| `telegram-bot` stage | NO | its closure is `{bot.mjs, telegram-api.mjs, telegram-webhook.mjs}`, all present |
+| `runtime` stage | NO | copies the whole `bot/` directory |
+
+**Fix:** one line in `deploy/Dockerfile`:
+
+```dockerfile
+COPY --chown=node:node server/analytics-summary.mjs ./server/analytics-summary.mjs
+```
+
+### 7.2 The permanent guard
+
+A missing COPY line is invisible until an image is built and booted — the slowest, most expensive possible place to find out. `scripts/check-server-image-modules.mjs` turns it into a **sub-second static check**:
+
+1. parse `deploy/Dockerfile` into stages (name, COPY sources, CMD);
+2. for every stage whose CMD runs a local `.mjs` entrypoint, resolve that file's **transitive closure of relative imports**;
+3. assert every required module is covered by that stage's COPY sources (exact file, or a directory copy that contains it).
+
+**RED → GREEN, demonstrated:**
+
+| tree state | result |
+|---|---|
+| guard vs the **unfixed** Dockerfile | **EXIT=1** — `[server-image] stage "score" (CMD server/index.mjs) does not COPY server/analytics-summary.mjs — the image would fail with ERR_MODULE_NOT_FOUND` |
+| guard vs the **fixed** Dockerfile | **EXIT=0** — `[server-image] OK — 2 image stage(s), 9 imported module(s) all present in deploy/Dockerfile` |
+
+The guard is placed **first** in the `server:test` chain, so a missing module fails in under a second instead of after a 15-minute image build. The CI job that failed (`production-contract`) already runs `npm run server:test` as its first step — **so the guard is in CI without any workflow change**, which also solves the ci.yml permission problem for the new test (§8.4).
+
+---
 
 ---
 
@@ -273,7 +329,8 @@ ok 13 - HTTP: the endpoint fails closed when no operator token is configured
 
 | command | result |
 |---|---|
-| `npm run server:test` | see §8.4 |
+| `npm run test:server-image` (the new guard) | **PASS** — 2 stages, 9 modules |
+| `npm run server:test` (now = guard + existing suites + the read-path tests) | **PASS** |
 | `npm run test:analytics` | PASS |
 | `npm run test:analytics-readpath` | PASS (13/13) |
 | `npm run test:server-policy` | PASS |
@@ -282,6 +339,25 @@ ok 13 - HTTP: the endpoint fails closed when no operator token is configured
 | `node scripts/check-max-rc-production.mjs` | PASS |
 | `npm run build` (tsc --noEmit && vite build && stamp-release) | PASS |
 | `git diff --check` | PASS |
+
+### 8.4 Hosted CI
+
+| run | head | result |
+|---|---|---|
+| `40241321105` | `603a01345b` | **FAILURE** — `production-contract` step 18 *"Smoke production score image runtime"*, root-caused in §7.1 and fixed |
+
+The `build` job (55/55 steps) and the `browser-smoke` job (56/56 steps) were **green** on that same run — the failure was isolated to the production image.
+
+### 8.5 The ci.yml limitation, and how it was worked around
+
+`.github/workflows/ci.yml` **cannot be pushed from the connected GitHub App** — both `push_files` and `create_or_update_file` are rejected for paths under `.github/workflows/` (a `workflows` scope limit, reproduced three times; identical payloads for every other path succeed). There is no low-level git-data tool to work around it.
+
+**Workaround applied:** both the new test **and** the new image guard were wired into **`npm run server:test`**, which the `production-contract` CI job already runs as its first step (`Score server tests`). Both therefore execute in hosted CI **with no workflow edit at all**:
+
+- `scripts/check-server-image-modules.mjs` — placed **first**, so a missing production module fails in under a second;
+- `tests/analytics-readpath.test.mjs` — appended to the chain.
+
+The local `ci.yml` still contains the explicit `Analytics read path contract` step for clarity; it is simply redundant now and can be dropped or kept at the owner's discretion.
 
 ---
 
