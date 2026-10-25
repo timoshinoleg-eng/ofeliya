@@ -165,6 +165,34 @@ charge on the floor.
 restart + retry window of the payment host, with a wide margin. Recommended: **≥ 1 hour** for the intent
 TTL, with the reconciliation as the backstop.
 
+### B.4.1 The transaction-history backstop (added by the factual correction)
+
+The first revision of this package treated the **webhook as the only route** by which a charge reaches the
+server. That was based on the (incorrect) belief that Telegram exposed no transaction history. It does:
+**`getStarTransactions`** (main plan §9.2.1, Annex D §D.1.7).
+
+| The failure the webhook cannot cover | How the history covers it |
+|---|---|
+| The `successful_payment` update is **lost** (a webhook outage, a dropped delivery, a mis-routed webhook) | The charge is still in the Telegram history ⇒ **R1** finds it on the next scan |
+| The process **dies** between the charge and the local write | The same ⇒ **R1**, and the `LATE` fulfilment path grants it (main plan §14.7.1) |
+| The charge lands while the runtime is **disabled** by the kill switch | The same ⇒ **R1**; the charge-without-delivery guard still honours it (§B.4) |
+| The webhook is **delayed** past the intent TTL | The same ⇒ **R1**; the `LATE` path grants it |
+
+**The separation that must not be blurred:**
+
+> **"A payment was detected"** is guaranteed by the Telegram history.
+> **"We know what was bought"** is guaranteed only if the bot's `invoice_payload` is self-describing
+> (main plan §17). A payment whose payload does not resolve is classified
+> **"detected external payment, subject unresolved"** and goes to the manual queue.
+
+**This changes the operational posture, not the safety posture.** The obligation *"once Telegram has
+charged, the user is owed the goods"* no longer depends on the webhook arriving — it is enforced by a
+scheduled, bounded, replayable scan. That is a **stronger** guarantee than the webhook, which is
+best-effort.
+
+**The one thing the history does not do:** it does not *grant* anything by itself. The scan produces
+**evidence**; the grant comes from the `LATE` path or from a repair, under the advisory lock, audited.
+
 ---
 
 ## B.5 The race matrix in full

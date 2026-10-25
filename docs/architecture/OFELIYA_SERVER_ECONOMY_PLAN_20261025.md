@@ -588,6 +588,16 @@ Findings are **rows**, not log lines:
 `ofeliya_pay.reconcile_findings(finding_key UNIQUE, kind, operation_id, detail JSONB, first_seen_at,
 resolved_at, resolution)`. Repeat runs are idempotent via `finding_key`.
 
+Two more tables belong to the reconciliation:
+
+| Table | Purpose | The key constraints |
+|---|---|---|
+| `telegram_transactions` | the **mirror** of the bot's Star transaction history — source **A** (§14.1) | `PRIMARY KEY (tx_key)` — `sha256(id ‖ direction ‖ amount ‖ date)`; **not** the id alone, because a refund shares its original's id; a `UNIQUE (tx_id, direction)`; an index on `(direction, tx_date)` |
+| `telegram_scan_checkpoint` | the durable scan position | one row per bot; `last_offset`, `last_date`, `last_tx_key`, `mode` (`INCREMENTAL` / `FULL`), `last_scan_at` |
+
+The mirror is what makes the reconciliation **evidence-based** rather than opinion-based: a finding cites a
+mirror row, and the mirror row cites a Telegram transaction id that an operator can verify independently.
+
 ### 8.8 Why NOT the existing `ofeliya_private.state` JSONB blob
 
 The current durable-state store rewrites the **entire document** on each flush, guarded by a revision and
@@ -665,7 +675,7 @@ succeeded.
 |---|---|---|
 | 1 | **Which transactions does it return?** | The **bot's own** Telegram Star transactions, in both directions. *Incoming* (`source` set): a user purchasing goods or services, or Fragment refunding a failed withdrawal. *Outgoing* (`receiver` set): a refund to a user for a purchase, or a withdrawal to Fragment. Nothing belonging to another bot is included. |
 | 2 | **Is there pagination?** | Yes — but it is **positional skip pagination, not a server-issued cursor**. `offset` = *"Number of transactions to skip in the response"*; `limit` = *"The maximum number of transactions to be retrieved. Values between 1-100 are accepted. Defaults to 100."* There is **no** `date`/`since` filter and **no** opaque cursor token in the Bot API. |
-| 3 | **How are operations identified?** | By `StarTransaction.id` (String) — *"Unique identifier of the transaction."* For a successful incoming payment it **coincides with `SuccessfulPayment.telegram_payment_charge_id`**; for a refund it **coincides with the identifier of the original transaction**. ⚠️ Therefore `id` alone identifies the *money*, not the *transaction*: a charge and its refund share one id. The direction (`source` vs `receiver`) plus the amount and the date are needed to tell them apart (§14.5). |
+| 3 | **How are operations identified?** | By `StarTransaction.id` (String) — *"Unique identifier of the transaction."* For a successful incoming payment it **coincides with `SuccessfulPayment.telegram_payment_charge_id`**; for a refund it **coincides with the identifier of the original transaction**. ⚠️ Therefore `id` alone identifies the *money*, not the *transaction*: a charge and its refund share one id. The direction (`source` vs `receiver`) plus the amount and the date are needed to tell them apart (§14.2, R10 — the dedupe key). |
 | 4 | **How are inbound payments represented?** | `source` = `TransactionPartnerUser` with `transaction_type = "invoice_payment"`, carrying `user` (the payer) and — since Bot API 8.0 — **`invoice_payload`**, the bot-specified payload, *"Can be available only for 'invoice_payment' transactions"*. |
 | 5 | **How are refunds represented?** | As an **outgoing** transaction: `receiver` = `TransactionPartnerUser` (the refunded user), the **same `id`** as the original charge, the refund amount, and the refund date. The Bot API type carries **no** `refund` flag and **no** `original_transaction_id` — the shared `id` *is* the link. (The MTProto equivalent `starsTransaction` **does** carry a `refund` flag, and `inputStarsTransaction` carries a `refund` flag for its by-id lookup.) |
 | 6 | **Can the original payment be found by `telegram_payment_charge_id`?** | **Yes.** For a successful incoming payment `StarTransaction.id` *is* the `telegram_payment_charge_id`, so a stored charge id is directly resolvable against the transaction history by scanning. |
@@ -730,9 +740,9 @@ Telegram exposes **two different API surfaces** for Stars. They are **not** inte
 | **Transaction status** | ✅ *implicit* — the direction of the entry in the history (`source` vs `receiver`) is the status | ✅ *explicit* — `starsTransaction` carries `refund`, `pending` and `failed` flags | **Yes — the Bot API**, via direction. The status is inferred, not declared |
 | **Pagination** | `offset` (an **integer skip count**) + `limit` (1–100). **No server cursor, no date filter.** | `offset` is an **opaque string** obtained from the returned `next_offset`; `next_offset` is returned by `payments.starsStatus` | **Yes — the Bot API**, with the durability caveat in §14.7 |
 | **Refund indication** | ✅ the refund appears as an **outgoing** transaction with the **same `id`** as the original charge and `receiver.type='user'` | ✅ the same, **plus** an explicit `refund` flag on `starsTransaction` | **Yes — the Bot API** |
-| **Balance / history summary** | `getMyStarBalance` → a `StarAmount` (**Bot API 9.1**) | `payments.getStarsStatus` → `payments.starsStatus` (balance + the last 5 transactions); with `peer=inputPeerSelf` for the account | **Yes — the Bot API.** The balance is a **derived** signal, useful for detecting chargebacks (§14.5 R10) |
+| **Balance / history summary** | `getMyStarBalance` → a `StarAmount` (**Bot API 9.1**) | `payments.getStarsStatus` → `payments.starsStatus` (balance + the last 5 transactions); with `peer=inputPeerSelf` for the account | **Yes — the Bot API.** The balance is a **derived** signal, useful for detecting chargebacks (§14.2, R10) |
 | **Access requirements** | A bot token only. **No `api_id`/`api_hash`, no phone-number login, no user session.** | `api_id` + `api_hash` + a session. A *bot* session is possible (a bot token over MTProto), but it is a **new credential class** that must be stored, rotated and audited like a production secret | **Bot API only** for v1 |
-| **Chargeback visibility** | ❌ none per transaction — only the balance effect | ❌ none per transaction — the same balance effect | **Neither.** Procedural only (§14.5 R10) |
+| **Chargeback visibility** | ❌ none per transaction — only the balance effect | ❌ none per transaction — the same balance effect | **Neither.** Procedural only (§14.2, R10) |
 
 #### 9.5.1 What MTProto would add, and why it is *not* on the critical path
 
@@ -1017,26 +1027,50 @@ clawed back; a spend that starts after is refused.
 
 ## 14. Reconciliation
 
-### 14.1 What it must detect
+### 14.1 The three sources of truth
 
-| Finding | Severity |
+Reconciliation is **not** a comparison of two databases. It is the disciplined matching of **three**
+independent sources, each of which is authoritative for a *different* class of fact.
+
+| Source | What it is | Authoritative for | How it is read |
+|---|---|---|---|
+| **A. Telegram** | the bot's Star transaction history — `getStarTransactions` (§9.2.1) | the **external money facts**: a charge happened, who paid, how much, when, and whether it was returned | a paged scan into a local mirror (`ofeliya_pay.telegram_transactions`) |
+| **B. The OFELIYA operation ledger** | `ofeliya_pay.operations` — append-only | **our** decisions: what we intended, what we recorded, the two idempotency anchors (`opId`, `telegram_payment_charge_id`) | a local query |
+| **C. The OFELIYA entitlement read model** | `ofeliya_pay.entitlements` | **what the user actually got** | a local query |
+
+**Why three, and not two.**
+
+| The pair that disagrees | What it means |
 |---|---|
-| A **local operation without an entitlement** | 🔴 high — the user paid and got nothing |
-| An **entitlement without a payment** | 🔴 high — a free entitlement |
-| A **refund without a revoke** | 🔴 high — the refund was paid out but the value was retained |
-| A **revoke without a refund** | 🟠 medium — possibly a manual revoke |
-| A **duplicate external transaction** | 🔴 high — prevented by `UNIQUE(telegram_payment_charge_id)`; the job re-checks for violations that predate the constraint |
-| An **orphan intent** (`PENDING` past the TTL) | 🟢 low |
-| A **price mismatch** vs the catalog version | 🟠 medium |
-| A **Telegram payment with no local operation** | 🔴 high — **manual only**, see §14.3 |
-| An **entitlement level above `max_level`** | 🔴 high — a grant bug |
+| B ↔ C | a **grant bug** — we recorded a purchase but the value never landed, or the value exists with no purchase |
+| A ↔ B | a **money event we did not record** — Telegram charged (or returned) and our ledger is silent |
+| A ↔ C | **the value and the money disagree** — the user holds paid value that Telegram says was returned, or holds nothing for a payment Telegram says was paid |
 
-### 14.2 Job shape
+No single pair covers the system. A vs B alone would miss a grant bug; B vs C alone would miss every
+charge without a local operation.
 
-- **Periodic** (e.g. hourly) and **on-demand** (an admin endpoint).
-- **Read-only** — it *finds*; it does not *fix*. Findings go to `ofeliya_pay.reconcile_findings` with a
-  `finding_key` (idempotent across runs).
-- The admin endpoint returns the findings; the repair is a separate, explicit, audited operation.
+**The rule that makes it safe:** *no source is ever used as evidence for itself.* The ledger is not evidence
+that a Telegram charge happened; the Telegram history is not evidence that a grant happened; the entitlement
+row is not evidence that either is true. Every conclusion in §14.2 is drawn from **at least two** sources,
+and a conclusion drawn from only one is a **finding**, never an action.
+
+### 14.2 The mismatch catalogue
+
+For every case: **evidence → severity → automatic action? → manual action → the safe outcome → the
+detectability class** (§14.4 defines the classes).
+
+| ID | The mismatch | Evidence | Severity | Automatic action? | Manual action | The safe outcome | Class |
+|---|---|---|---|---|---|---|---|
+| **R1** | **A: a charge exists · B: no operation** | an **inbound** A transaction with `source.type='user'` and `source.transaction_type='invoice_payment'`, whose `id` is absent from `operations.telegram_payment_charge_id` | 🔴 high — the user was charged | **Conditional.** If `source.invoice_payload` decodes to an operation of the same payer and the amount matches → the `LATE` fulfilment path (§14.7) grants it under the lock and alerts. Otherwise → **no auto-grant** | the unresolved queue, with the full Telegram facts attached (the id, the amount, the date, the payer id, the payload) | the user is never charged-and-denied: either the entitlement is granted, or a high-severity ticket exists within one scan interval | **FULLY_AUTOMATABLE** (detect) · the repair is **DETECTABLE_BUT_MANUAL_REPAIR** unless the payload resolves |
+| **R2** | **B: `ENTITLED` · C: no entitlement** | `operations.status='ENTITLED'` and no `entitlements` row for `(user_key, entitlement_key)` | 🔴 high — paid, not delivered | **Yes.** The operation already stores the server-computed `entitlement_key`/`entitlement_level`, so the grant is fully determined by the ledger. Upsert the entitlement, write a `grants_log` row with `actor='reconcile'`, alert | none required — the operator reviews the alert | the entitlement exists; **no double grant** (the grant is an upsert keyed by `(user_key, entitlement_key)`) | **FULLY_AUTOMATABLE** |
+| **R3** | **C: an entitlement exists · B: no confirmed payment operation** | an `entitlements` row whose `source_operation_id` is null or points at a non-paid operation, with no matching A transaction | 🔴 high — free value | **No.** The entitlement may be a legitimate promo / migration / admin grant (`ENTITLEMENT_SOURCES`, `grants_log`). Auto-revoking a granted badge is a customer-facing act | the operator checks `grants_log` for the actor; with no grant record at all it is a forged or buggy grant → revoke with a reason | the finding is not auto-resolved — a human decides; the entitlement is flagged in the operator console | **DETECTABLE_BUT_MANUAL_REPAIR** |
+| **R4** | **A: a refund exists · C: still active** | an **outgoing** A transaction whose `id` matches an `operations.telegram_payment_charge_id` and whose `receiver.type='user'`, while `entitlements.revoked_at IS NULL` and no `REFUNDED` operation exists | 🔴 high — the money came back and the value stayed | **Yes.** The external fact is unambiguous: Telegram returned the Stars to this user. Record a `REFUND` operation (status `REFUNDED`) and revoke the entitlement in one transaction | an alert — a refund we did not initiate is either an operator action outside the system or a chargeback-adjacent event | the entitlement is revoked and the ledger records the external refund we did not perform | **FULLY_AUTOMATABLE** |
+| **R5** | **B: `REFUNDED` · A: no refund observed** | `operations.status='REFUNDED'` with no outgoing A transaction carrying the matching id in the mirror | 🟠 medium — the mirror is stale, or the refund never happened | **Only after a bounded re-scan.** The worker re-scans the window around the refund's date; if the refund is still absent → the operation moves to `REFUND_RECONCILE` and the entitlement is **restored** to `ENTITLED` (the money was not returned), with an alert | if the re-scan is still ambiguous (the mirror is behind), the finding stays open | the operation never claims `REFUNDED` on local evidence alone, and the entitlement is not permanently revoked on an unconfirmed refund | **FULLY_AUTOMATABLE** (with the re-scan) |
+| **R6** | **A: a duplicate Telegram transaction** | two A transactions with the same `id` **and** the same direction (two inbound charges under one id) | 🔴 high — a double charge | **Partially.** Locally: keep one operation, record the finding, **never grant twice** (`uq_operations_charge`) | the operator raises it with Telegram — **only Telegram can return a duplicate charge**; OFELIYA's own refund path can then be used on the duplicate id | one grant; the duplicate stays visible and refundable | **DETECTABLE_BUT_MANUAL_REPAIR** |
+| **R7** | **One `telegram_payment_charge_id` linked to several operations** | `uq_operations_charge` makes this impossible for rows written after the constraint exists; the scan re-checks for pre-constraint violations | 🔴 high | **No** — repairing it means choosing which operation survives | the operator picks the survivor; the others are marked `REJECTED` with a reason | the constraint prevents recurrence; the scan surfaces a legacy violation | **DETECTABLE_BUT_MANUAL_REPAIR** |
+| **R8** | **One `opId` used with a different subject/fingerprint** | `operations (user_key, kind, op_id)` unique + the stored `op_fingerprint` ≠ the recomputed one | 🟠 medium — this is the *designed* fail-closed path | **Yes, and preventive:** the write path returns `409 IDEMPOTENCY_KEY_REUSE` and writes nothing | only if two *existing* rows disagree (a corruption) → manual | no second grant; the key reuse is visible in the audit trail | **FULLY_AUTOMATABLE** (the prevention) · **DETECTABLE_BUT_MANUAL_REPAIR** (the corruption case) |
+| **R9** | **The amount / SKU / catalog-version mismatch** | A's `amount` ≠ B's `operations.amount_stars`; or A's `source.invoice_payload` decodes to a different SKU than B's `operations.sku`; or B's `catalog_version` no longer resolves to the recorded price | 🟠 medium (catalog drift) · 🔴 high (an amount mismatch) | **No grant, ever.** The settlement path already refuses (`PRICE_MISMATCH`). The scanner records the finding; it never "fixes" a price | the operator decides between re-pricing + re-inviting, and refunding | the user is never charged the wrong amount and never granted the wrong SKU | **DETECTABLE_BUT_MANUAL_REPAIR** |
+| **R10** | **The balance does not reconcile** | `getMyStarBalance` (Bot API 9.1) ≠ the ledger's expected net receipts, beyond a tolerance | 🟠 medium | **No** — it is a *derived* signal with **no transaction identity**. It localises a period; it does not identify a transaction | the operator compares the balance against the A mirror over the same window. The most likely cause is a chargeback — Telegram documents that a chargeback *"will be deducted from the bot's balance. This is outside of Telegram's control"* | a balance drift is never silently absorbed; it is an alert | **PARTIALLY_DETECTABLE** — the drift is visible; the *cause* is not attributable per transaction from the Bot API |
 
 ### 14.3 The Telegram reconciliation facts (corrected)
 
@@ -1059,22 +1093,256 @@ What does **not** change: a **client-side report** ("I paid and got nothing") re
 evidence; and Telegram's own live checklist still says *"Use backups to make sure that you don't lose data
 about your users' payments."*
 
-**The full reconciliation architecture — the three sources of truth, the R1–R9 mismatch catalogue with
-its detectability classes, the worker and the checkpoint — is specified in §14.4–§14.8.**
+**The full reconciliation architecture — the three sources of truth (§14.1), the R1–R10 mismatch
+catalogue (§14.2), the detectability classes (§14.4), the worker (§14.5), the checkpoint (§14.6) and
+the charge-without-delivery path (§14.7) — is specified below.**
 
-### 14.4 The safe repair strategy
+### 14.4 The detectability classes — what is and is not recoverable
+
+Every case in §14.2 is classified. The classes are deliberately blunt, because the whole point of the
+correction is to replace *"nothing can be checked automatically"* with a **precise** statement of what can.
+
+| Class | The meaning |
+|---|---|
+| **FULLY_AUTOMATABLE** | the mismatch is detected with certainty, **and** the correct safe outcome can be applied by a machine with no human judgement |
+| **DETECTABLE_BUT_MANUAL_REPAIR** | detected with certainty; the **repair** requires a human decision, or is a money action that a human must authorise |
+| **PARTIALLY_DETECTABLE** | only **some instances** are visible; the rest are invisible to the available APIs |
+| **NOT_DETECTABLE_FROM_AVAILABLE_API** | no available surface exposes it at all — a procedural gap, not a tooling gap |
+
+> **The class is a property of the *case*, not of every *instance* of the case.**
+> R1 is `FULLY_AUTOMATABLE` for detection and `DETECTABLE_BUT_MANUAL_REPAIR` for the repair, and it
+> collapses to `FULLY_AUTOMATABLE` end-to-end **when the payload resolves**. Stating only one of the two
+> is how the first revision went wrong.
+
+#### 14.4.1 The summary
+
+| ID | Detect | Repair | The one-line verdict |
+|---|---|---|---|
+| R1 | `FULLY_AUTOMATABLE` | conditional on the payload | a charge without a local operation is **found automatically**; the grant is automatic only when the payload names the intent |
+| R2 | `FULLY_AUTOMATABLE` | `FULLY_AUTOMATABLE` | paid but not delivered is **fully automatic** — the operation stores the target |
+| R3 | `FULLY_AUTOMATABLE` | `DETECTABLE_BUT_MANUAL_REPAIR` | free value is found automatically, revoked by a human |
+| R4 | `FULLY_AUTOMATABLE` | `FULLY_AUTOMATABLE` | a Telegram refund with a live entitlement is **fully automatic** — Telegram is the authority for that fact |
+| R5 | `FULLY_AUTOMATABLE` | `FULLY_AUTOMATABLE` (after a re-scan) | a local `REFUNDED` with no external refund is **self-healing** |
+| R6 | `FULLY_AUTOMATABLE` | `DETECTABLE_BUT_MANUAL_REPAIR` | a duplicate charge is found automatically; only Telegram can return it |
+| R7 | `FULLY_AUTOMATABLE` | `DETECTABLE_BUT_MANUAL_REPAIR` | prevented by a constraint; a legacy violation needs a human |
+| R8 | `FULLY_AUTOMATABLE` | preventive | the write path already refuses it |
+| R9 | `FULLY_AUTOMATABLE` | `DETECTABLE_BUT_MANUAL_REPAIR` | a price drift is found automatically; the price is never "fixed" by a machine |
+| R10 | `PARTIALLY_DETECTABLE` | `DETECTABLE_BUT_MANUAL_REPAIR` | a balance drift is visible; the cause is not attributable per transaction |
+
+#### 14.4.2 What is still **not** automatically recoverable
+
+This list is the honest remainder. It is short, and it is *not* "everything".
+
+| # | The residual gap | The class | Why it cannot be closed on the Bot API | What we do instead |
+|---|---|---|---|---|
+| 1 | **The subject of a payment whose payload does not resolve** — "detected external payment, subject unresolved" | `PARTIALLY_DETECTABLE` | `invoice_payload` is returned **only** for `"invoice_payment"` transactions, and only what the *bot* put there. A `paid_media_payment` carries `paid_media_payload`; a `gift_purchase` carries none | the finding goes to the manual queue; and the payload design (§17) is chosen so that **our own** payments are never in this class |
+| 2 | **A chargeback (Apple / Google)** | `NOT_DETECTABLE_FROM_AVAILABLE_API` per transaction | Telegram documents the *effect* — *"the refunded Stars will be deducted from the bot's balance"* — but exposes **no** chargeback event, and `StarTransaction` carries no chargeback flag | the balance comparison (R10) raises a **period-level** alert; the resolution is procedural (Telegram's dispute terms) |
+| 3 | **Why a refund failed** | `NOT_DETECTABLE_FROM_AVAILABLE_API` | `refundStarPayment` returns a bare `true`/`false` — there is no error taxonomy | the *outcome* is still fully determinate: the Telegram history shows the refund or does not (§13) |
+| 4 | **Whether a refund call succeeded, at the instant it was made** | `PARTIALLY_DETECTABLE` | a timeout is indistinguishable from a failure at the call site | resolved **after the fact** by the Telegram history — this is exactly why `REFUND_RECONCILE` exists (§13) |
+| 5 | **The completeness of the history before some cut-off** | `PARTIALLY_DETECTABLE` | the Bot API states **no** retention guarantee and offers **no** date filter | verified in the test environment (R-T7) and re-verified by the **weekly full scan** (§14.6) — a documented assumption, not a guarantee |
+| 6 | **Whether the user actually consumed the paid value** | out of scope for the API | the game is client-side; a granted entitlement may have been used before a refund | a **product policy** question (§11.3), not an API question — paid permanent power is deferred to v1.1 for exactly this reason |
+
+### 14.5 The reconciliation worker
+
+```
+observe → compare → classify → repair only when deterministic → otherwise queue for a human
+```
+
+**observe** — page through `getStarTransactions` via the provider interface
+(`listStarTransactions({ offset, limit })` → `{ transactions: [...] }`, Annex D §D.6.5), write each
+transaction into the mirror `ofeliya_pay.telegram_transactions`, and advance the checkpoint **in the same
+database transaction as the page write** (§14.6).
+
+**compare** — three joins, no more:
+
+```sql
+-- A ↔ B  : a charge we did not record
+select t.id from ofeliya_pay.telegram_transactions t
+  left join ofeliya_pay.operations o on o.telegram_payment_charge_id = t.id
+ where t.direction = 'IN' and o.id is null;
+
+-- B ↔ C  : a paid operation with no entitlement
+select o.id from ofeliya_pay.operations o
+  left join ofeliya_pay.entitlements e
+    on e.user_key = o.user_key and e.entitlement_key = o.entitlement_key
+ where o.status = 'ENTITLED' and e.user_key is null;
+
+-- A ↔ C  : an externally refunded charge whose entitlement is still live
+select t.id from ofeliya_pay.telegram_transactions t
+  join ofeliya_pay.operations o on o.telegram_payment_charge_id = t.id
+  left join ofeliya_pay.entitlements e
+    on e.user_key = o.user_key and e.entitlement_key = o.entitlement_key
+ where t.direction = 'OUT' and (e.revoked_at is null or e.user_key is null);
+```
+
+**classify** — map each difference to a row of §14.2 (R1–R10) and write a `reconcile_findings` row keyed by
+`finding_key`, so repeat runs are idempotent and an operator sees the *age* of a finding.
+
+**repair** — only the deterministic cases, each in **one** database transaction, each audited in
+`grants_log` with `actor='reconcile'`, the `finding_key`, and the evidence that justified it.
+
+| The auto-repair allowlist | Why it is deterministic |
+|---|---|
+| **R2** — grant the missing entitlement for an `ENTITLED` operation | the operation stores the server-computed target; the grant is an upsert, so it cannot double-grant |
+| **R4** — record the externally observed refund and revoke the entitlement | Telegram is the authority for "the money was returned"; the local ledger cannot contradict it |
+| **R5** — move a locally `REFUNDED` operation to `REFUND_RECONCILE` and restore the entitlement, after a bounded re-scan | the local state was wrong about the external fact; the external fact is the truth |
+| **`REFUND_RECONCILE` resolution** — finalise to `REFUNDED` (revoke) or to `REFUND_FAILED` (restore) | the Telegram history answers the question that the call site could not |
+
+| The auto-repair denylist — **never, at any severity** | Why |
+|---|---|
+| granting value without a confirmed Telegram transaction | a grant is a money action; the ledger is not evidence |
+| any money movement | a refund is always an explicit operator command (§13) |
+| revoking an entitlement whose grant source is unknown (R3) | it may be a legitimate promo / migration grant |
+| choosing between two conflicting operations (R7) | it requires a human judgement about which purchase was real |
+| re-pricing or "correcting" an amount (R9) | the price is a product decision |
+
+**Properties of the worker.**
+
+- **Safe during a purchase.** It reads committed rows only (MVCC); it never flags a `PENDING` operation; it
+  never holds the user advisory lock for long. A repair takes the same `pg_advisory_xact_lock(userKey)` as
+  the write path, so a repair and a purchase cannot interleave.
+- **Idempotent.** A repeat run over the same mirror yields the same findings (the `finding_key`) and the
+  same repairs (upserts + `grants_log` rows keyed by the finding id).
+- **Bounded.** One scan page = one HTTP call. A scan that fails leaves the checkpoint untouched and the
+  worker retries with backoff. **A partial scan never advances the checkpoint** — the mirror is never
+  ahead of the checkpoint.
+
+### 14.6 The checkpoint and the scan cursor
+
+**The problem, stated precisely.** The Bot API's pagination is **not** a cursor:
+
+| Property | What the documentation actually says |
+|---|---|
+| The page size | `limit` — *"Values between 1-100 are accepted. Defaults to 100."* |
+| The position | `offset` — *"Number of transactions to skip in the response"* — an **integer skip count** |
+| The ordering | *"Returns the bot's Telegram Star transactions in chronological order."* |
+| A server-issued cursor | ❌ **none** |
+| A date filter | ❌ **none** |
+| A retention guarantee | ❌ **none stated** |
+
+⇒ **A durable checkpoint is our own construction**, and it depends on the assumption that the list is
+**append-only and chronologically ordered**. The Bot API states the ordering; it does not explicitly
+guarantee append-only behaviour. The design therefore makes the checkpoint *defensive* rather than
+authoritative.
+
+**The design.**
+
+| Piece | The rule |
+|---|---|
+| The mirror | `ofeliya_pay.telegram_transactions` — every transaction ever seen, keyed by `tx_key` |
+| The checkpoint | `ofeliya_pay.telegram_scan_checkpoint` — `last_offset`, `last_date`, `last_tx_key`, `last_scan_at`, `mode` |
+| **Atomicity** | the checkpoint advances **only in the same transaction as the page write**. A crash mid-page rolls back both ⇒ the mirror is never ahead of the checkpoint |
+| The dedupe key | `tx_key = sha256( id ‖ direction ‖ amount ‖ date )`, where `direction = 'IN'` if `source` is present else `'OUT'` |
+| ⚠️ **not** `id` alone | the Bot API says the refund *"Coincides with the identifier of the original transaction"* ⇒ **a charge and its refund share one id**. Dedupe by id alone would silently drop every refund |
+| The overlap | each scan re-reads the last `OVERLAP` transactions **before** the checkpoint (`OVERLAP = max(limit, 200)`) and re-ingests them; the dedupe key makes the re-ingest a no-op, and it closes the "a transaction was appended while we were paging" gap |
+| The ordering-violation guard | if a scan returns a transaction whose `date` is **older** than `last_date`, the append-only assumption is violated ⇒ the worker forces `mode='FULL'` (a re-scan from `offset=0`) and raises an alert. **This is the blind-spot detector** |
+| The periodic deep reconciliation | a **weekly full scan** from `offset=0` re-ingests everything and re-compares. It catches a compaction, a reordering, a lost page or a checkpoint bug |
+| The manual full scan | an admin operation that sets `mode='FULL'` on demand — used for a dispute, an incident, or a release |
+| The cost | ⌈n/100⌉ API calls for *n* transactions. At OFELIYA's scale this is negligible; **the weekly full scan is the cheapest insurance in the system** |
+
+**The honest limitation, stated plainly.**
+
+> The Bot API provides **no durable cursor**. `offset` is a positional skip count. A durable checkpoint is
+> *our* construction and it depends on an append-only ordering assumption that the documentation implies
+> (*"in chronological order"*) but does not explicitly guarantee.
+>
+> Therefore the checkpoint is backed by **four** independent safety nets: the **overlap**, the
+> **ordering-violation guard**, the **weekly full re-scan**, and the **test-environment verification of
+> history completeness** (R-T7). If any of them fails, the system degrades to *"the periodic full scan is
+> the truth"* — **not** to *"the checkpoint is the truth"*.
+>
+> **MTProto would remove this dependency** (`next_offset` is an opaque server-issued string, documented as
+> *"obtained from the returned next_offset"*), which is the single strongest reason to consider it later —
+> and **not** a reason to make it a dependency now (§9.5.1, §22 Q11).
+
+### 14.7 Charge-without-delivery, rewritten against the transaction API
+
+The first revision could only handle this class through a late `successful_payment` webhook. **That is no
+longer the only route** — the Telegram history is the backstop, and it covers the case the webhook cannot.
+
+| # | The scenario | What the state looks like | How it is detected | The automatic action | What is not automatically recoverable |
+|---|---|---|---|---|---|
+| 1 | **The update arrives; the payment is recorded; the entitlement is not granted** | B: the operation is `ENTITLED`; C: no entitlement | **R2** — a pure local join, found on the next scan (seconds, not hours) | the grant is re-applied from the operation's own stored target; audited | nothing |
+| 2 | **The process dies before the `successful_payment` handling completes** | A: the charge exists; B: no operation | **R1** — the Telegram scan finds the charge | if `source.invoice_payload` resolves → the `LATE` fulfilment path grants it (§14.7.1); otherwise a high-severity finding with the payload attached | the **subject**, if the payload does not resolve |
+| 3 | **The update is lost / a webhook outage** | A: the charge exists; B: no operation, or a `PENDING` intent | **R1** — the *same* scan. The outage is invisible to us; **the charge is not** | as #2 | as #2 |
+| 4 | **The history does not carry enough data to recover the subject** | A: a charge with no `invoice_payload` (e.g. a `paid_media_payment`) or an unresolvable payload | **R1** | **none** — the finding is classified **"detected external payment, subject unresolved"** and goes to the manual queue | the subject |
+
+> **"A payment was detected"** and **"we know what was bought"** are two different claims, and the package
+> keeps them apart. The first is **guaranteed** by `getStarTransactions`. The second is guaranteed **only**
+> if the bot's `invoice_payload` is self-describing (§17). That is why the payload design is a *correctness
+> requirement*, not a stylistic one — and why a `paid_media_payment` (which carries no
+> `invoice_payload`) is explicitly out of scope for the Storefront.
+
+#### 14.7.1 The `LATE` fulfilment path
+
+The intent TTL is **not** a reason to refuse a charge. A `successful_payment` that arrives after the TTL is
+still a real charge, and Telegram's own rule applies: *"You must always check that you received a
+successful_payment update before delivering the goods or services purchased by the user."*
+
+| The local state | The action |
+|---|---|
+| the operation exists as `PENDING` (or `LATE`) and the payload matches | grant under the advisory lock; `status='ENTITLED'`; audit |
+| the operation **does not exist** (the intent was garbage-collected, or the intent API was down) and the payload decodes to a known SKU/catalog version | **create** the operation with `kind='PURCHASE'`, `status='LATE'` → `ENTITLED`, with the payload as the link; grant; audit; alert |
+| the payload does not decode, or the amount does not match the catalog price at the payload's catalog version | **no grant.** `REJECTED` + a high-severity finding + an alert. A charge is never silently dropped and never silently granted |
+
+**The intent TTL is therefore a financial parameter, not a cleanup parameter** (Annex B §B.4): it must
+exceed the worst-case restart + retry window of the payment host, with a wide margin — **≥ 1 hour** is the
+recommended value, with the reconciliation as the backstop.
+
+### 14.8 The safe repair strategy
 
 ```
 detect → record the finding → a human reviews → an explicit repair command → an audit log → re-run to confirm
 ```
 
-1. **Never auto-repair.** A repair that grants an entitlement is a money action.
+1. **Never auto-repair a money action.** A repair that grants an entitlement is a money action *unless* it
+   is on the §14.5 auto-repair allowlist, and each allowlist entry has a written reason why it is
+   deterministic. Everything else is manual.
 2. Every repair writes to `grants_log` with `reason`, `finding_id` and the operator identity.
 3. Repairs are **idempotent** — running them twice changes nothing the second time.
-4. A repair that would grant value **without** a matching charge requires a charge reference (from the
-   Telegram-side export) — otherwise it is rejected.
+4. A repair that would grant value **without** a matching Telegram charge requires a charge reference (the
+   transaction id from the mirror, or a dispute reference) — otherwise it is rejected with
+   `manual-review-required`.
 5. The reconcile job must be safe to run **during** a purchase: it reads committed rows only, never
    flags a `PENDING` operation, and never blocks the write path.
+6. The reconcile job must be safe to run **during** a refund: it takes the same advisory lock as the write
+   path, so a repair and a refund cannot interleave.
+
+### 14.9 The operator runbook — the reconciliation cases
+
+```
+1. "I paid and got nothing."
+   a. Read the operations by (user_key, created_at desc) and by telegram_payment_charge_id.
+   b. Run the scan (POST /api/admin/reconcile {op:'scan'}) — or wait for the next one.
+   c. If a Telegram charge exists and the payload resolves:
+        → the LATE fulfilment path grants it automatically. Confirm it, tell the user.
+   d. If a Telegram charge exists and the payload does NOT resolve:
+        → the finding is "detected external payment, subject unresolved".
+        → ask the user for the receipt / the payload shown in their Telegram receipt, then repair manually
+          with a reason.
+   e. If no Telegram charge exists:
+        → nothing was charged. Tell the user so. Do not grant anything.
+
+2. "I was charged twice."
+   → R6. Keep one grant; raise the duplicate with Telegram; refund the duplicate through the normal
+     refund path (only Telegram can return a duplicate charge).
+
+3. "I paid but my money came back / my item disappeared."
+   → R4 (an external refund we did not initiate) or an ordinary REFUNDED operation.
+   → The scan resolves it automatically and the entitlement is revoked. If the entitlement is still live,
+     check the operation status: REFUND_RECONCILE means the outcome is not yet known — wait for the scan,
+     do NOT restore the entitlement by hand.
+
+4. The balance does not match the ledger.
+   → R10. Compare the balance with the mirror over the same window. The most likely cause is a chargeback
+     (Apple / Google) — Telegram states it is outside their control. Escalate procedurally; the balance
+     alert is period-level only.
+
+5. A refund that "did nothing".
+   → Check the operation status. REFUND_REQUESTED → the worker has not claimed it yet.
+     REFUND_PENDING → the call is in flight or the outcome is unknown; do NOT re-issue it manually.
+     REFUND_RECONCILE → the outcome is unknown; the scan resolves it; a repeat refund is blocked.
+     REFUND_FAILED → the call definitely failed; the entitlement is restored; re-issue is allowed.
 
 ---
 
@@ -1107,6 +1375,8 @@ A new schema `ofeliya_pay` in the same Supabase project, with the same disciplin
 | `entitlements` | The current-state read model | `PRIMARY KEY (user_key, entitlement_key)`; a partial index on `revoked_at` |
 | `grants_log` | The audit trail | an index on `(user_key, created_at desc)` |
 | `reconcile_findings` | The reconciliation findings | `PRIMARY KEY (finding_key)`; a partial index on the open findings |
+| `telegram_transactions` | The mirror of the Telegram Star transaction history (source **A**) | `PRIMARY KEY (tx_key)`; `UNIQUE (tx_id, direction)`; an index on `(direction, tx_date)` |
+| `telegram_scan_checkpoint` | The durable scan position | one row per bot; `mode` ∈ (`INCREMENTAL`, `FULL`) |
 
 `updated_at` is the **only** mutable column on an operation row besides `status`; the history is otherwise
 append-only. `raw_payload` keeps the full `SuccessfulPayment` JSONB — needed for the disputes and for the

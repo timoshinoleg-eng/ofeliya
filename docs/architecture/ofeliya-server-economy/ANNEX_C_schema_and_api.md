@@ -244,7 +244,78 @@ alter table ofeliya_pay.reconcile_findings enable row level security;
 grant select, insert, update on ofeliya_pay.reconcile_findings to service_role;
 ```
 
-### C.3.7 `900_rpc.sql` — the money RPC
+### C.3.7 `060_telegram_mirror.sql` — the Telegram transaction mirror + the scan checkpoint
+
+The mirror of source **A** (main plan §14.1) and the durable scan position (§14.6). These two tables are
+what turn "we read Telegram once" into "we have a durable, deduplicated, replayable view of every Telegram
+Star transaction".
+
+```sql
+-- The mirror of the bot's Telegram Star transaction history.
+-- One row per (transaction, direction). NOT one row per id: the Bot API states that a
+-- refund "Coincides with the identifier of the original transaction", so a charge and
+-- its refund share an id and are distinguished by direction.
+create table if not exists ofeliya_pay.telegram_transactions (
+  tx_key          text primary key,          -- sha256(tx_id || direction || amount || tx_date)
+  tx_id           text not null,             -- StarTransaction.id
+                                                  --   == telegram_payment_charge_id for an incoming payment
+                                                  --   == the ORIGINAL id for a refund
+  direction       text not null check (direction in ('IN','OUT')),
+  amount          integer not null,          -- StarTransaction.amount
+  nanostar_amount integer,                   -- StarTransaction.nanostar_amount (optional, fractional Stars)
+  tx_date         timestamptz not null,      -- StarTransaction.date
+  source_type     text,                      -- 'user' | 'fragment' | 'telegram_api' | ...
+  source_tx_type  text,                      -- 'invoice_payment' | 'paid_media_payment' | 'gift_purchase' | ...
+  payer_user_id   bigint,                    -- TransactionPartnerUser.user.id (an IN transaction only)
+  invoice_payload text,                      -- TransactionPartnerUser.invoice_payload -- the subject-recovery hook
+  peer_user_id    bigint,                    -- TransactionPartnerUser.user.id (an OUT transaction only)
+  raw             jsonb not null default '{}'::jsonb,
+  first_seen_at   timestamptz not null default now(),
+  constraint uq_telegram_tx unique (tx_id, direction)
+);
+
+create index if not exists ix_telegram_tx_dir_date
+  on ofeliya_pay.telegram_transactions (direction, tx_date desc);
+create index if not exists ix_telegram_tx_payer
+  on ofeliya_pay.telegram_transactions (payer_user_id)
+  where payer_user_id is not null;
+
+alter table ofeliya_pay.telegram_transactions enable row level security;
+grant select, insert on ofeliya_pay.telegram_transactions to service_role;
+```
+
+```sql
+-- The durable scan position. One row per bot.
+--
+-- IMPORTANT: the Bot API's `offset` is a POSITIONAL SKIP COUNT, not a server-issued
+-- cursor. This row is therefore OUR construction, and it is valid only while the
+-- transaction list is append-only and chronologically ordered. It is defended by
+-- (a) the overlap re-read, (b) the ordering-violation guard, (c) the weekly full
+-- re-scan, and (d) the test-environment verification of history completeness.
+create table if not exists ofeliya_pay.telegram_scan_checkpoint (
+  bot_key       text primary key,
+  mode          text not null default 'INCREMENTAL' check (mode in ('INCREMENTAL','FULL')),
+  last_offset   integer not null default 0,   -- the number of transactions fully ingested
+  last_date     timestamptz,                  -- the newest tx_date ingested (the ordering guard)
+  last_tx_key   text,
+  last_scan_at  timestamptz,
+  full_scan_at  timestamptz                   -- the last completed full (offset=0) scan
+);
+
+alter table ofeliya_pay.telegram_scan_checkpoint enable row level security;
+grant select, insert, update on ofeliya_pay.telegram_scan_checkpoint to service_role;
+```
+
+**The write rule (the whole point of this table).** The checkpoint row and the page of mirrored transactions
+are written **in the same database transaction**. A crash mid-page rolls back both, so the mirror is never
+ahead of the checkpoint and a partial scan can never advance the position. This is what makes an incremental
+scan safe to retry.
+
+**The dedupe key.** `tx_key = sha256(tx_id || direction || amount || tx_date)`. The `direction` component is
+**not optional**: without it, the re-ingest of a refund would collide with its original charge and the refund
+would be silently dropped — the exact failure the whole correction exists to prevent.
+
+### C.3.8 `900_rpc.sql` — the money RPC
 
 The pattern is copied from `ofeliya_private.ofeliya_state_call`: `security invoker`, an empty
 `search_path`, and the grants restricted to `service_role`.
