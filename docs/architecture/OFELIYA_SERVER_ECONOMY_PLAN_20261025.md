@@ -155,13 +155,18 @@ Status vocabulary: `PRODUCTION_READY` · `QA_ONLY` · `PARTIAL` · `PROTOTYPE` �
 
 ### 2.1 Repository facts (verified)
 
+> **Re-verified 2026-10-25 at revision 2.** The only corrections against revision 1 are the branch/ref
+> count (which changed because this package's own branch was created) and the head SHA of PR #241, which
+> revision 1 cited stale. Nothing about the *finding* — no monetization code — changed: it was re-checked
+> against the live repository and remains **0 monetization PRs, 0 payment files, 0 patch files**.
+
 | Fact | Value |
 |---|---|
 | Default branch · HEAD | `main` · `6144b4d181fd711294adb7bef7dfc2641c483bcf` (2026-10-21, PR #223) |
-| Remote branches · total refs | 230 · 232 (incl. tag `pre-v0.4.1`) |
-| Total PRs | 219 (#13 → #243) |
+| Remote branches · total refs | 231 heads + 1 tag = 232 refs (re-verified at revision 2; revision 1 counted 230 heads, before this package's own branch existed) |
+| Total PRs | 219 existed before this one (#13 → #243); **this PR is #245** |
 | Merged PRs relevant here | #100 `763628e548` · #104 `d1aebf329` · #117 `64624b18bf` · #119 `d549a9534` · #188 `94ba99153d` · #223 `6144b4d18` |
-| Open QA-only PRs (untouched) | #241 `5a2e04332` · #242 `466536ba4` · #243 `5ba7652d6` |
+| Open QA-only PRs (untouched) | #241 `5725cbed7ff4` · #242 `466536ba49c8` · #243 `5ba7652d6749` (head SHAs read back 2026-10-25; revision 1 cited a stale SHA for #241) |
 | Backend runtime | Node 22 (`server/index.mjs`, 2084 lines, zero framework) |
 | Runtime deps | `@maxhub/max-bot-api`, `phaser` — **no DB driver, no ORM, no SQL client** |
 | Persistence | JSON files (`store.json`, `profiles.json`, `tg_users.json`) + Supabase Postgres JSONB snapshot |
