@@ -317,12 +317,13 @@ claimed as a fix.
   defect, and not caused by the fix.** `tests/platform-lifecycle-browser.mjs:192` waits for the Game
   scene to become active again after a Telegram `deactivated → activated` cycle, and it failed once
   locally with the Game left `PAUSED` and the `UI` scene `RUNNING`. The identical failure was
-  reproduced on the **untouched #240 baseline** (`f3acc38`) in the same comparison run — the
-  baseline failed while the branch passed — so the scenario is a pre-existing flake in the host
-  pause/resume path, not a regression of §5.1. The scenario itself depends on whether the host
-  owns the pause at that moment: when a UI-owned pause (a level-up modal) or a hidden document
-  holds it, `TelegramLifecycle.resumeIfOwnedByUs()` legitimately refuses to resume, which is the
-  product contract the cross-flow asserts explicitly.
+  reproduced on the **untouched #240 baseline** (`f3acc38`): six alternating runs of
+  `npm run test:review-browser` on this machine gave **6/6 PASS on this branch and 4/6 on the
+  baseline**, and both baseline failures carry the same timeout and the same scene states — so the
+  scenario is a pre-existing flake in the host pause/resume path, not a regression of §5.1. The
+  scenario itself depends on whether the host owns the pause at that moment: when a UI-owned pause
+  (a level-up modal) or a hidden document holds it, `TelegramLifecycle.resumeIfOwnedByUs()`
+  legitimately refuses to resume, which is the product contract the cross-flow asserts explicitly.
 
 ---
 
@@ -393,7 +394,7 @@ has no purchase control, and the feature flags contain no economy or gameplay en
 | OS process eviction / background resume | **NOT_RUN** | The visibility/pause contract is verified; the OS behaviour is not. |
 | Real Stars, real payments, D1 production, production deploy | **NOT_RUN** | Out of scope for this branch by policy. |
 | Windows `test:startup` font/splash timing flake | **Pre-existing environment flake, reproduced identically on the untouched #240 baseline** | Measured on this machine against a clean worktree at the exact #240 HEAD `f3acc38`: three consecutive runs of `npm run test:startup` failed **once** on the baseline (exit=1) and **once** on this branch (exit=1), with the same assertion — `tests/startup-font-timeout.mjs:47`, `font readiness must not block the Mini App startup` (`actual: true, expected: false`): the splash was still on screen 900 ms after load on a loaded machine. The timeout was not weakened and the assertion was not removed. Hosted Ubuntu CI is green. |
-| `test:review-browser` → `tests/platform-lifecycle-browser.mjs:192` (the Game scene stays paused after a Telegram `deactivated → activated` cycle) | **Pre-existing flake, reproduced identically on the untouched #240 baseline** | Measured side by side on this machine, alternating runs of `npm run test:review-browser` between this branch and a clean worktree at the exact #240 HEAD `f3acc38`: the untouched baseline failed with the same timeout and the same scene states (`Game` paused, `UI` running) while the branch passed, so the flake is not a regression of §5.1. The scenario assumes the host owns the pause; when a UI-owned pause or a hidden document holds it, `TelegramLifecycle.resumeIfOwnedByUs()` correctly refuses to resume — the contract the cross-flow asserts explicitly. Nothing was changed in that test. |
+| `test:review-browser` → `tests/platform-lifecycle-browser.mjs:192` (the Game scene stays paused after a Telegram `deactivated → activated` cycle) | **Pre-existing flake, reproduced identically on the untouched #240 baseline** | Measured side by side on this machine, alternating runs of `npm run test:review-browser` between this branch and a clean worktree at the exact #240 HEAD `f3acc38`: **6/6 PASS on this branch, 4/6 on the untouched baseline**, and both baseline failures carry the same timeout and the same scene states (`Game` paused, `UI` running) — so the flake is not a regression of §5.1. The scenario assumes the host owns the pause; when a UI-owned pause or a hidden document holds it, `TelegramLifecycle.resumeIfOwnedByUs()` correctly refuses to resume — the contract the cross-flow asserts explicitly. Nothing was changed in that test. |
 | Deferred Scene Plugin pause/resume outside the host lifecycle | **Documented limitation (P3), not changed here** | The fix in §5.1 makes the *host* pause synchronous. The UI still drives its own pauses through Phaser's deferred Scene Plugin (`UIScene.showPauseMenu`, `showLevelUp`, `closePauseMenu`, `VideoInterstitial`). Each of those reads the scene state before acting (`if (this.scene.isPaused('Game')) this.scene.resume('Game')`), which is only safe because a pointer event cannot be handled in the same frame that queued the pause — i.e. input latency is the guard. That is a fragile invariant for a future refactor, but no reachable freeze was demonstrated, so nothing is changed here. |
 | Cross-tab collection state | **Documented limitation** | Two tabs writing `ofeliya.collection.v1` is last-writer-wins. It cannot corrupt or grant anything (cosmetic-only, no wallet), and a cross-tab sync would be a design change beyond this QA branch. |
 
