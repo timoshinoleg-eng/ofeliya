@@ -278,13 +278,101 @@ const mark = (name, value, kind = 'real') => {
         choices: (gs?.pendingChoices ?? []).map(c => c.id),
       };
     });
+    /**
+     * One snapshot of the real level-up hand-off.
+     *
+     * `cards` counts only the containers that own an interactive surface, so a
+     * decorative container can never be mistaken for the tappable upgrade card.
+     * `sameModal` reports whether the modal is still the instance the helper
+     * tagged, which is how a replaced or destroyed modal is detected instead of
+     * being waited out.
+     */
+    const modalSnapshot = () => page.evaluate(() => {
+      const ui = window.__game.scene.getScene('UI');
+      const gs = window.__game.scene.getScene('Game');
+      const modal = ui?.modal ?? null;
+      const cards = modal
+        ? modal.list.filter(o => o.type === 'Container' && o.list.some(c => c.input && c.input.enabled))
+        : [];
+      return {
+        hasModal: Boolean(modal),
+        sameModal: Boolean(modal) && modal === window.__museModal,
+        modalOpen: Boolean(ui?.modalOpen),
+        awaitingChoice: Boolean(gs?.awaitingChoice),
+        queuedLevels: gs?.queuedLevels ?? null,
+        cards: cards.length,
+        cardAlpha: cards[0] ? Number(cards[0].alpha.toFixed(3)) : null,
+        choices: (gs?.pendingChoices ?? []).map(c => c.id),
+        gameStatus: gs?.sys?.settings?.status ?? null,
+        gameActive: window.__game?.scene?.isActive('Game') ?? null,
+        gamePaused: window.__game?.scene?.isPaused('Game') ?? null,
+        phase: gs?.stageDirector?.phase ?? null,
+        overShown: Boolean(ui?.overShown),
+      };
+    });
+
+    /**
+     * Wait until the real level-up modal is on screen.
+     *
+     * The budget is the same 20 s the bare `page.waitForFunction` used, but the
+     * failure now reports the game state that caused it. A queued level-up that
+     * is consumed without any modal is a product-level inconsistency, so it
+     * fails immediately instead of waiting for a card that can never appear.
+     */
+    const waitForLevelUpModal = async (timeoutMs = 20000) => {
+      const started = Date.now();
+      let last = null;
+      while (Date.now() - started < timeoutMs) {
+        last = await modalSnapshot();
+        if (last.hasModal) return last;
+        if (last.queuedLevels === 0 && !last.awaitingChoice) {
+          throw new Error(`the queued level-up was consumed without a modal: ${JSON.stringify(last)}`);
+        }
+        await page.waitForTimeout(50);
+      }
+      throw new Error(`timeout waiting for the level-up modal; last=${JSON.stringify(last)}`);
+    };
+
+    /**
+     * Wait until the tagged modal shows a fully visible upgrade card.
+     *
+     * Returns `{ gone: true }` when the tagged modal was destroyed or replaced
+     * while the helper was looking at it. The caller then re-evaluates the round
+     * instead of burning the whole budget on a card that belongs to a modal
+     * that no longer exists.
+     */
+    const waitForVisibleCard = async (timeoutMs = 20000) => {
+      const started = Date.now();
+      let last = null;
+      while (Date.now() - started < timeoutMs) {
+        last = await modalSnapshot();
+        if (!last.hasModal || !last.sameModal) return { gone: true, last };
+        if (last.cards > 0 && last.cardAlpha >= 0.99) return { gone: false, last };
+        await page.waitForTimeout(50);
+      }
+      throw new Error(`timeout waiting for a visible upgrade card; last=${JSON.stringify(last)}`);
+    };
+
+    /**
+     * Wait until the tagged modal is closed or replaced. Same 8 s budget as the
+     * bare wait it replaces, but a timeout reports the modal state.
+     */
+    const waitForModalClosed = async (timeoutMs = 8000) => {
+      const started = Date.now();
+      let last = null;
+      while (Date.now() - started < timeoutMs) {
+        last = await modalSnapshot();
+        if (!last.hasModal || !last.sameModal) return last;
+        await page.waitForTimeout(50);
+      }
+      throw new Error(`timeout waiting for the level-up modal to close; last=${JSON.stringify(last)}`);
+    };
+
     const resolveLevelUpModal = async ({ required = false } = {}) => {
       let state = await modalState();
       if (!state.modal) {
         if (!required) return null;
-        await page.waitForFunction(() => Boolean(window.__game.scene.getScene('UI')?.modal),
-          null, { timeout: 20000 });
-        state = await modalState();
+        await waitForLevelUpModal();
       }
       let cardInfo = null;
       for (let round = 0; round < 6; round++) {
@@ -292,8 +380,9 @@ const mark = (name, value, kind = 'real') => {
           const ui = window.__game.scene.getScene('UI');
           const gs = window.__game.scene.getScene('Game');
           if (!ui?.modal) return null;
+          const cards = ui.modal.list.filter(o => o.type === 'Container' && o.list.some(c => c.input && c.input.enabled));
           return {
-            cards: ui.modal.list.filter(o => o.type === 'Container').length,
+            cards: cards.length,
             choices: gs.pendingChoices.map(c => ({ id: c.id, title: c.title, kind: c.kind })),
           };
         });
@@ -308,14 +397,17 @@ const mark = (name, value, kind = 'real') => {
         // invisible object. The card keeps a small idle animation afterwards, so
         // its hit box never comes to rest — a moving card is handled by
         // recomputing the tap point on every round instead.
-        await page.waitForFunction(() => {
-          const ui = window.__game.scene.getScene('UI');
-          const card = ui?.modal?.list?.filter(o => o.type === 'Container')[0];
-          return Boolean(card) && card.alpha >= 0.99;
-        }, null, { timeout: 20000 });
+        const visible = await waitForVisibleCard();
+        if (visible.gone) {
+          // The tagged modal was destroyed or replaced before its card settled:
+          // re-evaluate the round against the modal that is on screen now.
+          state = await modalState();
+          if (!state.modal) break;
+          continue;
+        }
         const cardPoint = await page.evaluate(() => {
           const ui = window.__game.scene.getScene('UI');
-          const card = ui.modal.list.filter(o => o.type === 'Container')[0];
+          const card = ui.modal.list.filter(o => o.type === 'Container' && o.list.some(c => c.input && c.input.enabled))[0];
           const hit = card.list.find(o => o.input && o.input.enabled);
           if (!hit) throw Error('the first upgrade card has no interactive surface');
           const b = hit.getBounds();
@@ -329,10 +421,7 @@ const mark = (name, value, kind = 'real') => {
         await page.touchscreen.tap(cardPoint.x, cardPoint.y);
         // The modal must close. A queued level-up may replace it with the next
         // card, which is a new modal and not a stuck one.
-        await page.waitForFunction(() => {
-          const ui = window.__game.scene.getScene('UI');
-          return !ui?.modal || ui.modal !== window.__museModal;
-        }, null, { timeout: 8000 });
+        await waitForModalClosed();
         state = await modalState();
         if (!state.modal) break;
       }
