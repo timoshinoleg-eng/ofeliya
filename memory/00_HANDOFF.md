@@ -1,3 +1,9 @@
+# PR244 independent final gate - 2026-10-25
+
+Original de6a74afd80607e6df24801a819d7e6cfa60af4f is BLOCK: P2 mutation gate falsely classifies omitted pre-hit flush as equivalent. Real offset streak reaches q_nodmg60; the permitted mutant records59. Narrow tests-only repair on review/codex-pr244-final-gate-20261025; report docs/qa/CODEX_PR244_FINAL_GATE_20261025.md. UTC14/14 +2 equivalent +control passed; exact candidate CI40181931371 is genuinely green but cannot prove the false equivalence. Lifecycle and UTC/units historical RED/GREEN independently reproduced. Keep native memory failures and base-reproduced startup font assertion distinct from product findings. No merge/deploy. Next: Draft follow-up into #244 branch, new exact-head full CI and release decision. Physical native close inconclusive, eviction/MAX NOT_RUN.
+
+---
+
 # Final convergence QA — 2026-10-25
 
 Branch qa/ofeliya-p11-final-convergence-20261025 starts at exact #243, then cherry-picks #242 (3bc9ef5). Canonical report: docs/qa/OFELIYA_FINAL_CONVERGENCE_20261025.md. Independent review found positive-reset streak unit regression in #243; RED0!==1, one-line millisecond fix edb8d0d, targeted GREEN. Combined crossflow retains run ID through host transfer/midnight and terminal59->60; final local/hosted status is in the report and Draft PR. Only QA consolidation authorized. No merge/deploy/production actions. Physical Samsung S20+ acceptance NOT_RUN.

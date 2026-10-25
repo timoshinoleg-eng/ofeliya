@@ -1,3 +1,9 @@
+# PR244 independent final gate - 2026-10-25
+
+Original de6a74afd80607e6df24801a819d7e6cfa60af4f is BLOCK: P2 mutation gate falsely classifies omitted pre-hit flush as equivalent. Real offset streak reaches q_nodmg60; the permitted mutant records59. Narrow tests-only repair on review/codex-pr244-final-gate-20261025; report docs/qa/CODEX_PR244_FINAL_GATE_20261025.md. UTC14/14 +2 equivalent +control passed; exact candidate CI40181931371 is genuinely green but cannot prove the false equivalence. Lifecycle and UTC/units historical RED/GREEN independently reproduced. Keep native memory failures and base-reproduced startup font assertion distinct from product findings. No merge/deploy. Next: Draft follow-up into #244 branch, new exact-head full CI and release decision. Physical native close inconclusive, eviction/MAX NOT_RUN.
+
+---
+
 # Final convergence state — 25.10.2026
 
 #241 5725cbed + #243 5ba7652 + exact #242 cherry-pick3bc9ef5; no changed-file intersection. Lifecycle remains exact#242. Additional confirmed P2: positive reset streak seconds divided as milliseconds, fixed edb8d0d with Runtime regression. UTC anchor v4/rollback-like resume checks pass; actual#241 parser probe preserves known fields and drops optional anchor. See final convergence report and PR for exact validation state.
