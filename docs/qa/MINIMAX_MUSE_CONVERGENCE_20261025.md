@@ -16,9 +16,10 @@ contracts.
 
 | Path | Kind | Purpose |
 |---|---|---|
-| `scripts/muse-convergence-crossflow-smoke.cjs` | new | One real Chromium session that walks platform startup → viewport → Collection → QuestBoard → Game → cosmetics → host lifecycle → platform transfer → cleanup. 27 assertions. |
+| `scripts/muse-convergence-crossflow-smoke.cjs` | new | One real Chromium session that walks platform startup → viewport → Collection → QuestBoard → Game → cosmetics → host lifecycle → platform transfer → cleanup. 29 assertions. |
 | `scripts/check-muse-convergence-adversarial.mjs` | new | 11 adversarial contracts that close gaps the shipped Muse suites did not cover. |
-| `src/game/collection/ClientCollection.ts` | **product fix** | Bounds the observed-run idempotency ledger (see §5.1). |
+| `src/game/collection/ClientCollection.ts` | **product fix** | Bounds the observed-run idempotency ledger (see §5.2). |
+| `src/platform/GameHostLifecycle.ts` | **product fix** | Host pause/resume must be synchronous, otherwise a Telegram deactivate/activate cycle can leave the run frozen (see §5.1). |
 | `package.json` | wiring | `test:muse-convergence`, `test:muse-convergence-crossflow`. |
 | `.github/workflows/ci.yml` | wiring | Adversarial contracts in `build`; cross-flow in `browser-smoke`. |
 
@@ -133,8 +134,8 @@ one real Phaser game, one real Telegram adapter.
 | 48 | Player appearance changed | PASS |
 | 49 | Collision body radius unchanged (11.4–12.1 px, authoritative) | PASS |
 | 50 | Mutation silhouette texture still present | PASS |
-| 51–52 | Telegram `deactivated` pauses the running game | PASS |
-| 53–54 | Telegram `activated` resumes **only** the host-owned pause | PASS |
+| 51–52 | Telegram `deactivated` pauses the running game **inside the same browser turn** | PASS |
+| 53–54 | Telegram `activated` resumes **only** the host-owned pause, inside the same turn | PASS |
 | 55–58 | A manual pause survives `deactivated → activated`; the host never resumes it | PASS |
 | 59–61 | Telegram → MAX: MAX viewport applied, Telegram listeners released | PASS |
 | 62–63 | MAX → Browser: runs with no Telegram SDK at all | PASS |
@@ -148,11 +149,62 @@ Extra hardening added beyond the minimum list: a five-size compact viewport matr
 reward-reveal tween**, teardown of the Collection by a **Menu restart underneath it**, and three
 repeated MAX/Telegram switching rounds that must never accumulate host subscriptions.
 
+The host-lifecycle phase is measured **inside a single browser turn**. The run itself keeps
+playing while the suite walks it — the player auto-fires, killed enemies drop XP gems, and a
+collected gem opens the real level-up modal, which legitimately owns the pause and blocks
+`UIScene.canResumeFromHost()`. Polling for "paused"/"active" therefore raced the game's own
+progression; reading the contract in the turn that produces it removes the race entirely. Three
+host contracts are asserted this way: a `deactivated`/`activated` pair inside one turn must never
+leave an ownerless pause behind, the host must never take over or release a pause it does not own
+(a real level-up modal owns it), and a manual pause must survive the host cycle.
+
 ---
 
 ## 5. Defects found
 
-### 5.1 P2 — unbounded observed-run ledger in the Muse collection
+### 5.1 P1 — a Telegram deactivate/activate cycle could freeze the run
+
+* **Severity:** P1 (the player is left in a paused, frozen run that nothing can resume; no data
+  loss and no paid state, but the session is unrecoverable without a reload).
+* **How it was found:** the exact-head CI run `40144635676` failed in `browser-smoke` → step
+  *"Combined Muse convergence cross-flow"* → `a Telegram activation must resume the host-owned
+  pause`. The failure was reproduced locally with a CPU-throttled Chromium
+  (`MUSEFLOW_CPU_THROTTLE=6`) and then traced frame by frame with a per-frame recorder that the
+  cross-flow now keeps in `window.__museFrames`.
+* **RED:** `scripts/muse-convergence-crossflow-smoke.cjs`, contract *"a same-turn
+  deactivate/activate never leaves the run frozen"* — against the original
+  `src/platform/GameHostLifecycle.ts` the assertion *“a same-turn deactivated → activated cycle
+  must not leave the game paused with no owner”* fails: the game is left `paused` while
+  `canResumeFromHost() === true`, i.e. **nobody owns that pause**. The same RED reproduces with
+  the Chromium throttled 6×, which is the condition that failed in CI.
+* **Root cause:** Phaser 3.90 (`phaser@^3.90.0`) **queues** `ScenePlugin.pause()` / `resume()`
+  for the next Scene Manager update (`SceneManager.queueOp`), while `ScenePlugin.isPaused()` and
+  `isActive()` read the current state synchronously. `GameHostLifecycle` drove the game through
+  the Scene Plugin (`scene.scene.pause('Game')`) but tracked the pause ownership synchronously:
+  1. Telegram `deactivated` → the host pauses → the pause is only *queued*, the scene still runs.
+  2. Telegram `activated` arrives before the queue is applied → `TelegramLifecycle.resumeIfOwnedByUs()`
+     reads `isPaused() === false`, so it **drops the pause token** and returns.
+  3. The queued pause is applied on the next frame → the game is paused and **no host or UI owns
+     that pause** → the run is frozen: nothing resumes it, and `UIScene.canResumeFromHost()`
+     stays `true`, so the host refuses to touch it either.
+  The same one-frame gap let the game's own level-up modal take the pause between the host pause
+  and the host resume — exactly what the CI failure snapshot showed (`awaitingChoice: true`,
+  `modalOpen: true`, `canResumeFromHost: false`).
+* **Fix:** `src/platform/GameHostLifecycle.ts` now drives the game through the Scene Manager
+  (`scene.sys.game.scene`) instead of the Scene Plugin. The Scene Manager applies `pause` and
+  `resume` immediately, so ownership bookkeeping and scene state always agree inside the same
+  host event. The product contract is otherwise unchanged: the host still refuses to own a pause
+  it did not create, and still refuses to resume while `UIScene.canResumeFromHost()` is `false`.
+* **GREEN:** the new contract passes, the whole cross-flow passes (29/29), and it also passes
+  with the Chromium throttled 6×. The pre-existing platform contracts pass unchanged:
+  `npm run test:telegram-runtime` (the browser platform-lifecycle suite), `npm run test:telegram-tma`,
+  `npm run test:muse-client`, `npm run test:viewport`, `npm run test:review-browser`.
+* **Regression test:** the cross-flow contracts *"a same-turn deactivate/activate never leaves
+  the run frozen"*, *"Telegram deactivated pauses and activated resumes the host-owned pause"* and
+  *"the host never takes over or releases a UI-owned pause"*, wired into CI as
+  `npm run test:muse-convergence-crossflow`.
+
+### 5.2 P2 — unbounded observed-run ledger in the Muse collection
 
 * **Severity:** P2 (progressive storage growth; no crash, no paid state, no authority change).
 * **RED:** `scripts/check-muse-convergence-adversarial.mjs`, case *"the observed run ledger stays
@@ -176,20 +228,22 @@ repeated MAX/Telegram switching rounds that must never accumulate host subscript
   `scripts/check-muse-collection.mjs` contract still passes unchanged.
 * **Regression test:** the adversarial case above, wired into CI as `npm run test:muse-convergence`.
 
-### 5.2 Defects that were investigated and found **not** to be defects
+### 5.3 Defects that were investigated and found **not** to be defects
 
 These were real hypotheses during the review; each was disproved against the code, so none is
 claimed as a fix.
 
-* *The host lifecycle cannot resume after a Telegram deactivate/activate cycle.* — **Not a
-  defect.** The host deliberately refuses to own a pause it did not create
-  (`TelegramLifecycle.pauseIfOwnedByUs` returns early when the game is already paused), and
-  `UIScene.canResumeFromHost()` refuses to resume while a modal, the game-over overlay, a stage
-  transition or a boss reveal is open. The observed failure in the first cross-flow draft was a
-  **test** artifact: the draft restarted the `Game` scene without the `UI` scene, which is a
-  path the product does not have. The product's own "play again" control restarts both scenes
-  (`this.scene.launch('Game'); this.scene.restart();` in `UIScene.showGameOver`), and the
-  cross-flow now uses that real control.
+* *The host lifecycle cannot resume after a Telegram deactivate/activate cycle.* — **Partly a
+  real defect, and it is fixed in §5.1.** The design intent is correct and unchanged: the host
+  refuses to own a pause it did not create (`TelegramLifecycle.pauseIfOwnedByUs` returns early
+  when the game is already paused) and `UIScene.canResumeFromHost()` refuses to resume while a
+  modal, the game-over overlay, a stage transition or a boss reveal is open. What was wrong was
+  the *mechanism*: the host drove the scene through Phaser's deferred Scene Plugin, so the pause
+  and the ownership bookkeeping disagreed for one frame and a deactivate/activate pair could
+  strand the run in an ownerless pause. A second, separate artefact of the first cross-flow draft
+  — restarting the `Game` scene without the `UI` scene, a path the product does not have — was
+  also removed: the cross-flow now uses the product's own "play again" control, which restarts
+  both scenes (`this.scene.launch('Game'); this.scene.restart();` in `UIScene.showGameOver`).
 * *Two `activated` listeners on the Telegram SDK.* — **Not a defect.** One is the lifecycle
   controller, the other is `TelegramPlatform.lockVerticalSwipes`, which is a separate product
   responsibility.
@@ -268,7 +322,8 @@ has no purchase control, and the feature flags contain no economy or gameplay en
 | Real Android keyboard safe-area transition | **NOT_RUN** | Safe-area arithmetic is unit-tested; the OS transition is not. |
 | OS process eviction / background resume | **NOT_RUN** | The visibility/pause contract is verified; the OS behaviour is not. |
 | Real Stars, real payments, D1 production, production deploy | **NOT_RUN** | Out of scope for this branch by policy. |
-| Windows `test:startup` font/splash timing flake | **Observed flaky, not reproduced on the final run** | The baseline run and the final run both passed on this machine; the known ~900 ms assertion has a documented history of failing on the unmodified #236 base while hosted Ubuntu CI stayed green. The timeout was not weakened and the assertion was not removed. |
+| Windows `test:startup` font/splash timing flake | **Pre-existing environment flake, reproduced identically on the untouched #240 baseline** | Measured on this machine against a clean worktree at the exact #240 HEAD `f3acc38`: three consecutive runs of `npm run test:startup` failed **once** on the baseline (exit=1) and **once** on this branch (exit=1), with the same assertion — `tests/startup-font-timeout.mjs:47`, `font readiness must not block the Mini App startup` (`actual: true, expected: false`): the splash was still on screen 900 ms after load on a loaded machine. The timeout was not weakened and the assertion was not removed. Hosted Ubuntu CI is green. |
+| Deferred Scene Plugin pause/resume outside the host lifecycle | **Documented limitation (P3), not changed here** | The fix in §5.1 makes the *host* pause synchronous. The UI still drives its own pauses through Phaser's deferred Scene Plugin (`UIScene.showPauseMenu`, `showLevelUp`, `closePauseMenu`, `VideoInterstitial`). Each of those reads the scene state before acting (`if (this.scene.isPaused('Game')) this.scene.resume('Game')`), which is only safe because a pointer event cannot be handled in the same frame that queued the pause — i.e. input latency is the guard. That is a fragile invariant for a future refactor, but no reachable freeze was demonstrated, so nothing is changed here. |
 | Cross-tab collection state | **Documented limitation** | Two tabs writing `ofeliya.collection.v1` is last-writer-wins. It cannot corrupt or grant anything (cosmetic-only, no wallet), and a cross-tab sync would be a design change beyond this QA branch. |
 
 ---
