@@ -119,7 +119,104 @@ Returns **True** on success.
 <https://core.telegram.org/bots/api/methods/createinvoicelink.md> ·
 <https://core.telegram.org/bots/api/methods/refundstarpayment.md> ·
 <https://core.telegram.org/bots/api/types/successfulpayment.md> ·
-<https://core.telegram.org/bots/api/types/precheckoutquery.md>
+<https://core.telegram.org/bots/api/types/precheckoutquery.md> ·
+<https://core.telegram.org/bots/api/methods/getstartransactions.md> ·
+<https://core.telegram.org/bots/api/types/startransaction.md> ·
+<https://core.telegram.org/bots/api/types/startransactions.md> ·
+<https://core.telegram.org/bots/api/types/transactionpartneruser.md> ·
+<https://core.telegram.org/bots/api-changelog>
+
+### D.1.7 The transaction-history surface — `getStarTransactions` and friends
+
+> Added by the factual correction. The first revision of this package asserted that *"Telegram provides no
+> API to list a bot's payments"*. **That was wrong**, and the whole reconciliation architecture was
+> rebuilt on the correct facts (main plan §9.2.1, §9.5).
+
+#### D.1.7.1 `getStarTransactions`
+
+| Parameter | Type | Required | The documented description |
+|---|---|---|---|
+| `offset` | Integer | Optional | *"Number of transactions to skip in the response"* |
+| `limit` | Integer | Optional | *"The maximum number of transactions to be retrieved. Values between 1-100 are accepted. Defaults to 100."* |
+
+> *"Returns the bot's Telegram Star transactions in chronological order. On success, returns a StarTransactions
+> object."*
+
+**Version:** added in **Bot API 7.5** (June 18, 2024) — *"Added the method getStarTransactions that can be used
+to get the list of all Telegram Star transactions for the bot."*
+
+**Three properties that shape the whole design:**
+
+1. It is a **list**, not a lookup. There is **no** Bot API method that returns one transaction by id.
+2. Its pagination is a **positional skip count**, not a server-issued cursor. There is **no** `date`/`since`
+   filter. A durable checkpoint is therefore *our* construction (main plan §14.7), not a documented guarantee.
+3. The documentation states **no retention limit**. Completeness is an assumption to be verified in the test
+   environment (main plan §18.5, R-T7), not a fact to be relied on.
+
+#### D.1.7.2 `StarTransaction`
+
+| Field | Type | The documented description | The design consequence |
+|---|---|---|---|
+| `id` | String | *"Unique identifier of the transaction. **Coincides with the identifier of the original transaction for refund transactions.** Coincides with `SuccessfulPayment.telegram_payment_charge_id` for successful incoming payments from users."* | The id is the **money identity**, not a transaction identity. A charge and its refund **share one id** ⇒ the dedupe key must include the direction |
+| `amount` | Integer | *"Integer amount of Telegram Stars transferred by the transaction"* | The amount comparison for the price check. Compare with a tolerance if `nanostar_amount` is non-zero |
+| `nanostar_amount` | Integer | Optional · *"The number of 1/1000000000 shares of Telegram Stars transferred by the transaction; from 0 to 999999999"* (Bot API 8.1, Dec 4 2024) | **Fractional Stars are possible.** An exact integer comparison can fail on a fractional charge ⇒ compare `amount` ± `nanostar_amount` |
+| `date` | Integer | *"Date the transaction was created in Unix time"* | The ordering key and the overlap window anchor |
+| `source` | TransactionPartner | Optional · *"Source of an incoming transaction (e.g., a user purchasing goods or services, Fragment refunding a failed withdrawal). Only for incoming transactions."* | **Present ⇒ the direction is incoming.** The absent/`receiver`-present shape distinguishes a purchase from a refund |
+| `receiver` | TransactionPartner | Optional · *"Receiver of an outgoing transaction (e.g., **a user for a purchase refund**, Fragment for a withdrawal). Only for outgoing transactions."* | **`receiver` ⇒ the direction is outgoing.** A refund to a user is the exact shape a reconciliation looks for |
+
+**Header note (verbatim):** *"if the buyer initiates a chargeback with the payment provider from whom they
+acquired Stars (e.g., Apple, Google) following this transaction, the refunded Stars will be deducted from the
+bot's balance. This is outside of Telegram's control."* — ⇒ there is **no** chargeback event; only a balance
+effect (main plan §14.5, R10).
+
+#### D.1.7.3 `StarTransactions`
+
+| Field | Type | Description |
+|---|---|---|
+| `transactions` | Array of `StarTransaction` | *"The list of transactions"* |
+
+#### D.1.7.4 `TransactionPartnerUser` — where the **subject** comes from
+
+| Field | Type | The documented description |
+|---|---|---|
+| `type` | String | *"Type of the transaction partner, always \"user\""* |
+| `transaction_type` | String | *"Type of the transaction, currently one of \"invoice_payment\" for payments via invoices, \"paid_media_payment\" for payments for paid media, \"gift_purchase\" for gifts sent by the bot, \"premium_purchase\" for Telegram Premium subscriptions gifted by the bot, \"business_account_transfer\" for direct transfers from managed business accounts"* |
+| `user` | User | *"Information about the user"* |
+| `invoice_payload` | String | Optional · *"Bot-specified invoice payload. **Can be available only for \"invoice_payment\" transactions**"* (Bot API 8.0, Nov 17 2024) |
+| `subscription_period` | Integer | Optional |
+| `affiliate` | AffiliateInfo | Optional |
+
+**This is the single most important row in this annex.** Two facts follow:
+
+- The **payer** is recoverable from `source.user.id` — the server does **not** need the client to tell it who
+  paid, and a client-supplied user id is never trusted.
+- The **subject** (what was bought) is recoverable from `source.invoice_payload` — **but only because the
+  bot chose to put a self-describing payload there**. A `paid_media_payment` carries `paid_media_payload`
+  instead, and a `gift_purchase` carries no payload at all. ⇒ the payload design is not cosmetic; it is the
+  difference between an auto-recoverable payment and a manual one (main plan §17).
+
+#### D.1.7.5 `getMyStarBalance`
+
+> *"A method to get the current Telegram Stars balance of the bot. Requires no parameters. On success, returns
+> a StarAmount object."* — added in **Bot API 9.1** (July 3, 2025).
+
+Its only architectural role: the bot's balance **minus** the sum of the ledger's expected net receipts is a
+**balance-level** signal for chargebacks and for unrecorded withdrawals. It is a *derived* signal — it
+localises a problem to a period, it does **not** identify a transaction (main plan §14.5, R10).
+
+#### D.1.7.6 The MTProto counterparts — for reference only
+
+| MTProto method | Who may call it | The documented note | The delta vs the Bot API |
+|---|---|---|---|
+| `payments.getStarsTransactions` (#69da4557) | *"Both users and bots can use this method"* | `peer` = *"Fetch the transaction history of the peer (inputPeerSelf or **a bot we own**)"*; `offset` = *"obtained from the returned next_offset, initially an empty string"*; flags `inbound` / `outbound` / `ascending` | An **opaque server-issued cursor** and **filters**. No date filter either |
+| `payments.getStarsTransactionsByID` (#2dca16b8) | ***"Only users can use this method"*** | `id` = a vector of `InputStarsTransaction` (which carries a `refund` flag to disambiguate a refund from its original) | ⚠️ **Not available to a bot on either surface.** The by-id lookup that MTProto appears to offer is a *user* feature |
+| `payments.refundStarsCharge` (#25ae8f4a) | *"Only bots can use this method"* | typed errors: `CHARGE_ALREADY_REFUNDED`, `CHARGE_ID_EMPTY`, `USER_ID_INVALID`, `USER_BOT_REQUIRED` | **Typed errors** where the Bot API has a bare boolean |
+| `payments.getStarsStatus` (#4ea9b3bf) | — | *"The method will also return the last 5 star transactions."* | A summary, not a history |
+
+**Verdict:** the Bot API covers every capability OFELIYA needs. MTProto adds a durable cursor, filters and
+typed refund errors — at the cost of a new credential class (`api_id`/`api_hash`/a session) and the loss of
+the by-id lookup for bots. It is an **optional operational/forensic upgrade**, never a critical-path
+dependency (main plan §9.5, §22 Q11).
 
 ---
 
@@ -484,20 +581,29 @@ clawed back; a spend that starts after is refused.
 - It must be safe to run **during** a purchase: it reads committed rows only (MVCC), it never flags a
   `PENDING` operation, and it never takes the advisory lock for long.
 
-### D.6.3 The hard truth about Telegram reconciliation
+### D.6.3 The Telegram reconciliation facts (corrected)
 
-**Telegram provides no API to list a bot's payments.** There is no "list my transactions" method.
-Therefore **"a Telegram payment with no local operation"** can only be found by:
+> **CORRECTION.** The first revision of this package said: *"Telegram provides no API to list a bot's
+> payments. There is no 'list my transactions' method."* **That was factually wrong.** The Bot API has
+> exposed `getStarTransactions` — the bot's own Telegram Star transaction list — since **Bot API 7.5
+> (June 18, 2024)**. The full field reference is in **D.1.7**; the capability matrix is in the main plan
+> **§9.5**.
 
-- a **manual export** from the Telegram side (support / dispute resolution), or
-- a **client-side report** ("I paid and got nothing") — not authoritative, but a useful trigger, or
-- a **late `successful_payment` webhook** arriving after our intent TTL expired — this *is* detectable
-  server-side, and is exactly the charge-without-delivery case.
+What changes:
 
-**This is a real operational constraint, not an oversight.** It must be in the runbook and reflected in the
-Go/No-Go criteria: the operator needs a way to receive Telegram-side transaction listings for dispute
-handling. Telegram's own live checklist says *"Use backups to make sure that you don't lose data about
-your users' payments."*
+| The first revision claimed | The verified reality |
+|---|---|
+| *"a Telegram payment with no local operation" can only be found by a manual export from the Telegram side* | It can be found **automatically** by scanning `getStarTransactions` and comparing it with the local ledger. The manual export is now a **dispute-handling convenience**, not the detection mechanism |
+| *"There is no 'list my transactions' method"* | There is: `getStarTransactions`, with `offset` (a skip count) and `limit` (1–100) |
+| *"cannot be detected automatically"* (Annex D §D.6.1, the last row) | **Detection is automatic.** What stays manual is the *repair* when the evidence is ambiguous (main plan §14.5) |
+| Open question Q5 — *"how do we obtain a Telegram-side payment listing?"* | **Answered.** `getStarTransactions` is the listing. The remaining question is the *operator console* over it, not its existence |
+
+What does **not** change: a **client-side report** ("I paid and got nothing") is still only a *trigger*, never
+evidence; and Telegram's own live checklist still says *"Use backups to make sure that you don't lose data
+about your users' payments."*
+
+The complete reconciliation architecture — the three sources of truth, the R1–R9 mismatch catalogue with
+their detectability classes, the worker and the checkpoint — is in the main plan **§14**.
 
 ### D.6.4 The safe repair strategy
 
