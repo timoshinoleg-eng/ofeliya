@@ -1,3 +1,9 @@
+# Final convergence state — 25.10.2026
+
+#241 5725cbed + #243 5ba7652 + exact #242 cherry-pick3bc9ef5; no changed-file intersection. Lifecycle remains exact#242. Additional confirmed P2: positive reset streak seconds divided as milliseconds, fixed edb8d0d with Runtime regression. UTC anchor v4/rollback-like resume checks pass; actual#241 parser probe preserves known fields and drops optional anchor. See final convergence report and PR for exact validation state.
+
+---
+
 # PR #241 independent gate — 25.10.2026
 
 Review base `5725cbed7ff425aa7789d45d98aeaf730a749361`; original exact-head workflows verified success, tested merge tree equals head tree. Independent host RED/GREEN and ledger eviction evidence are in `docs/qa/CODEX_PR241_GATE_20261025.md`.

@@ -1,3 +1,9 @@
+# Final convergence decisions — 25.10.2026
+
+Preserve linear #241 -> #243 -> #242 provenance; do not merge source branches. Expand existing crossflow rather than add a third harness. Keep product delta to proven P2 unit repair; do not redesign Collection eviction. Preserve full86+13 mutation matrices and equivalent controls. Exact combined-head hosted CI is mandatory; physical WebViews remain separate NOT_RUN gate. Report final immutable SHA/CI identity in Draft PR to avoid document self-hash recursion.
+
+---
+
 # PR #241 gate decisions — 25.10.2026
 
 - A lifecycle transfer must restore Game pause/close subscriptions as well as viewport listeners. Reuse the existing idempotent binder on resize and detach it on shutdown/finish.

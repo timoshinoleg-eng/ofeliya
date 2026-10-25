@@ -1,3 +1,9 @@
+# Final convergence QA — 2026-10-25
+
+Branch qa/ofeliya-p11-final-convergence-20261025 starts at exact #243, then cherry-picks #242 (3bc9ef5). Canonical report: docs/qa/OFELIYA_FINAL_CONVERGENCE_20261025.md. Independent review found positive-reset streak unit regression in #243; RED0!==1, one-line millisecond fix edb8d0d, targeted GREEN. Combined crossflow retains run ID through host transfer/midnight and terminal59->60; final local/hosted status is in the report and Draft PR. Only QA consolidation authorized. No merge/deploy/production actions. Physical Samsung S20+ acceptance NOT_RUN.
+
+---
+
 # Independent PR #241 integration gate — 2026-10-25
 
 Isolated review branch `review/codex-pr241-gate-20261025` from exact #241 `5725cbed7ff425aa7789d45d98aeaf730a749361`.

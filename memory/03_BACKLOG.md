@@ -1,3 +1,9 @@
+# Final convergence residual gates — 25.10.2026
+
+P3: Collection bounded1024 run-ID eviction; existing harness retry/network-filter breadth; paired environment flakes only when proven; old executable/optional anchor rollback semantics. Physical Telegram/MAX WebView, native closing dialog, Android keyboard/safe-area and OS eviction NOT_RUN. Next stage after exact-head GREEN: physical Telegram WebView acceptance on Samsung S20+. No new cosmetic redesign or unrelated P3 fixes in convergence.
+
+---
+
 # PR #241 gate backlog — 25.10.2026
 
 1. Review the separate Draft follow-up for restored Game host lifecycle; consult `docs/qa/CODEX_PR241_GATE_20261025.md` for exact tests/limitations and hosted status.
