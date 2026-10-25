@@ -324,8 +324,8 @@ const MUTATIONS = [
     edits: [
       {
         file: 'questEngine.ts',
-        find: '        this.trackNoDamageStreak(event.noDamageMs / 1000);',
-        replace: '        this.trackNoDamageStreak(event.noDamageMs);',
+        find: '        this.trackNoDamageStreak(event.noDamageMs / 1000, event.at);',
+        replace: '        this.trackNoDamageStreak(event.noDamageMs, event.at);',
       },
     ],
   },
@@ -334,7 +334,7 @@ const MUTATIONS = [
     edits: [
       {
         file: 'questEngine.ts',
-        find: '        this.trackNoDamageStreak(event.noDamageMs / 1000);',
+        find: '        this.trackNoDamageStreak(event.noDamageMs / 1000, event.at);',
         replace: '        // the streak of the day was not tracked',
       },
     ],
@@ -801,7 +801,7 @@ const MUTATIONS = [
     edits: [
       {
         file: 'questEngine.ts',
-        find: '        this.trackNoDamageStreak(event.noDamageMs / 1000);',
+        find: '        this.trackNoDamageStreak(event.noDamageMs / 1000, event.at);',
         replace: '        // the streak was not tracked',
       },
     ],
