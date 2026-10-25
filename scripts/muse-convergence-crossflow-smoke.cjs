@@ -92,6 +92,7 @@ const report = {
     'Telegram WebApp SDK object (a desktop Chromium cannot host a real Mini App WebView)',
     'MAX bridge stub (window.WebApp)',
     'Telegram SDK script delivery is intercepted and fulfilled locally',
+    'QuestRuntime clock and elapsed samples are injected across midnight in the live GameScene',
   ],
   errors: [],
 };
@@ -1212,6 +1213,15 @@ const mark = (name, value, kind = 'real') => {
     // progression, so the contract is read in the same turn that produces it.
     await ensureRunningGame('the host lifecycle phase');
 
+    // Synthetic quest clock only; retain the live GameScene runtime across host transfers.
+    await page.evaluate(() => {
+      const gs = window.__game.scene.getScene('Game');
+      window.__finalMidnight = Date.parse('2026-10-27T00:00:00Z');
+      window.__finalQuestNow = window.__finalMidnight - 800;
+      gs.quests.clock.now = () => window.__finalQuestNow;
+      window.__finalQuestRunId = gs.quests.checkpoint().id;
+      gs.quests.tick(59000, 59000, true);
+    });
     const hostCycle = () => page.evaluate(() => {
       const gs = window.__game.scene.getScene('Game');
       const ui = window.__game.scene.getScene('UI');
@@ -1442,6 +1452,20 @@ const mark = (name, value, kind = 'real') => {
 
       await page.evaluate(() => {
         delete window.WebApp;
+        delete window.Telegram;
+        window.dispatchEvent(new Event('resize'));
+      });
+      await waitUntil(sceneSnapshot, `round ${round}: the Browser viewport to apply`,
+        () => document.getElementById('game')?.dataset?.viewportSource === 'browser');
+      const browserRound = await page.evaluate(() => ({
+        source: document.getElementById('game')?.dataset.viewportSource,
+        deactivated: window.__p11Tg.count('deactivated'),
+      }));
+      assert.equal(browserRound.source, 'browser', `round ${round} must select Browser`);
+      assert.equal(browserRound.deactivated, 0, `round ${round} Browser must release Game lifecycle`);
+
+      await page.evaluate(() => {
+        delete window.WebApp;
         window.Telegram = { WebApp: window.__p11Tg };
         window.dispatchEvent(new Event('resize'));
       });
@@ -1456,9 +1480,9 @@ const mark = (name, value, kind = 'real') => {
       assert.equal(telegramRound.telegram, 1, `round ${round} must keep exactly one Telegram subscription`);
       assert.equal(telegramRound.deactivated, 1, `round ${round} must restore exactly one Game host lifecycle`);
       assert.equal(telegramRound.closingEnabled, true, `round ${round} must restore the running-game close confirmation`);
-      switching.push({ round, max: maxRound, telegram: telegramRound });
+      switching.push({ round, max: maxRound, browser: browserRound, telegram: telegramRound });
     }
-    mark('platform transfer: three MAX/Telegram switching rounds never accumulate host subscriptions', {
+    mark('platform transfer: three Telegram/MAX/Browser/Telegram rounds never accumulate host subscriptions', {
       rounds: switching.length,
       telegramSubscriptions: switching.map(s => s.telegram.telegram),
     });
@@ -1474,7 +1498,47 @@ const mark = (name, value, kind = 'real') => {
     // Cleanup: finish the run and prove the host contract is released.
     const activationHandlersBefore = await page.evaluate(() => window.__p11Tg.count('activated'));
     assert.equal(activationHandlersBefore, 2, 'before finish, swipe locking and Game lifecycle must both be subscribed');
-    await page.evaluate(() => { window.__game.scene.getScene('Game').finish(false); });
+    const combined = await page.evaluate(() => {
+      const gs = window.__game.scene.getScene('Game');
+      const read = () => { gs.quests.flush(); return JSON.parse(localStorage.getItem('ofeliya.quests.v1')); };
+      window.__finalQuestNow = window.__finalMidnight + 300;
+      const sameRun = gs.quests.checkpoint().id === window.__finalQuestRunId;
+      gs.quests.tick(60100, 60100, true);
+      const midnight = read();
+      window.__finalQuestNow += 5850;
+      gs.quests.tick(65950, 0, true);
+      window.__finalQuestNow += 59050;
+      gs.quests.tick(125000, 59050);
+      const before = gs.quests.snapshot().processedEvents;
+      window.__finalQuestNow += 950;
+      gs.quests.tick(125950, 60000);
+      const pending = read();
+      const suppressed = gs.quests.snapshot().processedEvents;
+      gs.runState.run.timeMs = 125950;
+      gs.runState.stage.noDamageMs = 60000;
+      gs.finish(false);
+      const ended = read();
+      const events = gs.quests.snapshot().processedEvents;
+      gs.finish(false);
+      return { sameRun, midnight, pending, ended, repeated: read(), before, suppressed, events,
+        deactivated: window.__p11Tg.count('deactivated') };
+    });
+    assert.equal(combined.sameRun, true, 'host pauses and transfers must retain the original quest run');
+    assert.equal(combined.midnight.dayMetrics.q_nodmg, 0, 'after transfer: 300ms after midnight must credit zero whole seconds');
+    assert.equal(combined.midnight.lastTickAtMs, Date.parse('2026-10-27T00:00:00.300Z'));
+    assert.equal(combined.pending.dayMetrics.q_nodmg, 59, 'after transfer: terminal sample must remain pending at 59');
+    assert.equal(combined.suppressed, combined.before, 'pending tick must not be delivered early');
+    assert.equal(combined.ended.dayMetrics.q_nodmg, 60, 'after transfer: finish must force 59 -> 60');
+    assert.equal(combined.ended.lastTickTimeMs, 125950);
+    assert.equal(combined.ended.lastTickAtMs, Date.parse('2026-10-27T00:01:06.150Z'));
+    assert.equal(combined.events, combined.before + 2, 'finish delivers exactly one pending tick and one completion');
+    assert.deepEqual(combined.repeated, combined.ended, 'combined repeated finish must be idempotent');
+    assert.equal(combined.deactivated, 0, 'combined finish removes lifecycle handler');
+    mark('combined lifecycle + UTC: midnight attribution, terminal 59->60, exact delivery and repeated finish', {
+      midnight: combined.midnight.dayMetrics.q_nodmg, pending: combined.pending.dayMetrics.q_nodmg,
+      ended: combined.ended.dayMetrics.q_nodmg, terminalAt: combined.ended.lastTickAtMs,
+      delivered: combined.events - combined.before, deactivated: combined.deactivated,
+    }, 'synthetic-clock');
     await page.waitForFunction(() => window.__p11Tg.closingEnabled === false);
     const cleanup = await page.evaluate(async () => {
       const { ViewportManager } = await import('/src/platform/ViewportManager.ts');
