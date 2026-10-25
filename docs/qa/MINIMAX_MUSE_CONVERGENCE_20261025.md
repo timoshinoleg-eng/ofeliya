@@ -16,7 +16,7 @@ contracts.
 
 | Path | Kind | Purpose |
 |---|---|---|
-| `scripts/muse-convergence-crossflow-smoke.cjs` | new | One real Chromium session that walks platform startup → viewport → Collection → QuestBoard → Game → cosmetics → host lifecycle → platform transfer → cleanup. 29 assertions. |
+| `scripts/muse-convergence-crossflow-smoke.cjs` | new | One real Chromium session that walks platform startup → viewport → Collection → QuestBoard → Game → cosmetics → host lifecycle → platform transfer → cleanup. 29 assertions. The level-up modal helper resolves its waits with self-describing pollers, so a failure reports the game state instead of a bare timeout (see §5.3). |
 | `scripts/check-muse-convergence-adversarial.mjs` | new | 11 adversarial contracts that close gaps the shipped Muse suites did not cover. |
 | `src/game/collection/ClientCollection.ts` | **product fix** | Bounds the observed-run idempotency ledger (see §5.2). |
 | `src/platform/GameHostLifecycle.ts` | **product fix** | Host pause/resume must be synchronous, otherwise a Telegram deactivate/activate cycle can leave the run frozen (see §5.1). |
@@ -228,7 +228,45 @@ leave an ownerless pause behind, the host must never take over or release a paus
   `scripts/check-muse-collection.mjs` contract still passes unchanged.
 * **Regression test:** the adversarial case above, wired into CI as `npm run test:muse-convergence`.
 
-### 5.3 Defects that were investigated and found **not** to be defects
+### 5.3 P2 (test harness) — the level-up modal helper could burn its whole budget on a card that no longer existed
+
+* **Severity:** P2 in the *test harness only*. No product defect is claimed here: the trace below
+  shows the product behaving correctly (the modal opens, the card becomes visible, the tap selects a
+  real upgrade, the modal closes and the run resumes). The defect is that the harness could spend
+  20 s waiting for a condition that could never become true, and then report only
+  `page.waitForFunction: Timeout 20000ms exceeded.` — with no indication of *what* it was waiting
+  for or what the game was doing at that moment.
+* **How it was found:** CI run `40148398647` (head `a3f0b05`) failed in the cross-flow on the
+  level-up modal, and CI run `40149460335` (head `e738d30`) failed on the same step again. Both
+  were real harness races and both are fixed in `e738d30` / `a17f3cb`. A third instance surfaced
+  locally: a throttled validation run (`MUSEFLOW_CPU_THROTTLE=6`) on `a17f3cb` failed with the
+  same 20 s timeout while a second run of the same head passed.
+* **Evidence collected:** the cross-flow keeps a per-frame recorder (`window.__museFrames`). The
+  failing run's frame buffer shows the whole hand-off, and the product is correct in it:
+  `queuedLevels 1 → awaitingChoice true → modal open → the card becomes visible → the tap lands →
+  awaitingChoice false (the upgrade was really chosen) → the modal closes → the Game scene
+  resumes → the run keeps playing`. The per-frame record also shows the *harness* problem: the
+  helper's card wait was a bare `page.waitForFunction` whose predicate re-read
+  `ui.modal.list.filter(o => o.type === 'Container')[0]`, so a modal that was destroyed or replaced
+  between tagging it and waiting for its card could never satisfy the predicate, and the helper
+  waited out the full budget without saying why.
+* **Fix** (`scripts/muse-convergence-crossflow-smoke.cjs`): the three bare waits are replaced by
+  self-describing pollers that report the last observed game state on failure.
+  * the upgrade card is located by *"the container that owns an interactive surface"* instead of
+    *"the first Container child"*, so a decorative container can no longer be mistaken for the
+    tappable card;
+  * the card wait is bound to the **tagged modal instance**: if that modal was destroyed or
+    replaced, the round is re-evaluated against the modal that is on screen now instead of waiting
+    the budget out;
+  * a queued level-up that is consumed **without** any modal now fails immediately with the game
+    state, instead of waiting 20 s for a card that can never appear — that is a product-level
+    inconsistency and must be loud, not slow;
+  * the budgets are unchanged (20 s / 20 s / 8 s) and no assertion was relaxed.
+* **GREEN:** the cross-flow passes locally with and without the 6× CPU throttle, and the exact-head
+  CI run of the cross-flow step is green.
+* **Regression test:** the cross-flow itself — `npm run test:muse-convergence-crossflow`.
+
+### 5.4 Defects that were investigated and found **not** to be defects
 
 These were real hypotheses during the review; each was disproved against the code, so none is
 claimed as a fix.
@@ -270,7 +308,7 @@ the shipped suites; a case was only written if the gap was real.
 | Collection | invalid stored visit days are dropped without inflating the streak | new |
 | Collection | the UTC day boundary counts exactly one visit per UTC day | new |
 | Collection | a backwards visit never lowers the recorded UTC day | new |
-| Collection | the observed run ledger stays bounded across many runs | new — **caught a real defect (§5.1)** |
+| Collection | the observed run ledger stays bounded across many runs | new — **caught a real defect (§5.2)** |
 | Telemetry | the launch URL query and hash are never transmitted | strengthened (the existing contract only proved property-level dropping) |
 | Quest runtime | a negative timestamp cannot move the quest clock | new |
 | Quest runtime | an oversized event id cannot corrupt the processed-event set | new |
@@ -353,8 +391,12 @@ has no purchase control, and the feature flags contain no economy or gameplay en
 npm ci
 npm run test:muse-convergence           # adversarial contracts (no browser needed)
 npm run dev -- --host 127.0.0.1        # the cross-flow needs the dev server
-npm run test:muse-convergence-crossflow # one Chromium session, 27 assertions
+npm run test:muse-convergence-crossflow # one Chromium session, 29 assertions
 ```
 
-The cross-flow honours `OFELIYA_BASE_URL` (default `http://127.0.0.1:5173/`), `CHROME_PATH` and
-`MUSEFLOW_EVIDENCE` (a JSON evidence file, default in the system temp directory).
+The cross-flow honours `OFELIYA_BASE_URL` (default `http://127.0.0.1:5173/`), `CHROME_PATH`,
+`MUSEFLOW_EVIDENCE` (a JSON evidence file, default in the system temp directory) and
+`MUSEFLOW_CPU_THROTTLE` (a CDP `Emulation.setCPUThrottlingRate` multiplier). The throttle is a
+**diagnostic aid**: it reproduces the timing of a loaded CI runner on a local machine, so the
+host-lifecycle and modal hand-off contracts can be exercised under the conditions that failed CI.
+It changes no timeout, no assertion and no product code.
