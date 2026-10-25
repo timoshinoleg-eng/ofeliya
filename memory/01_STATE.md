@@ -1,3 +1,10 @@
+# PR #241 independent gate — 25.10.2026
+
+Review base `5725cbed7ff425aa7789d45d98aeaf730a749361`; original exact-head workflows verified success, tested merge tree equals head tree. Independent host RED/GREEN and ledger eviction evidence are in `docs/qa/CODEX_PR241_GATE_20261025.md`.
+Product follow-up only adds resize binding/cleanup to GameHostLifecycle; crossflow now proves restored lifecycle/close confirmation and exact handler removal, rather than comparing a missing handler with itself. Original product RED and patched GREEN retained externally. Full results and remaining gates are in the report; do not infer all tests passed from this handoff.
+
+---
+
 # Quest scene integration — 23.10.2026
 
 На feat/quest-scene-integration-20261023 от 66fc1a9 добавлены локальный typed producer, GameScene события, checkpoint metadata и read-only Menu→Codex→Quests. SaveSystem/Daily/outbox/Player/UIScene/Joystick/physics/RNG/server не изменены. Persistence использует существующие lifecycle listeners. Полная карта, tests/exit codes, screenshots и непройденные browser gates: docs/qa/QUEST_SCENE_INTEGRATION_20261023.md. Физический WebView и hosted CI NOT_RUN. Никаких публикаций.

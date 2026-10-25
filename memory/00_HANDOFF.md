@@ -1,3 +1,13 @@
+# Independent PR #241 integration gate — 2026-10-25
+
+Isolated review branch `review/codex-pr241-gate-20261025` from exact #241 `5725cbed7ff425aa7789d45d98aeaf730a749361`.
+Review/evidence and current validation status: `docs/qa/CODEX_PR241_GATE_20261025.md`.
+Confirmed original host pause RED on #240 / GREEN on #241 with real Phaser3.90; cap is bounded-window idempotency, not lifetime dedup.
+Found inherited loss of Game lifecycle after the explicitly tested MAX/Browser/same-Telegram adapter transfer. Original crossflow missed it; stronger assertions RED0!==1. Minimal resize bind/unbind fix and strict subscription/finish assertions GREEN locally. Further full regression status is recorded in the report before publication.
+Only a Draft follow-up targeting `qa/minimax-muse-convergence-20261025` is authorized. Do not update #240/#241/main or deploy. Native host transfer/physical acceptance NOT_RUN; P2 classification is against the explicit adapter-transfer gate contract, not a claim of observed native-client failure.
+
+---
+
 # Quest scene integration — 2026-10-23
 
 Рабочая ветка: feat/quest-scene-integration-20261023. Исходный HEAD: 66fc1a953409b90ed63b9acc9f9f55278b96c77f (#231). Только локальная задача, без push/merge/deploy и production запросов.

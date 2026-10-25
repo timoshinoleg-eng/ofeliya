@@ -1,3 +1,12 @@
+# PR #241 gate decisions — 25.10.2026
+
+- A lifecycle transfer must restore Game pause/close subscriptions as well as viewport listeners. Reuse the existing idempotent binder on resize and detach it on shutdown/finish.
+- Treat 1024 run IDs as a finite duplicate horizon. An evicted replay can cross cumulative cosmetic thresholds; no authoritative rewards/score/payment effects exist. No cap rewrite without an ordinary reachable old-result replay.
+- Record synthetic-transfer scope explicitly. Native remount and physical WebView behavior remain acceptance evidence to collect; do not relabel a synthetic finding as observed native failure.
+- Keep broad console error filters, swallowed/retried modal errors and direct DESTROY-without-SHUTDOWN cleanup as separate P3 observations. No unrelated product churn in this fix.
+
+---
+
 # Quest integration decisions — 23.10.2026
 
 - Engine принадлежит GameScene producer; UI читает отдельный storage-backed view только в остановленном Menu. Singleton/новый глобальный event bus не понадобились. Для будущего одновременного HUD потребуется отдельный readonly subscription contract.

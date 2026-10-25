@@ -43,6 +43,9 @@ export function installGameHostLifecycle(scene:Phaser.Scene,isRunning:()=>boolea
  const onResume=()=>{owner=null;};
  window.addEventListener(TELEGRAM_BRIDGE_READY_EVENT,bind);
  window.addEventListener('ofeliya:max-bridge-ready',bind);
+ // ViewportManager also re-resolves adapters on resize. Returning to an already
+ // announced Telegram SDK does not emit another bridge-ready event.
+ window.addEventListener('resize',bind);
  document.addEventListener('visibilitychange',onVisible);
  scene.events.on('resume',onResume);
  bind();
@@ -51,6 +54,7 @@ export function installGameHostLifecycle(scene:Phaser.Scene,isRunning:()=>boolea
   controller?.destroy();controller=null;owner=null;
   window.removeEventListener(TELEGRAM_BRIDGE_READY_EVENT,bind);
   window.removeEventListener('ofeliya:max-bridge-ready',bind);
+  window.removeEventListener('resize',bind);
   document.removeEventListener('visibilitychange',onVisible);
   scene.events.off('resume',onResume);
  };

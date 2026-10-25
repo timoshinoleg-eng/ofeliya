@@ -1,3 +1,12 @@
+# PR #241 gate backlog — 25.10.2026
+
+1. Review the separate Draft follow-up for restored Game host lifecycle; consult `docs/qa/CODEX_PR241_GATE_20261025.md` for exact tests/limitations and hosted status.
+2. After integrating that fix through the authorized QA process, perform physical Telegram/MAX acceptance: background/resume, close dialog, manual/modal pause, restart/Menu cycles, keyboard safe area, OS eviction.
+3. P3: narrow API503 error allowlist, preserve resolver errors, bound skins pagination; document finite Collection replay horizon and direct DESTROY cleanup gap. These are not extra code changes in this patch.
+4. No merge/main/production/Stars/payments/live D1/user-data action authorized.
+
+---
+
 # Quest integration backlog — 23.10.2026
 
 1. Разобрать/повторить полный integration-visual-browser: utility20 PASS, motion/Game часть не завершилась за внешний180s; причина пока не доказана. Не ослаблять тест.
