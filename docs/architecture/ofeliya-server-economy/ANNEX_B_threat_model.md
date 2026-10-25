@@ -53,7 +53,7 @@ Test ids: `T#` unit · `I#` integration · `C#` contract · `E#` synthetic E2E �
 
 | Risk | Why it survives | Mitigation |
 |---|---|---|
-| **Chargeback / dispute** | Telegram documents it: *"if the buyer initiates a chargeback with the relevant payment provider … the funds may be debited from your balance. This is outside of Telegram's control."* | Fulfill on `successful_payment`, not on final settlement; keep `raw_payload`; define the revocation path (main plan §13.3) |
+| **Chargeback / dispute** | Telegram documents it: *"if the buyer initiates a chargeback with the relevant payment provider … the funds may be debited from your balance. This is outside of Telegram's control."* | Fulfill on `successful_payment`, not on final settlement; keep `raw_payload`; define the revocation path (main plan §13.7) |
 | **Supabase Free pausing the project** | `deploy/RENDER.md`: *"Supabase Free may pause inactive projects."* A paused project makes the ledger unreachable → the purchases **fail closed**, so the revenue dies but nothing is mis-sold | Move off the Free tier **before** real money (main plan §23.3) |
 | **Render Free sleeping after 15 idle minutes** | The same document | A sleeping server can blow the 10-second `pre_checkout_query` deadline → the payment path needs a **non-sleeping host** |
 | **Single-process lock semantics** | `withProfileLock` is in-memory | Use `pg_advisory_xact_lock` (DB-wide) for every money path |
@@ -205,7 +205,7 @@ best-effort.
 | R4 | The same `opId` from **two different users** | Two independent operations — `opId` is scoped by `user_key`. No cross-user effect | the composite unique index `(user_key, kind, op_id)` |
 | R5 | A refund webhook arrives **before** the purchase fulfillment | The refund finds no terminal purchase → it is **parked** (`REFUND_PENDING`, no revoke) and retried. It never applies to a non-existent grant | the refund's `SELECT ... FOR UPDATE` finds no `ENTITLED` row → it parks |
 | R6 | A refund vs a **spend** | *(v1: no spend)*. In v2: the spend is refused if the entitlement is revoked | the advisory lock + the `revoked_at IS NULL` check in the spend's transaction |
-| R7 | A refund vs an **entitlement use** | The revoke is visible immediately (revoke-first, main plan §13.1). A concurrent use may complete — a documented asymmetry | the soft-revoke is committed before the external call |
+| R7 | A refund vs an **entitlement use** | The entitlement is **suspended** the moment the refund is requested (main plan §13.3). A concurrent use may complete — a documented asymmetry | the `suspended_at` write is committed before the external call |
 | R8 | Two **different** SKUs purchased simultaneously by one user | Both succeed, serialized by the advisory lock. Both entitlements are present | the advisory lock serializes; the rows are distinct |
 | R9 | Two **devices** purchase the same one-time SKU simultaneously | One succeeds; the other is `409 ONE_TIME_ALREADY_OWNED`. The partial unique index is the backstop even if the advisory lock is bypassed | the partial unique index on `(user_key, sku)` |
 | R10 | A **crash between the ledger write and the entitlement write** | Neither exists — one transaction | the single DB transaction (main plan §12) |

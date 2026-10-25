@@ -331,7 +331,7 @@ sed -n '60,82p' coder_survival/backend/migrations/001_init.sql
 | Q7 | Is `premium_pass`-style **recurring** Stars in scope? (`createInvoiceLink` supports `subscription_period=2592000`, a price ≤ 10000 Stars) | The recurring payments change the refund and the entitlement model entirely | product | v2 |
 | Q8 | Which entity holds the money — OFELIYA directly, or a MAX-platform account? | It affects the account, the tax treatment and the reconciliation | product + legal | the Go/No-Go |
 | Q9 | Do we split `server/index.mjs` into the modules before S2, to unblock the parallel agents? | The ownership map is much cleaner if we do | engineering | S0/S1 |
-| Q10 | What is the **refund policy** window, and who may trigger it? | It determines the `REFUND_PENDING` handling and the operator runbook (Annex D §D.5.5) | product + support | S5 |
+| Q10 | What is the **refund policy** window, and who may trigger it? | It determines the `REFUND_REQUESTED` / `REFUND_RECONCILE` handling, who may trigger a refund, and the operator runbook (main plan §13.8) | product + support | S5 |
 
 ---
 
@@ -367,7 +367,7 @@ All must be **true** before a single real Stars charge is accepted.
 - [ ] The payment host **does not sleep** and can answer `pre_checkout_query` inside 10s with a measured margin.
 - [ ] A Telegram **test-environment** purchase has completed end-to-end (§18.5) — including a refund.
 - [ ] The `/terms` and `/support` bot commands exist (Telegram's own live checklist).
-- [ ] A dispute/chargeback runbook exists (Annex D §D.5.5), with an owner and an escalation path.
+- [ ] A dispute/chargeback runbook exists (main plan §13.8), with an owner and an escalation path.
 - [ ] A way to obtain a Telegram-side transaction listing for the disputes exists (Q5).
 - [ ] A kill switch exists and is tested: flipping it makes `pre_checkout_query` fail closed — and any
       already-charged payment is still fulfilled (Annex B §B.4).

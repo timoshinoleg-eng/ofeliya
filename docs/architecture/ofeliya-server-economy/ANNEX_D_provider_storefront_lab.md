@@ -482,103 +482,98 @@ only ask to **advance**, and the server decides by how much.
 
 ## D.5 The refund design in full
 
-### D.5.1 The state machine
+> The state machine, the entitlement policy, the durable sequence, the race/crash analysis and the
+> idempotency contract are specified in the main plan **§13.1–§13.8**. This annex carries the
+> **provider-level** detail that belongs here: what the Telegram call actually returns, how the
+> `refundStarPayment` boolean maps onto the states, and what the provider interface must expose.
 
-```
-        ┌──────────────┐
-        │ PENDING      │  the intent exists; the invoice was presented; not yet charged
-        └──────┬───────┘
-               │ successful_payment received & verified
-        ┌──────▼───────┐
-        │ ENTITLED     │  charged AND granted, in one transaction
-        └──────┬───────┘
-               │ a refund is requested
-        ┌──────▼────────────┐
-        │ REFUND_PENDING    │  the entitlement is ALREADY soft-revoked; the Bot API call is in flight
-        └──────┬────────────┘
-               │ refundStarPayment() returned true
-        ┌──────▼───────┐
-        │ REFUNDED     │  the charge was returned; the entitlement is revoked
-        └──────────────┘
+### D.5.1 The provider's refund call — and what it cannot tell us
 
-  The failure side: PENDING → FAILED (the checkout was rejected / the TTL expired)
-                   ENTITLED → REJECTED (an amount or currency mismatch)
-                   REFUND_PENDING → REFUND_FAILED (the Telegram call failed; the entitlement stays revoked)
-```
+```ts
+// The provider's refund contract. The shape matters: it returns a THREE-valued result,
+// not a boolean, because the caller must be able to distinguish "failed" from "unknown".
+type RefundOutcome =
+  | { kind: 'CONFIRMED_SUCCESS' }
+  | { kind: 'CONFIRMED_FAILURE'; reason?: string }
+  | { kind: 'UNKNOWN'; reason: 'timeout' | 'transport_error' | 'no_response' };
 
-### D.5.2 The ordering — the most important detail in this annex
-
-```
-BEGIN;
-  SELECT * FROM operations WHERE id=$purchase FOR UPDATE;
-  if status <> 'ENTITLED': ROLLBACK; return 409;
-  UPDATE entitlements SET revoked_at=now() WHERE ...;       -- ① revoke FIRST
-  UPDATE operations SET status='REFUND_PENDING' WHERE ...;   -- ② mark in-flight
-COMMIT;
-
-  result = telegram.refundStarPayment(user_id, telegram_payment_charge_id)   -- ③ outside the tx
-  if result === true:
-      UPDATE operations SET status='REFUNDED' WHERE id=$purchase;           -- ④
-  else:
-      -- ⑤ the charge was NOT returned, but the entitlement is already revoked.
-      --    This is the SAFE direction (we under-deliver rather than over-deliver).
-      --    Mark REFUND_FAILED and alert; do NOT silently restore the entitlement.
+interface PaymentProvider {
+  // ... the rest of the interface
+  refund({ userId, telegramPaymentChargeId }): Promise<RefundOutcome>;
+  listStarTransactions({ offset, limit }): Promise<{ transactions: StarTransactionView[] }>;
+  getStarBalance(): Promise<{ amountStars: number }>;
+}
 ```
 
-**Why revoke-first:** if the process dies between ① and ④, the user has *less* than they paid for —
-annoying but safe and fixable. If we revoked *after* a successful refund, a crash in between leaves a
-refunded user with a live entitlement — money taken, value delivered, and no audit trail.
-**Fail toward under-delivery.**
+**Why the provider returns three values, not one.** The Bot API's `refundStarPayment` returns a bare
+`true`/`false`. A transport timeout and a `false` are **indistinguishable at the call site**, and the first
+revision of this package mapped **both** to "the refund failed" while leaving the entitlement revoked. The
+adapter's job is to separate them:
 
-> The `coder_survival` implementation does the opposite (the Bot API call first, inside the transaction).
-> **Do not port that ordering.** Port the shape, not the sequence.
+| The wire outcome | The adapter's classification | The rule |
+|---|---|---|
+| HTTP 200, `true` | `CONFIRMED_SUCCESS` | Telegram accepted the refund |
+| HTTP 200, `false` | `CONFIRMED_FAILURE` | Telegram declined it |
+| a timeout / a socket error / a 5xx / a malformed body | **`UNKNOWN`** | the outcome is undetermined — **not** a failure |
+| HTTP 200 with a body that is not `true`/`false` | **`UNKNOWN`** | the contract was not honoured — treat it as undetermined, not as a failure |
 
-### D.5.3 The permissible intermediate states
+> **A `false` is only a confirmed failure when the response was actually received and parsed.** Anything
+> else is `UNKNOWN`. This is the single most important line in the provider adapter, and it is what stops a
+> network blip from destroying a user's paid value.
 
-| State | Meaning | The user sees | Safe? |
+**A note on the MTProto alternative.** The MTProto counterpart `payments.refundStarsCharge` returns typed
+errors — `CHARGE_ALREADY_REFUNDED`, `CHARGE_ID_EMPTY`, `USER_ID_INVALID` — so it distinguishes *"already
+refunded"* from *"refunded"*. The Bot API does not. The design therefore **does not probe** with a repeat
+call: it **observes** the Telegram history instead (§13.6). MTProto remains an optional upgrade, never a
+dependency (main plan §9.5.1).
+
+### D.5.2 The state machine (the annex view)
+
+The canonical machine is in the main plan **§13.2**. What the provider adds is the mapping from the wire to
+the state:
+
+| The provider outcome | The state transition | The entitlement |
+|---|---|---|
+| `CONFIRMED_SUCCESS` | `REFUND_PENDING` → **`REFUNDED`** | **permanently revoked** |
+| `CONFIRMED_FAILURE` | `REFUND_PENDING` → **`REFUND_FAILED`** | **restored** to `ENTITLED` |
+| `UNKNOWN` | `REFUND_PENDING` → **`REFUND_RECONCILE`** | **suspended** — not revoked, not restored |
+| — | `REFUND_RECONCILE` → `REFUNDED` / `REFUND_FAILED` | decided by the **Telegram history**, not by a repeat call |
+
+### D.5.3 The entitlement during the pending window
+
+The policy, the comparison of the three options and the per-class recommendation are in the main plan
+**§13.3**. The provider-level consequence:
+
+| The entitlement class | During `REFUND_REQUESTED` / `REFUND_PENDING` / `REFUND_RECONCILE` | After `REFUNDED` | After `REFUND_FAILED` |
 |---|---|---|---|
-| `PENDING` | the intent exists; no charge | "Ожидание оплаты" | ✅ |
-| `ENTITLED` | charged and granted | ✅ | ✅ |
-| `REFUND_PENDING` | revoked; the Telegram call is in flight | "Возврат в обработке" | ✅ (the user sees it revoked) |
-| `REFUNDED` | the charge was returned | "Возврат оформлен" | ✅ |
-| `REFUND_FAILED` | the Telegram call failed; the entitlement stays revoked | "Возврат требует обработки" + an alert | ✅ (under-delivery, recoverable) |
-| `REJECTED` | an amount/currency mismatch | "Оплата не распознана" + an alert | ✅ |
-| `FAILED` | the intent expired / the checkout was rejected | "Оплата не завершена" | ✅ |
+| a **paid cosmetic** | **usable** | revoked | usable |
+| **paid gameplay power / Lab progression** | **suspended** (`suspended_at` is set; the client renders "возврат в обработке") | revoked (`revoked_at` is set) | usable again (`suspended_at` is cleared) |
 
-**Simplification:** because the operation insert and the entitlement upsert happen in one transaction, an
-observer can never see a charged-but-not-granted state. **`PAID` is collapsed into `ENTITLED`** and only
-the states above are exposed. This is the "don't complicate the state machine without necessity" rule.
+### D.5.4 The durable sequence, in provider terms
 
-### D.5.4 The refund-vs-spend race
+The full transaction sequence is in the main plan **§13.4**. The provider-specific rules:
 
-In v1 there is no spend, so the race is impossible. In v2:
-
-> A spend is refused if the entitlement it draws on has `revoked_at IS NOT NULL`.
-> The spend's transaction takes `pg_advisory_xact_lock(userKey)`, the same lock the refund takes.
-
-The lock is the whole defense. A spend that starts before the refund commits completes and is **not**
-clawed back; a spend that starts after is refused.
+1. **Exactly one caller.** Only the refund worker may call `refundStarPayment`. Not the operator console,
+   not a support script, not an admin endpoint, not a cron job.
+2. **No transaction is held across the call.** The provider call is issued *after* the claim transaction has
+   committed and *before* the outcome transaction begins (§13.4).
+3. **A bounded timeout.** The call has a hard timeout (e.g. 15 s) — long enough for a slow Telegram
+   response, short enough that the worker's lease is not the thing that expires.
+4. **The lease is not the truth.** The lease (`lease_expires_at`) only decides *who retries*. **The
+   Telegram history decides what happened.** A worker that takes over a stale lease **checks the history
+   first** and finalises without calling Telegram if the refund is already visible.
+5. **The history check precedes every call**, including a re-issue after `REFUND_FAILED` (main plan
+   §13.6).
 
 ### D.5.5 The operator runbook
 
-```
-1. The support ticket arrives: "I paid and got nothing."
-2. Look up the user_key from the verified initData (never from the ticket).
-3. Query the operations by (user_key, created_at desc) and by telegram_payment_charge_id.
-4. If the operation is PENDING and the charge id is absent:
-     → the payment never completed, or the webhook was lost.
-       Check the Telegram-side transaction listing (the manual step — D.6.3).
-       If a charge exists → run the charge-without-delivery fulfilment (Annex B.4).
-       If no charge exists → tell the user nothing was charged.
-5. If the operation is ENTITLED and the entitlement is missing:
-     → a grant bug. Run the reconcile scan; repair manually with a reason.
-6. If the operation is REFUND_PENDING:
-     → the Telegram call is in flight or it failed. Re-issue the refundStarPayment
-       (it is idempotent from the user's perspective: the money is either returned or not).
-       Never restore the entitlement without a successful refund confirmation.
-```
+The runbook is in the main plan **§13.8**. The one rule that must be repeated here, because it is the one
+an operator is most likely to break under pressure:
 
----
+> **Never call `refundStarPayment` by hand.** A refund is a state machine, not an API call. The command
+> creates a durable `REFUND_REQUESTED` operation; the worker performs the call; the Telegram history
+> decides the outcome. A manual call creates exactly the state the whole design exists to prevent — *money
+> returned, nothing recorded*.
 
 ## D.6 The reconciliation design in full
 

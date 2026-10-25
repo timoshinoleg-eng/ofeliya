@@ -219,7 +219,7 @@ game (a Telegram Mini App with a Node/PostgreSQL backend), so **nothing is porte
 | `backend/migrations/060_*.sql` | the partial unique index `ON purchases(user_id) WHERE item_type='starter_pack' AND status IN ('pending','completed')` — *"A refunded purchase frees the slot again (deliberate: refund = can rebuy). Guards the concurrent double-intent race the pre-check in buy.js cannot close."* | ✅ **Port in spirit** — the DB-level one-time-SKU guard |
 | `backend/src/routes/buy.js` (`POST /api/buy`) | the purchase intent: rate-limiter → auth → payments-enabled → validate → `BEGIN` → the one-time check → `INSERT purchases(status='pending')` → `audit_logs` → `COMMIT` → **`202`** + `payment:{currency:'XTR', payload:'purchase:<id>:<item_type>'}` | ✅ **Port the shape**; tighten per §16 |
 | `backend/src/routes/internalPayments.js` (`POST /telegram/confirm`) | `BEGIN` → **`pg_advisory_xact_lock(userId)`** → `SELECT purchase FOR UPDATE` → the prior-paid check → the effect → `UPDATE purchases status='completed'` → `INSERT star_payments` (UNIQUE charge id) → `COMMIT` | ✅ **Port the shape.** `pg_advisory_xact_lock` is the key idea |
-| `backend/src/routes/internalPayments.js` (`POST /telegram/refund`) | `BEGIN` → `FOR UPDATE OF sp` → **the Bot API `refundStarPayment` FIRST** → `status='refunded'` on both tables → `audit_logs` → `COMMIT` | ⚠️ **Port with care** — the external call holds a row lock, and the *ordering* is wrong (§13.1) |
+| `backend/src/routes/internalPayments.js` (`POST /telegram/refund`) | `BEGIN` → `SELECT … FOR UPDATE OF sp` → the user check → `UPDATE star_payments status='refunded'` → `UPDATE purchases status='refunded'` → `audit_logs` → `COMMIT`. **The route contains NO Telegram call at all** — the comment claims *"the bot calls refundStarPayments() on the Bot API FIRST"*, but no such call exists anywhere in that repo | ⚠️ **Port the shape, not the semantics.** See the REUSE / PORT_WITH_CHANGE / DO_NOT_REUSE split in §21.5 |
 | `bot/src/payments.js` | the fail-closed kill switch: `parsePaymentsEnabled` = strict `=== 'true'`; `decidePreCheckout()` rejects non-`XTR`; `redactedDisabledPaymentNotice()` carries **no raw identifiers** | ✅ **Port verbatim** — exactly the discipline §20 requires |
 | `bot/src/createBot.js:209–231` | `bot.on('pre_checkout_query')` → `answerPreCheckoutQuery(false,{error_message})` / `(true)`; `bot.on('message:successful_payment')` | ✅ Port the wiring; OFELIYA has no `grammy` — use `server/telegram-api.mjs` |
 | `internalPayments.js` → `alertPaymentWhileDisabled({itemType, idempotent})` | the charge-without-delivery guard — a payment landing while the runtime is disabled is **fulfilled**, not dropped | ✅ **Port the intent** (§6 row 10) |
@@ -271,7 +271,7 @@ Details: **Annex A**.
 | Muse worker / D1 (patches #13–#16) | Muse patch files (absent) | Assumed a server ledger that **does not exist here**; schema versions 15/16 are unanchored | Re-derive against `ofeliya_pay` on the **existing Supabase Postgres** |
 | Muse `storefront.variant` / `economy.lab` flags | Muse patch #3, dropped in OFELIYA | Feature flags are presentation-only; an economy flag is a client-side switch | No economy flags. Ever. `'events' in flags === false` stays |
 | `stars_500` achievement id | `ClientCollection.ts` | **Name collision** with Telegram Stars | It is a kill-counter achievement; rename mentally |
-| `coder_survival` refund ordering | `internalPayments.js` | Holds a row lock across a network call; revokes *after* the refund | Two-phase, **revoke-first** refund (§13.1) |
+| `coder_survival` refund path | `internalPayments.js` | **No Telegram call exists**; the route only flips the local rows, and *"item effects are deliberately NOT reversed"* — so a "refund" there means **money back, value kept** | The five-state refund machine with a durable outbox and a history-gated outcome (§13) |
 | `coder_survival` "Stars — пока mock" purchases | `001_init.sql:52` | The intent was never proven against real Telegram | Take the schema, not the semantics; re-derive against §13 |
 
 ---
@@ -336,9 +336,13 @@ Corollaries:
 
 | Field | Authority |
 |---|---|
-| requested · accepted | Server (operator/admin action) |
-| completed | Server — **only after Telegram confirms `refundStarPayment` returned `true`** |
-| entitlement revoked | Server — soft-revoke (`revoked_at`); the ledger row is immutable |
+| requested · accepted | Server (operator/admin action) — recorded durably as a `REFUND_REQUESTED` operation |
+| in flight | Server — `REFUND_PENDING`, held by a worker under a lease |
+| **confirmed success** | **Telegram** — `refundStarPayment` returned `true`, **or** the Telegram history shows an outgoing transaction for that charge id ⇒ `REFUNDED` |
+| **confirmed failure** | **Telegram** — the call returned `false` **and** the history shows no refund ⇒ `REFUND_FAILED` |
+| **unknown outcome** | **Nobody knows** — a timeout, a lost response, a crashed worker ⇒ `REFUND_RECONCILE`. It is **never** recorded as a success or a failure |
+| entitlement suspended | Server — `suspended_at` (temporary, for paid gameplay power during an unresolved refund, §13.3) |
+| entitlement revoked | Server — soft-revoke (`revoked_at`, **permanent**); the ledger row is immutable |
 | currency restored | Server — only if/when a wallet exists; in v1, "restored" = entitlement revoked |
 
 **Reconciliation**
@@ -393,7 +397,7 @@ Format: `attack/failure → expected invariant → required defense → test`.
 
 | Risk | Why it survives | Mitigation |
 |---|---|---|
-| **Chargeback / dispute** | Telegram documents it: *"if the buyer initiates a chargeback with the relevant payment provider … the funds may be debited from your balance. This is outside of Telegram's control."* | Fulfill on `successful_payment`, not on final settlement; keep `raw_payload`; define a revocation path (§13.3) |
+| **Chargeback / dispute** | Telegram documents it: *"if the buyer initiates a chargeback with the relevant payment provider … the funds may be debited from your balance. This is outside of Telegram's control."* | Fulfill on `successful_payment`, not on final settlement; keep `raw_payload`; define a revocation path (§13.7) |
 | **Supabase Free pausing the project** | `deploy/RENDER.md`: *"Supabase Free may pause inactive projects."* A paused project makes the ledger unreachable → purchases **fail closed**, so revenue dies but nothing is mis-sold | Move off the Free tier **before** real money (§23.3) |
 | **Render Free sleeping after 15 idle minutes** | Same document | A sleeping server can blow the 10-second `pre_checkout_query` deadline → the payment path needs a **non-sleeping host** |
 | **Single-process lock semantics** | `withProfileLock` is in-memory | Use `pg_advisory_xact_lock` (DB-wide) for every money path |
@@ -521,8 +525,9 @@ COMMIT;
 ```
 
 Everything that must be atomic — the operation row, the entitlement, the audit row — is in the same
-transaction. The **only** thing outside a transaction is the Telegram API call for a *refund* (§13.1),
-because a network call must not hold a row lock.
+transaction. The **only** thing outside a transaction is the Telegram API call for a *refund* (§13.4),
+because a network call must not hold a row lock — and because a network call inside a transaction would
+make the external side effect and the local record share a fate.
 
 ### 8.3 Unique constraints (the heart of the design)
 
@@ -534,15 +539,21 @@ because a network call must not hold a row lock.
 | `entitlements (user_key, entitlement_key) PRIMARY KEY` | One row per entitlement → an entitlement is a *state*, not a log |
 | `catalog_sku.sku PRIMARY KEY` | The catalog is the only SKU namespace |
 | A partial unique index for one-time SKUs | The DB-level one-time guard (below) |
+| `operations (parent_operation_id) WHERE kind='REFUND' AND status IN ('REFUND_REQUESTED','REFUND_PENDING','REFUND_RECONCILE')` | **At most one non-terminal refund per purchase** — this is what makes a repeated refund command a no-op instead of a second Telegram call (§13.6) |
 
 **One-time SKU guard** (ported in spirit from `coder_survival` migration `060`):
 
 ```sql
 CREATE UNIQUE INDEX uq_ofeliya_one_time_sku
   ON ofeliya_pay.operations (user_key, sku)
-  WHERE sku IN (/* server-side list of one-time SKUs */)
-    AND status IN ('PENDING','PAID','ENTITLED');
+  WHERE kind = 'PURCHASE'                       -- a REFUND row names the same sku; it must not hold the slot
+    AND sku IN (/* server-side list of one-time SKUs */)
+    AND status IN ('PENDING','ENTITLED','LATE');
 ```
+
+> The `kind = 'PURCHASE'` filter is **load-bearing**, not cosmetic. A refund operation carries the sku it
+> refunded; without the filter the refund row would keep occupying the one-time slot and a refunded
+> purchase would **not** be re-buyable — exactly the opposite of the rule below.
 
 The list must come from the catalog (`catalog_sku.one_time_per_user`), not a literal in the index —
 implement it as a catalog-driven trigger, or accept a literal list for v1 (a handful of SKUs) and
@@ -568,7 +579,7 @@ There is no `balances` table with a mutable `amount` column. A materialized bala
 ### 8.5 Entitlement derivation
 
 `entitlements` is materialized (a current-state table), written **only** by the transaction in §8.2 and
-the refund transaction in §13.1. It is also derivable from `operations` — and the reconcile job (§14)
+the refund transaction in §13.4. It is also derivable from `operations` — and the reconcile job (§14)
 must be able to prove the two agree.
 
 ```
@@ -581,6 +592,16 @@ entitlement(user, key) = the level of the latest non-revoked
 A refund is **a new operation row** (`kind='REFUND'`, `parent_operation_id` → the purchase), *plus* a
 status transition on the original purchase row and a soft-revoke on the entitlement. The purchase's
 `operations` row is never deleted — its `status` moves forward, never backward.
+
+The refund operation carries its own `op_id` (the **refund operation id**), its own `op_fingerprint`, and the
+**external anchor** `telegram_payment_charge_id` carried from the purchase. It is the durable record that a
+Telegram call is *owed* — the **outbox** of the refund path (§13.4) — and it is what makes a repeated
+refund command a no-op instead of a second call (§13.6).
+
+The purchase's own status is **not** driven through the refund's intermediate states. The purchase stays
+`ENTITLED`/`LATE`; the refund's lifecycle lives entirely on the refund operation row. This is what keeps
+"the status moves forward, never backward" true for the purchase while allowing the refund to move
+*back* from `REFUND_FAILED` (a new attempt) — as a **new operation**, never as a rewrite.
 
 ### 8.7 Reconcile representation
 
@@ -819,10 +840,16 @@ Never mutate a SKU's meaning in place:
 - **Restore** — `POST /api/storefront/restore` is a **read**. It must not create, extend or mutate any
   entitlement. Safe to call repeatedly, from any device.
 - **Pending UI** — `PENDING` → "Ожидание оплаты…"; `PAID` → "Оплата получена, выдаём…"; `ENTITLED` →
-  success with the item highlighted; `REFUND_PENDING` → "Возврат в обработке" (**not** an error — the
-  entitlement shows as *pending revocation*, not as active); `REFUNDED` → "Возврат оформлен";
-  `FAILED`/`REJECTED` → a clear error; *(unknown/unreachable)* → **fail closed**: "не удалось подтвердить
-  оплату" — **never** "оплачено".
+  success with the item highlighted; `REFUND_REQUESTED` / `REFUND_PENDING` → "Возврат в обработке"
+  (**not** an error); `REFUND_RECONCILE` → "Возврат уточняется" — the outcome is genuinely unknown, and the
+  client must **not** claim either that the money is back or that it is not; `REFUNDED` → "Возврат
+  оформлен"; `REFUND_FAILED` → "Возврат не выполнен, покупка активна"; `FAILED`/`REJECTED` → a clear
+  error; *(unknown/unreachable)* → **fail closed**: "не удалось подтвердить оплату" — **never** "оплачено".
+
+  **The entitlement state the client renders** is a *separate* axis from the operation status:
+  `revoked` (permanent), `suspended` (temporary — a refund is unresolved), `active`. A suspended entitlement
+  is **not** revoked and **not** available: the client renders it as *temporarily unavailable*, and the
+  server rejects any operation that depends on it (§13.3).
 
 ### 10.4 Error states
 
@@ -945,85 +972,298 @@ None of these may be sold in v1 or v1.1:
 
 ## 13. Refund design
 
-### 13.1 State machine
+### 13.1 The adversarial review of *"revoke first"*
+
+The first revision of this package proposed:
+
+> **revoke the entitlement → call `refundStarPayment` → on `false` mark `REFUND_FAILED`, and leave the
+> entitlement revoked.** *"Fail toward under-delivery."*
+
+The underlying instinct — **a refunded user must not keep a live entitlement** — is correct and is
+preserved. The **implementation** does not survive an adversarial review.
+
+| # | The defect | Why it matters |
+|---|---|---|
+| 1 | **"Fixable" is false in the design as written.** The ledger is append-only and a status *"moves forward, never backward"* (§8.6); the entitlement carries `revoked_at` and there is **no un-revoke path**. A crash between the revoke and the Telegram call therefore leaves a **permanently** revoked entitlement with **no supported way to restore it** | the "safe" direction is not merely inconvenient — it is **irreversible**. The failure the design calls *fixable* is not fixable at all |
+| 2 | **A `false` and a lost response are indistinguishable.** `refundStarPayment` returns a bare boolean. A timeout, a dropped response, a proxy error and a genuine refusal all look like `false`. The original mapped **all** of them to `REFUND_FAILED` + revoked | the system would **routinely** revoke a user's paid value while their money was in fact returned — money taken, value gone, no record of what happened. This is the worst outcome in the catalogue |
+| 3 | **"Under-delivery is safe" holds only when the failure is cheap to undo.** Here the undo path does not exist, and the "un-delivery" is permanent paid value | the asymmetry the original relied on is not present. Failing toward under-delivery is a principle about *recoverability*, not about optimism |
+| 4 | **The re-issue advice was wrong.** The first revision's runbook said: *"Re-issue the refundStarPayment (it is idempotent from the user's perspective: the money is either returned or not)."* A repeat call is **not** a harmless success. The Bot API returns a bare `true`/`false` with **no idempotency contract**, and the MTProto counterpart `payments.refundStarsCharge` has a typed error **`CHARGE_ALREADY_REFUNDED`** — Telegram explicitly distinguishes *"already refunded"* from *"refunded"* | a repeat call may return `false` and drive the machine down the **failure** branch, or be misread as *"not refunded"* while the money **was** returned. **A repeat call is not a safe probe** |
+| 5 | **The external call was inside the transaction boundary in the shape that was being reacted to.** The original's own §13.1 pseudocode shows the Telegram call *outside* the `BEGIN…COMMIT` but the state update *after* it was a bare `UPDATE` — no lease, no `WHERE status='REFUND_PENDING'` guard, and no recovery path for a lost response | two workers, or a retried request, could each make a call. The design had no way to know whether a call had already been made |
+
+**What the corrected design keeps.** The obligation *"a confirmed refund ⇒ the entitlement is revoked"* is
+inviolable. **What it changes.** The system no longer guesses. It **waits for the external truth**, and it
+distinguishes **confirmed success**, **confirmed failure**, and **unknown** — three different outcomes with
+three different consequences.
+
+### 13.2 The state machine
 
 ```
-        ┌──────────────┐
-        │ PENDING      │  the intent exists; the invoice was presented; not yet charged
-        └──────┬───────┘
-               │ successful_payment received & verified
-        ┌──────▼───────┐
-        │ ENTITLED     │  charged AND granted, in one transaction (§12 step 6–7)
-        └──────┬───────┘
-               │ a refund is requested
-        ┌──────▼────────────┐
-        │ REFUND_PENDING    │  the entitlement is ALREADY soft-revoked; the Bot API call is in flight
-        └──────┬────────────┘
-               │ refundStarPayment() returned true
-        ┌──────▼───────┐
-        │ REFUNDED     │  the charge was returned; the entitlement is revoked
-        └──────────────┘
-
-  Terminal-failure side: PENDING → FAILED (the checkout was rejected / the TTL expired)
-                         ENTITLED → REJECTED (an amount or currency mismatch)
+                    ┌──────────────┐
+                    │ PENDING      │  the intent exists; the invoice was presented; not yet charged
+                    └──────┬───────┘
+                           │ successful_payment received & verified
+                    ┌──────▼───────┐
+                    │ ENTITLED     │  charged AND granted, in one transaction (§12 steps 6–7)
+                    └──────┬───────┘
+                           │ an operator requests a refund → the REFUND operation row is created
+                           │ (a durable intent; the Telegram call has NOT been made)
+                    ┌──────▼───────────────┐
+                    │ REFUND_REQUESTED     │  the decision is durable; no worker has claimed it
+                    └──────┬───────────────┘
+                           │ a worker claims it (an atomic lease); the entitlement is SUSPENDED (§13.3)
+                    ┌──────▼───────────────┐
+                    │ REFUND_PENDING       │  the external call is in flight
+                    └──────┬───────────────┘
+                           │
+        ┌──────────────────┼───────────────────────────┐
+        │                  │                           │
+  returns true      returns false            a timeout / a lost response
+        │                  │                     / an unknown outcome
+   ┌────▼─────────┐  ┌─────▼────────────┐  ┌────────▼────────────┐
+   │ REFUNDED     │  │ REFUND_FAILED    │  │ REFUND_RECONCILE    │
+   └──────────────┘  └──────────────────┘  └────────┬────────────┘
+   the entitlement   the money was NOT      the outcome is UNKNOWN:
+   is PERMANENTLY    returned; the          the entitlement stays suspended;
+   revoked           entitlement is         a repeat refund is BLOCKED;
+                     RESTORED              the Telegram history resolves it (§13.6)
 ```
 
-**The invariant that must never break:** `REFUNDED` ⇒ the entitlement is revoked.
-The dangerous state is *refund completed → the entitlement is still active*. The design prevents it by
-**revoking the entitlement *before* calling Telegram**, not after:
+**The three terminal outcomes, and why they are different.**
 
-```
-BEGIN;
-  SELECT * FROM operations WHERE id=$purchase FOR UPDATE;
-  if status <> 'ENTITLED': ROLLBACK; return 409;
-  UPDATE entitlements SET revoked_at=now() WHERE ...;       -- ① revoke FIRST
-  UPDATE operations SET status='REFUND_PENDING' WHERE ...;   -- ② mark in-flight
-COMMIT;
+| Outcome | The evidence | The money | The entitlement | The next action |
+|---|---|---|---|---|
+| **Confirmed success** | `refundStarPayment` returned `true`, **or** the Telegram history shows an outgoing transaction for that charge id | **returned** | **permanently revoked** | none — the terminal state |
+| **Confirmed failure** | `refundStarPayment` returned `false` **and** the history shows no refund for that charge id | **not returned** | **restored** to `ENTITLED` | the operator may re-issue (gated by the history check, §13.6) |
+| **Unknown** | a timeout, a lost response, a crashed worker — anything that leaves the outcome undetermined | **unknown** | **suspended**, not revoked | `REFUND_RECONCILE` — the scan resolves it |
 
-  result = telegram.refundStarPayment(user_id, telegram_payment_charge_id)   -- ③ outside the tx
-  if result === true:
-      UPDATE operations SET status='REFUNDED' WHERE id=$purchase;           -- ④
-  else:
-      -- ⑤ the charge was NOT returned, but the entitlement is already revoked.
-      --    This is the SAFE direction (we under-deliver rather than over-deliver).
-      --    Mark REFUND_FAILED and alert; do NOT silently restore the entitlement.
-```
+> **The single most important line in this section:** an **unknown** outcome is never recorded as a
+> **failure**, and it is never recorded as a **success**. It is recorded as **unknown** — and "unknown" has
+> its own state, its own operator message, and its own resolution path.
 
-**Why revoke-first:** if the process dies between ① and ④, the user has *less* than they paid for —
-annoying but safe and fixable. If we revoked *after* a successful refund, a crash in between leaves a
-refunded user with a live entitlement — money taken, value delivered, no audit trail.
-**Fail toward under-delivery.**
+**The full state list, and one simplification that still holds.** `PENDING` · `ENTITLED` · `LATE` ·
+`FAILED` · `REJECTED` · `REFUND_REQUESTED` · `REFUND_PENDING` · `REFUND_RECONCILE` · `REFUNDED` ·
+`REFUND_FAILED`.
 
-> The `coder_survival` implementation does the opposite (the Bot API call first, inside the transaction).
-> **Do not port that ordering.** Port the shape, not the sequence.
+`PAID` is **still** deliberately absent: the operation insert and the entitlement upsert happen in one
+transaction, so an observer can never see a charged-but-not-granted state (§12). `LATE` is the sibling of
+`ENTITLED` — *"granted, but through the late-fulfilment path"* (§14.7.1) — and it is treated as granted
+everywhere the entitlement is checked.
 
-### 13.2 Permissible intermediate states
+**The remaining transitions.**
 
-| State | Meaning | User-visible | Safe? |
+| From | To | The trigger |
+|---|---|---|
+| `PENDING` | `FAILED` | the checkout was rejected, or the intent TTL expired with no charge |
+| `ENTITLED` / `LATE` | `REJECTED` | an amount or currency mismatch at settlement |
+| `REFUND_REQUESTED` | `ENTITLED` | **cancellation** — allowed **only** before the worker claims it, i.e. before any call could have been made |
+| `REFUND_RECONCILE` | `REFUND_PENDING` | a **retry**, permitted **only** after the history check proves that no refund exists for that charge id |
+
+**Cancellation is deliberately restricted.** Once the call is in flight (`REFUND_PENDING`) or its outcome is
+unknown (`REFUND_RECONCILE`), the only legal next step is *resolution*, never *cancellation* — the money
+may already be on its way back.
+
+### 13.3 The entitlement during the pending window
+
+The question the original design answered by revoking is answered here by a policy that depends on **what
+the entitlement actually is**.
+
+| | **A. it stays usable** | **B. it is temporarily suspended** | **C. it is permanently revoked immediately** |
 |---|---|---|---|
-| `PENDING` | The intent exists; no charge | "Ожидание оплаты" | ✅ |
-| `ENTITLED` | Charged and granted | ✅ | ✅ |
-| `REFUND_PENDING` | Revoked; the Telegram call is in flight | "Возврат в обработке" | ✅ (the user sees it revoked) |
-| `REFUNDED` | The charge was returned | "Возврат оформлен" | ✅ |
-| `REFUND_FAILED` | The Telegram call failed; the entitlement stays revoked | "Возврат требует обработки" + an alert | ✅ (under-delivery, recoverable) |
-| `REJECTED` | An amount/currency mismatch | "Оплата не распознана" + an alert | ✅ |
-| `FAILED` | The intent expired / the checkout was rejected | "Оплата не завершена" | ✅ |
+| **Customer harm** | a cosmetic: **none**. gameplay power: the user keeps using power that may be returned | a cosmetic: a transient cosmetic loss — trivial. gameplay power: a transient loss of paid power — noticeable, but **recoverable** | **the worst**: the user loses the paid value **even when the refund failed** — the money was not returned and the value is gone |
+| **Fraud exposure** | gameplay power: **real** — the paid power can be consumed in a run while the refund completes ⇒ *"power without money"* | **none** — the value is not usable while the outcome is unresolved | none |
+| **Implementation complexity** | the lowest — no third state | medium — an `entitlements.suspended_at` column, a third client state, and a restore path | the lowest — `revoked_at` already exists — **but the restore path does not, and §13.1 shows why that is fatal** |
+| **Crash recovery** | trivially recoverable — the entitlement was never touched | **recoverable** — a stuck suspension is a **delay**, not a loss; the reconcile resolves it and either restores or revokes | **not recoverable** in the original design — `revoked_at` is set and the ledger only moves forward |
 
-**Simplification:** because the operation insert and the entitlement upsert happen in one transaction, an
-observer can never see a charged-but-not-granted state. **Collapse `PAID` into `ENTITLED`** and expose
-only the states above. This is exactly the "don't complicate the state machine without necessity" rule.
+**The recommendation.**
 
-### 13.3 The refund-vs-spend race
+| The entitlement class | The policy | Why |
+|---|---|---|
+| **A paid cosmetic** — a skin, a palette, a badge | **A — it stays usable** until the refund is **confirmed** | a cosmetic has **no spend moment**, no transferable value and no combat effect. Suspending it buys nothing and only manufactures a support ticket. And the asymmetry already accepted in §11.3 applies: *"an already-consumed effect is not clawed back"* |
+| **Paid gameplay progression / Lab power** | **B — it is suspended** from `REFUND_REQUESTED` until the outcome is confirmed | it **is** consumable. A keeps a *"power without money"* window open; C destroys the value whenever the refund merely **failed**. Suspension is the only option that is simultaneously fraud-safe and **reversible** |
+
+**C is rejected for both classes.** *"Fail toward under-delivery"* is sound **only** when the failure is
+cheap to undo. Here the undo path does not exist in the design, the money may not even have been returned,
+and the user-visible outcome — *money returned **and** the value gone* — is the worst combination in the
+catalogue. **The corrected design fails toward neither over-delivery nor under-delivery: it waits for the
+external truth.**
+
+**One consequence, written down so it is not forgotten.** The entitlement needs a **third** state:
+
+```sql
+-- entitlements.suspended_at  -- TEMPORARY. Distinct from revoked_at, which is PERMANENT.
+-- The entitlement is usable iff  revoked_at IS NULL AND suspended_at IS NULL.
+```
+
+`suspended_at` is set when the refund enters `REFUND_REQUESTED`/`REFUND_PENDING`/`REFUND_RECONCILE` and
+cleared on either terminal outcome (`REFUNDED` ⇒ `revoked_at` is set and `suspended_at` is cleared;
+`REFUND_FAILED` ⇒ `suspended_at` is cleared and the entitlement is live again).
+
+### 13.4 The durable sequence — the external call is never inside a database transaction
+
+```
+── tx 1 (short) ──────────────────────────────────────────────────────────
+BEGIN;
+  SELECT * FROM ofeliya_pay.operations WHERE id = $purchase FOR UPDATE;
+  if status not in ('ENTITLED','LATE'):        ROLLBACK; return 409;
+  if a REFUND operation exists for this purchase and is not terminal:
+                                                 ROLLBACK; return 409 REFUND_ALREADY_IN_PROGRESS;
+
+  INSERT INTO ofeliya_pay.operations (
+      kind='REFUND', op_id=$refundOpId, op_fingerprint=$fp,
+      parent_operation_id=$purchase, telegram_payment_charge_id=$chargeId,
+      user_key=$user, entitlement_key=$ek, entitlement_level=$lvl,
+      amount_stars=$amt, status='REFUND_REQUESTED')
+    ON CONFLICT (user_key, kind, op_id) DO NOTHING;      -- the replay path
+COMMIT;
+── end tx 1 ──────────────────────────────────────────────────────────────
+→ 202 { refundOpId, status:'REFUND_REQUESTED' }          -- the operator's request returns FAST
+
+── tx 2 (short, by the worker) ───────────────────────────────────────────
+BEGIN;
+  UPDATE ofeliya_pay.operations
+     SET status='REFUND_PENDING', lease_owner=$worker, lease_expires_at=now()+interval '2 minutes'
+   WHERE id=$refundOpId AND status='REFUND_REQUESTED';   -- the ATOMIC claim
+  if not updated:                   COMMIT; return;       -- another worker won
+  UPDATE ofeliya_pay.entitlements SET suspended_at=now()  -- gameplay power only (§13.3)
+   WHERE user_key=$user AND entitlement_key=$ek AND revoked_at IS NULL;
+COMMIT;
+── end tx 2 ──────────────────────────────────────────────────────────────
+
+── step 3: the external call — OUTSIDE every transaction ─────────────────
+  result = telegram.refundStarPayment(user_id, telegram_payment_charge_id)
+            with a bounded timeout (e.g. 15 s) and NO transaction, NO row lock held
+── end step 3 ────────────────────────────────────────────────────────────
+
+── tx 3 (short) ──────────────────────────────────────────────────────────
+BEGIN;
+  if result === true:                                  -- CONFIRMED success
+      UPDATE operations SET status='REFUNDED' WHERE id=$refundOpId;
+      UPDATE entitlements SET revoked_at=now(), suspended_at=NULL WHERE ...;
+  else if result === false:                            -- CONFIRMED failure
+      UPDATE operations SET status='REFUND_FAILED' WHERE id=$refundOpId;
+      UPDATE entitlements SET suspended_at=NULL WHERE ...;          -- RESTORE
+  else:                                                -- UNKNOWN
+      UPDATE operations SET status='REFUND_RECONCILE' WHERE id=$refundOpId;
+      -- the entitlement stays suspended; a repeat refund is BLOCKED
+COMMIT;
+── end tx 3 ──────────────────────────────────────────────────────────────
+```
+
+**Why the call must not be inside a database transaction.** A Telegram network call inside a Postgres
+transaction holds a row lock *and* a connection for the whole round-trip. The consequences are concrete,
+not stylistic:
+
+| The consequence | What it costs in production |
+|---|---|
+| The purchase row's lock is held for the whole network call | **every** other money path for that user blocks — a purchase, another refund, a reconcile repair. The refund path becomes the user's latency |
+| A database connection is held for the whole network call | under a burst of refunds the pool is exhausted by **in-flight network calls**, not by work |
+| The transaction's duration becomes the network's tail latency × the concurrency | on a free-tier Postgres with a small connection cap, that is an outage, not a slowdown |
+| The external side effect and the local record share a fate | if the transaction rolls back **after** Telegram succeeded, **the money is returned and the ledger has no record of it** — the unrecoverable case |
+
+**The outbox pattern.** The refund operation row **is** the outbox: it is the durable record that a call is
+*owed*. The worker claims it, makes the call, records the outcome. If the worker dies, the row is still
+there — `REFUND_REQUESTED` or `REFUND_PENDING` — and it is picked up again, **after** the history check
+(§13.6). The refund path never depends on an operator's browser session staying open.
+
+### 13.5 The races and the crash points
+
+| # | The scenario | The state before | The failure | The final state | The mechanism that makes it safe |
+|---|---|---|---|---|---|
+| 1 | The worker **crashes before** the Telegram call | `REFUND_REQUESTED` | the process dies; the lease expires | another worker claims it → `REFUND_PENDING` → the call → a terminal state | the claim is an atomic conditional `UPDATE`; **exactly one** worker can hold the lease |
+| 2 | The worker **crashes after** Telegram succeeded, before the DB write | `REFUND_PENDING`; the money is already returned | the process dies between the call and tx 3 | the sweeper takes over, **checks the Telegram history first**, sees the refund ⇒ `REFUNDED` | the **history** is the source of truth for the outcome; the call is **not** repeated |
+| 3 | The call **times out** but Telegram actually succeeded | `REFUND_PENDING` | the outcome is undetermined | `REFUND_RECONCILE` → the scan resolves it → `REFUNDED` | an unknown outcome is **never** recorded as a failure |
+| 4 | The call **definitely failed** (`false`, and the history confirms no refund) | `REFUND_PENDING` | a confirmed failure | `REFUND_FAILED`; the entitlement is **restored** | the user keeps what they paid for; the money was not returned |
+| 5 | **Two refund workers** race for the same refund | `REFUND_REQUESTED` | both try to claim it | one call, one terminal state | the claim is `UPDATE … WHERE status='REFUND_REQUESTED'`; the loser updates nothing |
+| 6 | **Two admins** start a refund for the same purchase | `ENTITLED` | both create a refund operation | one `REFUND_REQUESTED`; the other gets **`409 REFUND_ALREADY_IN_PROGRESS`** | a **partial unique index** allows at most one non-terminal refund per purchase (§13.6) |
+| 7 | The **user starts another purchase** while a refund is pending | `ENTITLED` + a refund in flight | the purchase path takes the advisory lock | the purchase is allowed if the SKU is independent; it is **refused** if it depends on the suspended entitlement | the purchase validation reads the entitlement's suspension |
+| 8 | The **reconcile worker** runs during a refund | any | the scan sees the intermediate state | it never re-issues a refund; it only **resolves** `REFUND_RECONCILE` | resolution is a state transition, never a call |
+| 9 | The refund is **re-issued** after a `REFUND_FAILED` | `REFUND_FAILED` | the operator retries | a **new** refund operation; the call is made **only after the history check proves there is no refund** | a confirmed-failure state alone is not enough; the history is the final gate |
+
+### 13.6 The idempotency of the refund operation
+
+**The refund operation's identity.** A refund is a **first-class operation** in the same append-only ledger
+— not a flag on the purchase.
+
+| Field | The value | Why |
+|---|---|---|
+| `kind` | `'REFUND'` | it is an operation, not a mutation |
+| `op_id` | the **refund operation id** — server-minted (`refund:<purchaseOpId>:<n>`) | the retry anchor |
+| `parent_operation_id` | the purchase operation | the refund is bound to exactly one purchase |
+| `telegram_payment_charge_id` | carried from the purchase | the external anchor |
+| `user_key` | the refunded user | the scope |
+| `entitlement_key` / `entitlement_level` | the affected entitlement | the target |
+| `amount_stars` | the refunded amount | the amount |
+| `op_fingerprint` | `sha256(parent_operation_id ‖ user_key ‖ entitlement_key ‖ amount_stars ‖ telegram_payment_charge_id)` | the binding |
+| `status` | the refund state (§13.2) | the state machine |
+
+**The rules.**
+
+| Situation | The response | **A Telegram call?** |
+|---|---|---|
+| The same `op_id` + the **same** fingerprint | the **current state** — `200`, `replayed: true` | ❌ **no** |
+| The same `op_id` + a **different** fingerprint | **`409 IDEMPOTENCY_KEY_REUSE`** — nothing is written | ❌ **no** |
+| A **new** refund command for a purchase that already has a non-terminal refund | **`409 REFUND_ALREADY_IN_PROGRESS`** | ❌ **no** |
+| A **new** refund command for a purchase whose refund is already `REFUNDED` | **`409 REFUND_ALREADY_COMPLETED`** | ❌ **no** |
+| A **new** refund command for a purchase whose refund is `REFUND_FAILED` | a new refund operation is allowed — **but only after the history check proves that no refund exists** | ✅ yes, via the worker |
+| A **repeated client HTTP request** (the operator's UI double-clicks) | the same as the first two rows | ❌ **no** |
+
+> **The invariant, stated once:** *no Telegram refund call is ever made as a direct consequence of a
+> repeated client request.* The call is made **only** by the worker that won the atomic claim, and **only**
+> after the history check. Every other path is a state **read**.
+
+**The database-level guard.**
+
+```sql
+-- At most ONE non-terminal refund per purchase. A REFUND_FAILED attempt is terminal
+-- for THAT attempt, so a re-issue is allowed -- but only after the history check.
+create unique index if not exists uq_operations_one_open_refund
+  on ofeliya_pay.operations (parent_operation_id)
+  where kind = 'REFUND'
+    and status in ('REFUND_REQUESTED','REFUND_PENDING','REFUND_RECONCILE');
+```
+
+**The history check — the thing the first revision got wrong.** Before the worker makes (or re-makes) a
+refund call it asks the Telegram history a single question: *does an outgoing transaction exist for this
+charge id?*
+
+- **Yes** → the money was already returned. The refund is **not** re-issued; the operation is finalised to
+  `REFUNDED` and the entitlement is revoked.
+- **No** → the call is made (the first time), or the attempt is recorded as a confirmed failure.
+
+This one query replaces the *"it is idempotent from the user's perspective"* assumption with an **observed
+fact**, and it is what makes the unknown-outcome path safe.
+
+### 13.7 The refund-vs-spend race
 
 In v1 there is no spend, so the race is impossible. In v2:
 
-> A spend is refused if the entitlement it draws on has `revoked_at IS NOT NULL`.
-> The spend's transaction takes `pg_advisory_xact_lock(userKey)`, the same lock the refund takes.
+> A spend is refused if the entitlement it draws on has `revoked_at IS NOT NULL` **or** `suspended_at IS NOT NULL`.
+> The spend's transaction takes `pg_advisory_xact_lock(userKey)` — the same lock the refund takes.
 
 The lock is the whole defense. A spend that starts before the refund commits completes and is **not**
-clawed back; a spend that starts after is refused.
+clawed back; a spend that starts after is refused. And because the refund **suspends** rather than revokes
+until the outcome is confirmed, a *failed* refund restores the entitlement instead of leaving a permanent
+loss.
 
----
+### 13.8 The refund runbook
+
+```
+1. The support ticket arrives: "I want my money back" (or "my item is gone").
+2. Identify the purchase: by (user_key, created_at desc), by opId, or by telegram_payment_charge_id.
+   Never trust the ticket's own identifiers.
+3. Read the operation:
+     ENTITLED / LATE          → a refund may be requested (tx 1 of §13.4). The operator command returns 202.
+     REFUND_REQUESTED         → the worker has not claimed it yet. Do not call Telegram by hand.
+     REFUND_PENDING           → the call is in flight, or the outcome is unknown. DO NOT re-issue.
+     REFUND_RECONCILE         → the outcome is unknown; the scan resolves it. A repeat refund is BLOCKED.
+     REFUNDED                 → done. The entitlement is revoked. Nothing to do.
+     REFUND_FAILED            → the call definitely failed and the entitlement is restored.
+                                  A re-issue is allowed, but only via the normal command, which is
+                                  history-gated.
+4. "It says REFUND_FAILED but the money is back."  → the scan (R5) will move it to REFUND_RECONCILE and
+   then to REFUNDED. Never resolve it by hand; the history check is the only authority.
+5. Never call refundStarPayment from a support tool, a script, or a console. The only caller is the worker.
+```
 
 ## 14. Reconciliation
 
@@ -1162,10 +1402,12 @@ select t.id from ofeliya_pay.telegram_transactions t
  where t.direction = 'IN' and o.id is null;
 
 -- B ↔ C  : a paid operation with no entitlement
+--   ENTITLED and LATE are both 'granted' states: LATE means 'granted through the
+--   late-fulfilment path' (main plan 14.7.1), so it must be covered too.
 select o.id from ofeliya_pay.operations o
   left join ofeliya_pay.entitlements e
     on e.user_key = o.user_key and e.entitlement_key = o.entitlement_key
- where o.status = 'ENTITLED' and e.user_key is null;
+ where o.status in ('ENTITLED','LATE') and e.user_key is null;
 
 -- A ↔ C  : an externally refunded charge whose entitlement is still live
 select t.id from ofeliya_pay.telegram_transactions t
@@ -1372,7 +1614,7 @@ A new schema `ofeliya_pay` in the same Supabase project, with the same disciplin
 |---|---|---|
 | `catalog_sku` | The authoritative SKU catalog | `PRIMARY KEY (sku)`; `price_stars > 0`; `currency = 'XTR'`; a self-FK on `prerequisite_sku` / `superseded_by` |
 | `operations` | **The append-only ledger** | `UNIQUE (user_key, kind, op_id)`; a partial `UNIQUE (telegram_payment_charge_id) WHERE NOT NULL`; a partial `UNIQUE (user_key, sku)` for the one-time SKUs; indexes on `(user_key, created_at desc)`, `(status)`, `(parent_operation_id)`, `(user_key, op_fingerprint)` |
-| `entitlements` | The current-state read model | `PRIMARY KEY (user_key, entitlement_key)`; a partial index on `revoked_at` |
+| `entitlements` | The current-state read model | `PRIMARY KEY (user_key, entitlement_key)`; a partial index on `revoked_at`; a partial index on `suspended_at` (`suspended_at` = **temporary**, `revoked_at` = **permanent**, §13.3) |
 | `grants_log` | The audit trail | an index on `(user_key, created_at desc)` |
 | `reconcile_findings` | The reconciliation findings | `PRIMARY KEY (finding_key)`; a partial index on the open findings |
 | `telegram_transactions` | The mirror of the Telegram Star transaction history (source **A**) | `PRIMARY KEY (tx_key)`; `UNIQUE (tx_id, direction)`; an index on `(direction, tx_date)` |
@@ -1543,7 +1785,7 @@ for it; it is handled procedurally.
 | R4 | The same `opId` from **two different users** | Two independent operations — `opId` is scoped by `user_key`. No cross-user effect |
 | R5 | A refund webhook arrives **before** the purchase fulfillment | The refund finds no terminal purchase → it is **parked** (`REFUND_PENDING`, no revoke) and retried. It never applies to a non-existent grant |
 | R6 | A refund vs **spend** | *(v1: no spend)*. In v2: the spend is refused if the entitlement is revoked; the advisory lock serializes both |
-| R7 | A refund vs **entitlement use** | The revoke is visible immediately (revoke-first, §13.1). A concurrent use may complete — a documented asymmetry |
+| R7 | A refund vs **entitlement use** | The entitlement is **suspended** the moment the refund is requested (§13.3). A concurrent use may complete — a documented asymmetry |
 | R8 | Two **different** SKUs purchased simultaneously by one user | Both succeed, serialized by the advisory lock. Both entitlements are present |
 | R9 | Two **devices** purchase the same one-time SKU simultaneously | One succeeds; the other is `409 ONE_TIME_ALREADY_OWNED`. The partial unique index is the backstop even if the advisory lock is bypassed |
 | R10 | A **crash between the ledger write and the entitlement write** | Neither exists — one transaction (§12). Verified by I1 |

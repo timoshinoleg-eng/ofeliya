@@ -126,9 +126,12 @@ create table if not exists ofeliya_pay.operations (
   entitlement_key             text,
   entitlement_level           integer,
   parent_operation_id         uuid references ofeliya_pay.operations(id),
+  lease_owner                 text,             -- the refund worker holding the claim
+  lease_expires_at            timestamptz,      -- the lease deadline; it decides WHO retries, never WHAT happened
   status                      text not null check (status in (
-                                 'PENDING','ENTITLED','FAILED','REJECTED',
-                                 'REFUND_PENDING','REFUNDED','REFUND_FAILED','LATE')),
+                                 'PENDING','ENTITLED','LATE','FAILED','REJECTED',
+                                 'REFUND_REQUESTED','REFUND_PENDING','REFUND_RECONCILE',
+                                 'REFUNDED','REFUND_FAILED')),
   entitlement_snapshot        jsonb,
   raw_payload                 jsonb,
   created_at                  timestamptz not null default now(),
@@ -144,11 +147,25 @@ create unique index if not exists uq_operations_charge
 -- The DB-level one-time-SKU guard. A refunded purchase frees the slot again
 -- (deliberate: refund = can rebuy). This closes the concurrent double-intent
 -- race that an application-level pre-check cannot.
+--
+-- kind = 'PURCHASE' is REQUIRED in the predicate: a REFUND operation may carry the
+-- same sku (it names what was refunded). Without the kind filter, a refunded
+-- purchase would NOT free the slot -- the refund row would still occupy it.
 create unique index if not exists uq_operations_one_time_sku
   on ofeliya_pay.operations (user_key, sku)
-  where sku is not null
+  where kind = 'PURCHASE'
+    and sku is not null
     and status in ('PENDING','ENTITLED','LATE')
     and sku in ('cosmetic.skin.gilded_prime.v1', 'lab.branch.prestige_tier.v1');
+
+-- At most ONE non-terminal refund per purchase. This is what makes a repeated
+-- refund command a no-op instead of a second Telegram call (main plan 13.6).
+-- REFUND_FAILED is deliberately EXCLUDED: it is terminal for THAT attempt, so a
+-- re-issue is allowed -- but only after the Telegram-history check.
+create unique index if not exists uq_operations_one_open_refund
+  on ofeliya_pay.operations (parent_operation_id)
+  where kind = 'REFUND'
+    and status in ('REFUND_REQUESTED','REFUND_PENDING','REFUND_RECONCILE');
 
 create index if not exists ix_operations_user_created
   on ofeliya_pay.operations (user_key, created_at desc);
@@ -185,7 +202,8 @@ create table if not exists ofeliya_pay.entitlements (
   level               integer not null default 0,
   source_operation_id uuid references ofeliya_pay.operations(id),
   granted_at          timestamptz not null default now(),
-  revoked_at          timestamptz,
+  revoked_at          timestamptz,          -- PERMANENT. The entitlement is gone for good.
+  suspended_at        timestamptz,          -- TEMPORARY. An unresolved refund is in flight.
   metadata            jsonb not null default '{}'::jsonb,
   primary key (user_key, entitlement_key),
   constraint ck_entitlements_level check (level >= 0)
@@ -195,6 +213,9 @@ create index if not exists ix_entitlements_source
 create index if not exists ix_entitlements_revoked
   on ofeliya_pay.entitlements (revoked_at)
   where revoked_at is not null;
+create index if not exists ix_entitlements_suspended
+  on ofeliya_pay.entitlements (suspended_at)
+  where suspended_at is not null;
 
 alter table ofeliya_pay.entitlements enable row level security;
 grant select, insert, update on ofeliya_pay.entitlements to service_role;
@@ -202,6 +223,24 @@ grant select, insert, update on ofeliya_pay.entitlements to service_role;
 
 **A soft revoke (`revoked_at`), never a delete.** The ledger is the history; the entitlement is the state.
 A refunded entitlement must still be visible to the audit and to the reconcile.
+
+**`revoked_at` and `suspended_at` are different things, and conflating them was a defect of the first
+revision of this package.**
+
+| | `suspended_at` | `revoked_at` |
+|---|---|---|
+| Meaning | a refund is **unresolved**; the outcome is not yet known | the money **was** returned; the entitlement is gone |
+| Duration | **temporary** — cleared on either terminal outcome | **permanent** |
+| Set when | the refund enters `REFUND_REQUESTED` / `REFUND_PENDING` / `REFUND_RECONCILE` | the refund reaches `REFUNDED` |
+| The entitlement is usable? | **no** (paid gameplay power only, main plan §13.3) | **no**, ever |
+| The purchase validation | **refuses** an operation that depends on a suspended entitlement | refuses |
+
+The usability rule in one expression:
+
+```sql
+-- usable  <=>  not revoked and not suspended
+-- where revoked_at is null and suspended_at is null
+```
 
 ### C.3.5 `040_grants_log.sql` — the audit trail
 
