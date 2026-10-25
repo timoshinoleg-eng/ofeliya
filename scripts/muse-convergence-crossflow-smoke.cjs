@@ -1414,10 +1414,14 @@ const mark = (name, value, kind = 'real') => {
     const telegramAgain = await page.evaluate(() => ({
       source: document.getElementById('game')?.dataset.viewportSource,
       physical: window.__p11Tg.count('viewportChanged'),
+      deactivated: window.__p11Tg.count('deactivated'),
+      closingEnabled: window.__p11Tg.closingEnabled,
       scale: [window.__game.scale.width, window.__game.scale.height],
     }));
     assert.equal(telegramAgain.source, 'telegram', 'Browser -> Telegram must restore the Telegram host');
     assert.equal(telegramAgain.physical, 1, 'returning to Telegram must create exactly one subscription');
+    assert.equal(telegramAgain.deactivated, 1, 'returning to Telegram must restore the Game host lifecycle');
+    assert.equal(telegramAgain.closingEnabled, true, 'returning to Telegram must restore the running-game close confirmation');
     mark('platform transfer: Browser -> Telegram re-subscribes exactly once', telegramAgain);
 
     // Repeated switching must never accumulate host subscriptions.
@@ -1446,8 +1450,12 @@ const mark = (name, value, kind = 'real') => {
       const telegramRound = await page.evaluate(() => ({
         source: document.getElementById('game')?.dataset.viewportSource,
         telegram: window.__p11Tg.count('viewportChanged'),
+        deactivated: window.__p11Tg.count('deactivated'),
+        closingEnabled: window.__p11Tg.closingEnabled,
       }));
       assert.equal(telegramRound.telegram, 1, `round ${round} must keep exactly one Telegram subscription`);
+      assert.equal(telegramRound.deactivated, 1, `round ${round} must restore exactly one Game host lifecycle`);
+      assert.equal(telegramRound.closingEnabled, true, `round ${round} must restore the running-game close confirmation`);
       switching.push({ round, max: maxRound, telegram: telegramRound });
     }
     mark('platform transfer: three MAX/Telegram switching rounds never accumulate host subscriptions', {
@@ -1455,9 +1463,17 @@ const mark = (name, value, kind = 'real') => {
       telegramSubscriptions: switching.map(s => s.telegram.telegram),
     });
 
+    await ensureRunningGame('the restored Telegram host lifecycle');
+    const restoredHostCycle = await hostCycle();
+    assert.equal(restoredHostCycle.ready, true, 'the restored host contract needs a running, unblocked Game');
+    assert.equal(restoredHostCycle.afterDeactivate.paused, true, 'the restored Telegram host must pause Game');
+    assert.equal(restoredHostCycle.afterActivate.active, true, 'the restored Telegram host must resume its own pause');
+    mark('platform transfer: the restored Telegram host still pauses and resumes Game', restoredHostCycle);
+
     // ---------------------------------------------------------------- Phase 9
     // Cleanup: finish the run and prove the host contract is released.
     const activationHandlersBefore = await page.evaluate(() => window.__p11Tg.count('activated'));
+    assert.equal(activationHandlersBefore, 2, 'before finish, swipe locking and Game lifecycle must both be subscribed');
     await page.evaluate(() => { window.__game.scene.getScene('Game').finish(false); });
     await page.waitForFunction(() => window.__p11Tg.closingEnabled === false);
     const cleanup = await page.evaluate(async () => {
@@ -1477,6 +1493,7 @@ const mark = (name, value, kind = 'real') => {
       return {
         closingEnabled: window.__p11Tg.closingEnabled,
         activatedHandlers: window.__p11Tg.count('activated'),
+        deactivatedHandlers: window.__p11Tg.count('deactivated'),
         viewportHandlers: window.__p11Tg.count('viewportChanged'),
         ready: window.__p11BridgeReady,
         menuShutdown: menu.events.listenerCount('shutdown'),
@@ -1484,8 +1501,9 @@ const mark = (name, value, kind = 'real') => {
       };
     });
     assert.equal(cleanup.closingEnabled, false, 'ending the run must disable the closing confirmation');
-    assert.equal(cleanup.activatedHandlers, activationHandlersBefore,
+    assert.equal(cleanup.activatedHandlers, activationHandlersBefore - 1,
       'ending the run must remove only the game-specific activation handler');
+    assert.equal(cleanup.deactivatedHandlers, 0, 'ending the run must release the Game deactivation handler');
     assert.equal(cleanup.viewportHandlers, 0, 'teardown must release the Telegram viewport subscription');
     assert.equal(cleanup.ready, 1, 'the bridge must announce readiness exactly once for the whole session');
     mark('cleanup: run end disables the closing confirmation and releases the host subscriptions', cleanup);
