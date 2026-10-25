@@ -387,6 +387,20 @@ try {
     assert.equal(state.streakLast, 0, 'a flushed sample: the hit resets the streak');
   }
 
+  // A hit need not align the streak clock with whole run seconds. A pending
+  // sample inside the same run second can therefore cross a whole STREAK second.
+  // Removing the pre-hit flush loses that completed second permanently.
+  {
+    const { state } = runScenario([
+      sample(MIDNIGHT + 500, 500, 0, true),
+      sample(MIDNIGHT + 60000, 60000, 59500),
+      sample(MIDNIGHT + 60800, 60800, 60300),
+      sample(MIDNIGHT + 60900, 60900, 0, true),
+    ]);
+    assert.equal(state.dayMetrics.q_nodmg, 60, 'pre-hit flush preserves an offset streak at the quest threshold');
+    assert.equal(state.streakLast, 0, 'the hit still resets the offset streak');
+  }
+
   // --- duplicate, stale and invalid input ------------------------------------------------------
 
   {

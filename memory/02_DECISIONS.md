@@ -1,3 +1,9 @@
+# PR244 independent final gate - 2026-10-25
+
+Original de6a74afd80607e6df24801a819d7e6cfa60af4f is BLOCK: P2 mutation gate falsely classifies omitted pre-hit flush as equivalent. Real offset streak reaches q_nodmg60; the permitted mutant records59. Narrow tests-only repair on review/codex-pr244-final-gate-20261025; report docs/qa/CODEX_PR244_FINAL_GATE_20261025.md. UTC14/14 +2 equivalent +control passed; exact candidate CI40181931371 is genuinely green but cannot prove the false equivalence. Lifecycle and UTC/units historical RED/GREEN independently reproduced. Keep native memory failures and base-reproduced startup font assertion distinct from product findings. No merge/deploy. Next: Draft follow-up into #244 branch, new exact-head full CI and release decision. Physical native close inconclusive, eviction/MAX NOT_RUN.
+
+---
+
 # Final convergence decisions — 25.10.2026
 
 Preserve linear #241 -> #243 -> #242 provenance; do not merge source branches. Expand existing crossflow rather than add a third harness. Keep product delta to proven P2 unit repair; do not redesign Collection eviction. Preserve full86+13 mutation matrices and equivalent controls. Exact combined-head hosted CI is mandatory; physical WebViews remain separate NOT_RUN gate. Report final immutable SHA/CI identity in Draft PR to avoid document self-hash recursion.

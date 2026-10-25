@@ -207,12 +207,9 @@ const MUTATIONS = [
   // --- the F-5 terminal force -----------------------------------------------------------------
 
   {
-    // Equivalent: a suppressed sample lies inside one run second of the sample before
-    // it, so it can never carry a whole second of its own, and the producer's own
-    // freshness guard already rejects the samples the flush would have rejected. The
-    // difference cannot reach the counter through the producer.
+    // Damage can offset the streak clock from whole run seconds. A suppressed
+    // sample can then complete a streak second before the next hit resets it.
     name: 'the final suppressed sample is omitted',
-    equivalent: true,
     edits: [
       {
         file: 'questRuntime.ts',
