@@ -132,9 +132,16 @@ export interface QuestEventBase {
   /**
    * Epoch milliseconds of the occurrence.
    *
-   * Informational only: the UTC rotation runs on the injected clock, not on the event
-   * timestamp, so a device with a wrong clock cannot move the quest day by replaying
-   * old events.
+   * The UTC rotation runs on the injected clock, not on the event timestamp, so a
+   * device with a wrong clock cannot move the quest day by replaying old events.
+   *
+   * The timestamp is the wall clock of the sample as the engine received it, and the
+   * quest core uses it to place a streak sample inside a UTC day: the part of a streak
+   * that was alive before the midnight is not credited to the new day. The producer
+   * suppresses the samples inside one run second and flushes the suppressed one only
+   * when the run is hit or finished, which happens in the frame the sample was
+   * observed in — so the sample time and the observation time differ by less than a
+   * frame.
    */
   readonly at: number;
   /** Optional run the event belongs to. */

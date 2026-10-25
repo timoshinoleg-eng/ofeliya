@@ -113,6 +113,16 @@ export interface QuestSaveData {
   streakLast: number;
   /** Last accepted run-elapsed millisecond sample; absent in older v4/v3 records. */
   lastTickTimeMs?: number;
+  /**
+   * The wall clock of the last accepted streak sample, in epoch milliseconds.
+   *
+   * The UTC day is decided by the wall clock, and a streak sample does not say when it
+   * was taken. This timestamp is the anchor that locates the sample inside a UTC day,
+   * so the part of a streak that was alive before the midnight is not credited to the
+   * new day. It is absent in older records and in the records of a run that was
+   * restored from a checkpoint, because a restored run opens a new timeline.
+   */
+  lastTickAtMs?: number;
   /** Recently processed event ids, used as the idempotency key set. */
   seenEventIds: string[];
   /**
@@ -234,6 +244,7 @@ export function sanitizeQuestSaveData(
     // Seed last from that baseline, or a new clean streak can never reset it.
     streakLast: numberOrZero(record.streakLast ?? baseline.q_nodmg),
     lastTickTimeMs: typeof record.lastTickTimeMs === 'number' && Number.isFinite(record.lastTickTimeMs) && record.lastTickTimeMs >= 0 ? record.lastTickTimeMs : undefined,
+    lastTickAtMs: typeof record.lastTickAtMs === 'number' && Number.isFinite(record.lastTickAtMs) && record.lastTickAtMs >= 0 ? record.lastTickAtMs : undefined,
     seenEventIds: stringList(record.seenEventIds).slice(-MAX_REMEMBERED_EVENT_IDS),
     claimedLifetime: stringList(record.claimedLifetime),
   };

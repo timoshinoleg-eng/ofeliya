@@ -238,6 +238,7 @@ export class QuestEngine {
   restoreRunMetrics(values: { kills: number; timeMs: number; rna: number; mutations: number; elites: number }): void {
     this.rollDayIfNeeded(this.clock.now());
     delete this.state.lastTickTimeMs;
+    delete this.state.lastTickAtMs;
     const metrics = { q_kills: values.kills, q_time: Math.floor(values.timeMs / 1000),
       q_rna: values.rna, q_mut: values.mutations, q_elites: values.elites };
     for (const metric of RUN_SCOPED_METRICS) {
@@ -338,8 +339,12 @@ export class QuestEngine {
         this.markDirty();
         this.peakRunMetric('q_time', Math.floor(finiteOrZero(event.timeMs) / 1000));
         if (Number.isFinite(event.noDamageMs) && event.noDamageMs >= 0) {
-          this.trackNoDamageStreak(event.noDamageMs / 1000);
+          this.trackNoDamageStreak(event.noDamageMs / 1000, event.at);
         }
+        // The wall clock of the sample is the anchor of the next attribution: it says
+        // where inside a UTC day the streak was seen.
+        if (Number.isFinite(event.at)) this.state.lastTickAtMs = event.at;
+        else delete this.state.lastTickAtMs;
         break;
       }
       default:
@@ -494,6 +499,7 @@ export class QuestEngine {
 
   private resetRunMetrics(): void {
     delete this.state.lastTickTimeMs;
+    delete this.state.lastTickAtMs;
     for (const metric of RUN_SCOPED_METRICS) this.state.runMetrics[metric] = 0;
     this.markDirty();
   }
@@ -523,8 +529,11 @@ export class QuestEngine {
    *
    * The value of the day is the longest such streak of the day, so a broken streak does
    * not lower it.
+   *
+   * `sampleAtMs` is the wall clock of the sample. It is the anchor of the attribution:
+   * the streak of a day is the part of the streak that was alive inside that day.
    */
-  private trackNoDamageStreak(current: number): void {
+  private trackNoDamageStreak(current: number, sampleAtMs: number): void {
     const previous = this.state.streakLast ?? 0;
     let progress: number;
     if (current < previous) {
@@ -532,11 +541,21 @@ export class QuestEngine {
       this.state.baseline.q_nodmg = 0;
       progress = current;
     } else {
-      progress = current - (this.state.baseline.q_nodmg ?? 0);
+      // The sample can have reached across the midnight of the current day. The day
+      // then starts from the streak that was alive at the midnight itself, not from the
+      // last streak that was observed before it.
+      const dayStart = this.streakAtDayStart(
+        Math.round(previous * 1000),
+        this.state.lastTickAtMs ?? Number.NaN,
+        Math.round(current * 1000),
+        sampleAtMs
+      );
+      if (dayStart !== null) this.state.baseline.q_nodmg = dayStart / 1000;
+      progress = Math.round(current * 1000) - Math.round((this.state.baseline.q_nodmg ?? 0) * 1000);
     }
     this.state.streakLast = current;
     // Convert both operands to milliseconds before subtracting and rounding.
-    progress = Math.floor((Math.round(current * 1000) - Math.round((this.state.baseline.q_nodmg ?? 0) * 1000)) / 1000);
+    progress = Math.floor(progress / 1000);
     if (progress <= 0) {
       this.markDirty();
       return;
@@ -546,6 +565,42 @@ export class QuestEngine {
       this.state.dayMetrics.q_nodmg = progress;
       this.markDirty();
     }
+  }
+
+  /**
+   * The streak the current UTC day starts from, when the observation reached across the
+   * midnight of that day.
+   *
+   * The streak advances with the run clock, and the run clock advances with the wall
+   * clock while the game runs. The wall clock decides the UTC day, so the part of an
+   * observation interval that lies inside a UTC day is the part of the streak that
+   * belongs to it: the streak can only be credited to the new day for the part of the
+   * interval that lies in it.
+   *
+   * The interval of a normal observation is one run second long, so it can reach
+   * across at most one midnight. A longer interval — a paused game, a device whose
+   * clock was moved — cannot be located better than that, and the whole of the advance
+   * that fits into the new day is credited to it.
+   *
+   * Returns null when the interval did not reach across the midnight, in which case
+   * the baseline of the day stays in force.
+   */
+  private streakAtDayStart(
+    previousStreakMs: number,
+    previousAtMs: number,
+    currentStreakMs: number,
+    currentAtMs: number
+  ): number | null {
+    const dayStart = Date.parse(`${this.state.dayKey}T00:00:00.000Z`);
+    if (!Number.isFinite(dayStart)) return null;
+    if (!(previousAtMs < dayStart && currentAtMs >= dayStart)) return null;
+    const advance = currentStreakMs - previousStreakMs;
+    if (advance <= 0) return null;
+    // The observation is at or after the midnight, so the part of the interval that
+    // lies in the new day is `insideDay`. An observation exactly on the midnight has
+    // no elapsed time in the new day at all.
+    const insideDay = currentAtMs - dayStart;
+    return currentStreakMs - Math.min(advance, insideDay);
   }
 
   /** The current reading of a metric. */
