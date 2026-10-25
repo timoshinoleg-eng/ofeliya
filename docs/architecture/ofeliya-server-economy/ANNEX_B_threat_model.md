@@ -48,6 +48,18 @@ Test ids: `T#` unit · `I#` integration · `C#` contract · `E#` synthetic E2E �
 | 33 | **A multi-chat / inline invoice paid by many users** | Each payment grants its own payer | The operation is created per payer at `pre_checkout_query` time; the `invoice_payload` is bound to one user; Telegram's own warning — *"It is critical to make sure your bot only accepts multiple payments when the order can be processed correctly"* — is why the intent is created per payer, never per invoice | T5, R12 |
 | 34 | **The catalog is edited mid-flight** (the price changes between the intent and the charge) | The user is not over- or under-charged silently | The operation stores the amount it was priced at; at settlement the server compares against its own recomputed amount → `PRICE_MISMATCH`, no grant, an alert | E6, T10 |
 | 35 | **A disabled SKU is still shown in the client's cached catalog** | No purchase of a disabled SKU | The server rejects it (`404`); the client cache is not authoritative | T5 |
+| 36 | **External truth mismatch** — Telegram says paid, the local ledger says absent | The user's money is real; our record is not | The transaction scan finds the charge ⇒ **R1** ⇒ the `LATE` path grants it when the payload resolves, else a manual finding with the full evidence | I11, R16 |
+| 37 | **Unknown refund outcome** — a network timeout on the refund call | An unknown outcome is **never** recorded as a success or a failure | `REFUND_RECONCILE`; the entitlement stays suspended; a repeat refund is **blocked**; the Telegram history resolves it | T13, I12, R17 |
+| 38 | **Reconciliation replay** — the same external transaction is seen in several scans | The scan never repairs twice | the `tx_key` dedupe makes the re-ingest a no-op; the `finding_key` makes the finding idempotent; the repair is an upsert | T14, I13 |
+| 39 | **An old transaction is rediscovered** — the cursor overlap, or a weekly full re-scan | The overlap never re-grants and never re-refunds | the `tx_key` dedupe; the `LATE` path is guarded by `UNIQUE(telegram_payment_charge_id)`; the grant is an upsert | T14, I13 |
+| 40 | **A forged transaction id** — a client reports someone else's charge id | The server never accepts a client-supplied charge id as proof | the charge id reaches the server **only** from the bot path or from the Telegram history; the payer is derived from the history, never from the request | T5, T15 |
+| 41 | **A manual repair races the reconciliation worker** | The same defect is not repaired twice | the same `pg_advisory_xact_lock(userKey)` as the write path; both repairs are idempotent upserts keyed by `(user_key, entitlement_key)`; `grants_log` records both actors | R18 |
+| 42 | **A charge with an unresolvable payload** | The payment is detected; the subject is not | the finding is classified **"detected external payment, subject unresolved"** and queued for a human. Nothing is granted; nothing is dropped | I11 |
+| 43 | **A refund is re-issued after a confirmed failure, but the money was in fact returned** | No double refund and no lost record | every call is preceded by the **history check**; `REFUND_FAILED` is reached only on a confirmed `false` | T13, I12 |
+| 44 | **A stale refund worker takes over an expired lease** | Two calls are never made for one refund | the lease decides **who retries**, never **what happened**; the taker checks the history first and finalises **without calling Telegram** if the refund is already visible | I12, R19 |
+| 45 | **The Telegram history is truncated or reordered** | The reconstruction has no silent blind spot | the ordering-violation guard forces a full re-scan and alerts; the weekly full scan is the backstop; completeness is verified in the test environment | I13, R-T7d |
+| 46 | **A non-purchase transaction appears in the history** (a `paid_media_payment`, a gift, a Fragment withdrawal) | A non-purchase never grants | only `transaction_type = 'invoice_payment'` is treated as a purchase; every other type is recorded and ignored by the grant path | T15, I11 |
+| 47 | **The catalog is re-priced and an old payload arrives** | The old price is never silently applied | the operation's frozen `amount_stars` is the settlement comparison; the catalog **history** at the payload's version resolves the historical price; a mismatch is `PRICE_MISMATCH` | T10, I11 |
 
 ### B.2 The residual risks that do not disappear with good code
 
@@ -214,6 +226,13 @@ best-effort.
 | R13 | A **refund and a purchase** of the same SKU concurrently | The purchase completes first → the refund sees `ENTITLED` → revokes. Or the refund parks first → the purchase completes → the refund retries and revokes. Either way the end state is consistent | the advisory lock + the refund's retry loop |
 | R14 | Two purchases for the **same one-time SKU** where the first is **refunded** concurrently | The refund frees the slot (the partial index excludes `REFUNDED`), so a new purchase may succeed | the partial index's `status IN ('PENDING','PAID','ENTITLED')` predicate |
 | R15 | The **admin reconcile repair** runs concurrently with a purchase | The repair is a single audited statement under the same lock; it cannot double-grant | the advisory lock + the `grants_log` |
+| R16 | The **reconciliation scan** runs while a purchase is in flight | The scan never flags a `PENDING` operation and never blocks the write path | MVCC — the reader sees the pre-commit snapshot; the repair takes the lock only when it writes |
+| R17 | The **refund call times out** while Telegram actually succeeded | The outcome is unknown, then **resolved** | `REFUND_RECONCILE` → the history shows the refund → `REFUNDED`; the entitlement is revoked; **no second call** |
+| R18 | The **operator repairs** an entitlement while the **scan** repairs it | One grant, two audit rows, no conflict | the same advisory lock; the grant is an upsert keyed by `(user_key, entitlement_key)` |
+| R19 | A **stale worker** takes over an expired lease after a crash | **No second Telegram call** | the taker checks the **history first** and finalises without calling Telegram if the refund is already visible |
+| R20 | **Two scans** run concurrently | One mirror, one set of findings, one repair | the `tx_key` dedupe, the `finding_key` idempotency, and the checkpoint's conditional update |
+| R21 | **Two refund workers** claim the same refund | **One** Telegram call; one terminal state | the claim is a conditional `UPDATE … WHERE status='REFUND_REQUESTED'` |
+| R22 | **Two admins** request a refund for the same purchase | One `REFUND_REQUESTED`; the second gets `409 REFUND_ALREADY_IN_PROGRESS` | the `uq_operations_one_open_refund` partial unique index |
 
 ---
 
@@ -238,6 +257,9 @@ plan's threat model and the roadmap's acceptance criteria.
 | T10 | The price mismatch | `total_amount != the server amount` → `PRICE_MISMATCH`, no grant |
 | T11 | The state machine | Every legal transition is accepted; every illegal transition is refused; the terminal states are terminal |
 | T12 | The redaction | No log/notice output contains an `initData`, a charge id, or an invoice payload |
+| T13 | The refund state machine | Every legal transition is accepted; every illegal one is refused; **`UNKNOWN` never maps to a terminal state**; `REFUND_RECONCILE` blocks a re-issue; a confirmed failure **restores** the entitlement; a confirmed success **revokes** it |
+| T14 | The `tx_key` dedupe | A refund that shares its original's id produces a **different** `tx_key` (the direction is part of the key); re-ingesting the same transaction is a no-op; a re-scan produces no new findings |
+| T15 | The transaction classification | Only `transaction_type='invoice_payment'` with a `source` is a purchase; a `paid_media_payment`, a gift and a Fragment withdrawal are recorded and ignored by the grant path; a client-supplied charge id is never trusted as proof |
 
 ### B.6.2 Integration — real Postgres
 
@@ -252,7 +274,10 @@ plan's threat model and the roadmap's acceptance criteria.
 | I7 | RLS / grants | `anon`/`authenticated`/`public` cannot read `ofeliya_pay`; only `service_role` can |
 | I8 | The edge gateway | An unauthorized token → `401`; an oversized body → `413`; an unknown op → `400` |
 | I9 | The refund ordering | A crash between the revoke and the Telegram call leaves the entitlement **revoked** and the operation `REFUND_PENDING` — never a refunded-but-granted state |
-| I10 | The one-time SKU | The partial unique index rejects a second concurrent intent for a one-time SKU; a refunded purchase frees the slot |
+| I10 | The one-time SKU | The partial unique index rejects a second concurrent intent for a one-time SKU; a refunded purchase frees the slot (the `kind='PURCHASE'` filter is present, so a refund row does not hold the slot) |
+| I11 | The payment-vs-ledger scan | An `IN` transaction with no local operation is found; a resolvable payload triggers the `LATE` grant; an unresolvable one produces the *"detected external payment, subject unresolved"* finding and grants nothing; the auto-repair denylist cases are never auto-repaired |
+| I12 | The refund crash matrix | Every crash point in main plan §13.5 leaves a safe terminal state; a repeated refund command makes **zero** extra Telegram calls; the **history check precedes every call**; the external call is issued outside every transaction |
+| I13 | The checkpoint | The mirror and the checkpoint move in one transaction; a crash mid-page advances neither; the overlap re-ingests idempotently; the ordering guard forces a full re-scan; a refund sharing its original's id is **not** dropped |
 
 ### B.6.3 Contract — the client ↔ server schema
 
@@ -282,6 +307,9 @@ provider error).
 | E8 | The provider errors on the refund → the entitlement stays revoked; `REFUND_FAILED`; an alert fires |
 | E9 | The ledger is unreachable → no invoice is presented; the checkout is rejected |
 | E10 | The kill switch is flipped mid-flow → the `pre_checkout_query` is rejected; an already-charged payment is still fulfilled |
+| E11 | The fake provider returns a scripted history (a charge, a refund, a duplicate, a non-purchase) → the scan classifies each correctly and repairs only the allowlisted cases |
+| E12 | The fake provider times out on the refund → the operation goes to `REFUND_RECONCILE`; the entitlement is suspended; a re-issue is blocked; the scan resolves it to `REFUNDED` or `REFUND_FAILED` |
+| E13 | The fake provider is unreachable → the scan fails; the checkpoint does **not** advance; the auto-repair path is suspended; the money path keeps working |
 
 ### B.6.5 Real Telegram Stars — the test environment
 
@@ -296,6 +324,10 @@ Telegram Stars by connecting your bot to Telegram's dedicated test environment"*
 | R-T4 | The `successful_payment` fields match the documented contract exactly (the field names, the types) |
 | R-T5 | The `invoice_payload` round-trips (≤128 bytes, opaque, parseable by the server) |
 | R-T6 | A forwarded invoice paid by a second user → the second user gets their own grant, not the first's |
+| **R-T7a** | **The history shows the charge**: after a test-env purchase, `getStarTransactions` returns an `IN` transaction whose `id` equals `telegram_payment_charge_id`, with `source.type='user'` and `source.transaction_type='invoice_payment'`, and whose `source.user.id` is the payer |
+| **R-T7b** | **The history shows the refund**: after a test-env refund, `getStarTransactions` returns an `OUT` transaction with the **same id** and `receiver.type='user'` — the shared id is the link, and the direction is what distinguishes them |
+| **R-T7c** | **Pagination behaves**: `limit` is honoured; `offset` skips exactly; a full re-scan from `offset=0` returns the same set as the incremental scan; a page boundary is handled |
+| **R-T7d** | **History completeness and ordering**: a full re-scan returns the same count as the incremental scan, and the transactions come back in **non-decreasing `date` order**. *This is the assumption the checkpoint depends on — it is verified, not assumed* |
 
 **Precondition:** the bot must be connected to the test environment, and the production bot token must
 **never** be used for a test. **No real payment is executed** in this audit or in the pre-Go/No-Go phases.

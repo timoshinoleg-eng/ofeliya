@@ -67,40 +67,63 @@ is schema, not infrastructure**. Each phase is independently mergeable and indep
 | **Rollback** | swap the adapter back to the fake |
 | **Parallelizable?** | ✅ yes (a new file) |
 
-### E.1.6 S5 — the refunds
+### E.1.6 S4.5 — the transaction-history reconciliation foundation  *(new)*
 
 | | |
 |---|---|
-| **The changed subsystem** | the refund path, `refundStarPayment` |
-| **Dependencies** | S3, S4 |
-| **Tests** | T3, E5, E8, I9 |
-| **Acceptance criteria** | the revoke-first ordering; `REFUNDED` ⇒ revoked, always; a failed Telegram call leaves the entitlement revoked and marks `REFUND_FAILED`; a crash between the revoke and the Telegram call leaves the entitlement revoked |
-| **Rollback** | disable the refunds |
-| **Parallelizable?** | ⚠️ the same file |
+| **The changed subsystem** | `ofeliya_pay.telegram_transactions` + `telegram_scan_checkpoint`, the provider's `listStarTransactions` / `getStarBalance`, the scan worker, the checkpoint logic, the three-valued refund outcome in the provider adapter |
+| **Dependencies** | S0, S4 (the provider interface) |
+| **Tests** | T13, T14, T15, I13 |
+| **Acceptance criteria** | the mirror is written and deduplicated by `tx_key` — **the direction is part of the key**, so a refund that shares its original's id is **not** dropped; the checkpoint advances **only** in the same transaction as the page; the overlap is applied; the ordering-violation guard forces a full re-scan and alerts; the provider classifies a timeout as `UNKNOWN`, not as a failure |
+| **Rollback** | disable the scan; the mirror and the checkpoint stay |
+| **Parallelizable?** | ✅ mostly (a new file) — it **shares the provider module with S4**, so serialize that one file |
+| **Do not** | make any Telegram call from this phase beyond the read API; make a repair that moves money; put the checkpoint outside the page transaction |
 
-### E.1.7 S6 — the reconciliation
+> **Why this phase exists and why it sits here.** In the first revision the reconciliation was S6 — *after*
+> the refunds. That ordering meant the first thing built on the money system was the part that could
+> silently lose a user's paid value. Now the evidence comes first: the refund's unknown-outcome branch
+> (`REFUND_RECONCILE`) and its history-gated re-issue both **require** the transaction history, so S4.5
+> is a hard predecessor of S5, and S5 + S6 land together (main plan §21.4).
+
+### E.1.7 S5 — the refunds
 
 | | |
 |---|---|
-| **The changed subsystem** | the scan job, `reconcile_findings`, the admin endpoint |
-| **Dependencies** | S3, S5 |
-| **Tests** | I6 |
-| **Acceptance criteria** | each finding type is detected; the repairs are manual and audited; the job is safe during a purchase; a repair without a charge reference is rejected |
-| **Rollback** | disable the job |
+| **The changed subsystem** | the refund path, the refund worker, `refundStarPayment` |
+| **Dependencies** | S3, S4, **S4.5** |
+| **Tests** | T3, T13, E5, E8, E12, I12 |
+| **Acceptance criteria** | the five-state machine `REFUND_REQUESTED → REFUND_PENDING → REFUNDED \| REFUND_FAILED \| REFUND_RECONCILE`; the Telegram call is issued **outside** every transaction; an **unknown** outcome becomes `REFUND_RECONCILE` and **never** a failure; a confirmed failure **restores** the entitlement; a repeated refund command makes **no** Telegram call; the history check precedes every call; `REFUNDED` ⇒ revoked, always |
+| **Rollback** | disable the refunds; the operations and the state machine stay |
+| **Parallelizable?** | ⚠️ the same file as S2/S3 |
+| **Do not** | call Telegram from the operator request; keep the external call inside a transaction; treat a timeout as a failure |
+
+
+### E.1.8 S6 — the reconciliation
+
+| | |
+|---|---|
+| **The changed subsystem** | the R1–R10 detectors, the auto-repair allowlist, the manual unresolved queue, `reconcile_findings`, the admin endpoint |
+| **Dependencies** | S3, S5, **S4.5** |
+| **Tests** | I6, I11 |
+| **Acceptance criteria** | each finding type is detected; the **allowlisted** repairs are automatic and audited; everything else is queued with its evidence; the job is safe during a purchase **and** during a refund; a repair without a confirmed Telegram charge is rejected; the auto-repair **denylist** is enforced in code |
+| **Rollback** | disable the job; the mirror stays |
 | **Parallelizable?** | ✅ yes |
+| **Do not** | auto-repair a grant without a confirmed Telegram transaction; auto-revoke an entitlement whose grant source is unknown; re-price anything |
 
-### E.1.8 S7 — the Telegram Stars test environment
+
+### E.1.9 S7 — the Telegram Stars test environment
 
 | | |
 |---|---|
 | **The changed subsystem** | the real provider, the bot wiring, the test-env bot |
-| **Dependencies** | S4 |
-| **Tests** | R-T1…R-T6 |
-| **Acceptance criteria** | a real test-env Stars payment completes end-to-end and grants exactly one entitlement; a real test-env refund revokes it; the `successful_payment` fields match the documented contract exactly |
+| **Dependencies** | S4, **S4.5**, S5 |
+| **Tests** | R-T1…R-T7d |
+| **Acceptance criteria** | a real test-env Stars payment completes end-to-end and grants exactly one entitlement; a real test-env refund revokes it; the `successful_payment` fields match the documented contract exactly; **the transaction history returns the charge (R-T7a) and the refund (R-T7b)**; the pagination behaves (R-T7c); **the history's completeness and ordering are verified (R-T7d)** — this is the assumption the checkpoint depends on, so it is measured, not assumed |
 | **Rollback** | keep the fake as the default; a flag selects the real one |
 | **Parallelizable?** | ✅ yes — but **must not run concurrently with S5** on the same bot token |
 
-### E.1.9 S8 — the Storefront UI
+
+### E.1.10 S8 — the Storefront UI
 
 | | |
 |---|---|
@@ -111,7 +134,8 @@ is schema, not infrastructure**. Each phase is independently mergeable and indep
 | **Rollback** | hide the storefront tab |
 | **Parallelizable?** | ✅ yes — **a different agent can own `src/**`** |
 
-### E.1.10 S9 — the paid Lab progression
+
+### E.1.11 S9 — the paid Lab progression
 
 | | |
 |---|---|
@@ -122,12 +146,15 @@ is schema, not infrastructure**. Each phase is independently mergeable and indep
 | **Rollback** | mark the Lab SKUs `enabled=false` |
 | **Parallelizable?** | ⚠️ depends on the §11.2 decision (combat power ⇒ v1.1) |
 
-### E.1.11 The parallelism map
+
+### E.1.12 The parallelism map
 
 ```
-S0 ──▶ S1 ──┬──▶ S2 ──┬──▶ S3 ──┬──▶ S4 ──┬──▶ S5 ──▶ S6
-             │         │         │         │         │
-             │         │         │         │         └──▶ S7 (needs S4)
+S0 ──▶ S1 ──┬──▶ S2 ──┬──▶ S3 ──┬──▶ S4 ──┬──▶ S4.5 ──▶ S5 ──▶ S6
+             │         │         │         │            │         │
+             │         │         │         │            │         └──▶ S7 (needs S4 + S4.5 + S5)
+             │         │         │         │            │
+             │         │         │         │            └──▶ S7 (the history verification can run early)
              │         │         │         │
              └─────────┴─────────┴─────────┴──▶ S8 (client-only; needs the S1+S3 read models)
                                                 └──▶ S9 (needs S2–S4 + the §11.2 decision)
@@ -135,8 +162,9 @@ S0 ──▶ S1 ──┬──▶ S2 ──┬──▶ S3 ──┬──▶ S
 
 **The file-ownership conflicts.** S2, S3 and S5 all touch `server/index.mjs`, the project's single hottest
 server file. **Do not run two agents on `server/index.mjs` simultaneously.** Either serialize them, or
-split `server/index.mjs` into a router that imports `server/routes/storefront.mjs` — a mechanical refactor
-worth doing in S0/S1 to unlock parallelism.
+split `server/index.mjs` into a router that imports `server/routes/storefront.mjs` — a mechanical
+refactor worth doing in S0/S1 to unlock parallelism. S4.5 shares **one** file with S4 (the provider
+module) — serialize that one file and nothing else.
 
 ---
 
@@ -162,6 +190,7 @@ re-checked independently.
 | The Postgres substrate | `deploy/ofeliya-state.sql` @ `413807daa5` | `ofeliya_private.state`, RLS, `service_role`, `ofeliya_state_call`, a revision + a commit-id idempotency |
 | The hosting facts | `deploy/RENDER.md:80–135` | Supabase Free may pause inactive projects; Render Free sleeps after 15 idle minutes; the production cutover was verified 2026-10-11 |
 | The Stars prior art | `coder_survival`: `backend/migrations/001_init.sql`, `060_*.sql`, `backend/src/routes/{buy,internalPayments}.js`, `bot/src/payments.js`, `bot/src/createBot.js:209–231` | a real `star_payments` schema + the confirm/refund endpoints + a fail-closed kill switch |
+| **The prior art's refund — corrected** | `grep -rn 'refundStarPayment' coder_survival` | **ZERO** matches outside a comment. The `POST /telegram/refund` route contains **no Telegram call** and does **not** reverse the item effects. The first revision of this package mis-described it as *"the Bot API `refundStarPayment` FIRST"* — that was **wrong** (Annex A §A.4.5, main plan §3.3, §21.5) |
 | The Telegram Stars contract | `core.telegram.org/bots/payments-stars`, `/bots/api/methods/*`, `/bots/api/types/*` | the field names quoted verbatim in Annex D §D.1 |
 | **The transaction-history surface (the correction)** | `core.telegram.org/bots/api` §`getStarTransactions` · §`StarTransaction` · §`StarTransactions` · §`TransactionPartnerUser` · §`getMyStarBalance`; `core.telegram.org/bots/api-changelog` | `getStarTransactions` **exists** (Bot API 7.5, June 18 2024); `StarTransaction.id` *"Coincides with the identifier of the original transaction for refund transactions. Coincides with `SuccessfulPayment.telegram_payment_charge_id` for successful incoming payments from users"*; `TransactionPartnerUser.invoice_payload` *"Can be available only for 'invoice_payment' transactions"* (Bot API 8.0); `nanostar_amount` (8.1); `getMyStarBalance` (9.1). The current Bot API is **10.3, August 24, 2026** |
 | **The MTProto Stars surface** | `core.telegram.org/method/payments.getStarsTransactions` · `…getStarsTransactionsByID` · `…refundStarsCharge` · `core.telegram.org/api/stars` | `payments.getStarsTransactions` — *"Both users and bots can use this method"*, `offset` = *"obtained from the returned next_offset"* · `payments.getStarsTransactionsByID` — ***"Only users can use this method"*** ⇒ **not available to a bot** · `payments.refundStarsCharge` — *"Only bots can use this method"*, typed errors `CHARGE_ALREADY_REFUNDED` / `CHARGE_ID_EMPTY` / `USER_ID_INVALID` |
@@ -323,8 +352,8 @@ sed -n '60,82p' coder_survival/backend/migrations/001_init.sql
 | # | The question | Why it matters | Who decides | Blocking |
 |---|---|---|---|---|
 | Q1 | Do we sell **combat power** at all, or only cosmetics + non-combat Lab branches? | It determines whether the paid power needs the ranking partitioning and the refund semantics (main plan §11.2) | the product owner | S9 |
-| Q2 | Which host runs the payment path? Render Free sleeps after 15 idle minutes → the 10s `pre_checkout_query` deadline is at risk. A missed deadline = a cancelled checkout; a cold start could exceed 10s | ops | **S7** |
-| Q3 | Do we move Supabase off the **Free** tier before real money? *"Supabase Free may pause inactive projects"* → the ledger becomes unreachable → the purchases fail closed (correct, but the revenue dies) | ops | **the Go/No-Go** |
+| Q2 | Which host runs the payment path? | Render's own docs: a Free web service spins down after 15 idle minutes and *"This process takes about one minute"* — a ~60 s cold start against a **10 s** deadline. A missed deadline = a cancelled checkout | ops | **S7** |
+| Q3 | Do we move Supabase off the **Free** tier before real money? | *"Supabase Free may pause inactive projects"* → the ledger becomes unreachable → the purchases fail closed (correct, but the revenue dies) | ops | **the Go/No-Go** |
 | Q4 | Is `createInvoiceLink` or `sendInvoice` the right primitive? `sendInvoice` requires the bot to message the user; `createInvoiceLink` works inside a Mini App | It determines the client UX and the forwarding/multiple-payment risk | product + UX | S7 |
 | Q5 | **RESOLVED by the factual correction:** the Bot API's `getStarTransactions` **is** the Telegram-side payment listing (Annex D §D.1.7). What remains open is the **operator console** over it and the retention policy for the local mirror | §14 — the automatic detection of "paid but no local operation" is now possible | ops | the Go/No-Go (the console only) |
 | Q6 | Do we add a spendable currency in v2? | The entire balance / refund-vs-spend class (main plan §1.3) | product | v2 |
@@ -337,63 +366,53 @@ sed -n '60,82p' coder_survival/backend/migrations/001_init.sql
 
 ## E.6 The Go/No-Go criteria for real money
 
-All must be **true** before a single real Stars charge is accepted.
+> **The authoritative checklist is the main plan §23.** It is grouped as **API · Ledger · Refund ·
+> Reconciliation · Correctness · Security · Operations · Product · Stop conditions**, and it is the only
+> copy — a second, divergent checklist is a liability, not a convenience. This section records only the
+> **deltas that the factual correction introduced** relative to the first revision.
 
-### E.6.1 Correctness
+### E.6.1 What is new
 
-- [ ] The §6 threat model is executable: every row has a passing test.
-- [ ] The §19 race matrix has a passing test per row (R1–R12).
-- [ ] The idempotency contract (§7) is proven: the same key + different parameters → `409` + **no write**.
-- [ ] The refund invariant is proven: `REFUNDED` ⇒ the entitlement is revoked, in every path including a
-      crash between the revoke and the Telegram call.
-- [ ] The atomicity test (I1) proves no half-grant.
-- [ ] The reconcile job detects every finding type in §14.1, and its repair is audited + idempotent.
+| The group | The new item | Why it is new |
+|---|---|---|
+| **API** | `getStarTransactions` reconciliation is verified (R-T7a) — the charge appears in the history with the expected id, direction and transaction type | the transaction history did not exist as a verified surface in the first revision |
+| **API** | `refundStarPayment` is verified (R-T7b) — the refund appears as an **outgoing** transaction with the **same id** | the shared-id semantics are what make the history usable for refunds |
+| **API** | pagination is tested (R-T7c) | the checkpoint depends on the pagination semantics |
+| **API** | **history completeness and ordering are measured** (R-T7d) | the checkpoint depends on an append-only ordering assumption that the Bot API **states but does not guarantee**. It is now **verified in the test environment**, not assumed |
+| **Ledger** | the refund operation's idempotency is proven — the same refund command twice ⇒ **one** operation and **zero** extra Telegram calls | the refund is a first-class operation in the ledger (§13.6) |
+| **Refund** | the **unknown** outcome is recorded as `REFUND_RECONCILE` — never as a failure, never as a success | the first revision collapsed the two |
+| **Refund** | the entitlement policy is implemented per class — cosmetic ⇒ usable, gameplay power ⇒ suspended, **never** a permanent revoke before confirmation | the first revision revoked unconditionally (§13.3) |
+| **Refund** | the Telegram call is issued **outside** every database transaction — verified by inspection and by a lock-contention test | the first revision's pseudocode left the outcome write unguarded |
+| **Reconciliation** | the **automatic** payment-vs-ledger scan runs; an `IN` transaction with no local operation is found | this is the case the first revision called *"manual only"* |
+| **Reconciliation** | the entitlement mismatch detectors run, and both auto-repairs are automatic and audited | R2 and R4 are now deterministic |
+| **Reconciliation** | the **manual unresolved queue** exists — and the unresolvable-payload case is **not** auto-resolved | the honest remainder (§14.4.2) |
+| **Reconciliation** | the auto-repair **allowlist** and **denylist** are enforced in code | "never auto-repair" was too blunt; the precise rule is now explicit |
+| **Reconciliation** | the checkpoint is proven — the mirror and the checkpoint move together; the overlap is applied; the `tx_key` dedupe keeps a refund that shares its original's id | the checkpoint is new (§14.6) |
+| **Operations** | the **`/paysupport`** command exists and works | Telegram's own requirement: *"Your bots and mini apps must be able to respond to the command /paysupport and process user requests regarding payment issues"* |
+| **Operations** | the **payment host** is stated as an invariant — an infrastructure that can reliably meet the 10 s deadline, with the margin **measured** | the first revision said "a non-sleeping host"; the invariant is sharper and the Render facts are now cited (§12.1.1) |
+| **Operations** | the **alerts** are enumerated: an ordering violation, a balance drift, a high-severity finding, a stale `REFUND_RECONCILE`, a scan that missed its window | the first revision had no alert list |
 
-### E.6.2 Security
+### E.6.2 What is unchanged
 
-- [ ] `ofeliya_pay` is unreadable by `anon` / `authenticated` / `public`; only `service_role` can.
-- [ ] The service-role key is **not** present on the game server (it lives only in the edge function).
-- [ ] Every RPC sets `search_path = ''` and is `security invoker`.
-- [ ] The admin reconcile endpoint requires a dedicated admin token, not a game session.
-- [ ] The payment token differs from the state token, and the admin reconcile op is not in the payment
-      function's whitelist.
-- [ ] No log line contains a raw `initData`, `telegram_payment_charge_id` or `invoice_payload` in a
-      user-visible or analytics context (the `redactedDisabledPaymentNotice` discipline).
-- [ ] An independent adversarial review (Kimi) has signed off on the whole money path.
+The correctness, security and product groups carry over from the first revision **unchanged**, because the
+correction did not weaken any of them: the threat model is still executable row by row, the idempotency
+contract still fails closed, the atomicity test still proves no half-grant, `ofeliya_pay` is still
+`service_role`-only, the service-role key is still not on the game server, the kill switch still fails
+closed **and** still honours an already-charged payment, and the client still renders only the server
+state.
 
-### E.6.3 Operational
+### E.6.3 The one stop condition that is new
 
-- [ ] The ledger is on a **non-pausing** Postgres tier, with backups and a restore drill.
-- [ ] The payment host **does not sleep** and can answer `pre_checkout_query` inside 10s with a measured margin.
-- [ ] A Telegram **test-environment** purchase has completed end-to-end (§18.5) — including a refund.
-- [ ] The `/terms` and `/support` bot commands exist (Telegram's own live checklist).
-- [ ] A dispute/chargeback runbook exists (main plan §13.8), with an owner and an escalation path.
-- [ ] A way to obtain a Telegram-side transaction listing for the disputes exists (Q5).
-- [ ] A kill switch exists and is tested: flipping it makes `pre_checkout_query` fail closed — and any
-      already-charged payment is still fulfilled (Annex B §B.4).
-- [ ] The intent TTL exceeds the worst-case restart + retry window of the payment host.
-
-### E.6.4 Product
-
-- [ ] The refund policy (Q10) is written and published.
-- [ ] The storefront renders the pending/refund/error states honestly (§10.3).
-- [ ] The client cannot author value (§17, contract C1).
-- [ ] The client has been verified to render **only** the server state — including the offline and the
-      stale-cache cases.
-
-### E.6.5 The explicit stop conditions
-
-- [ ] If the ledger is unreachable, **no invoice is presented** and **no grant happens**. Verified by
-      deliberately breaking the DB during a test-env purchase.
-
----
+- [ ] If the history scan has **not** completed successfully within its window, the **refund** path is still
+      allowed (a refund is not a new grant — refusing it would leave the user worse off), but the
+      **auto-repair** path is **suspended**: a repair must never be based on a stale mirror.
 
 ## E.7 The audit's own safety statement
 
 | Assertion | Status |
 |---|---|
-| No runtime code changed | ✅ only `docs/**` files were created |
-| No payment executed | ✅ no Bot API payment method was called; only the documentation pages were fetched |
+| No runtime code changed | ✅ only `docs/**` files were created or edited |
+| No payment executed | ✅ **no Bot API payment, refund, or transaction-read method was called**; only the public documentation pages were fetched |
 | No production changed | ✅ no deploy, no environment change, no secret read |
 | No deploy | ✅ |
 | No `main` merge | ✅ the branch `research/ofeliya-server-economy-architecture-20261025` was created from `main` and is not merged |
@@ -401,3 +420,11 @@ All must be **true** before a single real Stars charge is accepted.
 | No client product code changed | ✅ |
 | No fix PR created | ✅ the only PR is this documentation PR, in Draft |
 | No real Stars test performed | ✅ the Telegram test environment was **not** contacted |
+| No Telegram **write** call | ✅ `refundStarPayment`, `sendInvoice` and `answerPreCheckoutQuery` were never invoked — only the documentation pages describing them were read |
+| No secret read or written | ✅ no bot token, no service-role key, no session |
+| The only network access | ✅ `core.telegram.org` (the public documentation) and `render.com/docs` (the public documentation), plus read-only `git clone` of the two public repositories |
+
+> **Revision 2 note.** The factual correction in revision 2 was made **entirely from the public
+> documentation**. No Telegram account, bot, token or API call was involved in producing it — which is
+> exactly why it is trustworthy: every claim in §9.2, §9.2.1, §9.5 and Annex D §D.1.7 is quoted or
+> paraphrased from `core.telegram.org` and is recorded in the evidence log (§E.2).

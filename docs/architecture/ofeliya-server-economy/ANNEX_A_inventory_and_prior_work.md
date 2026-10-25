@@ -257,27 +257,52 @@ COMMIT
 end of the transaction. It is exactly what OFELIYA's in-memory `withProfileLock` cannot provide across
 replicas.
 
-### A.4.5 The refund (`POST /telegram/refund`)
+### A.4.5 The refund (`POST /telegram/refund`) — **corrected**
+
+> ⚠️ **The first revision of this package mis-described this file.** It claimed the route performs *"the Bot
+> API `refundStarPayment` FIRST → `status='refunded'` on both tables → `audit_logs` → `COMMIT`"* and
+> criticised it for *"holding a row lock across a network call"*. **Both claims are wrong.** Verified in
+> `coder_survival`'s `main`:
+>
+> - the route contains **no Telegram call at all**;
+> - the comment above it — *"Bot-side wrapper: the bot calls refundStarPayments() on the Bot API FIRST, and
+>   only after Telegram accepts the refund does it record it here"* — describes an **intended** bot-side call
+>   that **was never implemented** (a repository-wide grep for `refundStarPayment` returns **zero** matches
+>   outside that comment; the bot has no refund handler at all);
+> - the route's own doc comment states: *"Item effects are deliberately NOT reversed (consumables like
+>   energy cannot be un-consumed; cosmetics are kept per standard Telegram refund practice)"*.
+
+**The actual code:**
 
 ```
 BEGIN
-→ SELECT sp.id, sp.user_id, sp.purchase_id, sp.item_type, sp.stars_amount, sp.status
-    FROM star_payments ... FOR UPDATE OF sp
-→ the Bot API refundStarPayments() call
-→ UPDATE star_payments SET status='refunded'
-→ UPDATE purchases SET status='refunded' WHERE id=$1 AND status='completed'
+→ SELECT sp.id, sp.user_id, sp.purchase_id, sp.item_type, sp.stars_amount, sp.status,
+         u.telegram_id
+   FROM star_payments sp JOIN users u ON u.id = sp.user_id
+   WHERE sp.telegram_payment_charge_id = $1
+   FOR UPDATE OF sp
+→ the user check (the telegram_id must match)
+→ if sp.status = 'refunded':  COMMIT; return 200 { alreadyRefunded: true }
+→ UPDATE star_payments SET status = 'refunded'
+→ UPDATE purchases SET status = 'refunded' WHERE id=$1 AND status='completed'
 → INSERT audit_logs
 COMMIT
 ```
 
-**Two problems with this shape, both called out in the main plan:**
-1. The external Telegram call sits **inside** the DB transaction → a slow or hanging Telegram call holds
-   the row lock.
-2. The revocation happens **after** a successful refund → a crash in between leaves a refunded user with
-   a live entitlement.
+**What this actually means for OFELIYA.** The sibling repo is **not** a "wrong ordering" example — it is a
+**missing refund** example. There is **no** working Telegram refund anywhere in this organisation, and a
+"refund" there means **the money side only; the value is kept**. So:
 
-The main plan's §13.1 replaces the ordering with **revoke-first, then the external call, outside the
-transaction**.
+1. there is **no prior art to port** for the refund path — it must be **derived from the Telegram contract**
+   (main plan §13), not copied;
+2. the requirement is **higher**, not lower: the three forbidden end states (a refunded entitlement that
+   stays active; a revoked entitlement without a refund; an unknown outcome recorded as a final state) are
+   exactly what this file would produce if it were ported as-is;
+3. the `alreadyRefunded` short-circuit is worth keeping as an *idea* — a repeated refund must not call
+   Telegram — but it must be backed by the **Telegram transaction history**, not only by the local row,
+   because the local row can be stale.
+
+The full REUSE / PORT_WITH_CHANGE / DO_NOT_REUSE split is in the main plan **§21.5**.
 
 ### A.4.6 The fail-closed gate (`bot/src/payments.js`)
 

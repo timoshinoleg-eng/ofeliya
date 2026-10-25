@@ -103,6 +103,40 @@ alter table ofeliya_pay.catalog_sku enable row level security;
 grant select, insert, update on ofeliya_pay.catalog_sku to service_role;
 ```
 
+-- The PRICE HISTORY. `catalog_sku` above is a projection of the latest version; this table
+-- is the append-only record of every price the catalog has ever had.
+--
+-- It is a CORRECTNESS requirement, not a nicety:
+--   * the invoice payload carries a catalog version (main plan 9.6.2), and the `LATE`
+--     reconstruction must resolve that version to a price;
+--   * the R9 drift check compares an operation's frozen amount with the catalog price
+--     AT THE OPERATION'S CATALOG VERSION.
+-- Without the history, neither check can be true at the same time.
+create table if not exists ofeliya_pay.catalog_sku_history (
+  sku                text not null,
+  catalog_version    integer not null,
+  price_stars        integer not null check (price_stars > 0),
+  currency           text not null default 'XTR' check (currency = 'XTR'),
+  entitlement_kind   text not null,
+  entitlement_key    text not null,
+  entitlement_level  integer,
+  max_level          integer,
+  one_time_per_user  boolean not null default false,
+  superseded_by      text,
+  created_at         timestamptz not null default now(),
+  primary key (sku, catalog_version)
+);
+create index if not exists ix_catalog_history_created
+  on ofeliya_pay.catalog_sku_history (created_at desc);
+
+alter table ofeliya_pay.catalog_sku_history enable row level security;
+grant select, insert on ofeliya_pay.catalog_sku_history to service_role;
+```
+
+> **The retention question is deliberately open** (main plan §22 Q13). At OFELIYA's scale, "keep it
+> forever" is cheap — a handful of rows per SKU version — and it removes an entire class of
+> "we cannot explain this old operation" questions. It is a decision, not an accident.
+
 **The critical column is `entitlement_key`**, not `sku`. The entitlement identity is
 `(entitlement_key, level)`; the SKU is only *how it was bought*. This decouples the grant from the
 purchase, which is what makes refunds, re-pricing and SKU migration safe.
@@ -733,13 +767,60 @@ and the webhook is retried.
 
 **Auth** — an admin token, separate from `OFELIYA_PAY_TOKEN` and from `OFELIYA_STATE_TOKEN`.
 
-**Request** — `{ "op": "scan" }` or
+**Request** — `{ "op": "scan", "mode": "INCREMENTAL" | "FULL" }` or
 `{ "op": "repair", "findingKey": "...", "reason": "...", "chargeReference": "..." }`.
+
+| The `op` | The effect |
+|---|---|
+| `scan` with `mode: 'INCREMENTAL'` (the default) | pages from `max(0, last_offset - OVERLAP)`; advances the checkpoint in the same transaction as each page |
+| `scan` with `mode: 'FULL'` | re-scans from `offset = 0` — the deep reconciliation, and the recovery path when the ordering guard fires |
+| `repair` | applies a **manual** repair for one finding. It is refused for anything on the auto-repair allowlist (those are automatic) and for any finding whose class is `PARTIALLY_DETECTABLE` without a `chargeReference` |
 
 **Response `200`** — `{ "findings": [ ... ] }` or `{ "applied": true }`.
 
 **Failure modes** — `401`/`403`; `409 { "error": "manual-review-required" }` when a repair would grant
-value without a charge reference; `422` an unknown `findingKey`.
+value without a charge reference (the transaction id from the mirror, or a dispute reference); `422` an
+unknown `findingKey`.
+
+### C.5.7 `POST /api/admin/refund`
+
+**Auth** — an admin token, separate from `OFELIYA_PAY_TOKEN` and from `OFELIYA_STATE_TOKEN`.
+
+**This endpoint creates a durable refund *intent*. It never calls Telegram.** The Telegram call is made by
+the refund worker, after the atomic claim, and only after the history check (main plan §13.4, §13.6).
+
+**Request**
+
+```json
+{
+  "opId": "rf_2f9c1d4b8e7a6543210",
+  "purchaseOpId": "b3f1c2d4e5a6789012345678",
+  "reason": "duplicate charge reported by the user"
+}
+```
+
+**Server validation, in order** — the admin token → the `opId` shape → the purchase operation exists and
+is `ENTITLED`/`LATE` → no non-terminal refund already exists for it → the refund fingerprint is computed
+and bound → the refund operation is created.
+
+**Response `202`** — `{ "opId": "rf_...", "status": "REFUND_REQUESTED", "purchaseOpId": "b3f1..." }`.
+
+**Response `200`** — the same shape plus `"replayed": true`, when the refund operation already exists with
+the same fingerprint.
+
+**Failure modes**
+
+| Code | Meaning |
+|---|---|
+| `400` | a malformed `opId` |
+| `401` / `403` | a missing or invalid admin token |
+| `404` | the purchase operation does not exist |
+| `409 IDEMPOTENCY_KEY_REUSE` | the same `opId` with different parameters — **nothing is written** |
+| `409 REFUND_ALREADY_IN_PROGRESS` | a non-terminal refund already exists for this purchase — **no Telegram call is made** |
+| `409 REFUND_ALREADY_COMPLETED` | the purchase was already refunded |
+| `409 REFUND_NOT_REFUNDABLE` | the purchase is not in a refundable state |
+| `422` | the entitlement cannot be refunded (e.g. it was already revoked) |
+| `503` | the ledger is unreachable — **no refund operation is created** |
 
 ---
 
@@ -753,8 +834,15 @@ value without a charge reference; `422` an unknown `findingKey`.
 | `POST /api/storefront/fulfill` | the bot | POST | ✅ by the charge id | ✅ grants |
 | `POST /api/storefront/restore` | initData | POST | ✅ read-only | no |
 | `POST /api/admin/reconcile` | an admin token | POST | ✅ | only on an explicit repair |
+| `POST /api/admin/refund` | an admin token | POST | ✅ by the refund `opId` | creates the refund **intent** — never calls Telegram |
 
-**Six endpoints.** Anything else is an implementation detail.
+**Seven endpoints.** Anything else is an implementation detail.
+
+> **`POST /api/admin/refund` is a separate endpoint on purpose.** The refund needs a **durable outbox**: the
+> operator's command must return quickly (`202`) and survive the browser session closing, and the Telegram
+> call must happen later, in a worker, with a bounded timeout and a history check. Folding the refund into
+> the reconcile endpoint would couple two unrelated authorities and would make the *"the operator's HTTP
+> retry never causes a Telegram call"* invariant (§13.6) much harder to prove.
 
 ---
 
