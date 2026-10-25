@@ -299,25 +299,19 @@ const mark = (name, value, kind = 'real') => {
         });
         if (!info) break;
         cardInfo = cardInfo ?? info;
-        // Tag the modal instance and reset the motion probe: a replaced modal may
-        // have exactly the same hit box as the previous one.
+        // Tag the modal instance so a replaced modal is detected.
         await page.evaluate(() => {
           const ui = window.__game.scene.getScene('UI');
           window.__museModal = ui?.modal ?? null;
-          window.__museCardBox = null;
         });
-        // Wait for a fully visible card whose hit box stopped moving.
+        // Wait for the card to be fully visible: Phaser does not hit-test an
+        // invisible object. The card keeps a small idle animation afterwards, so
+        // its hit box never comes to rest — a moving card is handled by
+        // recomputing the tap point on every round instead.
         await page.waitForFunction(() => {
           const ui = window.__game.scene.getScene('UI');
           const card = ui?.modal?.list?.filter(o => o.type === 'Container')[0];
-          if (!card || card.alpha < 1) return false;
-          const b = card.getBounds();
-          const prev = window.__museCardBox;
-          window.__museCardBox = { x: b.x, y: b.y, w: b.width, h: b.height };
-          if (!prev) return false;
-          // Sub-pixel idle motion must not keep the card from settling.
-          return Math.abs(prev.x - b.x) < 0.5 && Math.abs(prev.y - b.y) < 0.5 &&
-            Math.abs(prev.w - b.width) < 0.5 && Math.abs(prev.h - b.height) < 0.5;
+          return Boolean(card) && card.alpha >= 0.99;
         }, null, { timeout: 20000 });
         const cardPoint = await page.evaluate(() => {
           const ui = window.__game.scene.getScene('UI');
