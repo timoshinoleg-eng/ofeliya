@@ -245,11 +245,15 @@ leave an ownerless pause behind, the host must never take over or release a paus
   failing run's frame buffer shows the whole hand-off, and the product is correct in it:
   `queuedLevels 1 → awaitingChoice true → modal open → the card becomes visible → the tap lands →
   awaitingChoice false (the upgrade was really chosen) → the modal closes → the Game scene
-  resumes → the run keeps playing`. The per-frame record also shows the *harness* problem: the
+  resumes → the run keeps playing`. The same frame buffer exposes the *harness* weakness: the
   helper's card wait was a bare `page.waitForFunction` whose predicate re-read
   `ui.modal.list.filter(o => o.type === 'Container')[0]`, so a modal that was destroyed or replaced
-  between tagging it and waiting for its card could never satisfy the predicate, and the helper
-  waited out the full budget without saying why.
+  between tagging it and waiting for its card could never satisfy the predicate. **What cannot be
+  claimed** is that this was the precise cause of every observed failure: the failing run's
+  evidence file was overwritten by the next run before the stack could be read, so the last
+  throttled failure is characterised by its signature (a bare 20 s timeout) and by the structural
+  weakness the recorder exposes — not by a proven single mechanism. The hardening below removes
+  that whole class of blind spot: every wait now reports the game state it was waiting for.
 * **Fix** (`scripts/muse-convergence-crossflow-smoke.cjs`): the three bare waits are replaced by
   self-describing pollers that report the last observed game state on failure.
   * the upgrade card is located by *"the container that owns an interactive surface"* instead of
@@ -400,3 +404,20 @@ The cross-flow honours `OFELIYA_BASE_URL` (default `http://127.0.0.1:5173/`), `C
 **diagnostic aid**: it reproduces the timing of a loaded CI runner on a local machine, so the
 host-lifecycle and modal hand-off contracts can be exercised under the conditions that failed CI.
 It changes no timeout, no assertion and no product code.
+
+---
+
+## 11. CI evidence — every red run and what closed it
+
+| Run | Head | Conclusion | Failing step | Closed by |
+|---|---|---|---|---|
+| `40144635676` | `fd6faa1` | ❌ failure | `browser-smoke` → *"Combined Muse convergence cross-flow"* → `a Telegram activation must resume the host-owned pause` | the P1 product fix (§5.1) |
+| `40148398647` | `a3f0b05` | ❌ failure | the same step → the level-up modal helper, on a **queued** level-up stacking behind an open modal | `e738d30` — the helper now taps until no modal is left and treats *closed or replaced* as closed |
+| `40149460335` | `e738d30` | ❌ failure | the same step → the card's hit box never "came to rest", because the card keeps a permanent idle animation | `a17f3cb` — the helper waits for the card to be fully visible and recomputes the tap point on every round |
+| `40149956271` | `a17f3cb` | ✅ success | — | — |
+| `40149956112` / `40149956127` | `a17f3cb` | ✅ success | Release Visual Matrix / Render Density QA | — |
+
+The terminal conclusion of the **exact-head** run is recorded in the PR description (#241), which is
+updated after every push. `Release Visual Matrix` and `Render Density QA` are green on every head
+that reached them; only the cross-flow step was ever red, and each red instance is listed above
+with the commit that closed it.
