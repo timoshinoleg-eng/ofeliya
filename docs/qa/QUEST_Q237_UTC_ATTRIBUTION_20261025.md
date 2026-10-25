@@ -321,6 +321,24 @@ never sends an equal or older sample — and it is already covered by `npm run t
 
 ---
 
+## CI
+
+Draft PR #243, base `qa/minimax-muse-convergence-20261025`, head `fix/q237-utc-attribution-20261025`.
+
+| run | head | conclusion | jobs |
+|---|---|---|---|
+| `40170251750` | `c59d51782391f06672e0c653e4a2d2872522ce30` | **success** | `build` 182 s, `browser-smoke` 1100 s, `production-contract` 63 s |
+
+The steps that matter on that exact head: *Quest core contract and mutation regressions* (which now runs
+the attribution contract and the attribution gate as well), *Quest runtime and resume idempotency
+contracts*, *Muse safe client contracts*, *Muse convergence adversarial contracts*, *Muse quest-to-Phaser
+scenes and touch lifecycle*, *Combined Muse convergence cross-flow*, *Typecheck and build* and
+*Production bundle shape* — all `success`.
+
+The hosted browser suite is green on this head, including the two suites that fail in this sandbox.
+
+---
+
 ## Regression
 
 Every command below was run on this branch. The exit code is the exit code of the command.
