@@ -539,7 +539,7 @@ export class QuestEngine {
     if (current < previous) {
       // The streak broke. A new streak starts at zero, so the whole of it is new.
       this.state.baseline.q_nodmg = 0;
-      progress = current;
+      progress = Math.round(current * 1000);
     } else {
       // The sample can have reached across the midnight of the current day. The day
       // then starts from the streak that was alive at the midnight itself, not from the

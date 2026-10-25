@@ -42,6 +42,7 @@ try {
     { stdio: 'inherit' }
   );
   const { QuestRuntime } = createRequire(import.meta.url)(join(temp, 'questRuntime.js'));
+  const { parseQuestSaveData, QUEST_SAVE_VERSION } = createRequire(import.meta.url)(join(temp, 'questState.js'));
 
   // --- the reference model ----------------------------------------------------------------
 
@@ -203,6 +204,18 @@ try {
     assert.equal(state.dayMetrics.q_nodmg, 0, 'case A: 300 ms is no completed second');
     assert.equal(state.baseline.q_nodmg, 59.8, 'case A: the midnight sees 59.8 s of streak');
     assert.equal(state.streakLast, 60.1, 'case A: the streak itself is untouched');
+  }
+
+  // A reset can arrive as a positive sample (e.g. restored/sparse observations).
+  // Its value is in seconds at the engine boundary, but progress arithmetic uses ms.
+  {
+    const { state } = runScenario([
+      sample(MIDNIGHT - 800, 59000, 59000, true),
+      sample(MIDNIGHT + 300, 60100, 60100, true),
+      sample(MIDNIGHT + 2200, 62000, 1200, true),
+    ]);
+    assert.equal(state.dayMetrics.q_nodmg, 1, 'positive reset streak credits 1.2 seconds as one second');
+    assert.equal(state.baseline.q_nodmg, 0, 'positive reset starts a fresh streak');
   }
 
   // --- case B — a hundred milliseconds into the new day --------------------------------------
@@ -511,7 +524,35 @@ try {
     );
   }
 
-  console.log('PASS quest UTC attribution across the midnight (reference model)');
+  // Optional v4 anchor: old saves, malformed fields and rollback-like normalization.
+  // Older v4 readers discard this unknown field on write. Simulate precisely that
+  // loss, then exercise the real checkpoint resume path of the upgraded runtime.
+  {
+    const { runtime, raw } = runScenario([sample(MIDNIGHT - 800, 59000, 59000, true)]);
+    const saved = JSON.parse(raw());
+    const checkpoint = runtime.checkpoint();
+    assert.equal(QUEST_SAVE_VERSION, 4);
+    assert.equal(parseQuestSaveData(JSON.stringify(saved), DAY_ONE).lastTickAtMs, MIDNIGHT - 800);
+    for (const field of [undefined, null, 'invalid', -1, Number.NaN, Number.POSITIVE_INFINITY, {}, []]) {
+      const record = { ...saved, lastTickAtMs: field };
+      const parsed = parseQuestSaveData(JSON.stringify(record), DAY_ONE);
+      assert.equal(parsed.lastTickAtMs, undefined, 'missing/malformed optional anchor is dropped');
+      assert.equal(parsed.lastTickTimeMs, 59000, 'other v4 progress survives normalization');
+      let data = JSON.stringify(parsed);
+      let now = MIDNIGHT + 300;
+      const resumed = new QuestRuntime({ read: () => data, write: value => { data = value; } }, { now: () => now });
+      resumed.begin(0, checkpoint, { kills: 0, timeMs: 59000, noDamageMs: 59000, savedAtEpochMs: MIDNIGHT - 800 });
+      resumed.flush();
+      assert.equal(JSON.parse(data).dayMetrics.q_nodmg, 0, 'upgrade/resume never credits yesterday');
+      now += 1000;
+      resumed.tick(60000, 60000, true);
+      resumed.flush();
+      assert.equal(JSON.parse(data).dayMetrics.q_nodmg, 1, 'fresh timeline earns one real second');
+      assert.equal(JSON.parse(data).lastTickAtMs, now, 're-upgrade restores the wall-clock anchor');
+    }
+  }
+
+  console.log('PASS quest UTC attribution across the midnight (reference model), v4 anchor compatibility');
 } finally {
   rmSync(temp, { recursive: true, force: true });
 }
