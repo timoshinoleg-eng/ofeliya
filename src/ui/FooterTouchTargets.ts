@@ -15,10 +15,11 @@ export function layoutUtilityTargets(
   texts: Phaser.GameObjects.Text[], width: number, height: number, preferredY: number, occupiedBottom: number,
 ): void {
   if (texts.length !== 5) return;
+  const minimumGap = 4;
   texts.forEach(text => text.setWordWrapWidth(0));
   let widths = texts.map(text => Math.max(TOUCH.min, text.width));
-  if (widths.reduce((a, b) => a + b, 0) + 4 * TOUCH.gap > width - 16) {
-    const column = (width - 16 - 4 * TOUCH.gap) / 5;
+  if (widths.reduce((a, b) => a + b, 0) + 4 * minimumGap > width - 16) {
+    const column = Math.floor((width - 16 - 4 * minimumGap) / 5);
     texts.forEach(text => text.setWordWrapWidth(column, true));
     widths = texts.map(text => Math.max(TOUCH.min, text.width));
   }
