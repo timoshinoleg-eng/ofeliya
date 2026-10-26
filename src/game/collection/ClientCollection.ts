@@ -63,6 +63,13 @@ export interface AchievementProgress {
 
 export interface CollectionSnapshot {
   achievements: AchievementProgress[];
+  /**
+   * The kill counter of the milestones system.
+   *
+   * It is its own window and it is never replaced by the lifetime counter of
+   * the codex: the two numbers measure different things.
+   */
+  killsTotal: number;
   ownedSkinIds: string[];
   selectedSkinId: string;
   /** Informational UTC login-day counters. They do not grant anything. */
@@ -72,7 +79,7 @@ export interface CollectionSnapshot {
   readOnly: boolean;
 }
 
-const DEFAULT_SKIN_ID = 'strain-zero';
+export const DEFAULT_SKIN_ID = 'strain-zero';
 
 /**
  * The Muse catalog's 24 IDs are retained for continuity. Original currency,
@@ -82,10 +89,10 @@ const DEFAULT_SKIN_ID = 'strain-zero';
  * because this campaign has only three critical evolutions.
  */
 export const COLLECTION_CATALOG: readonly AchievementDefinition[] = [
-  { id: 'killer_500', title: 'ЧИСТИЛЬЩИК', description: '500 уничтоженных противников суммарно', metric: 'kills', threshold: 500 },
-  { id: 'killer_1k', title: 'ТЫСЯЧНИК', description: '1 000 уничтоженных противников суммарно', metric: 'kills', threshold: 1_000 },
-  { id: 'killer_10k', title: 'ДЕСЯТИТЫСЯЧНИК', description: '10 000 уничтоженных противников суммарно', metric: 'kills', threshold: 10_000 },
-  { id: 'killer_100k', title: 'ПАНДЕМИЯ', description: '100 000 уничтоженных противников суммарно', metric: 'kills', threshold: 100_000 },
+  { id: 'killer_500', title: 'ЧИСТИЛЬЩИК', description: '500 противников всего', metric: 'kills', threshold: 500 },
+  { id: 'killer_1k', title: 'ТЫСЯЧНИК', description: '1 000 противников всего', metric: 'kills', threshold: 1_000 },
+  { id: 'killer_10k', title: 'ДЕСЯТИТЫСЯЧНИК', description: '10 000 противников всего', metric: 'kills', threshold: 10_000 },
+  { id: 'killer_100k', title: 'ПАНДЕМИЯ', description: '100 000 противников всего', metric: 'kills', threshold: 100_000 },
   { id: 'runs_3', title: 'РЕЦИДИВ', description: 'Завершить 3 забега', metric: 'runs', threshold: 3 },
   { id: 'runs_10', title: 'ЗАВСЕГДАТАЙ', description: 'Завершить 10 забегов', metric: 'runs', threshold: 10 },
   { id: 'runs_50', title: 'ХРОНИК', description: 'Завершить 50 забегов', metric: 'runs', threshold: 50 },
@@ -341,6 +348,7 @@ export class ClientCollection {
         threshold: definition.threshold,
         unlocked: unlocked.has(definition.id),
       })),
+      killsTotal: Math.max(0, Math.floor(this.state.counters.kills ?? 0)),
       ownedSkinIds: [...this.state.ownedSkinIds],
       selectedSkinId: this.state.selectedSkinId,
       visitDays: this.state.visitDays,
