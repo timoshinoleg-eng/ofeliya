@@ -554,7 +554,7 @@ const mark = (name, value, kind = 'real') => {
       const menu = game.scene.getScene('Menu');
       // The shipped touch target is the interactive button plate; the label text is only a caption.
       const action = menu.children.getByName('ofeliya-menu-action-bg');
-      const legal = menu.children.list.find(o => o.text === 'О приложении · Политика · Поддержка');
+      const legal = menu.children.getByName('ofeliya-menu-legal');
       const canvas = document.querySelector('#game canvas').getBoundingClientRect();
       return {
         menuCreates: window.__p11MenuCreates,
@@ -579,6 +579,7 @@ const mark = (name, value, kind = 'real') => {
     }
     assert.equal(viewportLayout.legalInteractive, true, 'the legal CTA must stay tappable after the resize');
     assert.ok(viewportLayout.action.height >= 44, 'the action button must keep a 44px touch target');
+    assert.ok(viewportLayout.legal.width >= 44 && viewportLayout.legal.height >= 44, 'the legal CTA must keep a 44px touch target');
     mark('viewport: a resize recreates the Menu and keeps both CTAs inside the new bounds', viewportLayout);
 
     await page.evaluate(() => {
@@ -880,7 +881,7 @@ const mark = (name, value, kind = 'real') => {
       const game = window.__game;
       const menu = game.scene.getScene('Menu');
       const action = menu.children.getByName('ofeliya-menu-action-bg');
-      const legal = menu.children.list.find(o => o.text === 'О приложении · Политика · Поддержка');
+      const legal = menu.children.getByName('ofeliya-menu-legal');
       const bounds = o => {
         if (!o) return null;
         const b = o.getBounds();
@@ -922,6 +923,7 @@ const mark = (name, value, kind = 'real') => {
       assert.deepEqual(ctas.scale, [width, height], `the frame must reach ${width}x${height}`);
       assert.equal(ctas.actionInteractive, true, `the action CTA must stay interactive at ${width}x${height}`);
       assert.equal(ctas.legalInteractive, true, `the legal CTA must stay interactive at ${width}x${height}`);
+      assert.ok(ctas.legal.width >= 44 && ctas.legal.height >= 44, `the legal target must be at least 44px at ${width}x${height}`);
       for (const name of ['action', 'legal']) {
         const b = ctas[name];
         assert.ok(b, `${name} CTA must exist at ${width}x${height}`);
