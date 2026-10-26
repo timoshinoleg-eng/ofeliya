@@ -1,3 +1,17 @@
+# EASY difficulty tier — 26.10.2026
+
+Рабочая ветка `feat/easy-difficulty-20261026` от `ce8ecb8` (current `main`). Задача: третий уровень сложности `easy` / «ЛЁГКИЙ», самый лёгкий, всегда вне рейтинга. Standard и НАПРЯЖЕНИЕ не перебалансированы.
+
+Готовые гейты: `npm run test:difficulty`, `test:easy-difficulty`, `test:difficulty-comparison`, `test:easy-difficulty-visual`. Новые файлы: `scripts/check-easy-difficulty.mjs`, `scripts/check-difficulty-comparison.mjs`, `scripts/difficulty-comparison-smoke.cjs`, `tests/easy-difficulty-visual.mjs`, `src/game/RunModeLabel.ts`.
+
+Ключевые решения и ограничения — в `memory/02_DECISIONS.md` (раздел EASY) и `memory/01_STATE.md`. Важно: `test:release-config` и `npm run build` требуют release-env (`VITE_MAX_BOT_NAME`, `VITE_DEVELOPER_*`, `VITE_SUPPORT_EMAIL`, `VITE_RELEASE_SHA`) — без них падают на чистом main тоже.
+
+Что НЕ сделано и не требует разрешения без отдельного решения владельца: дефолт для новых игроков, счётчик `easyCampaignClears`, правка аналитики `death`/`win`, merge, deploy, публикация в production. PR — Draft.
+
+Модель сравнения в `scripts/check-difficulty-comparison.mjs` гоняет НАСТОЯЩИЙ WaveDirector/StageDirector/RunRng с общей моделью игрока; браузерный `difficulty-comparison-smoke.cjs` меряет настоящую игру, но в headless-софтверном рендере она идёт ~6% от реального времени, поэтому окно там короткое.
+
+---
+
 # PR244 independent final gate - 2026-10-25
 
 Original de6a74afd80607e6df24801a819d7e6cfa60af4f is BLOCK: P2 mutation gate falsely classifies omitted pre-hit flush as equivalent. Real offset streak reaches q_nodmg60; the permitted mutant records59. Narrow tests-only repair on review/codex-pr244-final-gate-20261025; report docs/qa/CODEX_PR244_FINAL_GATE_20261025.md. UTC14/14 +2 equivalent +control passed; exact candidate CI40181931371 is genuinely green but cannot prove the false equivalence. Lifecycle and UTC/units historical RED/GREEN independently reproduced. Keep native memory failures and base-reproduced startup font assertion distinct from product findings. No merge/deploy. Next: Draft follow-up into #244 branch, new exact-head full CI and release decision. Physical native close inconclusive, eviction/MAX NOT_RUN.
