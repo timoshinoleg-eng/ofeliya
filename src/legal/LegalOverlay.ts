@@ -1,6 +1,7 @@
 import { RELEASE_INFO, missingReleaseLegalFields } from './ReleaseInfo';
 import { RELEASE_SHORT } from '../release';
 import { PlatformBridge } from '../platform';
+import { platformLabel } from '../game/UiCopy';
 
 const ID = 'ofeliya-legal-overlay';
 const HTML_ESCAPES: Record<string, string> = {
@@ -11,20 +12,6 @@ const HTML_ESCAPES: Record<string, string> = {
   '"': '&quot;',
 };
 
-/**
- * Friendly name of the host platform.
- *
- * The raw host string can be an internal client token (Telegram Desktop reports
- * `tdesktop`), so it never reaches the player. The About surface names the kind
- * of the host instead.
- */
-function platformLabel(): string {
-  switch (PlatformBridge.kind) {
-    case 'max': return 'MAX';
-    case 'telegram': return 'Telegram';
-    default: return 'Браузер';
-  }
-}
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>'"]/g, (ch) => HTML_ESCAPES[ch] ?? ch);
@@ -95,7 +82,7 @@ export function showLegalOverlay(): void {
       <h2>Техническая сборка</h2>
       ${row('Версия', `v${info.version}`)}
       ${row('Сборка', RELEASE_SHORT)}
-      ${row('Платформа', platformLabel())}
+      ${row('Платформа', platformLabel(PlatformBridge.kind))}
 
       <h2>Техническая поддержка</h2>
       <p>При обращении укажите устройство, платформу MAX (iOS/Android/Desktop/Web), примерное время ошибки и последовательность действий. Не присылайте пароль, токен бота или иные секреты.</p>

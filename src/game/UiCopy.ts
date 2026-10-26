@@ -152,6 +152,21 @@ export const RESULT_COPY = {
 } as const;
 
 /** Copy of the three meta surfaces and of the rating surface. */
+/**
+ * Friendly name of the host platform.
+ *
+ * The raw host string can be an internal client token (Telegram Desktop reports
+ * `tdesktop`), so it never reaches the player: the About surface and the
+ * hidden diagnostics target name the kind of the host instead.
+ */
+export function platformLabel(kind: string): string {
+  switch (kind) {
+    case 'max': return 'MAX';
+    case 'telegram': return 'Telegram';
+    default: return 'Браузер';
+  }
+}
+
 export const META_COPY = {
   /** Title of the rating surface. */
   rating: 'РЕЙТИНГ',

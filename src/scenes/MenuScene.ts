@@ -7,7 +7,7 @@ import { parseChallengePayload } from '../game/Challenge';
 import { parseDuelStartPayload, type DuelChallengeSnapshot } from '../game/Duel';
 import { ACHIEVEMENTS } from '../game/AchievementSystem';
 import { COLORS, FONT, UI_FONT, UI_TEXT, fmtTime } from '../game/config';
-import { MENU_COPY, META_COPY } from '../game/UiCopy';
+import { MENU_COPY, META_COPY, platformLabel } from '../game/UiCopy';
 import { fmtInt, joinSegments, toTitleCase } from '../game/UiFormat';
 import { IDENTITY } from '../game/identity';
 import { masteryTracks } from '../game/RunIdentity';
@@ -906,6 +906,39 @@ export class MenuScene extends Phaser.Scene {
     legalText.setInteractive({ useHandCursor: true }).on('pointerup', () => {
       Sfx.play('click');
       showLegalOverlay();
+    });
+
+    // ---- Hidden diagnostics gesture ----------------------------------------
+    // The visible build information lives in the About surface, so the five-tap
+    // gesture keeps a target of its own: it carries the same line, but it is
+    // drawn without ink and it never shows a raw host token.
+    let diagnosticTapCount = 0;
+    let diagnosticTapTimer: number | null = null;
+    const diagnosticTarget = this.add
+      .text(W / 2, H - 9, `mini-app · ${platformLabel(PlatformBridge.kind)} · ${RELEASE_SHORT}`, {
+        fontFamily: FONT,
+        fontSize: '9px',
+        color: '#654454',
+      })
+      .setOrigin(0.5, 1)
+      .setResolution(2)
+      .setAlpha(0.001)
+      .setDepth(5)
+      .setInteractive({ useHandCursor: true });
+    diagnosticTarget.on('pointerup', () => {
+      diagnosticTapCount += 1;
+      if (diagnosticTapTimer !== null) window.clearTimeout(diagnosticTapTimer);
+      diagnosticTapTimer = window.setTimeout(() => {
+        diagnosticTapCount = 0;
+        diagnosticTapTimer = null;
+      }, 2400);
+      if (diagnosticTapCount < 5) return;
+      diagnosticTapCount = 0;
+      if (diagnosticTapTimer !== null) {
+        window.clearTimeout(diagnosticTapTimer);
+        diagnosticTapTimer = null;
+      }
+      if (StartupTrace.showDebugOverlay()) PlatformBridge.haptic('light');
     });
     this.scale.on('resize', this.onResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
