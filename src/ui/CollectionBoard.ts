@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SKIN_CATALOG } from '../game/collection/ClientCollection';
+import { DEFAULT_SKIN_ID, SKIN_CATALOG } from '../game/collection/ClientCollection';
 import { clientCollection, clientFlags, cosmeticColor } from '../systems/ClientExperience';
 import { rewardReveal, squashAndStretch } from './ClientJuice';
 import { PlatformBridge } from '../platform';
@@ -11,6 +11,18 @@ import { createMetaDock, createModalFrame, MODAL, type MetaDockTarget } from './
 import { collectionPageCount, shouldShowPaginator } from './collectionPages';
 
 type Page = 'milestones' | 'shells' | 'lab';
+
+/**
+ * The kind of a shell.
+ *
+ * The base shell and the bio shells are named in the copy of the collection; a
+ * shell that is opened by a milestone carries its unlock condition instead.
+ */
+function shellSubLabel(skinId: string): string | null {
+  if (skinId === DEFAULT_SKIN_ID) return 'Базовая оболочка';
+  if (skinId === 'skin.gilded-prime') return null;
+  return 'Био-оболочка';
+}
 
 /** Cosmetic-only Muse collection. No inventory, currency, boosts or product save writes. */
 export class CollectionBoard {
@@ -128,8 +140,12 @@ export class CollectionBoard {
 
     if (this.page === 'milestones') {
       const rows = state.achievements.slice(this.offset, this.offset + pageSize);
+      // The kills milestones share one group header, so the phrase that used to
+      // repeat in every row is written once.
+      const killsGroup = this.offset === 0;
+      const firstRowY = y0 + (killsGroup ? 20 : 0);
       rows.forEach((a, i) => {
-        const y = y0 + i * rowH;
+        const y = firstRowY + i * rowH;
         text(
           left + MODAL.padX,
           y,
@@ -138,16 +154,38 @@ export class CollectionBoard {
           a.unlocked ? VISUAL_TEXT.host : VISUAL_TEXT.ivory
         );
         text(left + MODAL.padX, y + 22, a.description, 11, VISUAL_TEXT.muted);
+        // Every milestone has a numeric target, so the bar is always a real
+        // fraction of a real goal.
+        const barW = w - MODAL.padX * 2;
+        const barY = y + 42;
+        const ratio = a.threshold > 0 ? Math.max(0, Math.min(1, a.progress / a.threshold)) : 0;
+        const back = s.add
+          .rectangle(left + MODAL.padX + barW / 2, barY, barW, 4, VISUAL.ink, 0.9)
+          .setStrokeStyle(1, VISUAL.line, 0.4);
+        const fill = s.add
+          .rectangle(left + MODAL.padX + (barW * ratio) / 2, barY, Math.max(2, barW * ratio), 4,
+            a.unlocked ? VISUAL.host : VISUAL.player, a.unlocked ? 1 : 0.85);
+        this.root.add([back, fill]);
+        const rest = Math.max(0, a.threshold - a.progress);
         text(
           left + MODAL.padX,
           y + 51,
           a.unlocked
             ? `◆ ВЫПОЛНЕНО · ${fmtInt(a.progress)} / ${fmtInt(a.threshold)}`
-            : `${fmtInt(a.progress)} / ${fmtInt(a.threshold)}`,
+            : `${fmtInt(a.progress)} / ${fmtInt(a.threshold)} · ${META_COPY.remaining(rest)}`,
           11,
           a.unlocked ? VISUAL_TEXT.host : VISUAL_TEXT.muted
         );
       });
+      if (killsGroup) {
+        text(
+          left + MODAL.padX,
+          y0,
+          META_COPY.milestoneKillsGroup(state.killsTotal),
+          11,
+          VISUAL_TEXT.host
+        );
+      }
     } else if (this.page === 'shells') {
       // One explanation for the whole tab, not one line per shell.
       text(left + MODAL.padX, y0, META_COPY.shellsNote, 11, VISUAL_TEXT.muted);
@@ -161,14 +199,25 @@ export class CollectionBoard {
           .setStrokeStyle(2, VISUAL.line);
         this.root.add(orb);
         if (owned) orb.setInteractive().on('pointerdown', () => squashAndStretch(s, orb, { enabled: clientFlags().juice.enhanced }));
-        text(left + MODAL.padX + 40, y, skin.title, 12, owned ? VISUAL_TEXT.ivory : VISUAL_TEXT.muted, w - MODAL.padX * 2 - 56);
-        if (!owned) {
-          // The unlock condition comes from the milestone catalog itself.
-          const goal = state.achievements.find((a) => a.id === skin.earnedBy);
+        // The sub label names the kind of the shell; the goal names the way to
+        // open it.
+        const goal = state.achievements.find((a) => a.id === skin.earnedBy);
+        const sub = shellSubLabel(skin.id);
+        text(
+          left + MODAL.padX + 40,
+          y,
+          sub ? `${skin.title} (${sub})` : skin.title,
+          12,
+          owned ? VISUAL_TEXT.ivory : VISUAL_TEXT.muted,
+          w - MODAL.padX * 2 - 56
+        );
+        if (goal) {
           text(
             left + MODAL.padX + 40,
             y + 20,
-            goal ? `${META_COPY.locked} · ${goal.title} — ${goal.description}` : META_COPY.locked,
+            owned
+              ? META_COPY.shellUnlockedBy(goal.title)
+              : META_COPY.shellLockedBy(goal.title),
             10,
             VISUAL_TEXT.muted,
             w - MODAL.padX * 2 - 56
@@ -183,11 +232,13 @@ export class CollectionBoard {
           text(left + w - MODAL.padX - 52, y + 52, META_COPY.active, 11, '#080f14').setOrigin(0.5);
         } else if (!owned) {
           // A locked shell keeps a named, inert row handle: it is shown, but it
-          // never offers a select action.
+          // never offers a select action. The state is written where the button
+          // would be: "ЗАКРЫТО", never a select action.
           const lockedPlate = s.add
             .rectangle(left + w - MODAL.padX - 52, y + 52, 104, 30, VISUAL.ink, 0.001)
             .setName(`ofeliya-skin-${skin.id}`);
           this.root.add(lockedPlate);
+          text(left + w - MODAL.padX - 52, y + 52, META_COPY.locked, 10, VISUAL_TEXT.muted, 104).setOrigin(0.5);
         } else if (!state.readOnly) {
           button(`ofeliya-skin-${skin.id}`, left + w - MODAL.padX - 52, y + 52, 104, 'ВЫБРАТЬ', () => {
             if (this.collection.selectSkin(skin.id)) this.render();

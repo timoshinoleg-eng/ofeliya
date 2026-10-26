@@ -53,11 +53,16 @@ function errorCopy(status: RemoteStatus): string | null {
  * instead of inventing an identity.
  */
 function seasonRow(entry: SocialTopEntry): string {
-  return `#${entry.rank} · ${META_COPY.player(platformLabel(entry.platform))}\n${fmtTime(entry.timeMs)} · Уничтожено ${fmtInt(entry.kills)}`;
+  return META_COPY.seasonRow(
+    entry.rank,
+    META_COPY.player(platformLabel(entry.platform)),
+    fmtTime(entry.timeMs),
+    fmtInt(entry.kills)
+  );
 }
 
 function friendRow(entry: FriendSnapshot): string {
-  return `${relationLabel(entry.relation)} · ${META_COPY.player(platformLabel(entry.platform))}\n${fmtTime(entry.timeMs)} · Уничтожено ${fmtInt(entry.kills)}`;
+  return `${relationLabel(entry.relation)} · ${META_COPY.player(platformLabel(entry.platform))}\n${fmtTime(entry.timeMs)} · ${fmtInt(entry.kills)} кл.`;
 }
 
 export class SocialHub {
@@ -112,18 +117,6 @@ export class SocialHub {
     closeHit?.setName('ofeliya-social-close-hit');
     const closeGlyph = this.root.list.find((obj) => obj.name === 'ofeliya-modal-close-label');
     closeGlyph?.setName('ofeliya-social-close-label');
-
-    this.root.add(
-      scene.add
-        .text(W / 2, this.panelTop + 47, 'ЗАБЕГ ДНЯ · СЕЗОН · ДРУЗЬЯ', {
-          fontFamily: UI_FONT,
-          fontSize: '11px',
-          fontStyle: '700',
-          color: VISUAL_TEXT.host,
-        })
-        .setOrigin(0.5)
-        .setResolution(2)
-    );
 
     this.body = scene.add.container(0, 0).setName('ofeliya-social-body');
     this.root.add(this.body);
@@ -205,6 +198,17 @@ export class SocialHub {
     this.addText(left, friendsY + 22, 'ЗАГРУЗКА СВЯЗЕЙ…', 11, VISUAL_TEXT.muted, 'left', width);
   }
 
+  /**
+   * The name of the carrier in the tables.
+   *
+   * The messenger gives the player a name; the social payload does not. When
+   * there is no name the platform tag is used, so no identity is ever invented.
+   */
+  private playerName(): string {
+    const displayName = this.platform.getDisplayName();
+    return displayName || META_COPY.player(platformLabel(this.platform.kind));
+  }
+
   private canLaunchDaily(): boolean {
     return (
       (this.platform.kind === 'max' || this.platform.kind === 'telegram') &&
@@ -283,7 +287,7 @@ export class SocialHub {
       };
     }
     return {
-      label: 'НАЧАТЬ ЕЖЕДНЕВНЫЙ ЗАБЕГ',
+      label: META_COPY.dailyCta,
       enabled: true,
       color: '#080f14',
       fill: VISUAL.ivory,
@@ -330,7 +334,7 @@ export class SocialHub {
     // A zero streak is an empty state, not a counter that reads "СЕРИЯ 0".
     if (streak.current > 0 || streak.best > 0) {
       const streakText = this.scene.add
-        .text(W / 2, y + 43, streak.current > 0 ? `СЕРИЯ ${streak.current} · РЕКОРД ${streak.best}` : META_COPY.streakEmpty, {
+        .text(W / 2, y + 43, streak.current > 0 ? META_COPY.streak(streak.current, streak.best) : META_COPY.streakEmptyWithBest(streak.best), {
           fontFamily: FONT,
           fontSize: '11px',
           fontStyle: 'bold',
@@ -378,15 +382,22 @@ export class SocialHub {
     if (detail.status.daily === 'ok' && detail.snapshot.daily?.you) {
       const you = detail.snapshot.daily.you;
       const rank = detail.snapshot.daily.rank;
-      dailyLine = `ВЫ · ${fmtTime(you.timeMs)} · УНИЧТОЖЕНО ${you.kills}${rank != null ? ` · МЕСТО #${rank}` : ''}`;
+      // The row names the player: the social payload carries no display name, so
+      // the name of the carrier is used and the platform tag is the fallback.
+      dailyLine = META_COPY.dailyRow(
+        this.playerName(),
+        fmtTime(you.timeMs),
+        fmtInt(you.kills),
+        rank
+      );
     } else if (detail.status.daily === 'ok') {
-      dailyLine = 'СЕГОДНЯ РЕЗУЛЬТАТА ЕЩЁ НЕТ';
+      dailyLine = META_COPY.dailyEmpty;
     } else {
       dailyLine =
         dailyError ??
         this.channelLine(
           detail.status.daily,
-          'СЕГОДНЯ РЕЗУЛЬТАТА ЕЩЁ НЕТ',
+          META_COPY.dailyEmpty,
           'ЛИЧНЫЙ РЕЗУЛЬТАТ ДОСТУПЕН ПОСЛЕ ВХОДА ЧЕРЕЗ MAX ИЛИ Telegram'
         );
     }
@@ -396,7 +407,7 @@ export class SocialHub {
     const seasonY = todayY + 136;
     const seasonTitle =
       detail.status.season === 'ok' && detail.snapshot.season
-        ? `СЕЗОН ${detail.snapshot.season.index} · ${detail.snapshot.season.daysLeft} ДН.`
+        ? META_COPY.seasonTitle(detail.snapshot.season.index, detail.snapshot.season.daysLeft)
         : 'СЕЗОН';
     this.sectionTitle(seasonY, seasonTitle, 'ofeliya-social-season-title');
     const seasonError = errorCopy(detail.status.seasonTop) ?? errorCopy(detail.status.season);

@@ -4,7 +4,7 @@ import { nextUtcMidnightMs } from '../quests/questRotation';
 import { SaveSystem } from '../systems/SaveSystem';
 import { FONT, UI_FONT } from '../game/config';
 import { META_COPY } from '../game/UiCopy';
-import { fmtCountdown, fmtInt, fmtProgress } from '../game/UiFormat';
+import { fmtCountdown, fmtProgress } from '../game/UiFormat';
 import { VISUAL, VISUAL_TEXT } from './visualTokens';
 import { PlatformBridge } from '../platform';
 import { createMetaDock, createModalFrame, MODAL, type MetaDockTarget } from './modal';
@@ -132,7 +132,7 @@ export class QuestBoard {
         text(
           left + MODAL.padX,
           barY + 10,
-          done ? META_COPY.taskComplete : `${fmtProgress(current, p.target)} · осталось ${fmtInt(remainingCount)}`,
+          done ? META_COPY.taskComplete : `${fmtProgress(current, p.target)} · ${META_COPY.remaining(remainingCount)}`,
           compact ? 11 : 12,
           done ? VISUAL_TEXT.host : VISUAL_TEXT.muted
         );
