@@ -350,11 +350,11 @@ try {
   assert.deepEqual(
     [...copy.CODEX_COPY.synergyRecipes],
     [
-      'Совмести ветви «Снаряды» и «Орбита»',
-      'Совмести ветви «Орбита» и «Инфекция»',
-      'Совмести ветви «Снаряды» и «Инфекция»',
+      'БЕЛКОВЫЕ ШИПЫ III + ПРОНИКНОВЕНИЕ II',
+      'КАПСИДНЫЕ СПУТНИКИ III + ПОДВИЖНОСТЬ/РЕПЛИКАЦИЯ II',
+      'МЕМБРАННЫЙ ИМПУЛЬС III + РНК-АФФИНИТЕТ II',
     ],
-    'the recipes of the locked synergies'
+    'the source-truth recipes of the locked synergies'
   );
   assert.equal(
     copy.CODEX_COPY.synergySub,
