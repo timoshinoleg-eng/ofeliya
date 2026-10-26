@@ -28,6 +28,7 @@ import { DualMoveControls } from '../game/DualMoveControls';
 import { getLegendaryDefinition, type LegendaryId } from '../game/LegendarySystem';
 import { TwinStickControls } from '../game/TwinStickControls';
 import { readControlMode, type ControlMode } from '../game/ControlMode';
+import { runModeLabel, isRankedResult } from '../game/RunModeLabel';
 import type { RunResult, RunSnapshot } from '../game/RunContracts';
 import {
   EVOLUTION_NAMES,
@@ -2209,8 +2210,14 @@ export class UIScene extends Phaser.Scene {
       now: Date.now(),
     });
     const standardFresh = res.difficultyId === 'standard' && !res.resumed;
-    // A daily-launched run must never render global-ranking semantics.
-    const ranked = standardFresh && !duelChallenge && dailyIntent === null;
+    // A daily-launched run must never render global-ranking semantics, and only
+    // a fresh Standard run may claim a ranked place.
+    const ranked = isRankedResult({
+      difficultyId: res.difficultyId,
+      resumed: res.resumed,
+      daily: dailyIntent !== null,
+      duel: duelChallenge !== null,
+    });
     const duelCreatable = standardFresh && res.win;
     const W = this.scale.width;
     const H = this.scale.height;
@@ -2370,15 +2377,13 @@ export class UIScene extends Phaser.Scene {
         .text(
           W / 2,
           detailY,
-          res.resumed
-            ? `РЕЖИМ: ${res.difficultyId === 'standard' ? 'СТАНДАРТ' : 'НАПРЯЖЕНИЕ'} · ВОЗОБНОВЛЁН · ВНЕ РЕЙТИНГА`
-            : dailyIntent
-              ? 'РЕЖИМ: СТАНДАРТ · ежедневный забег'
-              : duelChallenge
-                ? 'РЕЖИМ: ДУЭЛЬ · СТАНДАРТ · ВНЕ РЕЙТИНГА'
-                : ranked
-                  ? 'РЕЖИМ: СТАНДАРТ · рейтинговый'
-                  : 'РЕЖИМ: НАПРЯЖЕНИЕ · вне рейтинга',
+          runModeLabel({
+            difficultyId: res.difficultyId,
+            resumed: res.resumed,
+            daily: dailyIntent !== null,
+            duel: duelChallenge !== null,
+            ranked,
+          }),
           {
             fontFamily: FONT,
             fontSize: compact ? '9px' : '10px',
