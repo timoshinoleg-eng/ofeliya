@@ -12,7 +12,7 @@ import type { HeartbeatPulseSnapshot } from '../game/HeartbeatPulseDirector';
 import type { HostCellSystemSnapshot } from './HostCellSystem';
 import { UPGRADES, type EvolutionId } from '../game/UpgradeSystem';
 import { LEGENDARIES, type LegendaryId } from '../game/LegendarySystem';
-import type { DifficultyId } from '../game/DifficultyProfile';
+import { isDifficultyId, type DifficultyId } from '../game/DifficultyProfile';
 import type { ControlMode } from '../game/ControlMode';
 import { SCORE_CAMPAIGN_VERSION, SCORE_RULESET_VERSION } from '../game/RunVersions';
 
@@ -335,7 +335,7 @@ export function validateRunCheckpoint(raw: unknown): RunCheckpointData | null {
     !finite(value.savedAtEpochMs, 1, 9_999_999_999_999) ||
     typeof value.runSeed !== 'string' ||
     !/^[A-Za-z0-9_-]{1,32}$/.test(value.runSeed) ||
-    (value.difficultyId !== 'standard' && value.difficultyId !== 'strained') ||
+    !isDifficultyId(value.difficultyId) ||
     (value.controlMode !== 'one-hand' && value.controlMode !== 'two-hand' && value.controlMode !== 'dual-move') ||
     typeof value.resumed !== 'boolean' ||
     !validDirector(value.director) ||
