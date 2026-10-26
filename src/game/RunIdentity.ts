@@ -1,3 +1,4 @@
+import { toTitleCase } from './UiFormat';
 import type { LegendaryId } from './LegendarySystem';
 import type { StageBuildResult } from './RunContracts';
 import type { EvolutionId } from './UpgradeSystem';
@@ -46,22 +47,22 @@ type IdentityScore = {
 
 const LABELS: Record<RunIdentityId, { label: string; shortLabel: string; description: string }> = {
   projectile: {
-    label: 'ПРОЕКТИЛЬНЫЙ ШТАММ',
-    shortLabel: 'ПРОЕКТИЛЬНЫЙ',
+    label: 'Снарядный штамм',
+    shortLabel: 'СНАРЯДНЫЙ',
     description: 'Ставка на залп, пробивание и урон снарядов.',
   },
   'orbit-control': {
-    label: 'ОРБИТАЛЬНЫЙ КОНТРОЛЬ',
+    label: 'Орбитальный контроль',
     shortLabel: 'КОНТРОЛЬ',
     description: 'Ставка на спутники, импульсы, мобильность и управление толпой.',
   },
   'infection-lysis': {
-    label: 'ИНФЕКЦИЯ / ЛИЗИС',
+    label: 'Инфекция / Лизис',
     shortLabel: 'ЛИЗИС',
     description: 'Ставка на заражение клеток, разрыв мембраны и цепные эффекты.',
   },
   hybrid: {
-    label: 'ГИБРИДНЫЙ ШТАММ',
+    label: 'Базовый гибрид',
     shortLabel: 'ГИБРИД',
     description: 'Сила распределена между несколькими ветвями без одной доминирующей.',
   },
@@ -97,52 +98,52 @@ function scoreIdentity(input: RunIdentityInput): IdentityScore[] {
   // Prefer distinctive run-defining discoveries in the compact result summary.
   if (evolutions.has('prism')) {
     projectile += 4;
-    projectileSignals.push('ГИПЕРШИП');
+    projectileSignals.push(toTitleCase('ГИПЕРШИП'));
   }
   if (legendary.has('split-geometry')) {
     projectile += 4;
-    projectileSignals.push('ГЕОМЕТРИЯ РАСКОЛА');
+    projectileSignals.push(toTitleCase('ГЕОМЕТРИЯ РАСКОЛА'));
   }
   if (legendary.has('core-predator')) {
     projectile += 2;
-    projectileSignals.push('ХИЩНИК ЯДРА');
+    projectileSignals.push(toTitleCase('ХИЩНИК ЯДРА'));
   }
-  if (safeStack(s.multi) >= 2) projectileSignals.push('многозарядность');
-  if (safeStack(s.pierce) >= 2) projectileSignals.push('пробивание');
+  if (safeStack(s.multi) >= 2) projectileSignals.push(toTitleCase('многозарядность'));
+  if (safeStack(s.pierce) >= 2) projectileSignals.push(toTitleCase('пробивание'));
 
   const controlSignals: string[] = [];
   let control = safeStack(s.orbit) * 2 + safeStack(s.nova) * 1.5;
   control += safeStack(s.speed) * 0.6 + safeStack(s.magnet) * 0.45;
   if (evolutions.has('halo')) {
     control += 4;
-    controlSignals.push('СВЕРХКАПСИД');
+    controlSignals.push(toTitleCase('СВЕРХКАПСИД'));
   }
   if (legendary.has('zero-point')) {
     control += 3.5;
-    controlSignals.push('НУЛЕВАЯ ТОЧКА');
+    controlSignals.push(toTitleCase('НУЛЕВАЯ ТОЧКА'));
   }
   if (legendary.has('myocardial-rhythm')) {
     control += 1.5;
-    controlSignals.push('РИТМ МИОКАРДА');
+    controlSignals.push(toTitleCase('РИТМ МИОКАРДА'));
   }
-  if (safeStack(s.orbit) >= 2) controlSignals.push('спутники');
-  if (safeStack(s.nova) >= 2) controlSignals.push('импульсы');
+  if (safeStack(s.orbit) >= 2) controlSignals.push(toTitleCase('спутники'));
+  if (safeStack(s.nova) >= 2) controlSignals.push(toTitleCase('импульсы'));
 
   const lysisSignals: string[] = [];
   let lysis = safeStack(s.infect) * 2 + safeStack(s.lysis) * 2.2 + safeStack(s.factory) * 1.8;
   lysis += Math.min(6, cells) * 0.45;
   if (evolutions.has('singularity')) {
     lysis += 2;
-    lysisSignals.push('СИНГУЛЯРНОСТЬ');
+    lysisSignals.push(toTitleCase('СИНГУЛЯРНОСТЬ'));
   }
   if (legendary.has('lysis-chain')) {
     lysis += 4;
-    lysisSignals.push('ЦЕПЬ ЛИЗИСА');
+    lysisSignals.push(toTitleCase('ЦЕПЬ ЛИЗИСА'));
   }
-  if (cells >= 4) lysisSignals.push('клеточный маршрут');
-  if (safeStack(s.infect) >= 2) lysisSignals.push('быстрое заражение');
-  if (safeStack(s.lysis) >= 2) lysisSignals.push('усиленный лизис');
-  if (safeStack(s.factory) >= 1) lysisSignals.push('вирусная фабрика');
+  if (cells >= 4) lysisSignals.push(toTitleCase('клеточный маршрут'));
+  if (safeStack(s.infect) >= 2) lysisSignals.push(toTitleCase('быстрое заражение'));
+  if (safeStack(s.lysis) >= 2) lysisSignals.push(toTitleCase('усиленный лизис'));
+  if (safeStack(s.factory) >= 1) lysisSignals.push(toTitleCase('вирусная фабрика'));
 
   const scores: IdentityScore[] = [
     { id: 'projectile', score: projectile, signals: projectileSignals },
@@ -192,30 +193,30 @@ export function masteryTracks(input: MasteryDiscoveryInput): MasteryTrack[] {
   }> = [
     {
       id: 'projectile',
-      label: 'ПРОЕКТИЛЬНЫЙ ШТАММ',
+      label: 'Снарядный штамм',
       evolution: 'prism',
       legendary: 'split-geometry',
       objective: 'ГИПЕРШИП + ГЕОМЕТРИЯ РАСКОЛА',
-      firstGoal: 'Открой ГИПЕРШИП',
-      secondGoal: 'Найди ГЕОМЕТРИЮ РАСКОЛА',
+      firstGoal: 'дальше: Гипершип',
+      secondGoal: 'дальше: Геометрия раскола',
     },
     {
       id: 'orbit-control',
-      label: 'ОРБИТАЛЬНЫЙ КОНТРОЛЬ',
+      label: 'Орбитальный контроль',
       evolution: 'halo',
       legendary: 'zero-point',
       objective: 'СВЕРХКАПСИД + НУЛЕВАЯ ТОЧКА',
-      firstGoal: 'Открой СВЕРХКАПСИД',
-      secondGoal: 'Найди НУЛЕВУЮ ТОЧКУ',
+      firstGoal: 'дальше: Сверхкапсид',
+      secondGoal: 'дальше: Нулевая точка',
     },
     {
       id: 'infection-lysis',
-      label: 'ИНФЕКЦИЯ / ЛИЗИС',
+      label: 'Инфекция / Лизис',
       evolution: 'singularity',
       legendary: 'lysis-chain',
       objective: 'СИНГУЛЯРНОСТЬ + ЦЕПЬ ЛИЗИСА',
-      firstGoal: 'Открой СИНГУЛЯРНОСТЬ',
-      secondGoal: 'Найди ЦЕПЬ ЛИЗИСА',
+      firstGoal: 'дальше: Сингулярность',
+      secondGoal: 'дальше: Цепь лизиса',
     },
   ];
 

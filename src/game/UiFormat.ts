@@ -34,18 +34,18 @@ export function fmtProgress(current: number, target: number): string {
 }
 
 /**
- * Countdown to the next UTC midnight, `HH:MM`.
+ * Countdown to the next UTC midnight, in the duration wording of the product.
  *
  * The quest rotation resets at UTC midnight, so the countdown is a duration under
- * 24 hours and is rendered as hours and minutes — `MM:SS` would either truncate the
- * last minute or spill into a three-digit minute count.
+ * 24 hours. It is written as a duration and never as a clock time: `04:15` reads
+ * like a time of day, `4 ч 15 мин` reads like the time that is left.
  */
 export function fmtCountdown(ms: number): string {
   const safe = Number.isFinite(ms) ? Math.max(0, ms) : 0;
   const totalMinutes = Math.floor(safe / 60000);
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  return hours > 0 ? `${hours} ч ${minutes} мин` : `${minutes} мин`;
 }
 
 /**
