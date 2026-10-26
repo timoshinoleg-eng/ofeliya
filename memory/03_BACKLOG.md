@@ -1,9 +1,10 @@
 # EASY difficulty backlog — 26.10.2026
 
 - [ ] Продуктовое решение: сделать Easy дефолтом для новых игроков. Не выполнять автоматически; текущий дефолт остаётся `standard`.
+- [ ] Физическая приёмка MAX/Telegram WebView (background/resume, ввод, safe area) — NOT_RUN, отдельный гейт.
+- [ ] Добавить в CI browser-smoke шаг визуальной матрицы Easy (`node tests/easy-difficulty-visual.mjs`) — коннектор блокирует запись в `.github/workflows/**`, шаг приложен в теле PR #248.
 - [ ] Решить, нужен ли отдельный счётчик `easyCampaignClears` в `SaveData`. Сейчас победы в Easy не увеличивают ни один счётчик, чтобы не трогать схему сохранения. Требует миграции save — отдельная задача.
 - [ ] Проверить события `run_end`/`death`/`win`: `difficulty` передаётся в `run_start`, но в `death`/`win` (GameScene) его нет. Это пробел аналитики, инфраструктуру в этом PR не меняли.
-- [ ] Физическая приёмка MAX/Telegram WebView (background/resume, ввод, safe area) — NOT_RUN, отдельный гейт.
 - [ ] Hosted CI на точном SHA и решение о мердже — за владельцем; PR остаётся Draft.
 
 ---
