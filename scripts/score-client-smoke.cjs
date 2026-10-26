@@ -209,9 +209,9 @@ function browserDriver() {
     const texts = flat.filter((obj) => typeof obj.text === 'string').map((obj) => obj.text);
     return {
       rank: texts.find((text) => text.includes('РЕЙТИНГ · МЕСТО #7')) ?? null,
-      retry: texts.includes('ЕЩЁ ОДИН ЦИКЛ'),
+      retry: texts.includes('НОВЫЙ ЗАБЕГ'),
       menu: texts.includes('В МЕНЮ'),
-      share: texts.includes('БРОСИТЬ ВЫЗОВ'),
+      share: texts.includes('БРОСИТЬ ВЫЗОВ ДРУГУ'),
     };
   });
 

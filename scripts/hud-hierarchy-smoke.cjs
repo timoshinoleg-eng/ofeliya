@@ -34,7 +34,7 @@ const SHOT_ONLY_VIEWPORTS = [
   { width: 390, height: 844 },
 ];
 const KILL_VALUES = [0, 99, 999, 2142, 5560, 99999];
-const RESULT_BUTTONS = ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В МЕНЮ'];
+const RESULT_BUTTONS = ['НОВЫЙ ЗАБЕГ', 'БРОСИТЬ ВЫЗОВ ДРУГУ', 'В МЕНЮ'];
 
 // Pinned HUD geometry contract - mirrors `src/ui/hudTokens.ts` (SLICE-HUD-01R).
 const HUD = {

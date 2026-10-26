@@ -79,7 +79,7 @@ export async function checkPlatformLifecycle(browser, url) {
     const layout = await page.evaluate(() => {
       const game = window.__game, menu = game.scene.getScene('Menu');
       const action = menu.children.getByName('ofeliya-menu-action');
-      const legal = menu.children.list.find(o => o.text === 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА');
+      const legal = menu.children.list.find(o => o.text === 'О приложении · Политика · Поддержка');
       return { host: document.getElementById('game').getBoundingClientRect().toJSON(),
         scale: [game.scale.width, game.scale.height],
         action: action?.getBounds(), legal: legal?.getBounds() };

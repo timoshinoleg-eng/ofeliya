@@ -554,7 +554,7 @@ const mark = (name, value, kind = 'real') => {
       const menu = game.scene.getScene('Menu');
       // The shipped touch target is the interactive button plate; the label text is only a caption.
       const action = menu.children.getByName('ofeliya-menu-action-bg');
-      const legal = menu.children.list.find(o => o.text === 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА');
+      const legal = menu.children.list.find(o => o.text === 'О приложении · Политика · Поддержка');
       const canvas = document.querySelector('#game canvas').getBoundingClientRect();
       return {
         menuCreates: window.__p11MenuCreates,
@@ -677,7 +677,7 @@ const mark = (name, value, kind = 'real') => {
         });
         if (!last.open) return last;
         try {
-          await tap('ofeliya-collection-close');
+          await tap('ofeliya-modal-close-hit');
         } catch (error) {
           last = { ...last, tapError: String(error) };
         }
@@ -698,7 +698,7 @@ const mark = (name, value, kind = 'real') => {
     const storageBefore = await storageSnapshot();
 
     await page.evaluate(() => { window.__game.scene.getScene('Menu').showCodex(); });
-    await tap('ofeliya-menu-collection');
+    await tap('ofeliya-meta-dock-collection');
     await page.waitForFunction(() => Boolean(window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection')));
 
     const achievements = await page.evaluate(async () => {
@@ -738,7 +738,7 @@ const mark = (name, value, kind = 'real') => {
     assert.match(pager2.indicator, /^2\s*\/\s*\d+$/, 'the achievements pager must advance to the second page');
     mark('collection: the achievements pager advances through the catalog', { first: pager, second: pager2 });
 
-    await tap('ofeliya-collection-skins');
+    await tap('ofeliya-collection-shells');
     const skins = await page.evaluate(async () => {
       const { SKIN_CATALOG, ClientCollection } = await import('/src/game/collection/ClientCollection.ts');
       const state = new ClientCollection().snapshot();
@@ -832,7 +832,7 @@ const mark = (name, value, kind = 'real') => {
     });
     for (let i = 0; i < 10; i++) {
       await page.evaluate(() => { window.__game.scene.getScene('Menu').showCodex(); });
-      await tap('ofeliya-menu-collection');
+      await tap('ofeliya-meta-dock-collection');
       await page.waitForFunction(() => Boolean(window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection')));
       await closeCollectionBoard();
     }
@@ -857,7 +857,7 @@ const mark = (name, value, kind = 'real') => {
     });
     for (let i = 0; i < 5; i++) {
       await page.evaluate(() => { window.__game.scene.getScene('Menu').showCodex(); });
-      await tap('ofeliya-menu-quests');
+      await tap('ofeliya-meta-dock-tasks');
       await page.waitForFunction(() => Boolean(window.__game.scene.getScene('Menu').questBoard));
       await page.evaluate(() => { window.__game.scene.getScene('Menu').questBoard.destroy(); });
     }
@@ -880,7 +880,7 @@ const mark = (name, value, kind = 'real') => {
       const game = window.__game;
       const menu = game.scene.getScene('Menu');
       const action = menu.children.getByName('ofeliya-menu-action-bg');
-      const legal = menu.children.list.find(o => o.text === 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА');
+      const legal = menu.children.list.find(o => o.text === 'О приложении · Политика · Поддержка');
       const bounds = o => {
         if (!o) return null;
         const b = o.getBounds();
@@ -954,7 +954,7 @@ const mark = (name, value, kind = 'real') => {
       menu.showCodex();
       return before;
     });
-    await tap('ofeliya-menu-collection');
+    await tap('ofeliya-meta-dock-collection');
     await page.waitForFunction(() => Boolean(window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection')));
     // The board must really have a reveal tween in flight, otherwise this case would
     // prove nothing about tearing a board down mid-animation.
@@ -977,7 +977,7 @@ const mark = (name, value, kind = 'real') => {
     // Close immediately: the reward-reveal tween is still running at this point.
     // The tap must not wait for the board to settle - that is the whole point of
     // this case - so the settle budget is switched off here on purpose.
-    await tap('ofeliya-collection-close', { settleMs: 0 });
+    await tap('ofeliya-modal-close-hit', { settleMs: 0 });
     await page.waitForTimeout(120);
     const afterTweenTeardown = await page.evaluate(() => {
       const menu = window.__game.scene.getScene('Menu');
@@ -1006,7 +1006,7 @@ const mark = (name, value, kind = 'real') => {
       };
     });
     await page.evaluate(() => { window.__game.scene.getScene('Menu').showCodex(); });
-    await tap('ofeliya-menu-collection');
+    await tap('ofeliya-meta-dock-collection');
     await page.waitForFunction(() => Boolean(window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection')));
     await page.evaluate(() => {
       window.__p11Tg.viewportHeight = 700;

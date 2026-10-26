@@ -19,7 +19,7 @@ const sizes = [
   { width: 390, height: 844 },
   { width: 412, height: 915 },
 ];
-const BUTTONS = ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В МЕНЮ'];
+const BUTTONS = ['НОВЫЙ ЗАБЕГ', 'БРОСИТЬ ВЫЗОВ ДРУГУ', 'В МЕНЮ'];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function assertCompactResumeMenu(browser) {
@@ -87,7 +87,7 @@ async function assertCompactResumeMenu(browser) {
       sound: bounds(text((value) => value.startsWith('звук:'))),
       social: bounds(text((value) => value === 'СВОДКА')),
       codex: bounds(text((value) => value.startsWith('КОДЕКС '))),
-      legal: bounds(text((value) => value === 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА')),
+      legal: bounds(text((value) => value === 'О приложении · Политика · Поддержка')),
     };
   });
 
@@ -220,7 +220,7 @@ async function assertCompactResumeMenu(browser) {
       const sound = visible.find((obj) => obj.text.startsWith('звук:'));
       const social = visible.find((obj) => obj.text === 'СВОДКА');
       const codex = visible.find((obj) => obj.text.startsWith('КОДЕКС '));
-      const legal = visible.find((obj) => obj.text === 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА');
+      const legal = visible.find((obj) => obj.text === 'О приложении · Политика · Поддержка');
       const tagline = visible.find((obj) => obj.text === 'Двигай штамм · собирай РНК · выбирай мутации');
       const boundsOf = (obj) => {
         const bounds = obj?.getBounds?.();

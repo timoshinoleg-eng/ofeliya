@@ -107,37 +107,43 @@ function methodBody(path, name) {
  assert.ok(method?.body, `production method ${name} must exist`);
  return method.body.getText(source).slice(1, -1);
 }
-test('Menu host and hero keep the original large portraits and tween endpoints', () => {
+test('Menu host and hero keep the layout portraits and tween endpoints', () => {
  const { artScale } = load('src/game/ArtMetrics.ts');
  const { ROLE, BORDER, PANEL } = load('src/ui/tokens.ts');
  const { VISUAL } = load('src/ui/visualTokens.ts');
+ const { computeMenuLayout } = load('src/ui/menuLayout.ts');
  const source = readFileSync('src/scenes/MenuScene.ts', 'utf8');
- const body = source.slice(source.indexOf('    const host ='), source.indexOf('    const titleY ='));
- for (const H of [568, 844]) {
+ const body = source.slice(source.indexOf('    // ---- Hero'), source.indexOf('    const title = this.add'));
+ for (const H of [568, 744, 844, 1920]) {
   const f = fixture(); bake(f);
-  new Function('W', 'H', 'artScale', 'ROLE', 'BORDER', 'PANEL', 'VISUAL', 'prefersReducedMotion', body).call(f.scene, 390, H, artScale, ROLE, BORDER, PANEL, VISUAL, () => false);
+  const layout = computeMenuLayout(390, H, { hasCheckpoint: false, hasRecord: false, recordLines: 1 });
+  new Function('W', 'H', 'artScale', 'ROLE', 'BORDER', 'PANEL', 'VISUAL', 'prefersReducedMotion', 'layout', body).call(f.scene, 390, H, artScale, ROLE, BORDER, PANEL, VISUAL, () => false, layout);
   const host = f.objects.find(o => o.texture?.key === 'host-cell-shadow');
   const hero = f.objects.find(o => o.texture?.key === 'virus-player');
-  const hostScale = H < 650 ? 1.1 : 1.4, heroScale = H < 650 ? 1.8 : 2.15;
-  assert.equal(host.displayWidth, 112 * hostScale);
-  assert.equal(hero.displayWidth, 56 * heroScale);
-  assert.ok(Math.abs(f.tweens.find(t => t.targets === host && t.scale !== undefined).scale * host.width - 112 * hostScale * 1.07) < 1e-9);
-  assert.ok(Math.abs(f.tweens.find(t => t.targets === hero && t.scale !== undefined).scale * hero.width - 56 * heroScale * 1.06) < 1e-9);
+  // The hero art is the elastic band of the menu layout: it keeps its ratio to
+  // the layout height and never loses its proportions.
+  assert.ok(layout.artHeight >= 34, 'the hero art keeps a visible minimum');
+  assert.equal(hero.displayWidth, layout.artHeight);
+  assert.equal(host.displayWidth, layout.artHeight * 1.25);
+  assert.ok(Math.abs(f.tweens.find(t => t.targets === host && t.scale !== undefined).scale * host.width - layout.artHeight * 1.25 * 1.07) < 1e-9);
+  assert.ok(Math.abs(f.tweens.find(t => t.targets === hero && t.scale !== undefined).scale * hero.width - layout.artHeight * 1.06) < 1e-9);
  }
 });
 test('Menu reduced-motion portraits keep dimensions and register no decorative tweens', () => {
  const { artScale } = load('src/game/ArtMetrics.ts');
  const { ROLE, BORDER, PANEL } = load('src/ui/tokens.ts');
  const { VISUAL } = load('src/ui/visualTokens.ts');
+ const { computeMenuLayout } = load('src/ui/menuLayout.ts');
  const source = readFileSync('src/scenes/MenuScene.ts', 'utf8');
- const body = source.slice(source.indexOf('    const host ='), source.indexOf('    const titleY ='));
- for (const H of [568, 844]) {
+ const body = source.slice(source.indexOf('    // ---- Hero'), source.indexOf('    const title = this.add'));
+ for (const H of [568, 744, 844, 1920]) {
   const f = fixture(); bake(f);
-  new Function('W', 'H', 'artScale', 'ROLE', 'BORDER', 'PANEL', 'VISUAL', 'prefersReducedMotion', body).call(f.scene, 390, H, artScale, ROLE, BORDER, PANEL, VISUAL, () => true);
+  const layout = computeMenuLayout(390, H, { hasCheckpoint: false, hasRecord: false, recordLines: 1 });
+  new Function('W', 'H', 'artScale', 'ROLE', 'BORDER', 'PANEL', 'VISUAL', 'prefersReducedMotion', 'layout', body).call(f.scene, 390, H, artScale, ROLE, BORDER, PANEL, VISUAL, () => true, layout);
   const host = f.objects.find(o => o.texture?.key === 'host-cell-shadow');
   const hero = f.objects.find(o => o.texture?.key === 'virus-player');
-  assert.equal(host.displayWidth, 112 * (H < 650 ? 1.1 : 1.4));
-  assert.equal(hero.displayWidth, 56 * (H < 650 ? 1.8 : 2.15));
+  assert.equal(host.displayWidth, layout.artHeight * 1.25);
+  assert.equal(hero.displayWidth, layout.artHeight);
   assert.equal(host.alpha, .1);
   assert.equal(hero.rotation, 0);
   assert.deepEqual(f.tweens, []);

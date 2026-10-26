@@ -11,7 +11,10 @@ import {
 import type { DailyTicketStatus } from '../systems/DailyRunClient';
 import { dailyStreakSummary } from '../systems/DailyHistory';
 import { dailyPreviewTitle, dailyPreviewRefreshDelay } from './DailyPreview';
+import { META_COPY, buildInviteText } from '../game/UiCopy';
+import { fmtInt } from '../game/UiFormat';
 import { VISUAL, VISUAL_TEXT } from './visualTokens';
+import { createModalFrame } from './modal';
 import { createSpecimenSurface } from './specimenSurface';
 
 const MAX_ROWS = 3;
@@ -31,18 +34,30 @@ function relationLabel(value: FriendSnapshot['relation']): string {
   return 'ВЫ ПРИГЛАСИЛИ';
 }
 
+/**
+ * The error of a read-only surface.
+ *
+ * The rating surface reads the server; it does not hold the player's progress, so
+ * it never promises that the progress is preserved.
+ */
 function errorCopy(status: RemoteStatus): string | null {
-  if (status === 'network') return 'НЕТ СОЕДИНЕНИЯ · МОЖНО ПОВТОРИТЬ';
-  if (status === 'http') return 'СЕРВЕР НЕ ОТВЕТИЛ · МОЖНО ПОВТОРИТЬ';
+  if (status === 'network') return META_COPY.networkError;
+  if (status === 'http') return 'Сервер не ответил';
   return null;
 }
 
+/**
+ * Player rows of the tables.
+ *
+ * The social payload carries no display name, so the row names the platform
+ * instead of inventing an identity.
+ */
 function seasonRow(entry: SocialTopEntry): string {
-  return `#${entry.rank} · ${platformLabel(entry.platform)}\n${fmtTime(entry.timeMs)} · УНИЧТОЖЕНО ${entry.kills}`;
+  return `#${entry.rank} · ${META_COPY.player(platformLabel(entry.platform))}\n${fmtTime(entry.timeMs)} · Уничтожено ${fmtInt(entry.kills)}`;
 }
 
 function friendRow(entry: FriendSnapshot): string {
-  return `${relationLabel(entry.relation)} · ${platformLabel(entry.platform)}\n${fmtTime(entry.timeMs)} · УНИЧТОЖЕНО ${entry.kills}`;
+  return `${relationLabel(entry.relation)} · ${META_COPY.player(platformLabel(entry.platform))}\n${fmtTime(entry.timeMs)} · Уничтожено ${fmtInt(entry.kills)}`;
 }
 
 export class SocialHub {
@@ -66,41 +81,38 @@ export class SocialHub {
   ) {
     const W = scene.scale.width;
     const H = scene.scale.height;
-    this.panelW = Math.min(W - 22, 370);
+    this.panelW = Math.min(W - 22, 400);
     this.panelH = Math.min(H - 24, 620);
     this.panelTop = H / 2 - this.panelH / 2;
     this.panelLeft = W / 2 - this.panelW / 2;
 
     this.root = scene.add.container(0, 0).setDepth(46).setName('ofeliya-social-hub');
-    const dim = scene.add
-      .rectangle(W / 2, H / 2, W, H, VISUAL.ink, 0.96)
-      .setInteractive()
-      .setName('ofeliya-social-dim');
-    const panel = scene.add
-      .rectangle(W / 2, H / 2, this.panelW, this.panelH, VISUAL.panel, 0.995)
-      .setStrokeStyle(1, VISUAL.line, 0.8)
-      .setName('ofeliya-social-panel');
-    this.root.add([dim, panel, createSpecimenSurface(scene, W / 2, H / 2, this.panelW, this.panelH, {
-      accent: VISUAL.host, detail: 'quiet',
-    }).setName('ofeliya-social-membrane')]);
+    // The rating surface shares the frame of the other meta surfaces: one
+    // scrim, one membrane, one centered title and one 44x44 close control.
+    createModalFrame(scene, this.root, {
+      x: W / 2,
+      y: H / 2,
+      width: this.panelW,
+      height: this.panelH,
+      title: META_COPY.rating,
+      compact: H < 650,
+      onClose: () => {
+        this.platform.haptic('light');
+        this.destroy();
+      },
+    });
+    // The shared frame owns the title and the close control; the rating surface
+    // keeps its own object names so the existing probes stay valid.
+    const frameTitle = this.root.list.find((obj) => obj.name === 'ofeliya-modal-title');
+    frameTitle?.setName('ofeliya-social-title');
+    const closeHit = this.root.list.find((obj) => obj.name === 'ofeliya-modal-close-hit');
+    closeHit?.setName('ofeliya-social-close-hit');
+    const closeGlyph = this.root.list.find((obj) => obj.name === 'ofeliya-modal-close-label');
+    closeGlyph?.setName('ofeliya-social-close-label');
 
     this.root.add(
       scene.add
-        .text(W / 2, this.panelTop + 24, 'СВОДКА', {
-          fontFamily: FONT,
-          fontSize: H < 650 ? '18px' : '21px',
-          fontStyle: 'bold',
-          color: VISUAL_TEXT.ivory,
-          letterSpacing: 1,
-        })
-        .setOrigin(0.5)
-        .setResolution(2)
-        .setName('ofeliya-social-title')
-    );
-
-    this.root.add(
-      scene.add
-        .text(W / 2, this.panelTop + 47, 'СЕГОДНЯ · СЕЗОН · ДРУЗЬЯ', {
+        .text(W / 2, this.panelTop + 47, 'ЗАБЕГ ДНЯ · СЕЗОН · ДРУЗЬЯ', {
           fontFamily: UI_FONT,
           fontSize: '11px',
           fontStyle: '700',
@@ -109,27 +121,6 @@ export class SocialHub {
         .setOrigin(0.5)
         .setResolution(2)
     );
-
-    const closeX = this.panelLeft + this.panelW - 25;
-    const closeY = this.panelTop + 25;
-    const closeHit = scene.add
-      .rectangle(closeX, closeY, 44, 44, 0x000000, 0.001)
-      .setInteractive({ useHandCursor: true })
-      .setName('ofeliya-social-close-hit');
-    const closeGlyph = scene.add
-      .text(closeX, closeY - 1, '×', {
-        fontFamily: FONT,
-        fontSize: '27px',
-        color: VISUAL_TEXT.muted,
-      })
-      .setOrigin(0.5)
-      .setResolution(2)
-      .setName('ofeliya-social-close-label');
-    closeHit.on('pointerup', () => {
-      this.platform.haptic('light');
-      this.destroy();
-    });
-    this.root.add([closeHit, closeGlyph]);
 
     this.body = scene.add.container(0, 0).setName('ofeliya-social-body');
     this.root.add(this.body);
@@ -198,7 +189,7 @@ export class SocialHub {
     const left = this.panelLeft + 17;
     const width = this.panelW - 34;
     const todayY = this.panelTop + 70;
-    this.sectionTitle(todayY, 'СЕГОДНЯ', 'ofeliya-social-today-title');
+    this.sectionTitle(todayY, 'ЗАБЕГ ДНЯ', 'ofeliya-social-today-title');
     this.addText(left, todayY + 22, 'ЗАГРУЗКА ЛИЧНОГО РЕЗУЛЬТАТА…', 11, VISUAL_TEXT.muted, 'left', width);
     this.addDailyButton(todayY + 74, true);
 
@@ -227,7 +218,7 @@ export class SocialHub {
   } {
     if (loadingView || this.dailyLaunchStatus === 'loading') {
       return {
-        label: 'ПОЛУЧАЕМ ЕЖЕДНЕВНЫЙ ЗАБЕГ…',
+        label: 'ПОЛУЧАЕМ ЗАБЕГ ДНЯ…',
         enabled: false,
         color: VISUAL_TEXT.muted,
         fill: VISUAL.panelRaised,
@@ -333,9 +324,10 @@ export class SocialHub {
       .setName('ofeliya-social-daily-mutator');
     this.body.add([bg, label, mutatorText]);
     const streak = dailyStreakSummary();
+    // A zero streak is an empty state, not a counter that reads "СЕРИЯ 0".
     if (streak.current > 0 || streak.best > 0) {
       const streakText = this.scene.add
-        .text(W / 2, y + 43, `СЕРИЯ ${streak.current} · РЕКОРД ${streak.best}`, {
+        .text(W / 2, y + 43, streak.current > 0 ? `СЕРИЯ ${streak.current} · РЕКОРД ${streak.best}` : META_COPY.streakEmpty, {
           fontFamily: FONT,
           fontSize: '11px',
           fontStyle: 'bold',
@@ -377,7 +369,7 @@ export class SocialHub {
     const bodySize = 11;
     const todayY = this.panelTop + 70;
 
-    this.sectionTitle(todayY, 'СЕГОДНЯ', 'ofeliya-social-today-title');
+    this.sectionTitle(todayY, 'ЗАБЕГ ДНЯ', 'ofeliya-social-today-title');
     const dailyError = errorCopy(detail.status.daily);
     let dailyLine = '';
     if (detail.status.daily === 'ok' && detail.snapshot.daily?.you) {
@@ -456,17 +448,50 @@ export class SocialHub {
       this.addText(
         left,
         friendsY + 22,
-        'ПОКА НЕТ РЕЗУЛЬТАТОВ ДРУЗЕЙ',
+        META_COPY.friendsEmpty,
         bodySize,
         VISUAL_TEXT.muted,
         'left',
         width,
         'ofeliya-social-friends-status'
       );
+      this.addInviteButton(friendsY + 74);
     }
 
     const hasRetry = Object.values(detail.status).some((status) => status === 'network' || status === 'http');
     if (hasRetry) this.addRetryButton();
+  }
+
+  /**
+   * The invite action of the empty friends list.
+   *
+   * It uses the existing messenger share: no referral system, no reward.
+   */
+  private addInviteButton(y: number): void {
+    const W = this.scene.scale.width;
+    const buttonW = Math.min(this.panelW - 34, 310);
+    const bg = this.scene.add
+      .rectangle(W / 2, y, buttonW, 44, VISUAL.panelRaised, 0.97)
+      .setStrokeStyle(1, VISUAL.host, 0.82)
+      .setName('ofeliya-social-invite-bg');
+    const label = this.scene.add
+      .text(W / 2, y, META_COPY.inviteFriends, {
+        fontFamily: FONT,
+        fontSize: '11px',
+        fontStyle: 'bold',
+        color: VISUAL_TEXT.ivory,
+      })
+      .setOrigin(0.5)
+      .setResolution(2)
+      .setName('ofeliya-social-invite-label');
+    bg.setInteractive({ useHandCursor: true });
+    bg.on('pointerup', () => {
+      this.platform.haptic('light');
+      void this.platform.shareResult(buildInviteText()).then((ok) => {
+        if (!ok) this.addText(W / 2, y + 30, 'Нативный шаринг недоступен в этом клиенте', 11, VISUAL_TEXT.muted);
+      });
+    });
+    this.body.add([bg, label]);
   }
 
   private addRetryButton(): void {
@@ -479,7 +504,7 @@ export class SocialHub {
       .setInteractive({ useHandCursor: true })
       .setName('ofeliya-social-retry-bg');
     const label = this.scene.add
-      .text(W / 2, y, 'ПОВТОРИТЬ ЗАГРУЗКУ', {
+      .text(W / 2, y, META_COPY.retry, {
         fontFamily: FONT,
         fontSize: '11px',
         fontStyle: 'bold',

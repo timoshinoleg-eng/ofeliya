@@ -70,7 +70,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       source: host.dataset.viewportSource,
       challenge: texts.includes('ВЫЗОВ ПОЛУЧЕН'),
       accept: texts.includes('ПРИНЯТЬ ВЫЗОВ'),
-      legal: texts.includes('О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА'),
+      legal: texts.includes('О приложении · Политика · Поддержка'),
       greeting: texts.some((text) => text.includes('Носитель: QA Carrier')),
       overflow,
       targetAcceptGap:
@@ -96,7 +96,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   await page.evaluate(() => {
     const menu = window.__game.scene.getScene('Menu');
-    const legal = menu.children.list.find((obj) => obj.text === 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА');
+    const legal = menu.children.list.find((obj) => obj.text === 'О приложении · Политика · Поддержка');
     if (!legal) throw new Error('legal footer missing');
     legal.emit('pointerup');
   });
@@ -163,12 +163,12 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     ) ?? [];
     const time = modalTexts.find((obj) => /^\d{2}:\d{2}$/.test(obj.text));
     const stats = modalTexts.find((obj) => obj.text.startsWith('УНИЧТОЖЕНО:') && obj.text.includes('Заражено:'));
-    const shareText = modalTexts.find((obj) => obj.text === 'БРОСИТЬ ВЫЗОВ');
+    const shareText = modalTexts.find((obj) => obj.text === 'БРОСИТЬ ВЫЗОВ ДРУГУ');
     const report = container?.getByName('ofeliya-result-report');
     const reportHit = container?.getByName('ofeliya-result-report-hit');
     const reportRows = report?.list?.filter((obj) => typeof obj.text === 'string') ?? [];
     const verdict = reportRows.find((obj) => obj.text.includes('ВЫЗОВ ПРЕВЗОЙДЁН'));
-    const buttons = modalTexts.filter((obj) => ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В МЕНЮ'].includes(obj.text));
+    const buttons = modalTexts.filter((obj) => ['НОВЫЙ ЗАБЕГ', 'БРОСИТЬ ВЫЗОВ ДРУГУ', 'В МЕНЮ'].includes(obj.text));
     const buttonSet = new Set(buttons);
     const details = modalTexts
       .filter((obj) => obj !== title && obj !== time && obj !== stats && !buttonSet.has(obj))
@@ -276,7 +276,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       if (Array.isArray(obj?.list)) obj.list.forEach(visit);
     };
     ui.children.list.forEach(visit);
-    const shareText = flat.find((obj) => obj.text === 'БРОСИТЬ ВЫЗОВ');
+    const shareText = flat.find((obj) => obj.text === 'БРОСИТЬ ВЫЗОВ ДРУГУ');
     const control = shareText?.parentContainer?.list?.find((obj) =>
       obj !== shareText && obj.input?.enabled && Math.abs((obj.y ?? -9999) - shareText.y) < 1
     );

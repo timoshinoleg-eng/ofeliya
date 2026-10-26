@@ -25,7 +25,7 @@ for(const viewport of [{width:320,height:568},{width:390,height:844},{width:768,
  await page.goto(process.env.OFELIYA_BASE_URL||'http://127.0.0.1:5173/');
  await page.waitForFunction(()=>window.__game?.scene.isActive('Menu'));
  const show=async()=>{
-  const point=await page.evaluate(()=>{const m=window.__game.scene.getScene('Menu');m.showCodex();const b=m.codexOverlay.list.find(o=>o.name==='ofeliya-menu-quests').getBounds();const c=window.__game.canvas.getBoundingClientRect();return {x:c.x+(b.x+b.width/2)*c.width/m.scale.width,y:c.y+(b.y+b.height/2)*c.height/m.scale.height};});
+  const point=await page.evaluate(()=>{const m=window.__game.scene.getScene('Menu');m.showCodex();const b=m.codexOverlay.list.find(o=>o.name==='ofeliya-meta-dock-tasks').getBounds();const c=window.__game.canvas.getBoundingClientRect();return {x:c.x+(b.x+b.width/2)*c.width/m.scale.width,y:c.y+(b.y+b.height/2)*c.height/m.scale.height};});
   await page.touchscreen.tap(point.x,point.y);
   await page.waitForFunction(()=>!!window.__game.scene.getScene('Menu').questBoard);
  };
