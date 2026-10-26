@@ -1,3 +1,4 @@
+import { NotificationRegion } from '../ui/NotificationRegion';
 import { installGameHostLifecycle } from '../platform/GameHostLifecycle';
 import { clientCollection, clientFlags } from '../systems/ClientExperience';
 import { impactZoom } from '../ui/ClientJuice';
@@ -259,6 +260,8 @@ export class GameScene extends Phaser.Scene {
     super('Game');
   }
 
+  notificationRegion = new NotificationRegion();
+
   create(): void {
     const requestedResume = this.registry.get('runCheckpointResume') as
       | RunCheckpointData
@@ -516,7 +519,9 @@ export class GameScene extends Phaser.Scene {
       this.difficulty.id === 'strained' && !this.dailyRun,
       () => this.gameplayRng.next('anomaly')
     );
-    this.milestones = new RunMilestones(this);
+    this.notificationRegion.destroy();
+    this.notificationRegion = new NotificationRegion();
+    this.milestones = new RunMilestones(this, this.notificationRegion);
     if (this.dailyMutator) {
       // Same presentation path as stage milestones/wave events: one banner,
       // no new UI system.
@@ -587,6 +592,7 @@ export class GameScene extends Phaser.Scene {
     document.addEventListener('visibilitychange', flushHiddenCheckpoint);
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.notificationRegion.destroy(false);
       this.detachHostLifecycle?.();this.detachHostLifecycle=null;
       this.quests.flush();
       this.scale.off('resize', this.onResize, this);
@@ -841,7 +847,7 @@ export class GameScene extends Phaser.Scene {
 
     if (this.queuedLevels > 0 && !this.awaitingChoice) {
       // Progression supersedes onboarding; never render tutorial copy beneath a mutation modal.
-      this.dismissIntroHint(true);
+      this.notificationRegion.setBlocked(true);
       this.pendingChoices = rollRunChoices(
         this.runState,
         3,
@@ -2391,6 +2397,7 @@ export class GameScene extends Phaser.Scene {
 
   finish(win: boolean, reason: RunEndReason = win ? 'campaign-complete' : 'defeat'): void {
     if (this.registry.get('runResult')) return;
+    this.notificationRegion.destroy();
     if (this.stageDirector.phase !== 'RUN_ENDED') this.stageDirector.endRun(reason);
     this.resetCardiacLineHazard();
     RunCheckpoint.clear();
@@ -2901,6 +2908,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   private showAchievementToast(id: AchievementId): void {
+    this.notificationRegion.enqueue(`achievement:${id}`, (done) => this.presentAchievementToast(id, done));
+  }
+
+  private presentAchievementToast(id: AchievementId, done: () => void) {
     const W = this.scale.width;
     const H = this.scale.height;
     const def = getAchievementDef(id);
@@ -2932,16 +2943,23 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({
       targets: c,
       alpha: 1,
-      y: y + 6,
+      y: prefersReducedMotion() ? y : y + 6,
       duration: 160,
       yoyo: true,
       hold: 900,
-      onComplete: () => c.destroy(),
+      onComplete: done,
     });
+    return { setVisible: (visible: boolean) => {
+      c.setVisible(visible);
+      for (const tween of this.tweens.getTweensOf(c)) { if (visible) tween.resume(); else tween.pause(); }
+    }, destroy: () => { this.tweens.killTweensOf(c); c.destroy(); } };
   }
 
   private showIntroHint(): void {
-    this.dismissIntroHint(true);
+    this.notificationRegion.enqueue('intro', (done) => this.presentIntroHint(done));
+  }
+
+  private presentIntroHint(done: () => void) {
     const W = this.scale.width;
     const H = this.scale.height;
     const c = this.add.container(0, 0).setDepth(60);
@@ -2979,29 +2997,22 @@ export class GameScene extends Phaser.Scene {
 
     c.setAlpha(0);
     this.tweens.add({ targets: c, alpha: 1, duration: 220 });
-    this.time.delayedCall(4600, () => {
+    const timer = this.time.delayedCall(4600, () => {
       if (!c.active || this.introHint !== c) return;
       this.introHint = null;
-      this.tweens.add({ targets: c, alpha: 0, duration: 260, onComplete: () => c.destroy() });
+      this.tweens.add({ targets: c, alpha: 0, duration: 260, onComplete: done });
     });
+    return { setVisible: (visible: boolean) => {
+      c.setVisible(visible); timer.paused = !visible;
+      for (const tween of this.tweens.getTweensOf(c)) { if (visible) tween.resume(); else tween.pause(); }
+    }, destroy: () => {
+      timer.remove(false); this.tweens.killTweensOf(c); c.destroy();
+      if (this.introHint === c) this.introHint = null;
+    } };
   }
 
-  private dismissIntroHint(immediate = false): void {
-    const c = this.introHint;
-    if (!c) return;
-    this.introHint = null;
-    this.tweens.killTweensOf(c);
-    if (immediate) {
-      c.destroy();
-      return;
-    }
-    this.tweens.add({
-      targets: c,
-      alpha: 0,
-      duration: 110,
-      ease: 'Quad.Out',
-      onComplete: () => c.destroy(),
-    });
+  private dismissIntroHint(_immediate = false): void {
+    this.notificationRegion.cancel('intro');
   }
 
   private snapshot(): RunSnapshot {

@@ -1,3 +1,12 @@
+UX CI follow-up: new ordering/touch tests PASS; legacy mobile matrix uses center alignment for wrapped footer labels, retaining spacing/overflow guards. No runtime delta. Exact final SHA CI required.
+
+UX follow-up: EASY248 c615ab7 resolves prior share-label P2; source-only limits remain. UX250 first CI Daily fixture failure reproduced and presentation initialization relocated; final exact-head checks tracked in PR.
+
+# Verified UX decisions — 2026-10-26
+Use run-owned FIFO for system surfaces; tutorial yields presentation only. Preserve notice display time across suspension; startup resumes after mutation. Obsolete stage notices cancel atomically at stage boundary; terminal result/shutdown closes queue. Footer wraps measured labels only when needed and uses custom44px hit areas; legal/version occupy disjoint bottom-row targets. No result-HUD change, no instrumentation, difficulty or validator change. See docs/qa/VERIFIED_UX_FIXES_20261026.md.
+
+---
+
 # PR244 independent final gate - 2026-10-25
 
 Original de6a74afd80607e6df24801a819d7e6cfa60af4f is BLOCK: P2 mutation gate falsely classifies omitted pre-hit flush as equivalent. Real offset streak reaches q_nodmg60; the permitted mutant records59. Narrow tests-only repair on review/codex-pr244-final-gate-20261025; report docs/qa/CODEX_PR244_FINAL_GATE_20261025.md. UTC14/14 +2 equivalent +control passed; exact candidate CI40181931371 is genuinely green but cannot prove the false equivalence. Lifecycle and UTC/units historical RED/GREEN independently reproduced. Keep native memory failures and base-reproduced startup font assertion distinct from product findings. No merge/deploy. Next: Draft follow-up into #244 branch, new exact-head full CI and release decision. Physical native close inconclusive, eviction/MAX NOT_RUN.

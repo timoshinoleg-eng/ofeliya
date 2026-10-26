@@ -39,7 +39,7 @@ jobs:
         run: npm run test:layout-diagnostics
 
       - name: Onboarding state machine smoke
-        run: npm run test:onboarding
+        run: npm run test:onboarding && node tests/notification-region.mjs
 
       - name: Daily history deterministic smoke
         run: npm run test:daily-history
@@ -306,6 +306,16 @@ jobs:
       - name: Daily CTA runtime browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/daily-cta-smoke.cjs
 
+      - name: Verified notification ordering and footer touch accessibility
+        env:
+          OFELIYA_BASE_URL: http://127.0.0.1:5173/
+          UX_EVIDENCE: /tmp/verified-ux
+        run: |
+          node scripts/verified-ux-smoke.cjs --footer
+          node scripts/verified-ux-smoke.cjs
+          node scripts/notification-ordering-smoke.cjs
+          node scripts/footer-actions-smoke.cjs
+
       - name: Utility text extremes and reduced-motion browser contracts
         run: npm run test:integration-visual-browser
 
@@ -392,6 +402,7 @@ jobs:
           name: max-browser-smoke
           path: |
             /tmp/browser-smoke/*.png
+            /tmp/verified-ux/
             /tmp/visual-completion/*.png
             /tmp/release-visual-matrix/**/*.png
             /tmp/release-visual-matrix/**/matrix.json
