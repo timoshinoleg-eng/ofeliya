@@ -46,7 +46,28 @@ const FORBIDDEN_PLAYER_COPY = [
   'НЕЗАВЕРШЁННЫЙ ЗАБЕГ',
   'ПЕРВЫЙ ЦИКЛ',
   'STRAIN-0',
+  // The calque of the projectile branch and the achievement counter of the codex
+  // are gone for good.
+  'ПРОЕКТИЛЬНЫЙ',
+  'ДОСТИЖЕНИЯ',
+  // The daily run has one canonical call to action.
+  'НАЧАТЬ ЕЖЕДНЕВНЫЙ ЗАБЕГ',
+  'СЕГОДНЯ РЕЗУЛЬТАТА ЕЩЁ НЕТ',
+  // A ranking disclaimer is an internal flag, never a player-facing word.
+  'вне рейтинга',
+  'вне рейтинга'.toUpperCase(),
 ];
+
+/** Every text of a surface, including the texts of its nested containers. */
+function collectTexts(node) {
+  const out = [];
+  const visit = (child) => {
+    if (child?.type === 'Text' && typeof child.text === 'string') out.push(child.text);
+    for (const grand of child?.list ?? []) visit(grand);
+  };
+  visit(node);
+  return out;
+}
 
 const server = await createServer({ server: { host: '127.0.0.1', port: 0 } });
 let browser;
@@ -165,7 +186,7 @@ try {
 
     // The audio row is three switches, never a percentage.
     assert.equal(menu.audio.length, 3, `the audio row must have three switches at ${viewport.width}`);
-    const audioLabels = menu.allText.filter((t) => /^(Музыка|Звук|Эффекты):/.test(t));
+    const audioLabels = menu.allText.filter((t) => /^(♪ )?(Музыка|Звук|Эффекты):/.test(t));
     assert.equal(audioLabels.length, 3, 'the audio row must name three switches');
     assert.ok(
       audioLabels.every((t) => / (вкл|выкл)$/.test(t)),
@@ -275,6 +296,13 @@ try {
     resultPage.on('pageerror', (error) => resultErrors.push(String(error)));
     await resultPage.addInitScript(() => {
       localStorage.setItem('ofeliya_save_v1', JSON.stringify({ runs: 3, muted: true, bestSurvivalMs: 920000, bestKills: 2617 }));
+      // The share action of the result screen is the real product path: capture
+      // the text it hands to the messenger.
+      window.__shared = [];
+      Object.defineProperty(navigator, 'share', {
+        configurable: true,
+        value: async (data) => { window.__shared.push(data); },
+      });
     });
     await resultPage.goto(base, { waitUntil: 'domcontentloaded' });
     await resultPage.waitForFunction(() => window.__game?.scene.isActive('Menu'), null, { timeout: 20000 });
@@ -350,6 +378,11 @@ try {
     assert.ok(defeat.labels.retry === 'НОВЫЙ ЗАБЕГ', 'the primary result action is wrong');
     assert.ok(defeat.labels.share === 'БРОСИТЬ ВЫЗОВ ДРУГУ', 'the challenge action is wrong');
     assert.ok(defeat.labels.menu === 'В МЕНЮ', 'the menu action is wrong');
+    // The challenge button states what the challenge is about.
+    assert.ok(
+      defeat.overlayTexts.some((t) => t.startsWith('Побить результат 15:20') && t.includes('2\u00a0617 кл.')),
+      `the challenge caption is wrong: ${defeat.overlayTexts.join(' | ')}`
+    );
     assert.ok(
       defeat.labels.stats.includes('Уничтожено: 2\u00a0617') && defeat.labels.stats.includes('Комбо ×460'),
       `the result stats are wrong: ${defeat.labels.stats}`
@@ -367,12 +400,66 @@ try {
       defeat.overlayTexts.some((t) => t.startsWith('Архетип: ')),
       'the build must be named as an archetype'
     );
+    assert.ok(
+      defeat.overlayTexts.some((t) => t.startsWith('Архетип: Снарядный штамм (')),
+      `the archetype must be named in full: ${defeat.overlayTexts.join(' | ')}`
+    );
+    assert.ok(
+      defeat.overlayTexts.some((t) => t.startsWith('НОВЫЕ РЕКОРДЫ: ')),
+      'the records of the run must be named'
+    );
+    assert.ok(
+      !defeat.overlayTexts.some((t) => t.startsWith('НОВЫЕ ЗАПИСИ')),
+      'a record is a record, not a codex entry'
+    );
+    // The mode chip names the mode; it never uses a ranking disclaimer.
+    assert.ok(
+      defeat.overlayTexts.some((t) => t === 'СТАНДАРТ · Тренировка'),
+      `the mode chip is wrong: ${defeat.overlayTexts.join(' | ')}`
+    );
+    assert.ok(
+      !defeat.overlayTexts.some((t) => t.startsWith('РЕЖИМ:')),
+      'the mode chip must not be a prefixed line'
+    );
     assert.deepEqual(defeat.hudVisible, [], 'the gameplay HUD must be hidden under the result');
+
+    // The share action hands the canonical text to the messenger.
+    await resultPage.evaluate(() => {
+      const ui = window.__game.scene.getScene('UI');
+      // The button is armed by a pointerdown: the synthetic pair keeps the
+      // product's own guard intact.
+      const bg = ui.resultOverlay.getByName('ofeliya-result-share-bg');
+      bg.emit('pointerdown', { id: 1 });
+      bg.emit('pointerup', { id: 1 });
+    });
+    await resultPage.waitForTimeout(250);
+    const shared = await resultPage.evaluate(() => window.__shared ?? []);
+    assert.ok(shared.length > 0, 'the share action must hand a text to the messenger');
+    const shareText = shared[0].text ?? '';
+    assert.ok(shareText.startsWith('OFELIYA · Вызов в кровотоке'), `the share title is wrong: ${shareText}`);
+    assert.ok(shareText.includes('продержался'), 'a defeat says "продержался"');
+    assert.ok(!shareText.includes('выжил'), 'a defeat never says "выжил"');
+    assert.ok(shareText.includes('@ofeliya_game_bot'), 'the share names the bot');
+    for (const forbidden of ['STRAIN-0', 'Профиль штамма', 'вне рейтинга', 'тот же штамм', 'тот же забег']) {
+      assert.ok(!shareText.includes(forbidden), `the share must not carry "${forbidden}"`);
+    }
+
+    // The records the run opened are named once, and the plate is a way into
+    // the codex.
+    const withEntries = await renderResult({ ...baseResult, newAchievements: ['first-contact'] });
+    assert.ok(
+      withEntries.overlayTexts.some((t) => t.startsWith('★ Открыто в Кодексе: +1 запись')),
+      `the codex plate is wrong: ${withEntries.overlayTexts.join(' | ')}`
+    );
+    assert.ok(
+      !withEntries.overlayTexts.some((t) => t.includes('ДОСТИЖЕНИЕ')),
+      'the player UI does not say "достижение"'
+    );
 
     const victory = await renderResult({ ...baseResult, win: true, reason: 'campaign-clear', bossesDefeated: 2, stageId: 'heart', stageOrder: 1, evolutions: ['prism'] });
     assert.ok(victory.overlayTexts.includes('НОСИТЕЛЬ ЗАРАЖЁН'), 'the victory outcome is wrong');
     assert.ok(
-      victory.overlayTexts.some((t) => t.includes('◆ КРИТИЧЕСКАЯ МУТАЦИЯ:')),
+      victory.overlayTexts.some((t) => t.includes('◆ Критические мутации:')),
       'a present critical mutation must use the full copy'
     );
 
@@ -475,7 +562,7 @@ try {
     assert.ok(!tasks.texts.some((t) => t.includes('00:00 UTC')), 'no UTC string on the daily tasks');
     assert.ok(!tasks.texts.some((t) => t.includes('без наград')), 'no reward disclaimer on the daily tasks');
     assert.ok(
-      tasks.texts.some((t) => /^\d+\s\/\s\d+ · осталось \d+$/.test(t) || t === '◆ ВЫПОЛНЕНО'),
+      tasks.texts.some((t) => /^\d+\s\/\s\d+ · остал(ся|ось) \d+$/.test(t) || t === '◆ ВЫПОЛНЕНО'),
       `a task must show its fraction or its completed state: ${tasks.texts.join(' | ')}`
     );
 
@@ -485,6 +572,55 @@ try {
     await shot(metaPage, `codex-${viewport.width}x${viewport.height}.png`);
     assert.ok(codex.overlayTexts.includes('КОДЕКС'), 'the codex title is wrong');
     assert.ok(!codex.overlayTexts.some((t) => t.includes('STRAIN-0')), 'no strain code in the codex');
+
+    // The codex body lives in a nested container: read the whole surface.
+    const codexBody = await metaPage.evaluate(() => {
+      const menu = window.__game.scene.getScene('Menu');
+      const overlay = menu.children.list.find((o) => o.name === 'ofeliya-codex');
+      const visit = (node, out) => {
+        for (const child of node.list ?? []) {
+          if (child.type === 'Text' && typeof child.text === 'string') out.push(child.text);
+          visit(child, out);
+        }
+        return out;
+      };
+      return overlay ? visit(overlay, []) : [];
+    });
+    // The tab is named after its content: it shows the critical mutations.
+    const codexTabs = await metaPage.evaluate(() => {
+      const menu = window.__game.scene.getScene('Menu');
+      const overlay = menu.children.list.find((o) => o.name === 'ofeliya-codex');
+      return overlay
+        ? overlay.list.filter((o) => o.type === 'Text' && o.input?.enabled).map((o) => o.text)
+        : [];
+    });
+    assert.deepEqual(
+      codexTabs,
+      ['СИНЕРГИИ', 'ЛЕГЕНДАРНЫЕ', 'МАСТЕРСТВО'],
+      'the codex tabs must be named after their content'
+    );
+    // The header names the open records and the runs; the achievement counter is
+    // not a codex record and does not belong into the codex.
+    assert.ok(
+      codexBody.some((t) => /^Открыто записей: \d+\/9 · Забегов: \d+$/.test(t)),
+      `the codex header is wrong: ${codexBody.join(' | ')}`
+    );
+    assert.ok(!codexBody.some((t) => t.includes('ДОСТИЖЕНИЯ')), 'the achievement counter must be gone');
+    // Every locked synergy names its own recipe.
+    assert.ok(
+      codexBody.some((t) => t.includes('ЗАКРЫТАЯ СИНЕРГИЯ')),
+      'a locked synergy must be named'
+    );
+    assert.ok(
+      codexBody.some((t) => t.includes('Совмести ветви «')),
+      'a locked synergy must name its recipe'
+    );
+    assert.ok(
+      codexBody.some((t) => t.includes('Открываются при совмещении двух совместимых ветвей')),
+      'the synergy section must explain itself'
+    );
+    assert.ok(!codexBody.some((t) => t.includes('НЕ ОТКРЫТО')), 'three identical locked cards must be gone');
+    assert.ok(!codexBody.includes('КВЕСТЫ'), 'the codex must not carry a stray quest link');
     assert.ok(
       codex.overlayNames.includes('ofeliya-meta-dock-tasks') && codex.overlayNames.includes('ofeliya-meta-dock-codex')
         && codex.overlayNames.includes('ofeliya-meta-dock-collection'),
@@ -493,6 +629,50 @@ try {
     assert.ok(
       !codex.overlayNames.includes('ofeliya-meta-dock-rating'),
       'the rating must not be part of the internal meta dock'
+    );
+
+    // The mastery tab: the branch rows and the mode rows.
+    await metaPage.evaluate(() => {
+      const menu = window.__game.scene.getScene('Menu');
+      const overlay = menu.children.list.find((o) => o.name === 'ofeliya-codex');
+      const tab = overlay.list.find((o) => o.type === 'Text' && o.text === 'МАСТЕРСТВО');
+      tab.emit('pointerup');
+    });
+    await metaPage.waitForTimeout(250);
+    const mastery = await metaPage.evaluate(() => {
+      const menu = window.__game.scene.getScene('Menu');
+      const overlay = menu.children.list.find((o) => o.name === 'ofeliya-codex');
+      const visit = (node, out) => {
+        for (const child of node.list ?? []) {
+          if (child.type === 'Text' && typeof child.text === 'string') out.push(child.text);
+          visit(child, out);
+        }
+        return out;
+      };
+      return overlay ? visit(overlay, []) : [];
+    });
+    assert.ok(mastery.includes('ПРОХОЖДЕНИЕ РЕЖИМОВ'), 'the mastery section must be named');
+    assert.ok(
+      mastery.some((t) => /^(◆ )?(Стандарт|Напряжение) — (пройдено: \d+ · рекорд: |ещё не пройдена)/.test(t)),
+      `the mode rows are wrong: ${mastery.join(' | ')}`
+    );
+    assert.ok(
+      mastery.some((t) => /Снарядный штамм · \d\/2 — /.test(t)),
+      `the branch rows are wrong: ${mastery.join(' | ')}`
+    );
+    assert.ok(
+      mastery.some((t) => /— (дальше: |Выполнено)/.test(t)),
+      'a branch row must state its state in words'
+    );
+    assert.ok(
+      !mastery.some((t) => /Открой |Найди /.test(t)),
+      'a branch row must never be a bare imperative'
+    );
+    // The codex keeps the lifetime counter with its own label, so the three
+    // counters of the product never look like one broken number.
+    assert.ok(
+      mastery.some((t) => /^Забегов: \d+ · Уничтожено клеток: [\d\u00a0]+$/.test(t)),
+      `the codex lifetime line is wrong: ${mastery.join(' | ')}`
     );
 
     const collection = await openMeta('collection');
@@ -558,6 +738,45 @@ try {
       shells.names.includes('ofeliya-skin-strain-zero'),
       'the owned shell keeps a named handle'
     );
+    // A shell names its kind and the way to open it; a locked shell never
+    // offers a select action.
+    assert.ok(
+      shells.texts.some((t) => t.includes('Штамм «Нулевой»') && t.includes('Базовая оболочка')),
+      `the shell must name its kind: ${shells.texts.join(' | ')}`
+    );
+    assert.ok(
+      shells.texts.some((t) => t.includes('Био-оболочка')),
+      'a bio shell must name its kind'
+    );
+    assert.ok(
+      shells.texts.some((t) => t.startsWith('Чтобы открыть: выполни веху «')),
+      'a locked shell must name the milestone that opens it'
+    );
+    assert.ok(
+      shells.texts.includes('ЗАКРЫТО'),
+      'a locked shell must state that it is locked'
+    );
+    assert.ok(
+      !shells.texts.some((t) => t.includes('Открывает:')),
+      'a locked shell must not use the "opens:" wording'
+    );
+    // The kill milestones share one group header and one target wording.
+    assert.ok(
+      collection.texts.some((t) => t.startsWith('Уничтожение иммунных клеток (всего: ')),
+      `the milestone group needs one header: ${collection.texts.join(' | ')}`
+    );
+    assert.ok(
+      collection.texts.some((t) => t === '500 противников всего'),
+      'a kill milestone must name its target once'
+    );
+    assert.ok(
+      !collection.texts.some((t) => t.includes('уничтоженных противников суммарно')),
+      'the repeated kill phrase must be gone'
+    );
+    assert.ok(
+      collection.texts.some((t) => / · остал(ся|ось) \d+$/.test(t)),
+      'an open milestone must state its rest'
+    );
 
     for (const forbidden of ['локально', 'без наград', '00:00 UTC', 'tdesktop', 'КРИТ.']) {
       assert.ok(
@@ -587,7 +806,14 @@ try {
     const rating = await ratingPage.evaluate(() => {
       const menu = window.__game.scene.getScene('Menu');
       const hub = menu.children.list.find((o) => o.name === 'ofeliya-social-hub');
-      const texts = hub ? hub.list.filter((o) => o.type === 'Text').map((o) => o.text) : [];
+      const visit = (node, out) => {
+        for (const child of node.list ?? []) {
+          if (child.type === 'Text' && typeof child.text === 'string') out.push(child.text);
+          visit(child, out);
+        }
+        return out;
+      };
+      const texts = hub ? visit(hub, []) : [];
       const find = (node, name) => {
         for (const child of node.list ?? []) {
           if (child.name === name) return child;
@@ -604,6 +830,19 @@ try {
     });
     assert.ok(rating.texts.includes('РЕЙТИНГ'), 'the rating title is wrong');
     assert.ok(rating.texts.some((t) => t.includes('ЗАБЕГ ДНЯ')), 'the rating has no daily-run band');
+    // The title is not a tab strip: the sections are the only structure.
+    assert.ok(
+      !rating.texts.some((t) => t === 'ЗАБЕГ ДНЯ · СЕЗОН · ДРУЗЬЯ'),
+      'the rating must not fake a tab strip under the title'
+    );
+    assert.ok(
+      rating.texts.some((t) => t === 'СЕЗОН' || t.startsWith('СЕЗОН ')),
+      'the rating must name the season section'
+    );
+    assert.ok(
+      rating.texts.some((t) => t === 'ДРУЗЬЯ'),
+      'the rating must name the friends section'
+    );
     assert.ok(
       !rating.texts.some((t) => t.includes('СЕРИЯ 0')),
       'a zero streak must never be rendered'
