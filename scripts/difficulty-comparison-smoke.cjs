@@ -137,14 +137,26 @@ function assert(condition, message) {
           return enemy;
         };
 
-        // Scripted input policy: a slow wide orbit, identical in every tier.
-        // The player keeps moving, collects what is nearby and never stops
-        // shooting, so the comparison measures the tier, not the operator.
+        // Scripted input policy: the player hovers around a slowly drifting
+        // anchor, the way someone who is still learning the controls plays —
+        // it keeps moving, collects nearby RNA and reaches host cells. The
+        // policy is identical in every tier, so every difference in the outcome
+        // is attributable to the difficulty profile alone.
         const originalUpdate = gs.update.bind(gs);
+        const anchorX = gs.player.x;
+        const anchorY = gs.player.y;
         gs.update = (time, delta) => {
           const clock = gs.runState.run.timeMs;
-          const angle = (clock / 8000) * Math.PI * 2;
-          gs.registry.set('joy', { x: Math.cos(angle), y: Math.sin(angle) });
+          const phase = (clock / 12000) * Math.PI * 2;
+          const targetX = anchorX + Math.cos(phase) * 60;
+          const targetY = anchorY + Math.sin(phase) * 60;
+          const dx = targetX - gs.player.x;
+          const dy = targetY - gs.player.y;
+          const distance = Math.hypot(dx, dy);
+          gs.registry.set(
+            'joy',
+            distance > 6 ? { x: dx / distance, y: dy / distance } : { x: 0, y: 0 }
+          );
           originalUpdate(time, delta);
         };
       });
