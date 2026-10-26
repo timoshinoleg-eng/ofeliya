@@ -96,7 +96,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   await page.evaluate(() => {
     const menu = window.__game.scene.getScene('Menu');
-    const legal = menu.children.list.find((obj) => obj.text === 'О приложении · Политика · Поддержка');
+    const legal = menu.children.getByName('ofeliya-menu-legal');
     if (!legal) throw new Error('legal footer missing');
     legal.emit('pointerup');
   });
