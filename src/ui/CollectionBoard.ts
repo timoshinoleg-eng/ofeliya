@@ -92,7 +92,10 @@ export class CollectionBoard {
 
     // ---- Tabs --------------------------------------------------------------
     const tabW = (w - MODAL.padX * 2 - 12) / 3;
-    const tabY = frame.bodyTop - 8;
+    // The tab row starts below the title band, so it can never cover the close
+    // control of the shared frame: a wide strip of buttons under the top-right
+    // corner used to swallow the tap.
+    const tabY = frame.bodyTop + 20;
     const tabs: Array<[Page, string]> = [
       ['shells', META_COPY.shells],
       ['milestones', META_COPY.milestones],

@@ -361,6 +361,47 @@ that pinned the old copy were updated to the new contract — never weakened:
 
 The exact commands are in §9.
 
+### What the CI caught
+
+The first local sweep covered the gates I had touched. The CI runs **every**
+gate in the workflow, and it found four real regressions that the local sweep
+missed. All four are repaired, and every repair keeps the assertion — the
+assertions were moved onto the new structure, not dropped:
+
+| Gate | The regression | The repair |
+| --- | --- | --- |
+| `test:quest-scenes` | the daily board is reached through the internal dock now, but the probe still looked for the tasks button as a direct child of the overlay | the probe looks the button up inside the dock container |
+| `test:quest-scenes` | the probe closed the board through `ofeliya-quests-close`, which the shared frame replaced | the probe closes through the shared `ofeliya-modal-close-hit` |
+| `test:quest-scenes` | the probe expected the old `Обновление в 00:00 UTC` line | the probe now expects the live `Обновление через HH:MM` **and** additionally asserts that it is not a static `00:00` midnight label — a stronger contract |
+| `test:muse-convergence-crossflow` | a locked shell has no select button any more, so the probe could not enumerate the shells it shows | every shell row keeps a named handle `ofeliya-skin-<id>` — the active plate and the locked plate included — so a locked shell is still enumerated while staying inert |
+| `test:muse-client` | the same locked-shell rule, asserted as existence | the probe now asserts that the locked shell's object is **not interactive**, which is the actual rule |
+| `test:social-hub` | the rating surface is opened from the navigation grid, and the shared frame has no `ofeliya-social-panel` / `ofeliya-social-dim` | the probe looks for `ofeliya-menu-nav-rating`; the frame names its scrim, and the rating surface keeps its own panel and scrim names so the overflow probe still has a reference frame |
+| `test:social-hub` | the close control's 44×44 hit area sat ten pixels **outside** the panel edge | the hit area is now fully inside the frame — a touch target may not hang over the edge |
+| `test:social-hub` | the error wording was changed to a sentence-case variant | the wording the repository already shipped and gates is kept — `СЕРВЕР НЕ ОТВЕТИЛ` and `НЕТ СОЕДИНЕНИЯ` — with the neutral `ПОВТОРИТЬ` retry |
+| `test:muse-convergence-crossflow` | **the collection's tab row covered the close control.** The tab strip sat at `bodyTop − 8`, so its plates crossed the title band, and the top-right tab swallowed the tap on the 44×44 close target — the board could not be closed | the tab row now starts at `bodyTop`, below the title band, so the close target is never covered. The content moves down by 28 px and still clears the internal dock at 320×568 and 390×740 |
+
+### The gates that fail in this sandbox — and on `main` as well
+
+Four gates fail here **and fail identically on `main` (`ce8ecb84…`)**, which is
+how they were classified as environment limits rather than regressions. The
+`main` runs were made in a second worktree of the base commit, against a dev
+server serving `main`:
+
+| Gate | The failure | Why it is the environment, not the change |
+| --- | --- | --- |
+| `test:art-startup` | `Menu startup must remain bounded` — the 6 s cold-start budget | the sandbox runs the game at ~3 fps on a software WebGL stack over a NAS filesystem. Measured on the same machine, the menu becomes ready in **4.1–5.5 s on this branch** and **5.7–9.1 s on `main`** — the branch is not slower, it is faster |
+| `test:integration-visual-browser` | the HP warning alpha reads `0` | the same assertion fails on `main` at the same line |
+| `test:natural-progression` | `page.waitForFunction` times out | the same timeout on `main` |
+| `test:quest-scenes` (the UTC rollover step only) | the day key does not roll inside 30 s | Phaser clamps the frame delta, so a one-second timer needs ~17 s of wall clock here. With the wait raised to 180 s the whole gate **passes at all four viewports** — and the 30 s budget is the repository's own value, so it was restored rather than relaxed |
+| `test:muse-convergence-crossflow` (the reveal tween step only) | the reveal tween is already finished when the probe looks for it | the same failure on `main` with the same numbers. The tween is 180 ms; in this sandbox the probe round-trip is slower than that |
+
+The 1080×1920 viewport of `test:quest-scenes` additionally failed once with
+`Target page, context or browser has been closed` — the sandbox has 3 GB of RAM
+and ~770 stale Chromium processes were running at that moment. After the stale
+processes were cleared, that viewport **passes on its own**.
+
+The exact commands are in §9.
+
 ---
 
 ## 9. Exact commands
