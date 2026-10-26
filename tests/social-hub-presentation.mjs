@@ -12,7 +12,8 @@ new Function('require', 'module', 'exports', ts.transpileModule(source, {
   : name.endsWith('/UiCopy') ? {
       META_COPY: {
         player: platform => `Игрок (${platform})`,
-        networkError: 'Нет соединения с сервером',
+        networkError: 'НЕТ СОЕДИНЕНИЯ',
+        serverError: 'СЕРВЕР НЕ ОТВЕТИЛ',
         friendsEmpty: 'Здесь появятся результаты друзей, которые играют в OFELIYA.',
         inviteFriends: 'ПРИГЛАСИТЬ ДРУЗЕЙ',
         retry: 'ПОВТОРИТЬ',
@@ -51,7 +52,7 @@ hub.render({ ...detail, status: { daily: 'network', season: 'http', seasonTop: '
 assert.equal(hub.retry, true, 'failed channels retain retry action');
 assert.ok(hub.rows.every(row => row.size >= 11));
 assert.ok(
-  hub.rows.filter(row => /-status$/.test(row.name ?? '')).every(row => /соединени|не ответил/.test(row.value)),
+  hub.rows.filter(row => /-status$/.test(row.name ?? '')).every(row => /соединени|не ответил/i.test(row.value)),
   'errors state what happened without promising a preserved progress'
 );
 assert.ok(source.includes('META_COPY.retry'), 'the retry action is copy driven');
