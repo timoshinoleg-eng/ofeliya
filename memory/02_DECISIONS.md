@@ -1,14 +1,9 @@
-# EASY difficulty decisions — 26.10.2026
+UX CI follow-up: new ordering/touch tests PASS; legacy mobile matrix uses center alignment for wrapped footer labels, retaining spacing/overflow guards. No runtime delta. Exact final SHA CI required.
 
-1. Easy снижает только входящее давление. `enemyHpMultiplier`/`bossHpMultiplier` остаются 1: урон игрока, скорость убийств и кривая мутаций идентичны Standard, поэтому Easy учит настоящей игре, а не урезанной.
-2. Порядок приоритета давления соблюдён: урон → спавн → элиты → небольшое замедление скорости. Никакого усиления игрока, неуязвимости, удаления боссов или постоянных бонусов прогрессии.
-3. Easy — всегда UNRANKED и никогда не отправляется на `/api/score` (клиентский guard в `submitRunScore`). Strained сохранил историческое поведение (отправляется, не ранжируется), чтобы не менять существующий режим. Сервер не изменялся: `DIFFICULTY_IDS` без `easy` — жёсткий отказ любого утёкшего payload.
-4. `isRankedResult` и `runModeLabel` вынесены в чистый модуль, чтобы контракт «unranked» и строка режима проверялись детерминированно, а не только визуально.
-5. Первую мутацию не трогали: first kill → 5 RNA → Level 2 → модалка остаётся как есть (проверено в коде).
-6. Daily не изменён: `launchDailyRun` атомарно пишет `difficultyId='standard'`, тикет Daily принимает только `standard`. Easy в Daily попасть не может.
-7. Старое сохранение пользователя не мигрируется: новое поле в схеме не добавлялось. Easy-побег не увеличивает `standardCampaignClears`/`strainedCampaignClears` и не трогает личные рекорды (`ranked=false`).
-8. Описание в селекторе — две короткие строки `Более спокойный\nрежим для основ`: длинная формулировка в 5–6 строк физически не помещалась в панель и перекрывала ярлык и кнопку старта. Это единственная правка копирайта MenuScene.
-9. Новым игрокам дефолт НЕ менялся: `readDifficultySelection()` по-прежнему отдаёт `standard` при пустом хранилище. Смена дефолта — отдельное продуктовое решение.
+UX follow-up: EASY248 c615ab7 resolves prior share-label P2; source-only limits remain. UX250 first CI Daily fixture failure reproduced and presentation initialization relocated; final exact-head checks tracked in PR.
+
+# Verified UX decisions — 2026-10-26
+Use run-owned FIFO for system surfaces; tutorial yields presentation only. Preserve notice display time across suspension; startup resumes after mutation. Obsolete stage notices cancel atomically at stage boundary; terminal result/shutdown closes queue. Footer wraps measured labels only when needed and uses custom44px hit areas; legal/version occupy disjoint bottom-row targets. No result-HUD change, no instrumentation, difficulty or validator change. See docs/qa/VERIFIED_UX_FIXES_20261026.md.
 
 ---
 

@@ -382,6 +382,8 @@ export class UIScene extends Phaser.Scene {
   }
 
   update(): void {
+    this.gs?.notificationRegion.setBlocked(this.uiBlocked || this.modalOpen || this.overShown ||
+      this.activeBossReveals > 0 || this.contextHintKey !== null || this.pendingContextHints.length > 0 || document.visibilityState === 'hidden' || !this.scene.isActive('Game'));
     const run = this.registry.get('run') as RunSnapshot | undefined;
     const W = this.scale.width;
     const H = this.scale.height;
@@ -1269,7 +1271,7 @@ export class UIScene extends Phaser.Scene {
     const copy = ONBOARDING_COPY[step.id];
     const W = this.scale.width;
     const hidden =
-      this.contextHintKey !== null || this.pendingContextHints.length > 0 || this.overShown || this.modalOpen || this.activeBossReveals > 0;
+      Boolean(this.gs?.notificationRegion.occupied) || this.contextHintKey !== null || this.pendingContextHints.length > 0 || this.overShown || this.modalOpen || this.activeBossReveals > 0;
     if (!this.onboardingContainer) {
       const panelW = Math.min(W - 28, 380);
       const panel = this.add
@@ -1413,6 +1415,8 @@ export class UIScene extends Phaser.Scene {
     const gs = this.gs;
     if (!gs) return;
     this.modalOpen = true;
+    gs.notificationRegion.setBlocked(true);
+    this.onboardingContainer?.setVisible(false);
     this.onboarding?.notifyLevelUp();
     this.uiBlocked = true;
     this.suspendContextHint();
@@ -2117,6 +2121,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   private showGameOver(res: RunResult): void {
+    this.onboardingContainer?.setVisible(false);
     this.pendingContextHints = [];
     this.contextHintTimer?.remove(false);
     this.contextHintTimer = null;

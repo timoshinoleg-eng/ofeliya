@@ -1,18 +1,9 @@
-# EASY difficulty tier — 26.10.2026
+UX CI follow-up: new ordering/touch tests PASS; legacy mobile matrix uses center alignment for wrapped footer labels, retaining spacing/overflow guards. No runtime delta. Exact final SHA CI required.
 
-Рабочая ветка `feat/easy-difficulty-20261026` от `ce8ecb8` (current `main`). Задача: третий уровень сложности `easy` / «ЛЁГКИЙ», самый лёгкий, всегда вне рейтинга. Standard и НАПРЯЖЕНИЕ не перебалансированы.
+UX follow-up: EASY248 c615ab7 resolves prior share-label P2; source-only limits remain. UX250 first CI Daily fixture failure reproduced and presentation initialization relocated; final exact-head checks tracked in PR.
 
-Готовые гейты: `npm run test:difficulty`, `test:easy-difficulty`, `test:difficulty-comparison`, `test:easy-difficulty-visual`. Новые файлы: `scripts/check-easy-difficulty.mjs`, `scripts/check-difficulty-comparison.mjs`, `scripts/difficulty-comparison-smoke.cjs`, `tests/easy-difficulty-visual.mjs`, `src/game/RunModeLabel.ts`.
-
-Ключевые решения и ограничения — в `memory/02_DECISIONS.md` (раздел EASY) и `memory/01_STATE.md`. Важно: `test:release-config` и `npm run build` требуют release-env (`VITE_MAX_BOT_NAME`, `VITE_DEVELOPER_*`, `VITE_SUPPORT_EMAIL`, `VITE_RELEASE_SHA`) — без них падают на чистом main тоже.
-
-Что НЕ сделано и не требует разрешения без отдельного решения владельца: дефолт для новых игроков, счётчик `easyCampaignClears`, правка аналитики `death`/`win`, merge, deploy, публикация в production. PR — Draft (#248, `feat/easy-difficulty-20261026` → `main`).
-
-Ограничение коннектора: запись в `.github/workflows/**` блокируется, поэтому browser-smoke шаг визуальной матрицы Easy в CI не добавлен. Новые node-гейты встроены в существующий шаг `npm run test:difficulty` (в `package.json`), поэтому в CI попадают автоматически. Шаг для browser-smoke — в теле PR.
-
-Независимая адверсarial-проверка ветки нашла 5 P2 (текст share у Easy говорил «Режим: НАПРЯЖЕНИЕ»; у `submitDuelAttempt` не было difficulty-guard; `isScoreSubmittable` и `nextDifficultyId` fail-open к неизвестному id; три вакуумных ассерта). Все исправлены и подтверждены мутационным прогоном. Отчёт: `/workspace/verification-easy-difficulty.md`.
-
-Модель сравнения в `scripts/check-difficulty-comparison.mjs` гоняет НАСТОЯЩИЙ WaveDirector/StageDirector/RunRng с общей моделью игрока; браузерный `difficulty-comparison-smoke.cjs` меряет настоящую игру, но в headless-софтверном рендере она идёт ~6% от реального времени, поэтому окно там короткое.
+# Verified UX fixes — 2026-10-26
+Branch feat/verified-ux-fixes-20261026 is directly based on main ce8ecb8. Shared notification FIFO/suspension and44px footer targets only; difficulty selector, balance, score, analytics247 and server unchanged. Canonical report docs/qa/VERIFIED_UX_FIXES_20261026.md; separate EASY248 and MAX freshness source assessments. No merge/deploy. Local proof and eventual Draft/check status in report/PR. Retain native-device acceptance distinction.
 
 ---
 

@@ -1,3 +1,4 @@
+import { layoutFooterLinks, layoutUtilityTargets } from '../ui/FooterTouchTargets';
 import { CollectionBoard } from '../ui/CollectionBoard';
 import { clientCollection, clientFlags } from '../systems/ClientExperience';
 import { QuestBoard } from '../ui/QuestBoard';
@@ -824,45 +825,10 @@ export class MenuScene extends Phaser.Scene {
     // Function declarations hoist above the pointerup registrations, so handlers can
     // re-run the layout after setText(); the length guard covers creation order.
     function layoutUtilityRow(): void {
-      if (utilitySlots.length !== 5) return;
-      let slotWidths = utilitySlots.map((t) => t.width);
-      let slotTotal = slotWidths.reduce((a, b) => a + b, 0);
-      // Linux Chrome renders these labels measurably wider than local metrics. The
-      // readability contract floors the row at 11px (compact) / 12px (tall), so only
-      // when the 4px gaps cannot fit do we normalize larger labels to that floor.
-      if ((W - 16 - slotTotal) / (utilitySlots.length - 1) < 4) {
-        utilitySlots.forEach((t) => t.setFontSize(H < 650 ? 11 : 12));
-        slotWidths = utilitySlots.map((t) => t.width);
-        slotTotal = slotWidths.reduce((a, b) => a + b, 0);
-      }
-      // A five-item row of 11px labels can require >320px once its margins
-      // and tap gaps are included. Keep the readable font and reflow 3+2.
-      const needsTwoRows = (W - 16 - slotTotal) / (utilitySlots.length - 1) < 4;
-      const groups = needsTwoRows ? [[0, 1, 2], [3, 4]] : [[0, 1, 2, 3, 4]];
-      // The first utility row must clear both the start button and optional
-      // resume/new-run button. On 360px tall layouts its old y overlapped START.
-      const rowStep = resumeCheckpoint ? 18 : 22;
       const occupiedBottom = Math.max(btnY + btnH / 2, resumeCheckpoint ? btnY + 53 : -Infinity);
-      const firstRowHalfHeight = Math.max(...utilitySlots.slice(0, 3).map(t => t.height / 2));
-      const firstRowY = needsTwoRows
-        ? Math.max(utilityY - rowStep, occupiedBottom + 4 + firstRowHalfHeight)
-        : utilityY;
-      groups.forEach((indices, rowIndex) => {
-        const widths = indices.map((i) => slotWidths[i]);
-        const total = widths.reduce((a, b) => a + b, 0);
-        const slotGap = Math.max(4, Math.min(28, (W - 16 - total) / (indices.length - 1)));
-        let slotX = (W - total - slotGap * (indices.length - 1)) / 2;
-        for (const index of indices) {
-          const t = utilitySlots[index];
-          t.setX(slotX + slotWidths[index] / 2);
-          t.setY(needsTwoRows ? firstRowY + rowIndex * rowStep : utilityY);
-          slotX += slotWidths[index] + slotGap;
-          // setInteractive() snapshots the text hit area before later setText().
-          const hit = t.input?.hitArea;
-          if (hit && typeof hit.setSize === 'function') hit.setSize(t.width, t.height);
-        }
-      });
+      layoutUtilityTargets(utilitySlots, W, H, utilityY, occupiedBottom);
     }
+
     const musicVolText = this.add
       .text(W / 2, utilityY, volLabel(Math.round(Sfx.getMusicVolume() * 100)), {
         fontFamily: UI_FONT,
@@ -976,7 +942,7 @@ export class MenuScene extends Phaser.Scene {
         .setDepth(5);
     }
 
-    this.add
+    const legalText = this.add
       .text(W / 2, legalY, 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА', {
         fontFamily: UI_FONT,
         fontSize: H < 650 ? '11px' : '12px',
@@ -1004,6 +970,8 @@ export class MenuScene extends Phaser.Scene {
       .setResolution(2)
       .setDepth(5)
       .setInteractive({ useHandCursor: true });
+
+    layoutFooterLinks(legalText, versionText, W, H);
 
     versionText.on('pointerup', () => {
       diagnosticTapCount += 1;

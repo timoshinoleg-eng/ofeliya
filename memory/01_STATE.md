@@ -1,17 +1,9 @@
-# EASY difficulty tier — 26.10.2026
+UX CI follow-up: new ordering/touch tests PASS; legacy mobile matrix uses center alignment for wrapped footer labels, retaining spacing/overflow guards. No runtime delta. Exact final SHA CI required.
 
-Branch `feat/easy-difficulty-20261026` от `ce8ecb8` (current `main`, не analytics PR #247). Третий уровень сложности `easy` / «ЛЁГКИЙ», unranked.
+UX follow-up: EASY248 c615ab7 resolves prior share-label P2; source-only limits remain. UX250 first CI Daily fixture failure reproduced and presentation initialization relocated; final exact-head checks tracked in PR.
 
-Факты реализации:
-- `src/game/DifficultyProfile.ts`: `DifficultyId` теперь `'easy' | 'standard' | 'strained'`; добавлен `EASY_DIFFICULTY`, `DIFFICULTY_ORDER = ['easy','standard','strained']`, `RANKED_DIFFICULTY_ID='standard'`, `isDifficultyId`, `isRankedDifficulty`, `isScoreSubmittable`. `STANDARD_DIFFICULTY` и `STRAINED_DIFFICULTY` побайтово не изменены (закреплены в `scripts/check-difficulty.mjs`).
-- EASE профиль снижает только входящее давление: `enemyDamageMultiplier 0.55`, `bossDamageMultiplier 0.6`, `spawnIntervalMultiplier 1.25`, `batchBonus -1`, `eliteIntervalMultiplier 1.6`, `normalEnemyCapBonus -20`, `enemySpeedMultiplier 0.92`, `bossSpeedMultiplier 0.95`, `bossMinionIntervalMultiplier 1.35`, `bossMinionBonus -2`, `threatCap 26→52`, `heartbeat 1.2/0.85`. `enemyHpMultiplier` и `bossHpMultiplier` остались 1 — урон игрока и кривая мутаций не меняются.
-- `src/systems/RunCheckpoint.ts`: валидация difficulty расширена до `isDifficultyId` (старые сохранения standard/strained валидны, неизвестный id → null).
-- `src/systems/ScoreClient.ts`: `submitRunScore` пропускает `easy` полностью (0 сетевых запросов). Strained сохранил прежнее поведение (отправляется, но не ранжируется).
-- `src/game/RunModeLabel.ts` (новый): `runModeLabel()` и `isRankedResult()` — чистые функции для строки режима и ранга; `UIScene` использует их. Результат Easy: `РЕЖИМ: ЛЁГКИЙ · вне рейтинга`.
-- `src/scenes/MenuScene.ts`: селектор показывает ЛЁГКИЙ; описание `Более спокойный\nрежим для основ` (две строки — помещается в панель на 320/390/768/1080); цикл ЛЁГКИЙ → СТАНДАРТ → НАПРЯЖЕНИЕ.
-- Сервер не тронут: `DIFFICULTY_IDS` не знает про `easy`, поэтому любой утёкший Easy-payload отвергается сервером (422) и не может попасть ни на одну доску.
-
-Проверки: `test:difficulty`, `test:easy-difficulty`, `test:difficulty-comparison`, `test:pacing`, `test:threat`, `test:save`, `test:checkpoint`, `test:rng`, `test:challenge`, `test:duel`, `test:daily-v2`, `test:daily-mutator`, `test:onboarding`, `test:language`, `test:tokens`, `test:ui-copy`, `test:score-outbox`, `test:quest-core`, `test:quest-runtime`, `test:run-identity`, `test:streaks`, `test:daily-cta`, `test:profile`, `test:isolation`, `test:bundle-shape`, `npx tsc --noEmit`, `npm run build` — PASS. `tests/easy-difficulty-visual.mjs` — PASS на 320/390/768/1080. `test:release-config` требует release-env (не связано с задачей). Физический MAX/Telegram WebView NOT_RUN.
+# Verified UX candidate — 2026-10-26
+NotificationRegion coordinates startup/achievement/milestone with tutorial and context/modal/boss/background/result lifecycle. Footer hit bounds>=44px, disjoint, real edge-touch and checkpoint resume at320/390/768/1080. RED then GREEN locally; detailed regression evidence in docs/qa/VERIFIED_UX_FIXES_20261026.md. Result320 review NO_CHANGE. EASY248 source review at007f352 found share label P2; no EASY edits. MAX24h shared freshness assessed read-only; no validator change.
 
 ---
 

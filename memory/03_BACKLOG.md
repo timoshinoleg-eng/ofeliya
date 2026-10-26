@@ -1,11 +1,9 @@
-# EASY difficulty backlog — 26.10.2026
+UX CI follow-up: new ordering/touch tests PASS; legacy mobile matrix uses center alignment for wrapped footer labels, retaining spacing/overflow guards. No runtime delta. Exact final SHA CI required.
 
-- [ ] Продуктовое решение: сделать Easy дефолтом для новых игроков. Не выполнять автоматически; текущий дефолт остаётся `standard`.
-- [ ] Физическая приёмка MAX/Telegram WebView (background/resume, ввод, safe area) — NOT_RUN, отдельный гейт.
-- [ ] Добавить в CI browser-smoke шаг визуальной матрицы Easy (`node tests/easy-difficulty-visual.mjs`) — коннектор блокирует запись в `.github/workflows/**`, шаг приложен в теле PR #248.
-- [ ] Решить, нужен ли отдельный счётчик `easyCampaignClears` в `SaveData`. Сейчас победы в Easy не увеличивают ни один счётчик, чтобы не трогать схему сохранения. Требует миграции save — отдельная задача.
-- [ ] Проверить события `run_end`/`death`/`win`: `difficulty` передаётся в `run_start`, но в `death`/`win` (GameScene) его нет. Это пробел аналитики, инфраструктуру в этом PR не меняли.
-- [ ] Hosted CI на точном SHA и решение о мердже — за владельцем; PR остаётся Draft.
+UX follow-up: EASY248 c615ab7 resolves prior share-label P2; source-only limits remain. UX250 first CI Daily fixture failure reproduced and presentation initialization relocated; final exact-head checks tracked in PR.
+
+# Verified UX follow-up — 2026-10-26
+Track exact-head Draft CI and native TG/MAX acceptance separately. EASY248: fix fresh-EASY share text naming Strained; verify signed/HTTP and actual retry gates independently (reviewed007f352 only). MAX freshness: separate platform-scoped proposal requires long-lived-session/outbox compatibility proof before24h→1h hardening. No result-HUD change justified in focused320 review. Do not mix these follow-ups into UX source or analytics247.
 
 ---
 

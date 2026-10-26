@@ -27,6 +27,11 @@ import { buildTelegramWebhookMethod, telegramWebhookSecretMatches } from './tele
 import { DurableState } from './durable-state.mjs';
 import { TelegramUserRegistry } from './telegram-users.mjs';
 import { proxyHops, clientIp, corsHeaders } from './request-policy.mjs';
+import {
+  analyticsSummaryTokenMatches,
+  buildAnalyticsSummary,
+  parseAnalyticsSummaryQuery,
+} from './analytics-summary.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT ?? 8787);
@@ -52,6 +57,10 @@ const MAX_TOKEN = process.env.MAX_BOT_TOKEN ?? '';
 // валидируется и VK-скоры попадают в верифицированный общий топ.
 const VK_SECURE_KEY = process.env.VK_SECURE_KEY ?? '';
 const GAME_URL = process.env.GAME_URL ?? '';
+// Sprint 0: operator token for the product-analytics read path
+// (GET /api/analytics/summary). Empty or shorter than 16 chars => the endpoint is
+// fail-closed and rejects every request. It is never required for the game to run.
+const ANALYTICS_SUMMARY_TOKEN = process.env.OFELIYA_ANALYTICS_TOKEN ?? '';
 const TELEGRAM_SHARE_COOLDOWN_MS = 2_500;
 const telegramShareLastAt = new Map();
 
@@ -1340,6 +1349,41 @@ const server = createServer(async (req, res) => {
       }
       saveStoreBestEffort();
       return send(res, 202, { ok: true });
+    }
+
+    // Sprint 0 — product analytics read path.
+    // Aggregate-only: no raw event rows, no actor hashes, no props, no initData, no
+    // per-row timestamps. Requires the operator token; fails closed when it is unset.
+    if (req.method === 'GET' && url.pathname === '/api/analytics/summary') {
+      const providedSummaryToken = req.headers['x-ofeliya-analytics-token'];
+      if (!analyticsSummaryTokenMatches(ANALYTICS_SUMMARY_TOKEN, providedSummaryToken)) {
+        return send(res, 403, { ok: false, error: 'analytics summary access denied' });
+      }
+      const summaryQuery = parseAnalyticsSummaryQuery(url.searchParams);
+      if (!summaryQuery.ok) return send(res, 400, { ok: false, error: summaryQuery.error });
+      const summary = buildAnalyticsSummary(store.analyticsEvents, {
+        from: summaryQuery.from,
+        to: summaryQuery.to,
+        platform: summaryQuery.platform,
+        label: summaryQuery.label,
+        cap: MAX_ANALYTICS_EVENTS,
+        now: Date.now(),
+      });
+      return send(res, 200, {
+        ok: true,
+        generatedAt: summary.generatedAt,
+        window: summary.window,
+        platform: summary.platform,
+        totals: summary.totals,
+        coverage: summary.coverage,
+        events: summary.events,
+        funnel: summary.funnel,
+        gaps: summary.gaps,
+        // The summary is served from the live in-memory ring. The ring is persisted on a
+        // debounced timer, so a process crash can lose up to STORE_SAVE_DELAY_MS of
+        // recently accepted events; `dirty`/`lastFlushAt` expose that state honestly.
+        persistence: { mode: durable ? 'durable' : 'local', dirty: storeDirty, lastFlushAt: lastStoreFlushAt || null },
+      });
     }
 
     if (req.method === 'POST' && url.pathname === '/api/run/start') {

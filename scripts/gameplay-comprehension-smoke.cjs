@@ -129,7 +129,8 @@ async function bootGame(page) {
       const startupIntroVisible = Boolean(window.__startupIntroVisible);
       gs.queuedLevels = 1;
       gs.update(gs.time.now + 16, 16);
-      const introGoneAfterMutation = gs.introHint === null;
+      const introHiddenAfterMutation = !gs.introHint?.visible;
+      const introRetainedAfterMutation = Boolean(gs.introHint);
       const firstMutationPresented = gs.awaitingChoice && gs.pendingChoices.length > 0;
       if (firstMutationPresented) ui.update();
       gs.awaitingChoice = false;
@@ -150,9 +151,10 @@ async function bootGame(page) {
       gs.hostCells.update(gs.time.now, 0, 0);
       const approach = {
         startupIntroVisible,
-        introGoneAfterMutation,
+        introHiddenAfterMutation,
+        introRetainedAfterMutation,
         firstMutationPresented,
-        introGoneBeforeHostCellTeaching: gs.introHint === null,
+        introHiddenBeforeHostCellTeaching: !gs.introHint?.visible,
         progress: cell.infection,
         hintCount: hintMessages.length,
         hint: ui.contextHintText?.text ?? '',
@@ -165,9 +167,10 @@ async function bootGame(page) {
 
     assert.equal(setup.approach.progress, 0, 'approach changed gameplay infection');
     assert.equal(setup.approach.startupIntroVisible, true, 'fresh first run did not show its startup intro');
-    assert.equal(setup.approach.introGoneAfterMutation, true, 'first mutation did not clear the startup intro');
+    assert.equal(setup.approach.introHiddenAfterMutation, true, 'first mutation did not suspend the startup intro');
+    assert.equal(setup.approach.introRetainedAfterMutation, true, 'mutation must retain the startup notice for eventual display');
     assert.equal(setup.approach.firstMutationPresented, true, 'first-run mutation choice was not presented');
-    assert.equal(setup.approach.introGoneBeforeHostCellTeaching, true, 'Host Cell teaching appeared before the startup intro was gone');
+    assert.equal(setup.approach.introHiddenBeforeHostCellTeaching, true, 'Host Cell teaching overlaps the startup intro');
     assert.equal(setup.approach.hintCount, 1, 'first-run approach hint missing');
     assert.match(setup.approach.hint, /КЛЕТКА ОРГАНИЗМА/);
     assert.ok(setup.approach.rangeVisible && setup.approach.rangeCommands > 0, 'runtime range boundary is not visible');
