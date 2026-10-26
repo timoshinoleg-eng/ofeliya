@@ -24,7 +24,7 @@
  */
 import { createRequire } from 'node:module';
 import { buildSync } from 'esbuild';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 
@@ -109,10 +109,23 @@ try {
     pickEliteModifier,
   } = require(bundle);
 
+  // The real host-cell schedule, read from the production source so the
+  // comparison stays bound to it instead of a local copy that could drift.
+  const hostCellSource = readFileSync(resolve('src/systems/HostCellSystem.ts'), 'utf8');
+  const firstCellMatch = hostCellSource.match(/runTimeMs\s*>=\s*(\d[\d_]*)/);
+  const intervalMatch = hostCellSource.match(
+    /Math\.max\(\s*(\d[\d_]*)\s*,\s*(\d[\d_]*)\s*-\s*runTimeMs\s*\*\s*([\d.]+)\s*\)/
+  );
+  assert(firstCellMatch, 'the real host-cell first-spawn time could not be read');
+  assert(intervalMatch, 'the real host-cell interval could not be read');
+  const hostCellFirstAtMs = Number(firstCellMatch[1].replace(/_/g, ''));
+  const hostCellMinIntervalMs = Number(intervalMatch[1].replace(/_/g, ''));
+  const hostCellBaseIntervalMs = Number(intervalMatch[2].replace(/_/g, ''));
+  const hostCellDecay = Number(intervalMatch[3]);
+
   /**
    * Runs one difficulty tier for one seed and returns the measured envelope.
-   */
-  function simulate(tier, seed) {
+   */  function simulate(tier, seed) {
     const difficulty = getDifficultyProfile(tier);
     const stage = BLOODSTREAM_STAGE;
     const rng = new RunRng(seed);
@@ -247,7 +260,7 @@ try {
     let level = 1;
     let xp = 0;
     let xpNext = xpForLevel(1);
-    let hostCellNextAtMs = 7_000;
+    let hostCellNextAtMs = hostCellFirstAtMs;
 
     for (let t = 0; t <= WINDOW_MS; t += STEP_MS) {
       stageState.timeMs = t;
@@ -295,11 +308,16 @@ try {
         }
       }
 
-      // Host-cell infection opportunity (real schedule; difficulty-independent).
+      // Host-cell infection opportunity. The schedule is read from the real
+      // HostCellSystem source, so this stays bound to production behaviour
+      // instead of a local copy that could drift.
       if (t >= hostCellNextAtMs) {
         metrics.hostCellsAvailable += 1;
         if (metrics.firstHostCellAtMs === null) metrics.firstHostCellAtMs = t;
-        hostCellNextAtMs = t + Math.max(12_000, 21_000 - t * 0.018);
+        hostCellNextAtMs = t + Math.max(
+          hostCellMinIntervalMs,
+          hostCellBaseIntervalMs - t * hostCellDecay
+        );
       }
 
       metrics.peakConcurrent = Math.max(metrics.peakConcurrent, enemies.countActive());
@@ -478,6 +496,39 @@ try {
   for (const key of ['damageTaken', 'enemiesSpawned', 'elitesSpawned', 'kills', 'highestLevel']) {
     assertEqual(first[key], again[key], `the comparison is not reproducible for ${key}`);
   }
+  // Reproducibility is only meaningful if nothing reaches for an unseeded source.
+  const stripComments = (text) =>
+    text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  for (const source of [
+    'src/game/WaveDirector.ts',
+    'src/game/ThreatDirector.ts',
+    'src/game/StageDirector.ts',
+    'src/game/DifficultyProfile.ts',
+    'src/game/StageDefinitions.ts',
+  ]) {
+    const body = stripComments(readFileSync(resolve(source), 'utf8'));
+    assert(
+      !/Math\.random\s*\(/.test(body),
+      `${source} must not use Math.random — the comparison would stop being reproducible`
+    );
+  }
+  // RunRng may only reach for Math.random inside the one-time seed generator,
+  // which the comparison never calls: it always supplies an explicit seed.
+  const runRngSource = readFileSync(resolve('src/game/RunRng.ts'), 'utf8');
+  const seedGenerator = runRngSource.indexOf('generateRunSeed');
+  assert(seedGenerator >= 0, 'the run seed generator could not be located');
+  const runRngRest = stripComments(runRngSource).replace(
+    /export function generateRunSeed[\s\S]*$/,
+    ''
+  );
+  assert(
+    !/Math\.random\s*\(/.test(runRngRest),
+    'RunRng must not use Math.random outside the one-time seed generator'
+  );
+  assert(
+    /Math\.random\s*\(/.test(runRngSource),
+    'the one-time seed generator must still have its unseeded fallback'
+  );
 
   console.log('deterministic difficulty comparison: ok');
 } finally {
