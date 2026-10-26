@@ -8,12 +8,24 @@ const palette = Object.fromEntries(['ivory','muted','host','danger','warning','p
 new Function('require', 'module', 'exports', ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
 }).outputText)(name => name.endsWith('/config') ? { fmtTime: n => `${Math.floor(n / 1000)}с` }
-  : name.endsWith('/visualTokens') ? { VISUAL: palette, VISUAL_TEXT: palette } : {}, module, module.exports);
+  : name.endsWith('/visualTokens') ? { VISUAL: palette, VISUAL_TEXT: palette }
+  : name.endsWith('/UiCopy') ? {
+      META_COPY: {
+        player: platform => `Игрок (${platform})`,
+        networkError: 'Нет соединения с сервером',
+        friendsEmpty: 'Здесь появятся результаты друзей, которые играют в OFELIYA.',
+        inviteFriends: 'ПРИГЛАСИТЬ ДРУЗЕЙ',
+        retry: 'ПОВТОРИТЬ',
+      },
+      buildInviteText: () => 'OFELIYA — сыграй и сравни результат. @ofeliya_game_bot',
+    }
+  : name.endsWith('/UiFormat') ? { fmtInt: n => String(n) } : {}, module, module.exports);
 const { SocialHub } = module.exports;
 const hub = Object.assign(Object.create(SocialHub.prototype), {
   platform: { kind: 'max', initData: 'fixture' }, dailyLaunchStatus: 'idle',
   scene: { scale: { width: 320, height: 568 } }, panelW: 298, panelLeft: 11, panelTop: 12,
-  body: { removeAll() {} }, sectionTitle() {}, addDailyButton() {}, addRetryButton() { this.retry = true; },
+  body: { removeAll() {} }, sectionTitle() {}, addDailyButton() {},
+  addRetryButton() { this.retry = true; }, addInviteButton() { this.invite = true; },
   rows: [], addText(x, y, value, size, color, align, width, name) { this.rows.push({ x,y,value,size,width,name }); },
 });
 for (const status of ['idle','loading','unavailable','denied','incompatible','capacity','http','network']) {
@@ -38,5 +50,18 @@ hub.rows = []; hub.retry = false;
 hub.render({ ...detail, status: { daily: 'network', season: 'http', seasonTop: 'http', friends: 'network' } });
 assert.equal(hub.retry, true, 'failed channels retain retry action');
 assert.ok(hub.rows.every(row => row.size >= 11));
-assert.ok(hub.rows.filter(row => /-status$/.test(row.name ?? '')).every(row => /ПОВТОРИТЬ/.test(row.value)), 'errors retain actionable copy');
+assert.ok(
+  hub.rows.filter(row => /-status$/.test(row.name ?? '')).every(row => /соединени|не ответил/.test(row.value)),
+  'errors state what happened without promising a preserved progress'
+);
+assert.ok(source.includes('META_COPY.retry'), 'the retry action is copy driven');
+assert.ok(source.includes('META_COPY.friendsEmpty'), 'the friends empty state is copy driven');
+assert.ok(source.includes('META_COPY.inviteFriends'), 'the friends invite action is copy driven');
+
+// An empty friends list offers the invite action instead of a dead end.
+hub.rows = []; hub.invite = false;
+hub.render({ ...detail, status: { daily: 'ok', season: 'ok', seasonTop: 'ok', friends: 'ok' },
+  snapshot: { daily: null, season: null, seasonTop: [], friends: [] } });
+assert.equal(hub.invite, true, 'an empty friends list offers the invite action');
+assert.ok(hub.rows.some(row => row.value.includes('друзей, которые играют в OFELIYA')), 'the friends empty state explains itself');
 console.log('SocialHub: daily permission/loading/retry policy; 320px metadata sizes, bounded record count and explicit row separation passed');
