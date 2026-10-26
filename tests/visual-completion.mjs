@@ -32,7 +32,7 @@ try {
     if (out) await page.screenshot({path:resolve(out,`${width}-rich-result.png`)});
     const report = await page.evaluate(() => {
       const ui = window.__game.scene.getScene('UI'), c = ui.resultOverlay;
-      const details = c.list.filter(o => o.type === 'Text' && /^(КРИТ\.|ЛЕГЕНДАРНЫЕ|ПРОФИЛЬ ШТАММА|РЕЖИМ:|СЧЁТ:|НОВЫЕ ЗАПИСИ|НОВОЕ ДОСТИЖЕНИЕ)/.test(o.text));
+      const details = c.list.filter(o => o.type === 'Text' && /^(◆ |ЛЕГЕНДАРНЫЕ|Архетип:|СЧЁТ:|НОВЫЕ РЕКОРДЫ|★ Открыто)/.test(o.text));
       const viewport = c.list.find(o => o.name === 'ofeliya-result-report');
       const rows = viewport ? viewport.list.filter(o => o.type === 'Text') : details;
       const hit = c.getByName('ofeliya-result-report-hit').getBounds(), retry = c.getByName('ofeliya-result-retry-bg').getBounds(), stats = c.getByName('ofeliya-result-stats').getBounds();
@@ -88,7 +88,7 @@ try {
     }
     await page.evaluate(()=>window.__game.scene.getScene('Menu').socialHub.destroy());
     await page.evaluate(()=>window.__game.scene.getScene('Menu').showCodex());
-    for(const label of ['МУТАЦИИ','ЛЕГЕНДАРНЫЕ','МАСТЕРСТВО']) {
+    for(const label of ['СИНЕРГИИ','ЛЕГЕНДАРНЫЕ','МАСТЕРСТВО']) {
       const point=await page.evaluate(label=>{const c=window.__game.scene.getScene('Menu').codexOverlay,t=c.list.find(o=>o.text===label),b=t.getBounds();return{x:b.centerX,y:b.centerY};},label);
       await page.mouse.click(point.x,point.y);
       if(out) await page.screenshot({path:resolve(out,`${width}-codex-${label}.png`)});

@@ -221,6 +221,210 @@ try {
     assert(!menu.includes(drifted), `MenuScene still inlines the drift candidate: ${drifted}`);
   }
 
+  // 8. The copy of the UI redesign is pinned to the source of truth.
+  assert.equal(copy.MENU_COPY.tagline, 'Выживай. Поглощай РНК. Эволюционируй.', 'menu tagline');
+  assert.equal(copy.MENU_COPY.start, 'НАЧАТЬ ЗАРАЖЕНИЕ', 'fresh start action');
+  assert.equal(copy.MENU_COPY.resume, 'ПРОДОЛЖИТЬ ЗАБЕГ', 'resume action');
+  assert.equal(copy.MENU_COPY.newRun, 'НОВЫЙ ЗАБЕГ', 'new run action');
+  assert.equal(
+    copy.MENU_COPY.nextRunHint,
+    'Сложность и управление — для нового забега',
+    'the run-configuration cards belong to the next run'
+  );
+  assert.equal(copy.MENU_COPY.music, '♪ Музыка', 'the music switch carries its glyph');
+  assert.deepEqual(
+    { ...copy.MENU_COPY.difficultySteps },
+    { standard: '• • ◦', strained: '• • •' },
+    'the difficulty step indicator'
+  );
+  assert.equal(copy.RESULT_COPY.header, 'ИТОГ ЗАБЕГА', 'result header');
+  assert.equal(copy.RESULT_COPY.defeat, 'ШТАММ УНИЧТОЖЕН', 'defeat headline');
+  assert.equal(copy.RESULT_COPY.victory, 'НОСИТЕЛЬ ЗАРАЖЁН', 'victory headline');
+  assert.equal(copy.RESULT_COPY.critical, 'Критические мутации', 'the critical line is written in full');
+  assert.equal(copy.RESULT_COPY.legendary, 'ЛЕГЕНДАРНАЯ МУТАЦИЯ', 'the legendary line');
+  assert.equal(copy.RESULT_COPY.resumed, 'Тренировка (продолженный забег)', 'the practice chip');
+  assert.equal(copy.RESULT_COPY.dailyRank(5), '★ МЕСТО #5 В РЕЙТИНГЕ ДНЯ', 'the daily place');
+  assert.deepEqual(
+    { ...copy.RESULT_MODE_CHIP },
+    {
+      practice: 'Тренировка (продолженный забег)',
+      ranked: 'СТАНДАРТ · В зачёт рейтинга',
+      daily: 'ЗАБЕГ ДНЯ · СТАНДАРТ',
+      duel: 'ДУЭЛЬ · СТАНДАРТ',
+      strained: 'НАПРЯЖЕНИЕ · Тренировка',
+      local: 'СТАНДАРТ · Тренировка',
+    },
+    'the mode chips of the result screen'
+  );
+  assert.equal(copy.META_COPY.tasks, 'ЗАДАЧИ ДНЯ', 'daily tasks title');
+  assert.equal(copy.META_COPY.mastery, 'ПРОХОЖДЕНИЕ РЕЖИМОВ', 'codex mastery section');
+  assert.equal(copy.META_COPY.dailyCta, 'НАЧАТЬ ЗАБЕГ ДНЯ', 'the daily call to action');
+  assert.equal(copy.META_COPY.dailyEmpty, 'Сегодня ты ещё не играл', 'the empty daily state');
+  assert.equal(
+    copy.META_COPY.networkError,
+    'Нет соединения с сервером. Твой прогресс сохраняется.',
+    'the network error of the rating'
+  );
+  assert.equal(
+    copy.META_COPY.serverError,
+    'Сервер не ответил. Твой прогресс сохраняется.',
+    'the server error of the rating'
+  );
+  assert.equal(
+    copy.META_COPY.friendsEmpty,
+    'Здесь появятся результаты друзей, которые играют через @ofeliya_game_bot.',
+    'the empty friends state'
+  );
+  assert.equal(copy.META_COPY.streak(3, 5), 'Серия: 3 дн. · Рекорд: 5 дн.', 'the streak line');
+  assert.equal(
+    copy.META_COPY.streakEmptyWithBest(5),
+    'Сыграй забег дня, чтобы начать серию · Рекорд: 5 дн.',
+    'the empty streak line'
+  );
+  assert.equal(copy.META_COPY.remaining(1), 'остался 1', 'one task is left');
+  assert.equal(copy.META_COPY.remaining(4), 'осталось 4', 'four tasks are left');
+  assert.equal(copy.META_COPY.seasonTitle(3, 2), 'СЕЗОН 3 · осталось 2 дн.', 'the season header');
+  assert.equal(
+    copy.META_COPY.seasonRow(1, 'Игрок (TG)', '10:48', '1\u00a0414'),
+    '#1 · Игрок (TG) — 10:48 · 1\u00a0414 кл.',
+    'a row of the season table'
+  );
+  assert.equal(
+    copy.META_COPY.dailyRow('Олег', '01:09', '68', 1),
+    'Олег · 01:09 · уничтожено 68 · ★ место #1',
+    'the daily row of the player'
+  );
+  assert.equal(
+    copy.META_COPY.shellLockedBy('ОХОТНИК НА ЭЛИТУ'),
+    'Чтобы открыть: выполни веху «ОХОТНИК НА ЭЛИТУ»',
+    'the condition of a locked shell'
+  );
+  assert.equal(
+    copy.META_COPY.shellUnlockedBy('ОХОТНИК НА ЭЛИТУ'),
+    'Открыто за веху «ОХОТНИК НА ЭЛИТУ»',
+    'the condition of an open shell'
+  );
+  assert.equal(
+    copy.META_COPY.milestoneKillsGroup(2771),
+    'Уничтожение иммунных клеток (всего: 2\u00a0771)',
+    'the group header of the kill milestones'
+  );
+  assert.equal(
+    copy.META_COPY.codexSubtitle(4, 9, 12),
+    'Открыто записей: 4/9 · Забегов: 12',
+    'the codex header'
+  );
+  assert.equal(
+    copy.META_COPY.codexLifetime(12, 5424),
+    'Забегов: 12 · Уничтожено клеток: 5\u00a0424',
+    'the codex lifetime line'
+  );
+  assert.equal(
+    copy.META_COPY.codexEntries(3),
+    '★ Открыто в Кодексе: +3 записи',
+    'the codex entries plate'
+  );
+  assert.equal(
+    copy.META_COPY.codexEntries(1),
+    '★ Открыто в Кодексе: +1 запись',
+    'the codex entries plate, one record'
+  );
+  assert.equal(
+    copy.META_COPY.newRecords(['выживание', 'иммунитет']),
+    'НОВЫЕ РЕКОРДЫ: выживание · иммунитет',
+    'the new records line'
+  );
+  assert.deepEqual(
+    [...copy.CODEX_COPY.synergyTitles],
+    ['ЗАКРЫТАЯ СИНЕРГИЯ I', 'ЗАКРЫТАЯ СИНЕРГИЯ II', 'ЗАКРЫТАЯ СИНЕРГИЯ III'],
+    'the locked synergy titles'
+  );
+  assert.deepEqual(
+    [...copy.CODEX_COPY.synergyRecipes],
+    [
+      'Совмести ветви «Снаряды» и «Орбита»',
+      'Совмести ветви «Орбита» и «Инфекция»',
+      'Совмести ветви «Снаряды» и «Инфекция»',
+    ],
+    'the recipes of the locked synergies'
+  );
+  assert.equal(
+    copy.CODEX_COPY.synergySub,
+    'Открываются при совмещении двух совместимых ветвей в одном забеге',
+    'the explanation of the synergy section'
+  );
+  assert.equal(copy.CODEX_COPY.branchComplete, 'Выполнено', 'the state of a complete branch');
+  assert.equal(
+    copy.masteryModeLine('Стандарт', 0, '15:20'),
+    'Стандарт — ещё не пройдена · лучшее время: 15:20',
+    'a mode that was played but not cleared'
+  );
+  assert.equal(
+    copy.masteryModeLine('Стандарт', 0, null),
+    'Стандарт — ещё не пройдена',
+    'a mode that was never played never shows a dash as "no value"'
+  );
+  assert.equal(
+    copy.masteryModeLine('Стандарт', 2, '09:15'),
+    '◆ Стандарт — пройдено: 2 · рекорд: 09:15',
+    'a cleared mode'
+  );
+
+  // 9. The share variants of the source of truth and their invariants.
+  const standardShare = copy.buildShareText({ win: false, time: '00:26', kills: 18, infected: 2 });
+  assert.equal(
+    standardShare,
+    'OFELIYA · Вызов в кровотоке\n' +
+      '🦠 Мой вирус продержался 00:26 в OFELIYA — и это только начало.\n' +
+      'Уничтожено 18 иммунных клеток, заражено 2.\n' +
+      'Сможешь дольше? Играй: @ofeliya_game_bot',
+    'the standard challenge share'
+  );
+  const firstRunShare = copy.buildShareText({
+    win: true, time: '00:26', kills: 18, infected: 2, firstRun: true,
+  });
+  assert.equal(
+    firstRunShare,
+    'OFELIYA · Вызов в кровотоке\n' +
+      '🦠 Я запустил свой первый штамм в OFELIYA. Синтетический вирус против иммунной системы — выживи дольше меня.\n' +
+      '@ofeliya_game_bot',
+    'the first run share'
+  );
+  const legendaryShare = copy.buildShareText({
+    win: true, time: '15:20', kills: 2617, infected: 61, legendaryName: 'НУЛЕВАЯ ТОЧКА',
+  });
+  assert.equal(
+    legendaryShare,
+    'OFELIYA · Вызов в кровотоке\n' +
+      '🦠 15:20 выживания в OFELIYA. Уничтожено 2\u00a0617 иммунных клеток, заражено 61.\n' +
+      'Легендарная мутация «НУЛЕВАЯ ТОЧКА» открыта.\n' +
+      'Повторишь? @ofeliya_game_bot',
+    'the legendary share'
+  );
+  const victoryShare = copy.buildShareText({ win: true, time: '00:26', kills: 18, infected: 2 });
+  assert.ok(
+    victoryShare.startsWith('OFELIYA · Вызов в кровотоке'),
+    'a share text always starts with the product name'
+  );
+  assert.ok(
+    victoryShare.includes('Сможешь быстрее?'),
+    'a victory asks for a faster run, not a longer one'
+  );
+  for (const [name, text] of Object.entries({ standardShare, firstRunShare, legendaryShare, victoryShare })) {
+    assert.ok(text.startsWith('OFELIYA'), `${name} must start with OFELIYA`);
+    assert.ok(text.includes('@ofeliya_game_bot'), `${name} must name the bot`);
+    for (const forbidden of copy.SHARE_FORBIDDEN_TERMS) {
+      assert.ok(!text.includes(forbidden), `${name} must not carry "${forbidden}"`);
+    }
+  }
+  assert.ok(standardShare.includes('продержался'), 'a defeat says "продержался"');
+  assert.ok(!standardShare.includes('выжил'), 'a defeat never says "выжил"');
+  assert.equal(
+    copy.buildDuelShareText('10:48'),
+    'OFELIYA · ДУЭЛЬ: мой результат 10:48. Сможешь пройти быстрее? @ofeliya_game_bot',
+    'the duel share'
+  );
+
   console.log('ui copy catalog: ok');
 } finally {
   rmSync(temp, { recursive: true, force: true });
