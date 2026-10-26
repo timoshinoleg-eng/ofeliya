@@ -175,10 +175,17 @@ export class CollectionBoard {
           const activePlate = s.add
             .rectangle(left + w - MODAL.padX - 52, y + 52, 104, 30, VISUAL.host, 0.95)
             .setStrokeStyle(1, VISUAL.host, 1)
-            .setName(`ofeliya-skin-${skin.id}-active`);
+            .setName(`ofeliya-skin-${skin.id}`);
           this.root.add(activePlate);
           text(left + w - MODAL.padX - 52, y + 52, META_COPY.active, 11, '#080f14').setOrigin(0.5);
-        } else if (owned && !state.readOnly) {
+        } else if (!owned) {
+          // A locked shell keeps a named, inert row handle: it is shown, but it
+          // never offers a select action.
+          const lockedPlate = s.add
+            .rectangle(left + w - MODAL.padX - 52, y + 52, 104, 30, VISUAL.ink, 0.001)
+            .setName(`ofeliya-skin-${skin.id}`);
+          this.root.add(lockedPlate);
+        } else if (!state.readOnly) {
           button(`ofeliya-skin-${skin.id}`, left + w - MODAL.padX - 52, y + 52, 104, 'ВЫБРАТЬ', () => {
             if (this.collection.selectSkin(skin.id)) this.render();
           });

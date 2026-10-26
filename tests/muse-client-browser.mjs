@@ -65,7 +65,7 @@ export async function checkMuseClient(browser,url) {
    return {
     lastSkin:texts.some(t=>t.includes('Золотой прайм')),
     locked:texts.some(t=>t.startsWith('ЗАКРЫТО')),
-    lockedSelect:board.list.some(o=>o.name==='ofeliya-skin-skin.gilded-prime'),
+    lockedSelect:board.list.some(o=>o.name==='ofeliya-skin-skin.gilded-prime'&&Boolean(o.input?.enabled)),
    };
   });
   assert.equal(shellState.lastSkin,true,'pagination keeps last skin reachable');

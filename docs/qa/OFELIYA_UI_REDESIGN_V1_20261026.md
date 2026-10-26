@@ -59,7 +59,8 @@ overrode the bible, the bible was updated in the same commit — see §7.
 | --- | --- |
 | `origin/main` at the start | `ce8ecb84ced1afa09870f2f00f9a0328257fd11c` |
 | Previously released `ce8ecb84…` | `ce8ecb84ced1afa09870f2f00f9a0328257fd11c` |
-| Final head | see §16 |
+| Final head (the PR) | `3a7f507e82bd6e189471bdcc0f8cb143aca3097e` |
+| Final head (the local branch) | `2190888` |
 
 `origin/main` was fetched before the work started. **Main did not advance** beyond
 the previously released `ce8ecb84…` — the branch was cut from the current main
@@ -70,7 +71,27 @@ Commits (each one reviewable on its own):
 1. `f9ca1c4` — the RU copy catalog and the shared number formatting;
 2. `3c5d0a1` — the main menu;
 3. `4ce5732` — the result screen and the three meta surfaces;
-4. `8478b41` — the duplicated frame line and the extended contract.
+4. `8478b41` — the duplicated frame line and the extended contract;
+5. `2190888` — this report.
+
+### How the branch was pushed
+
+This environment has no shell git credentials, so the branch was pushed through
+the **GitHub App** (the `push_files` API). Two consequences are visible in the
+PR and are not defects in the change itself:
+
+* the App encodes file contents as text, so the **PNG evidence could not be
+  carried** — the screenshots in `docs/qa/ui-redesign-v1-evidence/` are delivered
+  with this report instead of being committed. `npm run test:ui-redesign`
+  regenerates every one of them;
+* the App **cannot write `.github/workflows/`**, so wiring the new contract into
+  CI is not in the branch. The step to add by hand is
+  `npm run test:ui-redesign` inside the browser-smoke job.
+
+The PR therefore shows 10 commits where the local branch shows 5: the first two
+are a binary push probe and its removal, and the fourth logical change was
+split into four pushes because of a per-request size limit. The **content** of
+the diff is identical to the local branch.
 
 ---
 
@@ -294,8 +315,18 @@ Evidence: `docs/qa/ui-redesign-v1-evidence/doubleline-card-before.png` and
 
 `node tests/ui-redesign.mjs` (`npm run test:ui-redesign`) drives the real
 application in a real browser over four viewports and asserts the copy contract,
-the hierarchy, the touch targets, the result rules and the internal dock. It is
-wired into the CI browser job.
+the hierarchy, the touch targets, the result rules and the internal dock. It
+captures the evidence set (`menu-fresh`, `menu-resume`, `result-defeat`,
+`result-legendary`, `daily-tasks`, `codex`, `collection`, `collection-milestones`,
+`rating`) into `docs/qa/ui-redesign-v1-evidence/` at every viewport.
+
+Result: **PASS** at 320×568, 390×740, 768×1024 and 1080×1920
+(`ui redesign surfaces PASS …` / `ui redesign menu PASS …` /
+`ui redesign contract: ok`).
+
+It is **not** wired into the CI browser job in this branch — the GitHub App that
+pushes the branch cannot write `.github/workflows/`. The step to add by hand is
+`npm run test:ui-redesign`.
 
 ### Existing gates
 
@@ -324,7 +355,9 @@ that pinned the old copy were updated to the new contract — never weakened:
 | `test:layout-diagnostics` | PASS | PASS |
 | `test:review-browser` | FAIL (the old legal copy, the old codex footer) | PASS |
 | `npx tsc --noEmit` | PASS | PASS |
+| `npm run build` (tsc + vite build + release stamp) | PASS | PASS |
 | `git diff --check` | PASS | PASS |
+| `node tests/ui-redesign.mjs` (the new contract) | — | PASS |
 
 The exact commands are in §9.
 
@@ -366,26 +399,58 @@ node tests/ui-redesign.mjs
 git diff --check
 ```
 
-`npm run build` is the remaining repository gate; it runs `tsc --noEmit`,
-`vite build` and the release stamp.
+`npm run build` runs `tsc --noEmit`, `vite build` and the release stamp. It needs
+an explicit 40-character SHA for the stamp:
+
+```
+VITE_RELEASE_SHA=$(git rev-parse HEAD) npm run build
+```
+
+Result: **PASS** — 132 modules transformed, `dist/assets/index-*.js` 490.24 kB
+(146.70 kB gzip), `vendor-phaser-*.js` 1 481.79 kB (339.85 kB gzip),
+`Stamped OFELIYA release 8478b41089f98859cfa5fa207effa91030368934`.
+
+One note on the first sweep: `test:result-actions` failed once with
+`page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:5173/` because the
+sandbox dev server was not running for that background sweep. With the server
+up it is **PASS** (`real-touch result actions smoke: ok` /
+`checkpoint resume mobile reload smoke: ok`). It is not a code failure.
 
 ---
 
 ## 10. Viewport matrix
 
-| Viewport | Fresh menu | Resume menu | Result | Daily tasks | Codex | Collection |
-| --- | --- | --- | --- | --- | --- | --- |
-| 320×568 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 390×740 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 768×1024 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 1080×1920 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Viewport | Fresh menu | Resume menu | Result (defeat) | Result (legendary) | Daily tasks | Codex | Collection | Rating |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 320×568 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 390×740 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 768×1024 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 1080×1920 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+Every one of these 36 captures is produced by `node tests/ui-redesign.mjs`; the
+run asserts the copy and the geometry at the same time, so a green run *is* the
+evidence. The capture list:
+
+| Screenshot | What it shows |
+| --- | --- |
+| `menu-fresh-<w>x<h>.png` | the menu without a saved run — one hierarchy, one record line, the 2×2 grid |
+| `menu-resume-<w>x<h>.png` | the menu with a saved run — the resume action, the new-run action, the record line |
+| `result-defeat-<w>x<h>.png` | the defeat result — `ШТАММ УНИЧТОЖЕН`, the actions, the share line |
+| `result-legendary-<w>x<h>.png` | the victory result with two evolutions and two legendary mutations |
+| `daily-tasks-<w>x<h>.png` | the daily board with the real UTC countdown and the task fractions |
+| `codex-<w>x<h>.png` | the codex with the mutation tabs |
+| `collection-<w>x<h>.png` | the collection on the shells page |
+| `collection-milestones-<w>x<h>.png` | the collection on the milestones page |
+| `rating-<w>x<h>.png` | the rating with a neutral `Игрок (TG)` row and the invite action |
+| `doubleline-card-before.png` / `-after.png` | the duplicated frame line and its fix |
 
 The menu geometry is computed by `src/ui/menuLayout.ts`, a pure function: the
 hero art absorbs the free space, the gaps grow up to a maximum and the whole
 block centres itself on a viewport taller than the content. Every interactive
 band is at least 44px tall.
 
-Screenshots: `docs/qa/ui-redesign-v1-evidence/`.
+Screenshots: `docs/qa/ui-redesign-v1-evidence/` — they are delivered with this
+report rather than committed (see §2 and §14).
 
 ---
 
@@ -469,3 +534,25 @@ profile, then check that the third description still fits the compact card.
 4. The desktop viewports (768 and 1080) keep the game's existing logical-pixel
    font sizes. The layout adapts, the type does not scale — a separate
    typographic pass would be needed for a tablet.
+5. The PNG evidence is not committed to the branch: the App-only push path
+   cannot carry binary files (§2). The screenshots travel with this report and
+   `npm run test:ui-redesign` regenerates all of them.
+6. The new contract is not in the CI workflow for the same reason. The step to
+   add by hand is `npm run test:ui-redesign` in the browser-smoke job.
+
+---
+
+## 15. The pull request
+
+| | |
+| --- | --- |
+| URL | https://github.com/timoshinoleg-eng/ofeliya/pull/249 |
+| Title | `[DRAFT] OFELIYA UI v1 — menu, results, meta navigation and Russian copy` |
+| Draft | **yes** |
+| Base | `main` @ `ce8ecb84ced1afa09870f2f00f9a0328257fd11c` |
+| Head | `feat/ui-redesign-v1-20261026` @ `3a7f507e82bd6e189471bdcc0f8cb143aca3097e` |
+| Diff | 33 files, +3 119 / −949 |
+| Merged | **no** |
+
+The pull request is open as a **draft** and was **not** merged. Nothing was
+deployed.
