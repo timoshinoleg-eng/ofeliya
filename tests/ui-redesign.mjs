@@ -616,10 +616,13 @@ try {
       codexBody.some((t) => t.includes('ЗАКРЫТАЯ СИНЕРГИЯ')),
       'a locked synergy must be named'
     );
-    assert.ok(
-      codexBody.some((t) => t.includes('Совмести ветви «')),
-      'a locked synergy must name its recipe'
-    );
+    for (const recipe of [
+      'БЕЛКОВЫЕ ШИПЫ III + ПРОНИКНОВЕНИЕ II',
+      'КАПСИДНЫЕ СПУТНИКИ III + ПОДВИЖНОСТЬ/РЕПЛИКАЦИЯ II',
+      'МЕМБРАННЫЙ ИМПУЛЬС III + РНК-АФФИНИТЕТ II',
+    ]) {
+      assert.ok(codexBody.some((t) => t.includes(recipe)), `the Codex is missing the real recipe: ${recipe}`);
+    }
     assert.ok(
       codexBody.some((t) => t.includes('Открываются при совмещении двух совместимых ветвей')),
       'the synergy section must explain itself'
