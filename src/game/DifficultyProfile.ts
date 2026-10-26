@@ -157,7 +157,19 @@ export function isRankedDifficulty(id: DifficultyId): boolean {
  * claim a place nor contaminate any server-side board.
  */
 export function isScoreSubmittable(id: DifficultyId): boolean {
-  return id !== 'easy';
+  return id === 'standard' || id === 'strained';
+}
+
+/**
+ * True when a run of this difficulty may take part in a ranked Duel contract.
+ *
+ * Only the ranked Standard tier may. The Duel flow already pins Standard end to
+ * end — the challenge loader rejects any non-Standard challenge and the Menu
+ * forces the tier — so this guard cannot change a mode that ships today; it
+ * simply refuses to let an unranked tier into a ranked contract.
+ */
+export function isDuelEligible(id: DifficultyId): boolean {
+  return id === 'standard';
 }
 
 export function getDifficultyProfile(id: unknown): DifficultyProfile {
