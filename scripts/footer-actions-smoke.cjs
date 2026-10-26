@@ -9,6 +9,7 @@ const TARGETS = [
   'ofeliya-menu-audio-sound',
   'ofeliya-menu-audio-effects',
   'ofeliya-menu-legal',
+  'ofeliya-menu-diagnostics',
 ];
 const AUDIO_PREFIX = {
   'ofeliya-menu-audio-music': '♪ Музыка',
@@ -100,6 +101,9 @@ async function audioLabel(page, name) {
             assert.equal(await p.evaluate(() => !!window.__game.scene.getScene('Menu').codexOverlay), true);
           } else if (t.name === 'ofeliya-menu-nav-collection') {
             assert.equal(await p.evaluate(() => !!window.__game.scene.getScene('Menu').collectionBoard), true);
+          } else if (t.name === 'ofeliya-menu-diagnostics') {
+            for (let n = 0; n < 4; n++) await p.touchscreen.tap(t.x + t.w / 2, t.y + t.h - 2);
+            assert.equal(await p.locator('#ofeliya-startup-trace').count(), 1, 'five diagnostic taps reveal the trace');
           } else if (t.name === 'ofeliya-menu-legal') {
             assert.equal(await p.locator('.legal-close').count(), 1);
             await p.keyboard.press('Escape');

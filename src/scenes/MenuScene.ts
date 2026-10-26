@@ -934,26 +934,26 @@ export class MenuScene extends Phaser.Scene {
 
     // ---- Legal row --------------------------------------------------------
     // The technical release information lives in the About surface, not here.
-    const legalText = this.add
-      .text(W / 2, layout.legalY, MENU_COPY.legal, {
+    const legalWidth = gridW - MIN_TOUCH - 8;
+    const legalCenter = gridLeft + legalWidth / 2;
+    this.add
+      .text(legalCenter, layout.legalY, MENU_COPY.legal, {
         fontFamily: UI_FONT,
         fontSize: layout.compact ? '11px' : '12px',
         fontStyle: '700',
         color: '#c9f6ff',
+        align: 'center',
+        wordWrap: { width: legalWidth, useAdvancedWrap: true },
       })
       .setOrigin(0.5)
       .setResolution(2)
       .setDepth(6);
     const legalHit = this.add
-      .rectangle(W / 2, layout.legalY, Math.min(gridW, 320), MIN_TOUCH, 0x000000, 0.001)
+      .rectangle(legalCenter, layout.legalY, legalWidth, MIN_TOUCH, 0x000000, 0.001)
       .setDepth(5)
       .setName('ofeliya-menu-legal')
       .setInteractive({ useHandCursor: true });
     legalHit.on('pointerup', () => {
-      Sfx.play('click');
-      showLegalOverlay();
-    });
-    legalText.setInteractive({ useHandCursor: true }).on('pointerup', () => {
       Sfx.play('click');
       showLegalOverlay();
     });
@@ -964,16 +964,21 @@ export class MenuScene extends Phaser.Scene {
     // drawn without ink and it never shows a raw host token.
     let diagnosticTapCount = 0;
     let diagnosticTapTimer: number | null = null;
-    const diagnosticTarget = this.add
-      .text(W / 2, H - 9, `mini-app · ${platformLabel(PlatformBridge.kind)} · ${RELEASE_SHORT}`, {
+    const diagnosticX = gridLeft + gridW - MIN_TOUCH / 2;
+    this.add
+      .text(diagnosticX, layout.legalY, `mini-app · ${platformLabel(PlatformBridge.kind)} · ${RELEASE_SHORT}`, {
         fontFamily: FONT,
         fontSize: '9px',
         color: '#654454',
       })
-      .setOrigin(0.5, 1)
+      .setOrigin(0.5)
       .setResolution(2)
       .setAlpha(0.001)
+      .setDepth(5);
+    const diagnosticTarget = this.add
+      .rectangle(diagnosticX, layout.legalY, MIN_TOUCH, MIN_TOUCH, 0x000000, 0.001)
       .setDepth(5)
+      .setName('ofeliya-menu-diagnostics')
       .setInteractive({ useHandCursor: true });
     diagnosticTarget.on('pointerup', () => {
       diagnosticTapCount += 1;
