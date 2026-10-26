@@ -1,6 +1,7 @@
 import type { RunResult } from '../game/RunContracts';
 import type { PlatformAdapter } from '../platform/PlatformBridge';
 import type { DailyRunTicket } from './DailyRunClient';
+import { isScoreSubmittable } from '../game/DifficultyProfile';
 import { SCORE_CAMPAIGN_VERSION, SCORE_RULESET_VERSION } from '../game/RunVersions';
 
 export { SCORE_CAMPAIGN_VERSION, SCORE_RULESET_VERSION } from '../game/RunVersions';
@@ -395,6 +396,9 @@ export async function submitRunScore(
   // Local checkpoint state is not server-authoritative. Never let a resumed Standard run
   // enter the canonical score submission path.
   if (result.resumed) return null;
+  // An Easy run is unranked by contract: it never reaches the score endpoint, so it
+  // can neither claim a place nor contaminate any server-side leaderboard.
+  if (!isScoreSubmittable(result.difficultyId)) return null;
   const submission = buildScoreSubmission(result, platform);
   // A messenger result without signed initData must never be downgraded to an anonymous trusted score.
   if (submission.platform !== 'browser' && !submission.initData) return null;
