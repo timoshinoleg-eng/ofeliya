@@ -44,3 +44,17 @@ export function runModeLabel(input: RunModeLabelInput): string {
   if (input.ranked) return 'РЕЖИМ: СТАНДАРТ · рейтинговый';
   return `РЕЖИМ: ${mode} · вне рейтинга`;
 }
+
+/**
+ * Share-text suffix naming the mode the player actually ran.
+ *
+ * It mirrors the on-screen mode line: a shared Easy result must never claim
+ * to be a Strained run, and a ranked Standard run adds no suffix at all.
+ */
+export function runModeShareLabel(input: RunModeLabelInput): string {
+  if (input.ranked) return '';
+  if (input.daily) return ' Ежедневный забег.';
+  if (input.duel) return ' Дуэль · вне глобального рейтинга.';
+  if (input.resumed) return ' Возобновлённый забег · вне рейтинга.';
+  return ` Режим: ${getDifficultyProfile(input.difficultyId).label}.`;
+}
