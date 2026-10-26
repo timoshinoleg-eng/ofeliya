@@ -72,20 +72,24 @@ try {
     const selector = await page.evaluate(() => {
       const menu = window.__game.scene.getScene('Menu');
       const panel = menu.children.list.find((o) => o.name === 'ofeliya-menu-difficulty-selector');
-      const value = menu.children.list.find((o) => o.name === 'ofeliya-menu-difficulty-value');
+      const value = menu.children.list.find((o) => o.name === 'ofeliya-menu-difficulty-selector-value');
       const texts = [];
       const visit = (o) => {
         if (o.type === 'Text') texts.push(o);
         o.list?.forEach(visit);
       };
       menu.children.list.forEach(visit);
-      const description = texts.find((o) => o.text && /спокойн/.test(o.text) && o.text.length < 80);      const panelBounds = panel.getBounds();
+      const description = menu.children.list.find((o) => o.name === 'ofeliya-menu-difficulty-selector-desc');
+      const steps = menu.children.list.find((o) => o.name === 'ofeliya-menu-difficulty-selector-steps');
+      const panelBounds = panel.getBounds();
       const descBounds = description ? description.getBounds() : null;
       return {
         difficultyId: window.__game.registry.get('difficultyId'),
         stored: localStorage.getItem('ofeliya_difficulty_v1'),
         valueText: value ? value.text : null,
         descriptionText: description ? description.text : null,
+        steps: steps?.text ?? null,
+        panelWidth: panelBounds.width,
         panel: { left: panelBounds.left, right: panelBounds.right, top: panelBounds.top, bottom: panelBounds.bottom },
         description: descBounds
           ? { left: descBounds.left, right: descBounds.right, top: descBounds.top, bottom: descBounds.bottom }
@@ -97,15 +101,10 @@ try {
 
     assert.equal(selector.difficultyId, 'easy', `${width}: the Menu did not select Easy`);
     assert.equal(selector.stored, 'easy', `${width}: the Easy selection was not persisted`);
-    assert.ok(selector.valueText && selector.valueText.includes('ЛЁГКИЙ'), `${width}: the selector does not show ЛЁГКИЙ (${selector.valueText})`);
+    assert.ok(selector.valueText && selector.valueText.toLocaleUpperCase('ru-RU').includes('ЛЁГКИЙ'), `${width}: the selector does not show ЛЁГКИЙ (${selector.valueText})`);
     assert.ok(selector.descriptionText, `${width}: the Easy description is missing`);
-    if (height >= 650) {
-      assert.ok(
-        selector.descriptionText.includes('Более спокойный') &&
-          selector.descriptionText.includes('режим для основ'),
-        `${width}: the full Easy description is not shown (${selector.descriptionText})`
-      );
-    }
+    assert.equal(selector.steps, '• ◦ ◦', `${width}: the Easy indicator is wrong`);
+    assert.ok(['спокойнее', 'Более спокойный\nрежим для основ'].includes(selector.descriptionText), `${width}: the Easy description is wrong`);
     assert.ok(
       selector.description && selector.description.left >= selector.panel.left - 1 &&
         selector.description.right <= selector.panel.right + 1 &&
@@ -121,7 +120,7 @@ try {
     if (OUT) await page.screenshot({ path: resolve(OUT, `easy-menu-${width}.png`) });
 
     // --- The cycle is ЛЁГКИЙ → СТАНДАРТ → НАПРЯЖЕНИЕ → ЛЁГКИЙ --------------
-    const labels = [selector.valueText.replace(/\s*›\s*$/, '').trim()];
+    const labels = [selector.valueText.replace(/\s*›\s*$/, '').trim().toLocaleUpperCase('ru-RU')];
     const overflows = [{ tier: 'easy', overflow: selector.overflow }];
     let lastState = null;
     for (let i = 0; i < 3; i += 1) {
@@ -135,26 +134,20 @@ try {
       await page.waitForTimeout(160);
       const state = await page.evaluate(() => {
         const menu = window.__game.scene.getScene('Menu');
-        const value = menu.children.list.find((o) => o.name === 'ofeliya-menu-difficulty-value');
+        const value = menu.children.list.find((o) => o.name === 'ofeliya-menu-difficulty-selector-value');
         const panel = menu.children.list.find((o) => o.name === 'ofeliya-menu-difficulty-selector');
         const pb = panel.getBounds();
         const texts = [];
         const visit = (o) => { if (o.type === 'Text') texts.push(o); o.list?.forEach(visit); };
         menu.children.list.forEach(visit);
-        const DESCRIPTIONS = [
-          'спокойнее',
-          'сложнее',
-          'базовый',
-          'Базовый ритм кампании',
-          'Особые клетки мутируют · давление растёт',
-          'Более спокойный\nрежим для основ',
-        ];
-        const description = texts.find((o) => DESCRIPTIONS.includes(o.text));
+        const description = menu.children.list.find((o) => o.name === 'ofeliya-menu-difficulty-selector-desc');
+        const steps = menu.children.list.find((o) => o.name === 'ofeliya-menu-difficulty-selector-steps');
         const db = description ? description.getBounds() : null;
         return {
           valueText: value ? value.text : null,
           difficultyId: window.__game.registry.get('difficultyId'),
           stored: localStorage.getItem('ofeliya_difficulty_v1'),
+          steps: steps?.text ?? null,
           descriptionText: description ? description.text : null,
           // Horizontal fit, vertical start inside the panel, and how far the
           // copy reaches past the panel bottom (the shipped Strained tier is
@@ -168,9 +161,10 @@ try {
       });
       assert.ok(state.horizontalFits, `${width}: the difficulty description leaves the panel (${JSON.stringify(state)})`);
       assert.ok(state.topInside, `${width}: the difficulty description overlaps the tier label (${JSON.stringify(state)})`);
+      assert.equal(state.steps, {easy: '• ◦ ◦', standard: '• • ◦', strained: '• • •'}[state.difficultyId], `${width}: difficulty indicator mismatch`);
       overflows.push({ tier: state.difficultyId, overflow: state.overflow });
       lastState = state;
-      labels.push(state.valueText.replace(/\s*›\s*$/, '').trim());
+      labels.push(state.valueText.replace(/\s*›\s*$/, '').trim().toLocaleUpperCase('ru-RU'));
     }
     // The new tier must fit the panel at least as well as the tiers that ship
     // today: the Strained description defines the accepted baseline.
@@ -237,7 +231,7 @@ try {
       const texts = [];
       const visit = (o) => { if (o.type === 'Text') texts.push(o); o.list?.forEach(visit); };
       overlay.list.forEach(visit);
-      const mode = texts.filter((o) => o.text.startsWith('РЕЖИМ:'));
+      const mode = texts.filter((o) => o.text === 'ЛЁГКИЙ · Тренировка');
       const share = overlay.getByName('ofeliya-result-share-label');
       const shareBg = overlay.getByName('ofeliya-result-share-bg');
       const modeBounds = mode[0] ? mode[0].getBounds() : null;
@@ -256,7 +250,7 @@ try {
         viewport: { width: window.innerWidth, height: window.innerHeight },
       };
     });
-    assert.equal(result.modeText, 'РЕЖИМ: ЛЁГКИЙ · вне рейтинга', `${width}: the Easy result label is wrong`);
+    assert.equal(result.modeText, 'ЛЁГКИЙ · Тренировка', `${width}: the Easy result label is wrong`);
     assert.ok(result.modeFits, `${width}: the Easy result line leaves the viewport`);
     assert.equal(result.shareText, 'ПОДЕЛИТЬСЯ РЕЗУЛЬТАТОМ', `${width}: an Easy result must not offer a ranked challenge`);
     assert.ok(result.shareFits, `${width}: the share action does not fit its target`);

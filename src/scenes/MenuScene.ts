@@ -521,6 +521,11 @@ export class MenuScene extends Phaser.Scene {
                 : 'базовый'
             : profile.description
       );
+      // Keep EASY's existing compact copy when its full description would leave the card.
+      if (!challengeLocked && profile.id === 'easy' &&
+          difficultyCard.desc.getBounds().bottom > cardY + cardH / 2) {
+        difficultyCard.desc.setText('спокойнее');
+      }
       difficultyCard.rail.setFillStyle(difficultyAccent, 0.94);
       difficultyCard.bg.setFillStyle(
         profile.id === 'strained' ? 0x29251e : VISUAL.panel,
