@@ -1,3 +1,13 @@
+# EASY difficulty backlog — 26.10.2026
+
+- [ ] Продуктовое решение: сделать Easy дефолтом для новых игроков. Не выполнять автоматически; текущий дефолт остаётся `standard`.
+- [ ] Решить, нужен ли отдельный счётчик `easyCampaignClears` в `SaveData`. Сейчас победы в Easy не увеличивают ни один счётчик, чтобы не трогать схему сохранения. Требует миграции save — отдельная задача.
+- [ ] Проверить события `run_end`/`death`/`win`: `difficulty` передаётся в `run_start`, но в `death`/`win` (GameScene) его нет. Это пробел аналитики, инфраструктуру в этом PR не меняли.
+- [ ] Физическая приёмка MAX/Telegram WebView (background/resume, ввод, safe area) — NOT_RUN, отдельный гейт.
+- [ ] Hosted CI на точном SHA и решение о мердже — за владельцем; PR остаётся Draft.
+
+---
+
 # PR244 independent final gate - 2026-10-25
 
 Original de6a74afd80607e6df24801a819d7e6cfa60af4f is BLOCK: P2 mutation gate falsely classifies omitted pre-hit flush as equivalent. Real offset streak reaches q_nodmg60; the permitted mutant records59. Narrow tests-only repair on review/codex-pr244-final-gate-20261025; report docs/qa/CODEX_PR244_FINAL_GATE_20261025.md. UTC14/14 +2 equivalent +control passed; exact candidate CI40181931371 is genuinely green but cannot prove the false equivalence. Lifecycle and UTC/units historical RED/GREEN independently reproduced. Keep native memory failures and base-reproduced startup font assertion distinct from product findings. No merge/deploy. Next: Draft follow-up into #244 branch, new exact-head full CI and release decision. Physical native close inconclusive, eviction/MAX NOT_RUN.
