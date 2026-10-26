@@ -405,6 +405,19 @@ try {
     }
     assert.deepEqual(resultErrors, [], 'page errors on the result screen');
     await resultPage.screenshot({ path: resolve(EVIDENCE_DIR, `result-defeat-${viewport.width}x${viewport.height}.png`) });
+    await renderResult({
+      ...baseResult,
+      win: true,
+      reason: 'campaign-clear',
+      bossesDefeated: 2,
+      stageId: 'heart',
+      stageOrder: 1,
+      evolutions: ['prism', 'halo'],
+      legendaryIds: ['zero-point', 'core-predator'],
+    });
+    await resultPage.screenshot({
+      path: resolve(EVIDENCE_DIR, `result-legendary-${viewport.width}x${viewport.height}.png`),
+    });
     await resultPage.close();
 
     // ---- Daily tasks, codex and collection ---------------------------------
@@ -464,7 +477,10 @@ try {
       `a task must show its fraction or its completed state: ${tasks.texts.join(' | ')}`
     );
 
+    await metaPage.screenshot({ path: resolve(EVIDENCE_DIR, `daily-tasks-${viewport.width}x${viewport.height}.png`) });
+
     const codex = await openMeta('codex');
+    await metaPage.screenshot({ path: resolve(EVIDENCE_DIR, `codex-${viewport.width}x${viewport.height}.png`) });
     assert.ok(codex.overlayTexts.includes('КОДЕКС'), 'the codex title is wrong');
     assert.ok(!codex.overlayTexts.some((t) => t.includes('STRAIN-0')), 'no strain code in the codex');
     assert.ok(
@@ -549,7 +565,60 @@ try {
     }
     assert.deepEqual(metaErrors, [], 'page errors in the meta surfaces');
     await metaPage.screenshot({ path: resolve(EVIDENCE_DIR, `collection-${viewport.width}x${viewport.height}.png`) });
+    await metaPage.evaluate(() => {
+      const menu = window.__game.scene.getScene('Menu');
+      const board = menu.children.list.find((o) => o.name === 'ofeliya-collection');
+      board.list.find((o) => o.name === 'ofeliya-collection-milestones')?.emit('pointerup');
+    });
+    await metaPage.waitForTimeout(200);
+    await metaPage.screenshot({
+      path: resolve(EVIDENCE_DIR, `collection-milestones-${viewport.width}x${viewport.height}.png`),
+    });
     await metaPage.close();
+
+    // ---- Rating surface ---------------------------------------------------
+    const ratingPage = await context.newPage();
+    const ratingErrors = [];
+    ratingPage.on('pageerror', (error) => ratingErrors.push(String(error)));
+    await ratingPage.goto(base, { waitUntil: 'domcontentloaded' });
+    await ratingPage.waitForFunction(() => window.__game?.scene.isActive('Menu'), null, { timeout: 20000 });
+    await ratingPage.evaluate(() => window.__game.scene.getScene('Menu').showSocialHub());
+    await ratingPage.waitForTimeout(900);
+    const rating = await ratingPage.evaluate(() => {
+      const menu = window.__game.scene.getScene('Menu');
+      const hub = menu.children.list.find((o) => o.name === 'ofeliya-social-hub');
+      const texts = hub ? hub.list.filter((o) => o.type === 'Text').map((o) => o.text) : [];
+      const find = (node, name) => {
+        for (const child of node.list ?? []) {
+          if (child.name === name) return child;
+          const hit = find(child, name);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      const close = hub ? find(hub, 'ofeliya-social-close-hit') : null;
+      return {
+        texts,
+        close: close ? { width: close.width, height: close.height } : null,
+      };
+    });
+    assert.ok(rating.texts.includes('РЕЙТИНГ'), 'the rating title is wrong');
+    assert.ok(rating.texts.some((t) => t.includes('ЗАБЕГ ДНЯ')), 'the rating has no daily-run band');
+    assert.ok(
+      !rating.texts.some((t) => t.includes('СЕРИЯ 0')),
+      'a zero streak must never be rendered'
+    );
+    assert.ok(
+      !rating.texts.some((t) => /#\d+ · (TG|MAX|WEB)$/.test(t)),
+      'a table row without a name must name the player neutrally'
+    );
+    assert.ok(
+      rating.close && rating.close.width >= 44 && rating.close.height >= 44,
+      'the rating close control is a real touch target'
+    );
+    assert.deepEqual(ratingErrors, [], 'page errors on the rating surface');
+    await ratingPage.screenshot({ path: resolve(EVIDENCE_DIR, `rating-${viewport.width}x${viewport.height}.png`) });
+    await ratingPage.close();
     await context.close();
     console.log(`ui redesign surfaces PASS ${viewport.width}x${viewport.height}`);
     console.log(`ui redesign menu PASS ${viewport.width}x${viewport.height}`);

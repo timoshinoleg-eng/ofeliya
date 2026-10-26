@@ -179,11 +179,13 @@ async function waitForText(page, needle, timeout = 6000) {
       assert(live.checkpointKeys.length === 0, 'checkpoint leaked to localStorage: ' + live.checkpointKeys.join(','));
 
       await finishRun(page);
-      await waitForText(page, 'ЕЖЕДНЕВНЫЙ ЗАБЕГ');
+      // A daily submission is ranked on the daily board, so the result states the
+      // daily place instead of a generic submission status.
+      await waitForText(page, 'В РЕЙТИНГЕ ДНЯ');
       const texts = await readResultTexts(page);
       const joined = texts.join('\n');
       assert(texts.includes('РЕЖИМ: СТАНДАРТ · ежедневный забег'), 'daily mode line missing: ' + joined);
-      assert(joined.includes('ЕЖЕДНЕВНЫЙ ЗАБЕГ'), 'daily status line missing');
+      assert(joined.includes('★ МЕСТО #5 В РЕЙТИНГЕ ДНЯ'), 'daily rank line missing: ' + joined);
       assert(!joined.includes('рейтинговый'), 'daily result rendered the global ranked mode: ' + joined);
       assert(!joined.includes('РЕЙТИНГ · МЕСТО'), 'daily result rendered the global ranking line: ' + joined);
 
