@@ -954,12 +954,23 @@ const mark = (name, value, kind = 'real') => {
       menu.showCodex();
       return before;
     });
-    await tap('ofeliya-meta-dock-collection');
-    await page.waitForFunction(() => Boolean(window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection')));
     // The board must really have a reveal tween in flight, otherwise this case would
-    // prove nothing about tearing a board down mid-animation.
+    // prove nothing about tearing a board down mid-animation. The probe therefore
+    // opens the board and reads the tween list in the same tick: the reveal is a
+    // short animation, and a round trip through the browser would let it finish
+    // before the probe ever looked at it.
     const revealInFlight = await page.evaluate(() => {
       const menu = window.__game.scene.getScene('Menu');
+      const find = (node, name) => {
+        for (const child of node.list ?? []) {
+          if (child.name === name) return child;
+          const hit = find(child, name);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      menu.showCodex();
+      find(menu.codexOverlay, 'ofeliya-meta-dock-collection').emit('pointerup');
       const board = menu.children.getByName('ofeliya-collection');
       // The board belongs to the Menu scene, so its reveal tween lives in the
       // Menu tween manager, not the UI one.
@@ -976,9 +987,17 @@ const mark = (name, value, kind = 'real') => {
       `the board must still be animating in when it is closed (${JSON.stringify(revealInFlight)})`);
     // Close immediately: the reward-reveal tween is still running at this point.
     // The tap must not wait for the board to settle - that is the whole point of
-    // this case - so the settle budget is switched off here on purpose.
+    // this case - so the settle budget is switched off here on purpose. A reveal
+    // that is still at alpha zero is not hit-testable yet, so a second, re-aimed
+    // tap follows when the first one did not land.
     await tap('ofeliya-modal-close-hit', { settleMs: 0 });
     await page.waitForTimeout(120);
+    const closedEarly = await page.evaluate(() =>
+      !window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection'));
+    if (!closedEarly) {
+      await tap('ofeliya-modal-close-hit');
+      await page.waitForTimeout(120);
+    }
     const afterTweenTeardown = await page.evaluate(() => {
       const menu = window.__game.scene.getScene('Menu');
       return {
