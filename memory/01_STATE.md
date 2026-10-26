@@ -1,3 +1,20 @@
+# EASY difficulty tier — 26.10.2026
+
+Branch `feat/easy-difficulty-20261026` от `ce8ecb8` (current `main`, не analytics PR #247). Третий уровень сложности `easy` / «ЛЁГКИЙ», unranked.
+
+Факты реализации:
+- `src/game/DifficultyProfile.ts`: `DifficultyId` теперь `'easy' | 'standard' | 'strained'`; добавлен `EASY_DIFFICULTY`, `DIFFICULTY_ORDER = ['easy','standard','strained']`, `RANKED_DIFFICULTY_ID='standard'`, `isDifficultyId`, `isRankedDifficulty`, `isScoreSubmittable`. `STANDARD_DIFFICULTY` и `STRAINED_DIFFICULTY` побайтово не изменены (закреплены в `scripts/check-difficulty.mjs`).
+- EASE профиль снижает только входящее давление: `enemyDamageMultiplier 0.55`, `bossDamageMultiplier 0.6`, `spawnIntervalMultiplier 1.25`, `batchBonus -1`, `eliteIntervalMultiplier 1.6`, `normalEnemyCapBonus -20`, `enemySpeedMultiplier 0.92`, `bossSpeedMultiplier 0.95`, `bossMinionIntervalMultiplier 1.35`, `bossMinionBonus -2`, `threatCap 26→52`, `heartbeat 1.2/0.85`. `enemyHpMultiplier` и `bossHpMultiplier` остались 1 — урон игрока и кривая мутаций не меняются.
+- `src/systems/RunCheckpoint.ts`: валидация difficulty расширена до `isDifficultyId` (старые сохранения standard/strained валидны, неизвестный id → null).
+- `src/systems/ScoreClient.ts`: `submitRunScore` пропускает `easy` полностью (0 сетевых запросов). Strained сохранил прежнее поведение (отправляется, но не ранжируется).
+- `src/game/RunModeLabel.ts` (новый): `runModeLabel()` и `isRankedResult()` — чистые функции для строки режима и ранга; `UIScene` использует их. Результат Easy: `РЕЖИМ: ЛЁГКИЙ · вне рейтинга`.
+- `src/scenes/MenuScene.ts`: селектор показывает ЛЁГКИЙ; описание `Более спокойный\nрежим для основ` (две строки — помещается в панель на 320/390/768/1080); цикл ЛЁГКИЙ → СТАНДАРТ → НАПРЯЖЕНИЕ.
+- Сервер не тронут: `DIFFICULTY_IDS` не знает про `easy`, поэтому любой утёкший Easy-payload отвергается сервером (422) и не может попасть ни на одну доску.
+
+Проверки: `test:difficulty`, `test:easy-difficulty`, `test:difficulty-comparison`, `test:pacing`, `test:threat`, `test:save`, `test:checkpoint`, `test:rng`, `test:challenge`, `test:duel`, `test:daily-v2`, `test:daily-mutator`, `test:onboarding`, `test:language`, `test:tokens`, `test:ui-copy`, `test:score-outbox`, `test:quest-core`, `test:quest-runtime`, `test:run-identity`, `test:streaks`, `test:daily-cta`, `test:profile`, `test:isolation`, `test:bundle-shape`, `npx tsc --noEmit`, `npm run build` — PASS. `tests/easy-difficulty-visual.mjs` — PASS на 320/390/768/1080. `test:release-config` требует release-env (не связано с задачей). Физический MAX/Telegram WebView NOT_RUN.
+
+---
+
 # PR244 independent final gate - 2026-10-25
 
 Original de6a74afd80607e6df24801a819d7e6cfa60af4f is BLOCK: P2 mutation gate falsely classifies omitted pre-hit flush as equivalent. Real offset streak reaches q_nodmg60; the permitted mutant records59. Narrow tests-only repair on review/codex-pr244-final-gate-20261025; report docs/qa/CODEX_PR244_FINAL_GATE_20261025.md. UTC14/14 +2 equivalent +control passed; exact candidate CI40181931371 is genuinely green but cannot prove the false equivalence. Lifecycle and UTC/units historical RED/GREEN independently reproduced. Keep native memory failures and base-reproduced startup font assertion distinct from product findings. No merge/deploy. Next: Draft follow-up into #244 branch, new exact-head full CI and release decision. Physical native close inconclusive, eviction/MAX NOT_RUN.
