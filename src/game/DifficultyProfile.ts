@@ -168,7 +168,8 @@ export function getDifficultyProfile(id: unknown): DifficultyProfile {
 
 export function nextDifficultyId(id: DifficultyId): DifficultyId {
   const index = DIFFICULTY_ORDER.indexOf(id);
-  if (index < 0) return DIFFICULTY_ORDER[0] ?? 'standard';
+  // An unknown id fails safe to Standard, never to the new beginner tier.
+  if (index < 0) return 'standard';
   return DIFFICULTY_ORDER[(index + 1) % DIFFICULTY_ORDER.length] ?? 'standard';
 }
 
