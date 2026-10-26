@@ -40,7 +40,8 @@ try {
       `export { RunCheckpoint, RUN_CHECKPOINT_STORAGE_KEY, validateRunCheckpoint } from '${sourcePath('src/systems/RunCheckpoint.ts')}';`,
       `export { SaveSystem } from '${sourcePath('src/systems/SaveSystem.ts')}';`,
       `export { submitRunScore, buildScoreSubmission, beginRunCapability } from '${sourcePath('src/systems/ScoreClient.ts')}';`,
-      `export { createFixedSeedDuel } from '${sourcePath('src/systems/DuelClient.ts')}';`,
+      `export { createFixedSeedDuel, submitDuelAttempt } from '${sourcePath('src/systems/DuelClient.ts')}';`,
+      `export { requestDailyRunDetailed } from '${sourcePath('src/systems/DailyRunClient.ts')}';`,
       `export { launchDailyRun, readDailyIntent, resolveDailyResultBranch } from '${sourcePath('src/game/DailyRunIntent.ts')}';`,
       `export { RunState } from '${sourcePath('src/game/RunState.ts')}';`,
       `export { RunRng } from '${sourcePath('src/game/RunRng.ts')}';`,
@@ -106,6 +107,7 @@ try {
     readDifficultySelection,
     writeDifficultySelection,
     runModeLabel,
+    runModeShareLabel,
     isRankedResult,
     RunCheckpoint,
     RUN_CHECKPOINT_STORAGE_KEY,
@@ -114,6 +116,8 @@ try {
     submitRunScore,
     beginRunCapability,
     createFixedSeedDuel,
+    submitDuelAttempt,
+    requestDailyRunDetailed,
     launchDailyRun,
     readDailyIntent,
     resolveDailyResultBranch,
@@ -319,12 +323,35 @@ try {
   assertEqual(easyGrant, null, 'an Easy run requested a ranked run capability');
   assertEqual(fetchCalls.length, 0, 'an Easy run must not request a run capability');
 
-  // A Duel contract must never be created from an Easy result.
+  // A Duel contract must never be created from an Easy result — and the client
+  // must not even try: a request to the duel endpoint would already leak the
+  // Easy run to the competitive contract path.
+  fetchCalls.length = 0;
   const easyDuel = await createFixedSeedDuel(
     makeResult({ difficultyId: 'easy', win: true }),
     { kind: 'max', initData: 'signed-easy-token' }
   );
   assertEqual(easyDuel, null, 'an Easy result created a ranked Duel contract');
+  assertEqual(
+    fetchCalls.filter((call) => call.url.includes('api/duel')).length,
+    0,
+    'an Easy result reached the Duel endpoint'
+  );
+  assertEqual(fetchCalls.length, 0, 'an Easy result must not issue any request');
+
+  // A Duel attempt from an Easy result must be refused client-side too.
+  fetchCalls.length = 0;
+  const easyDuelAttempt = await submitDuelAttempt(
+    'duel-challenge-0123456789',
+    makeResult({ difficultyId: 'easy', win: true }),
+    { kind: 'max', initData: 'signed-easy-token' }
+  );
+  assertEqual(easyDuelAttempt, null, 'an Easy result submitted a Duel attempt');
+  assertEqual(
+    fetchCalls.filter((call) => call.url.includes('api/duel')).length,
+    0,
+    'an Easy result reached the Duel attempt endpoint'
+  );
 
   // --- Server-side backstop ---------------------------------------------------
   // The server must not know the Easy tier, so any Easy payload that ever
@@ -441,6 +468,34 @@ try {
     'a non-Standard Daily ticket must be rejected'
   );
 
+  // ...and the client must actually refuse a non-Standard ticket it is handed.
+  global.fetch = async (url, init) => {
+    fetchCalls.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : null });
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        ticket: {
+          runId: 'daily-run-id-02',
+          runSeed: 'aabbccddeeff0022',
+          dateKey: '2026-10-26',
+          issuedAt: Date.now(),
+          expiresAt: Date.now() + 600_000,
+          difficultyId: 'easy',
+          rulesetVersion: 3,
+          campaignVersion: 2,
+        },
+      }),
+    };
+  };
+  const easyTicket = await requestDailyRunDetailed({ kind: 'max', initData: 'signed-daily-token' });
+  assertEqual(easyTicket.ticket, null, 'a Daily ticket for the Easy tier was accepted');
+  assert(
+    easyTicket.status !== 'ok',
+    `a Daily ticket for the Easy tier returned status "${easyTicket.status}"`
+  );
+
   // Daily result branch semantics are unchanged.
   assertEqual(
     resolveDailyResultBranch({ resumed: false, dailyIntent: null, ticket: null, runSeed: 'x', now: 1 }),
@@ -481,6 +536,23 @@ try {
   assertEqual(afterEasy.totalKills, 900, 'an Easy run must still count its kills');
   assertEqual(afterEasy.standardCampaignClears, 0, 'an Easy win must not count as a Standard clear');
   assertEqual(afterEasy.strainedCampaignClears, 0, 'an Easy win must not count as a Strained clear');
+
+  // An Easy WIN must not feed the difficulty-specific clear counters either.
+  const easyWin = SaveSystem.recordRun(
+    true,
+    600_000,
+    900,
+    40,
+    [],
+    { difficultyId: 'easy', boss1ClearMs: 120_000 },
+    false
+  );
+  assertEqual(easyWin.timeRecord, false, 'an Easy win claimed a time record');
+  const afterEasyWin = SaveSystem.get();
+  assertEqual(afterEasyWin.standardCampaignClears, 0, 'an Easy win incremented the Standard clear counter');
+  assertEqual(afterEasyWin.strainedCampaignClears, 0, 'an Easy win incremented the Strained clear counter');
+  assertEqual(afterEasyWin.bestStrainedCampaignClearMs, 0, 'an Easy win touched the Strained best time');
+  assertEqual(afterEasyWin.bestCampaignClearMs, 0, 'an Easy win touched the ranked campaign record');
 
   // Standard and Strained records keep their existing behaviour.
   const standardRecords = SaveSystem.recordRun(
@@ -554,6 +626,38 @@ try {
   for (const forbidden of ['ШТРАФ', 'ПРОВАЛ', 'ОШИБКА', 'ЗАБАНЕН', 'ДИСКВАЛ']) {
     assert(!easyLabel.includes(forbidden), `the Easy result label must not read as a penalty (${forbidden})`);
   }
+
+  // The shared result text must name the tier that was actually played.
+  assertEqual(
+    runModeShareLabel({ difficultyId: 'easy', resumed: false, daily: false, duel: false, ranked: false }),
+    ' Режим: ЛЁГКИЙ.',
+    'the Easy share text names the wrong mode'
+  );
+  assertEqual(
+    runModeShareLabel({ difficultyId: 'strained', resumed: false, daily: false, duel: false, ranked: false }),
+    ' Режим: НАПРЯЖЕНИЕ.',
+    'the Strained share text drifted'
+  );
+  assertEqual(
+    runModeShareLabel({ difficultyId: 'standard', resumed: false, daily: false, duel: false, ranked: true }),
+    '',
+    'a ranked Standard share must not add a mode suffix'
+  );
+  assertEqual(
+    runModeShareLabel({ difficultyId: 'standard', resumed: false, daily: true, duel: false, ranked: false }),
+    ' Ежедневный забег.',
+    'the Daily share text drifted'
+  );
+  assertEqual(
+    runModeShareLabel({ difficultyId: 'standard', resumed: false, daily: false, duel: true, ranked: false }),
+    ' Дуэль · вне глобального рейтинга.',
+    'the Duel share text drifted'
+  );
+  assertEqual(
+    runModeShareLabel({ difficultyId: 'easy', resumed: true, daily: false, duel: false, ranked: false }),
+    ' Возобновлённый забег · вне рейтинга.',
+    'the resumed share text drifted'
+  );
 
   // ===========================================================================
   // 8. The selector exposes the tier
