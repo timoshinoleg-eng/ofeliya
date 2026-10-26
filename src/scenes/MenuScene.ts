@@ -7,6 +7,8 @@ import { parseChallengePayload } from '../game/Challenge';
 import { parseDuelStartPayload, type DuelChallengeSnapshot } from '../game/Duel';
 import { ACHIEVEMENTS } from '../game/AchievementSystem';
 import { COLORS, FONT, UI_FONT, UI_TEXT, fmtTime } from '../game/config';
+import { MENU_COPY, META_COPY } from '../game/UiCopy';
+import { fmtInt, joinSegments, toTitleCase } from '../game/UiFormat';
 import { IDENTITY } from '../game/identity';
 import { masteryTracks } from '../game/RunIdentity';
 import { LEGENDARIES } from '../game/LegendarySystem';
@@ -35,6 +37,9 @@ import { clearDailyIntent, launchDailyRun } from '../game/DailyRunIntent';
 import { showLegalOverlay } from '../legal/LegalOverlay';
 import { SocialHub } from '../ui/SocialHub';
 import { BORDER, PANEL, ROLE } from '../ui/tokens';
+import { CTA } from '../ui/cta';
+import { computeMenuLayout, MIN_TOUCH } from '../ui/menuLayout';
+import { createMetaDock, createModalFrame, type MetaDockTarget } from '../ui/modal';
 import { VISUAL, VISUAL_TEXT } from '../ui/visualTokens';
 import { createSpecimenSurface, drawSpecimenSurface } from '../ui/specimenSurface';
 import { FOUNDER_BADGE_LABEL, hasFounderBadge } from '../ui/FounderBadge';
@@ -73,6 +78,16 @@ export class MenuScene extends Phaser.Scene {
     StartupTrace.mark('menu.strainTextures.end');
     const W = this.scale.width;
     const H = this.scale.height;
+
+    // The record strip is known before anything is drawn, so the whole menu geometry
+    // can be resolved up front by the layout module.
+    const save = SaveSystem.get();
+    const displayName = PlatformBridge.getDisplayName();
+    const recordParts: string[] = [];
+    if (displayName) recordParts.push(`Носитель: ${displayName}`);
+    if (save.bestSurvivalMs > 0) recordParts.push(`Рекорд: ${fmtTime(save.bestSurvivalMs)}`);
+    if (save.bestKills > 0) recordParts.push(`Уничтожено: ${fmtInt(save.bestKills)}`);
+    const recordText = recordParts.join(' · ');
     this.codexOverlay = null;
     this.socialHub = null;
     this.founderBadge?.destroy();
@@ -97,6 +112,14 @@ export class MenuScene extends Phaser.Scene {
     // immutable server snapshot and explicitly set runSeed/controlMode before Game starts.
     this.registry.set('challengeTarget', incomingChallenge);
     this.registry.set('duelChallenge', null);
+
+    // The run configuration is known before anything is drawn, so the whole menu
+    // geometry can be resolved up front by the layout module.
+    const layout = computeMenuLayout(W, H, {
+      hasCheckpoint: Boolean(resumeCheckpoint),
+      hasRecord: recordText.length > 0,
+      recordLines: recordText.length > 40 ? 2 : 1,
+    });
 
     const plasma = this.add
       .tileSprite(0, 0, W, H, 'blood-plasma')
@@ -136,9 +159,14 @@ export class MenuScene extends Phaser.Scene {
       });
     });
 
+    // ---- Hero ------------------------------------------------------------
+    // The hero is anchored to the top of the viewport. The layout module owns the
+    // geometry, so the art, the statement and the record always land on the same
+    // rhythm at every viewport.
+    const artCenterY = layout.artTop + layout.artHeight / 2;
     const host = this.add
-      .image(W * 0.5, H * 0.3, 'host-cell-shadow')
-      .setScale(artScale('host-cell-shadow', H < 650 ? 1.1 : 1.4))
+      .image(W * 0.5, artCenterY + layout.artHeight * 0.16, 'host-cell-shadow')
+      .setScale(artScale('host-cell-shadow', (layout.artHeight * 1.25) / 112))
       .setAlpha(0.1)
       .setDepth(-10);
     if (!prefersReducedMotion()) this.tweens.add({
@@ -153,8 +181,8 @@ export class MenuScene extends Phaser.Scene {
 
     // Retained specimen framing sits below the portrait and all copy/input targets.
     // Only the halo's opacity breathes; no scene objects are spawned by animation.
-    const specimenRadius = Math.min(82, H * 0.088);
-    const specimen = this.add.graphics().setPosition(W / 2, H * 0.27).setDepth(0);
+    const specimenRadius = layout.ringRadius;
+    const specimen = this.add.graphics().setPosition(W / 2, artCenterY).setDepth(0);
     specimen.fillStyle(ROLE.surface.panel, PANEL.plate * 0.5);
     specimen.fillCircle(0, 0, specimenRadius);
     specimen.lineStyle(BORDER.hair, VISUAL.immune, 0.36);
@@ -165,7 +193,7 @@ export class MenuScene extends Phaser.Scene {
       specimen.lineBetween(Math.cos(angle) * inner, Math.sin(angle) * inner,
         Math.cos(angle) * outer, Math.sin(angle) * outer);
     }
-    const halo = this.add.graphics().setPosition(W / 2, H * 0.27).setDepth(1);
+    const halo = this.add.graphics().setPosition(W / 2, artCenterY).setDepth(1);
     halo.lineStyle(BORDER.heavyLg, VISUAL.player, 0.1);
     halo.strokeCircle(0, 0, specimenRadius - 11);
     halo.lineStyle(BORDER.hair, VISUAL.player, 0.32);
@@ -175,8 +203,8 @@ export class MenuScene extends Phaser.Scene {
       repeat: -1, ease: 'Sine.InOut' });
 
     const virus = this.add
-      .image(W / 2, H * 0.27, 'virus-player')
-      .setScale(artScale('virus-player', H < 650 ? 1.8 : 2.15))
+      .image(W / 2, artCenterY, 'virus-player')
+      .setScale(artScale('virus-player', layout.artScale))
       .setDepth(2);
     if (!prefersReducedMotion()) this.tweens.add({
       targets: virus,
@@ -194,11 +222,10 @@ export class MenuScene extends Phaser.Scene {
       ease: 'Sine.InOut',
     });
 
-    const titleY = H < 650 ? H * 0.08 : H * 0.09;
     const title = this.add
-      .text(W / 2, titleY, 'OFELIYA', {
+      .text(W / 2, layout.titleY, 'OFELIYA', {
         fontFamily: FONT,
-        fontSize: H < 650 ? '39px' : '48px',
+        fontSize: `${layout.titleFont}px`,
         fontStyle: 'bold',
         color: VISUAL_TEXT.ivory,
       })
@@ -209,9 +236,9 @@ export class MenuScene extends Phaser.Scene {
     title.setShadow(0, 2, '#080f14', 0, true, true);
 
     this.add
-      .text(W / 2, titleY + (H < 650 ? 38 : 46), 'STRAIN ZERO', {
+      .text(W / 2, layout.strainY, 'STRAIN ZERO', {
         fontFamily: FONT,
-        fontSize: '12px',
+        fontSize: layout.compact ? '9px' : '12px',
         fontStyle: 'bold',
         color: VISUAL_TEXT.player,
         letterSpacing: 4,
@@ -226,8 +253,8 @@ export class MenuScene extends Phaser.Scene {
       if (profileLoadGeneration !== this.profileLoadGeneration || !this.sys.isActive()) return;
       if (!hasFounderBadge(profile)) return;
 
-      const badgeY = H * 0.175;
-      const badgeW = Math.min(W - 48, 156);
+      const badgeY = layout.badgeY;
+      const badgeW = Math.min(layout.contentWidth, 156);
       const badge = this.add.container(0, 0).setDepth(6).setName('ofeliya-menu-founder-badge');
       const plate = this.add
         .rectangle(W / 2, badgeY, badgeW, 24, COLORS.bg, 0.86)
@@ -235,7 +262,7 @@ export class MenuScene extends Phaser.Scene {
       const label = this.add
         .text(W / 2, badgeY, `◆  ${FOUNDER_BADGE_LABEL}`, {
           fontFamily: FONT,
-          fontSize: H < 650 ? '9px' : '10px',
+          fontSize: layout.compact ? '9px' : '10px',
           fontStyle: 'bold',
           color: '#ffe066',
           letterSpacing: 0.6,
@@ -246,11 +273,12 @@ export class MenuScene extends Phaser.Scene {
       this.founderBadge = badge;
     });
 
-    const hookY = H * 0.405;
+    // ---- Statement, record and run state ---------------------------------
+    const hookY = layout.hookY;
     this.add
-      .text(W / 2, hookY, 'СИНТЕТИЧЕСКИЙ ВИРУС.\nЖИВОЙ ОРГАНИЗМ.', {
+      .text(W / 2, hookY, MENU_COPY.hook, {
         fontFamily: FONT,
-        fontSize: H < 650 ? '15px' : '18px',
+        fontSize: `${layout.hookFont}px`,
         fontStyle: 'bold',
         color: VISUAL_TEXT.ivory,
         align: 'center',
@@ -262,9 +290,9 @@ export class MenuScene extends Phaser.Scene {
       .setDepth(5);
 
     this.add
-      .text(W / 2, hookY + 38, 'Выживай. Собирай РНК. Меняй штамм.', {
+      .text(W / 2, layout.taglineY, MENU_COPY.tagline, {
         fontFamily: UI_FONT,
-        fontSize: H < 650 ? '12px' : '15px',
+        fontSize: `${layout.taglineFont}px`,
         fontStyle: '600',
         color: VISUAL_TEXT.muted,
         align: 'center',
@@ -274,28 +302,30 @@ export class MenuScene extends Phaser.Scene {
       .setName('ofeliya-menu-subtitle')
       .setDepth(5);
 
-    const displayName = PlatformBridge.getDisplayName();
-    if (PlatformBridge.available && displayName) {
-      this.add
-        .text(W / 2, hookY + 62, `Носитель: ${displayName}`, {
-          fontFamily: UI_FONT,
-          fontSize: H < 650 ? '12px' : '14px',
-          fontStyle: '700',
-          color: '#9deeff',
-          wordWrap: { width: W - 40, useAdvancedWrap: true },
-          maxLines: 1,
-        })
-        .setOrigin(0.5)
-        .setResolution(2)
-        .setName('ofeliya-menu-carrier')
-        .setDepth(5);
-    }
+    // One compact record line. Every value is a real counter of the product save:
+    // the display name of the carrier, the best survival time and the best kills of
+    // a single run. A value that does not exist yet removes its own segment.
+    const recordLine = this.add
+      .text(W / 2, layout.recordY, recordText, {
+        fontFamily: UI_FONT,
+        fontSize: `${layout.recordFont}px`,
+        fontStyle: '700',
+        color: '#9deeff',
+        align: 'center',
+        wordWrap: { width: W - 40, useAdvancedWrap: true },
+        maxLines: 2,
+      })
+      .setOrigin(0.5)
+      .setResolution(2)
+      .setName('ofeliya-menu-record')
+      .setDepth(5);
+    if (!recordText) recordLine.setVisible(false);
 
     let challengeHeadline: Phaser.GameObjects.Text | null = null;
     let challengeTargetText: Phaser.GameObjects.Text | null = null;
     let challengeDetailText: Phaser.GameObjects.Text | null = null;
     if (incomingChallenge || incomingDuelId) {
-      const challengeY = H * 0.54;
+      const challengeY = layout.recordY;
       const panelW = Math.min(W - 42, 330);
       this.add
         .rectangle(W / 2, challengeY, panelW, 58, 0x251020, 0.9)
@@ -347,120 +377,83 @@ export class MenuScene extends Phaser.Scene {
         .setResolution(2)
         .setName('ofeliya-menu-challenge-meta')
         .setDepth(5);
-    } else if (resumeCheckpoint) {
-      const resumeStage =
-        STAGES.find((stage) => stage.id === resumeCheckpoint.director.stageId) ?? STAGES[0];
-      const resumeDifficulty = getDifficultyProfile(resumeCheckpoint.difficultyId);
-      this.add
-        .text(
-          W / 2,
-          H * 0.54,
-          `НЕЗАВЕРШЁННЫЙ ЗАБЕГ\n${resumeStage.name} · ${fmtTime(resumeCheckpoint.runState.run.timeMs)} · МУТАЦИЯ ${resumeCheckpoint.runState.stage.level} · ${resumeDifficulty.shortLabel}`,
-          {
-            fontFamily: UI_FONT,
-            fontSize: H < 650 ? '11px' : '12px',
-            fontStyle: '700',
-            color: '#ffe066',
-            align: 'center',
-            lineSpacing: 4,
-            wordWrap: { width: W - 42 },
-          }
-        )
-        .setOrigin(0.5)
-        .setResolution(2)
-        .setDepth(5);
-    } else {
-      const save = SaveSystem.get();
-      const survival = save.bestSurvivalMs > 0 ? fmtTime(save.bestSurvivalMs) : '—';
-      const boss1 = save.bestBoss1ClearMs > 0 ? fmtTime(save.bestBoss1ClearMs) : '—';
-      const campaign = save.bestCampaignClearMs > 0 ? fmtTime(save.bestCampaignClearMs) : '—';
-      const records =
-        save.runs > 0
-          ? `Выживание ${survival} · ПРАЙМ ${boss1}\nКампания ${campaign} · клетки ${save.bestKills}`
-          : 'STRAIN-0 · ПЕРВЫЙ ЦИКЛ ЗАРАЖЕНИЯ';
-      this.add
-        .text(W / 2, H * 0.54, records, {
-          fontFamily: UI_FONT,
-          fontSize: H < 650 ? '12px' : '14px',
-          fontStyle: '650',
-          color: VISUAL_TEXT.muted,
-          align: 'center',
-          lineSpacing: 5,
-          wordWrap: { width: W - 42 },
-        })
-        .setOrigin(0.5)
-        .setResolution(2)
-        .setDepth(5);
     }
 
-    // 320px cannot fit five utility labels at the minimum readable font, even
-    // after measuring. Reflow only on truly narrow viewports.
-    const narrowFooter = W < 344;
-    const compactStackShift = narrowFooter && H < 650 ? 24 : 0;
-    const splitSelectors = W >= 360 && H >= 650;
-    const selectorGap = splitSelectors ? 10 : 0;
-    const selectorW = splitSelectors
-      ? Math.min((W - 34 - selectorGap) / 2, 164)
-      : Math.min(W - 34, 330);
-    const selectorH = splitSelectors ? 84 : H < 650 ? 46 : 54;
-    const selectorY = splitSelectors ? H * 0.685 : 0;
-    const difficultyY = splitSelectors ? selectorY : H * 0.635 - compactStackShift;
-    const difficultyX = splitSelectors ? W / 2 - selectorW / 2 - selectorGap / 2 : W / 2;
-    const difficultyLeft = difficultyX - selectorW / 2;
-    const difficultyRight = difficultyX + selectorW / 2;
-    const difficultyBg = this.add
-      .rectangle(difficultyX, difficultyY, selectorW, selectorH, VISUAL.panel, 0.97)
-      .setStrokeStyle(1, COLORS.stroke, 0.46)
-      .setDepth(5)
-      .setName('ofeliya-menu-difficulty-selector')
-      .setInteractive({ useHandCursor: true });
-    const difficultySurface = createSpecimenSurface(this, difficultyX, difficultyY, selectorW, selectorH,
-      { fill: VISUAL.panel, accent: VISUAL.immune, detail: 'quiet' }).setDepth(5);
-    const difficultyRail = this.add
-      .rectangle(difficultyLeft + 5, difficultyY, 5, selectorH - 10, COLORS.cyan, 0.92)
-      .setDepth(6);
-    this.add.rectangle(difficultyX, difficultyY - selectorH / 2 + 1,
-      selectorW - 16, BORDER.hair, ROLE.faction.immune, 0.38).setDepth(6);
-    this.add
-      .text(difficultyLeft + 14, difficultyY - (splitSelectors ? 27 : 12), 'СЛОЖНОСТЬ:', {
-        fontFamily: UI_FONT,
-        fontSize: splitSelectors ? '12px' : H < 650 ? '11px' : '12px',
-        fontStyle: '700',
-        color: UI_TEXT.secondary,
-        letterSpacing: 0.8,
-      })
-      .setOrigin(0, 0.5)
-      .setResolution(2)
-      .setDepth(6);
-    const difficultyText = this.add
-      .text(difficultyLeft + 14, difficultyY - (splitSelectors ? 7 : -8), '', {
-        fontFamily: FONT,
-        fontSize: splitSelectors ? '14px' : H < 650 ? '13px' : '16px',
-        fontStyle: 'bold',
-        color: UI_TEXT.primary,
-      })
-      .setOrigin(0, 0.5)
-      .setResolution(2)
-      .setName('ofeliya-menu-difficulty-value')
-      .setDepth(6);
-    const difficultyDesc = this.add
-      .text(
-        splitSelectors ? difficultyLeft + 14 : difficultyRight - 12,
-        difficultyY + (splitSelectors ? 23 : 1),
-        '',
-        {
+    // ---- Run configuration -------------------------------------------------
+    // Two cards side by side: the difficulty the next run will use and the control
+    // mode. Both are interactive; both keep the real value of the product state.
+    const cardGap = layout.cardGap;
+    const cardW = layout.cardWidth;
+    const cardH = layout.cardHeight;
+    const cardY = layout.cardY;
+    const cardLeftX = W / 2 - layout.contentWidth / 2 + cardW / 2;
+    const cardRightX = W / 2 - layout.contentWidth / 2 + cardW + cardGap + cardW / 2;
+
+    const createConfigCard = (
+      name: string,
+      x: number,
+      accent: number
+    ): {
+      bg: Phaser.GameObjects.Rectangle;
+      surface: Phaser.GameObjects.Graphics;
+      rail: Phaser.GameObjects.Rectangle;
+      label: Phaser.GameObjects.Text;
+      value: Phaser.GameObjects.Text;
+      desc: Phaser.GameObjects.Text;
+    } => {
+      const left = x - cardW / 2;
+      // No stroke on the plate: the specimen surface below owns the frame, so a
+      // framed panel never shows two parallel border lines.
+      const bg = this.add
+        .rectangle(x, cardY, cardW, cardH, VISUAL.panel, 0.97)
+        .setDepth(5)
+        .setName(name)
+        .setInteractive({ useHandCursor: true });
+      const surface = createSpecimenSurface(this, x, cardY, cardW, cardH, {
+        fill: VISUAL.panel, accent, detail: 'quiet',
+      }).setDepth(5);
+      const rail = this.add.rectangle(left + 5, cardY, 5, cardH - 10, accent, 0.92).setDepth(6);
+      const label = this.add
+        .text(left + 14, cardY - cardH / 2 + 11, '', {
           fontFamily: UI_FONT,
-          fontSize: splitSelectors ? '13px' : H < 650 ? '11px' : '13px',
+          fontSize: layout.compact ? '9px' : '10px',
+          fontStyle: '700',
+          color: UI_TEXT.secondary,
+          letterSpacing: 0.8,
+        })
+        .setOrigin(0, 0.5)
+        .setResolution(2)
+        .setDepth(6);
+      const value = this.add
+        .text(left + 14, cardY - cardH / 2 + 28, '', {
+          fontFamily: FONT,
+          fontSize: layout.compact ? '13px' : '15px',
+          fontStyle: 'bold',
+          color: UI_TEXT.primary,
+        })
+        .setOrigin(0, 0.5)
+        .setResolution(2)
+        .setDepth(6);
+      const desc = this.add
+        .text(left + 14, cardY + cardH / 2 - 11, '', {
+          fontFamily: UI_FONT,
+          fontSize: layout.compact ? '9px' : '10px',
           fontStyle: '650',
           color: UI_TEXT.secondary,
-          align: splitSelectors ? 'left' : 'right',
-          lineSpacing: 1,
-          wordWrap: { width: splitSelectors ? selectorW - 28 : Math.min(142, selectorW * 0.43), useAdvancedWrap: true },
-        }
-      )
-      .setOrigin(splitSelectors ? 0 : 1, 0.5)
-      .setResolution(2)
-      .setDepth(6);
+          wordWrap: { width: cardW - 28, useAdvancedWrap: true },
+          maxLines: layout.compact ? 1 : 2,
+        })
+        .setOrigin(0, 0.5)
+        .setResolution(2)
+        .setDepth(6);
+      return { bg, surface, rail, label, value, desc };
+    };
+
+    const difficultyCard = createConfigCard('ofeliya-menu-difficulty-selector', cardLeftX, COLORS.cyan);
+    const controlCard = createConfigCard('ofeliya-menu-control-selector', cardRightX, COLORS.magenta);
+    difficultyCard.label.setText('СЛОЖНОСТЬ');
+    controlCard.label.setText('УПРАВЛЕНИЕ');
+
 
     const renderDifficulty = () => {
       const profile = getDifficultyProfile(selectedDifficulty);
@@ -468,39 +461,31 @@ export class MenuScene extends Phaser.Scene {
       const challengeLocked = Boolean(incomingChallenge) || duelLocked;
       const difficultyAccent =
         challengeLocked || profile.id === 'strained' ? COLORS.gold : COLORS.cyan;
-      difficultyText.setText(
+      difficultyCard.value.setText(
         challengeLocked
-          ? splitSelectors
-            ? 'СТАНДАРТ'
-            : `СТАНДАРТ · ${duelLocked ? 'ДУЭЛЬ' : 'ВЫЗОВ'}`
-          : `${profile.label}  ›`
+          ? toTitleCase(getDifficultyProfile('standard').shortLabel)
+          : `${toTitleCase(profile.label)} ›`
       );
-      difficultyText.setColor(profile.id === 'strained' || challengeLocked ? '#ffe066' : '#fff4ec');
-      difficultyDesc.setVisible(true);
-      difficultyDesc.setText(
+      difficultyCard.value.setColor(profile.id === 'strained' || challengeLocked ? '#ffe066' : '#fff4ec');
+      difficultyCard.desc.setText(
         challengeLocked
-          ? duelLocked
-            ? splitSelectors
-              ? 'фиксировано · вне рейтинга'
-              : 'фиксированный режим\nбез глобального рейтинга'
-            : splitSelectors
-              ? 'фиксировано условиями вызова'
-              : 'сложность фиксирована\nусловиями вызова'
-          : H < 650
-            ? profile.id === 'strained' ? 'сложнее' : 'базовый'
+          ? (duelLocked ? 'фиксировано дуэлью' : 'фиксировано вызовом')
+          : cardW < 170
+            ? (profile.id === 'strained' ? 'сложнее' : 'базовый')
             : profile.description
       );
-      difficultyRail.setFillStyle(difficultyAccent, 0.94);
-      difficultyBg
-        .setStrokeStyle(1, difficultyAccent, challengeLocked || profile.id === 'strained' ? 0.5 : 0.34)
-        .setFillStyle(profile.id === 'strained' ? 0x29251e : VISUAL.panel, 0.97);
-      drawSpecimenSurface(difficultySurface, selectorW, selectorH, {
+      difficultyCard.rail.setFillStyle(difficultyAccent, 0.94);
+      difficultyCard.bg.setFillStyle(
+        profile.id === 'strained' ? 0x29251e : VISUAL.panel,
+        0.97
+      );
+      drawSpecimenSurface(difficultyCard.surface, cardW, cardH, {
         fill: profile.id === 'strained' ? 0x29251e : VISUAL.panel,
         accent: difficultyAccent, detail: 'quiet',
       });
     };
     renderDifficulty();
-    difficultyBg.on('pointerup', () => {
+    difficultyCard.bg.on('pointerup', () => {
       Sfx.play('click');
       PlatformBridge.haptic('light');
       if (incomingChallenge || (incomingDuelId && !duelUnavailable)) return;
@@ -509,111 +494,41 @@ export class MenuScene extends Phaser.Scene {
       this.registry.set('difficultyId', selectedDifficulty);
       renderDifficulty();
     });
-    difficultyBg.on('pointerover', () => difficultyBg.setAlpha(1));
-    difficultyBg.on('pointerout', () => difficultyBg.setAlpha(0.97));
+    difficultyCard.bg.on('pointerover', () => difficultyCard.bg.setAlpha(1));
+    difficultyCard.bg.on('pointerout', () => difficultyCard.bg.setAlpha(0.97));
 
-    const controlY = splitSelectors ? selectorY : H * 0.715 - compactStackShift;
-    const controlX = splitSelectors ? W / 2 + selectorW / 2 + selectorGap / 2 : W / 2;
-    const controlH = splitSelectors ? selectorH : H < 650 ? 44 : 52;
-    const controlLeft = controlX - selectorW / 2;
-    const controlRight = controlX + selectorW / 2;
-    const controlBg = this.add
-      .rectangle(controlX, controlY, selectorW, controlH, VISUAL.panel, 0.96)
-      .setStrokeStyle(1, COLORS.stroke, 0.44)
-      .setDepth(5)
-      .setName('ofeliya-menu-control-selector')
-      .setInteractive({ useHandCursor: true });
-    const controlSurface = createSpecimenSurface(this, controlX, controlY, selectorW, controlH,
-      { fill: VISUAL.panel, accent: VISUAL.player, detail: 'quiet' }).setDepth(5);
-    const controlRail = this.add
-      .rectangle(controlLeft + 5, controlY, 5, controlH - 10, COLORS.magenta, 0.94)
-      .setDepth(6);
-    this.add.rectangle(controlX, controlY - controlH / 2 + 1,
-      selectorW - 16, BORDER.hair, ROLE.faction.player, 0.38).setDepth(6);
-    this.add
-      .text(controlLeft + 14, controlY - (splitSelectors ? 27 : 11), 'УПРАВЛЕНИЕ:', {
-        fontFamily: UI_FONT,
-        fontSize: splitSelectors ? '12px' : H < 650 ? '11px' : '12px',
-        fontStyle: '700',
-        color: UI_TEXT.secondary,
-        letterSpacing: 0.8,
-      })
-      .setOrigin(0, 0.5)
-      .setResolution(2)
-      .setDepth(6);
-    const controlText = this.add
-      .text(controlLeft + 14, controlY - (splitSelectors ? 7 : -8), '', {
-        fontFamily: FONT,
-        fontSize: splitSelectors ? '13px' : H < 650 ? '12px' : '15px',
-        fontStyle: 'bold',
-        color: UI_TEXT.primary,
-        wordWrap: { width: splitSelectors ? selectorW - 28 : selectorW * 0.52, useAdvancedWrap: true },
-      })
-      .setOrigin(0, 0.5)
-      .setResolution(2)
-      .setName('ofeliya-menu-control-value')
-      .setDepth(6);
-    const controlDesc = this.add
-      .text(
-        splitSelectors ? controlLeft + 14 : controlRight - 12,
-        controlY + (splitSelectors ? 23 : 1),
-        '',
-        {
-          fontFamily: UI_FONT,
-          fontSize: splitSelectors ? '13px' : H < 650 ? '11px' : '13px',
-          fontStyle: '650',
-          color: UI_TEXT.secondary,
-          align: splitSelectors ? 'left' : 'right',
-          lineSpacing: 1,
-          wordWrap: { width: splitSelectors ? selectorW - 28 : Math.min(144, selectorW * 0.44), useAdvancedWrap: true },
-        }
-      )
-      .setOrigin(splitSelectors ? 0 : 1, 0.5)
-      .setResolution(2)
-      .setDepth(6);
-    let startHint: Phaser.GameObjects.Text | null = null;
     const renderControlMode = () => {
-      const splitControlValue = controlModeCompactLabel(selectedControlMode);
-      const splitControlDescription = controlModeCompactDescription(selectedControlMode);
-      if (duelLoading) {
-        controlText.setText('ЗАГРУЗКА ДУЭЛИ');
-        controlDesc.setText(H < 650 ? 'фиксировано' : splitSelectors ? 'режим придёт из вызова' : 'режим придёт\nиз снимка вызова');
-      } else if (incomingDuel) {
-        controlText.setText(splitSelectors ? splitControlValue : `${controlModeLabel(selectedControlMode)} · ДУЭЛЬ`);
-        controlDesc.setText(H < 650 ? 'фиксировано' : 'зафиксировано вызовом\nменять нельзя');
-      } else {
-        controlText.setText(splitSelectors ? `${splitControlValue}  ›` : `${controlModeLabel(selectedControlMode)}  ›`);
-        controlDesc.setText(
-          H < 650
-            ? controlModeTinyHint(selectedControlMode)
-            : splitSelectors ? splitControlDescription : controlModeDescription(selectedControlMode)
-        );
-      }
-      controlDesc.setVisible(true);
+      const duelFixed = duelLoading || Boolean(incomingDuel);
+      controlCard.value.setText(
+        duelLoading
+          ? 'ЗАГРУЗКА'
+          : duelFixed
+            ? toTitleCase(controlModeCompactLabel(selectedControlMode))
+            : `${toTitleCase(controlModeCompactLabel(selectedControlMode))} ›`
+      );
+      controlCard.desc.setText(
+        duelLoading
+          ? 'фиксировано'
+          : duelFixed
+            ? 'задано вызовом'
+            : cardW < 170
+              ? controlModeTinyHint(selectedControlMode)
+              : controlModeCompactDescription(selectedControlMode)
+      );
       const controlAccent =
         selectedControlMode === 'two-hand'
           ? COLORS.cyan
           : selectedControlMode === 'dual-move'
             ? COLORS.purple
             : COLORS.magenta;
-      controlRail.setFillStyle(controlAccent, 0.95);
-      controlBg.setStrokeStyle(1, controlAccent, selectedControlMode === 'one-hand' ? 0.34 : 0.5);
-      drawSpecimenSurface(controlSurface, selectorW, controlH,
-        { fill: VISUAL.panel, accent: controlAccent, detail: 'quiet' });
-      if (incomingDuel) {
-        startHint?.setText(`тот же забег · быстрее ${fmtTime(incomingDuel.targetTimeMs)}`);
-      } else if (resumeCheckpoint) {
-        const resumeStage =
-          STAGES.find((stage) => stage.id === resumeCheckpoint.director.stageId) ?? STAGES[0];
-        startHint?.setText(
-          `${resumeStage.name} · ${fmtTime(resumeCheckpoint.runState.run.timeMs)} · МУТАЦИЯ ${resumeCheckpoint.runState.stage.level}`
-        );
-      } else {
-        startHint?.setText('автоатака · заражай клетки · собирай РНК');
-      }
+      controlCard.rail.setFillStyle(controlAccent, 0.95);
+
+      drawSpecimenSurface(controlCard.surface, cardW, cardH, {
+        fill: VISUAL.panel, accent: controlAccent, detail: 'quiet',
+      });
     };
     renderControlMode();
-    controlBg.on('pointerup', () => {
+    controlCard.bg.on('pointerup', () => {
       Sfx.play('click');
       PlatformBridge.haptic('light');
       if (duelLoading || incomingDuel) return;
@@ -622,61 +537,86 @@ export class MenuScene extends Phaser.Scene {
       this.registry.set('controlMode', selectedControlMode);
       renderControlMode();
     });
-    controlBg.on('pointerover', () => controlBg.setAlpha(1));
-    controlBg.on('pointerout', () => controlBg.setAlpha(0.96));
+    controlCard.bg.on('pointerover', () => controlCard.bg.setAlpha(1));
+    controlCard.bg.on('pointerout', () => controlCard.bg.setAlpha(0.96));
 
-    const btnY = H * (resumeCheckpoint ? 0.785 : 0.805) - (compactStackShift ? 20 : 0);
-    const btnW = Math.min(W - 30, 338);
-    const btnH = resumeCheckpoint || compactStackShift ? 58 : 66;
-    const btnAccent = incomingChallenge ? VISUAL.warning : VISUAL.player;
-    this.add
-      .rectangle(W / 2 + 3, btnY + 4, btnW, btnH, 0x050308, 0.58)
-      .setDepth(4);
-    const btnBg = this.add
-      .rectangle(W / 2, btnY, btnW, btnH, 0x472a38, 0.95)
-      .setStrokeStyle(1, btnAccent, 0.58)
-      .setName('ofeliya-menu-action-bg')
-      .setDepth(5);
-    const actionSurface = createSpecimenSurface(this, W / 2, btnY, btnW, btnH,
-      { fill: 0x472a38, accent: btnAccent, detail: 'specimen' }).setDepth(5);
-    this.add
-      .rectangle(W / 2, btnY - btnH / 2 + 3, btnW - 16, 1, btnAccent, 0.72)
-      .setDepth(6);
-    const startButtonText = this.add
-      .text(
-        W / 2,
-        btnY - 5,
-        incomingDuelId
-          ? 'ЗАГРУЗКА ДУЭЛИ…'
-          : incomingChallenge
-            ? 'ПРИНЯТЬ ВЫЗОВ'
-            : resumeCheckpoint
-              ? 'ПРОДОЛЖИТЬ ЗАБЕГ'
-              : 'НАЧАТЬ ЗАРАЖЕНИЕ',
-        {
-        fontFamily: FONT,
-        fontSize: H < 650 ? '18px' : '22px',
-        fontStyle: 'bold',
-        color: '#fff4ec',
-        }
-      )
-      .setOrigin(0.5)
-      .setResolution(2)
-      .setName('ofeliya-menu-action')
-      .setDepth(6);
-    startHint = this.add
-      .text(W / 2, btnY + 18, '', {
+    // ---- Primary action ----------------------------------------------------
+    // One shared primary CTA style: a mint plate with dark, high-contrast text.
+    const startHint = this.add
+      .text(W / 2, layout.hintY, '', {
         fontFamily: UI_FONT,
-        fontSize: H < 650 ? '11px' : '13px',
+        fontSize: layout.compact ? '11px' : '12px',
         fontStyle: '650',
-        color: '#ffe3f0',
+        color: VISUAL_TEXT.muted,
         align: 'center',
+        lineSpacing: 2,
       })
       .setOrigin(0.5)
       .setResolution(2)
       .setName('ofeliya-menu-action-hint')
       .setDepth(6);
-    renderControlMode();
+
+    const startButtonText = this.add
+      .text(W / 2, layout.ctaY, '', {
+        fontFamily: FONT,
+        fontSize: layout.compact ? '17px' : '21px',
+        fontStyle: 'bold',
+        color: CTA.text,
+      })
+      .setOrigin(0.5)
+      .setResolution(2)
+      .setName('ofeliya-menu-action')
+      .setDepth(6);
+
+    const btnBg = this.add
+      .rectangle(W / 2, layout.ctaY, layout.ctaWidth, layout.ctaHeight, CTA.fill, 0.97)
+      .setStrokeStyle(2, CTA.stroke, 1)
+      .setName('ofeliya-menu-action-bg')
+      .setDepth(5)
+      .setInteractive({ useHandCursor: true });
+    this.add
+      .rectangle(W / 2, layout.ctaY - layout.ctaHeight / 2 + 3, layout.ctaWidth - 16, 1, CTA.fillHover, 0.72)
+      .setDepth(6);
+
+    const renderStartLabel = () => {
+      startButtonText.setText(
+        incomingDuelId
+          ? 'ЗАГРУЗКА ДУЭЛИ…'
+          : incomingChallenge
+            ? 'ПРИНЯТЬ ВЫЗОВ'
+            : resumeCheckpoint
+              ? MENU_COPY.resume
+              : MENU_COPY.start
+      );
+    };
+    renderStartLabel();
+
+    const renderRunConfiguration = () => {
+      if (incomingDuel) {
+        startHint.setText(`тот же забег · быстрее ${fmtTime(incomingDuel.targetTimeMs)}`);
+        return;
+      }
+      if (resumeCheckpoint) {
+        const resumeStage =
+          STAGES.find((stage) => stage.id === resumeCheckpoint.director.stageId) ?? STAGES[0];
+        // The first line describes the run that will be resumed, the second says
+        // that the difficulty and control cards configure the NEXT run.
+        startHint.setText(
+          `${joinSegments([
+            toTitleCase(resumeStage.name),
+            fmtTime(resumeCheckpoint.runState.run.timeMs),
+            `Уровень ${resumeCheckpoint.runState.stage.level}`,
+            toTitleCase(getDifficultyProfile(resumeCheckpoint.difficultyId).shortLabel),
+          ])}\n${MENU_COPY.nextRunHint}`
+        );
+        return;
+      }
+      const stage = STAGES[0];
+      startHint.setText(
+        joinSegments([toTitleCase(stage.name), toTitleCase(getDifficultyProfile(selectedDifficulty).shortLabel)])
+      );
+    };
+    renderRunConfiguration();
 
     let freshRunStarting = false;
     const launchFreshRun = () => {
@@ -715,7 +655,6 @@ export class MenuScene extends Phaser.Scene {
       if (!playing) launchOnce();
     };
 
-    btnBg.setInteractive({ useHandCursor: true });
     btnBg.on('pointerdown', () => {
       if (!resumeCheckpoint) VideoInterstitial.preload('startIntro');
     });
@@ -733,10 +672,9 @@ export class MenuScene extends Phaser.Scene {
       }
       startFreshRun();
     });
-    btnBg.on('pointerover', () => { btnBg.setFillStyle(0x654050, 1); actionSurface.setAlpha(0.72); });
-    btnBg.on('pointerout', () => { btnBg.setFillStyle(0x472a38, 0.95); actionSurface.setAlpha(1); });
-    btnBg.on('pointerdown', () => actionSurface.setAlpha(0.55));
-    btnBg.on('pointerup', () => actionSurface.setAlpha(1));
+    btnBg.on('pointerover', () => btnBg.setFillStyle(CTA.fillHover, 1));
+    btnBg.on('pointerout', () => btnBg.setFillStyle(CTA.fill, 0.97));
+    btnBg.on('pointerdown', () => btnBg.setFillStyle(CTA.fillPressed, 1));
 
     if (incomingDuelId) {
       void loadDuelChallenge(incomingDuelId).then((challenge) => {
@@ -751,6 +689,7 @@ export class MenuScene extends Phaser.Scene {
           startButtonText.setText('НАЧАТЬ ОБЫЧНЫЙ ЗАБЕГ');
           renderDifficulty();
           renderControlMode();
+          renderRunConfiguration();
           return;
         }
 
@@ -768,22 +707,24 @@ export class MenuScene extends Phaser.Scene {
         startButtonText.setText('ПРИНЯТЬ ДУЭЛЬ');
         renderDifficulty();
         renderControlMode();
+        renderRunConfiguration();
         void trackDuelEvent(challenge.challengeId, 'open', PlatformBridge);
       });
     }
 
     if (resumeCheckpoint) {
-      const newRunY = btnY + 42;
+      // A proper touch target: the visible label is small, the hit area is not.
+      const newRunW = Math.min(layout.contentWidth, 190);
       const newRunHit = this.add
-        .rectangle(W / 2, newRunY, Math.min(btnW, 190), 22, 0x14101a, 0.78)
+        .rectangle(W / 2, layout.secondaryY, newRunW, layout.secondaryHeight, VISUAL.panelRaised, 0.9)
         .setStrokeStyle(1, COLORS.cyan, 0.45)
         .setDepth(7)
         .setName('ofeliya-menu-new-run')
         .setInteractive({ useHandCursor: true });
       this.add
-        .text(W / 2, newRunY, 'НАЧАТЬ НОВЫЙ', {
+        .text(W / 2, layout.secondaryY, MENU_COPY.newRun, {
           fontFamily: FONT,
-          fontSize: H < 650 ? '10px' : '11px',
+          fontSize: layout.compact ? '11px' : '12px',
           fontStyle: 'bold',
           color: '#8fe8ff',
           letterSpacing: 1,
@@ -797,228 +738,175 @@ export class MenuScene extends Phaser.Scene {
         startFreshRun();
       });
     }
-
-    // Keep the action/utilities/footer as separate vertical bands on short MAX WebViews.
-    // The old btnY-relative row collided with the footer copy at 568–640 px (and with the
-    // resume secondary action at the shortest viewport).
-    const compactFooter = H < 720;
-    // Resume adds a secondary action immediately below the main button. On the shortest MAX
-    // viewport reserve a narrow middle band for utilities and move legal copy down by 5 px.
-    const utilityY = compactFooter
-      ? H - (resumeCheckpoint ? 59 : 64)
-      : btnY + (resumeCheckpoint ? 72 : 55);
-    const legalY = compactFooter && resumeCheckpoint ? H - 38 : H - 43;
-    // Utilities row: volume steppers flank the existing mute toggle. Slot spacing is
-    // measured live in layoutUtilityRow() — at creation and after every label change —
-    // so the row provably fits any viewport/font metrics and never overlaps after taps
-    // (the old fixed-gap formula overflowed at 360px on Linux Chrome).
-    const wideLabels = W >= 460;
-    const utilityFont = H < 650 ? '11px' : '12px';
-    const volLabel = (pct: number) => (wideLabels ? `музыка: ${pct}%` : `муз·${pct}%`);
-    const sfxLabel = (pct: number) => (wideLabels ? `эффекты: ${pct}%` : `эфф·${pct}%`);
-    const utilitySlots: Phaser.GameObjects.Text[] = [];
-    // Function declarations hoist above the pointerup registrations, so handlers can
-    // re-run the layout after setText(); the length guard covers creation order.
-    function layoutUtilityRow(): void {
-      if (utilitySlots.length !== 5) return;
-      let slotWidths = utilitySlots.map((t) => t.width);
-      let slotTotal = slotWidths.reduce((a, b) => a + b, 0);
-      // Linux Chrome renders these labels measurably wider than local metrics. The
-      // readability contract floors the row at 11px (compact) / 12px (tall), so only
-      // when the 4px gaps cannot fit do we normalize larger labels to that floor.
-      if ((W - 16 - slotTotal) / (utilitySlots.length - 1) < 4) {
-        utilitySlots.forEach((t) => t.setFontSize(H < 650 ? 11 : 12));
-        slotWidths = utilitySlots.map((t) => t.width);
-        slotTotal = slotWidths.reduce((a, b) => a + b, 0);
-      }
-      // A five-item row of 11px labels can require >320px once its margins
-      // and tap gaps are included. Keep the readable font and reflow 3+2.
-      const needsTwoRows = (W - 16 - slotTotal) / (utilitySlots.length - 1) < 4;
-      const groups = needsTwoRows ? [[0, 1, 2], [3, 4]] : [[0, 1, 2, 3, 4]];
-      // The first utility row must clear both the start button and optional
-      // resume/new-run button. On 360px tall layouts its old y overlapped START.
-      const rowStep = resumeCheckpoint ? 18 : 22;
-      const occupiedBottom = Math.max(btnY + btnH / 2, resumeCheckpoint ? btnY + 53 : -Infinity);
-      const firstRowHalfHeight = Math.max(...utilitySlots.slice(0, 3).map(t => t.height / 2));
-      const firstRowY = needsTwoRows
-        ? Math.max(utilityY - rowStep, occupiedBottom + 4 + firstRowHalfHeight)
-        : utilityY;
-      groups.forEach((indices, rowIndex) => {
-        const widths = indices.map((i) => slotWidths[i]);
-        const total = widths.reduce((a, b) => a + b, 0);
-        const slotGap = Math.max(4, Math.min(28, (W - 16 - total) / (indices.length - 1)));
-        let slotX = (W - total - slotGap * (indices.length - 1)) / 2;
-        for (const index of indices) {
-          const t = utilitySlots[index];
-          t.setX(slotX + slotWidths[index] / 2);
-          t.setY(needsTwoRows ? firstRowY + rowIndex * rowStep : utilityY);
-          slotX += slotWidths[index] + slotGap;
-          // setInteractive() snapshots the text hit area before later setText().
-          const hit = t.input?.hitArea;
-          if (hit && typeof hit.setSize === 'function') hit.setSize(t.width, t.height);
-        }
-      });
-    }
-    const musicVolText = this.add
-      .text(W / 2, utilityY, volLabel(Math.round(Sfx.getMusicVolume() * 100)), {
-        fontFamily: UI_FONT,
-        fontSize: utilityFont,
-        fontStyle: '650',
-        color: '#c89aaf',
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .setResolution(2)
-      .setDepth(5)
-      .on('pointerup', () => {
-        const v = Sfx.bumpMusicVolume();
-        musicVolText.setText(volLabel(Math.round(v * 100)));
-        layoutUtilityRow();
-        Sfx.play('click');
-      });
-    utilitySlots.push(musicVolText);
-    const soundText = this.add
-      .text(W / 2, utilityY, `звук: ${Sfx.muted ? 'выкл' : 'вкл'}`, {
-        fontFamily: UI_FONT,
-        fontSize: utilityFont,
-        fontStyle: '650',
-        color: Sfx.muted ? UI_TEXT.secondary : '#efcddd',
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .setResolution(2)
-      .setDepth(5)
-      .on('pointerup', () => {
-        const muted = Sfx.toggle();
-        soundText.setText(`звук: ${muted ? 'выкл' : 'вкл'}`).setColor(muted ? '#755266' : '#c89aaf');
-        layoutUtilityRow();
-        if (!muted) Sfx.play('click');
-      });
-    utilitySlots.push(soundText);
-    const sfxVolText = this.add
-      .text(W / 2, utilityY, sfxLabel(Math.round(Sfx.getSfxVolume() * 100)), {
-        fontFamily: UI_FONT,
-        fontSize: utilityFont,
-        fontStyle: '650',
-        color: '#c89aaf',
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .setResolution(2)
-      .setDepth(5)
-      .on('pointerup', () => {
-        const v = Sfx.bumpSfxVolume();
-        sfxVolText.setText(sfxLabel(Math.round(v * 100)));
-        layoutUtilityRow();
-        Sfx.play('click');
-      });
-    utilitySlots.push(sfxVolText);
-
-
-    const summaryText = this.add
-      .text(W / 2, utilityY, `СВОДКА`, {
-        fontFamily: FONT,
-        fontSize: H < 650 ? '11px' : '12px',
-        fontStyle: 'bold',
-        color: '#c9f6ff',
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .setResolution(2)
-      .setDepth(5)
-      .setName('ofeliya-menu-social')
-      .on('pointerup', () => {
-        Sfx.play('click');
-        PlatformBridge.haptic('light');
-        this.showSocialHub();
-      });
-    utilitySlots.push(summaryText);
-
+    // ---- Navigation grid --------------------------------------------------
+    // The four meta destinations are a 2x2 grid. Four columns would be cramped at
+    // 320px, and a grid keeps the navigation visually apart from the audio row.
+    const gridW = layout.gridWidth;
+    const colGap = 10;
+    const cellW = (gridW - colGap) / 2;
+    const gridLeft = W / 2 - gridW / 2;
     const codexSave = SaveSystem.get();
     const codexFound = codexSave.evolutionsSeen.length + codexSave.legendarySeen.length;
-    const codexText = this.add
-      .text(W / 2, utilityY, `КОДЕКС ${codexFound}/9`, {
-        fontFamily: FONT,
-        fontSize: H < 650 ? '12px' : '13px',
-        fontStyle: 'bold',
-        color: '#9deeff',
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .setResolution(2)
-      .setDepth(5)
-      .on('pointerup', () => {
-        Sfx.play('click');
-        PlatformBridge.haptic('light');
-        this.showCodex();
-      });
-    utilitySlots.push(codexText);
-    // All five utility labels were created centered as placeholders; distribute them
-    // edge-to-edge from real measured widths so neither end can leave the screen.
-    layoutUtilityRow();
-
-    if (!compactFooter) {
+    const navItems: Array<{ name: string; label: string; badge?: string; onTap: () => void }> = [
+      { name: 'ofeliya-menu-nav-rating', label: MENU_COPY.rating, onTap: () => this.showSocialHub() },
+      { name: 'ofeliya-menu-nav-tasks', label: MENU_COPY.tasks, onTap: () => this.showQuestBoard() },
+      { name: 'ofeliya-menu-nav-codex', label: MENU_COPY.codex, badge: `${codexFound}/9`, onTap: () => this.showCodex() },
+      { name: 'ofeliya-menu-nav-collection', label: MENU_COPY.collection, onTap: () => this.showCollectionBoard() },
+    ];
+    navItems.forEach((item, index) => {
+      const col = index % 2;
+      const row = Math.floor(index / 2);
+      const cx = gridLeft + cellW / 2 + col * (cellW + colGap);
+      const cy = layout.gridTop + layout.gridRowHeight / 2 +
+        row * (layout.gridRowHeight + layout.gridGap);
+      const plate = this.add
+        .rectangle(cx, cy, cellW, layout.gridRowHeight, VISUAL.panel, 0.92)
+        .setStrokeStyle(1, COLORS.stroke, 0.5)
+        .setDepth(5)
+        .setName(item.name)
+        .setInteractive({ useHandCursor: true });
       this.add
-        .text(W / 2, H - 66, 'Двигай штамм · собирай РНК · выбирай мутации', {
-          fontFamily: UI_FONT,
-          fontSize: '13px',
-          fontStyle: '600',
-          color: '#d8d1e2',
-          align: 'center',
-          wordWrap: { width: W - 36 },
+        .text(cx, cy, item.label, {
+          fontFamily: FONT,
+          fontSize: layout.compact ? '12px' : '13px',
+          fontStyle: 'bold',
+          color: '#c9f6ff',
+          letterSpacing: 0.6,
         })
         .setOrigin(0.5)
         .setResolution(2)
-        .setDepth(5);
-    }
+        .setDepth(6);
+      if (item.badge) {
+        this.add
+          .text(cx + cellW / 2 - 10, cy, item.badge, {
+            fontFamily: UI_FONT,
+            fontSize: layout.compact ? '9px' : '10px',
+            fontStyle: '700',
+            color: VISUAL_TEXT.muted,
+          })
+          .setOrigin(1, 0.5)
+          .setResolution(2)
+          .setDepth(6);
+      }
+      plate.on('pointerup', () => {
+        Sfx.play('click');
+        PlatformBridge.haptic('light');
+        item.onTap();
+      });
+      plate.on('pointerover', () => plate.setFillStyle(VISUAL.panelRaised, 0.96));
+      plate.on('pointerout', () => plate.setFillStyle(VISUAL.panel, 0.92));
+    });
 
-    this.add
-      .text(W / 2, legalY, 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА', {
+    // ---- Audio row --------------------------------------------------------
+    // Three switches and nothing else: the menu says on/off, never a percentage.
+    // The stored volume is only written when the player taps a switch.
+    let lastMusicVolume = Sfx.getMusicVolume() > 0 ? Sfx.getMusicVolume() : 0.75;
+    let lastSfxVolume = Sfx.getSfxVolume() > 0 ? Sfx.getSfxVolume() : 0.75;
+    const audioItems: Array<{
+      name: string;
+      label: string;
+      isOn: () => boolean;
+      toggle: () => boolean;
+    }> = [
+      {
+        name: 'ofeliya-menu-audio-music',
+        label: MENU_COPY.music,
+        isOn: () => Sfx.getMusicVolume() > 0,
+        toggle: () => {
+          const current = Sfx.getMusicVolume();
+          if (current > 0) {
+            lastMusicVolume = current;
+            Sfx.setMusicVolume(0);
+          } else {
+            Sfx.setMusicVolume(lastMusicVolume);
+          }
+          return Sfx.getMusicVolume() > 0;
+        },
+      },
+      {
+        name: 'ofeliya-menu-audio-sound',
+        label: MENU_COPY.sound,
+        isOn: () => !Sfx.muted,
+        toggle: () => !Sfx.toggle(),
+      },
+      {
+        name: 'ofeliya-menu-audio-effects',
+        label: MENU_COPY.effects,
+        isOn: () => Sfx.getSfxVolume() > 0,
+        toggle: () => {
+          const current = Sfx.getSfxVolume();
+          if (current > 0) {
+            lastSfxVolume = current;
+            Sfx.setSfxVolume(0);
+          } else {
+            Sfx.setSfxVolume(lastSfxVolume);
+          }
+          return Sfx.getSfxVolume() > 0;
+        },
+      },
+    ];
+    const audioGap = 8;
+    const audioCellW = (gridW - audioGap * 2) / 3;
+    const audioLeft = W / 2 - gridW / 2;
+    audioItems.forEach((item, index) => {
+      const cx = audioLeft + audioCellW / 2 + index * (audioCellW + audioGap);
+      const plate = this.add
+        .rectangle(cx, layout.audioY, audioCellW, MIN_TOUCH, VISUAL.panelRaised, 0.55)
+        .setStrokeStyle(1, COLORS.stroke, 0.35)
+        .setDepth(5)
+        .setName(item.name)
+        .setInteractive({ useHandCursor: true });
+      const label = this.add
+        .text(cx, layout.audioY, '', {
+          fontFamily: UI_FONT,
+          fontSize: layout.compact ? '11px' : '12px',
+          fontStyle: '650',
+          color: UI_TEXT.secondary,
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setDepth(6);
+      const renderAudio = (): void => {
+        const on = item.isOn();
+        label.setText(`${item.label}: ${on ? MENU_COPY.on : MENU_COPY.off}`);
+        label.setColor(on ? '#c89aaf' : UI_TEXT.disabled);
+        plate.setFillStyle(on ? VISUAL.panelRaised : VISUAL.panel, on ? 0.75 : 0.4);
+      };
+      renderAudio();
+      plate.on('pointerup', () => {
+        const on = item.toggle();
+        renderAudio();
+        if (on) Sfx.play('click');
+      });
+      plate.on('pointerover', () => plate.setAlpha(1));
+      plate.on('pointerout', () => plate.setAlpha(1));
+    });
+
+    // ---- Legal row --------------------------------------------------------
+    // The technical release information lives in the About surface, not here.
+    const legalText = this.add
+      .text(W / 2, layout.legalY, MENU_COPY.legal, {
         fontFamily: UI_FONT,
-        fontSize: H < 650 ? '11px' : '12px',
+        fontSize: layout.compact ? '11px' : '12px',
         fontStyle: '700',
         color: '#c9f6ff',
       })
       .setOrigin(0.5)
       .setResolution(2)
-      .setDepth(6)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerup', () => {
-        Sfx.play('click');
-        showLegalOverlay();
-      });
-
-    let diagnosticTapCount = 0;
-    let diagnosticTapTimer: number | null = null;
-    const versionText = this.add
-      .text(W / 2, H - 9, `mini-app · ${PlatformBridge.platform} · ${RELEASE_SHORT}`, {
-        fontFamily: FONT,
-        fontSize: '9px',
-        color: '#654454',
-      })
-      .setOrigin(0.5, 1)
-      .setResolution(2)
+      .setDepth(6);
+    const legalHit = this.add
+      .rectangle(W / 2, layout.legalY, Math.min(gridW, 320), MIN_TOUCH, 0x000000, 0.001)
       .setDepth(5)
+      .setName('ofeliya-menu-legal')
       .setInteractive({ useHandCursor: true });
-
-    versionText.on('pointerup', () => {
-      diagnosticTapCount += 1;
-      if (diagnosticTapTimer !== null) window.clearTimeout(diagnosticTapTimer);
-      diagnosticTapTimer = window.setTimeout(() => {
-        diagnosticTapCount = 0;
-        diagnosticTapTimer = null;
-      }, 2400);
-
-      if (diagnosticTapCount < 5) return;
-
-      diagnosticTapCount = 0;
-      if (diagnosticTapTimer !== null) {
-        window.clearTimeout(diagnosticTapTimer);
-        diagnosticTapTimer = null;
-      }
-      if (StartupTrace.showDebugOverlay()) PlatformBridge.haptic('light');
+    legalHit.on('pointerup', () => {
+      Sfx.play('click');
+      showLegalOverlay();
     });
-
+    legalText.setInteractive({ useHandCursor: true }).on('pointerup', () => {
+      Sfx.play('click');
+      showLegalOverlay();
+    });
     this.scale.on('resize', this.onResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.onResize, this);
@@ -1030,7 +918,6 @@ export class MenuScene extends Phaser.Scene {
       this.profileLoadGeneration += 1;
       this.founderBadge?.destroy();
       this.founderBadge = null;
-      if (diagnosticTapTimer !== null) window.clearTimeout(diagnosticTapTimer);
     });
 
     StartupTrace.setMeta('platformFinal', PlatformBridge.kind);
@@ -1066,6 +953,37 @@ export class MenuScene extends Phaser.Scene {
     );
   }
 
+  /**
+   * Open one of the three meta surfaces.
+   *
+   * The surfaces replace each other: a dock inside one of them opens the next,
+   * so the player never has to close a modal before opening another one.
+   */
+  private openMetaSurface(target: MetaDockTarget): void {
+    if (target === 'tasks') this.showQuestBoard();
+    else if (target === 'codex') this.showCodex();
+    else this.showCollectionBoard();
+  }
+
+  private showQuestBoard(): void {
+    if (this.questBoard || this.codexOverlay || this.socialHub || this.collectionBoard) return;
+    this.questBoard = new QuestBoard(
+      this,
+      () => { this.questBoard = null; },
+      (target) => this.openMetaSurface(target)
+    );
+  }
+
+  private showCollectionBoard(): void {
+    if (this.collectionBoard || this.codexOverlay || this.socialHub || this.questBoard) return;
+    if (!clientFlags().collection.enabled) return;
+    this.collectionBoard = new CollectionBoard(
+      this,
+      () => { this.collectionBoard = null; },
+      (target) => this.openMetaSurface(target)
+    );
+  }
+
   private showCodex(): void {
     if (this.codexOverlay || this.socialHub || this.questBoard || this.collectionBoard) return;
 
@@ -1073,35 +991,32 @@ export class MenuScene extends Phaser.Scene {
     const H = this.scale.height;
     const compact = H < 650;
     const save = SaveSystem.get();
-    const overlay = this.add.container(0, 0).setDepth(40);
+    const overlay = this.add.container(0, 0).setDepth(40).setName('ofeliya-codex');
     this.codexOverlay = overlay;
 
-    const dim = this.add
-      .rectangle(W / 2, H / 2, W, H, VISUAL.ink, 0.95)
-      .setInteractive();
-    const panelW = Math.min(W - 22, 370);
+    const panelW = Math.min(W - 22, 400);
     const panelH = Math.min(H - 34, 650);
-    const panel = this.add
-      .rectangle(W / 2, H / 2, panelW, panelH, VISUAL.panel, 0.995)
-      .setStrokeStyle(1, VISUAL.line, 0.8);
-    overlay.add([dim, panel, createSpecimenSurface(this, W / 2, H / 2, panelW, panelH, {
-      accent: VISUAL.host, detail: 'quiet',
-    })]);
+    const dismiss = () => {
+      if (this.codexOverlay !== overlay) return;
+      PlatformBridge.setBackHandler(null);
+      overlay.destroy();
+      this.codexOverlay = null;
+    };
+    // The same modal frame as the other meta surfaces: centered title, a top-right
+    // close control with a real hit area, and no second close button at the bottom.
+    const frame = createModalFrame(this, overlay, {
+      x: W / 2,
+      y: H / 2,
+      width: panelW,
+      height: panelH,
+      title: META_COPY.codex,
+      compact,
+      withDock: true,
+      onClose: dismiss,
+    });
 
     const top = H / 2 - panelH / 2;
     const left = W / 2 - panelW / 2;
-    overlay.add(
-      this.add
-        .text(W / 2, top + 26, 'КОДЕКС · STRAIN-0', {
-          fontFamily: FONT,
-          fontSize: compact ? '19px' : '22px',
-          fontStyle: 'bold',
-          color: VISUAL_TEXT.ivory,
-          letterSpacing: 1,
-        })
-        .setOrigin(0.5)
-        .setResolution(2)
-    );
 
     const discovered = save.evolutionsSeen.length + save.legendarySeen.length;
     overlay.add(
@@ -1116,16 +1031,6 @@ export class MenuScene extends Phaser.Scene {
         .setResolution(2)
     );
 
-    const close = this.add
-      .text(left + panelW - 18, top + 14, '×', {
-        fontFamily: FONT,
-        fontSize: '26px',
-        color: VISUAL_TEXT.muted,
-      })
-      .setOrigin(0.5)
-      .setResolution(2)
-      .setInteractive({ useHandCursor: true });
-    overlay.add(close);
 
     const body = this.add.container(0, 0);
     overlay.add(body);
@@ -1240,7 +1145,7 @@ export class MenuScene extends Phaser.Scene {
         const standardBest = save.bestCampaignClearMs > 0 ? fmtTime(save.bestCampaignClearMs) : '—';
         const strainedBest =
           save.bestStrainedCampaignClearMs > 0 ? fmtTime(save.bestStrainedCampaignClearMs) : '—';
-        addText(W / 2, bodyTop, 'МАСТЕРСТВО КАМПАНИИ', compact ? 13 : 15, VISUAL_TEXT.warning, panelW - 42, 'center');
+        addText(W / 2, bodyTop, META_COPY.mastery, compact ? 13 : 15, VISUAL_TEXT.warning, panelW - 42, 'center');
         const standardRow = createSpecimenSurface(this, W / 2, bodyTop + 50, panelW - 34, 40, {
           fill: VISUAL.panelRaised, accent: save.standardCampaignClears > 0 ? VISUAL.immune : VISUAL.line, detail: 'quiet',
         });
@@ -1302,7 +1207,7 @@ export class MenuScene extends Phaser.Scene {
         addText(
           left + 28,
           top + panelH - 82,
-          `ЦИКЛОВ: ${save.runs}   ·   УНИЧТОЖЕНО КЛЕТОК: ${save.totalKills}`,
+          `ЗАБЕГОВ: ${fmtInt(save.runs)}   ·   УНИЧТОЖЕНО: ${fmtInt(save.totalKills)}`,
           compact ? 11 : 13,
           VISUAL_TEXT.ivory
         );
@@ -1346,30 +1251,22 @@ export class MenuScene extends Phaser.Scene {
         .setResolution(2)
     );
 
-    const dismiss = () => {
-      if (this.codexOverlay !== overlay) return;
-      PlatformBridge.setBackHandler(null);
-      overlay.destroy();
-      this.codexOverlay = null;
-    };
-    const questHit = this.add.rectangle(W / 2 - panelW / 4 + 8, top + panelH - 40, panelW / 2 - 24, 44, VISUAL.ink, 0.001)
-      .setInteractive({ useHandCursor: true }).setName('ofeliya-menu-quests');
-    overlay.add(questHit);
-    questHit.on('pointerup', () => {
-      dismiss();
-      this.questBoard = new QuestBoard(this, () => { this.questBoard = null; });
+    // The internal dock of the meta surfaces: Задачи дня · Кодекс · Коллекция.
+    // Рейтинг is a top-level destination and is deliberately not part of it.
+    const dock = createMetaDock(this, overlay, {
+      x: W / 2,
+      y: top + panelH - 34,
+      width: panelW - 32,
+      active: 'codex',
+      compact,
+      onSelect: (target) => {
+        if (target === 'codex') return;
+        dismiss();
+        this.openMetaSurface(target);
+      },
     });
-    if (clientFlags().collection.enabled) {
-      const x=W/2+panelW/4-8,y=top+panelH-40;
-      overlay.add(this.add.text(x,y,'КОЛЛЕКЦИЯ',{fontFamily:UI_FONT,fontSize:compact?'12px':'14px',color:VISUAL_TEXT.ivory}).setOrigin(0.5).setResolution(2));
-      const hit=this.add.rectangle(x,y,panelW/2-24,44,VISUAL.ink,0.001).setInteractive({useHandCursor:true}).setName('ofeliya-menu-collection');
-      overlay.add(hit);hit.on('pointerup',()=>{dismiss();this.collectionBoard=new CollectionBoard(this,()=>{this.collectionBoard=null;});});
-    }
+    dock.setActive('codex');
     PlatformBridge.setBackHandler(dismiss);
-    close.on('pointerup', dismiss);
-    dim.on('pointerup', () => {
-      // The full-screen interactive dimmer owns the pointer event and blocks menu controls below.
-    });
 
     render();
   }

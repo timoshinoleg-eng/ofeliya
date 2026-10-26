@@ -86,6 +86,7 @@
     "test:mutation-art-recovery": "node tests/mutation-art-recovery.mjs",
     "test:combat-fixture": "node tests/combat-fixture.mjs",
     "test:integration-visual": "node tests/integration-visual-contracts.mjs",
+    "test:ui-redesign": "node tests/ui-redesign.mjs",
     "test:natural-progression": "node scripts/natural-progression-smoke.cjs",
     "test:integration-visual-browser": "node scripts/integration-visual-smoke.cjs",
     "test:video-cap-clock": "node tests/video-cap-clock.mjs",

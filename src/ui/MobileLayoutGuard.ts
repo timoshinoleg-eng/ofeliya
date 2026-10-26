@@ -6,9 +6,34 @@ type MenuLayoutState = {
 };
 
 const menuLayouts = new WeakMap<Phaser.Scene, MenuLayoutState>();
-const subtitleBaseYs = new WeakMap<Phaser.GameObjects.Text, number>();
 const resultLayouts = new WeakMap<Phaser.GameObjects.Container, string>();
 const originalTexts = new WeakMap<Phaser.GameObjects.Text, string>();
+
+/**
+ * The interactive menu surfaces the guard knows about.
+ *
+ * Every entry is a named object of the main menu. The guard fits the labels of
+ * these surfaces to their own box, so a long label can never push its control
+ * out of the viewport.
+ */
+const MENU_NAV_ANCHORS = [
+  'ofeliya-menu-nav-rating',
+  'ofeliya-menu-nav-tasks',
+  'ofeliya-menu-nav-codex',
+  'ofeliya-menu-nav-collection',
+] as const;
+
+const MENU_AUDIO_ANCHORS = [
+  'ofeliya-menu-audio-music',
+  'ofeliya-menu-audio-sound',
+  'ofeliya-menu-audio-effects',
+] as const;
+
+const MENU_OTHER_ANCHORS = [
+  'ofeliya-menu-action-bg',
+  'ofeliya-menu-new-run',
+  'ofeliya-menu-legal',
+] as const;
 
 function textObjects(scene: Phaser.Scene): Phaser.GameObjects.Text[] {
   return scene.children.list.filter(
@@ -58,23 +83,12 @@ function guardMenu(scene: Phaser.Scene): void {
   if (hook) fitToWidth(hook, W - 34, 0.68);
 
   const subtitle = byName('ofeliya-menu-subtitle');
-  const carrier = byName('ofeliya-menu-carrier');
-  // The carrier greeting is useful context, not a release-critical control. On short MAX
-  // viewports it competes with the challenge card, so omit it instead of shrinking every
-  // important challenge label into unreadable text.
-  if (carrier) carrier.setVisible(H >= 680);
-  if (subtitle) {
-    let baseY = subtitleBaseYs.get(subtitle);
-    if (baseY === undefined) {
-      baseY = subtitle.y;
-      subtitleBaseYs.set(subtitle, baseY);
-    }
-    subtitle.setY(baseY);
-  }
-  if (hook && subtitle && H < 620) {
-    const subtitleHalf = subtitle.getBounds().height / 2;
-    subtitle.setY(hook.getBounds().bottom + 12 + subtitleHalf);
-  }
+  if (subtitle) fitToWidth(subtitle, W - 44, 0.72);
+
+  // The record strip is one compact line of real counters. It is never hidden for
+  // space: it is part of the hierarchy, and the layout module reserves its band.
+  const record = byName('ofeliya-menu-record');
+  if (record) fitToWidth(record, W - 44, 0.72);
 
   const challengeHeader = byName('ofeliya-menu-challenge-header');
   if (challengeHeader) fitToWidth(challengeHeader, Math.min(W - 64, 286), 0.72);
@@ -90,6 +104,35 @@ function guardMenu(scene: Phaser.Scene): void {
 
   const actionHint = byName('ofeliya-menu-action-hint');
   if (actionHint) fitToWidth(actionHint, W - 58, 0.68);
+
+  // The navigation grid and the audio switches own a fixed box each: their labels
+  // are fitted to that box, never to the viewport.
+  for (const nav of MENU_NAV_ANCHORS) {
+    const plate = scene.children.list.find((obj) => obj.name === nav);
+    const width = plate && 'width' in plate ? (plate as Phaser.GameObjects.Rectangle).width : 0;
+    const cellLabel = texts.find(
+      (text) => Math.abs(text.x - ((plate as Phaser.GameObjects.Rectangle)?.x ?? 0)) < 1
+    );
+    if (cellLabel && width > 0) fitToWidth(cellLabel, width - 12, 0.72);
+  }
+  for (const audio of MENU_AUDIO_ANCHORS) {
+    const plate = scene.children.list.find((obj) => obj.name === audio);
+    const width = plate && 'width' in plate ? (plate as Phaser.GameObjects.Rectangle).width : 0;
+    const cellLabel = texts.find(
+      (text) => Math.abs(text.x - ((plate as Phaser.GameObjects.Rectangle)?.x ?? 0)) < 1
+    );
+    if (cellLabel && width > 0) fitToWidth(cellLabel, width - 12, 0.72);
+  }
+  for (const other of MENU_OTHER_ANCHORS) {
+    const plate = scene.children.list.find((obj) => obj.name === other);
+    const width = plate && 'width' in plate ? (plate as Phaser.GameObjects.Rectangle).width : 0;
+    if (width > 0) {
+      const ownLabel = texts.find(
+        (text) => Math.abs(text.x - ((plate as Phaser.GameObjects.Rectangle)?.x ?? 0)) < 1
+      );
+      if (ownLabel) fitToWidth(ownLabel, width - 16, 0.68);
+    }
+  }
 }
 
 function resultContainer(scene: Phaser.Scene): Phaser.GameObjects.Container | null {
