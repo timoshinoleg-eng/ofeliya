@@ -127,7 +127,7 @@ function browserDriver() {
     !snapshot.texts.some((text) => text.includes('ГИПЕРШИП')) ||
     !snapshot.texts.some((text) => text.includes('СВЕРХКАПСИД')) ||
     !snapshot.texts.some((text) => text.includes('ЗАКРЫТАЯ СИНЕРГИЯ III')) ||
-    !snapshot.texts.some((text) => text.includes('Совмести ветви «Снаряды» и «Инфекция»')) ||
+    !snapshot.texts.some((text) => text.includes('МЕМБРАННЫЙ ИМПУЛЬС III + РНК-АФФИНИТЕТ II')) ||
     !snapshot.texts.some((text) => text.includes('Открываются при совмещении двух совместимых ветвей')) ||
     snapshot.texts.some((text) => text.includes('НЕ ОТКРЫТО')) ||
     snapshot.texts.some((text) => text.includes('ДОСТИЖЕНИЯ'))
