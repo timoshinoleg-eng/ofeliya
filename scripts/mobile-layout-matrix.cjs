@@ -256,11 +256,12 @@ async function assertCompactResumeMenu(browser) {
 
     const compactFooter = size.height < 720;
     const utility = menu.utility;
+    // Wrapped labels in one band have different heights; compare centers, not top edges.
     // Five readable compact controls may require two rows. Verify either
     // legitimate layout while enforcing spacing in both axes and legal copy.
     const sameRow = utility.sound && utility.social && utility.codex &&
-      Math.abs(utility.sound.top - utility.social.top) <= 3 &&
-      Math.abs(utility.social.top - utility.codex.top) <= 3;
+      Math.abs((utility.sound.top + utility.sound.bottom) / 2 - (utility.social.top + utility.social.bottom) / 2) <= 3 &&
+      Math.abs((utility.social.top + utility.social.bottom) / 2 - (utility.codex.top + utility.codex.bottom) / 2) <= 3;
     const oneRow = sameRow &&
       utility.sound.right + 4 <= utility.social.left &&
       utility.social.right + 4 <= utility.codex.left;
