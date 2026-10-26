@@ -5,9 +5,8 @@ import Phaser from 'phaser';
 import { artScale } from '../game/ArtMetrics';
 import { parseChallengePayload } from '../game/Challenge';
 import { parseDuelStartPayload, type DuelChallengeSnapshot } from '../game/Duel';
-import { ACHIEVEMENTS } from '../game/AchievementSystem';
 import { COLORS, FONT, UI_FONT, UI_TEXT, fmtTime } from '../game/config';
-import { MENU_COPY, META_COPY, platformLabel } from '../game/UiCopy';
+import { CODEX_COPY, MENU_COPY, META_COPY, masteryModeLine, platformLabel } from '../game/UiCopy';
 import { fmtInt, joinSegments, toTitleCase } from '../game/UiFormat';
 import { IDENTITY } from '../game/identity';
 import { masteryTracks } from '../game/RunIdentity';
@@ -54,6 +53,17 @@ import { StartupTrace } from '../systems/StartupTrace';
 import { VideoInterstitial } from '../systems/VideoInterstitial';
 import { loadDuelChallenge, trackDuelEvent } from '../systems/DuelClient';
 import { trackProductEvent } from '../systems/AnalyticsClient';
+
+/** The number of records the codex counts. */
+const CODEX_RECORD_TOTAL = CODEX_COPY.recordTotal;
+/** The explanation under the critical mutations header. */
+const CODEX_SYNERGY_SUB = CODEX_COPY.synergySub;
+/** The titles of the three locked synergies. */
+const CODEX_SYNERGY_TITLES = CODEX_COPY.synergyTitles;
+/** The recipe of every locked synergy. */
+const CODEX_SYNERGY_RECIPES = CODEX_COPY.synergyRecipes;
+/** The state of a branch that is fully discovered. */
+const CODEX_BRANCH_COMPLETE = CODEX_COPY.branchComplete;
 
 export class MenuScene extends Phaser.Scene {
   private collectionBoard: CollectionBoard | null = null;
@@ -460,6 +470,32 @@ export class MenuScene extends Phaser.Scene {
     difficultyCard.label.setText('СЛОЖНОСТЬ');
     controlCard.label.setText('УПРАВЛЕНИЕ');
 
+    // The step indicator of the difficulty scale, next to the value of the card.
+    const difficultySteps = this.add
+      .text(W / 2 - layout.contentWidth / 2 + cardW - 12, cardY - cardH / 2 + 28, '', {
+        fontFamily: UI_FONT,
+        fontSize: layout.compact ? '11px' : '12px',
+        color: VISUAL_TEXT.muted,
+      })
+      .setOrigin(1, 0.5)
+      .setResolution(2)
+      .setName('ofeliya-menu-difficulty-selector-steps')
+      .setDepth(6);
+
+    // A saved run dims the two run-configuration cards: they configure the next
+    // run and must never look like they change the run that is going on.
+    const dimmed = Boolean(resumeCheckpoint);
+    const cardAlpha = dimmed ? 0.6 : 1;
+    const hoverAlpha = dimmed ? 0.72 : 1;
+    const applyCardDim = (card: typeof difficultyCard): void => {
+      card.bg.setAlpha(cardAlpha);
+      card.surface.setAlpha(cardAlpha);
+      card.rail.setAlpha(cardAlpha);
+      card.label.setAlpha(cardAlpha);
+      card.value.setAlpha(cardAlpha);
+      card.desc.setAlpha(cardAlpha);
+    };
+
 
     const renderDifficulty = () => {
       const profile = getDifficultyProfile(selectedDifficulty);
@@ -473,6 +509,7 @@ export class MenuScene extends Phaser.Scene {
           : `${toTitleCase(profile.label)} ›`
       );
       difficultyCard.value.setColor(profile.id === 'strained' || challengeLocked ? '#ffe066' : '#fff4ec');
+      difficultySteps.setText(MENU_COPY.difficultySteps[profile.id] ?? '');
       difficultyCard.desc.setText(
         challengeLocked
           ? (duelLocked ? 'фиксировано дуэлью' : 'фиксировано вызовом')
@@ -491,6 +528,8 @@ export class MenuScene extends Phaser.Scene {
       });
     };
     renderDifficulty();
+    applyCardDim(difficultyCard);
+    applyCardDim(controlCard);
     difficultyCard.bg.on('pointerup', () => {
       Sfx.play('click');
       PlatformBridge.haptic('light');
@@ -500,7 +539,7 @@ export class MenuScene extends Phaser.Scene {
       this.registry.set('difficultyId', selectedDifficulty);
       renderDifficulty();
     });
-    difficultyCard.bg.on('pointerover', () => difficultyCard.bg.setAlpha(1));
+    difficultyCard.bg.on('pointerover', () => difficultyCard.bg.setAlpha(hoverAlpha));
     difficultyCard.bg.on('pointerout', () => difficultyCard.bg.setAlpha(0.97));
 
     const renderControlMode = () => {
@@ -534,6 +573,7 @@ export class MenuScene extends Phaser.Scene {
       });
     };
     renderControlMode();
+    applyCardDim(controlCard);
     controlCard.bg.on('pointerup', () => {
       Sfx.play('click');
       PlatformBridge.haptic('light');
@@ -543,7 +583,7 @@ export class MenuScene extends Phaser.Scene {
       this.registry.set('controlMode', selectedControlMode);
       renderControlMode();
     });
-    controlCard.bg.on('pointerover', () => controlCard.bg.setAlpha(1));
+    controlCard.bg.on('pointerover', () => controlCard.bg.setAlpha(hoverAlpha));
     controlCard.bg.on('pointerout', () => controlCard.bg.setAlpha(0.96));
 
     // ---- Primary action ----------------------------------------------------
@@ -959,6 +999,13 @@ export class MenuScene extends Phaser.Scene {
       this.founderBadge = null;
     });
 
+    // The result screen can send the player into the codex: the flag is consumed
+    // by the menu that opens next.
+    if (this.registry.get('openCodexOnMenu') === true) {
+      this.registry.remove('openCodexOnMenu');
+      this.showCodex();
+    }
+
     StartupTrace.setMeta('platformFinal', PlatformBridge.kind);
     StartupTrace.setMeta('platformVersionFinal', PlatformBridge.version || '');
     StartupTrace.mark('menu.create.end');
@@ -1060,7 +1107,7 @@ export class MenuScene extends Phaser.Scene {
     const discovered = save.evolutionsSeen.length + save.legendarySeen.length;
     overlay.add(
       this.add
-        .text(W / 2, top + 50, `ОТКРЫТО ${discovered}/9 · ДОСТИЖЕНИЯ ${save.achievements.length}/${ACHIEVEMENTS.length}`, {
+        .text(W / 2, top + 50, META_COPY.codexSubtitle(discovered, CODEX_RECORD_TOTAL, save.runs), {
           fontFamily: UI_FONT,
           fontSize: compact ? '11px' : '13px',
           fontStyle: '700',
@@ -1074,8 +1121,8 @@ export class MenuScene extends Phaser.Scene {
     const body = this.add.container(0, 0);
     overlay.add(body);
 
-    type CodexPage = 'mutations' | 'legendary' | 'mastery';
-    let page: CodexPage = 'mutations';
+    type CodexPage = 'synergies' | 'legendary' | 'mastery';
+    let page: CodexPage = 'synergies';
     const tabs: Array<{
       id: CodexPage;
       label: string;
@@ -1085,7 +1132,7 @@ export class MenuScene extends Phaser.Scene {
     }> = [];
     const tabY = top + 82;
     const tabDefs: Array<[CodexPage, string, number]> = [
-      ['mutations', 'МУТАЦИИ', W / 2 - 104],
+      ['synergies', 'СИНЕРГИИ', W / 2 - 104],
       ['legendary', 'ЛЕГЕНДАРНЫЕ', W / 2],
       ['mastery', 'МАСТЕРСТВО', W / 2 + 104],
     ];
@@ -1124,21 +1171,34 @@ export class MenuScene extends Phaser.Scene {
         return text;
       };
 
-      if (page === 'mutations') {
+      if (page === 'synergies') {
         addText(W / 2, bodyTop, 'КРИТИЧЕСКИЕ МУТАЦИИ', compact ? 13 : 15, VISUAL_TEXT.warning, panelW - 42, 'center');
+        addText(
+          W / 2,
+          bodyTop + (compact ? 18 : 22),
+          CODEX_SYNERGY_SUB,
+          // The section note is body text: it must clear the readability floor
+          // of the repository on every viewport.
+          compact ? 11 : 13,
+          VISUAL_TEXT.muted,
+          panelW - 42,
+          'center'
+        );
         const evolutionIds: EvolutionId[] = ['prism', 'halo', 'singularity'];
         evolutionIds.forEach((id, index) => {
           const found = save.evolutionsSeen.includes(id);
-          const y = bodyTop + 40 + index * (compact ? 76 : 86);
+          const y = bodyTop + (compact ? 40 : 54) + index * (compact ? 76 : 86);
           const row = createSpecimenSurface(
             this, W / 2, y + (compact ? 24 : 28), panelW - 34, compact ? 62 : 72,
             { fill: VISUAL.panelRaised, accent: found ? VISUAL.warning : VISUAL.line, detail: 'quiet' },
           );
           body.add(row);
+          // A locked synergy names its own recipe: three identical "not open"
+          // cards told the player nothing.
           addText(
             left + 28,
             y,
-            `${found ? '◆' : '◇'}  ${found ? EVOLUTION_NAMES[id] : 'НЕ ОТКРЫТО'}`,
+            found ? `◆  ${EVOLUTION_NAMES[id]}` : `◇  ${CODEX_SYNERGY_TITLES[index]}`,
             compact ? 13 : 15,
             found ? VISUAL_TEXT.warning : VISUAL_TEXT.muted
           );
@@ -1147,9 +1207,9 @@ export class MenuScene extends Phaser.Scene {
             y + 22,
             found
               ? 'Критическая форма зарегистрирована в КОДЕКСЕ.'
-              : 'Развивай совместимые ветви мутаций.',
+              : CODEX_SYNERGY_RECIPES[index],
             compact ? 12 : 13,
-            found ? VISUAL_TEXT.muted : VISUAL_TEXT.muted,
+            VISUAL_TEXT.muted,
             panelW - 76
           );
         });
@@ -1181,9 +1241,9 @@ export class MenuScene extends Phaser.Scene {
           }
         });
       } else {
-        const standardBest = save.bestCampaignClearMs > 0 ? fmtTime(save.bestCampaignClearMs) : '—';
+        const standardBest = save.bestCampaignClearMs > 0 ? fmtTime(save.bestCampaignClearMs) : null;
         const strainedBest =
-          save.bestStrainedCampaignClearMs > 0 ? fmtTime(save.bestStrainedCampaignClearMs) : '—';
+          save.bestStrainedCampaignClearMs > 0 ? fmtTime(save.bestStrainedCampaignClearMs) : null;
         addText(W / 2, bodyTop, META_COPY.mastery, compact ? 13 : 15, VISUAL_TEXT.warning, panelW - 42, 'center');
         const standardRow = createSpecimenSurface(this, W / 2, bodyTop + 50, panelW - 34, 40, {
           fill: VISUAL.panelRaised, accent: save.standardCampaignClears > 0 ? VISUAL.immune : VISUAL.line, detail: 'quiet',
@@ -1195,14 +1255,14 @@ export class MenuScene extends Phaser.Scene {
         addText(
           left + 28,
           bodyTop + 39,
-          `${save.standardCampaignClears > 0 ? '◆' : '◇'} СТАНДАРТ · пройдено ${save.standardCampaignClears} · рекорд ${standardBest}`,
+          masteryModeLine('Стандарт', save.standardCampaignClears, standardBest),
           compact ? 12 : 13,
           save.standardCampaignClears > 0 ? VISUAL_TEXT.immune : VISUAL_TEXT.muted
         );
         addText(
           left + 28,
           bodyTop + 81,
-          `${save.strainedCampaignClears > 0 ? '◆' : '◇'} НАПРЯЖЕНИЕ · пройдено ${save.strainedCampaignClears} · рекорд ${strainedBest}`,
+          masteryModeLine('Напряжение', save.strainedCampaignClears, strainedBest),
           compact ? 12 : 13,
           save.strainedCampaignClears > 0 ? VISUAL_TEXT.warning : VISUAL_TEXT.muted
         );
@@ -1219,34 +1279,22 @@ export class MenuScene extends Phaser.Scene {
         });
         tracks.forEach((track, index) => {
           const y = bodyTop + 154 + index * (compact ? 42 : 46);
+          // One line per branch: the state is always spelled out in words, and
+          // the next step never is a bare imperative.
+          const state = track.complete ? CODEX_BRANCH_COMPLETE : track.nextGoal;
           addText(
             left + 28,
             y,
-            `${track.complete ? '◆' : '◇'} ${track.label} · ${track.progress}/${track.max}`,
+            `${track.complete ? '◆' : '◇'} ${track.label} · ${track.progress}/${track.max} — ${state}`,
             compact ? 11 : 13,
             track.complete ? VISUAL_TEXT.host : VISUAL_TEXT.ivory,
             panelW - 56
           ).setFontStyle('700');
-          addText(
-            left + 48,
-            y + (compact ? 17 : 19),
-            track.complete ? track.objective : track.nextGoal,
-            compact ? 11 : 13,
-            track.complete ? VISUAL_TEXT.host : VISUAL_TEXT.muted,
-            panelW - 78
-          );
         });
         addText(
           left + 28,
-          bodyTop + (compact ? 286 : 302),
-          `ДОСТИЖЕНИЯ · ${save.achievements.length}/${ACHIEVEMENTS.length}`,
-          compact ? 11 : 13,
-          VISUAL_TEXT.ivory
-        );
-        addText(
-          left + 28,
           top + panelH - 82,
-          `ЗАБЕГОВ: ${fmtInt(save.runs)}   ·   УНИЧТОЖЕНО: ${fmtInt(save.totalKills)}`,
+          META_COPY.codexLifetime(save.runs, save.totalKills),
           compact ? 11 : 13,
           VISUAL_TEXT.ivory
         );
@@ -1275,20 +1323,6 @@ export class MenuScene extends Phaser.Scene {
       tabs.push({ id, label, x, text: tabText, underline });
       overlay.add([tabText, underline]);
     }
-
-    overlay.add(
-      this.add
-        .text(W / 2 - panelW / 4 + 8, top + panelH - 40, 'КВЕСТЫ', {
-          fontFamily: UI_FONT,
-          fontSize: compact ? '13px' : '14px',
-          fontStyle: '650',
-          color: VISUAL_TEXT.ivory,
-          align: 'center',
-          wordWrap: { width: panelW - 46 },
-        })
-        .setOrigin(0.5)
-        .setResolution(2)
-    );
 
     // The internal dock of the meta surfaces: Задачи дня · Кодекс · Коллекция.
     // Рейтинг is a top-level destination and is deliberately not part of it.
