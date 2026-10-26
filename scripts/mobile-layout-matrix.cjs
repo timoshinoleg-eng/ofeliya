@@ -321,7 +321,7 @@ async function assertCompactResumeMenu(browser) {
       const normalize = (value) => String(value ?? '').replace(/\n/g, ' ');
       const container = ui.children.list.find(
         (obj) => Array.isArray(obj?.list) && obj.list.some(
-          (child) => typeof child.text === 'string' && ['ШТАММ УНИЧТОЖЕН', 'ИММУНИТЕТ ПОДАВЛЕН'].includes(normalize(child.text))
+          (child) => typeof child.text === 'string' && ['ШТАММ УНИЧТОЖЕН', 'НОСИТЕЛЬ ЗАРАЖЁН'].includes(normalize(child.text))
         )
       );
       if (!container) return { missing: 'result container' };

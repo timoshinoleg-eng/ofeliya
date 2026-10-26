@@ -155,7 +155,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
     const normalize = (value) => String(value ?? '').replace(/\n/g, ' ');
     const title = flat.find(
-      (obj) => typeof obj.text === 'string' && ['ШТАММ УНИЧТОЖЕН', 'ИММУНИТЕТ ПОДАВЛЕН'].includes(normalize(obj.text))
+      (obj) => typeof obj.text === 'string' && ['ШТАММ УНИЧТОЖЕН', 'НОСИТЕЛЬ ЗАРАЖЁН'].includes(normalize(obj.text))
     );
     const container = title?.parentContainer;
     const modalTexts = container?.list?.filter(
