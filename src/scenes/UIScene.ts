@@ -28,7 +28,7 @@ import { DualMoveControls } from '../game/DualMoveControls';
 import { getLegendaryDefinition, type LegendaryId } from '../game/LegendarySystem';
 import { TwinStickControls } from '../game/TwinStickControls';
 import { readControlMode, type ControlMode } from '../game/ControlMode';
-import { runModeLabel, isRankedResult } from '../game/RunModeLabel';
+import { runModeLabel, runModeShareLabel, isRankedResult } from '../game/RunModeLabel';
 import type { RunResult, RunSnapshot } from '../game/RunContracts';
 import {
   EVOLUTION_NAMES,
@@ -2628,15 +2628,13 @@ export class UIScene extends Phaser.Scene {
           ? ` Легендарные: ${res.legendaryIds.map((id) => getLegendaryDefinition(id).title).join(', ')}.`
           : '';
       const identityShare = ` Профиль штамма: ${runIdentity.label}.`;
-      const modeShare = ranked
-        ? ''
-        : dailyIntent
-          ? ' Ежедневный забег.'
-          : duelChallenge
-            ? ' Дуэль · вне глобального рейтинга.'
-            : res.resumed
-              ? ' Возобновлённый забег · вне рейтинга.'
-              : ' Режим: НАПРЯЖЕНИЕ.';
+      const modeShare = runModeShareLabel({
+        difficultyId: res.difficultyId,
+        resumed: res.resumed,
+        daily: dailyIntent !== null,
+        duel: duelChallenge !== null,
+        ranked,
+      });
       const dailySuffix = dailyIntent ? buildDailyShareSuffix({ timeMs: res.timeMs }) : '';
       const shareText = (res.win
         ? `OFELIYA / STRAIN-0 завершила кампанию за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${identityShare}${evoShare}${legendaryShare}`
