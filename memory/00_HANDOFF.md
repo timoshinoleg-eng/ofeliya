@@ -1,3 +1,8 @@
+# Verified UX fixes — 2026-10-26
+Branch feat/verified-ux-fixes-20261026 is directly based on main ce8ecb8. Shared notification FIFO/suspension and44px footer targets only; difficulty selector, balance, score, analytics247 and server unchanged. Canonical report docs/qa/VERIFIED_UX_FIXES_20261026.md; separate EASY248 and MAX freshness source assessments. No merge/deploy. Local proof and eventual Draft/check status in report/PR. Retain native-device acceptance distinction.
+
+---
+
 # PR244 independent final gate - 2026-10-25
 
 Original de6a74afd80607e6df24801a819d7e6cfa60af4f is BLOCK: P2 mutation gate falsely classifies omitted pre-hit flush as equivalent. Real offset streak reaches q_nodmg60; the permitted mutant records59. Narrow tests-only repair on review/codex-pr244-final-gate-20261025; report docs/qa/CODEX_PR244_FINAL_GATE_20261025.md. UTC14/14 +2 equivalent +control passed; exact candidate CI40181931371 is genuinely green but cannot prove the false equivalence. Lifecycle and UTC/units historical RED/GREEN independently reproduced. Keep native memory failures and base-reproduced startup font assertion distinct from product findings. No merge/deploy. Next: Draft follow-up into #244 branch, new exact-head full CI and release decision. Physical native close inconclusive, eviction/MAX NOT_RUN.

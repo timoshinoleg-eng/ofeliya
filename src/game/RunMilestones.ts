@@ -1,3 +1,5 @@
+import { NotificationRegion } from '../ui/NotificationRegion';
+import { prefersReducedMotion } from '../systems/MotionPreferences';
 import Phaser from 'phaser';
 import { FONT } from './config';
 import type { StageMilestoneDefinition } from './StageDefinitions';
@@ -13,17 +15,27 @@ export class RunMilestones {
   private readonly scene: Phaser.Scene;
   private readonly active = new Set<Phaser.GameObjects.GameObject>();
 
-  constructor(scene: Phaser.Scene) {
+  private readonly pending = new Set<string>();
+  private generation = 0;
+
+  constructor(scene: Phaser.Scene, private readonly region?: NotificationRegion) {
     this.scene = scene;
   }
 
   show(def: StageMilestoneDefinition): void {
+    if (!this.region) { this.present(def, () => {}); return; }
+    const key = `milestone:${this.generation}:${def.id}`;
+    this.pending.add(key);
+    this.region.enqueue(key, (done) => this.present(def, () => { this.pending.delete(key); done(); }));
+  }
+
+  private present(def: StageMilestoneDefinition, done: () => void) {
     const width = this.scene.scale.width;
     const height = this.scene.scale.height;
     const y = Math.max(118, height * 0.2);
 
     const pulse = this.scene.add
-      .rectangle(0, 0, width, height, def.color, 0.055)
+      .rectangle(0, 0, width, height, def.color, prefersReducedMotion() ? 0 : 0.055)
       .setOrigin(0)
       .setScrollFactor(0)
       .setDepth(29)
@@ -76,7 +88,7 @@ export class RunMilestones {
     this.scene.tweens.add({
       targets: container,
       alpha: 1,
-      y: y + 8,
+      y: prefersReducedMotion() ? y : y + 8,
       duration: 180,
       ease: 'Quad.Out',
       yoyo: true,
@@ -84,11 +96,28 @@ export class RunMilestones {
       onComplete: () => {
         this.active.delete(container);
         container.destroy();
+        done();
       },
     });
+    return {
+      setVisible: (visible: boolean) => {
+        container.setVisible(visible);
+        if (pulse.active) pulse.setVisible(visible);
+        for (const tween of this.scene.tweens.getTweensOf([container, pulse])) { if (visible) tween.resume(); else tween.pause(); }
+      },
+      destroy: () => {
+        this.scene.tweens.killTweensOf([container, pulse]);
+        this.active.delete(container); this.active.delete(pulse);
+        if (container.active) container.destroy();
+        if (pulse.active) pulse.destroy();
+      },
+    };
   }
 
   reset(): void {
+    this.generation += 1;
+    const keys = [...this.pending]; this.pending.clear();
+    this.region?.cancel(keys);
     for (const object of this.active) {
       this.scene.tweens.killTweensOf(object);
       object.destroy();
