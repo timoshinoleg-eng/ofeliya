@@ -234,7 +234,7 @@ try {
   assert.equal(copy.MENU_COPY.music, '♪ Музыка', 'the music switch carries its glyph');
   assert.deepEqual(
     { ...copy.MENU_COPY.difficultySteps },
-    { standard: '• • ◦', strained: '• • •' },
+    { easy: '• ◦ ◦', standard: '• • ◦', strained: '• • •' },
     'the difficulty step indicator'
   );
   assert.equal(copy.RESULT_COPY.header, 'ИТОГ ЗАБЕГА', 'result header');
@@ -251,6 +251,7 @@ try {
       ranked: 'СТАНДАРТ · В зачёт рейтинга',
       daily: 'ЗАБЕГ ДНЯ · СТАНДАРТ',
       duel: 'ДУЭЛЬ · СТАНДАРТ',
+      easy: 'ЛЁГКИЙ · Тренировка',
       strained: 'НАПРЯЖЕНИЕ · Тренировка',
       local: 'СТАНДАРТ · Тренировка',
     },
