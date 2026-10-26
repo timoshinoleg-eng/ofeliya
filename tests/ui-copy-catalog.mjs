@@ -38,6 +38,8 @@ try {
   const copy = require(join(temp, 'game', 'UiCopy.js'));
   const control = require(join(temp, 'game', 'ControlMode.js'));
   const { UPGRADES } = require(join(temp, 'game', 'UpgradeSystem.js'));
+  const evolutionSource = readFileSync('src/game/EvolutionSystem.ts', 'utf8');
+  const evolutionRecipes = [...evolutionSource.matchAll(/recipe:\s*'([^']+)'/g)].map((m) => m[1]);
 
   const MODES = ['one-hand', 'two-hand', 'dual-move'];
 
@@ -244,6 +246,11 @@ try {
   assert.equal(copy.RESULT_COPY.legendary, 'ЛЕГЕНДАРНАЯ МУТАЦИЯ', 'the legendary line');
   assert.equal(copy.RESULT_COPY.resumed, 'Тренировка (продолженный забег)', 'the practice chip');
   assert.equal(copy.RESULT_COPY.dailyRank(5), '★ МЕСТО #5 В РЕЙТИНГЕ ДНЯ', 'the daily place');
+  assert.deepEqual(
+    [...copy.CODEX_COPY.synergyRecipes],
+    evolutionRecipes,
+    'Codex synergy recipes must be the actual EvolutionSystem recipes'
+  );
   assert.deepEqual(
     { ...copy.RESULT_MODE_CHIP },
     {
