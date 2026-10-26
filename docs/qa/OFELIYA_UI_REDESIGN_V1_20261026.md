@@ -59,8 +59,8 @@ overrode the bible, the bible was updated in the same commit — see §7.
 | --- | --- |
 | `origin/main` at the start | `ce8ecb84ced1afa09870f2f00f9a0328257fd11c` |
 | Previously released `ce8ecb84…` | `ce8ecb84ced1afa09870f2f00f9a0328257fd11c` |
-| Final head (the PR) | `3a7f507e82bd6e189471bdcc0f8cb143aca3097e` |
-| Final head (the local branch) | `2190888` |
+| Final head (the PR) | `bb38f39c84a554e907fe1d1d9272a1e62bc77143` |
+| Final head (the local branch) | `2906016` |
 
 `origin/main` was fetched before the work started. **Main did not advance** beyond
 the previously released `ce8ecb84…` — the branch was cut from the current main
@@ -72,7 +72,17 @@ Commits (each one reviewable on its own):
 2. `3c5d0a1` — the main menu;
 3. `4ce5732` — the result screen and the three meta surfaces;
 4. `8478b41` — the duplicated frame line and the extended contract;
-5. `2190888` — this report.
+5. `2190888` — this report;
+6. `384c4bf` — the gates that the redesign moved (dock lookup, countdown, shell handles);
+7. `1c4668a` — the rating surface inside the shared frame, and the repository's error copy;
+8. `b598246` — the rating error probe matches the case;
+9. `57633e2` — the collection tab row clear of the close control;
+10. `505890b` — the collection reveal probe reads the tween in the same tick;
+11. `e7e3449` — the locked shell is probed by interactivity;
+12. `2906016` — the hidden five-tap diagnostics gesture restored;
+13. `2610ed1` / `d33e877` — the result stats and the victory outcome read by their new labels;
+14. `1b72ea3` — the challenge band of the layout, and the footer gates;
+15. `430605a` — the menu text above the readability floor.
 
 ### How the branch was pushed
 
@@ -88,10 +98,10 @@ PR and are not defects in the change itself:
   CI is not in the branch. The step to add by hand is
   `npm run test:ui-redesign` inside the browser-smoke job.
 
-The PR therefore shows 10 commits where the local branch shows 5: the first two
-are a binary push probe and its removal, and the fourth logical change was
-split into four pushes because of a per-request size limit. The **content** of
-the diff is identical to the local branch.
+The PR therefore shows more commits than the local branch: the first two are a
+binary push probe and its removal, and some logical changes were split into
+several pushes because of a per-request size limit. The **content** of the diff
+is identical to the local branch, except for the PNG evidence.
 
 ---
 
@@ -379,6 +389,13 @@ assertions were moved onto the new structure, not dropped:
 | `test:social-hub` | the close control's 44×44 hit area sat ten pixels **outside** the panel edge | the hit area is now fully inside the frame — a touch target may not hang over the edge |
 | `test:social-hub` | the error wording was changed to a sentence-case variant | the wording the repository already shipped and gates is kept — `СЕРВЕР НЕ ОТВЕТИЛ` and `НЕТ СОЕДИНЕНИЯ` — with the neutral `ПОВТОРИТЬ` retry |
 | `test:muse-convergence-crossflow` | **the collection's tab row covered the close control.** The tab strip sat at `bodyTop − 8`, so its plates crossed the title band, and the top-right tab swallowed the tap on the 44×44 close target — the board could not be closed | the tab row now starts at `bodyTop`, below the title band, so the close target is never covered. The content moves down by 28 px and still clears the internal dock at 320×568 and 390×740 |
+| `test:muse-convergence-crossflow` | the probe read the tween list one browser round trip after the board appeared, so the 180 ms reveal was already over when the probe looked at it | the probe now opens the board and reads the tween list in the same tick, so the reveal is measured while it is genuinely in flight; the early close falls back to a re-aimed tap when the first one lands on a control that is still at alpha zero |
+| `test:startup-trace` | **the hidden five-tap diagnostics gesture was lost with the visible build line.** Moving the build information to the About surface removed the target the gesture lived on, so a player could no longer reveal the startup trace | the gesture keeps a target of its own: the same line, drawn without ink, naming the host the way the About surface does — `Браузер`, `MAX` or `Telegram`, never a raw client token. The platform label is one shared helper now |
+| `test:mobile-layout-matrix` | **the challenge panel was drawn at the record line's position**, so an incoming challenge overlapped the record on a 320×568 menu | the layout has a challenge band between the record and the run configuration, so the record and the challenge never share a slot |
+| `test:mobile-layout-matrix` | the matrix measured the old utility row — a sound control, a social button and a codex button | the matrix measures the new footer: a 2×2 navigation grid, one row of three audio switches and the legal row last, with the spacing of each band |
+| `test:codex-smoke` | the codex entry of the menu, the shared title of the frame, the mastery counter and the close control all moved | the gate reads the navigation cell, the frame title, the `ЗАБЕГОВ: 7` counter and the 44×44 close control. The close glyph is no longer the interactive object — the shared hit area is |
+| `test:browser-smoke`, `test:video-interstitial` | the victory outcome is `НОСИТЕЛЬ ЗАРАЖЁН` now, not `ИММУНИТЕТ ПОДАВЛЕН` | the two probes read the new title; the defeat outcome keeps `ШТАММ УНИЧТОЖЕН` |
+| `test:run-identity` | one of the four identity labels had been renamed to sentence case while its three siblings stayed uppercase | the labels are back to the wording the repository shipped, so the archetype names stay consistent with each other |
 
 ### The gates that fail in this sandbox — and on `main` as well
 
@@ -591,8 +608,8 @@ profile, then check that the third description still fits the compact card.
 | Title | `[DRAFT] OFELIYA UI v1 — menu, results, meta navigation and Russian copy` |
 | Draft | **yes** |
 | Base | `main` @ `ce8ecb84ced1afa09870f2f00f9a0328257fd11c` |
-| Head | `feat/ui-redesign-v1-20261026` @ `3a7f507e82bd6e189471bdcc0f8cb143aca3097e` |
-| Diff | 33 files, +3 119 / −949 |
+| Head | `feat/ui-redesign-v1-20261026` @ `bb38f39c84a554e907fe1d1d9272a1e62bc77143` |
+| Diff | 36 files, +3 463 / −1 011 |
 | Merged | **no** |
 
 The pull request is open as a **draft** and was **not** merged. Nothing was
