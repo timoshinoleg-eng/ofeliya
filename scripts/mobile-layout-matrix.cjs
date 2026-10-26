@@ -88,7 +88,7 @@ async function assertCompactResumeMenu(browser) {
       tasks: bounds(text((value) => value === 'ЗАДАЧИ ДНЯ')),
       codex: bounds(text((value) => value === 'КОДЕКС')),
       collection: bounds(text((value) => value === 'КОЛЛЕКЦИЯ')),
-      music: bounds(text((value) => value.startsWith('Музыка:'))),
+      music: bounds(text((value) => value.includes('Музыка:'))),
       sound: bounds(text((value) => value.startsWith('Звук:'))),
       effects: bounds(text((value) => value.startsWith('Эффекты:'))),
       legal: bounds(text((value) => value === 'О приложении · Политика · Поддержка')),
@@ -252,7 +252,7 @@ async function assertCompactResumeMenu(browser) {
         collection: boundsOf(visible.find((obj) => obj.text === 'КОЛЛЕКЦИЯ')),
       };
       const audio = {
-        music: boundsOf(visible.find((obj) => obj.text.startsWith('Музыка:'))),
+        music: boundsOf(visible.find((obj) => obj.text.includes('Музыка:'))),
         sound: boundsOf(visible.find((obj) => obj.text.startsWith('Звук:'))),
         effects: boundsOf(visible.find((obj) => obj.text.startsWith('Эффекты:'))),
       };
@@ -366,10 +366,19 @@ async function assertCompactResumeMenu(browser) {
 
       const buttons = buttonLabels.map((label) => {
         const text = texts.find((obj) => obj.text === label);
-        const bg = text && container.list.find(
-          (obj) => obj !== text && obj.input?.enabled && Math.abs((obj.y ?? -9999) - text.y) < 1 && typeof obj.getBounds === 'function'
-        );
         const tb = text?.getBounds?.();
+        // The plate of a button is the smallest interactive object that holds
+        // the label: a captioned button carries its label above the centre, so
+        // the label is matched by the plate that contains it, not by its row.
+        const bg = tb && container.list
+          .filter((obj) => obj !== text && obj.input?.enabled && typeof obj.getBounds === 'function')
+          .map((obj) => ({ obj, bounds: obj.getBounds() }))
+          .filter(({ bounds }) => {
+            const cx = tb.left + tb.width / 2;
+            const cy = tb.top + tb.height / 2;
+            return cx >= bounds.left && cx <= bounds.right && cy >= bounds.top && cy <= bounds.bottom;
+          })
+          .sort((a, b) => (a.bounds.width * a.bounds.height) - (b.bounds.width * b.bounds.height))[0]?.obj;
         const bb = bg?.getBounds?.();
         return {
           label,
