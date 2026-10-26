@@ -184,7 +184,7 @@ async function waitForText(page, needle, timeout = 6000) {
       await waitForText(page, 'В РЕЙТИНГЕ ДНЯ');
       const texts = await readResultTexts(page);
       const joined = texts.join('\n');
-      assert(texts.includes('РЕЖИМ: СТАНДАРТ · ежедневный забег'), 'daily mode line missing: ' + joined);
+      assert(texts.includes('ЗАБЕГ ДНЯ · СТАНДАРТ'), 'daily mode line missing: ' + joined);
       assert(joined.includes('★ МЕСТО #5 В РЕЙТИНГЕ ДНЯ'), 'daily rank line missing: ' + joined);
       assert(!joined.includes('рейтинговый'), 'daily result rendered the global ranked mode: ' + joined);
       assert(!joined.includes('РЕЙТИНГ · МЕСТО'), 'daily result rendered the global ranking line: ' + joined);
