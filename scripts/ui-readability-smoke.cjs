@@ -115,7 +115,7 @@ async function inspectMenu(page, size) {
       pickNamed('ofeliya-menu-control-selector-value'),
       pick((t) => t === 'Базовый ритм кампании'),
       pick((t) => t.includes('оба стика')),
-      pick((t) => t.startsWith('Музыка:')),
+      pick((t) => t.includes('Музыка:')),
       pick((t) => t.startsWith('Звук:')),
       pick((t) => t.startsWith('Эффекты:')),
       pick((t) => t === 'РЕЙТИНГ'),
@@ -151,7 +151,7 @@ function assertMenu(contract, compact) {
     row.name === 'ofeliya-menu-record' ||
     row.text === 'Базовый ритм кампании' ||
     row.text.includes('оба стика') ||
-    row.text.startsWith('Музыка:') ||
+    row.text.includes('Музыка:') ||
     row.text.startsWith('Звук:') ||
     row.text.startsWith('Эффекты:') ||
     row.text === 'О приложении · Политика · Поддержка'
@@ -170,7 +170,7 @@ function assertMenu(contract, compact) {
       [(row) => row.name === 'ofeliya-menu-control-selector-value', 13, 'control value'],
       [(row) => row.text === 'Базовый ритм кампании', 13, 'difficulty description'],
       [(row) => row.text.includes('оба стика'), 13, 'control description'],
-      [(row) => row.text.startsWith('Музыка:'), 11, 'audio row'],
+      [(row) => row.text.includes('Музыка:'), 11, 'audio row'],
       [(row) => row.text === 'РЕЙТИНГ', 12, 'navigation grid'],
       [(row) => row.text === 'О приложении · Политика · Поддержка', 11, 'menu legal footer'],
     ];
@@ -223,9 +223,10 @@ async function inspectCodex(page, size) {
     const important = rows.filter((row) =>
       row.text !== '×' &&
       row.name !== 'ofeliya-modal-title' &&
-      !String(row.name ?? '').startsWith('ofeliya-meta-dock-') &&
-      !row.text.startsWith('КВЕСТЫ')
+      !String(row.name ?? '').startsWith('ofeliya-meta-dock-')
     );
+    // The internal dock is the only navigation of the codex: a stray footer link
+    // would look like a destination that the codex does not have.
     const footer = rows.find((row) => row.text === 'КВЕСТЫ') ?? null;
     const overflow = rows.filter(({ bounds }) =>
       bounds.left < 2 || bounds.right > width - 2 || bounds.top < 2 || bounds.bottom > height - 2
@@ -249,7 +250,7 @@ function assertCodex(contract, compact, pageName) {
   if (undersized.length) {
     throw new Error(`readability Codex ${pageName} undersized: ${JSON.stringify(undersized)}`);
   }
-  if (!contract.footer || contract.footer.size < (compact ? 13 : 14) || (!compact && contract.footer.bounds.bottom > 715)) {
+  if (contract.footer) {
     throw new Error(`readability Codex footer regression: ${JSON.stringify(contract.footer)}`);
   }
   const forbidden = contract.rows.filter((row) =>
@@ -274,7 +275,7 @@ function assertCodex(contract, compact, pageName) {
       throw new Error(`readability Codex ${pageName} still has sub-13px important text: ${JSON.stringify(tinyImportant)}`);
     }
     const section = contract.rows.find((row) =>
-      row.text === 'КРИТИЧЕСКИЕ МУТАЦИИ' || row.text === 'МАСТЕРСТВО КАМПАНИИ'
+      row.text === 'КРИТИЧЕСКИЕ МУТАЦИИ' || row.text === 'ПРОХОЖДЕНИЕ РЕЖИМОВ'
     );
     if (section && section.size < 15) {
       throw new Error(`readability Codex ${pageName} section heading too small: ${JSON.stringify(section)}`);
