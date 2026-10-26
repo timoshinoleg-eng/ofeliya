@@ -104,19 +104,25 @@ async function inspectMenu(page, size) {
     };
     const pick = (predicate) => toRow(texts.find((candidate) => predicate(candidate.text)));
     const pickNamed = (name) => toRow(menu.children.getByName(name));
+    // The bands of the redesigned menu: the statement, the tagline, the record,
+    // the two run-configuration cards, the navigation grid, the audio row and the
+    // legal row.
     const rows = [
-      pickNamed('ofeliya-menu-difficulty-value'),
-      pickNamed('ofeliya-menu-control-value'),
+      pickNamed('ofeliya-menu-hook'),
       pickNamed('ofeliya-menu-subtitle'),
-      pick((t) => t.startsWith('Носитель:')),
-      pick((t) => t.startsWith('Выживание ')),
+      pickNamed('ofeliya-menu-record'),
+      pickNamed('ofeliya-menu-difficulty-selector-value'),
+      pickNamed('ofeliya-menu-control-selector-value'),
       pick((t) => t === 'Базовый ритм кампании'),
       pick((t) => t.includes('оба стика')),
-      pick((t) => t.startsWith('автоатака ·')),
-      pick((t) => t.startsWith('звук:')),
-      pick((t) => t.startsWith('КОДЕКС ')),
-      pick((t) => t.startsWith('Двигай штамм')),
-      pick((t) => t.startsWith('О ПРИЛОЖЕНИИ')),
+      pick((t) => t.startsWith('Музыка:')),
+      pick((t) => t.startsWith('Звук:')),
+      pick((t) => t.startsWith('Эффекты:')),
+      pick((t) => t === 'РЕЙТИНГ'),
+      pick((t) => t === 'ЗАДАЧИ ДНЯ'),
+      pick((t) => t === 'КОДЕКС'),
+      pick((t) => t === 'КОЛЛЕКЦИЯ'),
+      pick((t) => t === 'О приложении · Политика · Поддержка'),
     ].filter(Boolean);
     const overflow = rows.filter(({ bounds }) =>
       bounds.left < 2 || bounds.right > width - 2 || bounds.top < 2 || bounds.bottom > height - 2
@@ -137,16 +143,18 @@ function assertMenu(contract, compact) {
   if (undersized.length) {
     throw new Error('readability menu undersized: ' + JSON.stringify(undersized));
   }
+  // The body text of the menu is the readable content: the tagline, the record,
+  // the run-configuration cards, the audio row and the legal row. The statement
+  // and the navigation labels are display elements and keep the display font.
   const bodyRows = contract.rows.filter((row) =>
     row.name === 'ofeliya-menu-subtitle' ||
-    row.text.startsWith('Носитель:') ||
-    row.text.startsWith('Выживание') ||
+    row.name === 'ofeliya-menu-record' ||
     row.text === 'Базовый ритм кампании' ||
     row.text.includes('оба стика') ||
-    row.text.startsWith('автоатака ·') ||
-    row.text.startsWith('звук:') ||
-    row.text.startsWith('Двигай штамм') ||
-    row.text.startsWith('О ПРИЛОЖЕНИИ')
+    row.text.startsWith('Музыка:') ||
+    row.text.startsWith('Звук:') ||
+    row.text.startsWith('Эффекты:') ||
+    row.text === 'О приложении · Политика · Поддержка'
   );
   const wrongFamily = bodyRows.filter((row) => !/system-ui/i.test(row.family));
   if (wrongFamily.length) {
@@ -155,14 +163,16 @@ function assertMenu(contract, compact) {
 
   if (!compact) {
     const required = [
-      [(row) => row.name === 'ofeliya-menu-subtitle', 15, 'menu hook body'],
-      [(row) => row.text.startsWith('Носитель:'), 14, 'carrier'],
-      [(row) => row.text.startsWith('Выживание'), 14, 'records'],
+      [(row) => row.name === 'ofeliya-menu-hook', 15, 'menu statement'],
+      [(row) => row.name === 'ofeliya-menu-subtitle', 13, 'menu tagline'],
+      [(row) => row.name === 'ofeliya-menu-record', 12, 'menu record'],
+      [(row) => row.name === 'ofeliya-menu-difficulty-selector-value', 13, 'difficulty value'],
+      [(row) => row.name === 'ofeliya-menu-control-selector-value', 13, 'control value'],
       [(row) => row.text === 'Базовый ритм кампании', 13, 'difficulty description'],
       [(row) => row.text.includes('оба стика'), 13, 'control description'],
-      [(row) => row.text.startsWith('автоатака ·'), 13, 'start hint'],
-      [(row) => row.text.startsWith('Двигай штамм'), 13, 'menu footer hint'],
-      [(row) => row.text.startsWith('О ПРИЛОЖЕНИИ'), 12, 'menu legal footer'],
+      [(row) => row.text.startsWith('Музыка:'), 11, 'audio row'],
+      [(row) => row.text === 'РЕЙТИНГ', 12, 'navigation grid'],
+      [(row) => row.text === 'О приложении · Политика · Поддержка', 11, 'menu legal footer'],
     ];
     for (const [predicate, minSize, label] of required) {
       const row = contract.rows.find(predicate);
@@ -176,9 +186,7 @@ function assertMenu(contract, compact) {
 async function openCodex(page) {
   await page.evaluate(() => {
     const menu = window.__game.scene.getScene('Menu');
-    const codex = menu.children.list.find(
-      (obj) => typeof obj?.text === 'string' && obj.text.startsWith('КОДЕКС ')
-    );
+    const codex = menu.children.getByName('ofeliya-menu-nav-codex');
     if (!codex) throw new Error('Codex entry missing');
     codex.emit('pointerup');
   });
@@ -202,6 +210,7 @@ async function inspectCodex(page, size) {
     const rows = texts.map((obj) => {
       const b = obj.getBounds();
       return {
+        name: obj.name,
         text: obj.text,
         size: parseFloat(String(obj.style?.fontSize ?? '0')) || 0,
         family: String(obj.style?.fontFamily ?? ''),
@@ -209,9 +218,12 @@ async function inspectCodex(page, size) {
         bounds: { left: b.left, right: b.right, top: b.top, bottom: b.bottom },
       };
     });
+    // The frame title and the internal dock are navigation, not body text: they
+    // keep their own sizes and are excluded from the readability floor.
     const important = rows.filter((row) =>
       row.text !== '×' &&
-      row.text !== 'КОДЕКС · STRAIN-0' &&
+      row.name !== 'ofeliya-modal-title' &&
+      !String(row.name ?? '').startsWith('ofeliya-meta-dock-') &&
       !row.text.startsWith('КВЕСТЫ')
     );
     const footer = rows.find((row) => row.text === 'КВЕСТЫ') ?? null;

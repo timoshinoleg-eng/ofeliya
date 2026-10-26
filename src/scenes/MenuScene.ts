@@ -417,13 +417,14 @@ export class MenuScene extends Phaser.Scene {
       const label = this.add
         .text(left + 14, cardY - cardH / 2 + 11, '', {
           fontFamily: UI_FONT,
-          fontSize: layout.compact ? '9px' : '10px',
+          fontSize: layout.compact ? '10px' : '11px',
           fontStyle: '700',
           color: UI_TEXT.secondary,
           letterSpacing: 0.8,
         })
         .setOrigin(0, 0.5)
         .setResolution(2)
+        .setName(`${name}-label`)
         .setDepth(6);
       const value = this.add
         .text(left + 14, cardY - cardH / 2 + 28, '', {
@@ -434,11 +435,14 @@ export class MenuScene extends Phaser.Scene {
         })
         .setOrigin(0, 0.5)
         .setResolution(2)
+        .setName(`${name}-value`)
         .setDepth(6);
       const desc = this.add
         .text(left + 14, cardY + cardH / 2 - 11, '', {
           fontFamily: UI_FONT,
-          fontSize: layout.compact ? '9px' : '10px',
+          // The readability contract floors the description of a run-configuration
+          // card at 11px on a compact viewport and at 13px on a tall one.
+          fontSize: layout.compact ? '11px' : '13px',
           fontStyle: '650',
           color: UI_TEXT.secondary,
           wordWrap: { width: cardW - 28, useAdvancedWrap: true },
@@ -446,6 +450,7 @@ export class MenuScene extends Phaser.Scene {
         })
         .setOrigin(0, 0.5)
         .setResolution(2)
+        .setName(`${name}-desc`)
         .setDepth(6);
       return { bg, surface, rail, label, value, desc };
     };
