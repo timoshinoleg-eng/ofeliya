@@ -325,9 +325,9 @@ export const CODEX_COPY = {
   synergyTitles: ['ЗАКРЫТАЯ СИНЕРГИЯ I', 'ЗАКРЫТАЯ СИНЕРГИЯ II', 'ЗАКРЫТАЯ СИНЕРГИЯ III'],
   /** The recipe of every locked synergy. */
   synergyRecipes: [
-    'Совмести ветви «Снаряды» и «Орбита»',
-    'Совмести ветви «Орбита» и «Инфекция»',
-    'Совмести ветви «Снаряды» и «Инфекция»',
+    'БЕЛКОВЫЕ ШИПЫ III + ПРОНИКНОВЕНИЕ II',
+    'КАПСИДНЫЕ СПУТНИКИ III + ПОДВИЖНОСТЬ/РЕПЛИКАЦИЯ II',
+    'МЕМБРАННЫЙ ИМПУЛЬС III + РНК-АФФИНИТЕТ II',
   ],
   /** The state of a branch that is fully discovered. */
   branchComplete: 'Выполнено',
