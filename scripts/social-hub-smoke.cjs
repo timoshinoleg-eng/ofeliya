@@ -425,7 +425,7 @@ async function runHttpRetry(browser) {
   const { ctx, page, requests, errors } = await boot(browser, size, { mode: 'http-first' });
   await openHub(page);
   let contract = await inspectHub(page, size);
-  if (!contract.retry || !contract.texts.some((text) => text.includes('СЕРВЕР НЕ ОТВЕТИЛ'))) {
+  if (!contract.retry || !contract.texts.some((text) => text.includes('Сервер не ответил.'))) {
     throw new Error('HTTP retry state missing');
   }
   if (requests.length !== 4) throw new Error('HTTP state request count before retry ' + requests.length);
@@ -560,9 +560,9 @@ async function runDailyLaunchState(browser, dailyMode, expectedText, disabledAft
   });
   try {
     await runSuccessMatrix(browser);
-    await runStateCase(browser, 'empty', 'СЕГОДНЯ РЕЗУЛЬТАТА ЕЩЁ НЕТ');
-    await runStateCase(browser, 'http', 'СЕРВЕР НЕ ОТВЕТИЛ');
-    await runStateCase(browser, 'network', 'НЕТ СОЕДИНЕНИЯ');
+    await runStateCase(browser, 'empty', 'Сегодня ты ещё не играл');
+    await runStateCase(browser, 'http', 'Сервер не ответил.');
+    await runStateCase(browser, 'network', 'Нет соединения с сервером.');
     await runHttpRetry(browser);
     await runSkipped(browser);
     await runDailyLaunch(browser);
