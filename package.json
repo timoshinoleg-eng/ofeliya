@@ -20,7 +20,7 @@
     "test:legendary": "node scripts/check-legendary.mjs",
     "test:legendary-layout": "node scripts/legendary-layout-probe.cjs",
     "test:layout-diagnostics": "node tests/visible-text-bounds.mjs",
-    "test:difficulty": "node scripts/check-difficulty.mjs",
+    "test:difficulty": "node scripts/check-difficulty.mjs && node scripts/check-easy-difficulty.mjs && node scripts/check-difficulty-comparison.mjs",
     "test:easy-difficulty": "node scripts/check-easy-difficulty.mjs",
     "test:easy-difficulty-visual": "node tests/easy-difficulty-visual.mjs",
     "test:difficulty-comparison": "node scripts/check-difficulty-comparison.mjs",
