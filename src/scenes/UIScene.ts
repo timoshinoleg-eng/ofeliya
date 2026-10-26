@@ -1,5 +1,4 @@
 import Phaser from 'phaser';
-import { getAchievementDef } from '../game/AchievementSystem';
 import {
   createChallengePayload,
   encodeChallengePayload,
@@ -37,8 +36,10 @@ import {
   type UpgradeDef,
 } from '../game/UpgradeSystem';
 import {
+  META_COPY,
   MUTATION_CARD_HEADERS,
   RESULT_COPY,
+  RESULT_MODE_CHIP,
   buildDuelShareText,
   buildShareText,
   formatBuildSummary,
@@ -2345,7 +2346,7 @@ export class UIScene extends Phaser.Scene {
     if (res.evolutions.length > 0) {
       c.add(
         this.add
-          .text(W / 2, detailY, `◆ ${MUTATION_CARD_HEADERS.evolution}: ${res.evolutions.map((id) => EVOLUTION_NAMES[id]).join(' · ')}`, {
+          .text(W / 2, detailY, `◆ ${RESULT_COPY.critical}: ${res.evolutions.map((id) => EVOLUTION_NAMES[id]).join(' · ')}`, {
             fontFamily: FONT,
             fontSize: compact ? '10px' : '11px',
             fontStyle: 'bold',
@@ -2381,7 +2382,7 @@ export class UIScene extends Phaser.Scene {
     const runIdentity = assessRunIdentity(res);
     const identityTags =
       runIdentity.focused && runIdentity.signals.length > 0
-        ? ` · ${runIdentity.signals.join(' · ')}`
+        ? ` (${runIdentity.signals.join(' · ')})`
         : '';
     c.add(
       this.add
@@ -2409,14 +2410,16 @@ export class UIScene extends Phaser.Scene {
           W / 2,
           detailY,
           res.resumed
-            ? `РЕЖИМ: ${res.difficultyId === 'standard' ? 'СТАНДАРТ' : 'НАПРЯЖЕНИЕ'} · ${RESULT_COPY.resumed}`
+            ? RESULT_MODE_CHIP.practice
             : dailyIntent
-              ? 'РЕЖИМ: СТАНДАРТ · ежедневный забег'
+              ? RESULT_MODE_CHIP.daily
               : duelChallenge
-                ? 'РЕЖИМ: ДУЭЛЬ · СТАНДАРТ · ВНЕ РЕЙТИНГА'
-                : ranked
-                  ? 'РЕЖИМ: СТАНДАРТ · рейтинговый'
-                  : 'РЕЖИМ: НАПРЯЖЕНИЕ · вне рейтинга',
+                ? RESULT_MODE_CHIP.duel
+                : PlatformBridge.kind === 'browser'
+                  ? RESULT_MODE_CHIP.local
+                  : ranked
+                    ? RESULT_MODE_CHIP.ranked
+                    : RESULT_MODE_CHIP.strained,
           {
             fontFamily: FONT,
             fontSize: compact ? '9px' : '10px',
@@ -2514,9 +2517,9 @@ export class UIScene extends Phaser.Scene {
             .setText(score.rank ? `РЕЙТИНГ · МЕСТО #${score.rank}` : 'РЕЙТИНГ · РЕЗУЛЬТАТ СОХРАНЁН')
             .setColor('#8fe8ff');
         } else if (PlatformBridge.kind === 'browser') {
-          scoreStatus.setText('ТЕСТОВЫЙ РЕЗУЛЬТАТ · ВНЕ РЕЙТИНГА').setColor('#8f9ab7');
+          scoreStatus.setText('ТЕСТОВЫЙ РЕЗУЛЬТАТ').setColor('#8f9ab7');
         } else {
-          scoreStatus.setText('РЕЗУЛЬТАТ СОХРАНЁН · ВНЕ РЕЙТИНГА').setColor('#ffe066');
+          scoreStatus.setText('РЕЗУЛЬТАТ СОХРАНЁН').setColor('#ffe066');
         }
       });
     }
@@ -2529,7 +2532,7 @@ export class UIScene extends Phaser.Scene {
       detailY += compact ? 24 : 28;
       c.add(
         this.add
-          .text(W / 2, detailY, `НОВЫЕ ЗАПИСИ: ${rec.join(' · ')}`, {
+          .text(W / 2, detailY, META_COPY.newRecords(rec), {
             fontFamily: FONT,
             fontSize: compact ? '10px' : '11px',
             fontStyle: 'bold',
@@ -2542,21 +2545,27 @@ export class UIScene extends Phaser.Scene {
 
     if (res.newAchievements.length > 0) {
       detailY += compact ? 24 : 29;
-      const labels = res.newAchievements.slice(0, 2).map((id) => getAchievementDef(id).name);
-      const extra = res.newAchievements.length > 2 ? ` +${res.newAchievements.length - 2}` : '';
-      c.add(
-        this.add
-          .text(W / 2, detailY, `НОВОЕ ДОСТИЖЕНИЕ: ${labels.join(' · ')}${extra}`, {
-            fontFamily: FONT,
-            fontSize: compact ? '9px' : '10px',
-            fontStyle: 'bold',
-            color: '#ffe066',
-            align: 'center',
-            wordWrap: { width: W - 42 },
-          })
-          .setOrigin(0.5)
-          .setResolution(2)
-      );
+      // The records the run opened are named once, and the plate is a way into
+      // the codex: the player never has to guess where a new record went.
+      const codexPlate = this.add
+        .text(W / 2, detailY, `${META_COPY.codexEntries(res.newAchievements.length)} ›`, {
+          fontFamily: FONT,
+          fontSize: compact ? '9px' : '10px',
+          fontStyle: 'bold',
+          color: '#ffe066',
+          align: 'center',
+          wordWrap: { width: W - 42 },
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setName('ofeliya-result-codex-entries');
+      codexPlate.setInteractive({ useHandCursor: true });
+      codexPlate.on('pointerup', () => {
+        this.registry.set('openCodexOnMenu', true);
+        this.gs?.scene.stop();
+        this.scene.start('Menu');
+      });
+      c.add(codexPlate);
     }
 
     const challengeTarget = this.registry.get('challengeTarget') as ChallengePayload | null | undefined;
@@ -2653,32 +2662,25 @@ export class UIScene extends Phaser.Scene {
       : duelCreatable
         ? RESULT_COPY.duel
         : RESULT_COPY.share;
+    const challengeCaption =
+      challengeTarget || legacyChallengeCreatable
+        ? `Побить результат ${fmtTime(res.timeMs)} · ${fmtInt(res.kills)} кл.`
+        : undefined;
     this.button(c, shareButtonLabel, W / 2, y, false, () => {
       const mins = fmtTime(res.timeMs);
       // The share text leaves the game: it names the product, states the outcome
       // and never carries the strain code, the build profile, a ranking
       // disclaimer or a same-seed promise.
-      const mutationShare = [
-        res.evolutions.length > 0 ? `Критические мутации: ${res.evolutions.map((id) => EVOLUTION_NAMES[id]).join(', ')}.` : '',
-        res.legendaryIds.length > 0 ? `Легендарные: ${res.legendaryIds.map((id) => getLegendaryDefinition(id).title).join(', ')}.` : '',
-      ].filter(Boolean).join(' ');
-      const modeShare = ranked
-        ? ''
-        : dailyIntent
-          ? 'Ежедневный забег.'
-          : duelChallenge
-            ? 'Дуэль.'
-            : res.resumed
-              ? `${RESULT_COPY.resumed}.`
-              : 'Режим: Напряжение.';
+      const legendaryName =
+        res.legendaryIds.length > 0 ? getLegendaryDefinition(res.legendaryIds[0]).title : null;
       const dailySuffix = dailyIntent ? buildDailyShareSuffix({ timeMs: res.timeMs }) : '';
       const shareText = buildShareText({
         win: res.win,
         time: mins,
         kills: res.kills,
         infected: res.hostCellsInfected,
-        mode: modeShare,
-        extra: mutationShare,
+        firstRun: SaveSystem.get().runs <= 1,
+        legendaryName: res.win ? legendaryName : null,
         suffix: dailySuffix,
       });
 
@@ -2690,6 +2692,8 @@ export class UIScene extends Phaser.Scene {
           time: mins,
           kills: res.kills,
           infected: res.hostCellsInfected,
+          firstRun: SaveSystem.get().runs <= 1,
+          legendaryName: res.win ? legendaryName : null,
         });
         void PlatformBridge.shareResult(legacyText, link ?? undefined).then((ok) => {
           if (!ok) {
@@ -2730,7 +2734,7 @@ export class UIScene extends Phaser.Scene {
           if (ok) void trackProductEvent('share', PlatformBridge, { kind: 'duel', runSeed: res.runSeed, daily: false });
         });
       });
-    }, 'ofeliya-result-share');
+    }, 'ofeliya-result-share', challengeCaption);
     y += gap;
     this.button(c, RESULT_COPY.menu, W / 2, y, false, () => {
       this.gs?.scene.stop();
@@ -2749,7 +2753,8 @@ export class UIScene extends Phaser.Scene {
     y: number,
     primary: boolean,
     cb: () => void,
-    layoutName?: string
+    layoutName?: string,
+    caption?: string
   ): void {
     const w = 230;
     const h = 46;
@@ -2758,8 +2763,10 @@ export class UIScene extends Phaser.Scene {
       .rectangle(x, y, w, h, primary ? VISUAL.host : VISUAL.panel, primary ? BUTTON.primaryFill : BUTTON.secondaryFill)
       .setStrokeStyle(BUTTON.strokeWidth, primary ? VISUAL.host : VISUAL.line, BUTTON.strokeAlpha);
     if (layoutName) bg.setName(layoutName + '-bg');
+    // A captioned button keeps its label above the caption, both inside the
+    // touch target: the caption states what the action is about.
     const t = this.add
-      .text(x, y, label, {
+      .text(x, caption ? y - 9 : y, label, {
         fontFamily: FONT,
         fontSize: '16px',
         fontStyle: 'bold',
@@ -2770,6 +2777,19 @@ export class UIScene extends Phaser.Scene {
     if (layoutName) t.setName(layoutName + '-label');
     if (t.width > w - 20) t.setFontSize(14);
     if (t.width > w - 20) t.setFontSize(13);
+    let captionText: Phaser.GameObjects.Text | null = null;
+    if (caption) {
+      captionText = this.add
+        .text(x, y + 9, caption, {
+          fontFamily: FONT,
+          fontSize: '10px',
+          fontStyle: 'bold',
+          color: primary ? '#080f14' : VISUAL_TEXT.muted,
+        })
+        .setOrigin(0.5)
+        .setResolution(2);
+      if (layoutName) captionText.setName(layoutName + '-caption');
+    }
     let armedPointer: number | null = null;
     bg.setInteractive({ useHandCursor: true });
     bg.on('pointerdown', (pointer: Phaser.Input.Pointer) => { armedPointer = pointer.id; });
@@ -2784,6 +2804,8 @@ export class UIScene extends Phaser.Scene {
       bg.setFillStyle(primary ? VISUAL.host : VISUAL.panel, primary ? BUTTON.primaryFill : BUTTON.secondaryFill);
     });
     c.add([bg, t]);
+    // The caption is drawn above the plate: it is part of the button.
+    if (captionText) c.add(captionText);
   }
 
   private toast(c: Phaser.GameObjects.Container, msg: string): void {
