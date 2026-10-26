@@ -364,6 +364,11 @@ jobs:
       - name: Strained difficulty runtime browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/difficulty-runtime-smoke.cjs
 
+      - name: Easy difficulty selector, result label and visual matrix
+        env:
+          OFELIYA_EASY_VISUAL_EVIDENCE: /tmp/easy-difficulty-visual
+        run: npm run test:easy-difficulty-visual
+
       - name: Elite modifier identity runtime browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/elite-readability-smoke.cjs
 
@@ -403,6 +408,7 @@ jobs:
           path: |
             /tmp/browser-smoke/*.png
             /tmp/verified-ux/
+            /tmp/easy-difficulty-visual/
             /tmp/visual-completion/*.png
             /tmp/release-visual-matrix/**/*.png
             /tmp/release-visual-matrix/**/matrix.json

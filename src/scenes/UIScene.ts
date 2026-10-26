@@ -28,6 +28,7 @@ import { DualMoveControls } from '../game/DualMoveControls';
 import { getLegendaryDefinition, type LegendaryId } from '../game/LegendarySystem';
 import { TwinStickControls } from '../game/TwinStickControls';
 import { readControlMode, type ControlMode } from '../game/ControlMode';
+import { runModeLabel, runModeShareLabel, isRankedResult } from '../game/RunModeLabel';
 import type { RunResult, RunSnapshot } from '../game/RunContracts';
 import {
   EVOLUTION_NAMES,
@@ -2214,8 +2215,14 @@ export class UIScene extends Phaser.Scene {
       now: Date.now(),
     });
     const standardFresh = res.difficultyId === 'standard' && !res.resumed;
-    // A daily-launched run must never render global-ranking semantics.
-    const ranked = standardFresh && !duelChallenge && dailyIntent === null;
+    // A daily-launched run must never render global-ranking semantics, and only
+    // a fresh Standard run may claim a ranked place.
+    const ranked = isRankedResult({
+      difficultyId: res.difficultyId,
+      resumed: res.resumed,
+      daily: dailyIntent !== null,
+      duel: duelChallenge !== null,
+    });
     const duelCreatable = standardFresh && res.win;
     const W = this.scale.width;
     const H = this.scale.height;
@@ -2375,15 +2382,13 @@ export class UIScene extends Phaser.Scene {
         .text(
           W / 2,
           detailY,
-          res.resumed
-            ? `РЕЖИМ: ${res.difficultyId === 'standard' ? 'СТАНДАРТ' : 'НАПРЯЖЕНИЕ'} · ВОЗОБНОВЛЁН · ВНЕ РЕЙТИНГА`
-            : dailyIntent
-              ? 'РЕЖИМ: СТАНДАРТ · ежедневный забег'
-              : duelChallenge
-                ? 'РЕЖИМ: ДУЭЛЬ · СТАНДАРТ · ВНЕ РЕЙТИНГА'
-                : ranked
-                  ? 'РЕЖИМ: СТАНДАРТ · рейтинговый'
-                  : 'РЕЖИМ: НАПРЯЖЕНИЕ · вне рейтинга',
+          runModeLabel({
+            difficultyId: res.difficultyId,
+            resumed: res.resumed,
+            daily: dailyIntent !== null,
+            duel: duelChallenge !== null,
+            ranked,
+          }),
           {
             fontFamily: FONT,
             fontSize: compact ? '9px' : '10px',
@@ -2473,6 +2478,12 @@ export class UIScene extends Phaser.Scene {
       void submission.then((score) => {
         if (!scoreStatus.active) return;
         if (!score) {
+          // An unranked tier that never submits gets a neutral line instead of a
+          // vanishing one: the run is complete, it simply carries no place.
+          if (res.difficultyId === 'easy') {
+            scoreStatus.setText('РЕЖИМ ЛЁГКИЙ · РЕЗУЛЬТАТ БЕЗ РЕЙТИНГА').setColor('#8f9ab7');
+            return;
+          }
           scoreStatus.setVisible(false);
           return;
         }
@@ -2628,15 +2639,13 @@ export class UIScene extends Phaser.Scene {
           ? ` Легендарные: ${res.legendaryIds.map((id) => getLegendaryDefinition(id).title).join(', ')}.`
           : '';
       const identityShare = ` Профиль штамма: ${runIdentity.label}.`;
-      const modeShare = ranked
-        ? ''
-        : dailyIntent
-          ? ' Ежедневный забег.'
-          : duelChallenge
-            ? ' Дуэль · вне глобального рейтинга.'
-            : res.resumed
-              ? ' Возобновлённый забег · вне рейтинга.'
-              : ' Режим: НАПРЯЖЕНИЕ.';
+      const modeShare = runModeShareLabel({
+        difficultyId: res.difficultyId,
+        resumed: res.resumed,
+        daily: dailyIntent !== null,
+        duel: duelChallenge !== null,
+        ranked,
+      });
       const dailySuffix = dailyIntent ? buildDailyShareSuffix({ timeMs: res.timeMs }) : '';
       const shareText = (res.win
         ? `OFELIYA / STRAIN-0 завершила кампанию за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${identityShare}${evoShare}${legendaryShare}`

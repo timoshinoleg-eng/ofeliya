@@ -1,7 +1,7 @@
 import type { HeartbeatPulseProfile } from './HeartbeatPulseDirector';
 import { HEARTBEAT_PULSE_PROFILE } from './HeartbeatPulseDirector';
 
-export type DifficultyId = 'standard' | 'strained';
+export type DifficultyId = 'easy' | 'standard' | 'strained';
 export type EliteModifierId = 'regenerator' | 'frenzied' | 'volatile';
 export type DifficultyMutatorId = 'adaptive-elites' | 'accelerated-heartbeat';
 
@@ -29,6 +29,46 @@ export interface DifficultyProfile {
   heartbeatIntervalMultiplier: number;
   heartbeatPressureMultiplier: number;
 }
+
+/**
+ * Beginner-friendly tier. It reduces INCOMING pressure only: enemy HP and boss HP
+ * stay identical to Standard so the player's damage output, the kill rate and the
+ * mutation cadence remain the real ones. Nothing here grants permanent progression,
+ * invulnerability or extra player damage.
+ */
+export const EASY_DIFFICULTY: DifficultyProfile = {
+  id: 'easy',
+  label: 'ЛЁГКИЙ',
+  shortLabel: 'ЛЁГКИЙ',
+  // Two short lines keep the copy inside the Menu selector panel at every
+  // width: "a more relaxed mode for the basics" — controls and mechanics.
+  description: 'Более спокойный\nрежим для основ',
+  // Damage is the first thing a beginner meets: halving it roughly doubles the
+  // number of mistakes the player can absorb before the run ends.
+  enemyHpMultiplier: 1,
+  enemyDamageMultiplier: 0.55,
+  enemySpeedMultiplier: 0.92,
+  // Slower waves and one enemy less per batch keep the field readable.
+  spawnIntervalMultiplier: 1.25,
+  batchBonus: -1,
+  eliteIntervalMultiplier: 1.6,
+  normalEnemyCapBonus: -20,
+  // Bosses stay real fights: same HP, softer hits, slower approach.
+  bossHpMultiplier: 1,
+  bossDamageMultiplier: 0.6,
+  bossSpeedMultiplier: 0.95,
+  bossMinionIntervalMultiplier: 1.35,
+  bossMinionBonus: -2,
+  // A hard ceiling on simultaneous threat. The field degrades to cheap swarm units
+  // instead of emptying out, so the player is never left without a target.
+  threatCapStart: 26,
+  threatCapEnd: 52,
+  eliteModifiers: [],
+  mutators: [],
+  // Fewer heartbeat decisions in the Heart stage.
+  heartbeatIntervalMultiplier: 1.2,
+  heartbeatPressureMultiplier: 0.85,
+};
 
 export const STANDARD_DIFFICULTY: DifficultyProfile = {
   id: 'standard',
@@ -81,24 +121,77 @@ export const STRAINED_DIFFICULTY: DifficultyProfile = {
 };
 
 export const DIFFICULTY_PROFILES: Record<DifficultyId, DifficultyProfile> = {
+  easy: EASY_DIFFICULTY,
   standard: STANDARD_DIFFICULTY,
   strained: STRAINED_DIFFICULTY,
 };
 
+/**
+ * Selector order, easiest first. The Menu selector cycles through this list.
+ * Existing modes keep their own ids and their own tuning — only the cycle changes.
+ */
+export const DIFFICULTY_ORDER: readonly DifficultyId[] = ['easy', 'standard', 'strained'];
+
+/**
+ * The only difficulty that owns a ranked place. Every other tier is unranked and
+ * must never reach a leaderboard, a duel contract or the Daily board.
+ */
+export const RANKED_DIFFICULTY_ID: DifficultyId = 'standard';
+
 export const DIFFICULTY_STORAGE_KEY = 'ofeliya_difficulty_v1';
 
+export function isDifficultyId(value: unknown): value is DifficultyId {
+  return typeof value === 'string' && (DIFFICULTY_ORDER as readonly string[]).includes(value);
+}
+
+/** True only for the ranked Standard tier. */
+export function isRankedDifficulty(id: DifficultyId): boolean {
+  return id === RANKED_DIFFICULTY_ID;
+}
+
+/**
+ * True when a run of this difficulty may be posted to the score endpoint.
+ *
+ * Standard is the ranked tier. Strained keeps its historic contract: the server
+ * accepts it but never ranks it. Easy is never posted at all, so it can neither
+ * claim a place nor contaminate any server-side board.
+ */
+export function isScoreSubmittable(id: DifficultyId): boolean {
+  return id === 'standard' || id === 'strained';
+}
+
+/**
+ * True when a run of this difficulty may take part in a ranked Duel contract.
+ *
+ * Only the ranked Standard tier may. The Duel flow already pins Standard end to
+ * end — the challenge loader rejects any non-Standard challenge and the Menu
+ * forces the tier — so this guard cannot change a mode that ships today; it
+ * simply refuses to let an unranked tier into a ranked contract.
+ */
+export function isDuelEligible(id: DifficultyId): boolean {
+  return id === 'standard';
+}
+
 export function getDifficultyProfile(id: unknown): DifficultyProfile {
-  return id === 'strained' ? STRAINED_DIFFICULTY : STANDARD_DIFFICULTY;
+  if (id === 'easy') return EASY_DIFFICULTY;
+  if (id === 'strained') return STRAINED_DIFFICULTY;
+  return STANDARD_DIFFICULTY;
 }
 
 export function nextDifficultyId(id: DifficultyId): DifficultyId {
-  return id === 'standard' ? 'strained' : 'standard';
+  const index = DIFFICULTY_ORDER.indexOf(id);
+  // An unknown id fails safe to Standard, never to the new beginner tier.
+  if (index < 0) return 'standard';
+  return DIFFICULTY_ORDER[(index + 1) % DIFFICULTY_ORDER.length] ?? 'standard';
 }
 
 export function readDifficultySelection(): DifficultyId {
   if (typeof localStorage === 'undefined') return 'standard';
   try {
-    return localStorage.getItem(DIFFICULTY_STORAGE_KEY) === 'strained' ? 'strained' : 'standard';
+    const stored = localStorage.getItem(DIFFICULTY_STORAGE_KEY);
+    // A stored value from an older build ('standard'/'strained') stays valid.
+    // Anything unknown fails safe to Standard.
+    return isDifficultyId(stored) ? stored : 'standard';
   } catch {
     return 'standard';
   }

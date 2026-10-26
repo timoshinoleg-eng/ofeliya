@@ -5,6 +5,7 @@ import {
   DUEL_ID_RE,
 } from '../game/Duel';
 import type { PlatformAdapter } from '../platform/PlatformBridge';
+import { isDuelEligible } from '../game/DifficultyProfile';
 import { SCORE_CAMPAIGN_VERSION, SCORE_RULESET_VERSION } from './ScoreClient';
 
 const DUEL_TIMEOUT_MS = 3500;
@@ -111,7 +112,7 @@ export async function createFixedSeedDuel(
   platform: PlatformAdapter
 ): Promise<DuelChallengeSnapshot | null> {
   const identity = verifiedIdentity(platform);
-  if (!identity || result.resumed || result.difficultyId !== 'standard' || !result.win) return null;
+  if (!identity || result.resumed || !isDuelEligible(result.difficultyId) || !result.win) return null;
   const response = await postJson<DuelCreateResponse>(duelEndpoint(), {
     ...identity,
     payload: duelRunPayload(result),
@@ -133,6 +134,9 @@ export async function submitDuelAttempt(
   platform: PlatformAdapter
 ): Promise<DuelAttemptResult | null> {
   if (!DUEL_ID_RE.test(challengeId) || result.resumed) return null;
+  // A ranked Duel contract only ever accepts the ranked Standard tier. An
+  // unranked run must not reach the duel endpoint at all.
+  if (!isDuelEligible(result.difficultyId)) return null;
   const identity = verifiedIdentity(platform);
   if (!identity) return null;
   const response = await postJson<DuelAttemptResult>(duelEndpoint(`/${challengeId}/attempt`), {

@@ -20,7 +20,7 @@
     "test:legendary": "node scripts/check-legendary.mjs",
     "test:legendary-layout": "node scripts/legendary-layout-probe.cjs",
     "test:layout-diagnostics": "node tests/visible-text-bounds.mjs",
-    "test:difficulty": "node scripts/check-difficulty.mjs",
+    "test:difficulty": "node scripts/check-difficulty.mjs && node scripts/check-easy-difficulty.mjs && node scripts/check-difficulty-comparison.mjs",
     "test:rng": "node scripts/check-rng.mjs && node scripts/check-checkpoint.mjs",
     "test:checkpoint": "node scripts/check-checkpoint.mjs",
     "test:viewport": "node scripts/check-viewport.mjs",
@@ -99,7 +99,11 @@
     "test:quest-scenes": "node scripts/quest-scene-smoke.cjs",
     "test:muse-client": "node scripts/check-muse-performance.mjs && node scripts/check-muse-collection.mjs && node scripts/check-muse-telemetry.mjs && node scripts/check-muse-tma.mjs && node scripts/check-muse-theme.mjs && node scripts/check-muse-juice.mjs",
     "test:muse-convergence": "node scripts/check-muse-convergence-adversarial.mjs",
-    "test:muse-convergence-crossflow": "node scripts/muse-convergence-crossflow-smoke.cjs"
+    "test:muse-convergence-crossflow": "node scripts/muse-convergence-crossflow-smoke.cjs",
+    "test:easy-difficulty": "node scripts/check-easy-difficulty.mjs",
+    "test:easy-difficulty-visual": "node tests/easy-difficulty-visual.mjs",
+    "test:difficulty-comparison": "node scripts/check-difficulty-comparison.mjs",
+    "test:difficulty-comparison-browser": "node scripts/difficulty-comparison-smoke.cjs"
   },
   "overrides": {
     "source-map-js": "1.2.2"
