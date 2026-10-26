@@ -74,6 +74,7 @@ try {
 
   // --- Stubbed network ---------------------------------------------------------
   const fetchCalls = [];
+  const realFetch = globalThis.fetch;
   global.fetch = async (url, init) => {
     fetchCalls.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : null });
     return {
@@ -339,6 +340,61 @@ try {
     /rankedEligible: payload\.difficultyId === 'standard'/.test(serverSource),
     'the server must keep ranking only Standard results'
   );
+
+  // The same contract, proven against the running server rather than the source.
+  global.fetch = realFetch;
+  const serverDataDir = mkdtempSync(join(tmpdir(), 'ofeliya-easy-server-'));
+  process.env.DATA_DIR = serverDataDir;
+  process.env.PORT = '0';
+  process.env.WRITE_RATE_LIMIT = '1000';
+  const { server: scoreServer } = await import(resolve('server/index.mjs'));
+  await new Promise((resolve) => scoreServer.once('listening', resolve));
+  const serverBase = `http://127.0.0.1:${scoreServer.address().port}`;
+  const serverPayload = (difficultyId) => ({
+    rulesetVersion: 3,
+    campaignVersion: 2,
+    difficultyId,
+    completionStage: 'bloodstream',
+    runSeed: 'easy-contract-seed',
+    controlMode: 'one-hand',
+    bossesDefeated: 0,
+    boss1ClearMs: null,
+    hostCellsInfected: 1,
+    win: false,
+    timeMs: 1000,
+    kills: 1,
+    level: 1,
+    daily: false,
+    resumed: false,
+  });
+  const easyPost = await fetch(`${serverBase}/api/score`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform: 'browser',
+      anonId: 'anon-easy-contract',
+      payload: serverPayload('easy'),
+    }),
+  });
+  assertEqual(easyPost.status, 422, 'the server must reject an Easy score payload');
+  const standardPost = await fetch(`${serverBase}/api/score`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform: 'browser',
+      anonId: 'anon-standard-contract',
+      payload: serverPayload('standard'),
+    }),
+  });
+  assertEqual(standardPost.status, 200, 'the server must still accept a Standard score payload');
+  const shadowBoard = await fetch(`${serverBase}/api/top?period=all&includeUnverified=1`).then((r) => r.json());
+  const shadowTiers = (shadowBoard.top || []).map((row) => row.difficultyId);
+  assert(
+    !shadowTiers.includes('easy'),
+    `an Easy score reached a server-side board: ${shadowTiers.join(', ')}`
+  );
+  await new Promise((resolve) => scoreServer.close(resolve));
+  rmSync(serverDataDir, { recursive: true, force: true });
 
   // ===========================================================================
   // 5. Daily stays unchanged
