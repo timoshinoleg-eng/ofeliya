@@ -134,6 +134,9 @@ jobs:
       - name: Analytics client contract smoke
         run: npm run test:analytics
 
+      - name: Analytics read path contract
+        run: npm run test:analytics-readpath
+
       - name: Daily V2 client contract smoke
         run: npm run test:daily-v2
 
