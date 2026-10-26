@@ -329,7 +329,7 @@ function assertSuccessContract(contract, size) {
 }
 
 async function openHub(page) {
-  await clickNamed(page, 'ofeliya-menu-social');
+  await clickNamed(page, 'ofeliya-menu-nav-rating');
   await page.waitForFunction(() => Boolean(window.__game.scene.getScene('Menu').children.list.find((obj) => obj?.name === 'ofeliya-social-hub')));
   await waitLoaded(page);
 }
@@ -388,7 +388,7 @@ async function runSuccessMatrix(browser) {
     await clickNamed(page, 'ofeliya-social-close-hit');
     await page.waitForFunction(() => !window.__game.scene.getScene('Menu').children.list.find((obj) => obj?.name === 'ofeliya-social-hub'));
 
-    await clickNamed(page, 'ofeliya-menu-social');
+    await clickNamed(page, 'ofeliya-menu-nav-rating');
     await page.waitForFunction(() => Boolean(window.__game.scene.getScene('Menu').children.list.find((obj) => obj?.name === 'ofeliya-social-hub')));
     const backAttached = await page.evaluate(() => typeof window.__qaBack === 'function');
     if (!backAttached) throw new Error('social hub Back handler not attached');

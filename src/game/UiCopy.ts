@@ -185,7 +185,8 @@ export const META_COPY = {
   /** Invite call to action. */
   inviteFriends: 'ПРИГЛАСИТЬ ДРУЗЕЙ',
   /** Network failure of the rating surface. */
-  networkError: 'Нет соединения с сервером',
+  networkError: 'НЕТ СОЕДИНЕНИЯ',
+  serverError: 'СЕРВЕР НЕ ОТВЕТИЛ',
   /** Retry call to action. */
   retry: 'ПОВТОРИТЬ',
   /** Neutral player label when the payload carries no display name. */

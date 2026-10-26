@@ -42,7 +42,7 @@ function relationLabel(value: FriendSnapshot['relation']): string {
  */
 function errorCopy(status: RemoteStatus): string | null {
   if (status === 'network') return META_COPY.networkError;
-  if (status === 'http') return 'Сервер не ответил';
+  if (status === 'http') return META_COPY.serverError;
   return null;
 }
 
@@ -89,7 +89,7 @@ export class SocialHub {
     this.root = scene.add.container(0, 0).setDepth(46).setName('ofeliya-social-hub');
     // The rating surface shares the frame of the other meta surfaces: one
     // scrim, one membrane, one centered title and one 44x44 close control.
-    createModalFrame(scene, this.root, {
+    const frame = createModalFrame(scene, this.root, {
       x: W / 2,
       y: H / 2,
       width: this.panelW,
@@ -103,6 +103,9 @@ export class SocialHub {
     });
     // The shared frame owns the title and the close control; the rating surface
     // keeps its own object names so the existing probes stay valid.
+    frame.panel.setName('ofeliya-social-panel');
+    const frameDim = this.root.list.find((obj) => obj.name === 'ofeliya-modal-dim');
+    frameDim?.setName('ofeliya-social-dim');
     const frameTitle = this.root.list.find((obj) => obj.name === 'ofeliya-modal-title');
     frameTitle?.setName('ofeliya-social-title');
     const closeHit = this.root.list.find((obj) => obj.name === 'ofeliya-modal-close-hit');

@@ -82,7 +82,8 @@ export function createModalFrame(
 
   const dim = scene.add
     .rectangle(scene.scale.width / 2, scene.scale.height / 2, scene.scale.width, scene.scale.height, VISUAL.ink, 0.96)
-    .setInteractive();
+    .setInteractive()
+    .setName('ofeliya-modal-dim');
   // The panel carries no stroke of its own: the membrane surface below owns the
   // frame, so a framed panel never shows two parallel border lines.
   const panel = scene.add.rectangle(x, y, width, height, VISUAL.panel, 0.995);
@@ -105,7 +106,9 @@ export function createModalFrame(
     .setResolution(2)
     .setName('ofeliya-modal-title');
 
-  const closeX = x + width / 2 - MODAL.closeInset;
+  // The close hit area stays fully inside the frame: the control is a target, not
+  // a decoration that may hang over the edge of the panel.
+  const closeX = x + width / 2 - MODAL.closeInset - MODAL.closeHit / 2;
   const closeY = y - height / 2 + MODAL.titleTop + 10;
   const closeHit = scene.add
     .rectangle(closeX, closeY, MODAL.closeHit, MODAL.closeHit, 0x000000, 0.001)
