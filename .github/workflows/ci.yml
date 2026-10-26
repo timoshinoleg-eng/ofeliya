@@ -193,8 +193,8 @@ jobs:
   browser-smoke:
     needs: build
     runs-on: ubuntu-22.04
-    # The additional 18 Legendary layout cases need headroom beyond the existing suite.
-    timeout-minutes: 25
+    # The combined redesign, onboarding and viewport suites exceed 25 minutes on hosted runners.
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
