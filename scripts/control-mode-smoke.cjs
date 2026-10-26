@@ -30,7 +30,9 @@ async function tapControlSelector(page) {
 async function readMenuMode(page) {
   return page.evaluate(() => {
     const menu = window.__game.scene.getScene('Menu');
+    // The run-configuration card owns the control mode; its value text is named.
     const label =
+      menu.children.getByName('ofeliya-menu-control-selector-value') ??
       menu.children.getByName('ofeliya-menu-control-value') ??
       menu.children.list.find(
         (obj) => obj?.type === 'Text' && typeof obj.text === 'string' && obj.text.startsWith('УПРАВЛЕНИЕ:')
@@ -140,7 +142,7 @@ function mag(v) {
   if (
     dualSelected.registry !== 'dual-move' ||
     dualSelected.stored !== 'dual-move' ||
-    !dualSelected.label.includes('ДВА СТИКА') && !dualSelected.label.includes('ДВЕ РУКИ · ДВИЖЕНИЕ')
+    !dualSelected.label.includes('Два стика') && !dualSelected.label.includes('Две руки · движение')
   ) {
     throw new Error('menu did not expose dual-move selection: ' + JSON.stringify(dualSelected));
   }
