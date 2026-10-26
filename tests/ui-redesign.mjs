@@ -423,6 +423,10 @@ try {
     );
     assert.deepEqual(defeat.hudVisible, [], 'the gameplay HUD must be hidden under the result');
 
+    // The capture belongs to the state that is on the screen: it is taken
+    // before the next render replaces the overlay.
+    await shot(resultPage, `result-defeat-${viewport.width}x${viewport.height}.png`);
+
     // The share action hands the canonical text to the messenger.
     await resultPage.evaluate(() => {
       const ui = window.__game.scene.getScene('UI');
@@ -455,6 +459,8 @@ try {
       !withEntries.overlayTexts.some((t) => t.includes('ДОСТИЖЕНИЕ')),
       'the player UI does not say "достижение"'
     );
+
+    await shot(resultPage, `result-codex-entries-${viewport.width}x${viewport.height}.png`);
 
     const victory = await renderResult({ ...baseResult, win: true, reason: 'campaign-clear', bossesDefeated: 2, stageId: 'heart', stageOrder: 1, evolutions: ['prism'] });
     assert.ok(victory.overlayTexts.includes('НОСИТЕЛЬ ЗАРАЖЁН'), 'the victory outcome is wrong');
@@ -495,7 +501,6 @@ try {
       );
     }
     assert.deepEqual(resultErrors, [], 'page errors on the result screen');
-    await shot(resultPage, `result-defeat-${viewport.width}x${viewport.height}.png`);
     await renderResult({
       ...baseResult,
       win: true,

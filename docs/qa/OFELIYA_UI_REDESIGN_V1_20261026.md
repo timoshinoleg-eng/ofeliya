@@ -861,25 +861,28 @@ up it is **PASS** (`real-touch result actions smoke: ok` /
 
 ## 10. Viewport matrix
 
-| Viewport | Fresh menu | Resume menu | Result (defeat) | Result (legendary) | Daily tasks | Codex | Collection | Rating |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 320×568 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 390×740 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 768×1024 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 1080×1920 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Viewport | Fresh menu | Resume menu | Result (defeat) | Result (codex plate) | Result (legendary) | Daily tasks | Codex | Collection | Rating |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 320×568 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 390×740 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 768×1024 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 1080×1920 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-Every one of these 36 captures is produced by `node tests/ui-redesign.mjs`; the
+Every one of these 40 captures is produced by `node tests/ui-redesign.mjs`; the
 run asserts the copy and the geometry at the same time, so a green run *is* the
-evidence. The capture list:
+evidence. Each capture is taken while its own state is on the screen — the
+result captures are taken in the order the states are rendered, so a file name
+never describes another state. The capture list:
 
 | Screenshot | What it shows |
 | --- | --- |
 | `menu-fresh-<w>x<h>.png` | the menu without a saved run — one hierarchy, one record line, the 2×2 grid |
 | `menu-resume-<w>x<h>.png` | the menu with a saved run — the resume action, the new-run action, the record line |
-| `result-defeat-<w>x<h>.png` | the defeat result — `ШТАММ УНИЧТОЖЕН`, the actions, the share line |
+| `result-defeat-<w>x<h>.png` | the defeat result — `ШТАММ УНИЧТОЖЕН`, the actions, the caption `Побить результат …` |
+| `result-codex-entries-<w>x<h>.png` | the same result with the `★ Открыто в Кодексе: +1 запись ›` plate |
 | `result-legendary-<w>x<h>.png` | the victory result with two evolutions and two legendary mutations |
 | `daily-tasks-<w>x<h>.png` | the daily board with the real UTC countdown and the task fractions |
-| `codex-<w>x<h>.png` | the codex with the mutation tabs |
+| `codex-<w>x<h>.png` | the codex with the `СИНЕРГИИ · ЛЕГЕНДАРНЫЕ · МАСТЕРСТВО` tabs and the three locked recipes |
 | `collection-<w>x<h>.png` | the collection on the shells page |
 | `collection-milestones-<w>x<h>.png` | the collection on the milestones page |
 | `rating-<w>x<h>.png` | the rating with a neutral `Игрок (TG)` row and the invite action |
