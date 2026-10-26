@@ -1,3 +1,5 @@
+UX follow-up: EASY248 c615ab7 resolves prior share-label P2; source-only limits remain. UX250 first CI Daily fixture failure reproduced and presentation initialization relocated; final exact-head checks tracked in PR.
+
 # Verified UX candidate — 2026-10-26
 NotificationRegion coordinates startup/achievement/milestone with tutorial and context/modal/boss/background/result lifecycle. Footer hit bounds>=44px, disjoint, real edge-touch and checkpoint resume at320/390/768/1080. RED then GREEN locally; detailed regression evidence in docs/qa/VERIFIED_UX_FIXES_20261026.md. Result320 review NO_CHANGE. EASY248 source review at007f352 found share label P2; no EASY edits. MAX24h shared freshness assessed read-only; no validator change.
 

@@ -1,3 +1,5 @@
+UX follow-up: EASY248 c615ab7 resolves prior share-label P2; source-only limits remain. UX250 first CI Daily fixture failure reproduced and presentation initialization relocated; final exact-head checks tracked in PR.
+
 # Verified UX decisions — 2026-10-26
 Use run-owned FIFO for system surfaces; tutorial yields presentation only. Preserve notice display time across suspension; startup resumes after mutation. Obsolete stage notices cancel atomically at stage boundary; terminal result/shutdown closes queue. Footer wraps measured labels only when needed and uses custom44px hit areas; legal/version occupy disjoint bottom-row targets. No result-HUD change, no instrumentation, difficulty or validator change. See docs/qa/VERIFIED_UX_FIXES_20261026.md.
 

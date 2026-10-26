@@ -263,8 +263,6 @@ export class GameScene extends Phaser.Scene {
   notificationRegion = new NotificationRegion();
 
   create(): void {
-    this.notificationRegion.destroy();
-    this.notificationRegion = new NotificationRegion();
     const requestedResume = this.registry.get('runCheckpointResume') as
       | RunCheckpointData
       | undefined;
@@ -521,6 +519,8 @@ export class GameScene extends Phaser.Scene {
       this.difficulty.id === 'strained' && !this.dailyRun,
       () => this.gameplayRng.next('anomaly')
     );
+    this.notificationRegion.destroy();
+    this.notificationRegion = new NotificationRegion();
     this.milestones = new RunMilestones(this, this.notificationRegion);
     if (this.dailyMutator) {
       // Same presentation path as stage milestones/wave events: one banner,

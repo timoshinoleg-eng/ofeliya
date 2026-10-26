@@ -39,7 +39,7 @@ An initial resource-constrained attempt failed with Windows native/esbuild out-o
 
 ## F. EASY independent review
 
-See EASY_CONTRACT_REVIEW_20261026.md. Reviewed PR248 head007f3521692e2cb14ce870c3d9583f6c0c6e0b26 and latest869aa35808b7e82bad77813f72aa205fb55535c4 (runtime unchanged) by source only, no edits/checkout/test-claim trust. Existing balance/ranking/duel/Daily/checkpoint boundaries remain by source. Confirmed separate P2: fresh EASY share text still says Режим: НАПРЯЖЕНИЕ (UIScene2631–2639→2666). No ranking contamination proved. Native/signed HTTP adversarial and exact PR runtime gates remain separate; not merge approval. Findings were not posted externally.
+See EASY_CONTRACT_REVIEW_20261026.md. Latest independent source review is PR248 c615ab7d26d92ef162485c2fed0f46a54ce40a9a. The earlier fresh-EASY share-label P2 is resolved there: shared run-mode label now names EASY correctly. No remaining confirmed product defect in this source review. Standard/harder tuning, unranked score allowlist, Standard-only duels, Daily Standard, checkpoint compatibility and retry identity hold by source. Its hosted checks passed separately; signed adversarial HTTP and physical Telegram/MAX behavior were not independently executed. No EASY branch edits or merge approval.
 
 ## G. MAX freshness
 
@@ -56,3 +56,5 @@ Tests/CI: notification-region unit; verified-ux, notification-ordering and foote
 Independent read-only source review resolved the intro-cancellation and missing-CI coverage findings. No remaining confirmed product issue in the reviewed UX source; executable browser verification performed by primary agent. Draft PR only after local gates; final HEAD and exact-head hosted check results reported separately. No merge/deploy authority inferred.
 
 Safety: no difficulty changes, no Standard balance change, no analytics changes, no EASY branch edits, no production changes, no deploy, no merge.
+
+CI follow-up: first hosted run40289925830 failed in the Daily source-extraction fixture because notification-region initialization had been inserted into its gameplay-only create-prefix. Reproduced locally RED; moved presentation initialization beside RunMilestones, after that prefix, without changing difficulty code or weakening assertions. Daily gate GREEN. Full build-job gates and notification ordering rerun before follow-up delivery; hosted final status belongs to the exact delivered HEAD.

@@ -1,3 +1,5 @@
+UX follow-up: EASY248 c615ab7 resolves prior share-label P2; source-only limits remain. UX250 first CI Daily fixture failure reproduced and presentation initialization relocated; final exact-head checks tracked in PR.
+
 # Verified UX follow-up — 2026-10-26
 Track exact-head Draft CI and native TG/MAX acceptance separately. EASY248: fix fresh-EASY share text naming Strained; verify signed/HTTP and actual retry gates independently (reviewed007f352 only). MAX freshness: separate platform-scoped proposal requires long-lived-session/outbox compatibility proof before24h→1h hardening. No result-HUD change justified in focused320 review. Do not mix these follow-ups into UX source or analytics247.
 

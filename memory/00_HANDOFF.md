@@ -1,3 +1,5 @@
+UX follow-up: EASY248 c615ab7 resolves prior share-label P2; source-only limits remain. UX250 first CI Daily fixture failure reproduced and presentation initialization relocated; final exact-head checks tracked in PR.
+
 # Verified UX fixes — 2026-10-26
 Branch feat/verified-ux-fixes-20261026 is directly based on main ce8ecb8. Shared notification FIFO/suspension and44px footer targets only; difficulty selector, balance, score, analytics247 and server unchanged. Canonical report docs/qa/VERIFIED_UX_FIXES_20261026.md; separate EASY248 and MAX freshness source assessments. No merge/deploy. Local proof and eventual Draft/check status in report/PR. Retain native-device acceptance distinction.
 

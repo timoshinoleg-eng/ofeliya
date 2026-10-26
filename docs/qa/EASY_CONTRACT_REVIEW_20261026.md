@@ -48,3 +48,7 @@ Disposition: no merge approval; fix P2 and verify exact-head contract/runtime ga
 ### Latest-head readback
 
 PR248 advanced to **869aa35808b7e82bad77813f72aa205fb55535c4** during this review. Independently checked delta from007f352: only scripts/difficulty-comparison-smoke.cjs changed; runtime/server diff is empty. The source checklist and share-label P2 therefore still apply to869aa35. New comparison policy steers toward a moving point around initial position with actual-position feedback; old browser outcomes must not be transferred to this new input policy. No updated browser execution was performed here.
+
+## Latest review supersedes earlier open P2
+
+PR248 head c615ab7d26d92ef162485c2fed0f46a54ce40a9a independently reviewed by source. Earlier share-label P2 RESOLVED: RunModeLabel supplies the actual EASY mode; fresh EASY displays ЛЁГКИЙ. Positive score allowlist, Standard-only duel guard and neutral EASY score status are present. Standard/harder tuning and server rules unchanged. Hosted build/browser/production-contract success was observed separately. No new confirmed product defect. Signed Telegram/MAX adversarial HTTP, native retry/F5/stage transitions and latest neutral-status visual fit remain unverified by this source-only review. No merge approval or branch edits.
