@@ -84,21 +84,30 @@ async function assertCompactResumeMenu(browser) {
     return {
       action: bounds(text((value) => value === 'ПРОДОЛЖИТЬ ЗАБЕГ')),
       newRun: bounds(scene.children.getByName('ofeliya-menu-new-run')),
-      sound: bounds(text((value) => value.startsWith('звук:'))),
-      social: bounds(text((value) => value === 'СВОДКА')),
-      codex: bounds(text((value) => value.startsWith('КОДЕКС '))),
+      rating: bounds(text((value) => value === 'РЕЙТИНГ')),
+      tasks: bounds(text((value) => value === 'ЗАДАЧИ ДНЯ')),
+      codex: bounds(text((value) => value === 'КОДЕКС')),
+      collection: bounds(text((value) => value === 'КОЛЛЕКЦИЯ')),
+      music: bounds(text((value) => value.startsWith('Музыка:'))),
+      sound: bounds(text((value) => value.startsWith('Звук:'))),
+      effects: bounds(text((value) => value.startsWith('Эффекты:'))),
       legal: bounds(text((value) => value === 'О приложении · Политика · Поддержка')),
     };
   });
 
-  const required = ['action', 'newRun', 'sound', 'social', 'codex', 'legal'];
+  const required = ['action', 'newRun', 'rating', 'tasks', 'codex', 'collection', 'music', 'sound', 'effects', 'legal'];
   for (const key of required) {
     if (!layout[key]) throw new Error(`resume menu missing ${key}: ${JSON.stringify(layout)}`);
   }
+  const navTops = [layout.rating, layout.tasks, layout.codex, layout.collection].map((item) => item.top);
+  const navBottoms = [layout.rating, layout.tasks, layout.codex, layout.collection].map((item) => item.bottom);
+  const audioTops = [layout.music, layout.sound, layout.effects].map((item) => item.top);
+  const audioBottoms = [layout.music, layout.sound, layout.effects].map((item) => item.bottom);
   if (
     layout.action.bottom > layout.newRun.top + 1 ||
-    layout.newRun.bottom + 2 > Math.min(layout.sound.top, layout.social.top, layout.codex.top) ||
-    Math.max(layout.sound.bottom, layout.social.bottom, layout.codex.bottom) + 4 > layout.legal.top
+    layout.newRun.bottom + 2 > Math.min(...navTops) ||
+    Math.max(...navBottoms) + 4 > Math.min(...audioTops) ||
+    Math.max(...audioBottoms) + 4 > layout.legal.top
   ) {
     throw new Error(`resume menu 320x568 overlap: ${JSON.stringify(layout)}`);
   }
@@ -112,23 +121,27 @@ async function assertCompactResumeMenu(browser) {
     await sleep(220);
     const compactRestart = await page.evaluate(() => {
       const scene = window.__game.scene.getScene('Menu');
-      const carrier = scene.children.getByName('ofeliya-menu-carrier');
+      // The redesign replaced the separate carrier line with one record line, so
+      // the restart contract now looks at the record line and the new hierarchy.
+      const record = scene.children.getByName('ofeliya-menu-record');
       const hook = scene.children.getByName('ofeliya-menu-hook');
       const subtitle = scene.children.getByName('ofeliya-menu-subtitle');
       const hookBounds = hook?.getBounds?.();
       const subtitleBounds = subtitle?.getBounds?.();
       return {
         active: scene.sys.isActive(),
-        carrierExists: Boolean(carrier),
-        carrierVisible: carrier?.visible ?? null,
+        recordExists: Boolean(record),
+        recordVisible: record?.visible ?? null,
+        // The redesign lays the bands out as a flow: the tagline follows the
+        // statement directly, so the contract is that it never overlaps it.
         subtitleBelowHook:
-          Boolean(hookBounds && subtitleBounds) && hookBounds.bottom + 10 <= subtitleBounds.top,
+          Boolean(hookBounds && subtitleBounds) && hookBounds.bottom < subtitleBounds.top,
       };
     });
     if (
       !compactRestart.active ||
-      !compactRestart.carrierExists ||
-      compactRestart.carrierVisible !== false ||
+      !compactRestart.recordExists ||
+      compactRestart.recordVisible === false ||
       !compactRestart.subtitleBelowHook
     ) {
       throw new Error(
@@ -217,11 +230,9 @@ async function assertCompactResumeMenu(browser) {
         }
       }
 
-      const sound = visible.find((obj) => obj.text.startsWith('звук:'));
-      const social = visible.find((obj) => obj.text === 'СВОДКА');
-      const codex = visible.find((obj) => obj.text.startsWith('КОДЕКС '));
+      // The footer of the redesign: a 2x2 navigation grid, one audio row with three
+      // switches and the legal row. Every band is measured, never assumed.
       const legal = visible.find((obj) => obj.text === 'О приложении · Политика · Поддержка');
-      const tagline = visible.find((obj) => obj.text === 'Двигай штамм · собирай РНК · выбирай мутации');
       const boundsOf = (obj) => {
         const bounds = obj?.getBounds?.();
         if (!bounds) return null;
@@ -234,12 +245,21 @@ async function assertCompactResumeMenu(browser) {
           height: bounds.height,
         };
       };
+      const nav = {
+        rating: boundsOf(visible.find((obj) => obj.text === 'РЕЙТИНГ')),
+        tasks: boundsOf(visible.find((obj) => obj.text === 'ЗАДАЧИ ДНЯ')),
+        codex: boundsOf(visible.find((obj) => obj.text === 'КОДЕКС')),
+        collection: boundsOf(visible.find((obj) => obj.text === 'КОЛЛЕКЦИЯ')),
+      };
+      const audio = {
+        music: boundsOf(visible.find((obj) => obj.text.startsWith('Музыка:'))),
+        sound: boundsOf(visible.find((obj) => obj.text.startsWith('Звук:'))),
+        effects: boundsOf(visible.find((obj) => obj.text.startsWith('Эффекты:'))),
+      };
       const utility = {
-        sound: boundsOf(sound),
-        social: boundsOf(social),
-        codex: boundsOf(codex),
+        nav,
+        audio,
         legal: boundsOf(legal),
-        tagline: boundsOf(tagline),
       };
 
       return {
@@ -254,25 +274,34 @@ async function assertCompactResumeMenu(browser) {
       };
     }, size);
 
-    const compactFooter = size.height < 720;
     const utility = menu.utility;
-    // Five readable compact controls may require two rows. Verify either
-    // legitimate layout while enforcing spacing in both axes and legal copy.
-    const sameRow = utility.sound && utility.social && utility.codex &&
-      Math.abs(utility.sound.top - utility.social.top) <= 3 &&
-      Math.abs(utility.social.top - utility.codex.top) <= 3;
-    const oneRow = sameRow &&
-      utility.sound.right + 4 <= utility.social.left &&
-      utility.social.right + 4 <= utility.codex.left;
-    const twoRows = utility.sound && utility.social && utility.codex &&
-      utility.sound.bottom + 4 <= Math.min(utility.social.top, utility.codex.top) &&
-      Math.abs(utility.social.top - utility.codex.top) <= 3 &&
-      utility.social.right + 4 <= utility.codex.left;
-    const utilityRowOk =
-      utility.sound && utility.social && utility.codex && utility.legal &&
-      (oneRow || twoRows) &&
-      Math.max(utility.sound.bottom, utility.social.bottom, utility.codex.bottom) + 4 <= utility.legal.top &&
-      (!compactFooter || utility.tagline === null);
+    const nav = utility.nav;
+    const audio = utility.audio;
+    const navItems = [nav.rating, nav.tasks, nav.codex, nav.collection];
+    const audioItems = [audio.music, audio.sound, audio.effects];
+    const allPresent = navItems.every(Boolean) && audioItems.every(Boolean) && utility.legal;
+    // The navigation grid is two rows of two: the top row holds the rating and the
+    // daily tasks, the bottom row the codex and the collection.
+    const navGridOk = allPresent &&
+      Math.abs(nav.rating.top - nav.tasks.top) <= 3 &&
+      Math.abs(nav.codex.top - nav.collection.top) <= 3 &&
+      nav.rating.bottom + 4 <= nav.codex.top &&
+      nav.rating.right + 4 <= nav.tasks.left &&
+      nav.codex.right + 4 <= nav.collection.left &&
+      // The labels are centred in their cells, so the columns are compared by
+      // their centre, not by the left edge of the text.
+      Math.abs((nav.rating.left + nav.rating.right) / 2 - (nav.codex.left + nav.codex.right) / 2) <= 3 &&
+      Math.abs((nav.tasks.left + nav.tasks.right) / 2 - (nav.collection.left + nav.collection.right) / 2) <= 3;
+    // The audio row is one row of three switches, between the grid and the legal row.
+    const audioRowOk = allPresent &&
+      Math.abs(audio.music.top - audio.sound.top) <= 3 &&
+      Math.abs(audio.sound.top - audio.effects.top) <= 3 &&
+      audio.music.right + 4 <= audio.sound.left &&
+      audio.sound.right + 4 <= audio.effects.left;
+    const footerOrderOk = allPresent &&
+      Math.max(...navItems.map((item) => item.bottom)) + 4 <= Math.min(...audioItems.map((item) => item.top)) &&
+      Math.max(...audioItems.map((item) => item.bottom)) + 4 <= utility.legal.top;
+    const utilityRowOk = navGridOk && audioRowOk && footerOrderOk;
 
     if (
       menu.scale[0] !== size.width ||

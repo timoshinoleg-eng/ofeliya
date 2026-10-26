@@ -119,6 +119,7 @@ export class MenuScene extends Phaser.Scene {
       hasCheckpoint: Boolean(resumeCheckpoint),
       hasRecord: recordText.length > 0,
       recordLines: recordText.length > 40 ? 2 : 1,
+      hasChallenge: Boolean(incomingChallenge || incomingDuelId),
     });
 
     const plasma = this.add
@@ -325,7 +326,7 @@ export class MenuScene extends Phaser.Scene {
     let challengeTargetText: Phaser.GameObjects.Text | null = null;
     let challengeDetailText: Phaser.GameObjects.Text | null = null;
     if (incomingChallenge || incomingDuelId) {
-      const challengeY = layout.recordY;
+      const challengeY = layout.challengeY;
       const panelW = Math.min(W - 42, 330);
       this.add
         .rectangle(W / 2, challengeY, panelW, 58, 0x251020, 0.9)

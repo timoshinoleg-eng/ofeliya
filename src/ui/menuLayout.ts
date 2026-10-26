@@ -24,6 +24,8 @@ export interface MenuLayoutFlags {
   hasRecord: boolean;
   /** How many lines the record strip needs. */
   recordLines: number;
+  /** An incoming challenge or duel is waiting: the menu shows the challenge band. */
+  hasChallenge: boolean;
 }
 
 export interface MenuLayout {
@@ -52,6 +54,8 @@ export interface MenuLayout {
   taglineFont: number;
   recordY: number;
   recordFont: number;
+  /** Y of the challenge band, between the record and the run configuration. */
+  challengeY: number;
   ctaY: number;
   ctaHeight: number;
   ctaWidth: number;
@@ -109,6 +113,9 @@ export function computeMenuLayout(
     ? Math.ceil(recordFont * 1.35 * Math.max(1, flags.recordLines))
     : 0;
   const secondary = flags.hasCheckpoint ? secondaryHeight : 0;
+  // The challenge band is its own band: the record line and the challenge must
+  // never share a slot, or they overlap on a compact viewport.
+  const challengeHeight = flags.hasChallenge ? 58 : 0;
 
   const bands: Band[] = [
     { key: 'title', height: titleFont * 1.24 },
@@ -117,6 +124,7 @@ export function computeMenuLayout(
     { key: 'hook', height: hookFont * 2.4 },
     { key: 'tagline', height: taglineFont * 1.35 },
     { key: 'record', height: recordHeight },
+    { key: 'challenge', height: challengeHeight },
     { key: 'cards', height: cardHeight },
     { key: 'cta', height: ctaHeight },
     { key: 'hint', height: hintHeight },
@@ -182,6 +190,7 @@ export function computeMenuLayout(
     taglineFont,
     recordY: top.record + recordHeight / 2,
     recordFont,
+    challengeY: challengeHeight > 0 ? top.challenge + challengeHeight / 2 : 0,
     ctaY: top.cta + ctaHeight / 2,
     ctaHeight,
     ctaWidth: Math.min(contentWidth, 338),

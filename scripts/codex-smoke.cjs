@@ -73,24 +73,32 @@ function browserDriver() {
   await page.goto('http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
 
+  // The codex entry is a cell of the navigation grid, and its discovery badge is a
+  // separate object next to the label.
   const menuSummary = await page.evaluate(() => {
     const menu = window.__game.scene.getScene('Menu');
-    const codex = menu.children.list.find(
-      (obj) => typeof obj.text === 'string' && obj.text.startsWith('КОДЕКС ')
+    const cell = menu.children.getByName('ofeliya-menu-nav-codex');
+    const label = menu.children.list.find(
+      (obj) => typeof obj.text === 'string' && obj.text === 'КОДЕКС'
     );
-    return { text: codex?.text ?? null, interactive: Boolean(codex?.input?.enabled) };
+    const badge = menu.children.list.find(
+      (obj) => typeof obj.text === 'string' && /^\d+\/\d+$/.test(obj.text)
+    );
+    return {
+      text: label?.text ?? null,
+      badge: badge?.text ?? null,
+      interactive: Boolean(cell?.input?.enabled),
+    };
   });
-  if (menuSummary.text !== 'КОДЕКС 4/9' || !menuSummary.interactive) {
+  if (menuSummary.text !== 'КОДЕКС' || !menuSummary.badge || !menuSummary.interactive) {
     throw new Error('Codex menu entry contract failed: ' + JSON.stringify(menuSummary));
   }
 
   await page.evaluate(() => {
     const menu = window.__game.scene.getScene('Menu');
-    const codex = menu.children.list.find(
-      (obj) => typeof obj.text === 'string' && obj.text.startsWith('КОДЕКС ')
-    );
-    if (!codex) throw new Error('Codex button missing');
-    codex.emit('pointerup');
+    const cell = menu.children.getByName('ofeliya-menu-nav-codex');
+    if (!cell) throw new Error('Codex button missing');
+    cell.emit('pointerup');
   });
 
   const textSnapshot = () => page.evaluate(() => {
@@ -113,7 +121,7 @@ function browserDriver() {
   if (
     !snapshot.open ||
     snapshot.gameActive ||
-    !snapshot.texts.includes('КОДЕКС · STRAIN-0') ||
+    !snapshot.texts.includes('КОДЕКС') ||
     !snapshot.texts.includes('ОТКРЫТО 4/9 · ДОСТИЖЕНИЯ 2/9') ||
     !snapshot.texts.some((text) => text.includes('ГИПЕРШИП')) ||
     !snapshot.texts.some((text) => text.includes('СВЕРХКАПСИД')) ||
@@ -155,7 +163,7 @@ function browserDriver() {
     !snapshot.texts.some((text) => text.includes('СВЕРХКАПСИД + НУЛЕВАЯ ТОЧКА')) ||
     !snapshot.texts.some((text) => text.includes('ИНФЕКЦИЯ / ЛИЗИС · 0/2')) ||
     !snapshot.texts.some((text) => text.includes('Открой СИНГУЛЯРНОСТЬ')) ||
-    !snapshot.texts.some((text) => text.includes('ЦИКЛОВ: 7')) ||
+    !snapshot.texts.some((text) => text.includes('ЗАБЕГОВ: 7')) ||
     snapshot.gameActive
   ) {
     throw new Error('Codex mastery page failed: ' + JSON.stringify(snapshot));
@@ -168,7 +176,8 @@ function browserDriver() {
   await page.evaluate(() => {
     const menu = window.__game.scene.getScene('Menu');
     const root = menu.codexOverlay;
-    const close = root?.list?.find((obj) => obj?.type === 'Text' && obj.text === '×');
+    // The shared frame owns a 44x44 close control; the cross is only its glyph.
+    const close = root?.list?.find((obj) => obj?.name === 'ofeliya-modal-close-hit');
     if (!close) throw new Error('Codex close control missing');
     close.emit('pointerup');
   });

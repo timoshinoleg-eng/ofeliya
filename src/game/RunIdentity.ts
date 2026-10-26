@@ -46,8 +46,8 @@ type IdentityScore = {
 
 const LABELS: Record<RunIdentityId, { label: string; shortLabel: string; description: string }> = {
   projectile: {
-    label: 'Снарядный штамм',
-    shortLabel: 'СНАРЯДНЫЙ',
+    label: 'ПРОЕКТИЛЬНЫЙ ШТАММ',
+    shortLabel: 'ПРОЕКТИЛЬНЫЙ',
     description: 'Ставка на залп, пробивание и урон снарядов.',
   },
   'orbit-control': {
@@ -192,7 +192,7 @@ export function masteryTracks(input: MasteryDiscoveryInput): MasteryTrack[] {
   }> = [
     {
       id: 'projectile',
-      label: 'Снарядный штамм',
+      label: 'ПРОЕКТИЛЬНЫЙ ШТАММ',
       evolution: 'prism',
       legendary: 'split-geometry',
       objective: 'ГИПЕРШИП + ГЕОМЕТРИЯ РАСКОЛА',

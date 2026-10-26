@@ -284,7 +284,8 @@ async function closeCodex(page) {
   await page.evaluate(() => {
     const menu = window.__game.scene.getScene('Menu');
     const root = menu.codexOverlay;
-    const close = root?.list?.find((obj) => obj?.type === 'Text' && obj.text === '×');
+    // The shared frame owns a 44x44 close control; the cross is only its glyph.
+    const close = root?.list?.find((obj) => obj?.name === 'ofeliya-modal-close-hit');
     if (!close) throw new Error('Codex close missing');
     close.emit('pointerup');
   });
