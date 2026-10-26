@@ -129,11 +129,11 @@ export const MENU_COPY = {
   /**
    * The step of the difficulty scale, shown next to the value of the card.
    *
-   * The scale has three steps: the first one belongs to the easy difficulty,
-   * which the product does not ship yet. The two modes that exist show their
-   * own step, so the card never promises a mode the player cannot pick.
+   * The scale has three shipped steps: EASY, STANDARD and STRAINED.
+   * The selector and its dots are data-driven by the current difficulty id.
    */
   difficultySteps: {
+    easy: '• ◦ ◦',
     standard: '• • ◦',
     strained: '• • •',
   },
@@ -188,6 +188,8 @@ export const RESULT_MODE_CHIP = {
   daily: 'ЗАБЕГ ДНЯ · СТАНДАРТ',
   /** A fixed-seed duel. */
   duel: 'ДУЭЛЬ · СТАНДАРТ',
+  /** A fresh Easy run: beginner mode, never ranked. */
+  easy: 'ЛЁГКИЙ · Тренировка',
   /** A fresh strained run: the server does not rank it. */
   strained: 'НАПРЯЖЕНИЕ · Тренировка',
   /** A local run with no server behind it. */

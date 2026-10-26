@@ -514,7 +514,11 @@ export class MenuScene extends Phaser.Scene {
         challengeLocked
           ? (duelLocked ? 'фиксировано дуэлью' : 'фиксировано вызовом')
           : cardW < 170
-            ? (profile.id === 'strained' ? 'сложнее' : 'базовый')
+            ? profile.id === 'strained'
+              ? 'сложнее'
+              : profile.id === 'easy'
+                ? 'спокойнее'
+                : 'базовый'
             : profile.description
       );
       difficultyCard.rail.setFillStyle(difficultyAccent, 0.94);

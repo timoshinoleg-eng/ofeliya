@@ -387,6 +387,8 @@ export class UIScene extends Phaser.Scene {
   }
 
   update(): void {
+    this.gs?.notificationRegion.setBlocked(this.uiBlocked || this.modalOpen || this.overShown ||
+      this.activeBossReveals > 0 || this.contextHintKey !== null || this.pendingContextHints.length > 0 || document.visibilityState === 'hidden' || !this.scene.isActive('Game'));
     const run = this.registry.get('run') as RunSnapshot | undefined;
     const W = this.scale.width;
     const H = this.scale.height;
@@ -1301,7 +1303,7 @@ export class UIScene extends Phaser.Scene {
     const copy = ONBOARDING_COPY[step.id];
     const W = this.scale.width;
     const hidden =
-      this.contextHintKey !== null || this.pendingContextHints.length > 0 || this.overShown || this.modalOpen || this.activeBossReveals > 0;
+      Boolean(this.gs?.notificationRegion.occupied) || this.contextHintKey !== null || this.pendingContextHints.length > 0 || this.overShown || this.modalOpen || this.activeBossReveals > 0;
     if (!this.onboardingContainer) {
       const panelW = Math.min(W - 28, 380);
       const panel = this.add
@@ -1445,6 +1447,8 @@ export class UIScene extends Phaser.Scene {
     const gs = this.gs;
     if (!gs) return;
     this.modalOpen = true;
+    gs.notificationRegion.setBlocked(true);
+    this.onboardingContainer?.setVisible(false);
     this.onboarding?.notifyLevelUp();
     this.uiBlocked = true;
     this.suspendContextHint();
@@ -2149,6 +2153,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   private showGameOver(res: RunResult): void {
+    this.onboardingContainer?.setVisible(false);
     this.pendingContextHints = [];
     this.contextHintTimer?.remove(false);
     this.contextHintTimer = null;
@@ -2415,11 +2420,13 @@ export class UIScene extends Phaser.Scene {
               ? RESULT_MODE_CHIP.daily
               : duelChallenge
                 ? RESULT_MODE_CHIP.duel
-                : PlatformBridge.kind === 'browser'
-                  ? RESULT_MODE_CHIP.local
-                  : ranked
-                    ? RESULT_MODE_CHIP.ranked
-                    : RESULT_MODE_CHIP.strained,
+                : res.difficultyId === 'easy'
+                  ? RESULT_MODE_CHIP.easy
+                  : PlatformBridge.kind === 'browser'
+                    ? RESULT_MODE_CHIP.local
+                    : ranked
+                      ? RESULT_MODE_CHIP.ranked
+                      : RESULT_MODE_CHIP.strained,
           {
             fontFamily: FONT,
             fontSize: compact ? '9px' : '10px',
@@ -2674,7 +2681,7 @@ export class UIScene extends Phaser.Scene {
       const legendaryName =
         res.legendaryIds.length > 0 ? getLegendaryDefinition(res.legendaryIds[0]).title : null;
       const dailySuffix = dailyIntent ? buildDailyShareSuffix({ timeMs: res.timeMs }) : '';
-      const shareText = buildShareText({
+      let shareText = buildShareText({
         win: res.win,
         time: mins,
         kills: res.kills,
@@ -2683,6 +2690,7 @@ export class UIScene extends Phaser.Scene {
         legendaryName: res.win ? legendaryName : null,
         suffix: dailySuffix,
       });
+      if (res.difficultyId === 'easy') shareText += '\nРежим: ЛЁГКИЙ.';
 
       if (challengeTarget || legacyChallengeCreatable) {
         const payload = ranked ? encodeChallengePayload(createChallengePayload(res)) : null;

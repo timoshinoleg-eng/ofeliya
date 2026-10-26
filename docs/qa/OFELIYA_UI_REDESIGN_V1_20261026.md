@@ -6,6 +6,13 @@
 
 ---
 
+> **Integration update (post-reconciliation):** this branch was subsequently merged with
+> production main @ `2b1e1426aa04b1d4cfb5159fb4ce89c00283d608`, which already contains PR #247 analytics,
+> PR #250 verified notification/footer UX, and PR #248 EASY difficulty. The integration
+> preserves those contracts and wires `npm run test:ui-redesign` into GitHub CI. Historical
+> sections below describe the reconciliation pass before that integration merge.
+
+
 ## 1. Source documents
 
 The three input documents named by the task were **not reachable during the first

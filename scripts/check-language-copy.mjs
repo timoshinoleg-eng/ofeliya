@@ -23,6 +23,7 @@ const SCOPED_FILES = [
   'src/game/LegendarySystem.ts',
   'src/game/StageDefinitions.ts',
   'src/game/DifficultyProfile.ts',
+  'src/game/RunModeLabel.ts',
   'src/game/ControlMode.ts',
   'src/game/UiCopy.ts',
   'src/game/AchievementSystem.ts',
