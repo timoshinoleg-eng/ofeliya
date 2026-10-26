@@ -59,7 +59,7 @@ overrode the bible, the bible was updated in the same commit — see §7.
 | --- | --- |
 | `origin/main` at the start | `ce8ecb84ced1afa09870f2f00f9a0328257fd11c` |
 | Previously released `ce8ecb84…` | `ce8ecb84ced1afa09870f2f00f9a0328257fd11c` |
-| Final head (the PR) | `f3d0e3dade4ed844a99056a0c37c3bcdd3a9aced` |
+| Final head (the PR) | the commit that carries this report — the commit before it is `f3d0e3dade4ed844a99056a0c37c3bcdd3a9aced`, the head the CI is green on |
 | Final head (the local branch) | `2906016` |
 
 `origin/main` was fetched before the work started. **Main did not advance** beyond
@@ -618,8 +618,8 @@ profile, then check that the third description still fits the compact card.
 | Title | `[DRAFT] OFELIYA UI v1 — menu, results, meta navigation and Russian copy` |
 | Draft | **yes** |
 | Base | `main` @ `ce8ecb84ced1afa09870f2f00f9a0328257fd11c` |
-| Head | `feat/ui-redesign-v1-20261026` @ `f3d0e3dade4ed844a99056a0c37c3bcdd3a9aced` |
-| Diff | 38 files, +3 558 / −1 014 |
+| Head | `feat/ui-redesign-v1-20261026` @ the commit that carries this report (the CI is green on its parent, `f3d0e3dade4ed844a99056a0c37c3bcdd3a9ced`) |
+| Diff | 38 files, +3 566 / −1 014 |
 | Merged | **no** |
 
 The pull request is open as a **draft** and was **not** merged. Nothing was
