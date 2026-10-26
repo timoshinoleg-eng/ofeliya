@@ -162,7 +162,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       (obj) => typeof obj.text === 'string' && obj.visible !== false && (obj.alpha ?? 1) > 0.01 && typeof obj.getBounds === 'function'
     ) ?? [];
     const time = modalTexts.find((obj) => /^\d{2}:\d{2}$/.test(obj.text));
-    const stats = modalTexts.find((obj) => obj.text.startsWith('УНИЧТОЖЕНО:') && obj.text.includes('Заражено:'));
+    const stats = modalTexts.find((obj) => obj.text.startsWith('Уничтожено:') && obj.text.includes('Заражено клеток:'));
     const shareText = modalTexts.find((obj) => obj.text === 'БРОСИТЬ ВЫЗОВ ДРУГУ');
     const report = container?.getByName('ofeliya-result-report');
     const reportHit = container?.getByName('ofeliya-result-report-hit');
