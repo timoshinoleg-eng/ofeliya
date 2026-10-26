@@ -21,6 +21,12 @@ const VIEWPORTS = [
 ];
 
 const EVIDENCE_DIR = process.env.OFELIYA_UI_EVIDENCE || resolve('docs/qa/ui-redesign-v1-evidence');
+
+/** Capture a surface. The timeout is generous: a 1080x1920 WebGL canvas can need
+ *  more than the default action timeout on a slow renderer. */
+async function shot(page, name) {
+  await page.screenshot({ path: resolve(EVIDENCE_DIR, name), timeout: 120000 });
+}
 const CHROME = [
   process.env.OFELIYA_CHROME_PATH,
   '/usr/bin/google-chrome',
@@ -195,7 +201,7 @@ try {
     }
     assert.deepEqual(errors, [], `page errors at ${viewport.width}x${viewport.height}`);
 
-    await page.screenshot({ path: resolve(EVIDENCE_DIR, `menu-fresh-${viewport.width}x${viewport.height}.png`) });
+    await shot(page, `menu-fresh-${viewport.width}x${viewport.height}.png`);
     await page.close();
 
     // ---- Resume menu ------------------------------------------------------
@@ -261,9 +267,7 @@ try {
     );
     assert.deepEqual(resumeErrors, [], `page errors in the resume menu at ${viewport.width}`);
 
-    await resumePage.screenshot({
-      path: resolve(EVIDENCE_DIR, `menu-resume-${viewport.width}x${viewport.height}.png`),
-    });
+    await shot(resumePage, `menu-resume-${viewport.width}x${viewport.height}.png`);
     await resumePage.close();
     // ---- Result screen -----------------------------------------------------
     const resultPage = await context.newPage();
@@ -404,7 +408,7 @@ try {
       );
     }
     assert.deepEqual(resultErrors, [], 'page errors on the result screen');
-    await resultPage.screenshot({ path: resolve(EVIDENCE_DIR, `result-defeat-${viewport.width}x${viewport.height}.png`) });
+    await shot(resultPage, `result-defeat-${viewport.width}x${viewport.height}.png`);
     await renderResult({
       ...baseResult,
       win: true,
@@ -415,9 +419,7 @@ try {
       evolutions: ['prism', 'halo'],
       legendaryIds: ['zero-point', 'core-predator'],
     });
-    await resultPage.screenshot({
-      path: resolve(EVIDENCE_DIR, `result-legendary-${viewport.width}x${viewport.height}.png`),
-    });
+    await shot(resultPage, `result-legendary-${viewport.width}x${viewport.height}.png`);
     await resultPage.close();
 
     // ---- Daily tasks, codex and collection ---------------------------------
@@ -477,10 +479,10 @@ try {
       `a task must show its fraction or its completed state: ${tasks.texts.join(' | ')}`
     );
 
-    await metaPage.screenshot({ path: resolve(EVIDENCE_DIR, `daily-tasks-${viewport.width}x${viewport.height}.png`) });
+    await shot(metaPage, `daily-tasks-${viewport.width}x${viewport.height}.png`);
 
     const codex = await openMeta('codex');
-    await metaPage.screenshot({ path: resolve(EVIDENCE_DIR, `codex-${viewport.width}x${viewport.height}.png`) });
+    await shot(metaPage, `codex-${viewport.width}x${viewport.height}.png`);
     assert.ok(codex.overlayTexts.includes('КОДЕКС'), 'the codex title is wrong');
     assert.ok(!codex.overlayTexts.some((t) => t.includes('STRAIN-0')), 'no strain code in the codex');
     assert.ok(
@@ -564,16 +566,14 @@ try {
       );
     }
     assert.deepEqual(metaErrors, [], 'page errors in the meta surfaces');
-    await metaPage.screenshot({ path: resolve(EVIDENCE_DIR, `collection-${viewport.width}x${viewport.height}.png`) });
+    await shot(metaPage, `collection-${viewport.width}x${viewport.height}.png`);
     await metaPage.evaluate(() => {
       const menu = window.__game.scene.getScene('Menu');
       const board = menu.children.list.find((o) => o.name === 'ofeliya-collection');
       board.list.find((o) => o.name === 'ofeliya-collection-milestones')?.emit('pointerup');
     });
     await metaPage.waitForTimeout(200);
-    await metaPage.screenshot({
-      path: resolve(EVIDENCE_DIR, `collection-milestones-${viewport.width}x${viewport.height}.png`),
-    });
+    await shot(metaPage, `collection-milestones-${viewport.width}x${viewport.height}.png`);
     await metaPage.close();
 
     // ---- Rating surface ---------------------------------------------------
@@ -617,7 +617,7 @@ try {
       'the rating close control is a real touch target'
     );
     assert.deepEqual(ratingErrors, [], 'page errors on the rating surface');
-    await ratingPage.screenshot({ path: resolve(EVIDENCE_DIR, `rating-${viewport.width}x${viewport.height}.png`) });
+    await shot(ratingPage, `rating-${viewport.width}x${viewport.height}.png`);
     await ratingPage.close();
     await context.close();
     console.log(`ui redesign surfaces PASS ${viewport.width}x${viewport.height}`);

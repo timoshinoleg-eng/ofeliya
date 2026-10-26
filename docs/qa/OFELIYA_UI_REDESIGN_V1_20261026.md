@@ -396,6 +396,8 @@ assertions were moved onto the new structure, not dropped:
 | `test:codex-smoke` | the codex entry of the menu, the shared title of the frame, the mastery counter and the close control all moved | the gate reads the navigation cell, the frame title, the `ЗАБЕГОВ: 7` counter and the 44×44 close control. The close glyph is no longer the interactive object — the shared hit area is |
 | `test:browser-smoke`, `test:video-interstitial` | the victory outcome is `НОСИТЕЛЬ ЗАРАЖЁН` now, not `ИММУНИТЕТ ПОДАВЛЕН` | the two probes read the new title; the defeat outcome keeps `ШТАММ УНИЧТОЖЕН` |
 | `test:run-identity` | one of the four identity labels had been renamed to sentence case while its three siblings stayed uppercase | the labels are back to the wording the repository shipped, so the archetype names stay consistent with each other |
+| `test:daily-cta` | a daily submission now states its place on the daily board — `★ МЕСТО #5 В РЕЙТИНГЕ ДНЯ` — instead of a generic submission status | the gate waits for the daily rank line and asserts the daily place; an ordinary run still must not show any daily copy |
+| `test:ui-readability` | the run-configuration cards had shrunk to 9/10px, below the readability floor of the repository | the card label is 10/11px and the card description 11/13px again, and the card texts carry their own names so a probe can address them |
 
 ### The gates that fail in this sandbox — and on `main` as well
 
