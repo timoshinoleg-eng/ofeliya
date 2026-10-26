@@ -495,9 +495,17 @@ try {
         }
         return into;
       };
+      const collectInteractive = (node, into) => {
+        for (const child of node.list ?? []) {
+          if (child.name && child.input?.enabled) into.push(child.name);
+          collectInteractive(child, into);
+        }
+        return into;
+      };
       return {
         texts: board.list.filter((o) => o.type === 'Text').map((o) => o.text),
         names: collect(board, []),
+        interactiveNames: collectInteractive(board, []),
       };
     });
     assert.ok(collection.texts.includes('КОЛЛЕКЦИЯ'), 'the collection title is wrong');
@@ -522,9 +530,15 @@ try {
       shells.names.includes('ofeliya-collection-next'),
       'the paginator controls must appear together'
     );
+    // Every shell row keeps a named handle, so the board can be probed; a locked
+    // shell must never be an interactive control.
     assert.ok(
-      !shells.names.some((n) => n.startsWith('ofeliya-skin-') && !n.endsWith('-active')),
+      !shells.interactiveNames.some((n) => n.startsWith('ofeliya-skin-') && n.endsWith('skin.gilded-prime')),
       'a locked shell must not offer a select action'
+    );
+    assert.ok(
+      shells.names.includes('ofeliya-skin-strain-zero'),
+      'the owned shell keeps a named handle'
     );
 
     for (const forbidden of ['локально', 'без наград', '00:00 UTC', 'tdesktop', 'КРИТ.']) {
