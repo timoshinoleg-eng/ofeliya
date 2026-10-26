@@ -1,3 +1,17 @@
+# EASY difficulty decisions — 26.10.2026
+
+1. Easy снижает только входящее давление. `enemyHpMultiplier`/`bossHpMultiplier` остаются 1: урон игрока, скорость убийств и кривая мутаций идентичны Standard, поэтому Easy учит настоящей игре, а не урезанной.
+2. Порядок приоритета давления соблюдён: урон → спавн → элиты → небольшое замедление скорости. Никакого усиления игрока, неуязвимости, удаления боссов или постоянных бонусов прогрессии.
+3. Easy — всегда UNRANKED и никогда не отправляется на `/api/score` (клиентский guard в `submitRunScore`). Strained сохранил историческое поведение (отправляется, не ранжируется), чтобы не менять существующий режим. Сервер не изменялся: `DIFFICULTY_IDS` без `easy` — жёсткий отказ любого утёкшего payload.
+4. `isRankedResult` и `runModeLabel` вынесены в чистый модуль, чтобы контракт «unranked» и строка режима проверялись детерминированно, а не только визуально.
+5. Первую мутацию не трогали: first kill → 5 RNA → Level 2 → модалка остаётся как есть (проверено в коде).
+6. Daily не изменён: `launchDailyRun` атомарно пишет `difficultyId='standard'`, тикет Daily принимает только `standard`. Easy в Daily попасть не может.
+7. Старое сохранение пользователя не мигрируется: новое поле в схеме не добавлялось. Easy-побег не увеличивает `standardCampaignClears`/`strainedCampaignClears` и не трогает личные рекорды (`ranked=false`).
+8. Описание в селекторе — две короткие строки `Более спокойный\nрежим для основ`: длинная формулировка в 5–6 строк физически не помещалась в панель и перекрывала ярлык и кнопку старта. Это единственная правка копирайта MenuScene.
+9. Новым игрокам дефолт НЕ менялся: `readDifficultySelection()` по-прежнему отдаёт `standard` при пустом хранилище. Смена дефолта — отдельное продуктовое решение.
+
+---
+
 # PR244 independent final gate - 2026-10-25
 
 Original de6a74afd80607e6df24801a819d7e6cfa60af4f is BLOCK: P2 mutation gate falsely classifies omitted pre-hit flush as equivalent. Real offset streak reaches q_nodmg60; the permitted mutant records59. Narrow tests-only repair on review/codex-pr244-final-gate-20261025; report docs/qa/CODEX_PR244_FINAL_GATE_20261025.md. UTC14/14 +2 equivalent +control passed; exact candidate CI40181931371 is genuinely green but cannot prove the false equivalence. Lifecycle and UTC/units historical RED/GREEN independently reproduced. Keep native memory failures and base-reproduced startup font assertion distinct from product findings. No merge/deploy. Next: Draft follow-up into #244 branch, new exact-head full CI and release decision. Physical native close inconclusive, eviction/MAX NOT_RUN.
