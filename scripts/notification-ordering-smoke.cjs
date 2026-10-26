@@ -2,6 +2,14 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
 const { chromium } = require('playwright');
 const { startCombatFixture } = require('./lib/combat-fixture.cjs');
 async function chooseOffer(page) {
+    // modalOpen is set before the card entrance tween; an invisible parent is not hittable in Phaser.
+    await page.waitForFunction(() => {
+        const g = window.__game, u = g.scene.getScene('UI'), s = g.scene.getScene('Game');
+        const index = Math.max(0, s.pendingChoices.findIndex(d => !d.kind || d.kind === 'upgrade'));
+        const cards = u.modal?.list.filter(o => o.type === 'Container' && o.list?.some(c => c.type === 'Rectangle' && c.input));
+        const card = cards?.[index];
+        return !!card && card.visible && card.alpha >= 0.99 && !u.tweens.isTweening(card);
+    });
     const xy = await page.evaluate(() => { const g = window.__game, u = g.scene.getScene('UI'), s = g.scene.getScene('Game'); const index = Math.max(0, s.pendingChoices.findIndex(d => !d.kind || d.kind === 'upgrade')); const cards = u.modal.list.filter(o => o.type === 'Container' && o.list?.some(c => c.type === 'Rectangle' && c.input)); const b = cards[index].list.find(c => c.type === 'Rectangle' && c.input).getBounds(); return { x: b.centerX, y: b.centerY }; });
     await page.touchscreen.tap(xy.x, xy.y);
     await page.waitForFunction(() => !window.__game.scene.getScene('UI').modalOpen);
