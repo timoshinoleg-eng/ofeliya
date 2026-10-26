@@ -37,9 +37,9 @@ for(const viewport of [{width:320,height:568},{width:390,height:844},{width:768,
    const close=root.list.find(o=>o.name==='ofeliya-modal-close-hit');return {texts,close:close.getBounds(),W:m.scale.width,H:m.scale.height};});
   assert.equal(layout.close.height,44);
   for(const t of layout.texts)assert.ok(t.b.x>=0&&t.b.y>=0&&t.b.x+t.b.width<=layout.W&&t.b.y+t.b.height<=layout.H,JSON.stringify(t));
-  const countdowns=layout.texts.filter(t=>/Обновление через \d{2}:\d{2}/.test(t.text));
-  assert.equal(countdowns.length,1,'the daily board shows exactly one countdown');
-  assert.ok(!/Обновление через 00:00/.test(countdowns[0].text),'the countdown is a live remaining time, not a static midnight');
+  const countdowns=layout.texts.filter(t=>/Обновление через (?:(?:\d+) ч )?(?:\d+) мин/.test(t.text));
+  assert.equal(countdowns.length,1,'the daily board shows exactly one live countdown');
+  assert.ok(!/00:00|UTC/.test(countdowns[0].text),'the countdown is player-facing remaining time, not a static/technical reset');
   if(i===0){fs.mkdirSync('docs/qa/quest-evidence',{recursive:true});await page.screenshot({path:`docs/qa/quest-evidence/quests-${viewport.width}.png`});}
   await page.evaluate(()=>window.__game.scene.getScene('Menu').questBoard.destroy());
  }
