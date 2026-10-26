@@ -668,6 +668,21 @@ branch, with the labels the reconciliation task prescribes.
 | Часть 3 | Пустые состояния: объяснение + действие | **PASS** |  |
 | Часть 3 | Ошибка сети — полное предложение + «ПОВТОРИТЬ» | **PASS** |  |
 
+### 8.1.2 The CI of the final head
+
+| | |
+| --- | --- |
+| The last **green** run on this branch | `40292414901` — head `1823f927a07f951914969f9339eaf2b2cc469f62` (the head of the first pass): `build` 58/58, `production-contract` 23/23, `browser-smoke` 59/59 |
+| The run of the reconciled head | **no run was created.** The App pushed the reconciliation commits to the same branch, the pull request's head moved to `8a916808ff28c8ae0dd5d0651e5996c2362ff6fb` (41 commits) and the `synchronize` event produced no workflow run within the observation window (25 minutes, with another `CI` run on `main` completing `success` in the meantime) |
+| Why | the pull request is **`mergeable_state: dirty`** — `main` advanced by two other merges during this pass (§2) and the new base touches the same surfaces. The workflow is not executed for a pull request that cannot be merged, and the base cannot be moved or rebased from this environment (the App push path only creates commits; it cannot rewrite a branch) |
+| What is left for a maintainer | rebase the branch onto the current `main`, add the one CI line of §8.2, and the `browser-smoke` job will then run the new contract |
+
+The reconciled head was **not** verified by GitHub CI. Everything in this
+report that is a test result was produced locally, in this sandbox, against the
+same code that is on the branch: the full contract at four viewports, the copy
+catalog, the codex/daily/rating/collection/result smokes, the layout matrix, the
+readability smoke, the type check, the release build and `git diff --check` (§9).
+
 ### 8.2 The CI step that the App could not write
 
 The new contract belongs in the `browser-smoke` job, next to the other browser
