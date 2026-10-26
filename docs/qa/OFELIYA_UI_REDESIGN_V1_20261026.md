@@ -8,48 +8,52 @@
 
 ## 1. Source documents
 
-The task named three input documents that had to be read completely before any
-implementation.
+The three input documents named by the task were **not reachable during the first
+pass** of this work. They were attached later, and this branch was reconciled
+against them. All three were read **completely** before any reconciliation change
+was made.
 
-| Document | Status |
-| --- | --- |
-| `ofeliya-ui-audit-final.md` | **NOT AVAILABLE** |
-| `ru-copy-dictionary.json` | **NOT AVAILABLE** |
-| `ofeliya-qa-checklist.md` | **NOT AVAILABLE** |
+| Document | State now | Where it was applied |
+| --- | --- | --- |
+| `ofeliya-ui-audit-final.md` (397 lines) | **READ IN FULL** | §3, §4, §5, §5.1 |
+| `ru-copy-dictionary.json` | **READ IN FULL** | §3, §5.1 |
+| `ofeliya-qa-checklist.md` | **READ IN FULL** | §8.1, §10 |
 
-None of the three exists anywhere this session can reach. The search covered:
+**The precedence order** used for every decision of this pass is the one the task
+defines:
 
-* the working tree of the clone (517 files) — no match;
-* **every** object of the full git history, including all 234 remote branches
-  (`git rev-list --all --objects`) — no match;
-* every pull request of the repository, open and closed, including their heads
-  (GitHub code search on the exact filenames returned `total_count: 0`) — no match;
-* the user drive — searches for `ofeliya`, `audit`, `checklist`, `copy`,
-  `dictionary` and `ui audit` returned no matching file;
-* the whole filesystem of the sandbox — no match.
+1. the current code and its contracts (the code is the fact);
+2. the task overrides (the task body wins over any document);
+3. `ofeliya-ui-audit-final.md`;
+4. `ru-copy-dictionary.json`;
+5. `ofeliya-qa-checklist.md`.
 
-**Consequence for this branch.** The audit's `ADOPTED / PROPOSAL / TO CONFIRM /
-REJECTED` statuses and the dictionary's scoped replacements could not be read, so
-nothing in this branch is derived from them. The implementation follows the
-**task body itself** (sections 1–58 of the assignment, which specify the target
-copy and structure literally) and the **current source code**, in the precedence
-order the task defines. Where the task body says "verify against source", the
-source was verified and the outcome is recorded below.
+Two in-repo documents remain the copy source of last resort and were used where
+the three documents above are silent: `src/game/UiCopy.ts` (the player-facing RU
+copy catalog) and `docs/GAME_LANGUAGE_BIBLE.md` (the canonical vocabulary).
 
-What this branch therefore does **not** contain:
+### 1.1 What the reconciliation changed
 
-* audit items that are not named in the task body — they are unknown, not
-  skipped;
-* the dictionary's additional scoped replacements — the exact replacement pairs
-  the task body does not name are unknown;
-* the QA checklist's own P0 list — its priorities were reinterpreted by
-  IMPLEMENTATION OVERRIDE 1 as UI-SPRINT MUST-HAVE, and the task body enumerates
-  the corresponding work items.
+The first pass built the redesign from the task body and the code. The
+reconciliation pass against the three documents produced these classes of change:
 
-Two in-repo documents were used as the authoritative copy source instead:
-`src/game/UiCopy.ts` (the player-facing RU copy catalog) and
-`docs/GAME_LANGUAGE_BIBLE.md` (the canonical vocabulary). Where the task body
-overrode the bible, the bible was updated in the same commit — see §7.
+* **copy corrections** — the canonical strings of the audit and the dictionary
+  (the codex tabs and the synergy cards, the daily CTA, the share variants, the
+  season/streak/friends lines, the network error, the collection shell states,
+  the milestone group header, the mode chip, the countdown format, the task
+  descriptions, the `дальше: …` branch hints, the archetype labels);
+* **one structural addition** — the Codex tabs are now
+  `СИНЕРГИИ | ЛЕГЕНДАРНЫЕ | МАСТЕРСТВО` (the first pass kept the old tab name);
+* **one addition to the result screen** — the `★ Открыто в Кодексе: +N …` plate
+  is a real button that opens the Codex (the audit's P2.2);
+* **a contract extension** — `tests/ui-copy-catalog.mjs` now pins the whole
+  reconciled copy (the share variants, the mode chips, the season/streak lines,
+  the collection strings) and `tests/ui-redesign.mjs` asserts the reconciled
+  surfaces in a real browser at four viewports;
+* **a CI step that could not be written** — see §2.1.
+
+Everything else in the first pass was confirmed by the documents and kept.
+
 
 ---
 
@@ -94,9 +98,15 @@ PR and are not defects in the change itself:
   carried** — the screenshots in `docs/qa/ui-redesign-v1-evidence/` are delivered
   with this report instead of being committed. `npm run test:ui-redesign`
   regenerates every one of them;
-* the App **cannot write `.github/workflows/`**, so wiring the new contract into
-  CI is not in the branch. The step to add by hand is
-  `npm run test:ui-redesign` inside the browser-smoke job.
+* the App **cannot write `.github/workflows/`** — both
+  `connector__github__create_or_update_file` and
+  `connector__github__push_files` answer
+  `error: connector_tool_error: Connector tool execution failed (latency_ms=0)`
+  for `.github/workflows/ci.yml`, and the remote blob SHA stays
+  `db7683832ce94871c8b6bc951b6a148c3ff1d929` after the attempt (verified by
+  re-reading the file through the App). Wiring the new contract into CI is
+  therefore **not** in the branch; the exact one-line step to add by hand is in
+  §8.2.
 
 The PR therefore shows more commits than the local branch: the first two are a
 binary push probe and its removal, and some logical changes were split into
@@ -133,7 +143,7 @@ is identical to the local branch, except for the PNG evidence.
 | 15 | An absent critical or legendary mutation renders nothing; a present one uses the full copy | `UIScene.renderGameOver` |
 | 16 | The build is named `Архетип: Снарядный штамм` (a deterministic classification exists) | `src/game/RunIdentity.ts` |
 | 17 | The place line never invents a board | see §5 |
-| 18 | A resumed run says `Тренировка · продолженный забег` | `RESULT_COPY.resumed` |
+| 18 | A resumed run says `Тренировка (продолженный забег)` and never shows a place | `RESULT_COPY.resumed` |
 | 19 | `НОВЫЙ ЗАБЕГ` / `БРОСИТЬ ВЫЗОВ ДРУГУ` / `ВЫЗВАТЬ НА ДУЭЛЬ` / `В МЕНЮ`, backend actions unchanged | `UIScene` |
 | 20 | The share text names OFELIYA first, says `продержался` after a defeat, carries the bot handle and no forbidden term | `UiCopy.buildShareText` |
 
@@ -143,8 +153,8 @@ is identical to the local branch, except for the PNG evidence.
 | --- | --- | --- |
 | 21 | `КВЕСТЫ` → `ЗАДАЧИ ДНЯ`; the UTC string, the local language and the reward disclaimer removed; the countdown uses the rotation's own UTC reset | `src/ui/QuestBoard.ts` |
 | 22 | Task cards: title, description, a real progress bar, `current / target`, the remaining count, `◆ ВЫПОЛНЕНО` | `QuestBoard` |
-| 23 | `КОДЕКС` without the strain code; the `МУТАЦИИ` tab kept (see §5); `ПРОХОЖДЕНИЕ РЕЖИМОВ` | `MenuScene.showCodex` |
-| 24 | No invented synergy pairings — the locked state is truthful | see §5 |
+| 23 | `КОДЕКС` without the strain code; the tabs `СИНЕРГИИ · ЛЕГЕНДАРНЫЕ · МАСТЕРСТВО`; `ПРОХОЖДЕНИЕ РЕЖИМОВ` | `MenuScene.showCodex` |
+| 24 | Three locked synergy cards, each with its own recipe (`ЗАКРЫТАЯ СИНЕРГИЯ I/II/III` + `Совмести ветви «…» и «…»`) and one explanation of the section | `MenuScene.showCodex`, `CODEX_COPY` |
 | 25 | `Снарядный штамм`, `ПРОХОЖДЕНИЕ РЕЖИМОВ`; the internal ids untouched | `RunIdentity.ts` |
 | 26 | `КОЛЛЕКЦИЯ` with `ОБОЛОЧКИ · ВЕХИ · ЛАБОРАТОРИЯ`; the streak/visit line removed | `src/ui/CollectionBoard.ts` |
 | 27 | One shells explanation, `✓ АКТИВЕН`, `ЗАКРЫТО` + the verified unlock condition, no select action on a locked shell | `CollectionBoard` |
@@ -156,7 +166,7 @@ is identical to the local branch, except for the PNG evidence.
 | 33 | `Игрок (TG)` / `Игрок (MAX)` — the payload carries no display name | `SocialHub` |
 | 34 | `РЕДКИЙ, НО МЕТКИЙ` was already absent from the current source | verified |
 | 35 | The friends list gets an invite action instead of a dead end | `SocialHub` |
-| 36 | The network error never promises a preserved progress | `SocialHub` |
+| 36 | The network error is a full sentence: `Нет соединения с сервером. Твой прогресс сохраняется.` / `Сервер не ответил. Твой прогресс сохраняется.` | `SocialHub`, `META_COPY` |
 | 37 | One modal frame: centered title, a 44×44 top-right close control, no second close button, one padding and radius recipe | `src/ui/modal.ts` |
 | 38 | The duplicated frame line removed (see §6) | `modal.ts`, `MenuScene`, `UIScene`, `SocialHub` |
 | 39 | One internal dock `ЗАДАЧИ ДНЯ · КОДЕКС · КОЛЛЕКЦИЯ`, rating excluded | `src/ui/modal.ts` |
@@ -166,6 +176,16 @@ is identical to the local branch, except for the PNG evidence.
 | 43 | The responsive matrix 320 / 390 / 768 / 1080 | `docs/qa/ui-redesign-v1-evidence/` |
 | 44 | Deterministic fixtures only, no mock-ups | `tests/ui-redesign.mjs` |
 | 45 | RED → GREEN per behaviour | the contract test was written against the old copy and failed first |
+| 46 | The mode chip of the result: `СТАНДАРТ · В зачёт рейтинга`, `ЗАБЕГ ДНЯ · СТАНДАРТ`, `ДУЭЛЬ · СТАНДАРТ`, `Тренировка (продолженный забег)` — no ranking disclaimer | `RESULT_MODE_CHIP` |
+| 47 | The daily countdown in words: `4 ч 15 мин`, `15 мин` | `UiFormat.fmtCountdown` |
+| 48 | The season table `СЕЗОН 3 · осталось 2 дн.`, the row `#1 · Игрок (TG) — 10:48 · 1 414 кл.`, the day row `Олег · 01:09 · уничтожено 68 · ★ место #1` | `SocialHub`, `META_COPY` |
+| 49 | The streak `Серия: 3 дн. · Рекорд: 5 дн.` and the empty state `Сыграй забег дня, чтобы начать серию · Рекорд: 5 дн.` | `SocialHub` |
+| 50 | The friends empty state `Здесь появятся результаты друзей, которые играют через @ofeliya_game_bot.` + `ПРИГЛАСИТЬ ДРУЗЕЙ` | `SocialHub` |
+| 51 | The shell states: `Штамм «Нулевой» (Базовая оболочка)`, `ЗАКРЫТО`, `Чтобы открыть: выполни веху «…»`, `Открыто за веху «…»` | `CollectionBoard`, `shellSubLabel` |
+| 52 | The milestones: the group header `Уничтожение иммунных клеток (всего: N)`, a progress bar per goal, `N / M · остался 1` | `CollectionBoard`, `CollectionSnapshot.killsTotal` |
+| 53 | The difficulty step indicator `• • ◦` / `• • •` and the hint `Сложность и управление — для нового забега` | `MenuScene`, `MENU_COPY` |
+| 54 | `★ Открыто в Кодексе: +3 записи ›` — a real plate that opens the Codex | `UIScene`, `openCodexOnMenu` |
+| 55 | The three canonical share variants + the victory variant, the duel share, and the forbidden-term guard | `UiCopy.buildShareText`, `SHARE_FORBIDDEN_TERMS` |
 
 ---
 
@@ -176,8 +196,10 @@ is identical to the local branch, except for the PNG evidence.
 | `Погиб от: …` | **DEFERRED — requires new gameplay state** | IMPLEMENTATION OVERRIDE 2. The state does not contain the last attacker, the lethal damage source or the largest recent hit. Nothing was fabricated and no gameplay tracking was added. |
 | `Задача «…»: 4 / 5 — остался 1` (the nearest task) | **DEFERRED — product rule required** | IMPLEMENTATION OVERRIDE 3. `src/quests/questRuntime.ts` exposes `activeQuestIds` in *selection* order; there is no `selected` / `active` / `tracked` / `closest` concept in the code. The result screen was completed without the line. |
 | `УЛУЧШИТЬ РЕЗУЛЬТАТ` | **DEFERRED — product rule required** | §31. The backend does not implement unlimited repeats with best-attempt-only semantics. The safe CTA `НАЧАТЬ ЗАБЕГ ДНЯ` is used. |
-| Synergy pair recipes | **DEFERRED — no source** | §24. `src/game/UpgradeSystem.ts` has no pair requirements. The codex shows the real critical mutations and a truthful locked state. |
-| Milestone pagination → scroll | **DEFERRED — P1** | §28. The paginator is hidden when there is one page; the scroll conversion is not a v1 change. |
+| Milestone pagination → scroll | **DEFERRED — P2** | Audit P2.5. The paginator is hidden when there is one page; the scroll conversion is not a v1 change. |
+| `★ МЕСТО #N В РЕЙТИНГЕ ДНЯ` under the timer | **DEFERRED — result layout refactor** | Audit P0.3 asks for the place line under the timer. The line exists and is correct, but moving it under the background timer is a change of the result composition, not of the copy. The audit's own §12 rule 1 makes the line conditional on a verified board, which the source verifies only for the daily board (§5.1). |
+| The `ЛЁГКИЙ` difficulty and its `• ◦ ◦` dots | **DEFERRED — EASY deliverable** | Audit rule 9 lists three difficulties. The code has two (`standard`, `strained`); a third mode is a balance change and belongs to the EASY work (see §11). The step indicator is implemented for the two real modes. |
+| `«#1 · Олег (Вы)»` — the "(Вы)" marker on your own row | **DEFERRED — server payload** | Audit §7 / rule 7. `SocialTopEntry` carries `{rank, platform, timeMs, kills}` only: the server sends no "this is you" flag, so the marker would be invented. The own row of the day uses the carrier's name instead (`PlatformBridge.getDisplayName()`). |
 
 ---
 
@@ -200,11 +222,14 @@ them. The source did not always support the proposal.
    * A **resumed** run is never submitted at all — `submitRunScore` returns `null`
      for `result.resumed` — so it can never carry a place. It says
      `Тренировка · продолженный забег`.
-2. **The `МУТАЦИИ` codex tab was not renamed to `СИНЕРГИИ`.**
-   §23 allows the rename only if the content is genuinely synergy content. The
-   tab lists the three evolution ids (`prism`, `halo`, `singularity`) under
-   `КРИТИЧЕСКИЕ МУТАЦИИ` — critical-mutation content, not synergy. The tab kept
-   the name `МУТАЦИИ`, which also matches the canonical vocabulary.
+2. **The `МУТАЦИИ` codex tab is now `СИНЕРГИИ`.** The first pass kept the old
+   name; the audit (its §5 and its P1.4) renames the tab under its content, and
+   the dictionary's scoped replacement (`codex_tab_mutations`) says the same.
+   The tab lists the three evolution ids (`prism`, `halo`, `singularity`) — the
+   critical mutations — and the section header inside the page stays
+   `КРИТИЧЕСКИЕ МУТАЦИИ`, exactly as the audit specifies it. The rename is
+   scoped to the tab; the word "мутация" was **not** replaced anywhere else
+   (the dictionary's `_warning` demands that).
 3. **A named archetype does exist.** `assessRunIdentity` in
    `src/game/RunIdentity.ts` is a deterministic classification
    (`projectile` / `orbit-control` / `infection-lysis` / `hybrid`, focused when
@@ -223,12 +248,171 @@ them. The source did not always support the proposal.
    `Уничтожено` is `SaveData.bestKills` (the best *single run*). `totalKills`
    (lifetime) and the milestone counters are a different window and are shown
    only in their own surfaces. No `Math.max` reconciliation was introduced.
-7. **Progress preservation on the network error is not provable** on the rating
-   surface: it is a read path, it holds no player progress. The copy states what
-   happened (`Нет соединения с сервером`) and offers `ПОВТОРИТЬ` instead of
-   promising a preserved progress.
+7. **The network error of the rating states that the progress is preserved.**
+   The first pass refused the promise, because the rating is a read path. The
+   audit's §7 states the sentence verbatim — `Нет соединения с сервером. Твой
+   прогресс сохраняется.` — and on a read path the promise is true: nothing the
+   rating does can lose a run. The copy is now exactly that sentence, and the
+   second variant (`Сервер не ответил. Твой прогресс сохраняется.`) covers the
+   http failure. The bare `НЕТ СОЕДИНЕНИЯ` survives only inside the compact
+   44 px daily-launch button, which cannot carry a sentence.
 8. **`РЕДКИЙ, НО МЕТКИЙ` was already absent** from the current source — no
    change was needed for §34.
+9. **`Гиперспиц` is `Гипершип` in the code.** The audit and the dictionary both
+   write `дальше: Гиперспиц`; `src/game/UpgradeSystem.ts:17` writes
+   `prism: 'ГИПЕРШИП'`. The game's own name wins, and the scoped rule of the
+   replacement (no bare imperative → `дальше: …`) is applied. Same for the other
+   branch hints: `дальше: Геометрия раскола`, `дальше: Сверхкапсид`,
+   `дальше: Нулевая точка`, `дальше: Сингулярность`, `дальше: Цепь лизиса`.
+10. **The codex header is `Открыто записей: 3/9`, not `3 из 9`.** The
+    dictionary writes `из`, the audit writes `3/9` and its §9.2 sets the short
+    counter as the rule. The audit outranks the dictionary, so the counter
+    keeps the slash. The denominator is the code's own `CODEX_RECORD_TOTAL = 9`
+    — the audit's warning ("the decomposition 3+6=9 is unverified") is honoured:
+    the branch never asserts the decomposition anywhere.
+11. **The legendary share writes the game's own name.** The audit's example
+    writes `Легендарная мутация «Нулевая точка» открыта.`; the game names it
+    `НУЛЕВАЯ ТОЧКА` (`getLegendaryDefinition(...).title`). The game's own title
+    is used, with the audit's sentence around it.
+12. **The menu record line keeps `Уничтожено:`.** The audit and the dictionary
+    propose `Клеток: 2 617`; the task body fixes the line as
+    `Носитель: {name} · Рекорд: {bestTime} · Уничтожено: {bestRunKills}`. The
+    task body wins, and the value is the best *single run* — the audit's
+    `2 617` — so the label is the task's and the number is the audit's.
+
+### 5.1 The reconciliation matrix
+
+Every item of the three documents, with the verdict of this branch. The
+verdicts mean:
+
+* **CORRECT_PR** — the branch already had it right; the document confirmed it.
+* **CHANGE_REQUIRED** — the reconciliation pass changed the branch.
+* **SSOT_OVERRIDDEN** — the document's wording was **not** applied, because the
+  current code (or the task body) is the fact under the precedence order.
+* **PROPOSAL_DEFERRED** — the document itself marks the item as a proposal or
+  as a decision that is not ours to take.
+* **TO_CONFIRM** — the document marks the underlying fact as unverified; the
+  branch states it only as a placeholder and never asserts it.
+
+#### The audit's prioritisation
+
+| # | Audit item | Verdict | Note |
+| --- | --- | --- | --- |
+| P0.1 | The developer language is gone (`локально`, `без наград`, `00:00 UTC`, the footer tokens, `КРИТ.`) | **CORRECT_PR** + **CHANGE_REQUIRED** | The strings were gone in the first pass; the countdown changed from `04:15` to `4 ч 15 мин` in the reconciliation. |
+| P0.2 | One mint CTA, a clean Resume, the run parameters inside the button, a full-size `НОВЫЙ ЗАБЕГ`, the dimmed configuration cards | **CORRECT_PR** | The hint is `Сложность и управление — для нового забега` (the task body) and the cards are dimmed to `alpha 0.6`. |
+| P0.3 | The result screen: the hidden HUD, no empty mutation lines, `Архетип: …`, the defeat/victory headlines | **CORRECT_PR** | |
+| P0.3 | `Погиб от: …` and the nearest task | **PROPOSAL_DEFERRED** | The task body forbids both (IMPLEMENTATION OVERRIDE 2 and 3). The state does not carry a cause of death and the quest runtime has no "tracked" concept. |
+| P0.3 | The place line under the timer | **PROPOSAL_DEFERRED** | The line is correct where it is; moving it is a composition change, not a copy change. |
+| P0.4 | The collection and daily states (`✓ АКТИВЕН`, `ЗАКРЫТО` + the condition, the hidden paginator, the progress bars, `◆ ВЫПОЛНЕНО`) | **CORRECT_PR** | The condition is `Чтобы открыть: выполни веху «ОХОТНИК НА ЭЛИТУ»` — the milestone title of the real data. |
+| P0.5 | The menu footer: no third instruction, three levels, the sound switches without percentages, the new tagline | **CORRECT_PR** | |
+| P1.1 | One modal template: a 12 px radius, a centred title, a 44×44 ×, 16 px padding, no bottom `ЗАКРЫТЬ` | **CORRECT_PR** | `src/ui/modal.ts`. |
+| P1.2 | The word `забег` everywhere, `БРОСИТЬ ВЫЗОВ ДРУГУ` | **CORRECT_PR** | |
+| P1.3 | The rating: `РЕЙТИНГ`, no pseudo-tabs, the empty day with the CTA, one row per player, the friends explanation + `ПРИГЛАСИТЬ ДРУЗЕЙ` | **CORRECT_PR** + **CHANGE_REQUIRED** | The pseudo-tab strip `ЗАБЕГ ДНЯ · СЕЗОН · ДРУЗЬЯ` was still in the code of the first pass and was removed in the reconciliation. |
+| P1.4 | The codex tabs, the three `ЗАКРЫТАЯ СИНЕРГИЯ` cards with their branch pairs, `Снарядный штамм`, `ПРОХОЖДЕНИЕ РЕЖИМОВ` | **CHANGE_REQUIRED** | The first pass kept the `МУТАЦИИ` tab and the three identical cards; the reconciliation renamed the tab, gave each locked card its own recipe and rewrote the branch rows. |
+| P1.5 | The collection tabs, the one appearance note, the milestones' group header, the progress bars, `осталось …` | **CHANGE_REQUIRED** | The group header `Уничтожение иммунных клеток (всего: N)`, the bars and the rest counter are new. |
+| P1.6 | The step dots `• • ◦` / `• • •`, the one-line difficulty descriptions, the record line | **CHANGE_REQUIRED** + **SSOT_OVERRIDDEN** | The dots are new. The descriptions keep the product's **factual** strings (`Базовый ритм кампании`, `Особые клетки мутируют · давление растёт`) instead of the audit's flavour placeholders — the audit itself says to replace the flavour with facts. The record line keeps the task body's `Уничтожено:` instead of the audit's `Клеток:`. |
+| P1.7 | The share text: the title, the action verbs, the hook, the bot handle | **CHANGE_REQUIRED** | The three canonical variants of the audit are now the templates of `buildShareText`, plus a fourth victory variant for the product's victory share path. |
+| P2.1 | The double-line artifact | **CORRECT_PR** | See §6. |
+| P2.2 | The clickable codex badge `★ Открыто в Кодексе: +3 … ›` | **CHANGE_REQUIRED** | The badge is a real interactive plate that opens the Codex. |
+| P2.3 | The non-breaking space for every number ≥ 1 000 | **CORRECT_PR** | `src/game/UiFormat.ts`. |
+| P2.4 | The leaderboard identities | **CORRECT_PR** | The payload carries no name and no "you" flag, so the branch shows `Игрок (TG)` and never invents `Штамм #NN`. |
+| P2.5 | The milestones: a scroll instead of a pagination | **PROPOSAL_DEFERRED** | The paginator is hidden when there is one page. |
+| §3 | The hero metric of the result: 44 px, bold, tabular monospace | **PROPOSAL_DEFERRED** | The timer is 46 px on the normal viewports and 38 px on the compact ones. Growing it further on a 320 px screen pushes the statistics out of the frame, and the repository has one display font — the monospace part of the token is a typographic change, not a copy change. |
+| §10 | The design-system token table (the heading sizes, the palette, the button radii) | **SSOT_OVERRIDDEN** | The table is a proposal; the repository's own token contract (`npm run test:tokens`) is the code. The branch keeps the repository's tokens and raises its own texts to the repository's readability floor (10/11 px for a card label, 11/13 px for a card description) instead of importing a second scale. The **ADOPTED** part of §10 — one modal template: 12 px radius, a centred title, a 44×44 ×, 16 px padding, no bottom `ЗАКРЫТЬ`, a marked active tab, a height that follows the content — is implemented. |
+
+#### The Decision Log — the twelve rules
+
+| # | Rule | Status in the audit | Verdict | Note |
+| --- | --- | --- | --- | --- |
+| 1 | The rating on the results | PROPOSAL | **SSOT_OVERRIDDEN** | The gate is the source, and the source answers it: a daily submission is ranked on the daily board, an ordinary one on the `all` board, a resumed one is not submitted at all. The branch therefore shows `★ МЕСТО #N В РЕЙТИНГЕ ДНЯ` for the daily case and the neutral `РЕЙТИНГ · МЕСТО #N` for the ordinary one — the audit's `В СЕЗОНЕ` would be a claim the server does not support. The `★ ЛИЧНЫЙ РЕКОРД` fallback stays unimplemented (PROPOSAL, unverified). |
+| 2 | The daily replay | PROPOSAL — Mark's decision | **PROPOSAL_DEFERRED** | The button stays `НАЧАТЬ ЗАБЕГ ДНЯ`, exactly as the audit instructs while the decision is open. |
+| 3 | The `Золотой прайм` condition | ADOPTED | **CORRECT_PR** | `Чтобы открыть: выполни веху «ОХОТНИК НА ЭЛИТУ»` + `ЗАКРЫТО`, and `Открыто за веху «…»` + `ВЫБРАТЬ` once the milestone is done. The milestone title is verified against the data. |
+| 4 | The codex counter vs the goals | ADOPTED | **CORRECT_PR** | `ДОСТИЖЕНИЯ 7/9` is gone; the header is `Открыто записей: N/9 · Забегов: R`. The branch never asserts the `3 + 6 = 9` decomposition. |
+| 5 | The kill counters | REJECTED as written | **CORRECT_PR** | No `Math.max` anywhere. The codex shows the lifetime `Забегов: N · Уничтожено клеток: N`, the menu the best run, the milestones their own counter (`killsTotal`, exposed by `CollectionSnapshot`). |
+| 6 | One streak only | ADOPTED | **CORRECT_PR** | The collection's streak line is gone; the rating shows `Серия: N дн. · Рекорд: M дн.`, and at zero `Сыграй забег дня, чтобы начать серию · Рекорд: M дн.`. |
+| 7 | The names in the table | REJECTED (fallback) | **CORRECT_PR** | `Игрок (TG)`; no invented identity. The `(Вы)` marker is **PROPOSAL_DEFERRED** — the server sends no "you" flag. |
+| 8 | `РЕДКИЙ, НО МЕТКИЙ` | ADOPTED | **CORRECT_PR** | The string was already absent from the source. |
+| 9 | The difficulty descriptions | ADOPTED (placeholder) | **SSOT_OVERRIDDEN** | The flavour placeholders are not facts; the branch shows the product's factual descriptions and the step dots. The third mode `ЛЁГКИЙ` is **PROPOSAL_DEFERRED** (the EASY deliverable). |
+| 10 | The record dashes | ADOPTED | **CORRECT_PR** | The `ПРАЙМ —` / `Кампания —` fields are hidden; the word `Прайм` is never asserted. The `Клеток:` label is the task body's `Уничтожено:`. |
+| 11 | The control card | ADOPTED (conditional) | **SSOT_OVERRIDDEN** | The gate is the code: there are three real modes (`one-hand`, `two-hand`, `dual-move`), so the scenario-2 branch applies and the card keeps its chevron. The audit's example names `ДЖОЙСТИК` / `КАСАНИЕ` do not exist in the code, so the code's own labels are used. |
+| 12 | The challenge button and the share | ADOPTED | **CORRECT_PR** | `БРОСИТЬ ВЫЗОВ ДРУГУ`; the share never promises a seed and never carries an insider term. |
+
+#### The copy dictionary
+
+| Group | Result |
+| --- | --- |
+| `exact_replacements` — 34 scoped pairs | **31 applied verbatim.** Three deviations, each recorded: `codex_branch_hint` (`Гипершип`, not `Гиперспиц` — the code's own name), `codex_branch_projectile` (applied as `Снарядный штамм` ✅), `results_profile` / `results_profile_prefix` (applied as `Архетип: …` ✅). |
+| `codex.subtitle` (`3 из 9`) | **SSOT_OVERRIDDEN** — the audit's §5/§9.2 short counter (`3/9`) outranks the dictionary. |
+| `codex.synergies_section` (the three recipes, the sub line) | **CHANGE_REQUIRED** — the recipes are now real, with the audit's own pairs; the dictionary marks them `TO CONFIRM`, and so does the report. |
+| `codex.mastery_section` (the branch rows, the mode rows) | **CHANGE_REQUIRED** — the rows use the dictionary's format with the game's own branch names. |
+| `collection.shells_section` (the shell names, the sub labels, the locked/unlocked conditions) | **CHANGE_REQUIRED** — `Базовая оболочка` / `Био-оболочка` and the two condition sentences are now rendered. |
+| `collection.milestones_section` (the group header, the four target texts) | **CHANGE_REQUIRED** — the group header and the four `противников всего` targets are now rendered. |
+| `daily_tasks` (the subtitle, the three task descriptions) | **CORRECT_PR** — the descriptions were corrected in the reconciliation (`2 000` with a non-breaking space, `Уничтожь 5 элитных клеток`, `Продержись 60 секунд подряд без урона`). |
+| `common.actions` / `common.states` / `common.units` | **CORRECT_PR** — `ЗАКРЫТО`, `✓ АКТИВЕН`, `◆ ВЫПОЛНЕНО`, `остался 1` / `осталось N`, `кл.`, `дн.`, `ч`, `мин`. |
+| `_meta.rules.forbidden_in_player_ui` | **CORRECT_PR** — the nine forbidden words are asserted absent by `tests/ui-redesign.mjs` on every redesigned surface. |
+| `_meta.rules.numbers_note` / `thousands_separator` | **CORRECT_PR** — `UiFormat.NBSP` is a real U+00A0. |
+
+#### The QA checklist
+
+`ofeliya-qa-checklist.md` is an acceptance checklist, not a source of copy. Its
+verdicts are in §8.1: **75 of its 83 check items PASS**, 2 are
+`DEFERRED_BY_OVERRIDE`, 3 are `PROPOSAL_NOT_APPROVED`, 2 are
+`SOURCE_TRUTH_CONFLICT` and 1 is a **FAIL** — the fixed height of the shared
+modal frame leaves empty space under the Codex on the tall viewports (a
+pre-existing condition, see §8.1).
+
+### 5.2 The exact-replacement matrix
+
+All **34** scoped replacements of `ru-copy-dictionary.json → exact_replacements`,
+each one applied in its own context. The dictionary's own `_warning` forbids a
+global find-replace, and none was done: the word "мутация" still appears where
+the product means a mutation (`КРИТИЧЕСКИЕ МУТАЦИИ`, `ЛЕГЕНДАРНАЯ МУТАЦИЯ`),
+and "веха" is used only in the collection.
+
+| Dictionary key | OLD | Required NEW | The branch now | Verdict |
+| --- | --- | --- | --- | --- |
+| `codex_branch_hint` | Открой ГИПЕРСПИЦ | дальше: Гиперспиц | `дальше: Гипершип` (RunIdentity.ts) | **SSOT_OVERRIDDEN_BY_SOURCE_TRUTH — `src/game/UpgradeSystem.ts:17` names the upgrade `ГИПЕРШИП`; the scoped rule (no bare imperative) is applied** |
+| `codex_branch_projectile` | ПРОЕКТИЛЬНЫЙ ШТАММ | Снарядный штамм | `Снарядный штамм` (RunIdentity.ts) | **CORRECT_PR** |
+| `codex_mastery_section` | МАСТЕРСТВО КАМПАНИИ | ПРОХОЖДЕНИЕ РЕЖИМОВ | `ПРОХОЖДЕНИЕ РЕЖИМОВ` (META_COPY.mastery) | **CORRECT_PR** |
+| `codex_tab_mutations` | МУТАЦИИ (tab) | СИНЕРГИИ | `СИНЕРГИИ` (MenuScene.showCodex) | **CHANGE_REQUIRED — the tab was renamed in the reconciliation; the section header inside stays `КРИТИЧЕСКИЕ МУТАЦИИ`, as the audit specifies** |
+| `codex_title` | КОДЕКС · STRAIN-0 | КОДЕКС | `КОДЕКС` (META_COPY.codex) | **CORRECT_PR** |
+| `collection_tab_goals` | ЦЕЛИ (tab) | ВЕХИ | `ВЕХИ` (CollectionBoard) | **CORRECT_PR** |
+| `collection_tab_skins` | ШТАММЫ (tab) | ОБОЛОЧКИ | `ОБОЛОЧКИ` (CollectionBoard) | **CORRECT_PR** |
+| `collection_title` | КОЛЛЕКЦИЯ ШТАММА | КОЛЛЕКЦИЯ | `КОЛЛЕКЦИЯ` (META_COPY.collection) | **CORRECT_PR** |
+| `daily_cta` | НАЧАТЬ ЕЖЕДНЕВНЫЙ ЗАБЕГ | НАЧАТЬ ЗАБЕГ ДНЯ | `НАЧАТЬ ЗАБЕГ ДНЯ` (META_COPY.dailyCta, SocialHub) | **CHANGE_REQUIRED — the review finding: the report claimed the new label while the code still had the old one** |
+| `friends_empty` | ПОКА НЕТ РЕЗУЛЬТАТОВ ДРУЗЕЙ | Здесь появятся результаты друзей, которые играют через @ofeliya_game_bot. | `Здесь появятся результаты друзей, которые играют через @ofeliya_game_bot.` + `ПРИГЛАСИТЬ ДРУЗЕЙ` (META_COPY) | **CHANGE_REQUIRED** |
+| `menu_footer_instruction` | Двигай штамм · собирай РНК · выбирай мутации | (delete) | removed from the menu (the onboarding hint in `src/game/identity.ts` is a different surface) | **CORRECT_PR** |
+| `menu_tagline` | Выживай. Собирай РНК. Меняй штамм. | Выживай. Поглощай РНК. Эволюционируй. | `Выживай. Поглощай РНК. Эволюционируй.` (MENU_COPY.tagline) | **CORRECT_PR** |
+| `quest_elite` | Уничтожь 5 элитных врагов за один забег | Уничтожь 5 элитных клеток за один забег | `Уничтожь 5 элитных клеток за один забег` (questCatalog.ts) | **CHANGE_REQUIRED** |
+| `quest_greedy` | Собери 2000 РНК за один забег | Собери 2 000 РНК за один забег | `Собери 2\u00a0000 РНК за один забег` (questCatalog.ts, a real U+00A0) | **CHANGE_REQUIRED** |
+| `quest_invisible` | 60 секунд подряд без урона | Продержись 60 секунд подряд без урона | `Продержись 60 секунд подряд без урона` (questCatalog.ts) | **CHANGE_REQUIRED** |
+| `quests_done_local` | Выполнено · локально | ◆ ВЫПОЛНЕНО | `◆ ВЫПОЛНЕНО` (QuestBoard, CollectionBoard) | **CORRECT_PR** |
+| `quests_local` | Локальный прогресс · без наград | (delete) | removed | **CORRECT_PR** |
+| `quests_reset` | Обновление в 00:00 UTC | Выполнено: {completed} из {total} · Обновление через {timeRemaining} | `Выполнено: N из M · Обновление через 4 ч 15 мин` (META_COPY.tasksProgress) | **CORRECT_PR — the countdown format was changed to words in the reconciliation** |
+| `quests_title` | КВЕСТЫ | ЗАДАЧИ ДНЯ | `ЗАДАЧИ ДНЯ` (META_COPY.tasks) | **CORRECT_PR** |
+| `results_challenge` | БРОСИТЬ ВЫЗОВ | БРОСИТЬ ВЫЗОВ ДРУГУ | `БРОСИТЬ ВЫЗОВ ДРУГУ` + the caption `Побить результат 15:20 · 2 617 кл.` | **CORRECT_PR — the caption was added in the reconciliation** |
+| `results_crit_empty` | КРИТ. МУТАЦИИ: нет | (hide) / `Критические мутации: {name}` | `◆ Критические мутации: …`, nothing when empty | **CORRECT_PR** |
+| `results_header` | STRAIN ZERO / ИТОГ ЦИКЛА | ИТОГ ЗАБЕГА | `ИТОГ ЗАБЕГА` (RESULT_COPY.header) | **CORRECT_PR** |
+| `results_infected` | Заражено: | Заражено клеток: | `Заражено клеток: N` (UIScene) | **CORRECT_PR** |
+| `results_legendary_empty` | ЛЕГЕНДАРНЫЕ: нет | (hide) | nothing when empty | **CORRECT_PR** |
+| `results_peak` | Пик мутации: | Уровень мутации: | `Уровень мутации: N` (UIScene) | **CORRECT_PR** |
+| `results_profile` | ПРОФИЛЬ ШТАММА: ГИБРИД - базовая конфигурация | Архетип: Базовый гибрид | `Архетип: Снарядный штамм (…)` — the archetype is computed, the name depends on the run | **CORRECT_PR** |
+| `results_profile_prefix` | ПРОФИЛЬ ШТАММА: | Архетип: | `Архетип:` | **CORRECT_PR** |
+| `results_rank` | РЕЙТИНГ · МЕСТО #1 | ★ МЕСТО #1 В РЕЙТИНГЕ ДНЯ | `★ МЕСТО #N В РЕЙТИНГЕ ДНЯ` for the daily board, the neutral `РЕЙТИНГ · МЕСТО #N` for the ordinary one | **CORRECT_PR — the board name is shown only when the server's board is provable** |
+| `results_retry` | ЕЩЁ ОДИН ЦИКЛ | НОВЫЙ ЗАБЕГ | `НОВЫЙ ЗАБЕГ` (RESULT_COPY.newRun) | **CORRECT_PR** |
+| `resume_label` | НЕЗАВЕРШЁННЫЙ ЗАБЕГ | (delete) | removed | **CORRECT_PR** |
+| `resume_secondary` | НАЧАТЬ НОВЫЙ | НОВЫЙ ЗАБЕГ | `НОВЫЙ ЗАБЕГ` (MENU_COPY.newRun) | **CORRECT_PR** |
+| `skin_golden_unlock` | Открывает: ОХОТНИК НА ЭЛИТУ | Чтобы открыть: выполни веху «Охотник на элиту» | `Чтобы открыть: выполни веху «ОХОТНИК НА ЭЛИТУ»` + `ЗАКРЫТО`; the owned shell shows `Открыто за веху «…»` | **CORRECT_PR — the milestone title is the real one from the data (`ОХОТНИК НА ЭЛИТУ`)** |
+| `skin_selected` | ВЫБРАН | ✓ АКТИВЕН | `✓ АКТИВЕН` (META_COPY.active) | **CORRECT_PR** |
+| `summary_title` | СВОДКА | РЕЙТИНГ | `РЕЙТИНГ` (the menu tile and the hub title) | **CORRECT_PR** |
+
+Two more entries of the dictionary are **not** in `exact_replacements` and are
+reconciled separately:
+
+| Dictionary entry | The branch now | Verdict |
+| --- | --- | --- |
+| `codex.subtitle` — `Открыто записей: {unlocked} из {total} · Забегов: {totalRuns}` | `Открыто записей: N/9 · Забегов: R` | **SSOT_OVERRIDDEN** — the audit's §5 and its §9.2 short-counter rule (`3/9`) outrank the dictionary's `из`; the audit is above the dictionary in the precedence order. The denominator is the code's own `CODEX_RECORD_TOTAL = 9`, and the branch never asserts the unverified decomposition. |
+| `codex.synergies_section` — the three locked recipes and the section sub line | `ЗАКРЫТАЯ СИНЕРГИЯ I/II/III` + `Совмести ветви «Снаряды» и «Орбита»` / `«Орбита» и «Инфекция»` / `«Снаряды» и «Инфекция»` + `Открываются при совмещении двух совместимых ветвей в одном забеге` | **CHANGE_REQUIRED / TO_CONFIRM** — the dictionary marks the pairings `TO CONFIRM` against the design, and so does this report; the structure (one card, one condition) is the part that is implemented. |
 
 ---
 
@@ -335,8 +519,162 @@ Result: **PASS** at 320×568, 390×740, 768×1024 and 1080×1920
 `ui redesign contract: ok`).
 
 It is **not** wired into the CI browser job in this branch — the GitHub App that
-pushes the branch cannot write `.github/workflows/`. The step to add by hand is
-`npm run test:ui-redesign`.
+pushes the branch cannot write `.github/workflows/` (see §2.1 for the exact
+error). The step to add by hand is in §8.2.
+
+The reconciliation pass extended the contract with the assertions of the three
+source documents: the codex tabs and their recipes, the mastery rows, the
+lifetime line, the daily CTA, the season/streak/friends lines, the network
+error, the collection shell states, the milestone group, the mode chip, the
+archetype line, the records line, the codex plate, the share variants read from
+the **real share action** (the messenger is stubbed, the product path is not),
+and a forbidden-term sweep over every redesigned surface. The copy catalog
+contract (`tests/ui-copy-catalog.mjs`) now pins the same strings as literals,
+so a silent rewrite of the catalog fails the build.
+
+### 8.1 The QA checklist — `ofeliya-qa-checklist.md`
+
+The checklist has **83** check items. Each one was run against the actual
+branch, with the labels the reconciliation task prescribes.
+
+| Label | Count |
+| --- | --- |
+| **PASS** | **75** |
+| **FAIL** | **1** |
+| **DEFERRED_BY_OVERRIDE** | **2** |
+| **PROPOSAL_NOT_APPROVED** | **3** |
+| **SOURCE_TRUTH_CONFLICT** | **2** |
+
+| Block | Items | Result |
+| --- | --- | --- |
+| P0.1 The developer language | 5 | **5 PASS.** The daily-tasks subtitle is `Выполнено: N из M · Обновление через 4 ч 15 мин`; the menu footer carries no platform token and no build hash; the result screen has no `КРИТ.`; the nine forbidden words of the dictionary are asserted absent on every redesigned surface. |
+| P0.2 One CTA, a clean Resume | 6 | **6 PASS.** The mint plate is shared (`src/ui/cta.ts`); the Resume state has no yellow block, the run parameters are inside the button, `НОВЫЙ ЗАБЕГ` is a 44 px target, the two configuration cards are dimmed to `alpha 0.6` and carry the hint `Сложность и управление — для нового забега`, and the caption is `Кровоток · Стандарт` (no `Акт I`). |
+| P0.3 The result screen | 6 | **5 PASS, 1 DEFERRED_BY_OVERRIDE.** The HUD is hidden, the empty mutation lines are gone, the archetype is named, the headlines are right, and the three buttons carry their captions (`Побить результат 15:20 · 2 617 кл.` under the challenge). **Deferred:** the cause of death and the nearest task — the task body forbids both, and the state carries neither. |
+| P0.4 The collection and the daily states | 6 | **6 PASS.** The active tab is marked, the selected shell is `✓ АКТИВЕН`, the locked shell shows `ЗАКРЫТО` + `Чтобы открыть: выполни веху «ОХОТНИК НА ЭЛИТУ»` and has no select action, the paginator hides itself on a single page, every daily task has a bar and `◆ ВЫПОЛНЕНО` or `4 / 5 · остался 1`, and the appearance note appears once. |
+| P0.5 The menu footer | 4 | **4 PASS.** |
+| Rule 1 — the rating on the results | 5 | **5 PASS.** The gate is answered by the source (see §5.1, rule 1): the daily board is provable, the ordinary place comes from the `all` board, a resumed run is never submitted, the unverified personal-best fallback is **not** implemented, and a place is never shown that the server did not return. |
+| Rule 2 — the daily replay | 3 | **1 PASS, 2 PROPOSAL_NOT_APPROVED.** The button stays `НАЧАТЬ ЗАБЕГ ДНЯ` and the item is marked deferred, exactly as the checklist prescribes while Mark's decision is open. |
+| Rule 3 — the `Золотой прайм` condition | 4 | **4 PASS**, and the milestone title is verified against the real data (`ОХОТНИК НА ЭЛИТУ`). |
+| Rule 4 — the codex counter vs the goals | 3 | **3 PASS.** The decomposition `3 + 6 = 9` is never asserted anywhere. |
+| Rule 5 — the kill counters | 4 | **3 PASS, 1 PROPOSAL_NOT_APPROVED.** There is no `Math.max` anywhere, each counter has its own label, and no synchronisation was chosen. The gate itself (the enemy filter of the milestone counter) is a backend fact, so the synchronisation proposal stays unapproved and the client labels the three counters instead of merging them. |
+| Rule 6 — one streak only | 4 | **4 PASS.** |
+| Rule 7 — the names | 4 | **3 PASS, 1 SOURCE_TRUTH_CONFLICT.** `Игрок (TG)` and no invented identity. The `(Вы)` marker on your own row conflicts with the source: the server sends no "you" flag, so the own row of the day carries the carrier's name instead. |
+| Rule 8 — `РЕДКИЙ, НО МЕТКИЙ` | 2 | **2 PASS** (the string was already absent from the source). |
+| Rule 9 — the difficulty selector | 3 | **2 PASS, 1 DEFERRED_BY_OVERRIDE.** The header is `СЛОЖНОСТЬ`, the dots are `• • ◦` / `• • •`, and the descriptions carry no percentages and no ranking wording. The third mode `ЛЁГКИЙ` is deferred by the task override (no EASY implementation) and belongs to the EASY deliverable. |
+| Rule 10 — the record dashes | 3 | **2 PASS, 1 SOURCE_TRUTH_CONFLICT.** The `ПРАЙМ —` / `Кампания —` fields are hidden, the lifetime total is never substituted for the best run, and the word `Прайм` is never asserted. The label of the record line conflicts with the checklist's `Клеток:` — the task body fixes it as `Уничтожено:`, and the number behind it is the checklist's `2 617` (the best run). |
+| Rule 11 — the control card | 3 | **3 PASS.** The gate is answered by the code: there are three real modes, so the card keeps its chevron and cycles through them. |
+| Rule 12 — the challenge button and the share | 3 | **3 PASS.** The button is `БРОСИТЬ ВЫЗОВ ДРУГУ` with the caption `Побить результат 15:20 · 2 617 кл.`, the share starts with `OFELIYA · Вызов в кровотоке`, says `продержался` after a defeat, ends with `@ofeliya_game_bot`, and carries none of `вне рейтинга`, `Профиль штамма`, `STRAIN-0`, `на этом же штамме`, `выжил`. |
+| Part 3 — the modal frame | 3 | **2 PASS, 1 FAIL.** 12 px radius, a centred title, a 44×44 × in the top-right corner, no bottom `ЗАКРЫТЬ`, no double-line artifact. **FAIL:** the height of the panel does not follow the content for the Codex — the shared frame uses a fixed height (`min(H − 34, 650)`), so the Codex leaves empty space below its three synergy cards on the tall viewports. The daily tasks fill their panel (their rows are distributed over the available height). This condition is **pre-existing** — `main` uses the same `Math.min(H - 34, 650)` for the Codex — and fixing it means making the shared frame's height content-driven for all four meta surfaces, which is a layout refactor beyond a copy reconciliation. |
+| Part 3 — the codex recipes and the calque | 3 | **3 PASS.** Three different locked cards with three different recipes, `Снарядный штамм` and `дальше: …`, `ПРОХОЖДЕНИЕ РЕЖИМОВ`. The branch pairs are the audit's own example pairs and stay marked `TO CONFIRM` here, as the audit demands. |
+| Part 3 — the numbers and the text | 5 | **5 PASS.** A real U+00A0 in every number ≥ 1 000, `MM:SS` timers, `4 / 5` fractions, the joined `3/9` counter, the headings in caps and the descriptions in sentence case, at most three `·` segments per line, and the em dash never used as "no value" (the mastery rows say `ещё не пройдена` instead). |
+| Part 3 — the navigation and the states | 4 | **4 PASS.** The codex tabs `СИНЕРГИИ \| ЛЕГЕНДАРНЫЕ \| МАСТЕРСТВО` and the collection tabs `ОБОЛОЧКИ \| ВЕХИ \| ЛАБОРАТОРИЯ` mark the active tab, the internal dock is a tab bar with the active segment lit, every empty state carries an explanation and an action, and the network error is the full sentence with `ПОВТОРИТЬ`. |
+
+#### 8.1.1 Every item, one by one
+
+| Блок | Пункт | Метка | Комментарий |
+| --- | --- | --- | --- |
+| P0.1 | Нет строк «Локальный прогресс · без наград», «· локально», «00:00 UTC» в Задачах дня | **PASS** |  |
+| P0.1 | Подзаголовок «Выполнено: 2 из 3 · Обновление через 4 ч 15 мин» | **PASS** |  |
+| P0.1 | Нет «mini-app · tdesktop · ce8ecb8» в подвале меню | **PASS** |  |
+| P0.1 | Нет «КРИТ.» на итогах | **PASS** | «◆ Критические мутации: …» |
+| P0.1 | Нет слов «локально», «без наград», «STRAIN-0», «tdesktop», хеша билда | **PASS** | asserted by the contract |
+| P0.2 | Единый мятный CTA в меню, на итогах и в Рейтинге | **PASS** | #9CC5B5 / src/ui/cta.ts |
+| P0.2 | Нет тускло-бордовой и бледно-бежевой кнопки | **PASS** |  |
+| P0.2 | Нет жёлтого «НЕЗАВЕРШЁННЫЙ ЗАБЕГ»; параметры один раз в кнопке | **PASS** |  |
+| P0.2 | Вторая кнопка «НОВЫЙ ЗАБЕГ», высота ≥ 40–44 px | **PASS** | 44 px |
+| P0.2 | Карточки сложности и управления приглушены или помечены | **PASS** | alpha 0.6 + подсказка |
+| P0.2 | Подпись «НАЧАТЬ ЗАРАЖЕНИЕ» — «Кровоток · Стандарт» | **PASS** |  |
+| P0.3 | Боевой HUD полностью скрыт под окном итогов | **PASS** |  |
+| P0.3 | Нет строк «КРИТ. МУТАЦИИ: нет» и «ЛЕГЕНДАРНЫЕ: нет» | **PASS** |  |
+| P0.3 | «Архетип: …» вместо «ПРОФИЛЬ ШТАММА» | **PASS** | «Архетип: Снарядный штамм (…)» |
+| P0.3 | Заголовки «ШТАММ УНИЧТОЖЕН» / «НОСИТЕЛЬ ЗАРАЖЁН» | **PASS** |  |
+| P0.3 | В центре — причина гибели и ближайшая задача | **DEFERRED_BY_OVERRIDE** | задание запрещает оба; в состоянии их нет |
+| P0.3 | Кнопки «НОВЫЙ ЗАБЕГ» / «БРОСИТЬ ВЫЗОВ ДРУГУ» + подпись / «В МЕНЮ» | **PASS** | «Побить результат 15:20 · 2 617 кл.» |
+| P0.4 | Активная вкладка выделена в Кодексе и Коллекции | **PASS** |  |
+| P0.4 | У выбранного скина — залитая «✓ АКТИВЕН» | **PASS** |  |
+| P0.4 | У закрытого скина нет «ВЫБРАТЬ», а «ЗАКРЫТО» + условие | **PASS** | веха «ОХОТНИК НА ЭЛИТУ» |
+| P0.4 | Пагинатор скрыт на одной странице | **PASS** |  |
+| P0.4 | У задач дня — прогресс-бар, «◆ ВЫПОЛНЕНО» или «4 / 5 · остался 1» | **PASS** |  |
+| P0.4 | Фраза про внешний вид — один раз, в шапке «ОБОЛОЧЕК» | **PASS** |  |
+| P0.5 | Удалена третья инструкция подвала | **PASS** |  |
+| P0.5 | Навигация — отдельным рядом плиток | **PASS** | 2×2 |
+| P0.5 | Переключатели звука — только вкл/выкл | **PASS** |  |
+| P0.5 | Слоган «Выживай. Поглощай РНК. Эволюционируй.» | **PASS** |  |
+| Правило 1 | Гейт: какой лидерборд ранжирует забег | **PASS** | дневной / all / без борда — из кода |
+| Правило 1 | Названа таблица в строке рейтинга | **PASS** | «★ МЕСТО #N В РЕЙТИНГЕ ДНЯ» / «РЕЙТИНГ · МЕСТО #N» |
+| Правило 1 | Продолженный забег — чип «Тренировка (продолженный забег)» без места | **PASS** |  |
+| Правило 1 | «★ ЛИЧНЫЙ РЕКОРД» — только при подтверждении | **PASS** | не реализовано: поведение не подтверждено |
+| Правило 1 | Нигде не показывается место, которого не вернул сервер | **PASS** |  |
+| Правило 2 | Гейт: решение Mark по повтору забега дня | **PROPOSAL_NOT_APPROVED** |  |
+| Правило 2 | Если решение принято — «УЛУЧШИТЬ РЕЗУЛЬТАТ» | **PROPOSAL_NOT_APPROVED** | условный пункт |
+| Правило 2 | Если решения нет — кнопка «НАЧАТЬ ЗАБЕГ ДНЯ», пункт отложен | **PASS** |  |
+| Правило 3 | «Чтобы открыть: выполни веху «Охотник на элиту»» | **PASS** | «ОХОТНИК НА ЭЛИТУ» — данные игры |
+| Правило 3 | У закрытого скина нет «ВЫБРАТЬ» | **PASS** |  |
+| Правило 3 | После вехи — «Открыто за веху …» и «ВЫБРАТЬ» | **PASS** |  |
+| Правило 3 | Название вехи сверено с данными | **PASS** |  |
+| Правило 4 | «ДОСТИЖЕНИЯ 7/9» удалены из Кодекса | **PASS** | «Открыто записей: N/9 · Забегов: R» |
+| Правило 4 | Все цели — под термином «ВЕХИ» | **PASS** |  |
+| Правило 4 | Декомпозиция «3 + 6 = 9» не утверждается | **PASS** |  |
+| Правило 5 | Гейт: что считает каждый счётчик убийств | **PROPOSAL_NOT_APPROVED** | окна известны, фильтр врагов — вопрос бэкенда |
+| Правило 5 | Нет `Math.max(totalKills, goalKills)` | **PASS** |  |
+| Правило 5 | У каждого счётчика своя подпись | **PASS** | лучший забег / lifetime / прогресс вех |
+| Правило 5 | Синхронизация не выбрана молча | **PASS** | не выбрана |
+| Правило 6 | Строка «Посещений: 1 · серия: 1 дн.» удалена из Коллекции | **PASS** |  |
+| Правило 6 | При нулевой серии — «Сыграй забег дня, чтобы начать серию · Рекорд: N дн.» | **PASS** |  |
+| Правило 6 | После забега дня серия ≥ 1 дн. | **PASS** | «Серия: N дн. · Рекорд: M дн.» |
+| Правило 6 | Серия только в Рейтинге | **PASS** |  |
+| Правило 7 | Гейт: хранятся ли имена на сервере | **PASS** | нет: payload = {rank, platform, timeMs, kills} |
+| Правило 7 | Один игрок — одна строка | **PASS** |  |
+| Правило 7 | «Игрок (TG)» и своя строка с именем | **SOURCE_TRUTH_CONFLICT** | «Игрок (TG)» — да; «(Вы)» — сервер не шлёт флаг «это вы» |
+| Правило 7 | Нет выдуманных «Штамм #NN (TG)» | **PASS** |  |
+| Правило 8 | «РЕДКИЙ, НО МЕТКИЙ» удалена | **PASS** | строки нет в коде |
+| Правило 8 | Под кнопкой — чистый отступ ≥ 12 px | **PASS** |  |
+| Правило 9 | Индикатор ступени и однострочные описания | **DEFERRED_BY_OVERRIDE** | точки есть для двух реальных режимов; «ЛЁГКИЙ» — задание EASY |
+| Правило 9 | Заголовок карточки — «СЛОЖНОСТЬ» | **PASS** |  |
+| Правило 9 | В описаниях нет процентов и «в зачёт рейтинга» | **PASS** | описания — фактические строки продукта |
+| Правило 10 | Поля «ПРАЙМ —» и «Кампания —» скрыты | **SOURCE_TRUTH_CONFLICT** | строка есть, но ярлык задания — «Уничтожено:», а не «Клеток:» |
+| Правило 10 | В бейдж не подставляется lifetime 5 424 | **PASS** | 2 617 — лучший забег |
+| Правило 10 | После первой победы нет слова «Прайм» | **PASS** |  |
+| Правило 11 | Гейт: есть ли режимы кроме «ОДНА РУКА» | **PASS** | три: one-hand / two-hand / dual-move |
+| Правило 11 | Сценарий «один режим» — снять «›» | **PASS** | сценарий не применим: режимов три |
+| Правило 11 | Сценарий «два режима» — «ДЖОЙСТИК»/«КАСАНИЕ» | **PASS** | имена кодовые: «ОДНА РУКА» / «ДВЕ РУКИ · ПРИЦЕЛ» / «ДВЕ РУКИ · ДВИЖЕНИЕ» |
+| Правило 12 | Кнопка «БРОСИТЬ ВЫЗОВ ДРУГУ» с подписью | **PASS** |  |
+| Правило 12 | Текст шеринга: заголовок, «продержался», @ofeliya_game_bot | **PASS** |  |
+| Правило 12 | Нет «вне рейтинга», «Профиль штамма», «STRAIN-0», «на этом же штамме», «выжил» | **PASS** | asserted by the contract |
+| Часть 3 | Скругление 12 px, заголовок по центру, × 44×44, без «ЗАКРЫТЬ» | **PASS** | src/ui/modal.ts |
+| Часть 3 | Нет артефакта двойной линии | **PASS** | см. §6 |
+| Часть 3 | Высота модалки — по контенту | **FAIL** | Кодекс: фиксированная высота панели (min(H−34, 650)); условие существовало и на main |
+| Часть 3 | «ЗАКРЫТАЯ СИНЕРГИЯ I/II/III» с конкретными парами веток | **PASS** | пары — TO CONFIRM по дизайну |
+| Часть 3 | «Снарядный штамм» и «дальше: …» | **PASS** |  |
+| Часть 3 | Секция «ПРОХОЖДЕНИЕ РЕЖИМОВ» | **PASS** |  |
+| Часть 3 | Неразрывный пробел во всех числах ≥ 1000 | **PASS** | U+00A0 |
+| Часть 3 | Таймеры MM:SS, дроби «4 / 5», короткий счётчик «3/9» | **PASS** |  |
+| Часть 3 | Заголовки — капс, описания — sentence case | **PASS** | readability-гейт |
+| Часть 3 | «·» — максимум три сегмента; «—» не значит «нет значения» | **PASS** | «ещё не пройдена» вместо «—» |
+| Часть 3 | Все строки сверены с exact_replacements | **PASS** | см. §5.1 |
+| Часть 3 | Вкладки «СИНЕРГИИ | ЛЕГЕНДАРНЫЕ | МАСТЕРСТВО» и «ОБОЛОЧКИ | ВЕХИ | ЛАБОРАТОРИЯ» | **PASS** |  |
+| Часть 3 | Док-бар оформлен таб-баром, активный сегмент подсвечен | **PASS** |  |
+| Часть 3 | Пустые состояния: объяснение + действие | **PASS** |  |
+| Часть 3 | Ошибка сети — полное предложение + «ПОВТОРИТЬ» | **PASS** |  |
+
+### 8.2 The CI step that the App could not write
+
+The new contract belongs in the `browser-smoke` job, next to the other browser
+contracts. The exact step:
+
+```yaml
+      - name: UI redesign v1 surfaces contract
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:ui-redesign
+```
+
+It is placed after the `Dense visual readability browser smoke` step in
+`.github/workflows/ci.yml`. The GitHub App that pushes this branch has no
+`workflows` permission: both `create_or_update_file` and `push_files` answer
+`error: connector_tool_error: Connector tool execution failed (latency_ms=0)`
+for that path, and the remote blob SHA of `ci.yml` is unchanged after the
+attempt. The step is therefore **in the local branch** and **not yet in
+PR #249** — the one line above is the whole pending change, and a maintainer
+with workflow rights adds it in one line.
 
 ### Existing gates
 
@@ -463,6 +801,15 @@ npm run test:quest-core
 npm run test:quest-runtime
 npm run test:layout-diagnostics
 npm run test:review-browser
+npm run test:run-identity
+npm run test:quest-core
+npm run test:social-hub
+npm run test:integration-visual-browser
+npm run test:visual-gameplay-impact
+node scripts/codex-smoke.cjs
+node scripts/ui-readability-smoke.cjs
+node scripts/mobile-layout-matrix.cjs
+node tests/visual-completion.mjs
 node tests/ui-redesign.mjs
 git diff --check
 ```
@@ -605,8 +952,12 @@ profile, then check that the third description still fits the compact card.
 5. The PNG evidence is not committed to the branch: the App-only push path
    cannot carry binary files (§2). The screenshots travel with this report and
    `npm run test:ui-redesign` regenerates all of them.
-6. The new contract is not in the CI workflow for the same reason. The step to
-   add by hand is `npm run test:ui-redesign` in the browser-smoke job.
+6. The new contract is not in the CI workflow for the same reason. The exact
+   step to add by hand is in §8.2.
+7. The three source documents were attached after the first pass. Everything
+   they name that is not a *game rule* is applied in the reconciliation pass
+   (§5.1); the items that are game rules or need a server fact are listed as
+   deferred in §4 with the reason.
 
 ---
 
