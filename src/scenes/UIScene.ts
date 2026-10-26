@@ -2473,6 +2473,12 @@ export class UIScene extends Phaser.Scene {
       void submission.then((score) => {
         if (!scoreStatus.active) return;
         if (!score) {
+          // An unranked tier that never submits gets a neutral line instead of a
+          // vanishing one: the run is complete, it simply carries no place.
+          if (res.difficultyId === 'easy') {
+            scoreStatus.setText('РЕЖИМ ЛЁГКИЙ · РЕЗУЛЬТАТ БЕЗ РЕЙТИНГА').setColor('#8f9ab7');
+            return;
+          }
           scoreStatus.setVisible(false);
           return;
         }
