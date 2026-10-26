@@ -63,7 +63,7 @@ Everything else in the first pass was confirmed by the documents and kept.
 | --- | --- |
 | `origin/main` at the start | `ce8ecb84ced1afa09870f2f00f9a0328257fd11c` |
 | Previously released `ce8ecb84…` | `ce8ecb84ced1afa09870f2f00f9a0328257fd11c` |
-| Final head (the PR) | the commit that carries this report — the commit before it is `1a25001e25f2d64475971e70d4c3245032c1c480` |
+| Final head (the PR) | the commit that carries this report — the App push path creates one commit per push, so the head is the last push of this pass |
 | Final head (the local branch) | the commit that carries this report |
 | The head the CI was green on in the first pass | `f3d0e3dade4ed844a99056a0c37c3bcdd3a9aced` |
 
@@ -673,7 +673,7 @@ branch, with the labels the reconciliation task prescribes.
 | | |
 | --- | --- |
 | The last **green** run on this branch | `40292414901` — head `1823f927a07f951914969f9339eaf2b2cc469f62` (the head of the first pass): `build` 58/58, `production-contract` 23/23, `browser-smoke` 59/59 |
-| The run of the reconciled head | **no run was created.** The App pushed the reconciliation commits to the same branch, the pull request's head moved to `8a916808ff28c8ae0dd5d0651e5996c2362ff6fb` (41 commits) and the `synchronize` event produced no workflow run within the observation window (25 minutes, with another `CI` run on `main` completing `success` in the meantime) |
+| The run of the reconciled head | **no run was created.** The App pushed the reconciliation commits to the same branch, the pull request's head moved forward with every push (the last one is the commit that carries this report) and the `synchronize` event produced no workflow run within the observation window (≈ 40 minutes, with another `CI` run on `main` completing `success` in the meantime) |
 | Why | the pull request is **`mergeable_state: dirty`** — `main` advanced by two other merges during this pass (§2) and the new base touches the same surfaces. The workflow is not executed for a pull request that cannot be merged, and the base cannot be moved or rebased from this environment (the App push path only creates commits; it cannot rewrite a branch) |
 | What is left for a maintainer | rebase the branch onto the current `main`, add the one CI line of §8.2, and the `browser-smoke` job will then run the new contract |
 
@@ -998,9 +998,9 @@ profile, then check that the third description still fits the compact card.
 | Title | `[DRAFT] OFELIYA UI v1 — menu, results, meta navigation and Russian copy` |
 | Draft | **yes** |
 | Base | `main` @ `ce8ecb84ced1afa09870f2f00f9a0328257fd11c` |
-| Head | `feat/ui-redesign-v1-20261026` @ the commit that carries this report — the commit before it is `1a25001e25f2d64475971e70d4c3245032c1c480` |
-| Diff | 45 files, +4 864 / −1 172 |
-| Commits | 40 (the App push path splits some logical changes into several commits) |
+| Head | `feat/ui-redesign-v1-20261026` @ the commit that carries this report |
+| Diff | 45 files, +4 900 / −1 172 |
+| Commits | 43 (the App push path splits some logical changes into several commits) |
 | Merged | **no** |
 | Merge state | `dirty` — `main` advanced by two other merges during this pass (§2) |
 
