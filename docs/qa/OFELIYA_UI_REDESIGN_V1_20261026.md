@@ -63,12 +63,23 @@ Everything else in the first pass was confirmed by the documents and kept.
 | --- | --- |
 | `origin/main` at the start | `ce8ecb84ced1afa09870f2f00f9a0328257fd11c` |
 | Previously released `ce8ecb84…` | `ce8ecb84ced1afa09870f2f00f9a0328257fd11c` |
-| Final head (the PR) | the commit that carries this report — the commit before it is `f3d0e3dade4ed844a99056a0c37c3bcdd3a9aced`, the head the CI is green on |
-| Final head (the local branch) | `2906016` |
+| Final head (the PR) | the commit that carries this report — the commit before it is `1a25001e25f2d64475971e70d4c3245032c1c480` |
+| Final head (the local branch) | the commit that carries this report |
+| The head the CI was green on in the first pass | `f3d0e3dade4ed844a99056a0c37c3bcdd3a9aced` |
 
-`origin/main` was fetched before the work started. **Main did not advance** beyond
-the previously released `ce8ecb84…` — the branch was cut from the current main
-and the working tree was clean at the start.
+`origin/main` was fetched before the work started. **Main did not advance while
+this work was made** — the branch was cut from the current main and the working
+tree was clean at the start.
+
+**Main has since moved, by other people's work.** While the reconciliation pass
+was running, `main` received two merges that are not part of this branch:
+`Merge PR #247: OFELIYA Sprint 0 analytics read path` (13:17 UTC) and
+`Merge PR #250: verified onboarding and touch UX fixes` (13:46 UTC, head
+`5412473011757bea44d21909ea02a2cd1ed63a7a`). The branch is still based on the
+released `ce8ecb84…`, the pull request's base is still `main`, and the pull
+request now reports **`mergeable_state: dirty`** — the new main touches the same
+surfaces. Rebasing or merging is **not** part of this pass: the pull request
+stays a draft, and the conflict is reported rather than resolved here.
 
 Commits (each one reviewable on its own):
 
@@ -821,9 +832,9 @@ an explicit 40-character SHA for the stamp:
 VITE_RELEASE_SHA=$(git rev-parse HEAD) npm run build
 ```
 
-Result: **PASS** — 132 modules transformed, `dist/assets/index-*.js` 490.24 kB
-(146.70 kB gzip), `vendor-phaser-*.js` 1 481.79 kB (339.85 kB gzip),
-`Stamped OFELIYA release 8478b41089f98859cfa5fa207effa91030368934`.
+Result: **PASS** — 132 modules transformed, `dist/assets/index-*.js` 494.32 kB
+(148.25 kB gzip), `vendor-phaser-*.js` 1 481.79 kB (339.85 kB gzip),
+`Stamped OFELIYA release b64196095f2f8e81ca8de180f360790d28a91d12`.
 
 One note on the first sweep: `test:result-actions` failed once with
 `page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:5173/` because the
@@ -969,9 +980,11 @@ profile, then check that the third description still fits the compact card.
 | Title | `[DRAFT] OFELIYA UI v1 — menu, results, meta navigation and Russian copy` |
 | Draft | **yes** |
 | Base | `main` @ `ce8ecb84ced1afa09870f2f00f9a0328257fd11c` |
-| Head | `feat/ui-redesign-v1-20261026` @ the commit that carries this report (the CI is green on its parent, `f3d0e3dade4ed844a99056a0c37c3bcdd3a9ced`) |
-| Diff | 38 files, +3 566 / −1 014 |
+| Head | `feat/ui-redesign-v1-20261026` @ the commit that carries this report — the commit before it is `1a25001e25f2d64475971e70d4c3245032c1c480` |
+| Diff | 45 files, +4 864 / −1 172 |
+| Commits | 40 (the App push path splits some logical changes into several commits) |
 | Merged | **no** |
+| Merge state | `dirty` — `main` advanced by two other merges during this pass (§2) |
 
 The pull request is open as a **draft** and was **not** merged. Nothing was
 deployed.
