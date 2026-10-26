@@ -487,7 +487,11 @@ export class MenuScene extends Phaser.Scene {
               ? 'фиксировано условиями вызова'
               : 'сложность фиксирована\nусловиями вызова'
           : H < 650
-            ? profile.id === 'strained' ? 'сложнее' : 'базовый'
+            ? profile.id === 'strained'
+              ? 'сложнее'
+              : profile.id === 'easy'
+                ? 'спокойнее'
+                : 'базовый'
             : profile.description
       );
       difficultyRail.setFillStyle(difficultyAccent, 0.94);
