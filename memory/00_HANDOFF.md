@@ -6,7 +6,11 @@
 
 Ключевые решения и ограничения — в `memory/02_DECISIONS.md` (раздел EASY) и `memory/01_STATE.md`. Важно: `test:release-config` и `npm run build` требуют release-env (`VITE_MAX_BOT_NAME`, `VITE_DEVELOPER_*`, `VITE_SUPPORT_EMAIL`, `VITE_RELEASE_SHA`) — без них падают на чистом main тоже.
 
-Что НЕ сделано и не требует разрешения без отдельного решения владельца: дефолт для новых игроков, счётчик `easyCampaignClears`, правка аналитики `death`/`win`, merge, deploy, публикация в production. PR — Draft.
+Что НЕ сделано и не требует разрешения без отдельного решения владельца: дефолт для новых игроков, счётчик `easyCampaignClears`, правка аналитики `death`/`win`, merge, deploy, публикация в production. PR — Draft (#248, `feat/easy-difficulty-20261026` → `main`).
+
+Ограничение коннектора: запись в `.github/workflows/**` блокируется, поэтому browser-smoke шаг визуальной матрицы Easy в CI не добавлен. Новые node-гейты встроены в существующий шаг `npm run test:difficulty` (в `package.json`), поэтому в CI попадают автоматически. Шаг для browser-smoke — в теле PR.
+
+Независимая адверсarial-проверка ветки нашла 5 P2 (текст share у Easy говорил «Режим: НАПРЯЖЕНИЕ»; у `submitDuelAttempt` не было difficulty-guard; `isScoreSubmittable` и `nextDifficultyId` fail-open к неизвестному id; три вакуумных ассерта). Все исправлены и подтверждены мутационным прогоном. Отчёт: `/workspace/verification-easy-difficulty.md`.
 
 Модель сравнения в `scripts/check-difficulty-comparison.mjs` гоняет НАСТОЯЩИЙ WaveDirector/StageDirector/RunRng с общей моделью игрока; браузерный `difficulty-comparison-smoke.cjs` меряет настоящую игру, но в headless-софтверном рендере она идёт ~6% от реального времени, поэтому окно там короткое.
 
