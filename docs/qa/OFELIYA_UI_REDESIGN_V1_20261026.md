@@ -59,7 +59,7 @@ overrode the bible, the bible was updated in the same commit — see §7.
 | --- | --- |
 | `origin/main` at the start | `ce8ecb84ced1afa09870f2f00f9a0328257fd11c` |
 | Previously released `ce8ecb84…` | `ce8ecb84ced1afa09870f2f00f9a0328257fd11c` |
-| Final head (the PR) | `bb38f39c84a554e907fe1d1d9272a1e62bc77143` |
+| Final head (the PR) | `f3d0e3dade4ed844a99056a0c37c3bcdd3a9aced` |
 | Final head (the local branch) | `2906016` |
 
 `origin/main` was fetched before the work started. **Main did not advance** beyond
@@ -398,8 +398,16 @@ assertions were moved onto the new structure, not dropped:
 | `test:run-identity` | one of the four identity labels had been renamed to sentence case while its three siblings stayed uppercase | the labels are back to the wording the repository shipped, so the archetype names stay consistent with each other |
 | `test:daily-cta` | a daily submission now states its place on the daily board — `★ МЕСТО #5 В РЕЙТИНГЕ ДНЯ` — instead of a generic submission status | the gate waits for the daily rank line and asserts the daily place; an ordinary run still must not show any daily copy |
 | `test:ui-readability` | the run-configuration cards had shrunk to 9/10px, below the readability floor of the repository | the card label is 10/11px and the card description 11/13px again, and the card texts carry their own names so a probe can address them |
+| `test:control-mode` | the control mode moved into the run-configuration card, so the multitouch gate read a name that no longer exists | the gate reads the named card value and expects the new title-case wording of the dual-move mode |
+
+**The CI is green on the head of the branch**: `build` 58/58, `production-contract`
+23/23, `browser-smoke` 59/59.
 
 ### The gates that fail in this sandbox — and on `main` as well
+
+The full workflow runs **green on the branch** — `build` 58/58,
+`production-contract` 23/23, `browser-smoke` 59/59. The gates below are the
+ones that cannot pass in this sandbox, and each of them fails on `main` too.
 
 Four gates fail here **and fail identically on `main` (`ce8ecb84…`)**, which is
 how they were classified as environment limits rather than regressions. The
@@ -610,8 +618,8 @@ profile, then check that the third description still fits the compact card.
 | Title | `[DRAFT] OFELIYA UI v1 — menu, results, meta navigation and Russian copy` |
 | Draft | **yes** |
 | Base | `main` @ `ce8ecb84ced1afa09870f2f00f9a0328257fd11c` |
-| Head | `feat/ui-redesign-v1-20261026` @ `bb38f39c84a554e907fe1d1d9272a1e62bc77143` |
-| Diff | 36 files, +3 463 / −1 011 |
+| Head | `feat/ui-redesign-v1-20261026` @ `f3d0e3dade4ed844a99056a0c37c3bcdd3a9aced` |
+| Diff | 38 files, +3 558 / −1 014 |
 | Merged | **no** |
 
 The pull request is open as a **draft** and was **not** merged. Nothing was
