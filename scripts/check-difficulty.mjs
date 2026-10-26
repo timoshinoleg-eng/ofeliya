@@ -96,6 +96,8 @@ try {
   assert(nextDifficultyId('easy') === 'standard', 'difficulty cycle did not advance Easy → Standard');
   assert(nextDifficultyId('standard') === 'strained', 'difficulty cycle did not advance Standard → Strained');
   assert(nextDifficultyId('strained') === 'easy', 'difficulty cycle did not advance Strained → Easy');
+  // An unknown id must fail safe to Standard, never to the beginner tier.
+  assert(nextDifficultyId('brutal') === 'standard', 'an unknown difficulty must fail safe to Standard');
   // The cycle must visit every tier exactly once and return to the start.
   const walked = [DIFFICULTY_ORDER[0]];
   for (let i = 1; i < DIFFICULTY_ORDER.length; i += 1) {
