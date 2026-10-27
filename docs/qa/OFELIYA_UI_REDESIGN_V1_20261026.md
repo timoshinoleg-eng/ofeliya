@@ -74,7 +74,10 @@ reconciliation pass against the three documents produced these classes of change
   reconciled copy (the share variants, the mode chips, the season/streak lines,
   the collection strings) and `tests/ui-redesign.mjs` asserts the reconciled
   surfaces in a real browser at four viewports;
-* **a CI step that could not be written** — see §2.1.
+* **a CI step that is now wired** — the `UI redesign v1 surfaces contract`
+  step came with the integration with main (§8.2). **Corrected in the fourth
+  pass:** the first pass of this report still said the step could not be
+  written.
 
 Everything else in the first pass was confirmed by the documents and kept.
 
@@ -93,6 +96,7 @@ Everything else in the first pass was confirmed by the documents and kept.
 | The head the CI was green on before this pass | `a105f7c750ae275f5febbe4ab3eb6c1fae7a704e` — run `40418654178`, `build` / `production-contract` / `browser-smoke` **success** |
 | The head this pass produces (the code) | `f17b1d726958227aba77e010b1d6269d2d77eaa4` — `fix(quests): the task board keeps its objects inside a day — the countdown line moves in place` — run `40459288198`, `build` / `production-contract` / `browser-smoke` **success** |
 | The head that carries this report | the last push of this pass — run `40459329616`, `build` / `production-contract` / `browser-smoke` **success** |
+| The code head of the fourth pass (the Muse delta and the Codex audit) | `849cca8ebcefcba70cf523fb8d9d8054748fc4c3` — `fix(ui,quests): the tightest menu state, the card descriptions, the D7 typo, the result identity and the milestone copy` — the run of this head and of the head that carries this report is quoted in the final response of this pass |
 
 `origin/main` was fetched before the work started. **Main did not advance while
 this work was made** — the branch was cut from the current main and the working
@@ -151,9 +155,12 @@ PR and are not defects in the change itself:
   `error: connector_tool_error: Connector tool execution failed (latency_ms=0)`
   for `.github/workflows/ci.yml`, and the remote blob SHA stays
   `db7683832ce94871c8b6bc951b6a148c3ff1d929` after the attempt (verified by
-  re-reading the file through the App). Wiring the new contract into CI is
-  therefore **not** in the branch; the exact one-line step to add by hand is in
-  §8.2.
+  re-reading the file through the App). **Corrected in the fourth pass:** this
+  limitation is still true of the App, but the conclusion of the second pass —
+  that the new contract is *not* in CI — is no longer true. The step
+  `UI redesign v1 surfaces contract` **is** in the remote workflow (it came
+  with the integration with main, PR #250) and it is green in the runs
+  `40418654178` and `40455271533` (§8.2).
 
 The PR therefore shows more commits than the local branch: the first two are a
 binary push probe and its removal, and some logical changes were split into
@@ -171,7 +178,7 @@ is identical to the local branch, except for the PNG evidence.
 | 1 | One hierarchy: logo, art, statement, record, run configuration, CTA | `src/scenes/MenuScene.ts` |
 | 2 | Hero copy kept, tagline `Выживай. Поглощай РНК. Эволюционируй.`, the redundant loop line removed | `MENU_COPY.hook`, `MENU_COPY.tagline` |
 | 3 | One compact record line `Носитель: Олег · Рекорд: 15:20 · Уничтожено: 2 617` | `MenuScene` + `UiFormat.fmtInt` |
-| 4 | One shared primary CTA style (mint plate, dark text, disabled state) | `src/ui/cta.ts` |
+| 4 | One shared primary CTA style (mint plate, dark text, disabled state) | `src/ui/cta.ts` — the tokens are shared; the factory `createPrimaryCta` has **no callers** (corrected in the fourth pass) |
 | 5 | Fresh state `НАЧАТЬ ЗАРАЖЕНИЕ` + `Кровоток · Стандарт` | `MenuScene` |
 | 6 | Resume state `ПРОДОЛЖИТЬ ЗАБЕГ` + `Кровоток · 00:19 · Уровень 2 · Стандарт` + `НОВЫЙ ЗАБЕГ` as a real touch target | `MenuScene` |
 | 7 | Difficulty card: title, current difficulty, description, chevron, unchanged selector behaviour | `MenuScene` |
@@ -211,7 +218,7 @@ is identical to the local branch, except for the PNG evidence.
 | 31 | `НАЧАТЬ ЗАБЕГ ДНЯ` | `SocialHub` |
 | 32 | `СЕРИЯ 0` never rendered; an empty state instead | `SocialHub` |
 | 33 | `Игрок (TG)` / `Игрок (MAX)` — the payload carries no display name | `SocialHub` |
-| 34 | `РЕДКИЙ, НО МЕТКИЙ` was already absent from the current source | verified |
+| 34 | `РЕДКИЙ, НО МЕТКИЙ` — **corrected in the fourth pass:** the string was *not* absent; it was the player-facing title of the `sparse-lethal` daily mutator and it was replaced in the third pass (§16.4) | verified |
 | 35 | The friends list gets an invite action instead of a dead end | `SocialHub` |
 | 36 | The network error is a full sentence: `Нет соединения с сервером. Твой прогресс сохраняется.` / `Сервер не ответил. Твой прогресс сохраняется.` | `SocialHub`, `META_COPY` |
 | 37 | One modal frame: centered title, a 44×44 top-right close control, no second close button, one padding and radius recipe | `src/ui/modal.ts` |
@@ -304,7 +311,9 @@ them. The source did not always support the proposal.
    http failure. The bare `НЕТ СОЕДИНЕНИЯ` survives only inside the compact
    44 px daily-launch button, which cannot carry a sentence.
 8. **`РЕДКИЙ, НО МЕТКИЙ` was already absent** from the current source — no
-   change was needed for §34.
+   change was needed for §34. **Corrected in the fourth pass:** the claim was
+   wrong. The string was the player-facing title of the `sparse-lethal` daily
+   mutator, and the third pass replaced it (§16.4).
 9. **`Гиперспиц` is `Гипершип` in the code.** The audit and the dictionary both
    write `дальше: Гиперспиц`; `src/game/UpgradeSystem.ts:17` writes
    `prism: 'ГИПЕРШИП'`. The game's own name wins, and the scoped rule of the
@@ -378,7 +387,7 @@ verdicts mean:
 | 5 | The kill counters | REJECTED as written | **CORRECT_PR** | No `Math.max` anywhere. The codex shows the lifetime `Забегов: N · Уничтожено клеток: N`, the menu the best run, the milestones their own counter (`killsTotal`, exposed by `CollectionSnapshot`). |
 | 6 | One streak only | ADOPTED | **CORRECT_PR** | The collection's streak line is gone; the rating shows `Серия: N дн. · Рекорд: M дн.`, and at zero `Сыграй забег дня, чтобы начать серию · Рекорд: M дн.`. |
 | 7 | The names in the table | REJECTED (fallback) | **CORRECT_PR** | `Игрок (TG)`; no invented identity. The `(Вы)` marker is **PROPOSAL_DEFERRED** — the server sends no "you" flag. |
-| 8 | `РЕДКИЙ, НО МЕТКИЙ` | ADOPTED | **CORRECT_PR** | The string was already absent from the source. |
+| 8 | `РЕДКИЙ, НО МЕТКИЙ` | ADOPTED | **CORRECT_PR** | **Corrected in the fourth pass:** the string was not absent — it was the title of the `sparse-lethal` daily mutator, and it was replaced in the third pass (§16.4). |
 | 9 | The difficulty descriptions | ADOPTED (placeholder) | **SSOT_OVERRIDDEN** | The flavour placeholders are not facts; the branch shows the product's factual descriptions and the step dots. The third mode `ЛЁГКИЙ` is **PROPOSAL_DEFERRED** (the EASY deliverable). |
 | 10 | The record dashes | ADOPTED | **CORRECT_PR** | The `ПРАЙМ —` / `Кампания —` fields are hidden; the word `Прайм` is never asserted. The `Клеток:` label is the task body's `Уничтожено:`. |
 | 11 | The control card | ADOPTED (conditional) | **SSOT_OVERRIDDEN** | The gate is the code: there are three real modes (`one-hand`, `two-hand`, `dual-move`), so the scenario-2 branch applies and the card keeps its chevron. The audit's example names `ДЖОЙСТИК` / `КАСАНИЕ` do not exist in the code, so the code's own labels are used. |
@@ -607,7 +616,7 @@ branch, with the labels the reconciliation task prescribes.
 | Rule 5 — the kill counters | 4 | **3 PASS, 1 PROPOSAL_NOT_APPROVED.** There is no `Math.max` anywhere, each counter has its own label, and no synchronisation was chosen. The gate itself (the enemy filter of the milestone counter) is a backend fact, so the synchronisation proposal stays unapproved and the client labels the three counters instead of merging them. |
 | Rule 6 — one streak only | 4 | **4 PASS.** |
 | Rule 7 — the names | 4 | **3 PASS, 1 SOURCE_TRUTH_CONFLICT.** `Игрок (TG)` and no invented identity. The `(Вы)` marker on your own row conflicts with the source: the server sends no "you" flag, so the own row of the day carries the carrier's name instead. |
-| Rule 8 — `РЕДКИЙ, НО МЕТКИЙ` | 2 | **2 PASS** (the string was already absent from the source). |
+| Rule 8 — `РЕДКИЙ, НО МЕТКИЙ` | 2 | **2 PASS** (**corrected in the fourth pass:** the string was not absent from the source; it was the `sparse-lethal` title and it was replaced in the third pass). |
 | Rule 9 — the difficulty selector | 3 | **2 PASS, 1 DEFERRED_BY_OVERRIDE.** The header is `СЛОЖНОСТЬ`, the dots are `• • ◦` / `• • •`, and the descriptions carry no percentages and no ranking wording. The third mode `ЛЁГКИЙ` is deferred by the task override (no EASY implementation) and belongs to the EASY deliverable. |
 | Rule 10 — the record dashes | 3 | **2 PASS, 1 SOURCE_TRUTH_CONFLICT.** The `ПРАЙМ —` / `Кампания —` fields are hidden, the lifetime total is never substituted for the best run, and the word `Прайм` is never asserted. The label of the record line conflicts with the checklist's `Клеток:` — the task body fixes it as `Уничтожено:`, and the number behind it is the checklist's `2 617` (the best run). |
 | Rule 11 — the control card | 3 | **3 PASS.** The gate is answered by the code: there are three real modes, so the card keeps its chevron and cycles through them. |
@@ -626,7 +635,7 @@ branch, with the labels the reconciliation task prescribes.
 | P0.1 | Нет «mini-app · tdesktop · ce8ecb8» в подвале меню | **PASS** |  |
 | P0.1 | Нет «КРИТ.» на итогах | **PASS** | «◆ Критические мутации: …» |
 | P0.1 | Нет слов «локально», «без наград», «STRAIN-0», «tdesktop», хеша билда | **PASS** | asserted by the contract |
-| P0.2 | Единый мятный CTA в меню, на итогах и в Рейтинге | **PASS** | #9CC5B5 / src/ui/cta.ts |
+| P0.2 | Единый CTA в меню, на итогах и в Рейтинге | **PASS** | **исправлено в четвёртом проходе:** плашка CTA — `VISUAL.host` = `#A4CBB5` (не `#9CC5B5`), подпись на плашке — `#16302a`, текст — `#080f14`; **в Рейтинге** кнопка забега дня **слоновой кости** (`VISUAL.ivory` = `#F0EADB`), а не мятной; `createPrimaryCta` из `src/ui/cta.ts` **не имеет вызовов** — токены живут, а фабрика не используется | src/ui/cta.ts, src/ui/SocialHub.ts |
 | P0.2 | Нет тускло-бордовой и бледно-бежевой кнопки | **PASS** |  |
 | P0.2 | Нет жёлтого «НЕЗАВЕРШЁННЫЙ ЗАБЕГ»; параметры один раз в кнопке | **PASS** |  |
 | P0.2 | Вторая кнопка «НОВЫЙ ЗАБЕГ», высота ≥ 40–44 px | **PASS** | 44 px |
@@ -675,7 +684,7 @@ branch, with the labels the reconciliation task prescribes.
 | Правило 7 | Один игрок — одна строка | **PASS** |  |
 | Правило 7 | «Игрок (TG)» и своя строка с именем | **SOURCE_TRUTH_CONFLICT** | «Игрок (TG)» — да; «(Вы)» — сервер не шлёт флаг «это вы» |
 | Правило 7 | Нет выдуманных «Штамм #NN (TG)» | **PASS** |  |
-| Правило 8 | «РЕДКИЙ, НО МЕТКИЙ» удалена | **PASS** | строки нет в коде |
+| Правило 8 | «РЕДКИЙ, НО МЕТКИЙ» удалена | **PASS** | строки нет в коде (**исправлено в четвёртом проходе:** строка была в коде — это был заголовок мутатора `sparse-lethal`, заменён в третьем проходе) |
 | Правило 8 | Под кнопкой — чистый отступ ≥ 12 px | **PASS** |  |
 | Правило 9 | Индикатор ступени и однострочные описания | **DEFERRED_BY_OVERRIDE** | точки есть для двух реальных режимов; «ЛЁГКИЙ» — задание EASY |
 | Правило 9 | Заголовок карточки — «СЛОЖНОСТЬ» | **PASS** |  |
@@ -1093,7 +1102,7 @@ that closed them.
 | **D2** | `без наград и глобального рейтинга` — a forbidden phrase, and a claim about the duel | **STILL_PRESENT → FIXED** | the server answers `ranked: false` on every duel endpoint and the attempt never reaches `store.scores`, so the claim was true but the wording was forbidden. The line is now `тот же забег · … · личная дуэль` — no reward invented, no ranking disclaimer (§16.4) |
 | **D3** | `state.killsTotal` is not the lifetime kill count, but it was labelled `всего` | **STILL_PRESENT → FIXED** | `killsTotal` is the collection's own progress counter; the label is now `в прогрессе вех: N`. No `Math.max`, no counter merged (§16.4) |
 | **D4** | the daily result status lines are technical and speak of "synchronization" | **STILL_PRESENT → FIXED** | eight server states, eight plain Russian lines; the in-flight placeholder `СЧЁТ: синхронизация…` became `Отправляю результат…` (§16.4) |
-| **D5** | the lifetime counters were moved out of the Codex — the player-facing row must go too | **STILL_PRESENT → FIXED** | the `Забегов: N · Уничтожено клеток: M` row is removed from the codex; the data stays in the save and is not merged into another counter (§16.4) |
+| **D5** | the lifetime counters were moved out of the Codex — the player-facing row must go too | **STILL_PRESENT → FIXED** | the `Забегов: N · Уничтожено клеток: M` row is removed from the codex; the data stays in the save and is not merged into another counter (§16.4). **Corrected in the fourth pass — the classification is `INTENTIONAL_PRODUCT_DECISION_SUPPORTED`:** the source material was contradictory about the lifetime kills (one strand moves them to the Rating, another keeps them in the Codex, another allows either), and the product decision for this release is to keep the row removed and to add nothing to the Rating. **The removal is intentional for this release. Placement of lifetime statistics is deferred to a separate product follow-up.** |
 | **D6** | the daily retry button carries its explanation in its own label | **STILL_PRESENT → FIXED** | the button is exactly `ПОВТОРИТЬ`; the reason is a separate named line above it. The retry behaviour is unchanged (§16.4) |
 | **D7** | the player-facing `РЕДКИЙ, НО МЕТКИЙ` | **STILL_PRESENT → FIXED** | only the presentation string changed — `МУТАТОР ДНЯ · РЕЖИЕ, НО КРЕПКИЕ`. The `sparse-lethal` multipliers are untouched (§16.4) |
 | **Footer** | the footer coverage | **ALREADY_FIXED** | `scripts/footer-actions-smoke.cjs` asserts the nine footer targets ≥ 44×44, the absence of an overlap between the legal row and the diagnostics, a real legal tap, the five real diagnostic taps, the volume/audio state change, the checkpoint-resume footer, and the in-canvas safe-area bounds; `scripts/verified-ux-smoke.cjs` adds the ≥ 44 px, the safe canvas and the CTA clearance. Both were **re-run in this pass**: `footer real touch PASS` for all four viewports in the `fresh` and the `resume` state (8 cases) and `verified-ux` / `notification-ordering` green |
@@ -1192,7 +1201,7 @@ with a two-line record, challenge, resume + challenge) it asserts:
 | **D2** — the duel line | `… без наград и глобального рейтинга` | `тот же забег · <control> · личная дуэль` | `src/scenes/MenuScene.ts` |
 | **D3** — the milestone group | `Уничтожение иммунных клеток (всего: N)` | `Уничтожение иммунных клеток (в прогрессе вех: N)` | `src/game/UiCopy.ts` |
 | **D4** — the daily status | `ЕЖЕДНЕВНЫЙ ЗАБЕГ · РЕЗУЛЬТАТ НЕ СИНХРОНИЗИРОВАН`, `СЧЁТ: синхронизация…` | `Забег дня засчитан` / `Забег дня не засчитан` / `Забег дня уже закрыт` / `Срок забега дня истёк` / `Нужен запуск через MAX или Telegram` / `Сервер не ответил` / `Нет соединения` / `Не удалось определить профиль`, and the in-flight line `Отправляю результат…` | `src/game/UiCopy.ts`, `src/scenes/UIScene.ts` |
-| **D5** — the codex lifetime row | `Забегов: 12 · Уничтожено клеток: 800` | removed; the codex keeps `Открыто записей: 3/9 · Забегов: 12` and the save keeps the data | `src/game/UiCopy.ts`, `src/scenes/MenuScene.ts` |
+| **D5** — the codex lifetime row | `Забегов: 12 · Уничтожено клеток: 800` | removed; the codex keeps `Открыто записей: 3/9 · Забегов: 12` and the save keeps the data. **Classification: `INTENTIONAL_PRODUCT_DECISION_SUPPORTED`** — the removal is intentional for this release, the placement of the lifetime statistics is deferred to a separate product follow-up, and **no Rating feature is added in PR #249** (§17.5) | `src/game/UiCopy.ts`, `src/scenes/MenuScene.ts` |
 | **D6** — the daily retry | `СЕРВЕР НЕ ОТВЕТИЛ · ПОВТОРИТЬ` | the button is `ПОВТОРИТЬ`; the reason is a separate line above it: `Сервер не ответил — попробуй ещё раз` / `Нет соединения — попробуй ещё раз` / `Забег дня сейчас недоступен — попробуй позже` | `src/ui/SocialHub.ts`, `src/game/UiCopy.ts` |
 | **D7** — the mutator title | `МУТАТОР ДНЯ · РЕДКИЙ, НО МЕТКИЙ` | `МУТАТОР ДНЯ · РЕЖИЕ, НО КРЕПКИЕ` (the `sparse-lethal` multipliers are unchanged) | `src/game/DailyMutator.ts` |
 
@@ -1524,3 +1533,265 @@ failed before the repair, and the code of the two runs is the same.
 30 s budget of the repository for the day rollover, which this sandbox misses
 (its Phaser clock needs more wall clock than the runner's) and which the CI
 runner meets; the step was green in the previous CI runs.
+
+## 17. The Muse delta pass and the Codex result-identity audit (2026-10-27)
+
+The independent Phase-B review of PR #249 came back `NEEDS_CORRECTION` with
+three P1 merge blockers, and the Codex runtime audit of the same candidate
+found a fourth, real regression of its own. This pass implements the blockers
+and the listed P2 items, and corrects the material statements of this report
+(§17.12). Nothing outside the list was touched: the server contracts, the
+payments, the analytics, the save schema, the difficulty balance, the ranking
+mechanics, `NotificationRegion` and the #250 lifecycle logic are as they were.
+
+### 17.1 The list
+
+| # | Finding | Class | Result |
+| --- | --- | --- | --- |
+| 1 | **V3** — the tightest menu state (`resume + challenge + recordLines: 2` at 320×568) collapsed the hero to 28.6 px | P1 | **FIXED** — 56.1 px |
+| 2 | **V2** — the description of a run-configuration card overflowed its card | P1 | **FIXED** — 0 px everywhere |
+| 3 | **D7** — `МУТАТОР ДНЯ · РЕЖИЕ, НО КРЕПКИЕ` is not Russian | P1 | **FIXED** — `РЕЖЕ` |
+| 4 | **D5** — the lifetime kills: the source material is contradictory | product decision | **INTENTIONAL_PRODUCT_DECISION_SUPPORTED** |
+| 5 | **The result identity** — a fresh STRAINED run in a browser wore the chip of a standard run (Codex audit) | P1 | **FIXED** |
+| 6 | **UTC milestone copy** — `UTC-день`, `UTC-дня`, `UTC-дней` in the collection milestones | P2 | **FIXED** |
+| 7 | **EASY coverage pins** — the share suffix and the result-mode selection | P2 | **FIXED** |
+| 8 | **The QuestBoard smoke** — a false-red window of one clock shift around every UTC midnight | P2 | **FIXED** |
+| 9 | **T1** — the footer coverage: the volume-cycle extremes and a tap outside the target | P2 | **FIXED** |
+| 10 | **R-1, R-2, R-4, R-7, R-10** — the material statements of this report | docs | **CORRECTED** (§17.12) |
+
+### 17.2 V3 — the tightest menu state
+
+The layout module must survive every combination of its flags, not only the
+states the product renders. The state `resume + challenge + recordLines: 2` at
+320×568 carries a checkpoint to continue, an incoming challenge and a record
+that needs two lines — and the hero collapsed to **28.6 px**, below the 40 px
+floor.
+
+**The repair is in the layout-priority system, not in the content.** The room
+is given up in a fixed order, and the hero has the last word:
+
+1. the spacing gives up its room first;
+2. the **decorative brand text** (the strain eyebrow, then the promise line)
+   gives up its room — it carries no run information, no control and no state;
+3. **nothing else**. A control, the challenge, the record, the navigation and
+   the legal and audio rows keep their space.
+
+The state in which the brand text has to go is a state the product never
+renders — a checkpoint and an incoming challenge never arrive together
+(`MenuScene` reads the checkpoint only when no challenge is waiting) — so the
+rule is the guarantee of the layout contract, not a change of the shipped menu.
+The real states keep their brand text, and the contract test asserts it.
+
+| State (320×568) | Hero before | Hero after |
+| --- | --- | --- |
+| fresh | 126.6 | **126.6** (unchanged) |
+| resume, record 1 line | 67.6 | **67.6** (unchanged) |
+| resume, record 2 lines | 64.0 | **64.0** (unchanged) |
+| resume + challenge, record 1 line | 43.6 | **64.0** |
+| resume + challenge, record 2 lines | **28.6** | **56.1** |
+
+The other viewports are unchanged (390×740: 180.9 / 118.9 / 100.9 / 96.0 /
+96.0; 768×1024 and 1080×1920: the hero at its 240 px maximum in every state),
+and the legal row still ends at 564 px inside the 568 px viewport.
+
+**The test.** `tests/ui-redesign.mjs` carries the exact state
+`resume+challenge+record2` in the pure geometry contract, which executes the
+production `computeMenuLayout` and asserts `artHeight >= 40` — a literal, not
+a value derived from the implementation. The contract also asserts that the
+brand text is present in every state the product can render.
+
+### 17.3 V2 — the description of a run-configuration card
+
+The difficulty and the control card describe the run configuration. The
+description is anchored 11 px above the bottom of the card, so a description
+that wraps to two lines reached past the card:
+
+| Card | Before | After |
+| --- | --- | --- |
+| the standard description (390) | +4 px | **0** |
+| the strained description (390 / 768 / 1080) | ≈ +4…5 px | **0** |
+| the one-hand control description (390) | ≈ +4.6 px | **0** |
+| the two-hand control description | borderline | **0** |
+
+**The repair keeps the readability floor.** The description is never made
+smaller: the full copy is used when it fits, and when it does not, the
+**one-line variant of the same fact** takes its place — `сложнее` / `спокойнее` /
+`базовый` for the difficulty and `автоатака` / `прицел` for the control, the
+same words the narrow card already used. The card is the same size and the
+text is the same size; only the *variant* of the copy changes.
+
+The EASY card already had this fallback for itself; it is now the rule of both
+cards, and the `maxLines` of the description is two everywhere so the text is
+never cut in the middle of a line.
+
+**The test.** `tests/easy-difficulty-visual.mjs` no longer accepts the
+Strained description as a baseline: **every** tier must fit inside its panel
+(`overflow <= 0`), the Strained tier is named explicitly, and the control card
+is cycled through its three modes with the same rule. The matrix was extended
+with 390×740. The test was verified to be **RED** before the repair
+(`390: the standard description overflows the panel by 4px`) and **GREEN**
+after it.
+
+### 17.4 D7 — the typo
+
+`РЕЖИЕ` is not a Russian word. The title of the `sparse-lethal` daily mutator
+is now `МУТАТОР ДНЯ · РЕЖЕ, НО КРЕПКИЕ`. The mechanics of the tier are
+untouched: the enemies appear less often, the HP is higher and the damage is
+higher.
+
+**The exact assertion.** `scripts/check-daily-mutator.mjs` pins the title
+string and sweeps every mutator title for the typo, so it cannot return.
+
+### 17.5 D5 — the product decision
+
+The source material was contradictory about the lifetime kills: one strand
+moves them to the Rating, another keeps them in the Codex, another allows
+either. The product decision for **this** release:
+
+> **The removal is intentional for this release. Placement of lifetime
+> statistics is deferred to a separate product follow-up.**
+
+The lifetime row stays removed from the Codex, the data stays intact in the
+save, no counter is merged into another, and **no Rating feature is added in
+PR #249**. The classification is `INTENTIONAL_PRODUCT_DECISION_SUPPORTED`.
+
+### 17.6 The UTC milestone copy
+
+The collection milestones told the player about a `UTC-день`. The mechanic is
+still UTC-based — the day key calculation is not touched — but the wording now
+describes the day itself and says nothing about the timezone:
+
+| Before | After |
+| --- | --- |
+| `Посетить игру в первый UTC-день` | `Посетить игру в первый день` |
+| `Посетить игру 3 UTC-дня подряд` | `Посетить игру 3 дня подряд` |
+| `Посетить игру 7 UTC-дней подряд` | `Посетить игру 7 дней подряд` |
+| `Посетить игру 30 UTC-дней подряд` | `Посетить игру 30 дней подряд` |
+
+`src/game/collection/ClientCollection.ts` joined the scope of the player
+language guard, and the guard now carries a rule of its own: a raw `UTC` in
+player copy is a violation. The rule was verified against the old wording —
+the guard fails on `Посетить игру 3 UTC-дня подряд` and passes on the new one.
+
+### 17.7 The EASY coverage pins
+
+Two deterministic coverage gaps were closed.
+
+**The share suffix.** The production suffix is now a named constant
+(`EASY_SHARE_SUFFIX` in `src/game/UiCopy.ts`) that the result scene uses, and
+the gate pins the **live generated output**: the share text of an Easy run
+ends with `Режим: ЛЁГКИЙ.`, and every other tier carries no suffix.
+
+**The result-mode selection.** The selection that the result screen used to
+assemble inline is now a production function (`resultModeChip`), and the gate
+calls **that function** — not the catalog constants — for the whole matrix:
+a ranked Standard, a Strained run, a duel, an Easy run, a continued run, the
+daily and a local run.
+
+### 17.8 The QuestBoard smoke
+
+The new in-place assertion moved the wall clock back by 125 seconds, which
+has a false-red window of one shift length around every UTC midnight: there
+the shifted clock fell into the previous day.
+
+**The repair is in the isolation only.** The clock is now pinned to two
+synthetic instants inside the board's own UTC day, far from the midnight
+(12:00 and 06:00 UTC), and the two instants differ from each other, so the
+countdown certainly changes. The three contracts are preserved: the countdown
+changes, the board object identity survives the change, and the day rollover
+still rebuilds the board. The runtime of the board was not touched.
+
+### 17.9 T1 — the footer coverage
+
+Two old gaps are now covered deterministically.
+
+* **The volume-cycle extremes.** Every audio switch must reach **both** ends
+  of its cycle — `выкл` and `вкл` again — and the label is the contract,
+  because the label is what the player reads.
+* **A tap outside the target.** A tap that lands outside the target and
+  outside every other target must not reach it. The point is picked inside the
+  band of the target, so the check measures the hit area and not the control
+  above the footer.
+
+The already-green legal and diagnostic geometry was not touched.
+
+### 17.10 The result identity — the regression of the Codex audit
+
+Codex reproduced a real regression of the candidate: **a fresh STRAINED run in
+a browser rendered `СТАНДАРТ · Тренировка`** instead of
+`НАПРЯЖЕНИЕ · Тренировка`.
+
+**The root cause** is the order of the selection: the platform was asked
+before the tier, so the browser branch claimed every fresh run of a tier that
+is never ranked. The order was inherited unchanged by the selection function
+of §17.7, and the pins of that gate did not cover the platform dimension.
+
+**The repair.** The selection now answers the questions in the order of the
+chip: a continued run, the daily, the duel, **then the tier of the run**, and
+only then the platform. The truth table:
+
+| Run | Platform | Chip |
+| --- | --- | --- |
+| resumed | any | `Тренировка (продолженный забег)` |
+| daily | any | `ЗАБЕГ ДНЯ · СТАНДАРТ` |
+| duel | any | `ДУЭЛЬ · СТАНДАРТ` |
+| fresh EASY | browser, Telegram, MAX | `ЛЁГКИЙ · Тренировка` |
+| fresh STRAINED | browser, Telegram, MAX | `НАПРЯЖЕНИЕ · Тренировка` |
+| fresh STANDARD | browser | `СТАНДАРТ · Тренировка` |
+| fresh STANDARD | eligible host, ranked | `СТАНДАРТ · В зачёт рейтинга` |
+| fresh STANDARD | eligible host, not ranked | `СТАНДАРТ · Тренировка` |
+
+**This is presentation identity only.** The score and ranking eligibility is
+untouched: the chip reads the same `ranked` flag the result screen has always
+read, and nothing in the submission path changed.
+
+**The test is a real RED → GREEN.** `tests/easy-difficulty-visual.mjs` drives
+the live result screen in a **browser** context (no host bridge) with a fresh
+STRAINED run. Before the repair it failed with
+`a fresh Strained run in a browser must name the Strained tier
+("СТАНДАРТ · Тренировка")`; after it, it passes. The gate carries the whole
+matrix of the table above, through the production selection.
+
+**The share text was verified, not redesigned.** The canonical share contract
+names the tier only for the beginner tier, so the browser STRAINED share names
+no tier (as before) and the EASY share still ends with `Режим: ЛЁГКИЙ.`.
+
+### 17.11 The gates of this pass
+
+| Gate | Result |
+| --- | --- |
+| `node tests/ui-redesign.mjs` | **PASS** — the geometry contract with the new state, 4 viewports |
+| `npm run test:easy-difficulty-visual` | **PASS** — 5 viewports, the strict overflow rule, the control cycle, the browser result identity |
+| `node scripts/footer-actions-smoke.cjs` | **PASS** — 8 cases, the volume extremes and the outside tap |
+| `npm run test:quest-scenes` | **PASS** at 320×568 and 390×844; the 768×1024 pass reaches the *next* wait of the same script — the 30 s budget of the repository for the day rollover, which this slow sandbox misses and the CI runner meets |
+| `node scripts/check-easy-difficulty.mjs` | **PASS** — the selection matrix and the share suffix |
+| `node scripts/check-daily-mutator.mjs` | **PASS** — the exact title and the typo sweep |
+| `node scripts/check-language-copy.mjs` | **PASS** — 1849 literals, the collection scope and the UTC rule |
+| `node scripts/check-daily-cta.mjs` | **PASS** |
+| `npm run test:ui-copy` · `npm run test:difficulty` · `npm run test:mutation-copy` | **PASS** |
+| `npx tsc --noEmit` · `npm run build` · `git diff --check` | **PASS** |
+
+**No threshold was weakened.** The only change to a *budget* is the waiting
+time of the two new QuestBoard waits (120 s), which is a wait for an
+asynchronous state and not an assertion; the assertions themselves are
+unchanged or stricter (the overflow baseline is gone).
+
+### 17.12 The corrected statements of this report
+
+| Ref | The statement | The correction |
+| --- | --- | --- |
+| **R-1** | the D5 classification contradicted itself | the classification is `INTENTIONAL_PRODUCT_DECISION_SUPPORTED` and the decision is written out (§17.5) |
+| **R-2** | "`РЕДКИЙ, НО МЕТКИЙ` was already absent from the current source" | it was not: it was the title of the `sparse-lethal` mutator, replaced in the third pass |
+| **R-4** | "a CI step that could not be written … wiring the new contract into CI is therefore **not** in the branch" | the step **is** in the remote workflow and it is green in the runs `40418654178` and `40455271533`; only the App's own limitation is still true |
+| **R-7** | the head and the CI of the pass | the code head of this pass is `849cca8ebcefcba70cf523fb8d9d8054748fc4c3`; the run of the head that carries this report is quoted in the final response of this pass |
+| **R-10** | the shared CTA: the hex `#9CC5B5`, the mint CTA in the Rating, the factory `createPrimaryCta` | the plate is `VISUAL.host` = `#A4CBB5`, the caption `#16302a`, the text `#080f14`; the **Rating's** daily button is **ivory** (`#F0EADB`), and `createPrimaryCta` has **no callers** |
+
+**The limits of this pass.** `pr249-final-review.md` is still unreachable in
+this environment, so the finding list of the Phase-B review is the one the
+handoff enumerates. The three runtime issues Codex found outside PR #249 — the
+stale Back callback after a host transfer with the QuestBoard open, the
+duplicated duel attempt and the Daily victory that offers a duel — exist in
+`main` as well and are **deliberately not fixed here**; they are separate
+follow-ups. The PNG evidence of the redesign still travels with the report
+(the App cannot carry binaries), and the physical Telegram/MAX acceptance stays
+a separate matter.
