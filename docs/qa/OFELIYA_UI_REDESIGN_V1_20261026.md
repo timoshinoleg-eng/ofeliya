@@ -91,7 +91,8 @@ Everything else in the first pass was confirmed by the documents and kept.
 | Final head (the PR) | the commit that carries this report — the App push path creates one commit per push, so the head is the last push of this pass |
 | Final head (the local branch) | the commit that carries this report |
 | The head the CI was green on before this pass | `a105f7c750ae275f5febbe4ab3eb6c1fae7a704e` — run `40418654178`, `build` / `production-contract` / `browser-smoke` **success** |
-| The head this pass produces | `6cd4c6eb56e23f1c049b1ec39fd9f191d8c105b6` — `test(quests): derive the synthetic midnight from the real clock — the cross-flow gate no longer depends on the calendar` — run `40455271533`, `build` / `production-contract` / `browser-smoke` **success** |
+| The head this pass produces (the code) | `f17b1d726958227aba77e010b1d6269d2d77eaa4` — `fix(quests): the task board keeps its objects inside a day — the countdown line moves in place` — run `40459288198`, `build` / `production-contract` / `browser-smoke` **success** |
+| The head that carries this report | the last push of this pass — run `40459329616`, `build` / `production-contract` / `browser-smoke` **success** |
 
 `origin/main` was fetched before the work started. **Main did not advance while
 this work was made** — the branch was cut from the current main and the working
@@ -1323,11 +1324,19 @@ The other two parts of `npm run test:startup` (`startup-font-timeout`,
 three jobs — `build`, `production-contract` and `browser-smoke` (run
 `40418654178`), including the `UI redesign v1 surfaces contract` step.
 
-**The head this pass produces is green in all three jobs as well** — run
-`40455271533` on `6cd4c6e…`: `build` **success** (59 steps), `production-contract`
-**success** (23 steps), `browser-smoke` **success** (61 steps), including
-`UI redesign v1 surfaces contract` and `Combined Muse convergence cross-flow
-(platform, collection, quests, cosmetics)`.
+**Every head of this pass that carried code is green in all three jobs:**
+
+| Head | Run | build | production-contract | browser-smoke |
+| --- | --- | --- | --- | --- |
+| `6cd4c6e` (the calendar repair) | `40455271533` | **success** (59) | **success** (23) | **success** (61) |
+| `f17b1d7` (the task board repair) | `40459288198` | **success** | **success** | **success** (62) |
+| the head that carries this report | `40459329616` | **success** (59) | **success** (23) | **success** (62) |
+
+The last two runs include the two steps that had failed —
+`Combined Muse convergence cross-flow (platform, collection, quests,
+cosmetics)` and `Muse quest-to-Phaser scenes and touch lifecycle` — and the
+`UI redesign v1 surfaces contract` step. The run of the final head is quoted
+in the final response.
 
 **One CI failure of this pass was not a code failure at all.** The cross-flow
 step failed on five consecutive heads — including the untouched base head, run
@@ -1431,7 +1440,7 @@ of skipping it.
 **The verification.** The repaired gate was run locally three times, once
 against the base runtime of `a105f7c…` and twice against the runtime of this
 pass: exit `0` every time. GitHub CI run `40455271533` on `6cd4c6e…` is green
-in all three jobs.
+in all three jobs, and the step itself is **success** there.
 
 A scan of the other gates found no second instance of this pattern: the
 remaining hard-coded dates (`2026-10-12`, `2026-10-22`, `2027-01-01`, …) are
@@ -1504,6 +1513,11 @@ assert.equal(..., true, 'the countdown moves without rebuilding the board');
 
 The check is deterministic: it does not depend on where the wall clock happens
 to be inside its minute.
+
+**The CI verification.** The step `Muse quest-to-Phaser scenes and touch
+lifecycle` is **success** on the run `40459288198` (head `f17b1d7…`) and on the
+run `40459329616` (the head that carries this report) — it is the step that
+failed before the repair, and the code of the two runs is the same.
 
 **The local verification.** `npm run test:quest-scenes` passes at 320×568 and
 390×740. The 768×1024 pass reaches the *next* wait in the same script — the
