@@ -89,7 +89,7 @@ export const DAILY_MUTATORS: readonly DailyMutator[] = [
   },
   {
     id: 'sparse-lethal',
-    title: 'МУТАТОР ДНЯ · РЕДКИЙ, НО МЕТКИЙ',
+    title: 'МУТАТОР ДНЯ · РЕЖИЕ, НО КРЕПКИЕ',
     subtitle: 'РОЙ РЕЖЕ · КАЖДЫЙ УДАР ОПАСНЕЕ',
     color: 0xff3e5f,
     apply: (profile) =>

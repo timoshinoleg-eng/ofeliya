@@ -337,13 +337,14 @@ export class MenuScene extends Phaser.Scene {
     let challengeDetailText: Phaser.GameObjects.Text | null = null;
     if (incomingChallenge || incomingDuelId) {
       const challengeY = layout.challengeY;
+      const challengeH = layout.challengeHeight;
       const panelW = Math.min(W - 42, 330);
       this.add
-        .rectangle(W / 2, challengeY, panelW, 58, 0x251020, 0.9)
+        .rectangle(W / 2, challengeY, panelW, challengeH, 0x251020, 0.9)
         .setStrokeStyle(1.5, COLORS.gold, 0.78)
         .setDepth(4);
       challengeHeadline = this.add
-        .text(W / 2, challengeY - 15, incomingDuelId ? 'ДУЭЛЬ · ЗАГРУЗКА' : 'ВЫЗОВ ПОЛУЧЕН', {
+        .text(W / 2, challengeY - challengeH / 2 + 8, incomingDuelId ? 'ДУЭЛЬ · ЗАГРУЗКА' : 'ВЫЗОВ ПОЛУЧЕН', {
           fontFamily: FONT,
           fontSize: H < 650 ? '10px' : '11px',
           fontStyle: 'bold',
@@ -377,7 +378,7 @@ export class MenuScene extends Phaser.Scene {
         ? `уничтожено ${incomingChallenge.kills} · заражено ${incomingChallenge.hostCellsInfected} · мутация ${incomingChallenge.level}`
         : 'СТАНДАРТ · управление и случайность фиксированы';
       challengeDetailText = this.add
-        .text(W / 2, challengeY + 18, detail, {
+        .text(W / 2, challengeY + challengeH / 2 - 9, detail, {
           fontFamily: UI_FONT,
           fontSize: H < 650 ? '10px' : '11px',
           fontStyle: '600',
@@ -513,7 +514,9 @@ export class MenuScene extends Phaser.Scene {
       difficultyCard.desc.setText(
         challengeLocked
           ? (duelLocked ? 'фиксировано дуэлью' : 'фиксировано вызовом')
-          : cardW < 170
+          : resumeCheckpoint
+            ? MENU_COPY.nextRunHint
+            : cardW < 170
             ? profile.id === 'strained'
               ? 'сложнее'
               : profile.id === 'easy'
@@ -565,7 +568,9 @@ export class MenuScene extends Phaser.Scene {
           ? 'фиксировано'
           : duelFixed
             ? 'задано вызовом'
-            : cardW < 170
+            : resumeCheckpoint
+              ? MENU_COPY.nextRunHint
+              : cardW < 170
               ? controlModeTinyHint(selectedControlMode)
               : controlModeCompactDescription(selectedControlMode)
       );
@@ -597,22 +602,24 @@ export class MenuScene extends Phaser.Scene {
 
     // ---- Primary action ----------------------------------------------------
     // One shared primary CTA style: a mint plate with dark, high-contrast text.
-    const startHint = this.add
-      .text(W / 2, layout.hintY, '', {
+    // The run configuration is the caption of the primary action. It lives
+    // inside the button, so the menu spends no separate band on it and the
+    // hero keeps its room.
+    const startButtonCaption = this.add
+      .text(W / 2, layout.ctaY + 9, '', {
         fontFamily: UI_FONT,
         fontSize: layout.compact ? '11px' : '12px',
         fontStyle: '650',
-        color: VISUAL_TEXT.muted,
+        color: CTA.caption,
         align: 'center',
-        lineSpacing: 2,
       })
       .setOrigin(0.5)
       .setResolution(2)
-      .setName('ofeliya-menu-action-hint')
+      .setName('ofeliya-menu-action-caption')
       .setDepth(6);
 
     const startButtonText = this.add
-      .text(W / 2, layout.ctaY, '', {
+      .text(W / 2, layout.ctaY - 9, '', {
         fontFamily: FONT,
         fontSize: layout.compact ? '17px' : '21px',
         fontStyle: 'bold',
@@ -648,26 +655,26 @@ export class MenuScene extends Phaser.Scene {
 
     const renderRunConfiguration = () => {
       if (incomingDuel) {
-        startHint.setText(`тот же забег · быстрее ${fmtTime(incomingDuel.targetTimeMs)}`);
+        startButtonCaption.setText(`тот же забег · быстрее ${fmtTime(incomingDuel.targetTimeMs)}`);
         return;
       }
       if (resumeCheckpoint) {
         const resumeStage =
           STAGES.find((stage) => stage.id === resumeCheckpoint.director.stageId) ?? STAGES[0];
-        // The first line describes the run that will be resumed, the second says
-        // that the difficulty and control cards configure the NEXT run.
-        startHint.setText(
-          `${joinSegments([
+        // The caption names the run that will be resumed. The configuration
+        // cards are marked as belonging to the next run on the cards themselves.
+        startButtonCaption.setText(
+          joinSegments([
             toTitleCase(resumeStage.name),
             fmtTime(resumeCheckpoint.runState.run.timeMs),
             `Уровень ${resumeCheckpoint.runState.stage.level}`,
             toTitleCase(getDifficultyProfile(resumeCheckpoint.difficultyId).shortLabel),
-          ])}\n${MENU_COPY.nextRunHint}`
+          ])
         );
         return;
       }
       const stage = STAGES[0];
-      startHint.setText(
+      startButtonCaption.setText(
         joinSegments([toTitleCase(stage.name), toTitleCase(getDifficultyProfile(selectedDifficulty).shortLabel)])
       );
     };
@@ -756,8 +763,10 @@ export class MenuScene extends Phaser.Scene {
         this.registry.set('controlMode', challenge.controlMode);
         challengeHeadline?.setText('ФИКСИРОВАННАЯ ДУЭЛЬ').setColor('#ffe066');
         challengeTargetText?.setText(`Заверши ту же кампанию быстрее ${fmtTime(challenge.targetTimeMs)}`);
+        // The duel is a head-to-head on one fixed seed. The line says what it
+        // is; it never promises a reward and never uses a ranking disclaimer.
         challengeDetailText?.setText(
-          `тот же забег · ${controlModeLabel(challenge.controlMode)} · без наград и глобального рейтинга`
+          `тот же забег · ${controlModeLabel(challenge.controlMode)} · личная дуэль`
         );
         startButtonText.setText('ПРИНЯТЬ ДУЭЛЬ');
         renderDifficulty();
@@ -1305,13 +1314,6 @@ export class MenuScene extends Phaser.Scene {
             panelW - 56
           ).setFontStyle('700');
         });
-        addText(
-          left + 28,
-          top + panelH - 82,
-          META_COPY.codexLifetime(save.runs, save.totalKills),
-          compact ? 11 : 13,
-          VISUAL_TEXT.ivory
-        );
       }
     };
 

@@ -167,7 +167,7 @@ function browserDriver() {
     !snapshot.texts.some((text) => text.includes('Орбитальный контроль · 2/2 — Выполнено')) ||
     !snapshot.texts.some((text) => text.includes('Инфекция / Лизис · 0/2 — ')) ||
     !snapshot.texts.some((text) => text.includes('дальше: Сингулярность')) ||
-    !snapshot.texts.some((text) => text.includes('Забегов: 7 · Уничтожено клеток: ')) ||
+    snapshot.texts.some((text) => text.includes('Уничтожено клеток')) ||
     snapshot.gameActive
   ) {
     throw new Error('Codex mastery page failed: ' + JSON.stringify(snapshot));

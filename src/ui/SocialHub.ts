@@ -261,7 +261,7 @@ export class SocialHub {
     }
     if (this.dailyLaunchStatus === 'capacity') {
       return {
-        label: 'ЗАБЕГ НЕДОСТУПЕН · ПОВТОРИТЬ',
+        label: META_COPY.dailyLaunchRetry,
         enabled: true,
         color: VISUAL_TEXT.warning,
         fill: VISUAL.panelRaised,
@@ -270,7 +270,7 @@ export class SocialHub {
     }
     if (this.dailyLaunchStatus === 'http') {
       return {
-        label: 'СЕРВЕР НЕ ОТВЕТИЛ · ПОВТОРИТЬ',
+        label: META_COPY.dailyLaunchRetry,
         enabled: true,
         color: VISUAL_TEXT.danger,
         fill: VISUAL.panelRaised,
@@ -279,7 +279,7 @@ export class SocialHub {
     }
     if (this.dailyLaunchStatus === 'network') {
       return {
-        label: 'НЕТ СОЕДИНЕНИЯ · ПОВТОРИТЬ',
+        label: META_COPY.dailyLaunchRetry,
         enabled: true,
         color: VISUAL_TEXT.danger,
         fill: VISUAL.panelRaised,
@@ -295,10 +295,39 @@ export class SocialHub {
     };
   }
 
+  /**
+   * The explanation of a failed daily launch.
+   *
+   * The button itself only says "повторить": the reason the launch failed is
+   * written above it, where a 44px control can afford to be short.
+   */
+  private dailyLaunchError(): string | null {
+    if (this.dailyLaunchStatus === 'capacity') return META_COPY.dailyLaunchCapacity;
+    if (this.dailyLaunchStatus === 'http') return META_COPY.dailyLaunchServerError;
+    if (this.dailyLaunchStatus === 'network') return META_COPY.dailyLaunchNetworkError;
+    return null;
+  }
+
   private addDailyButton(y: number, loadingView = false): void {
     const W = this.scene.scale.width;
     const buttonW = Math.min(this.panelW - 34, 310);
     const state = this.dailyButtonState(loadingView);
+    const launchError = loadingView ? null : this.dailyLaunchError();
+    if (launchError) {
+      const errorText = this.scene.add
+        .text(W / 2, y - 30, launchError, {
+          fontFamily: FONT,
+          fontSize: '11px',
+          fontStyle: 'bold',
+          color: VISUAL_TEXT.danger,
+          align: 'center',
+          wordWrap: { width: this.panelW - 34 },
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setName('ofeliya-social-daily-launch-status');
+      this.body.add(errorText);
+    }
     const bg = this.scene.add
       .rectangle(W / 2, y, buttonW, 44, state.fill, 0.97)
       .setStrokeStyle(state.enabled ? 1.5 : 1, state.stroke, state.enabled ? 0.84 : 0.72)

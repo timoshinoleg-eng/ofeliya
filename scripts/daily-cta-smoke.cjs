@@ -242,7 +242,7 @@ async function waitForText(page, needle, timeout = 6000) {
       assert(blockedCheckpoint.saved === false, 'fail-closed Daily intent wrote a checkpoint');
       assert(blockedCheckpoint.keys.length === 0, 'fail-closed Daily intent leaked checkpoint state: ' + blockedCheckpoint.keys.join(','));
       await finishRun(page);
-      await waitForText(page, 'ЕЖЕДНЕВНЫЙ ЗАБЕГ · РЕЗУЛЬТАТ НЕ СИНХРОНИЗИРОВАН');
+      await waitForText(page, 'Забег дня не засчитан');
       await page.waitForTimeout(400);
       assert(scoreRequests === 0, 'fail-closed daily branch sent ' + scoreRequests + ' /api/score request(s)');
       const after = await page.evaluate(() => ({

@@ -2202,33 +2202,29 @@ export class UIScene extends Phaser.Scene {
     switch (status) {
       case 'ok':
         scoreStatus
-          .setText(
-            rank
-              ? RESULT_COPY.dailyRank(rank)
-              : 'ЕЖЕДНЕВНЫЙ ЗАБЕГ · РЕЗУЛЬТАТ СОХРАНЁН'
-          )
+          .setText(rank ? RESULT_COPY.dailyRank(rank) : RESULT_COPY.dailyStatus.ok)
           .setColor('#8fe8ff');
         break;
       case 'rejected':
-        scoreStatus.setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · РЕЗУЛЬТАТ НЕ СИНХРОНИЗИРОВАН').setColor('#ff9b66');
+        scoreStatus.setText(RESULT_COPY.dailyStatus.rejected).setColor('#ff9b66');
         break;
       case 'closed':
-        scoreStatus.setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · ОКНО РЕЗУЛЬТАТА ЗАКРЫТО').setColor('#ff9b66');
+        scoreStatus.setText(RESULT_COPY.dailyStatus.closed).setColor('#ff9b66');
         break;
       case 'expired':
-        scoreStatus.setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · ВРЕМЯ РЕЗУЛЬТАТА ИСТЕКЛО').setColor('#ff9b66');
+        scoreStatus.setText(RESULT_COPY.dailyStatus.expired).setColor('#ff9b66');
         break;
       case 'denied':
-        scoreStatus.setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · НУЖЕН ПОДТВЕРЖДЁННЫЙ ЗАПУСК').setColor('#ff9b66');
+        scoreStatus.setText(RESULT_COPY.dailyStatus.denied).setColor('#ff9b66');
         break;
       case 'http':
-        scoreStatus.setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · СЕРВИС НЕДОСТУПЕН').setColor('#8f9ab7');
+        scoreStatus.setText(RESULT_COPY.dailyStatus.http).setColor('#8f9ab7');
         break;
       case 'network':
-        scoreStatus.setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · ПРОВЕРЬТЕ СОЕДИНЕНИЕ').setColor('#8f9ab7');
+        scoreStatus.setText(RESULT_COPY.dailyStatus.network).setColor('#8f9ab7');
         break;
       case 'unavailable':
-        scoreStatus.setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · НУЖНА ИДЕНТИЧНОСТЬ МЕССЕНДЖЕРА').setColor('#8f9ab7');
+        scoreStatus.setText(RESULT_COPY.dailyStatus.unavailable).setColor('#8f9ab7');
         break;
     }
   }
@@ -2440,7 +2436,7 @@ export class UIScene extends Phaser.Scene {
 
     detailY += compact ? 20 : 23;
     const scoreStatus = this.add
-      .text(W / 2, detailY, duelChallenge ? 'ДУЭЛЬ: синхронизация…' : 'СЧЁТ: синхронизация…', {
+      .text(W / 2, detailY, duelChallenge ? RESULT_COPY.duelSubmitting : RESULT_COPY.submitting, {
         fontFamily: FONT,
         fontSize: compact ? '9px' : '10px',
         fontStyle: 'bold',
@@ -2482,7 +2478,7 @@ export class UIScene extends Phaser.Scene {
       // Fail-closed: a daily intent with a missing/mismatched/expired ticket submits NOTHING.
       clearDailyIntent(this.registry);
       scoreStatus
-        .setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · РЕЗУЛЬТАТ НЕ СИНХРОНИЗИРОВАН')
+        .setText(RESULT_COPY.dailyBlocked)
         .setColor('#ff9b66');
     } else if (duelChallenge) {
       const submission = this.preVideoDuelAttempt ?? submitDuelAttempt(duelChallenge.challengeId, res, PlatformBridge);
@@ -2490,7 +2486,7 @@ export class UIScene extends Phaser.Scene {
       void submission.then((attempt) => {
         if (!scoreStatus.active) return;
         if (!attempt) {
-          scoreStatus.setText('ДУЭЛЬ · РЕЗУЛЬТАТ НЕ СИНХРОНИЗИРОВАН').setColor('#ff9b66');
+          scoreStatus.setText(RESULT_COPY.duelUnconfirmed).setColor('#ff9b66');
           return;
         }
         if (attempt.beaten) {

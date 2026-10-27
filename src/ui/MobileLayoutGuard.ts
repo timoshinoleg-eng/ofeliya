@@ -102,8 +102,10 @@ function guardMenu(scene: Phaser.Scene): void {
   const action = byName('ofeliya-menu-action');
   if (action) fitToWidth(action, Math.min(W - 82, 258), 0.62);
 
-  const actionHint = byName('ofeliya-menu-action-hint');
-  if (actionHint) fitToWidth(actionHint, W - 58, 0.68);
+  // The run configuration is the caption of the primary action: it must fit
+  // inside the plate, like the label above it.
+  const actionCaption = byName('ofeliya-menu-action-caption');
+  if (actionCaption) fitToWidth(actionCaption, Math.min(W - 82, 258), 0.68);
 
   // The navigation grid and the audio switches own a fixed box each: their labels
   // are fitted to that box, never to the viewport.

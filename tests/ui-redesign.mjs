@@ -69,6 +69,121 @@ function collectTexts(node) {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Pure menu geometry.
+//
+// The hero of the menu may shrink, but a control may never move out of the
+// viewport and two controls may never share a slot. The contract is asserted
+// on the production layout module itself, without a browser: a geometry
+// regression must fail here, not only in a screenshot.
+// ---------------------------------------------------------------------------
+const layoutModule = await (async () => {
+  const { buildSync } = await import('esbuild');
+  const { mkdtempSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join, resolve: resolvePath, sep } = await import('node:path');
+  const temp = mkdtempSync(join(tmpdir(), 'ofeliya-ui-redesign-layout-'));
+  const entry = join(temp, 'entry.ts');
+  const bundle = join(temp, 'bundle.cjs');
+  writeFileSync(
+    entry,
+    `export * from '${resolvePath('src/ui/menuLayout.ts').split(sep).join('/')}';`
+  );
+  buildSync({
+    entryPoints: [entry],
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    outfile: bundle,
+    logLevel: 'warning',
+  });
+  return import(bundle);
+})();
+
+/** The states the menu can be in. The challenge state carries the most controls. */
+const MENU_STATES = {
+  fresh: { hasCheckpoint: false, hasRecord: true, recordLines: 1, hasChallenge: false },
+  resume: { hasCheckpoint: true, hasRecord: true, recordLines: 1, hasChallenge: false },
+  'resume+record': { hasCheckpoint: true, hasRecord: true, recordLines: 2, hasChallenge: false },
+  challenge: { hasCheckpoint: false, hasRecord: true, recordLines: 1, hasChallenge: true },
+  'resume+challenge': { hasCheckpoint: true, hasRecord: true, recordLines: 1, hasChallenge: true },
+};
+
+/** The boxes of the interactive bands, in the order the menu stacks them. */
+function menuBandBoxes(layout) {
+  const touch = 44;
+  const boxes = [
+    { key: 'art', top: layout.artTop, bottom: layout.artTop + layout.artHeight },
+  ];
+  if (layout.challengeHeight > 0) {
+    boxes.push({
+      key: 'challenge',
+      top: layout.challengeY - layout.challengeHeight / 2,
+      bottom: layout.challengeY + layout.challengeHeight / 2,
+    });
+  }
+  boxes.push(
+    { key: 'cards', top: layout.cardY - layout.cardHeight / 2, bottom: layout.cardY + layout.cardHeight / 2 },
+    { key: 'cta', top: layout.ctaY - layout.ctaHeight / 2, bottom: layout.ctaY + layout.ctaHeight / 2 }
+  );
+  if (layout.secondaryY > 0) {
+    boxes.push({
+      key: 'secondary',
+      top: layout.secondaryY - layout.secondaryHeight / 2,
+      bottom: layout.secondaryY + layout.secondaryHeight / 2,
+    });
+  }
+  boxes.push(
+    {
+      key: 'grid',
+      top: layout.gridTop,
+      bottom: layout.gridTop + layout.gridRowHeight * 2 + layout.gridGap,
+    },
+    { key: 'audio', top: layout.audioY - touch / 2, bottom: layout.audioY + touch / 2 },
+    { key: 'legal', top: layout.legalY - touch / 2, bottom: layout.legalY + touch / 2 }
+  );
+  return boxes;
+}
+
+for (const viewport of VIEWPORTS) {
+  for (const [state, flags] of Object.entries(MENU_STATES)) {
+    const layout = layoutModule.computeMenuLayout(viewport.width, viewport.height, flags);
+    const where = `${state} at ${viewport.width}x${viewport.height}`;
+
+    // The hero never collapses to a sliver, in any state.
+    assert.ok(
+      layout.artHeight >= 40,
+      `the hero of the menu collapsed to ${layout.artHeight.toFixed(1)}px in the ${where}`
+    );
+    // The content never leaves the viewport.
+    const boxes = menuBandBoxes(layout);
+    for (const box of boxes) {
+      assert.ok(
+        box.top >= -0.01 && box.bottom <= viewport.height + 0.01,
+        `the ${box.key} band leaves the viewport in the ${where}: ${box.top.toFixed(1)}..${box.bottom.toFixed(1)}`
+      );
+    }
+    // Two controls never share a slot.
+    for (let i = 1; i < boxes.length; i += 1) {
+      assert.ok(
+        boxes[i].top >= boxes[i - 1].bottom - 0.01,
+        `the ${boxes[i - 1].key} and ${boxes[i].key} bands overlap in the ${where}`
+      );
+    }
+  }
+
+  // The returning player keeps a real hero at the smallest viewport: this is the
+  // state that used to collapse the hero to a 34px sliver.
+  const resume = layoutModule.computeMenuLayout(viewport.width, viewport.height, MENU_STATES.resume);
+  if (viewport.width === 320 && viewport.height === 568) {
+    assert.ok(
+      resume.artHeight >= 64,
+      `the resume hero collapsed to ${resume.artHeight.toFixed(1)}px at 320x568`
+    );
+  }
+}
+console.log('ui redesign menu geometry: ok (pure layout contract)');
+
 const server = await createServer({ server: { host: '127.0.0.1', port: 0 } });
 let browser;
 try {
@@ -162,6 +277,24 @@ try {
     assert.ok(
       menu.allText.some((t) => t.includes('Кровоток') && t.includes('Стандарт')),
       `the run configuration line is missing at ${viewport.width}x${viewport.height}`
+    );
+    // The run configuration is the caption of the primary action, inside the
+    // button: the menu spends no separate band on it.
+    const freshCaption = menu.named['ofeliya-menu-action-caption'];
+    assert.ok(freshCaption, `the primary action has no caption at ${viewport.width}`);
+    assert.ok(
+      /Кровоток · Стандарт/.test(freshCaption.text || ''),
+      `the fresh run configuration is wrong: ${freshCaption?.text}`
+    );
+    assert.ok(
+      freshCaption.bounds.y >= menu.action.bounds.y &&
+        freshCaption.bounds.y + freshCaption.bounds.height <=
+          menu.action.bounds.y + menu.action.bounds.height,
+      'the run configuration must sit inside the primary action'
+    );
+    assert.ok(
+      !menu.named['ofeliya-menu-action-hint'],
+      'the separate run configuration band must be gone'
     );
 
     // The record line never merges counters of different windows.
@@ -262,7 +395,11 @@ try {
         action: { bounds: bounds(byName('ofeliya-menu-action-bg')) },
         newRun: { bounds: bounds(byName('ofeliya-menu-new-run')) },
         actionLabel: texts.find((o) => o.name === 'ofeliya-menu-action')?.text,
-        hint: texts.find((o) => o.name === 'ofeliya-menu-action-hint')?.text,
+        // The run configuration is the caption of the primary action: the menu
+        // spends no separate band on it.
+        caption: texts.find((o) => o.name === 'ofeliya-menu-action-caption')?.text,
+        captionBounds: bounds(byName('ofeliya-menu-action-caption')),
+        hasLegacyHint: Boolean(byName('ofeliya-menu-action-hint')),
       };
     });
 
@@ -274,9 +411,18 @@ try {
       'the resume secondary action copy is wrong'
     );
     assert.ok(
-      /Кровоток · \d\d:\d\d · Уровень \d+ · Стандарт/.test(resume.hint || ''),
-      `the checkpoint summary is wrong: ${resume.hint}`
+      /Кровоток · \d\d:\d\d · Уровень \d+ · Стандарт/.test(resume.caption || ''),
+      `the checkpoint summary is wrong: ${resume.caption}`
     );
+    // The configuration lives inside the button, and the dead hint band is gone.
+    assert.ok(
+      resume.captionBounds &&
+        resume.captionBounds.y >= resume.action.bounds.y &&
+        resume.captionBounds.y + resume.captionBounds.height <=
+          resume.action.bounds.y + resume.action.bounds.height,
+      'the run configuration must sit inside the primary action'
+    );
+    assert.ok(!resume.hasLegacyHint, 'the separate run configuration band must be gone');
     assert.ok(
       !resume.allText.some((t) => t.includes('НЕЗАВЕРШЁННЫЙ ЗАБЕГ')),
       'the duplicated resume banner must be gone'
@@ -307,19 +453,25 @@ try {
     await resultPage.goto(base, { waitUntil: 'domcontentloaded' });
     await resultPage.waitForFunction(() => window.__game?.scene.isActive('Menu'), null, { timeout: 20000 });
 
-    const renderResult = async (res) => {
+    const renderResult = async (res, registryPatch = null) => {
       await resultPage.evaluate(() => {
         const game = window.__game;
         if (!game.scene.isActive('Game')) game.scene.getScene('Menu').scene.start('Game');
       });
       await resultPage.waitForFunction(() => window.__game?.scene.isActive('UI'), null, { timeout: 20000 });
-      await resultPage.evaluate((result) => {
-        const game = window.__game;
-        const gs = game.scene.getScene('Game');
-        const ui = game.scene.getScene('UI');
-        gs.scene.pause();
-        ui.renderGameOver(result);
-      }, res);
+      await resultPage.evaluate(
+        ({ result, patch }) => {
+          const game = window.__game;
+          const gs = game.scene.getScene('Game');
+          const ui = game.scene.getScene('UI');
+          gs.scene.pause();
+          if (patch) {
+            for (const [key, value] of Object.entries(patch)) game.registry.set(key, value);
+          }
+          ui.renderGameOver(result);
+        },
+        { result: res, patch: registryPatch }
+      );
       await resultPage.waitForTimeout(400);
       return resultPage.evaluate(() => {
         const ui = window.__game.scene.getScene('UI');
@@ -492,6 +644,34 @@ try {
     assert.ok(
       !resumed.overlayTexts.some((t) => /В СЕЗОНЕ/.test(t)),
       'no board identity may be invented'
+    );
+
+    // A daily run that could not be sent states it in one plain sentence: the
+    // player never reads a synchronization report.
+    const dailyBlocked = await renderResult(baseResult, {
+      dailyIntent: { runId: 'ui-redesign-daily' },
+      dailyTicket: {
+        runId: 'ui-redesign-other',
+        runSeed: 'ui-redesign-other',
+        dateKey: '2026-10-27',
+        issuedAt: Date.now(),
+        expiresAt: Date.now() + 60000,
+        difficultyId: 'standard',
+        rulesetVersion: 1,
+        campaignVersion: 1,
+      },
+    });
+    assert.ok(
+      dailyBlocked.overlayTexts.includes('Забег дня не засчитан'),
+      `the daily status is wrong: ${dailyBlocked.overlayTexts.join(' | ')}`
+    );
+    assert.ok(
+      !dailyBlocked.overlayTexts.some((t) => /синхрониз/i.test(t)),
+      'the daily status must not talk about synchronization'
+    );
+    assert.ok(
+      !dailyBlocked.overlayTexts.some((t) => t.includes('ЕЖЕДНЕВНЫЙ ЗАБЕГ ·')),
+      'the daily status must not be a prefixed technical label'
     );
 
     for (const forbidden of FORBIDDEN_PLAYER_COPY) {
@@ -676,14 +856,67 @@ try {
       !mastery.some((t) => /Открой |Найди /.test(t)),
       'a branch row must never be a bare imperative'
     );
-    // The codex keeps the lifetime counter with its own label, so the three
-    // counters of the product never look like one broken number.
+    // The lifetime counters of the profile do not live in the codex: the
+    // codex is the record of what the collection has unlocked, and every
+    // counter keeps its own window instead of being merged into one number.
     assert.ok(
-      mastery.some((t) => /^Забегов: \d+ · Уничтожено клеток: [\d\u00a0]+$/.test(t)),
-      `the codex lifetime line is wrong: ${mastery.join(' | ')}`
+      !mastery.some((t) => /^Забегов: \d+ · Уничтожено клеток:/.test(t)),
+      `the codex must not carry the lifetime counters: ${mastery.join(' | ')}`
+    );
+    assert.ok(
+      !mastery.some((t) => t.includes('Уничтожено клеток')),
+      `the codex must not carry a lifetime kill counter: ${mastery.join(' | ')}`
+    );
+    assert.ok(
+      mastery.some((t) => /^Открыто записей: \d+\/9 · Забегов: \d+$/.test(t)),
+      `the codex must keep its own progress line: ${mastery.join(' | ')}`
     );
 
     const collection = await openMeta('collection');
+
+    // The paginator of a multi-page list must never share a tap with the
+    // internal dock: the real Phaser hit areas are measured, not estimated.
+    const pagination = await metaPage.evaluate(() => {
+      const menu = window.__game.scene.getScene('Menu');
+      const board = menu.children.list.find((o) => o.name === 'ofeliya-collection');
+      const find = (node, name) => {
+        for (const child of node.list ?? []) {
+          if (child.name === name) return child;
+          const hit = find(child, name);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      const bounds = (o) => (o ? JSON.parse(JSON.stringify(o.getBounds())) : null);
+      const dockItems = ['ofeliya-meta-dock-tasks', 'ofeliya-meta-dock-codex', 'ofeliya-meta-dock-collection']
+        .map((name) => bounds(find(board, name)))
+        .filter(Boolean);
+      return {
+        prev: bounds(find(board, 'ofeliya-collection-prev')),
+        next: bounds(find(board, 'ofeliya-collection-next')),
+        dockTop: dockItems.length ? Math.min(...dockItems.map((b) => b.y)) : null,
+      };
+    });
+    assert.ok(
+      pagination.prev && pagination.next,
+      `the collection of a multi-page list needs a paginator at ${viewport.width}`
+    );
+    for (const target of [pagination.prev, pagination.next]) {
+      assert.ok(
+        target.width >= 44 && target.height >= 44,
+        `a paginator control must be a real touch target at ${viewport.width}: ${target.width}x${target.height}`
+      );
+    }
+    const paginatorBottom = Math.max(
+      pagination.prev.y + pagination.prev.height,
+      pagination.next.y + pagination.next.height
+    );
+    assert.ok(
+      paginatorBottom + 4 <= pagination.dockTop,
+      `the paginator overlaps the internal dock at ${viewport.width}x${viewport.height}: ` +
+        `paginator bottom ${paginatorBottom.toFixed(1)} + 4 > dock top ${pagination.dockTop?.toFixed(1)}`
+    );
+
     // The shells tab carries the one explanation of the cosmetic tab.
     await metaPage.evaluate(() => {
       const menu = window.__game.scene.getScene('Menu');
@@ -768,10 +1001,16 @@ try {
       !shells.texts.some((t) => t.includes('Открывает:')),
       'a locked shell must not use the "opens:" wording'
     );
-    // The kill milestones share one group header and one target wording.
+    // The kill milestones share one group header and one target wording. The
+    // counter of the group is the progress of the milestones, never a lifetime
+    // total: the collection does not keep one.
     assert.ok(
-      collection.texts.some((t) => t.startsWith('Уничтожение иммунных клеток (всего: ')),
+      collection.texts.some((t) => t.startsWith('Уничтожение иммунных клеток (в прогрессе вех: ')),
       `the milestone group needs one header: ${collection.texts.join(' | ')}`
+    );
+    assert.ok(
+      !collection.texts.some((t) => t.includes('Уничтожение иммунных клеток (всего:')),
+      'the milestone group must not promise a lifetime total'
     );
     assert.ok(
       collection.texts.some((t) => t === '500 противников всего'),

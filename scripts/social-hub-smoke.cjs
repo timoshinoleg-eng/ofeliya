@@ -511,21 +511,62 @@ async function runDailyLaunchState(browser, dailyMode, expectedText, disabledAft
   await openHub(page);
   await clickNamed(page, 'ofeliya-social-daily-bg');
 
-  await page.waitForFunction(
-    (text) => {
+  // The explanation of a failed launch lives outside the button, and the button
+  // itself only offers the retry. A state that cannot be retried at all has
+  // nothing to explain and nothing to press: it keeps its own inactive label.
+  const readLabel = (name) =>
+    page.evaluate((target) => {
       const menu = window.__game.scene.getScene('Menu');
       const root = menu.children.list.find((obj) => obj?.name === 'ofeliya-social-hub');
-      if (!root) return false;
       const flatten = (obj) => {
         const out = [obj];
         if (Array.isArray(obj?.list)) for (const child of obj.list) out.push(...flatten(child));
         return out;
       };
-      return flatten(root).some((obj) => typeof obj?.text === 'string' && obj.text.includes(text));
-    },
-    expectedText,
-    { timeout: 8000 }
-  );
+      return flatten(root).find((obj) => obj?.name === target)?.text ?? '';
+    }, name);
+
+  if (disabledAfter) {
+    await page.waitForFunction(
+      (text) => {
+        const menu = window.__game.scene.getScene('Menu');
+        const root = menu.children.list.find((obj) => obj?.name === 'ofeliya-social-hub');
+        if (!root) return false;
+        const flatten = (obj) => {
+          const out = [obj];
+          if (Array.isArray(obj?.list)) for (const child of obj.list) out.push(...flatten(child));
+          return out;
+        };
+        return flatten(root).some(
+          (obj) => obj?.name === 'ofeliya-social-daily-label' && typeof obj?.text === 'string' && obj.text.includes(text)
+        );
+      },
+      expectedText,
+      { timeout: 8000 }
+    );
+  } else {
+    await page.waitForFunction(
+      (text) => {
+        const menu = window.__game.scene.getScene('Menu');
+        const root = menu.children.list.find((obj) => obj?.name === 'ofeliya-social-hub');
+        if (!root) return false;
+        const flatten = (obj) => {
+          const out = [obj];
+          if (Array.isArray(obj?.list)) for (const child of obj.list) out.push(...flatten(child));
+          return out;
+        };
+        return flatten(root).some(
+          (obj) => obj?.name === 'ofeliya-social-daily-launch-status' && typeof obj?.text === 'string' && obj.text.includes(text)
+        );
+      },
+      expectedText,
+      { timeout: 8000 }
+    );
+    const retryLabel = await readLabel('ofeliya-social-daily-label');
+    if (retryLabel !== 'ПОВТОРИТЬ') {
+      throw new Error('the failed daily launch button must only offer the retry: ' + JSON.stringify(retryLabel));
+    }
+  }
 
   const contract = await inspectHub(page, size);
   const dailyRequests = requests.filter((item) => item.key === '/api/daily/run');
@@ -566,10 +607,10 @@ async function runDailyLaunchState(browser, dailyMode, expectedText, disabledAft
     await runHttpRetry(browser);
     await runSkipped(browser);
     await runDailyLaunch(browser);
-    await runDailyLaunchState(browser, 'capacity', 'ЗАБЕГ НЕДОСТУПЕН');
+    await runDailyLaunchState(browser, 'capacity', 'Забег дня сейчас недоступен');
     await runDailyLaunchState(browser, 'denied', 'НУЖЕН ПОДТВЕРЖДЁННЫЙ ВХОД', true);
-    await runDailyLaunchState(browser, 'http', 'СЕРВЕР НЕ ОТВЕТИЛ');
-    await runDailyLaunchState(browser, 'network', 'НЕТ СОЕДИНЕНИЯ');
+    await runDailyLaunchState(browser, 'http', 'Сервер не ответил');
+    await runDailyLaunchState(browser, 'network', 'Нет соединения');
     console.log('social hub browser smoke: ok (4 viewports + social states + atomic Daily launch/states + retry + PII)');
   } finally {
     await browser.close();

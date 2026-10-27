@@ -113,6 +113,7 @@ try {
     [
       resolve(root, 'node_modules/typescript/bin/tsc'),
       'src/game/DailyRunIntent.ts',
+      'src/game/UiCopy.ts',
       'src/systems/ScoreClient.ts',
       '--target', 'ES2020',
       '--module', 'commonjs',
@@ -131,6 +132,7 @@ try {
 
   const intent = require(join(temp, 'game/DailyRunIntent.js'));
   const score = require(join(temp, 'systems/ScoreClient.js'));
+  const { RESULT_COPY } = require(join(temp, 'game/UiCopy.js'));
 
   // --- (1) launchDailyRun atomicity -------------------------------------------------
   await test('launchDailyRun writes the full registry block only on an ok ticket', async () => {
@@ -308,18 +310,19 @@ try {
       unavailable: 'нужна идентичность мессенджера',
       ok: '(launches)',
     };
-    const submitCopy = {
-      ok: 'ЕЖЕДНЕВНЫЙ ЗАБЕГ · РЕЗУЛЬТАТ СОХРАНЁН',
-      rejected: 'ЕЖЕДНЕВНЫЙ ЗАБЕГ · РЕЗУЛЬТАТ НЕ СИНХРОНИЗИРОВАН',
-      closed: 'ЕЖЕДНЕВНЫЙ ЗАБЕГ · ОКНО РЕЗУЛЬТАТА ЗАКРЫТО',
-      expired: 'ЕЖЕДНЕВНЫЙ ЗАБЕГ · ВРЕМЯ РЕЗУЛЬТАТА ИСТЕКЛО',
-      denied: 'ЕЖЕДНЕВНЫЙ ЗАБЕГ · НУЖЕН ПОДТВЕРЖДЁННЫЙ ЗАПУСК',
-      http: 'ЕЖЕДНЕВНЫЙ ЗАБЕГ · СЕРВИС НЕДОСТУПЕН',
-      network: 'ЕЖЕДНЕВНЫЙ ЗАБЕГ · ПРОВЕРЬТЕ СОЕДИНЕНИЕ',
-      unavailable: 'ЕЖЕДНЕВНЫЙ ЗАБЕГ · НУЖНА ИДЕНТИЧНОСТЬ МЕССЕНДЖЕРА',
-    };
     for (const s of ticketStatuses) assert.ok(typeof ticketCopy[s] === 'string' && ticketCopy[s].length > 0, s);
-    for (const s of submitStatuses) assert.ok(typeof submitCopy[s] === 'string' && submitCopy[s].length > 0, s);
+    // The real catalog, not a copy of it: every state the server can answer with
+    // owns a line of plain Russian.
+    const dailyStatus = RESULT_COPY.dailyStatus;
+    for (const s of submitStatuses) {
+      assert.ok(typeof dailyStatus[s] === 'string' && dailyStatus[s].length > 0, `no copy for ${s}`);
+    }
+    // The line is player-facing: it never talks about the implementation.
+    for (const [state, line] of Object.entries(dailyStatus)) {
+      assert.ok(!/синхрониз/i.test(line), `the ${state} line talks about synchronization: ${line}`);
+      assert.ok(!/ЕЖЕДНЕВНЫЙ ЗАБЕГ ·/.test(line), `the ${state} line is a prefixed technical label: ${line}`);
+      assert.ok(line.length <= 40, `the ${state} line is not concise: ${line}`);
+    }
   });
 
   // --- (6) no PII / no logging in the intent module --------------------------------

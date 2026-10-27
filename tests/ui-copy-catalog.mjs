@@ -230,7 +230,7 @@ try {
   assert.equal(copy.MENU_COPY.newRun, 'НОВЫЙ ЗАБЕГ', 'new run action');
   assert.equal(
     copy.MENU_COPY.nextRunHint,
-    'Сложность и управление — для нового забега',
+    'Для нового забега',
     'the run-configuration cards belong to the next run'
   );
   assert.equal(copy.MENU_COPY.music, '♪ Музыка', 'the music switch carries its glyph');
@@ -314,18 +314,23 @@ try {
   );
   assert.equal(
     copy.META_COPY.milestoneKillsGroup(2771),
-    'Уничтожение иммунных клеток (всего: 2\u00a0771)',
-    'the group header of the kill milestones'
+    'Уничтожение иммунных клеток (в прогрессе вех: 2\u00a0771)',
+    'the group header of the kill milestones names the collection progress window'
+  );
+  assert.ok(
+    !copy.META_COPY.milestoneKillsGroup(2771).includes('всего:'),
+    'the milestone kills counter must not be presented as a lifetime total'
   );
   assert.equal(
     copy.META_COPY.codexSubtitle(4, 9, 12),
     'Открыто записей: 4/9 · Забегов: 12',
     'the codex header'
   );
+  // The lifetime totals left the codex: the catalog must not offer them again.
   assert.equal(
-    copy.META_COPY.codexLifetime(12, 5424),
-    'Забегов: 12 · Уничтожено клеток: 5\u00a0424',
-    'the codex lifetime line'
+    Object.prototype.hasOwnProperty.call(copy.META_COPY, 'codexLifetime'),
+    false,
+    'the codex must not carry a lifetime row'
   );
   assert.equal(
     copy.META_COPY.codexEntries(3),

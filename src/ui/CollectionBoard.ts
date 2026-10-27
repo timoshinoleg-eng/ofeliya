@@ -282,7 +282,11 @@ export class CollectionBoard {
     const total = this.page === 'shells' ? SKIN_CATALOG.length : state.achievements.length;
     const pageCount = collectionPageCount(total, pageSize);
     if (this.page !== 'lab' && shouldShowPaginator(total, pageSize)) {
-      const y = top + h - 84;
+      // The paginator is placed from the dock, not from the panel edge: its hit
+      // areas are 44px tall, so a fixed offset from the panel bottom pushed them
+      // into the dock row and the two controls competed for the same taps.
+      const dockTop = frame.dockTop - MODAL.dockHeight / 2;
+      const y = dockTop - 8 - 22;
       button('ofeliya-collection-prev', left + MODAL.padX + 27, y, 54, '‹', () => {
         this.offset = Math.max(0, this.offset - pageSize);
         this.render();

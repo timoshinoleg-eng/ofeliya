@@ -112,7 +112,7 @@ export const MENU_COPY = {
    * The wording is the canonical one of the source of truth: the cards are
    * marked "для нового забега", never "для следующего".
    */
-  nextRunHint: 'Сложность и управление — для нового забега',
+  nextRunHint: 'Для нового забега',
   /** Top-level destinations. */
   rating: 'РЕЙТИНГ',
   tasks: 'ЗАДАЧИ ДНЯ',
@@ -170,6 +170,35 @@ export const RESULT_COPY = {
   resumed: 'Тренировка (продолженный забег)',
   /** Daily board place. */
   dailyRank: (rank: number): string => `★ МЕСТО #${rank} В РЕЙТИНГЕ ДНЯ`,
+  /**
+   * The status of a daily submission.
+   *
+   * Every server state keeps its own line: the player has to know whether the
+   * run counted, whether the day is already over, or whether the game simply
+   * could not reach the server. The wording never exposes the implementation.
+   */
+  dailyStatus: {
+    ok: 'Забег дня засчитан',
+    rejected: 'Забег дня не засчитан',
+    closed: 'Забег дня уже закрыт',
+    expired: 'Срок забега дня истёк',
+    denied: 'Нужен запуск через MAX или Telegram',
+    http: 'Сервер не ответил',
+    network: 'Нет соединения',
+    unavailable: 'Не удалось определить профиль',
+  } as const,
+  /** The daily run was blocked before it could be sent. */
+  dailyBlocked: 'Забег дня не засчитан',
+  /** The duel attempt could not be confirmed by the server. */
+  duelUnconfirmed: 'Дуэль не засчитана',
+  /**
+   * The transient state of a result that is on its way to the server.
+   *
+   * The player sees a sentence, not the name of the request: the word
+   * "synchronization" describes the implementation, not the game.
+   */
+  submitting: 'Отправляю результат…',
+  duelSubmitting: 'Отправляю дуэль…',
 } as const;
 
 /**
@@ -241,14 +270,6 @@ export const META_COPY = {
    */
   codexSubtitle: (unlocked: number, total: number, runs: number): string =>
     `Открыто записей: ${unlocked}/${total} · Забегов: ${runs}`,
-  /**
-   * Codex lifetime line.
-   *
-   * The lifetime kill counter stays in the codex and keeps its own label, so the
-   * three counters of the product never look like one broken number.
-   */
-  codexLifetime: (runs: number, totalKills: number): string =>
-    `Забегов: ${runs} · Уничтожено клеток: ${fmtInt(totalKills)}`,
   /** Daily tasks progress line. */
   tasksProgress: (completed: number, total: number, remaining: string): string =>
     `Выполнено: ${completed} из ${total} · Обновление через ${remaining}`,
@@ -273,6 +294,14 @@ export const META_COPY = {
   serverError: 'Сервер не ответил. Твой прогресс сохраняется.',
   /** Retry call to action. */
   retry: 'ПОВТОРИТЬ',
+  /** The daily launch failed and the player may try again. */
+  dailyLaunchRetry: 'ПОВТОРИТЬ',
+  /** The daily launch could not reach the server. */
+  dailyLaunchServerError: 'Сервер не ответил — попробуй ещё раз',
+  /** The daily launch could not reach the network. */
+  dailyLaunchNetworkError: 'Нет соединения — попробуй ещё раз',
+  /** The daily run is not available at the moment. */
+  dailyLaunchCapacity: 'Забег дня сейчас недоступен — попробуй позже',
   /** Neutral player label when the payload carries no display name. */
   player: (platform: string): string => `Игрок (${platform})`,
   /** The call to action of the daily run. */
@@ -290,9 +319,16 @@ export const META_COPY = {
   /** One row of the season table. */
   seasonRow: (rank: number, name: string, time: string, kills: string): string =>
     `#${rank} · ${name} — ${time} · ${kills} кл.`,
-  /** The group header of the kill milestones. */
+  /**
+   * The group header of the kill milestones.
+   *
+   * The counter is the collection's own progress window — the kills the
+   * milestone system has counted since it started — and not the lifetime total
+   * of the profile. The label says so, because "всего" would promise a lifetime
+   * number the collection does not keep.
+   */
   milestoneKillsGroup: (totalKills: number): string =>
-    `Уничтожение иммунных клеток (всего: ${fmtInt(totalKills)})`,
+    `Уничтожение иммунных клеток (в прогрессе вех: ${fmtInt(totalKills)})`,
   /** The condition of a shell that is still locked. */
   shellLockedBy: (milestone: string): string => `Чтобы открыть: выполни веху «${milestone}»`,
   /** The condition of a shell that is already open. */

@@ -56,10 +56,11 @@ export interface MenuLayout {
   recordFont: number;
   /** Y of the challenge band, between the record and the run configuration. */
   challengeY: number;
+  /** Height of the challenge band. Zero when no challenge is waiting. */
+  challengeHeight: number;
   ctaY: number;
   ctaHeight: number;
   ctaWidth: number;
-  hintY: number;
   secondaryY: number;
   secondaryHeight: number;
   gridTop: number;
@@ -99,9 +100,9 @@ export function computeMenuLayout(
 
   const cardHeight = compact ? 56 : 64;
   const ctaHeight = compact ? 48 : 60;
-  // The resume state adds a second hint line that says the run-configuration
-  // cards belong to the next run.
-  const hintHeight = flags.hasCheckpoint ? (compact ? 26 : 32) : compact ? 14 : 18;
+  // The run configuration lives inside the primary action, and the resume state
+  // marks the configuration cards as belonging to the next run. The menu
+  // therefore needs no separate hint band: the space belongs to the hero.
   const secondaryHeight = MIN_TOUCH;
   const gridRowHeight = MIN_TOUCH;
   const gridGap = compact ? 4 : 8;
@@ -114,8 +115,10 @@ export function computeMenuLayout(
     : 0;
   const secondary = flags.hasCheckpoint ? secondaryHeight : 0;
   // The challenge band is its own band: the record line and the challenge must
-  // never share a slot, or they overlap on a compact viewport.
-  const challengeHeight = flags.hasChallenge ? 58 : 0;
+  // never share a slot, or they overlap on a compact viewport. On a compact
+  // viewport the card is tighter, so the hero keeps more of its room in the
+  // state that carries the most controls.
+  const challengeHeight = flags.hasChallenge ? (compact ? 48 : 58) : 0;
 
   const bands: Band[] = [
     { key: 'title', height: titleFont * 1.24 },
@@ -127,27 +130,53 @@ export function computeMenuLayout(
     { key: 'challenge', height: challengeHeight },
     { key: 'cards', height: cardHeight },
     { key: 'cta', height: ctaHeight },
-    { key: 'hint', height: hintHeight },
     { key: 'secondary', height: secondary },
     { key: 'grid', height: gridHeight },
     { key: 'audio', height: audioHeight },
     { key: 'legal', height: legalHeight },
   ];
 
-  const fixedTotal =
-    padTop +
-    padBottom +
-    bands.filter((band) => !band.elastic).reduce((sum, band) => sum + band.height, 0) +
-    minGap * (bands.length - 1);
+  const fixedBands = bands
+    .filter((band) => !band.elastic)
+    .reduce((sum, band) => sum + band.height, 0);
 
-  const minArt = 34;
+  const minArt = 24;
   const maxArt = 240;
-  let artHeight = Math.max(minArt, Math.min(maxArt, height - fixedTotal));
-  let leftover = height - fixedTotal - artHeight;
+  // The hero must stay recognisable in every state, including the returning
+  // player, whose menu carries one action more than the fresh one.
+  const heroMin = compact ? 64 : 96;
+  // The gaps may give up space; a control never does.
+  const hardMinGap = 2;
   const gapCount = bands.length - 1;
-  const gap = Math.min(maxGap, minGap + (gapCount > 0 ? leftover / gapCount : 0));
-  leftover -= (gap - minGap) * gapCount;
+  const gapMinTotal = hardMinGap * gapCount;
+  const gapBaseTotal = minGap * gapCount;
+  const flow = height - padTop - padBottom - fixedBands;
+  let gapTotal = gapBaseTotal;
+  let artHeight = Math.max(minArt, Math.min(maxArt, flow - gapTotal));
+  if (artHeight + gapTotal > flow) {
+    // The content does not fit: the spacing gives up its room first.
+    const artRoom = Math.max(0, flow - gapMinTotal);
+    artHeight = Math.max(minArt, Math.min(artHeight, artRoom));
+    gapTotal = flow - artHeight;
+  }
+  if (artHeight < heroMin) {
+    // The hero takes what the spacing can spare, and never pushes a control out
+    // of the viewport.
+    const need = heroMin - artHeight;
+    const room = Math.max(0, gapTotal - gapMinTotal);
+    const take = Math.min(need, room);
+    artHeight += take;
+    gapTotal -= take;
+  }
+  let leftover = flow - artHeight - gapTotal;
+  const gapMaxTotal = maxGap * gapCount;
+  if (leftover > 0 && gapTotal < gapMaxTotal) {
+    const grow = Math.min(leftover, gapMaxTotal - gapTotal);
+    gapTotal += grow;
+    leftover -= grow;
+  }
   artHeight = Math.min(maxArt, artHeight + Math.max(0, leftover));
+  const gap = gapTotal / gapCount;
 
   // Walk the flow and record the position of every band.
   const top: Record<string, number> = {};
@@ -191,10 +220,10 @@ export function computeMenuLayout(
     recordY: top.record + recordHeight / 2,
     recordFont,
     challengeY: challengeHeight > 0 ? top.challenge + challengeHeight / 2 : 0,
+    challengeHeight,
     ctaY: top.cta + ctaHeight / 2,
     ctaHeight,
     ctaWidth: Math.min(contentWidth, 338),
-    hintY: top.hint + hintHeight / 2,
     secondaryY: secondary > 0 ? top.secondary + secondaryHeight / 2 : 0,
     secondaryHeight,
     gridTop: top.grid,

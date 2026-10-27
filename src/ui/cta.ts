@@ -21,6 +21,8 @@ export const CTA = {
   fillPressed: 0x9dc3a9,
   fillDisabled: VISUAL.panelRaised,
   text: '#080f14',
+  /** The caption of a captioned primary action: dark, one step softer than the label. */
+  caption: '#16302a',
   textDisabled: VISUAL_TEXT.muted,
   stroke: VISUAL.host,
   strokeDisabled: VISUAL.line,
