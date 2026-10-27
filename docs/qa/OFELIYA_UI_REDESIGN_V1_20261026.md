@@ -1632,6 +1632,16 @@ with 390×740. The test was verified to be **RED** before the repair
 (`390: the standard description overflows the panel by 4px`) and **GREEN**
 after it.
 
+**One fixture had to follow.** `scripts/ui-readability-smoke.cjs` identified
+the two descriptions of the menu by their **wording** (`Базовый ритм
+кампании`, `оба стика`), which was the full copy of the two cards. With the
+one-line variant the wording is no longer a constant, so the contract now
+follows the **object** (`ofeliya-menu-difficulty-selector-desc`,
+`ofeliya-menu-control-selector-desc`). The assertion is the same one — the
+description of a run-configuration card is body text of at least 13 px in the
+system-ui font — and it is now checked for the description in *every* variant,
+which is stricter than before.
+
 ### 17.4 D7 — the typo
 
 `РЕЖИЕ` is not a Russian word. The title of the `sparse-lethal` daily mutator
@@ -1768,6 +1778,8 @@ no tier (as before) and the EASY share still ends with `Режим: ЛЁГКИЙ
 | `node scripts/check-daily-mutator.mjs` | **PASS** — the exact title and the typo sweep |
 | `node scripts/check-language-copy.mjs` | **PASS** — 1849 literals, the collection scope and the UTC rule |
 | `node scripts/check-daily-cta.mjs` | **PASS** |
+| `node scripts/ui-readability-smoke.cjs` | **PASS** — 390×740, 360×640 |
+| `node scripts/codex-smoke.cjs` (the smoke that calls the readability one) | **PASS** |
 | `npm run test:ui-copy` · `npm run test:difficulty` · `npm run test:mutation-copy` | **PASS** |
 | `npx tsc --noEmit` · `npm run build` · `git diff --check` | **PASS** |
 
