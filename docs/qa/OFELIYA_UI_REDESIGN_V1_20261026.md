@@ -1,10 +1,19 @@
 # OFELIYA — UI redesign v1
 
 **Branch:** `feat/ui-redesign-v1-20261026`
-**Base:** `main` @ `ce8ecb84ced1afa09870f2f00f9a0328257fd11c`
+**Base:** `main` @ `2b1e1426aa04b1d4cfb5159fb4ce89c00283d608` (main with PR #247 analytics, PR #250 verified notification/footer UX and PR #248 EASY difficulty merged)
 **Status:** implementation complete, draft PR open, not merged, not deployed.
 
 ---
+
+> **Third pass — Muse review correction (2026-10-27).** The independent Muse
+> review of this pull request was classified finding by finding against the
+> **current remote head** `a105f7c750ae275f5febbe4ab3eb6c1fae7a704e`; every
+> finding that was still present was implemented, with a regression test, and
+> everything that was already fixed or deliberate is recorded as such.
+> **§16 is the matrix of that pass.** The earlier sections are kept as the
+> history they are; the stale statements in them are corrected in place and
+> marked.
 
 > **Integration update (post-reconciliation):** this branch was subsequently merged with
 > production main @ `2b1e1426aa04b1d4cfb5159fb4ce89c00283d608`, which already contains PR #247 analytics,
@@ -68,25 +77,33 @@ Everything else in the first pass was confirmed by the documents and kept.
 
 | | SHA |
 | --- | --- |
-| `origin/main` at the start | `ce8ecb84ced1afa09870f2f00f9a0328257fd11c` |
-| Previously released `ce8ecb84…` | `ce8ecb84ced1afa09870f2f00f9a0328257fd11c` |
+| The base of the branch (the merged main it was integrated with) | `2b1e1426aa04b1d4cfb5159fb4ce89c00283d608` |
+| `main` when the first pass was cut | `ce8ecb84ced1afa09870f2f00f9a0328257fd11c` |
+| The head the third pass started from (the current remote head) | `a105f7c750ae275f5febbe4ab3eb6c1fae7a704e` — `ci: allow time for combined browser contracts` |
 | Final head (the PR) | the commit that carries this report — the App push path creates one commit per push, so the head is the last push of this pass |
 | Final head (the local branch) | the commit that carries this report |
-| The head the CI was green on in the first pass | `f3d0e3dade4ed844a99056a0c37c3bcdd3a9aced` |
+| The head the CI was green on before this pass | `a105f7c750ae275f5febbe4ab3eb6c1fae7a704e` — run `40418654178`, `build` / `production-contract` / `browser-smoke` **success** |
 
 `origin/main` was fetched before the work started. **Main did not advance while
 this work was made** — the branch was cut from the current main and the working
 tree was clean at the start.
 
 **Main has since moved, by other people's work.** While the reconciliation pass
-was running, `main` received two merges that are not part of this branch:
-`Merge PR #247: OFELIYA Sprint 0 analytics read path` (13:17 UTC) and
+was running, `main` received three merges that are not part of the first pass:
+`Merge PR #247: OFELIYA Sprint 0 analytics read path` (13:17 UTC),
 `Merge PR #250: verified onboarding and touch UX fixes` (13:46 UTC, head
-`5412473011757bea44d21909ea02a2cd1ed63a7a`). The branch is still based on the
-released `ce8ecb84…`, the pull request's base is still `main`, and the pull
-request now reports **`mergeable_state: dirty`** — the new main touches the same
-surfaces. Rebasing or merging is **not** part of this pass: the pull request
-stays a draft, and the conflict is reported rather than resolved here.
+`5412473011757bea44d21909ea02a2cd1ed63a7a`) and `Merge PR #248: EASY difficulty`.
+The branch was **integrated with that main** — the integration merge is the
+parent of the current head — so the branch now contains the analytics read
+path, the verified notification/footer UX and the EASY difficulty tier. The
+pull request's base is `main` and its merge state is **`clean`**; the `dirty`
+state this report described in the first two passes is gone.
+
+**Corrected in the third pass.** Two statements of the first two passes were
+stale and are corrected here, in place: the branch was *not* left on the old
+`ce8ecb84…` base, and the reconciled head was *not* a head that CI never ran —
+the CI is wired and was green on `a105f7c750ae275f5febbe4ab3eb6c1fae7a704e`
+before this pass started (§8.1.2, §8.2).
 
 Commits (each one reviewable on its own):
 
@@ -105,6 +122,8 @@ Commits (each one reviewable on its own):
 13. `2610ed1` / `d33e877` — the result stats and the victory outcome read by their new labels;
 14. `1b72ea3` — the challenge band of the layout, and the footer gates;
 15. `430605a` — the menu text above the readability floor.
+
+The third pass adds its own commits on top of the integrated head — see §16.6.
 
 ### How the branch was pushed
 
@@ -201,7 +220,7 @@ is identical to the local branch, except for the PNG evidence.
 | 50 | The friends empty state `Здесь появятся результаты друзей, которые играют через @ofeliya_game_bot.` + `ПРИГЛАСИТЬ ДРУЗЕЙ` | `SocialHub` |
 | 51 | The shell states: `Штамм «Нулевой» (Базовая оболочка)`, `ЗАКРЫТО`, `Чтобы открыть: выполни веху «…»`, `Открыто за веху «…»` | `CollectionBoard`, `shellSubLabel` |
 | 52 | The milestones: the group header `Уничтожение иммунных клеток (всего: N)`, a progress bar per goal, `N / M · остался 1` | `CollectionBoard`, `CollectionSnapshot.killsTotal` |
-| 53 | The difficulty step indicator `• • ◦` / `• • •` and the hint `Сложность и управление — для нового забега` | `MenuScene`, `MENU_COPY` |
+| 53 | The difficulty step indicator `• • ◦` / `• • •` and the marker of the configuration cards `Для нового забега` | `MenuScene`, `MENU_COPY` |
 | 54 | `★ Открыто в Кодексе: +3 записи ›` — a real plate that opens the Codex | `UIScene`, `openCodexOnMenu` |
 | 55 | The three canonical share variants + the victory variant, the duel share, and the forbidden-term guard | `UiCopy.buildShareText`, `SHARE_FORBIDDEN_TERMS` |
 
@@ -317,13 +336,13 @@ verdicts mean:
 | # | Audit item | Verdict | Note |
 | --- | --- | --- | --- |
 | P0.1 | The developer language is gone (`локально`, `без наград`, `00:00 UTC`, the footer tokens, `КРИТ.`) | **CORRECT_PR** + **CHANGE_REQUIRED** | The strings were gone in the first pass; the countdown changed from `04:15` to `4 ч 15 мин` in the reconciliation. |
-| P0.2 | One mint CTA, a clean Resume, the run parameters inside the button, a full-size `НОВЫЙ ЗАБЕГ`, the dimmed configuration cards | **CORRECT_PR** | The hint is `Сложность и управление — для нового забега` (the task body) and the cards are dimmed to `alpha 0.6`. |
+| P0.2 | One mint CTA, a clean Resume, the run parameters inside the button, a full-size `НОВЫЙ ЗАБЕГ`, the dimmed configuration cards | **CORRECT_PR** | The run parameters are **inside the button** — the primary action's caption is `Кровоток · Стандарт` (the resume caption: `Кровоток · 00:19 · Уровень 2 · Стандарт`) — and the configuration cards are dimmed to `alpha 0.6`. **Corrected in the third pass:** the cards carry the audit's own marker `Для нового забега` (the earlier wording `Сложность и управление — для нового забега` described a card and a separate hint band that no longer exist). |
 | P0.3 | The result screen: the hidden HUD, no empty mutation lines, `Архетип: …`, the defeat/victory headlines | **CORRECT_PR** | |
 | P0.3 | `Погиб от: …` and the nearest task | **PROPOSAL_DEFERRED** | The task body forbids both (IMPLEMENTATION OVERRIDE 2 and 3). The state does not carry a cause of death and the quest runtime has no "tracked" concept. |
 | P0.3 | The place line under the timer | **PROPOSAL_DEFERRED** | The line is correct where it is; moving it is a composition change, not a copy change. |
 | P0.4 | The collection and daily states (`✓ АКТИВЕН`, `ЗАКРЫТО` + the condition, the hidden paginator, the progress bars, `◆ ВЫПОЛНЕНО`) | **CORRECT_PR** | The condition is `Чтобы открыть: выполни веху «ОХОТНИК НА ЭЛИТУ»` — the milestone title of the real data. |
 | P0.5 | The menu footer: no third instruction, three levels, the sound switches without percentages, the new tagline | **CORRECT_PR** | |
-| P1.1 | One modal template: a 12 px radius, a centred title, a 44×44 ×, 16 px padding, no bottom `ЗАКРЫТЬ` | **CORRECT_PR** | `src/ui/modal.ts`. |
+| P1.1 | One modal template: a 12 px radius, a centred title, a 44×44 ×, 16 px padding, no bottom `ЗАКРЫТЬ` | **CORRECT_PR** | `src/ui/modal.ts`. **Corrected in the third pass:** the template is implemented, but with the **repository's own shared radius** — `MODAL.radius = 18` — and not the 12 px of the audit. The radius is one recipe for every framed surface, and the repository's token is the code (the same call as the font sizes below). The centred title, the 44×44 ×, the 16 px padding and the absence of a bottom `ЗАКРЫТЬ` are as the audit asks. |
 | P1.2 | The word `забег` everywhere, `БРОСИТЬ ВЫЗОВ ДРУГУ` | **CORRECT_PR** | |
 | P1.3 | The rating: `РЕЙТИНГ`, no pseudo-tabs, the empty day with the CTA, one row per player, the friends explanation + `ПРИГЛАСИТЬ ДРУЗЕЙ` | **CORRECT_PR** + **CHANGE_REQUIRED** | The pseudo-tab strip `ЗАБЕГ ДНЯ · СЕЗОН · ДРУЗЬЯ` was still in the code of the first pass and was removed in the reconciliation. |
 | P1.4 | The codex tabs, the three `ЗАКРЫТАЯ СИНЕРГИЯ` cards with their branch pairs, `Снарядный штамм`, `ПРОХОЖДЕНИЕ РЕЖИМОВ` | **CHANGE_REQUIRED** | The first pass kept the `МУТАЦИИ` tab and the three identical cards; the reconciliation renamed the tab, gave each locked card its own recipe and rewrote the branch rows. |
@@ -336,7 +355,7 @@ verdicts mean:
 | P2.4 | The leaderboard identities | **CORRECT_PR** | The payload carries no name and no "you" flag, so the branch shows `Игрок (TG)` and never invents `Штамм #NN`. |
 | P2.5 | The milestones: a scroll instead of a pagination | **PROPOSAL_DEFERRED** | The paginator is hidden when there is one page. |
 | §3 | The hero metric of the result: 44 px, bold, tabular monospace | **PROPOSAL_DEFERRED** | The timer is 46 px on the normal viewports and 38 px on the compact ones. Growing it further on a 320 px screen pushes the statistics out of the frame, and the repository has one display font — the monospace part of the token is a typographic change, not a copy change. |
-| §10 | The design-system token table (the heading sizes, the palette, the button radii) | **SSOT_OVERRIDDEN** | The table is a proposal; the repository's own token contract (`npm run test:tokens`) is the code. The branch keeps the repository's tokens and raises its own texts to the repository's readability floor (10/11 px for a card label, 11/13 px for a card description) instead of importing a second scale. The **ADOPTED** part of §10 — one modal template: 12 px radius, a centred title, a 44×44 ×, 16 px padding, no bottom `ЗАКРЫТЬ`, a marked active tab, a height that follows the content — is implemented. |
+| §10 | The design-system token table (the heading sizes, the palette, the button radii) | **SSOT_OVERRIDDEN** | The table is a proposal; the repository's own token contract (`npm run test:tokens`) is the code. The branch keeps the repository's tokens and raises its own texts to the repository's readability floor (10/11 px for a card label, 11/13 px for a card description) instead of importing a second scale. The **ADOPTED** part of §10 — one modal template: a single shared radius (the repository's own `MODAL.radius = 18`, not the 12 px of the proposal), a centred title, a 44×44 ×, 16 px padding, no bottom `ЗАКРЫТЬ`, a marked active tab, a height that follows the content — is implemented. |
 
 #### The Decision Log — the twelve rules
 
@@ -430,7 +449,7 @@ reconciled separately:
 | Dictionary entry | The branch now | Verdict |
 | --- | --- | --- |
 | `codex.subtitle` — `Открыто записей: {unlocked} из {total} · Забегов: {totalRuns}` | `Открыто записей: N/9 · Забегов: R` | **SSOT_OVERRIDDEN** — the audit's §5 and its §9.2 short-counter rule (`3/9`) outrank the dictionary's `из`; the audit is above the dictionary in the precedence order. The denominator is the code's own `CODEX_RECORD_TOTAL = 9`, and the branch never asserts the unverified decomposition. |
-| `codex.synergies_section` — the three locked recipes and the section sub line | `ЗАКРЫТАЯ СИНЕРГИЯ I/II/III` + `Совмести ветви «Снаряды» и «Орбита»` / `«Орбита» и «Инфекция»` / `«Снаряды» и «Инфекция»` + `Открываются при совмещении двух совместимых ветвей в одном забеге` | **CHANGE_REQUIRED / TO_CONFIRM** — the dictionary marks the pairings `TO CONFIRM` against the design, and so does this report; the structure (one card, one condition) is the part that is implemented. |
+| `codex.synergies_section` — the three locked recipes and the section sub line | `ЗАКРЫТАЯ СИНЕРГИЯ I/II/III` + `БЕЛКОВЫЕ ШИПЫ III + ПРОНИКНОВЕНИЕ II` / `КАПСИДНЫЕ СПУТНИКИ III + ПОДВИЖНОСТЬ/РЕПЛИКАЦИЯ II` / `МЕМБРАННЫЙ ИМПУЛЬС III + РНК-АФФИНИТЕТ II` + `Открываются при совмещении двух совместимых ветвей в одном забеге` | **CHANGE_REQUIRED / TO_CONFIRM** — the dictionary marks the pairings `TO CONFIRM` against the design, and so does this report; the structure (one card, one condition) is the part that is implemented. **Corrected in the third pass:** the recipes are the game's **real** evolution pairs (`src/game/EvolutionSystem.ts` → `CODEX_COPY.synergyRecipes`), not the branch names this report used to name. A codex that names a pairing the game does not have would be a lie. |
 
 ---
 
@@ -459,7 +478,7 @@ Evidence: `docs/qa/ui-redesign-v1-evidence/doubleline-card-before.png` and
 | Record | a separate `Носитель: Олег` line and a block `Выживание 15:20 · ПРАЙМ — / Кампания — · клетки 2617` | one line `Носитель: Олег · Рекорд: 15:20 · Уничтожено: 2 617`; unknown fields disappear |
 | Navigation | five texts in one row: `музыка: 50 %`, `звук: вкл`, `эффекты: 30 %`, `СВОДКА`, `КОДЕКС 3/9` | a 2×2 grid `РЕЙТИНГ · ЗАДАЧИ ДНЯ / КОДЕКС 3/9 · КОЛЛЕКЦИЯ`, and a separate row `Музыка: вкл · Звук: вкл · Эффекты: вкл` |
 | Primary action | a dark maroon plate with light text | one mint plate with dark text, used by the menu, the result and the daily action |
-| Resume | a duplicated yellow `НЕЗАВЕРШЁННЫЙ ЗАБЕГ` banner above the button | the state is stated once: `ПРОДОЛЖИТЬ ЗАБЕГ` + `Кровоток · 00:19 · Уровень 2 · Стандарт`; the cards say they configure the next run |
+| Resume | a duplicated yellow `НЕЗАВЕРШЁННЫЙ ЗАБЕГ` banner above the button | the state is stated once: `ПРОДОЛЖИТЬ ЗАБЕГ`, and the run configuration is the **caption inside the button** — `Кровоток · 00:19 · Уровень 2 · Стандарт`; the cards say they configure the next run (`Для нового забега`) |
 | Technical data | `mini-app · tdesktop · ce8ecb8` on the main menu | moved to the About surface; the host is named `MAX` / `Telegram` / `Браузер`, never the raw token |
 
 ### Results
@@ -472,7 +491,7 @@ Evidence: `docs/qa/ui-redesign-v1-evidence/doubleline-card-before.png` and
 | Stats | `УНИЧТОЖЕНО: 2617 · Заражено: 61` / `Пик мутации: 23 · Комбо ×460` | `Уничтожено: 2 617 · Заражено клеток: 61` / `Уровень мутации: 23 · Комбо ×460` |
 | Mutations | `КРИТ. МУТАЦИИ: нет` / `ЛЕГЕНДАРНЫЕ: нет` | nothing when absent; `◆ КРИТИЧЕСКАЯ МУТАЦИЯ: …` / `◆ ЛЕГЕНДАРНАЯ МУТАЦИЯ: …` when present |
 | Build | `ПРОФИЛЬ ШТАММА: ПРОЕКТИЛЬНЫЙ · …` | `Архетип: Снарядный штамм · …` |
-| Resumed | `РЕЖИМ: СТАНДАРТ · ВОЗОБНОВЛЁН · ВНЕ РЕЙТИНГА` | `РЕЖИМ: СТАНДАРТ · Тренировка · продолженный забег` |
+| Resumed | `РЕЖИМ: СТАНДАРТ · ВОЗОБНОВЛЁН · ВНЕ РЕЙТИНГА` | the chip `Тренировка (продолженный забег)` — a neutral status, never a ranking disclaimer |
 | Actions | `ЕЩЁ ОДИН ЦИКЛ` / `БРОСИТЬ ВЫЗОВ` / `БРОСИТЬ ДУЭЛЬ` / `В МЕНЮ` | `НОВЫЙ ЗАБЕГ` / `БРОСИТЬ ВЫЗОВ ДРУГУ` / `ВЫЗВАТЬ НА ДУЭЛЬ` / `В МЕНЮ` |
 | Share | `Мой STRAIN-0 выжил 15:20. Иммунных клеток: 2617…` | `OFELIYA — штамм продержался 15:20. Уничтожено: 2 617 · заражено клеток: 61. Сможешь дольше? @ofeliya_game_bot` |
 
@@ -503,8 +522,8 @@ Evidence: `docs/qa/ui-redesign-v1-evidence/doubleline-card-before.png` and
 | --- | --- | --- |
 | Title | `КОДЕКС · STRAIN-0` | `КОДЕКС` |
 | Mastery | `МАСТЕРСТВО КАМПАНИИ` | `ПРОХОЖДЕНИЕ РЕЖИМОВ` |
-| Counter | `ЦИКЛОВ: 12 · УНИЧТОЖЕНО КЛЕТОК: 800` | `ЗАБЕГОВ: 12 · УНИЧТОЖЕНО: 800` |
-| Tabs | `МУТАЦИИ · ЛЕГЕНДАРНЫЕ · МАСТЕРСТВО` | unchanged — the content is critical mutations, not synergies |
+| Counter | `ЦИКЛОВ: 12 · УНИЧТОЖЕНО КЛЕТОК: 800` | `Открыто записей: 3/9 · Забегов: 12` — the lifetime counters of the profile **left the codex**; the underlying data stays in the save |
+| Tabs | `МУТАЦИИ · ЛЕГЕНДАРНЫЕ · МАСТЕРСТВО` | `СИНЕРГИИ · ЛЕГЕНДАРНЫЕ · МАСТЕРСТВО`, and the three locked synergies carry their own recipes — the real evolution pairs `БЕЛКОВЫЕ ШИПЫ III + ПРОНИКНОВЕНИЕ II`, `КАПСИДНЫЕ СПУТНИКИ III + ПОДВИЖНОСТЬ/РЕПЛИКАЦИЯ II`, `МЕМБРАННЫЙ ИМПУЛЬС III + РНК-АФФИНИТЕТ II` — under one explanation `Открываются при совмещении двух совместимых ветвей` |
 | Navigation | a `КВЕСТЫ` / `КОЛЛЕКЦИЯ` footer | the internal dock `ЗАДАЧИ ДНЯ · КОДЕКС · КОЛЛЕКЦИЯ` |
 
 ### Collection
@@ -517,7 +536,8 @@ Evidence: `docs/qa/ui-redesign-v1-evidence/doubleline-card-before.png` and
 | Shells | `Только внешний вид` on every shell | one explanation for the tab |
 | Selected | `ВЫБРАН` | `✓ АКТИВЕН` on a filled plate |
 | Locked | a disabled `ВЫБРАТЬ` | `ЗАКРЫТО` + the verified unlock condition, no select action |
-| Paginator | always shown | only when there is more than one page |
+| Paginator | always shown | only when there is more than one page, and placed **from the internal dock** — `paginator.bottom + 4 ≤ dock.top` at every viewport (§16.2, V1) |
+| Milestone group | `Уничтожение иммунных клеток (всего: N)` | `Уничтожение иммунных клеток (в прогрессе вех: N)` — the counter is the milestone progress, not a lifetime total |
 
 ---
 
@@ -566,7 +586,7 @@ branch, with the labels the reconciliation task prescribes.
 | Block | Items | Result |
 | --- | --- | --- |
 | P0.1 The developer language | 5 | **5 PASS.** The daily-tasks subtitle is `Выполнено: N из M · Обновление через 4 ч 15 мин`; the menu footer carries no platform token and no build hash; the result screen has no `КРИТ.`; the nine forbidden words of the dictionary are asserted absent on every redesigned surface. |
-| P0.2 One CTA, a clean Resume | 6 | **6 PASS.** The mint plate is shared (`src/ui/cta.ts`); the Resume state has no yellow block, the run parameters are inside the button, `НОВЫЙ ЗАБЕГ` is a 44 px target, the two configuration cards are dimmed to `alpha 0.6` and carry the hint `Сложность и управление — для нового забега`, and the caption is `Кровоток · Стандарт` (no `Акт I`). |
+| P0.2 One CTA, a clean Resume | 6 | **6 PASS.** The mint plate is shared (`src/ui/cta.ts`); the Resume state has no yellow block, the run parameters are inside the button, `НОВЫЙ ЗАБЕГ` is a 44 px target, the two configuration cards are dimmed to `alpha 0.6` and carry the marker `Для нового забега`, and the caption is `Кровоток · Стандарт` (no `Акт I`). **Corrected in the third pass:** the marker is the audit's own wording, and the separate hint band it used to sit in is gone. |
 | P0.3 The result screen | 6 | **5 PASS, 1 DEFERRED_BY_OVERRIDE.** The HUD is hidden, the empty mutation lines are gone, the archetype is named, the headlines are right, and the three buttons carry their captions (`Побить результат 15:20 · 2 617 кл.` under the challenge). **Deferred:** the cause of death and the nearest task — the task body forbids both, and the state carries neither. |
 | P0.4 The collection and the daily states | 6 | **6 PASS.** The active tab is marked, the selected shell is `✓ АКТИВЕН`, the locked shell shows `ЗАКРЫТО` + `Чтобы открыть: выполни веху «ОХОТНИК НА ЭЛИТУ»` and has no select action, the paginator hides itself on a single page, every daily task has a bar and `◆ ВЫПОЛНЕНО` or `4 / 5 · остался 1`, and the appearance note appears once. |
 | P0.5 The menu footer | 4 | **4 PASS.** |
@@ -582,7 +602,7 @@ branch, with the labels the reconciliation task prescribes.
 | Rule 10 — the record dashes | 3 | **2 PASS, 1 SOURCE_TRUTH_CONFLICT.** The `ПРАЙМ —` / `Кампания —` fields are hidden, the lifetime total is never substituted for the best run, and the word `Прайм` is never asserted. The label of the record line conflicts with the checklist's `Клеток:` — the task body fixes it as `Уничтожено:`, and the number behind it is the checklist's `2 617` (the best run). |
 | Rule 11 — the control card | 3 | **3 PASS.** The gate is answered by the code: there are three real modes, so the card keeps its chevron and cycles through them. |
 | Rule 12 — the challenge button and the share | 3 | **3 PASS.** The button is `БРОСИТЬ ВЫЗОВ ДРУГУ` with the caption `Побить результат 15:20 · 2 617 кл.`, the share starts with `OFELIYA · Вызов в кровотоке`, says `продержался` after a defeat, ends with `@ofeliya_game_bot`, and carries none of `вне рейтинга`, `Профиль штамма`, `STRAIN-0`, `на этом же штамме`, `выжил`. |
-| Part 3 — the modal frame | 3 | **2 PASS, 1 FAIL.** 12 px radius, a centred title, a 44×44 × in the top-right corner, no bottom `ЗАКРЫТЬ`, no double-line artifact. **FAIL:** the height of the panel does not follow the content for the Codex — the shared frame uses a fixed height (`min(H − 34, 650)`), so the Codex leaves empty space below its three synergy cards on the tall viewports. The daily tasks fill their panel (their rows are distributed over the available height). This condition is **pre-existing** — `main` uses the same `Math.min(H - 34, 650)` for the Codex — and fixing it means making the shared frame's height content-driven for all four meta surfaces, which is a layout refactor beyond a copy reconciliation. |
+| Part 3 — the modal frame | 3 | **2 PASS, 1 FAIL.** One shared radius (the repository's `MODAL.radius = 18`; the audit's 12 px is a proposal, the code is the token), a centred title, a 44×44 × in the top-right corner, no bottom `ЗАКРЫТЬ`, no double-line artifact. **FAIL:** the height of the panel does not follow the content for the Codex — the shared frame uses a fixed height (`min(H − 34, 650)`), so the Codex leaves empty space below its three synergy cards on the tall viewports. The daily tasks fill their panel (their rows are distributed over the available height). This condition is **pre-existing** — `main` uses the same `Math.min(H - 34, 650)` for the Codex — and fixing it means making the shared frame's height content-driven for all four meta surfaces, which is a layout refactor beyond a copy reconciliation. |
 | Part 3 — the codex recipes and the calque | 3 | **3 PASS.** Three different locked cards with three different recipes, `Снарядный штамм` and `дальше: …`, `ПРОХОЖДЕНИЕ РЕЖИМОВ`. The branch pairs are the audit's own example pairs and stay marked `TO CONFIRM` here, as the audit demands. |
 | Part 3 — the numbers and the text | 5 | **5 PASS.** A real U+00A0 in every number ≥ 1 000, `MM:SS` timers, `4 / 5` fractions, the joined `3/9` counter, the headings in caps and the descriptions in sentence case, at most three `·` segments per line, and the em dash never used as "no value" (the mastery rows say `ещё не пройдена` instead). |
 | Part 3 — the navigation and the states | 4 | **4 PASS.** The codex tabs `СИНЕРГИИ \| ЛЕГЕНДАРНЫЕ \| МАСТЕРСТВО` and the collection tabs `ОБОЛОЧКИ \| ВЕХИ \| ЛАБОРАТОРИЯ` mark the active tab, the internal dock is a tab bar with the active segment lit, every empty state carries an explanation and an action, and the network error is the full sentence with `ПОВТОРИТЬ`. |
@@ -679,35 +699,46 @@ branch, with the labels the reconciliation task prescribes.
 
 | | |
 | --- | --- |
-| The last **green** run on this branch | `40292414901` — head `1823f927a07f951914969f9339eaf2b2cc469f62` (the head of the first pass): `build` 58/58, `production-contract` 23/23, `browser-smoke` 59/59 |
-| The run of the reconciled head | **no run was created.** The App pushed the reconciliation commits to the same branch, the pull request's head moved forward with every push (the last one is the commit that carries this report) and the `synchronize` event produced no workflow run within the observation window (≈ 40 minutes, with another `CI` run on `main` completing `success` in the meantime) |
-| Why | the pull request is **`mergeable_state: dirty`** — `main` advanced by two other merges during this pass (§2) and the new base touches the same surfaces. GitHub does not execute a `pull_request` workflow for a pull request that cannot be merged (the observed behaviour: every `synchronize` of this branch produced no run, while the pull request of the neighbouring branch, whose base was mergeable, ran normally), and the base cannot be moved or rebased from this environment — the App push path only creates commits, it cannot rewrite a branch. A test merge was attempted locally: the conflict is limited to four files (`src/scenes/MenuScene.ts`, `scripts/integration-visual-smoke.cjs`, `scripts/mobile-layout-matrix.cjs`, `tests/integration-visual-contracts.mjs`), and all four are places where the redesign deliberately replaced what `main` changed — resolving them here would silently drop the other branch's merged work, so the merge was aborted and the conflict is reported instead |
-| What is left for a maintainer | rebase the branch onto the current `main`, add the one CI line of §8.2, and the `browser-smoke` job will then run the new contract |
+| The green run before the third pass | `40418654178` — head `a105f7c750ae275f5febbe4ab3eb6c1fae7a704e`, event `pull_request`: `build` **success**, `production-contract` **success**, `browser-smoke` **success** — every step green, including `UI redesign v1 surfaces contract`, `Easy difficulty selector, result label and visual matrix`, `Codex and mastery browser smoke`, `Social hub browser smoke`, `Daily CTA runtime browser smoke`, `MAX compact viewport matrix` and `Verified notification ordering and footer touch accessibility` |
+| The green run of the first pass | `40292414901` — head `1823f927a07f951914969f9339eaf2b2cc469f62`: `build` 58/58, `production-contract` 23/23, `browser-smoke` 59/59 |
+| The run of the third pass | the head this pass produces is the commit that carries this report; §16.7 states the run and its result |
+| Why the reconciled head was not verified in the second pass | the pull request was **`mergeable_state: dirty`** back then, and GitHub does not execute a `pull_request` workflow for a pull request that cannot be merged. The branch has since been integrated with main (§2), the merge state is `clean`, and the CI runs |
 
-The reconciled head was **not** verified by GitHub CI. Everything in this
-report that is a test result was produced locally, in this sandbox, against the
-same code that is on the branch: the full contract at four viewports, the copy
-catalog, the codex/daily/rating/collection/result smokes, the layout matrix, the
-readability smoke, the type check, the release build and `git diff --check` (§9).
+**Corrected in the third pass.** The second pass of this report stated that the
+reconciled head had no CI run and that the branch could not be merged. Both are
+historical: the branch is integrated with the current main, the pull request
+reports `mergeable_state: clean`, and the CI of the integrated head
+`a105f7c…` is green in all three jobs.
 
-### 8.2 The CI step that the App could not write
+Everything in this report that is a test result was produced locally, in this
+sandbox, against the same code that is on the branch: the full contract at four
+viewports, the copy catalog, the codex/daily/rating/collection/result smokes,
+the layout matrix, the readability smoke, the type check, the release build and
+`git diff --check` (§9).
+
+### 8.2 The CI step — now wired
 
 The new contract belongs in the `browser-smoke` job, next to the other browser
-contracts. The exact step:
+contracts:
 
 ```yaml
       - name: UI redesign v1 surfaces contract
+        env:
+          OFELIYA_UI_EVIDENCE: /tmp/ui-redesign-v1
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:ui-redesign
 ```
 
-It is placed after the `Dense visual readability browser smoke` step in
-`.github/workflows/ci.yml`. The GitHub App that pushes this branch has no
-`workflows` permission: both `create_or_update_file` and `push_files` answer
-`error: connector_tool_error: Connector tool execution failed (latency_ms=0)`
-for that path, and the remote blob SHA of `ci.yml` is unchanged after the
-attempt. The step is therefore **in the local branch** and **not yet in
-PR #249** — the one line above is the whole pending change, and a maintainer
-with workflow rights adds it in one line.
+**Corrected in the third pass.** The second pass of this report stated that the
+App could not write `.github/workflows/` and that the step was therefore *not*
+in PR #249, with the exact YAML left for a maintainer. The step **is** in the
+remote workflow now — it was added by the integration with main (PR #250), and
+it is green in the run `40418654178`. The App still has no `workflows`
+permission in this environment, so this pass did not touch the workflow file
+either — it did not need to.
+
+The PNG evidence still cannot be carried by the App (binary files), so
+`docs/qa/ui-redesign-v1-evidence/` stays out of the branch and travels with
+this report; `npm run test:ui-redesign` regenerates every one of them.
 
 ### Existing gates
 
@@ -907,9 +938,16 @@ report rather than committed (see §2 and §14).
 
 ## 11. EASY conflict notes — `UI_REDESS × EASY integration notes`
 
-MiniMax is implementing EASY in parallel. This branch does **not** add EASY,
-does not touch the difficulty enum and does not tune anything. The conflicts
-that remain:
+> **Superseded in the third pass.** EASY has **shipped**: PR #248 was merged into
+> `main` and the branch was integrated with that main (§2), so the notes below
+> are the *pre-integration* record of a conflict that no longer exists. The
+> third pass did **not** implement, retune or rework EASY — it only
+> re-expressed the EASY gate against the live contracts (§16.4) and recorded
+> the neutral EASY status as `INTENTIONAL_SUPERSESSION` (§16.1).
+
+MiniMax was implementing EASY in parallel. This branch did **not** add EASY,
+did not touch the difficulty enum and did not tune anything. The conflicts
+that remained:
 
 | # | Conflict | Where | Severity | Note |
 | --- | --- | --- | --- | --- |
@@ -988,12 +1026,23 @@ profile, then check that the third description still fits the compact card.
 5. The PNG evidence is not committed to the branch: the App-only push path
    cannot carry binary files (§2). The screenshots travel with this report and
    `npm run test:ui-redesign` regenerates all of them.
-6. The new contract is not in the CI workflow for the same reason. The exact
-   step to add by hand is in §8.2.
+6. The new contract **is** in the CI workflow (§8.2) — the step came with the
+   integration with main and is green. Only the PNG evidence is still outside
+   the branch, for the binary-push reason of §2.
 7. The three source documents were attached after the first pass. Everything
    they name that is not a *game rule* is applied in the reconciliation pass
    (§5.1); the items that are game rules or need a server fact are listed as
    deferred in §4 with the reason.
+8. **`pr249-final-review.md` — the independent Muse review of this pull request
+   — was not reachable in this environment.** It is not in the repository tree,
+   not in the attachments directory, not in the drive, not in the comments,
+   review comments or reviews of PR #249, and GitHub code search does not find
+   it either. The finding list of the third pass is therefore the one the
+   handoff enumerates (V1, V3, D2–D7, the footer coverage, `RunModeLabel.ts`,
+   the EASY neutral status and the report/PR accuracy), and every finding was
+   **verified against the code** before it was classified — the verdicts in
+   §16.1 are measurements, not readings of the review document. A finding that
+   the review holds and this pass did not enumerate would not be caught here.
 
 ---
 
@@ -1004,12 +1053,277 @@ profile, then check that the third description still fits the compact card.
 | URL | https://github.com/timoshinoleg-eng/ofeliya/pull/249 |
 | Title | `[DRAFT] OFELIYA UI v1 — menu, results, meta navigation and Russian copy` |
 | Draft | **yes** |
-| Base | `main` @ `ce8ecb84ced1afa09870f2f00f9a0328257fd11c` |
+| Base | `main` @ `2b1e1426aa04b1d4cfb5159fb4ce89c00283d608` |
 | Head | `feat/ui-redesign-v1-20261026` @ the commit that carries this report |
-| Diff | 45 files, +4 900 / −1 172 |
-| Commits | 43 (the App push path splits some logical changes into several commits) |
+| Diff | 54 files, +5 138 / −1 266 (before the third pass) |
+| Commits | 63 (the App push path splits some logical changes into several commits) |
 | Merged | **no** |
-| Merge state | `dirty` — `main` advanced by two other merges during this pass (§2) |
+| Merge state | `clean` — the branch is integrated with the current main (§2) |
 
 The pull request is open as a **draft** and was **not** merged. Nothing was
 deployed.
+
+---
+
+## 16. The Muse review correction pass (2026-10-27)
+
+This is the third pass over the branch. The independent Muse review of PR #249
+was classified **finding by finding against the current remote head**
+`a105f7c750ae275f5febbe4ab3eb6c1fae7a704e` — every verdict below was measured
+in the code, not read from the review document. Only the findings that were
+**still present** were implemented; the others are recorded with the evidence
+that closed them.
+
+### 16.1 The findings matrix
+
+| # | Finding | Verdict | Evidence / where |
+| --- | --- | --- | --- |
+| **V1** | the collection paginator and the internal dock compete for the same taps | **STILL_PRESENT → FIXED** | the paginator sat at a fixed offset from the panel bottom; its 44 px hit area reached into the dock row. Now it is placed from the dock itself (§16.2) |
+| **V3** | the hero of the resume menu collapses at 320×568 | **STILL_PRESENT → FIXED** | the resume hero measured **37.6 px**; the review quotes the layout's 34 px floor. It is **67.6 px** now (§16.3) |
+| **D2** | `без наград и глобального рейтинга` — a forbidden phrase, and a claim about the duel | **STILL_PRESENT → FIXED** | the server answers `ranked: false` on every duel endpoint and the attempt never reaches `store.scores`, so the claim was true but the wording was forbidden. The line is now `тот же забег · … · личная дуэль` — no reward invented, no ranking disclaimer (§16.4) |
+| **D3** | `state.killsTotal` is not the lifetime kill count, but it was labelled `всего` | **STILL_PRESENT → FIXED** | `killsTotal` is the collection's own progress counter; the label is now `в прогрессе вех: N`. No `Math.max`, no counter merged (§16.4) |
+| **D4** | the daily result status lines are technical and speak of "synchronization" | **STILL_PRESENT → FIXED** | eight server states, eight plain Russian lines; the in-flight placeholder `СЧЁТ: синхронизация…` became `Отправляю результат…` (§16.4) |
+| **D5** | the lifetime counters were moved out of the Codex — the player-facing row must go too | **STILL_PRESENT → FIXED** | the `Забегов: N · Уничтожено клеток: M` row is removed from the codex; the data stays in the save and is not merged into another counter (§16.4) |
+| **D6** | the daily retry button carries its explanation in its own label | **STILL_PRESENT → FIXED** | the button is exactly `ПОВТОРИТЬ`; the reason is a separate named line above it. The retry behaviour is unchanged (§16.4) |
+| **D7** | the player-facing `РЕДКИЙ, НО МЕТКИЙ` | **STILL_PRESENT → FIXED** | only the presentation string changed — `МУТАТОР ДНЯ · РЕЖИЕ, НО КРЕПКИЕ`. The `sparse-lethal` multipliers are untouched (§16.4) |
+| **Footer** | the footer coverage | **ALREADY_FIXED** | `scripts/footer-actions-smoke.cjs` asserts the nine footer targets ≥ 44×44, the absence of an overlap between the legal row and the diagnostics, a real legal tap, the five real diagnostic taps, the volume/audio state change, the checkpoint-resume footer, and the in-canvas safe-area bounds; `scripts/verified-ux-smoke.cjs` adds the ≥ 44 px, the safe canvas and the CTA clearance. Both were **re-run in this pass**: `footer real touch PASS` for all four viewports in the `fresh` and the `resume` state (8 cases) and `verified-ux` / `notification-ordering` green |
+| **`src/ui/FooterTouchTargets.ts`** | a module with zero callers | **STILL_PRESENT → FIXED** | it had no caller at all — **deleted** as dead code. The rendered ≥ 44×44 assertions stay in the two smokes above (§16.5) |
+| **`src/game/RunModeLabel.ts`** | a module with zero callers, carrying the superseded `РЕЖИМ: … · вне рейтинга` presentation | **STILL_PRESENT → FIXED** | no runtime caller, and the string it owned is the banned one — **deleted**. The EASY gate now asserts the live contracts instead of the dead module (§16.5) |
+| **EASY** | the neutral status of the EASY result | **INTENTIONAL_SUPERSESSION** | the shipped chip is `ЛЁГКИЙ · Тренировка`. The old `РЕЖИМ ЛЁГКИЙ · РЕЗУЛЬТАТ БЕЗ РЕЙТИНГА` and the phrase `вне рейтинга` are **not** restored; the gate now asserts the live chip and sweeps every chip for the banned phrase (§16.5) |
+| **Report / PR accuracy** | the report and the pull request body state stale facts | **STILL_PRESENT → FIXED** | corrected in place, with the history kept: §2, §7, §8.1.2, §8.2, §11, §14, §15 and the PR body (§16.7) |
+
+### 16.2 V1 — the paginator and the internal dock
+
+**The defect.** The paginator was placed at a fixed offset from the bottom of
+the collection panel, while the internal dock is placed from the frame. The
+paginator's hit area is 44 px tall, so the two rows overlapped by about 12 px at
+every viewport: a tap in the overlap hit the paginator *or* the dock, never
+both, and the player could not tell which.
+
+**The fix.** The paginator is now derived from the dock, not from the panel
+edge (`src/ui/CollectionBoard.ts`):
+
+```ts
+const dockTop = frame.dockTop - MODAL.dockHeight / 2;
+const y = dockTop - 8 - 22;   // 8 px gap, 44 px tall targets
+```
+
+The 44×44 targets are unchanged, the dock is kept, and the contract is now
+`paginator.bottom + 4 ≤ dock.top`.
+
+**The regression test.** `tests/ui-redesign.mjs` measures the **real Phaser hit
+areas** — `ofeliya-collection-prev` / `ofeliya-collection-next` and the three
+dock plates `ofeliya-meta-dock-{tasks,codex,collection}` — at all four
+viewports and asserts the gap:
+
+```
+the paginator overlaps the internal dock at 320x568: paginator bottom … + 4 > dock top …
+```
+
+The measured gap is **8 px** (the paginator's bottom is 30 px above the dock's
+centre line, the dock's top is 22 px above it), so the contract holds with a
+4 px margin at 320×568, 390×740, 768×1024 and 1080×1920.
+
+### 16.3 V3 — the hero of the resume menu at 320×568
+
+**The defect.** The menu is a vertical flow of bands. The returning player has
+one band more than the fresh one (the `НОВЫЙ ЗАБЕГ` secondary), and the run
+configuration used to live in a band of its own. On the smallest viewport the
+content no longer fitted, and the hero — the first elastic band — was squeezed
+to the layout's floor: **37.6 px**, which the review quotes as the 34 px floor.
+Everything else stayed: the resume CTA, the secondary, the two configuration
+cards, the 2×2 grid, the audio row and the legal row.
+
+**The fix — two parts.**
+
+1. *The configuration moved inside the button.* The run configuration is now
+   the **caption of the primary action** (`ofeliya-menu-action-caption`), which
+   is what the audit and the QA checklist ask for ("параметры … один раз внутри
+   кнопки"). The separate hint band is **gone** — the object, the layout band
+   and the `hintY` field were removed, so no dead presentation is left behind
+   (§16.5). The resume state now reads `ПРОДОЛЖИТЬ ЗАБЕГ` with
+   `Кровоток · 00:19 · Уровень 2 · Стандарт` inside the plate, and the
+   configuration cards carry `Для нового забега`.
+2. *The hero has a floor, and the gaps give up their room first.* The layout
+   keeps `heroMin = 64` on a compact viewport; the gaps shrink to their hard
+   minimum of 2 px before any control does, and the overflow guard keeps the
+   content inside the viewport. The challenge card — the state with the most
+   controls — is 48 px tall on a compact viewport instead of 58, so the hero
+   keeps its room there too.
+
+**The measured result** (`computeMenuLayout`, pure geometry):
+
+| State | 320×568 before | 320×568 now | 390×740 now |
+| --- | --- | --- | --- |
+| fresh | 93.6 px | **111.6 px** | 162.9 px |
+| resume | **37.6 px** | **67.6 px** | 118.9 px |
+| resume + a two-line record | — | 64.0 px | 100.9 px |
+| fresh + challenge | — | 64.0 px | 104.9 px |
+| resume + challenge | 33.6 px | **43.6 px** | 96.0 px |
+
+The legal row's bottom is 564 px at 320×568 — **inside** the viewport, with no
+overlap between any two bands, in every state.
+
+**The regression test.** `tests/ui-redesign.mjs` now opens with a **pure
+geometry contract**: the production layout module is bundled with esbuild and
+called directly, so a geometry regression fails on the numbers and not only in
+a screenshot. For every viewport and every menu state (fresh, resume, resume
+with a two-line record, challenge, resume + challenge) it asserts:
+
+* the hero never collapses below **40 px**;
+* every band stays inside the viewport;
+* no two bands share a slot;
+* and, for the state the finding names, the resume hero at 320×568 is **≥ 64 px**.
+
+### 16.4 D2–D7 — the copy findings
+
+| Finding | Before | After | Where |
+| --- | --- | --- | --- |
+| **D2** — the duel line | `… без наград и глобального рейтинга` | `тот же забег · <control> · личная дуэль` | `src/scenes/MenuScene.ts` |
+| **D3** — the milestone group | `Уничтожение иммунных клеток (всего: N)` | `Уничтожение иммунных клеток (в прогрессе вех: N)` | `src/game/UiCopy.ts` |
+| **D4** — the daily status | `ЕЖЕДНЕВНЫЙ ЗАБЕГ · РЕЗУЛЬТАТ НЕ СИНХРОНИЗИРОВАН`, `СЧЁТ: синхронизация…` | `Забег дня засчитан` / `Забег дня не засчитан` / `Забег дня уже закрыт` / `Срок забега дня истёк` / `Нужен запуск через MAX или Telegram` / `Сервер не ответил` / `Нет соединения` / `Не удалось определить профиль`, and the in-flight line `Отправляю результат…` | `src/game/UiCopy.ts`, `src/scenes/UIScene.ts` |
+| **D5** — the codex lifetime row | `Забегов: 12 · Уничтожено клеток: 800` | removed; the codex keeps `Открыто записей: 3/9 · Забегов: 12` and the save keeps the data | `src/game/UiCopy.ts`, `src/scenes/MenuScene.ts` |
+| **D6** — the daily retry | `СЕРВЕР НЕ ОТВЕТИЛ · ПОВТОРИТЬ` | the button is `ПОВТОРИТЬ`; the reason is a separate line above it: `Сервер не ответил — попробуй ещё раз` / `Нет соединения — попробуй ещё раз` / `Забег дня сейчас недоступен — попробуй позже` | `src/ui/SocialHub.ts`, `src/game/UiCopy.ts` |
+| **D7** — the mutator title | `МУТАТОР ДНЯ · РЕДКИЙ, НО МЕТКИЙ` | `МУТАТОР ДНЯ · РЕЖИЕ, НО КРЕПКИЕ` (the `sparse-lethal` multipliers are unchanged) | `src/game/DailyMutator.ts` |
+
+**D2 — the server was checked, not assumed.** Every duel endpoint
+(`/api/duel` create, get, event, attempt) answers `ranked: false`, and the
+attempt is written to `store.duelAttempts` — never to `store.scores`. There is
+no grant logic, so there is **no reward to promise** and none was invented.
+The old line was factually true about the ranking, but it used the
+dictionary-forbidden phrase `без наград`; the new line is truthful, positive
+and says what the duel *is*.
+
+**D3 — the counter was traced.** `state.killsTotal` is
+`this.state.counters.kills` of the collection's own progress — the kills the
+milestone system has counted since it started, a counter that begins at zero.
+It is not the profile's lifetime kills. The label now says so; no `Math.max`
+was introduced and no two counters were merged.
+
+**D6 — the reason left the button.** The daily launch button carries only
+`ПОВТОРИТЬ`; the reason is rendered in a separate named object
+(`ofeliya-social-daily-launch-status`) above it. The state that cannot be
+retried at all (`denied`) keeps its own inactive label
+`НУЖЕН ПОДТВЕРЖДЁННЫЙ ВХОД` — it is not a retry, so it is not a retry button.
+The retry behaviour itself is unchanged: one request per failed launch, no
+automatic second attempt.
+
+### 16.5 The dead code and the EASY contract
+
+* **`src/game/RunModeLabel.ts` — deleted.** It had **no runtime caller** (only
+  the EASY gate's re-export and the language gate's file list referenced it),
+  and the presentation it owned — `РЕЖИМ: … · вне рейтинга` — is the banned
+  one. `scripts/check-easy-difficulty.mjs` now asserts the **live** contracts
+  instead: the chips `ЛЁГКИЙ · Тренировка`, `СТАНДАРТ · В зачёт рейтинга`,
+  `Тренировка (продолженный забег)`, `ЗАБЕГ ДНЯ · СТАНДАРТ`, `ДУЭЛЬ · СТАНДАРТ`;
+  a sweep that no chip contains `вне рейтинга`; a penalty-word sweep on the
+  EASY chip; and the share contracts (`startsWith('OFELIYA')`,
+  `@ofeliya_game_bot`, no `НАПРЯЖЕНИЕ`, no `вне рейтинга`).
+* **`src/ui/FooterTouchTargets.ts` — deleted.** No caller. The footer coverage
+  is asserted where the footer actually is: in the rendered targets of the two
+  browser smokes (§16.1).
+* **The dead hint band — deleted.** `ofeliya-menu-action-hint` was an object
+  that was always empty after the caption moved into the button. The object,
+  the layout band and the `hintY` field are gone, and the language gate now
+  requires the caption to exist and to be consumed by the mobile layout guard
+  (which fits it to the plate, like the label above it).
+* **EASY — `INTENTIONAL_SUPERSESSION`.** The shipped chip is
+  `ЛЁГКИЙ · Тренировка`. The review's proposal to restore
+  `РЕЖИМ ЛЁГКИЙ · РЕЗУЛЬТАТ БЕЗ РЕЙТИНГА` and the phrase `вне рейтинга` is
+  **not** applied: a ranking disclaimer is an internal flag, never a
+  player-facing word, and the EASY tier is neutral without one.
+
+### 16.6 What the third pass changed
+
+| File | Change |
+| --- | --- |
+| `src/ui/CollectionBoard.ts` | **V1** — the paginator is placed from the dock |
+| `src/ui/menuLayout.ts` | **V3** — the hint band removed, the challenge band compacted, the hero floor kept |
+| `src/scenes/MenuScene.ts` | **V3** — the configuration is the caption of the button; the dead hint object removed; **D2** — the duel line; **D5** — the codex lifetime row removed |
+| `src/ui/MobileLayoutGuard.ts` | the caption is fitted to the plate, like the label |
+| `src/ui/cta.ts` | the caption colour of the primary action |
+| `src/game/UiCopy.ts` | **D3**, **D4**, **D5**, **D6** — the copy catalog |
+| `src/scenes/UIScene.ts` | **D4** — the daily status lines and the in-flight placeholder |
+| `src/ui/SocialHub.ts` | **D6** — the retry button and the separate status line |
+| `src/game/DailyMutator.ts` | **D7** — the mutator title |
+| `src/game/RunModeLabel.ts` | **deleted** — dead code with the banned presentation |
+| `src/ui/FooterTouchTargets.ts` | **deleted** — dead code |
+| `tests/ui-redesign.mjs` | the **pure geometry contract** (V3), the **paginator/dock gap** (V1), the caption assertions, the codex lifetime rule, the milestone wording, the daily status line |
+| `tests/ui-copy-catalog.mjs` | the new copy of the catalog |
+| `scripts/check-easy-difficulty.mjs` | the live EASY contracts (the dead module is gone) |
+| `scripts/check-language-copy.mjs` | the caption replaces the dead hint in the structural anchors; `DailyMutator.ts` joins the player-facing scan |
+| `scripts/social-hub-smoke.cjs` | **D6** — the status line and the exact `ПОВТОРИТЬ` label |
+| `scripts/daily-cta-smoke.cjs` | **D4** — the fail-closed daily line |
+| `scripts/check-daily-cta.mjs` | **D4** — the copy exhaustiveness is asserted against the **real catalog**, and no line may talk about synchronization or exceed one short sentence |
+| `scripts/codex-smoke.cjs` | **D5** — the codex must not carry the lifetime counters |
+
+**The commits of this pass** (the App push path creates one commit per push):
+
+| Commit | What it carries |
+| --- | --- |
+| `f1e3e65b` | the code, the gates and the regression tests of §16.2–§16.5 |
+| `82b397e3` | the deletion of the dead `src/game/RunModeLabel.ts` |
+| `be9e9272` | the deletion of the dead `src/ui/FooterTouchTargets.ts` |
+| the report | this document |
+
+### 16.7 The gates and the CI of the third pass
+
+The full gate set was run locally against the code of this pass:
+
+| Gate | Result |
+| --- | --- |
+| `npx tsc --noEmit` | **PASS** |
+| `npm run build` (tsc + vite build + release stamp) | **PASS** — `Stamped OFELIYA release a105f7c…` |
+| `git diff --check` | **PASS** |
+| `npm run test:ui-copy` | **PASS** |
+| `npm run test:language` | **PASS** — 1681 literals scanned |
+| `npm run test:difficulty` | **PASS** |
+| `npm run test:daily-cta` | **PASS** |
+| `npm run test:onboarding` + `node tests/notification-region.mjs` | **PASS** |
+| `npm run test:layout-diagnostics` | **PASS** |
+| `npm run test:viewport` | **PASS** |
+| `node tests/ui-redesign.mjs` (4 viewports + the pure geometry contract) | **PASS** — `ui redesign contract: ok` |
+| `scripts/verified-ux-smoke.cjs --footer` and `scripts/verified-ux-smoke.cjs` | **PASS** |
+| `scripts/notification-ordering-smoke.cjs` | **PASS** |
+| `scripts/footer-actions-smoke.cjs` | **PASS** — 4 viewports × fresh/resume |
+| `scripts/checkpoint-resume-smoke.cjs` | **PASS** |
+| `scripts/result-actions-smoke.cjs` | **PASS** |
+| `scripts/codex-smoke.cjs` | **PASS** (+ the mobile readability smoke) |
+| `npm run test:social-hub` | **PASS** |
+| `scripts/daily-cta-smoke.cjs` | **PASS** |
+| `scripts/mobile-layout-matrix.cjs` | **PASS** — 320×568, 360×640, 360×760, 390×844, 412×915 |
+| `npm run test:easy-difficulty-visual` | **PASS** — 4 viewports |
+
+**Two gates cannot pass in this sandbox — and the same failure is measured on
+the untouched base head `a105f7c…`** (the runs were made in a second worktree
+of the base commit, against a dev server serving that commit):
+
+| Gate | The failure | Why it is the environment |
+| --- | --- | --- |
+| `npm run test:integration-visual-browser` | `assert.ok(x>0&&y>0)` — the HP warning alpha reads `0` in the motion step | the **same assertion fails at the same line on the untouched base head**. The menu part of the same smoke — the sixteen utility variants that measure the layout — passes on both trees |
+| `tests/startup-viewport-timeout.mjs` (part of `npm run test:startup`) | `stalled MAX viewport delayed startup too long: 5415 ms` (the ceiling is 5000 ms) | the same gate measures **6843 ms on the untouched base head** and passes on a warm run. The branch is not slower — the sandbox is a cold, software-rendered WebGL stack over a NAS filesystem, and the ceiling only catches a true hang |
+
+The other two parts of `npm run test:startup` (`startup-font-timeout`,
+`startup-renderer-contract`) pass.
+
+**GitHub CI.** The head this pass started from, `a105f7c…`, is green in all
+three jobs — `build`, `production-contract` and `browser-smoke` (run
+`40418654178`), including the `UI redesign v1 surfaces contract` step. The run
+of the head this pass produces is reported in the final response.
+
+### 16.8 The limits of this pass
+
+* **`pr249-final-review.md` was not reachable.** The independent review
+  document is not in the repository tree, not in the attachments directory, not
+  in the drive, not among the comments, review comments or reviews of PR #249,
+  and GitHub code search does not find it. The finding list used here is the
+  one the handoff enumerates, and every finding was **verified against the
+  code** before it was classified — so a finding the review holds and this pass
+  did not enumerate would not be caught here. This is the one place where this
+  pass cannot prove its own completeness.
+* **The physical acceptance of the MAX and Telegram surfaces is separate.** The
+  messenger identity, the real share sheet and the real duel links are
+  exercised by the stubs of the browser smokes, not by a physical device.
+* The PNG evidence of the third pass is in
+  `docs/qa/ui-redesign-v1-evidence/` (40 files) and travels with this report;
+  the App cannot carry binary files (§2).
