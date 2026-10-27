@@ -1237,7 +1237,13 @@ const mark = (name, value, kind = 'real') => {
     // Synthetic quest clock only; retain the live GameScene runtime across host transfers.
     await page.evaluate(() => {
       const gs = window.__game.scene.getScene('Game');
-      window.__finalMidnight = Date.parse('2026-10-27T00:00:00Z');
+      // The synthetic midnight is the next UTC midnight after the real clock, so the
+      // sample below always lands in a day the quest state has not reached yet. The
+      // contract under test is the day roll: at 300 ms into a new UTC day the
+      // day-scoped metrics start from zero. A hard-coded date tied the gate to the
+      // calendar — it passed while the real clock was still before that date and
+      // failed from the next midnight on, on every commit.
+      window.__finalMidnight = (Math.floor(Date.now() / 86400000) + 1) * 86400000;
       window.__finalQuestNow = window.__finalMidnight - 800;
       gs.quests.clock.now = () => window.__finalQuestNow;
       window.__finalQuestRunId = gs.quests.checkpoint().id;
@@ -1542,16 +1548,17 @@ const mark = (name, value, kind = 'real') => {
       const events = gs.quests.snapshot().processedEvents;
       gs.finish(false);
       return { sameRun, midnight, pending, ended, repeated: read(), before, suppressed, events,
+        syntheticMidnight: window.__finalMidnight,
         deactivated: window.__p11Tg.count('deactivated') };
     });
     assert.equal(combined.sameRun, true, 'host pauses and transfers must retain the original quest run');
     assert.equal(combined.midnight.dayMetrics.q_nodmg, 0, 'after transfer: 300ms after midnight must credit zero whole seconds');
-    assert.equal(combined.midnight.lastTickAtMs, Date.parse('2026-10-27T00:00:00.300Z'));
+    assert.equal(combined.midnight.lastTickAtMs, combined.syntheticMidnight + 300);
     assert.equal(combined.pending.dayMetrics.q_nodmg, 59, 'after transfer: terminal sample must remain pending at 59');
     assert.equal(combined.suppressed, combined.before, 'pending tick must not be delivered early');
     assert.equal(combined.ended.dayMetrics.q_nodmg, 60, 'after transfer: finish must force 59 -> 60');
     assert.equal(combined.ended.lastTickTimeMs, 125950);
-    assert.equal(combined.ended.lastTickAtMs, Date.parse('2026-10-27T00:01:06.150Z'));
+    assert.equal(combined.ended.lastTickAtMs, combined.syntheticMidnight + 66150);
     assert.equal(combined.events, combined.before + 2, 'finish delivers exactly one pending tick and one completion');
     assert.deepEqual(combined.repeated, combined.ended, 'combined repeated finish must be idempotent');
     assert.equal(combined.deactivated, 0, 'combined finish removes lifecycle handler');
