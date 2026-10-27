@@ -1,4 +1,7 @@
 import { RELEASE_INFO, missingReleaseLegalFields } from './ReleaseInfo';
+import { RELEASE_SHORT } from '../release';
+import { PlatformBridge } from '../platform';
+import { platformLabel } from '../game/UiCopy';
 
 const ID = 'ofeliya-legal-overlay';
 const HTML_ESCAPES: Record<string, string> = {
@@ -8,6 +11,7 @@ const HTML_ESCAPES: Record<string, string> = {
   "'": '&#39;',
   '"': '&quot;',
 };
+
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>'"]/g, (ch) => HTML_ESCAPES[ch] ?? ch);
@@ -74,6 +78,11 @@ export function showLegalOverlay(): void {
         <li>Запрещается вмешиваться в работу приложения, распространять вредоносный код или использовать приложение с нарушением применимого законодательства и правил MAX.</li>
         <li>Разработчик может обновлять механику, визуальное оформление и технические параметры приложения.</li>
       </ul>
+
+      <h2>Техническая сборка</h2>
+      ${row('Версия', `v${info.version}`)}
+      ${row('Сборка', RELEASE_SHORT)}
+      ${row('Платформа', platformLabel(PlatformBridge.kind))}
 
       <h2>Техническая поддержка</h2>
       <p>При обращении укажите устройство, платформу MAX (iOS/Android/Desktop/Web), примерное время ошибки и последовательность действий. Не присылайте пароль, токен бота или иные секреты.</p>

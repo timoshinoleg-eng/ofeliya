@@ -62,7 +62,7 @@ try {
     })
   );
   assert(projectile.id === 'projectile' && projectile.focused, 'projectile focus was not recognized');
-  assert(projectile.signals.includes('ГИПЕРШИП'), 'projectile evolution signal missing');
+  assert(projectile.signals.includes('Гипершип'), 'projectile evolution signal missing');
 
   const control = assessRunIdentity(
     base({
@@ -82,7 +82,7 @@ try {
     })
   );
   assert(lysis.id === 'infection-lysis' && lysis.focused, 'infection/lysis focus was not recognized');
-  assert(lysis.signals.includes('клеточный маршрут'), 'host-cell tactical signal missing');
+  assert(lysis.signals.includes('Клеточный маршрут'), 'host-cell tactical signal missing');
 
   const hybrid = assessRunIdentity(
     base({ stacks: { dmg: 1, orbit: 1, infect: 1 }, hostCellsInfected: 1 })
@@ -106,12 +106,24 @@ try {
     evolutionsSeen: ['prism', 'halo'],
     legendarySeen: ['split-geometry'],
   });
+  assert(
+    tracks.every((track) => track.label === track.label.trim() && track.label.length > 0),
+    'mastery branch label must be a filled label'
+  );
+  assert(
+    tracks.find((track) => track.id === 'projectile')?.label === 'Снарядный штамм',
+    'the projectile branch must not use the calque label'
+  );
+  assert(
+    !tracks.some((track) => /ПРОЕКТИЛЬН/.test(track.label)),
+    'the calque projectile label must be gone'
+  );
   const projectileTrack = tracks.find((track) => track.id === 'projectile');
   const controlTrack = tracks.find((track) => track.id === 'orbit-control');
   const lysisTrack = tracks.find((track) => track.id === 'infection-lysis');
   assert(projectileTrack?.complete && projectileTrack.progress === 2, 'projectile mastery did not complete');
-  assert(controlTrack?.progress === 1 && /НУЛЕВУЮ ТОЧКУ/.test(controlTrack.nextGoal), 'control next goal drifted');
-  assert(lysisTrack?.progress === 0 && /СИНГУЛЯРНОСТЬ/.test(lysisTrack.nextGoal), 'lysis first mastery goal drifted');
+  assert(controlTrack?.progress === 1 && /дальше: Нулевая точка/.test(controlTrack.nextGoal), 'control next goal drifted');
+  assert(lysisTrack?.progress === 0 && /дальше: Сингулярность/.test(lysisTrack.nextGoal), 'lysis first mastery goal drifted');
 
   assert(
     /ветка освоена/i.test(nextMasteryGoal(projectile, {

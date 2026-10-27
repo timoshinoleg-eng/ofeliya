@@ -63,6 +63,13 @@ export interface AchievementProgress {
 
 export interface CollectionSnapshot {
   achievements: AchievementProgress[];
+  /**
+   * The kill counter of the milestones system.
+   *
+   * It is its own window and it is never replaced by the lifetime counter of
+   * the codex: the two numbers measure different things.
+   */
+  killsTotal: number;
   ownedSkinIds: string[];
   selectedSkinId: string;
   /** Informational UTC login-day counters. They do not grant anything. */
@@ -72,7 +79,7 @@ export interface CollectionSnapshot {
   readOnly: boolean;
 }
 
-const DEFAULT_SKIN_ID = 'strain-zero';
+export const DEFAULT_SKIN_ID = 'strain-zero';
 
 /**
  * The Muse catalog's 24 IDs are retained for continuity. Original currency,
@@ -82,19 +89,19 @@ const DEFAULT_SKIN_ID = 'strain-zero';
  * because this campaign has only three critical evolutions.
  */
 export const COLLECTION_CATALOG: readonly AchievementDefinition[] = [
-  { id: 'killer_500', title: 'ЧИСТИЛЬЩИК', description: '500 уничтоженных противников суммарно', metric: 'kills', threshold: 500 },
-  { id: 'killer_1k', title: 'ТЫСЯЧНИК', description: '1 000 уничтоженных противников суммарно', metric: 'kills', threshold: 1_000 },
-  { id: 'killer_10k', title: 'ДЕСЯТИТЫСЯЧНИК', description: '10 000 уничтоженных противников суммарно', metric: 'kills', threshold: 10_000 },
-  { id: 'killer_100k', title: 'ПАНДЕМИЯ', description: '100 000 уничтоженных противников суммарно', metric: 'kills', threshold: 100_000 },
+  { id: 'killer_500', title: 'ЧИСТИЛЬЩИК', description: '500 противников всего', metric: 'kills', threshold: 500 },
+  { id: 'killer_1k', title: 'ТЫСЯЧНИК', description: '1 000 противников всего', metric: 'kills', threshold: 1_000 },
+  { id: 'killer_10k', title: 'ДЕСЯТИТЫСЯЧНИК', description: '10 000 противников всего', metric: 'kills', threshold: 10_000 },
+  { id: 'killer_100k', title: 'ПАНДЕМИЯ', description: '100 000 противников всего', metric: 'kills', threshold: 100_000 },
   { id: 'runs_3', title: 'РЕЦИДИВ', description: 'Завершить 3 забега', metric: 'runs', threshold: 3 },
   { id: 'runs_10', title: 'ЗАВСЕГДАТАЙ', description: 'Завершить 10 забегов', metric: 'runs', threshold: 10 },
   { id: 'runs_50', title: 'ХРОНИК', description: 'Завершить 50 забегов', metric: 'runs', threshold: 50 },
   { id: 'runs_100', title: 'ЛЕГЕНДА ШТАММА', description: 'Завершить 100 забегов', metric: 'runs', threshold: 100 },
   { id: 'evo_5', title: 'КОЛЛЕКЦИОНЕР МУТАЦИЙ', description: 'Выбрать 5 разных видов мутаций', metric: 'mutations', threshold: 5, unlockSkinId: 'skin.virulent-magenta' },
-  { id: 'daily_first', title: 'ВОЗВРАЩЕНИЕ', description: 'Посетить игру в первый UTC-день', metric: 'visitDays', threshold: 1 },
-  { id: 'streak_3', title: 'РЕГУЛЯРНОСТЬ', description: 'Посетить игру 3 UTC-дня подряд', metric: 'visitStreak', threshold: 3 },
-  { id: 'streak_7', title: 'НЕДЕЛЯ ЗАРАЖЕНИЯ', description: 'Посетить игру 7 UTC-дней подряд', metric: 'visitStreak', threshold: 7 },
-  { id: 'streak_30', title: 'МЕСЯЦ ПАНДЕМИИ', description: 'Посетить игру 30 UTC-дней подряд', metric: 'visitStreak', threshold: 30 },
+  { id: 'daily_first', title: 'ВОЗВРАЩЕНИЕ', description: 'Посетить игру в первый день', metric: 'visitDays', threshold: 1 },
+  { id: 'streak_3', title: 'РЕГУЛЯРНОСТЬ', description: 'Посетить игру 3 дня подряд', metric: 'visitStreak', threshold: 3 },
+  { id: 'streak_7', title: 'НЕДЕЛЯ ЗАРАЖЕНИЯ', description: 'Посетить игру 7 дней подряд', metric: 'visitStreak', threshold: 7 },
+  { id: 'streak_30', title: 'МЕСЯЦ ПАНДЕМИИ', description: 'Посетить игру 30 дней подряд', metric: 'visitStreak', threshold: 30 },
   { id: 'quests_10', title: 'КЛЕТОЧНАЯ СЕТЬ', description: 'Инфицировать 10 клеток хозяина', metric: 'hostCells', threshold: 10 },
   { id: 'quests_50', title: 'РАСШИРЕНИЕ СЕТИ', description: 'Инфицировать 50 клеток хозяина', metric: 'hostCells', threshold: 50 },
   { id: 'stars_1', title: 'ПЕРВАЯ ЭЛИТА', description: 'Победить одного элитного противника', metric: 'elites', threshold: 1 },
@@ -341,6 +348,7 @@ export class ClientCollection {
         threshold: definition.threshold,
         unlocked: unlocked.has(definition.id),
       })),
+      killsTotal: Math.max(0, Math.floor(this.state.counters.kills ?? 0)),
       ownedSkinIds: [...this.state.ownedSkinIds],
       selectedSkinId: this.state.selectedSkinId,
       visitDays: this.state.visitDays,

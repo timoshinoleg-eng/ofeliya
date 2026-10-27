@@ -9,20 +9,22 @@ export async function checkMuseClient(browser,url) {
  try {
   await page.goto(url,{waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>window.__game?.scene.isActive('Menu'));
-  const available=await page.evaluate(()=>{const m=window.__game.scene.getScene('Menu');m.showCodex();return !!m.children.getByName('ofeliya-codex')?.list.find(o=>o.name==='ofeliya-menu-collection') || m.children.list.some(o=>o.list?.some(c=>c.name==='ofeliya-menu-collection'));});
-  assert.equal(available,true,'Muse collection must be reachable from Codex');
+  const available=await page.evaluate(()=>{const m=window.__game.scene.getScene('Menu');m.showCodex();const overlay=m.children.list.find(o=>o.name==='ofeliya-codex');const dock=overlay?.list.find(o=>o.name==='ofeliya-meta-dock');const has=(name)=>!!dock?.list.find(c=>c.name===name);return {collection:has('ofeliya-meta-dock-collection'),tasks:has('ofeliya-meta-dock-tasks'),codex:has('ofeliya-meta-dock-codex')};});
+  assert.equal(available.collection,true,'Muse collection must be reachable from the Codex dock');
+  assert.equal(available.tasks,true,'Daily tasks must be reachable from the Codex dock');
+  assert.equal(available.codex,true,'the Codex dock must mark the Codex as the active destination');
   const tap=async name=>{
    const point=await page.evaluate(name=>{const s=window.__game.scene.getScene('Menu');const visit=o=>o.name===name?o:o.list?.map(visit).find(Boolean);const o=s.children.list.map(visit).find(Boolean);if(!o)throw Error('missing control '+name);const b=o.getBounds(),r=window.__game.canvas.getBoundingClientRect();return{x:r.x+(b.x+b.width/2)*r.width/s.scale.width,y:r.y+(b.y+b.height/2)*r.height/s.scale.height};},name);
    await page.touchscreen.tap(point.x,point.y);
   };
-  await tap('ofeliya-menu-collection');
+  await tap('ofeliya-meta-dock-collection');
   await page.waitForFunction(()=>!!window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection'));
-  for(const tab of ['achievements','skins','lab']) {
+  for(const tab of ['milestones','shells','lab']) {
    await tap('ofeliya-collection-'+tab);
    const overflow=await page.evaluate(()=>{const s=window.__game.scene.getScene('Menu'),r=s.children.getByName('ofeliya-collection');return r.list.filter(o=>o.type==='Text').map(o=>({text:o.text,b:o.getBounds()})).filter(({b})=>b.x<0||b.y<0||b.x+b.width>s.scale.width||b.y+b.height>s.scale.height);});
    assert.deepEqual(overflow,[],`${tab} texts stay inside compact viewport`);
   }
-  await tap('ofeliya-collection-close');
+  await tap('ofeliya-modal-close-hit');
   await page.waitForFunction(()=>!window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection'));
   await page.evaluate(async()=>{
    const {CollectionBoard}=await import('/src/ui/CollectionBoard.ts');
@@ -46,24 +48,35 @@ export async function checkMuseClient(browser,url) {
   await page.setViewportSize({width:320,height:474});
   await page.waitForFunction(()=>window.__museMenuResized);
   await page.evaluate(()=>{window.__game.scene.getScene('Menu').showCodex();});
-  await tap('ofeliya-menu-collection');
-  await tap('ofeliya-collection-skins');
+  await tap('ofeliya-meta-dock-collection');
+  await tap('ofeliya-collection-shells');
   const overlaps=await page.evaluate(()=>{
    const root=window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection');
-   const close=root.list.find(o=>o.name==='ofeliya-collection-close').getBounds();
+   const close=root.list.find(o=>o.name==='ofeliya-modal-close-hit').getBounds();
    return root.list.filter(o=>o.name?.startsWith('ofeliya-skin-')).filter(o=>{
     const b=o.getBounds();return b.y<close.bottom&&b.bottom>close.y;
    }).map(o=>o.name);
   });
   assert.deepEqual(overlaps,[],'safe-area-reduced viewport keeps skin controls separate from close');
   await tap('ofeliya-collection-next');
-  assert.equal(await page.evaluate(()=>!!window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection').list.find(o=>o.name==='ofeliya-skin-skin.gilded-prime')),true,'pagination keeps last skin reachable');
+  const shellState=await page.evaluate(()=>{
+   const board=window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection');
+   const texts=board.list.filter(o=>o.type==='Text').map(o=>o.text);
+   return {
+    lastSkin:texts.some(t=>t.includes('Золотой прайм')),
+    locked:texts.some(t=>t.startsWith('ЗАКРЫТО')),
+    lockedSelect:board.list.some(o=>o.name==='ofeliya-skin-skin.gilded-prime'&&Boolean(o.input?.enabled)),
+   };
+  });
+  assert.equal(shellState.lastSkin,true,'pagination keeps last skin reachable');
+  assert.equal(shellState.locked,true,'a locked shell states that it is locked');
+  assert.equal(shellState.lockedSelect,false,'a locked shell must not offer a select action');
   await tap('ofeliya-collection-lab');
   assert.equal(await page.evaluate(()=>{
    const texts=window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection').list.filter(o=>o.type==='Text');
-   return texts.find(o=>o.text.startsWith('Исследование клеток')).getBounds().bottom<=texts.find(o=>o.text.startsWith('Открыто записей')).getBounds().y;
+   return texts.find(o=>o.text.startsWith('Исследование клеток')).getBounds().bottom<=texts.find(o=>o.text.startsWith('Открыто вех')).getBounds().y;
   }),true,'safe-area-reduced lab research and status text do not overlap');
-  await tap('ofeliya-collection-close');
+  await tap('ofeliya-modal-close-hit');
   const state=await page.evaluate(async()=>{
    const {ClientCollection}=await import('/src/game/collection/ClientCollection.ts');
    const c=new ClientCollection();c.observeRun({id:'qa-cosmetic-unlock',kills:0,timeMs:0,noDamageMs:0,level:1,combo:50,mutations:[],elites:0,hostCells:0,evolutions:[],legendaryIds:[],won:false});

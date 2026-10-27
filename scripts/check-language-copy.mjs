@@ -23,10 +23,11 @@ const SCOPED_FILES = [
   'src/game/LegendarySystem.ts',
   'src/game/StageDefinitions.ts',
   'src/game/DifficultyProfile.ts',
-  'src/game/RunModeLabel.ts',
   'src/game/ControlMode.ts',
   'src/game/UiCopy.ts',
+  'src/game/DailyMutator.ts',
   'src/game/AchievementSystem.ts',
+  'src/game/collection/ClientCollection.ts',
   'src/scenes/MenuScene.ts',
   'src/scenes/UIScene.ts',
   'src/ui/SocialHub.ts',
@@ -71,6 +72,11 @@ const FORBIDDEN_IN_CYRILLIC = [
   /\bXP\b/,
   /\bRNA\b/,
 ];
+
+// Rule C: a raw timezone token in player copy. The day mechanics of the
+// product may stay UTC-based, but the player reads a day, not a timezone: the
+// wording must describe the day itself.
+const FORBIDDEN_RAW_UTC = [/\bUTC\b/];
 
 const CYRILLIC = /[\u0400-\u04FF]/;
 
@@ -181,6 +187,11 @@ for (const file of SCOPED_FILES) {
         }
       }
     }
+    for (const token of FORBIDDEN_RAW_UTC) {
+      if (token.test(testable)) {
+        violations.push(`${file}:${line} raw timezone token '${token.source}' in player copy: ${value.slice(0, 90)}`);
+      }
+    }
   }
 }
 
@@ -190,12 +201,22 @@ const structuralSources = [
     'ofeliya-menu-title',
     'ofeliya-menu-hook',
     'ofeliya-menu-subtitle',
-    'ofeliya-menu-carrier',
+    'ofeliya-menu-record',
     'ofeliya-menu-challenge-header',
     'ofeliya-menu-challenge-target',
     'ofeliya-menu-challenge-meta',
     'ofeliya-menu-action',
-    'ofeliya-menu-action-hint',
+    'ofeliya-menu-action-caption',
+    'ofeliya-menu-action-bg',
+    'ofeliya-menu-new-run',
+    'ofeliya-menu-legal',
+    'ofeliya-menu-nav-rating',
+    'ofeliya-menu-nav-tasks',
+    'ofeliya-menu-nav-codex',
+    'ofeliya-menu-nav-collection',
+    'ofeliya-menu-audio-music',
+    'ofeliya-menu-audio-sound',
+    'ofeliya-menu-audio-effects',
   ]],
   ['src/scenes/UIScene.ts', [
     'ofeliya-result',

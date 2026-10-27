@@ -193,8 +193,8 @@ jobs:
   browser-smoke:
     needs: build
     runs-on: ubuntu-22.04
-    # The additional 18 Legendary layout cases need headroom beyond the existing suite.
-    timeout-minutes: 25
+    # The combined redesign, onboarding and viewport suites exceed 25 minutes on hosted runners.
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -306,6 +306,11 @@ jobs:
       - name: Daily CTA runtime browser smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/daily-cta-smoke.cjs
 
+      - name: UI redesign v1 surfaces contract
+        env:
+          OFELIYA_UI_EVIDENCE: /tmp/ui-redesign-v1
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:ui-redesign
+
       - name: Verified notification ordering and footer touch accessibility
         env:
           OFELIYA_BASE_URL: http://127.0.0.1:5173/
@@ -409,6 +414,7 @@ jobs:
             /tmp/browser-smoke/*.png
             /tmp/verified-ux/
             /tmp/easy-difficulty-visual/
+            /tmp/ui-redesign-v1/
             /tmp/visual-completion/*.png
             /tmp/release-visual-matrix/**/*.png
             /tmp/release-visual-matrix/**/matrix.json

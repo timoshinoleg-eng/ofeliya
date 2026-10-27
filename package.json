@@ -103,7 +103,8 @@
     "test:easy-difficulty": "node scripts/check-easy-difficulty.mjs",
     "test:easy-difficulty-visual": "node tests/easy-difficulty-visual.mjs",
     "test:difficulty-comparison": "node scripts/check-difficulty-comparison.mjs",
-    "test:difficulty-comparison-browser": "node scripts/difficulty-comparison-smoke.cjs"
+    "test:difficulty-comparison-browser": "node scripts/difficulty-comparison-smoke.cjs",
+    "test:ui-redesign": "node tests/ui-redesign.mjs"
   },
   "overrides": {
     "source-map-js": "1.2.2"

@@ -554,7 +554,7 @@ const mark = (name, value, kind = 'real') => {
       const menu = game.scene.getScene('Menu');
       // The shipped touch target is the interactive button plate; the label text is only a caption.
       const action = menu.children.getByName('ofeliya-menu-action-bg');
-      const legal = menu.children.list.find(o => o.text === 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА');
+      const legal = menu.children.getByName('ofeliya-menu-legal');
       const canvas = document.querySelector('#game canvas').getBoundingClientRect();
       return {
         menuCreates: window.__p11MenuCreates,
@@ -579,6 +579,7 @@ const mark = (name, value, kind = 'real') => {
     }
     assert.equal(viewportLayout.legalInteractive, true, 'the legal CTA must stay tappable after the resize');
     assert.ok(viewportLayout.action.height >= 44, 'the action button must keep a 44px touch target');
+    assert.ok(viewportLayout.legal.width >= 44 && viewportLayout.legal.height >= 44, 'the legal CTA must keep a 44px touch target');
     mark('viewport: a resize recreates the Menu and keeps both CTAs inside the new bounds', viewportLayout);
 
     await page.evaluate(() => {
@@ -677,7 +678,7 @@ const mark = (name, value, kind = 'real') => {
         });
         if (!last.open) return last;
         try {
-          await tap('ofeliya-collection-close');
+          await tap('ofeliya-modal-close-hit');
         } catch (error) {
           last = { ...last, tapError: String(error) };
         }
@@ -698,7 +699,7 @@ const mark = (name, value, kind = 'real') => {
     const storageBefore = await storageSnapshot();
 
     await page.evaluate(() => { window.__game.scene.getScene('Menu').showCodex(); });
-    await tap('ofeliya-menu-collection');
+    await tap('ofeliya-meta-dock-collection');
     await page.waitForFunction(() => Boolean(window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection')));
 
     const achievements = await page.evaluate(async () => {
@@ -738,7 +739,7 @@ const mark = (name, value, kind = 'real') => {
     assert.match(pager2.indicator, /^2\s*\/\s*\d+$/, 'the achievements pager must advance to the second page');
     mark('collection: the achievements pager advances through the catalog', { first: pager, second: pager2 });
 
-    await tap('ofeliya-collection-skins');
+    await tap('ofeliya-collection-shells');
     const skins = await page.evaluate(async () => {
       const { SKIN_CATALOG, ClientCollection } = await import('/src/game/collection/ClientCollection.ts');
       const state = new ClientCollection().snapshot();
@@ -832,7 +833,7 @@ const mark = (name, value, kind = 'real') => {
     });
     for (let i = 0; i < 10; i++) {
       await page.evaluate(() => { window.__game.scene.getScene('Menu').showCodex(); });
-      await tap('ofeliya-menu-collection');
+      await tap('ofeliya-meta-dock-collection');
       await page.waitForFunction(() => Boolean(window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection')));
       await closeCollectionBoard();
     }
@@ -857,7 +858,7 @@ const mark = (name, value, kind = 'real') => {
     });
     for (let i = 0; i < 5; i++) {
       await page.evaluate(() => { window.__game.scene.getScene('Menu').showCodex(); });
-      await tap('ofeliya-menu-quests');
+      await tap('ofeliya-meta-dock-tasks');
       await page.waitForFunction(() => Boolean(window.__game.scene.getScene('Menu').questBoard));
       await page.evaluate(() => { window.__game.scene.getScene('Menu').questBoard.destroy(); });
     }
@@ -880,7 +881,7 @@ const mark = (name, value, kind = 'real') => {
       const game = window.__game;
       const menu = game.scene.getScene('Menu');
       const action = menu.children.getByName('ofeliya-menu-action-bg');
-      const legal = menu.children.list.find(o => o.text === 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА');
+      const legal = menu.children.getByName('ofeliya-menu-legal');
       const bounds = o => {
         if (!o) return null;
         const b = o.getBounds();
@@ -922,6 +923,7 @@ const mark = (name, value, kind = 'real') => {
       assert.deepEqual(ctas.scale, [width, height], `the frame must reach ${width}x${height}`);
       assert.equal(ctas.actionInteractive, true, `the action CTA must stay interactive at ${width}x${height}`);
       assert.equal(ctas.legalInteractive, true, `the legal CTA must stay interactive at ${width}x${height}`);
+      assert.ok(ctas.legal.width >= 44 && ctas.legal.height >= 44, `the legal target must be at least 44px at ${width}x${height}`);
       for (const name of ['action', 'legal']) {
         const b = ctas[name];
         assert.ok(b, `${name} CTA must exist at ${width}x${height}`);
@@ -954,12 +956,23 @@ const mark = (name, value, kind = 'real') => {
       menu.showCodex();
       return before;
     });
-    await tap('ofeliya-menu-collection');
-    await page.waitForFunction(() => Boolean(window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection')));
     // The board must really have a reveal tween in flight, otherwise this case would
-    // prove nothing about tearing a board down mid-animation.
+    // prove nothing about tearing a board down mid-animation. The probe therefore
+    // opens the board and reads the tween list in the same tick: the reveal is a
+    // short animation, and a round trip through the browser would let it finish
+    // before the probe ever looked at it.
     const revealInFlight = await page.evaluate(() => {
       const menu = window.__game.scene.getScene('Menu');
+      const find = (node, name) => {
+        for (const child of node.list ?? []) {
+          if (child.name === name) return child;
+          const hit = find(child, name);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      menu.showCodex();
+      find(menu.codexOverlay, 'ofeliya-meta-dock-collection').emit('pointerup');
       const board = menu.children.getByName('ofeliya-collection');
       // The board belongs to the Menu scene, so its reveal tween lives in the
       // Menu tween manager, not the UI one.
@@ -976,9 +989,17 @@ const mark = (name, value, kind = 'real') => {
       `the board must still be animating in when it is closed (${JSON.stringify(revealInFlight)})`);
     // Close immediately: the reward-reveal tween is still running at this point.
     // The tap must not wait for the board to settle - that is the whole point of
-    // this case - so the settle budget is switched off here on purpose.
-    await tap('ofeliya-collection-close', { settleMs: 0 });
+    // this case - so the settle budget is switched off here on purpose. A reveal
+    // that is still at alpha zero is not hit-testable yet, so a second, re-aimed
+    // tap follows when the first one did not land.
+    await tap('ofeliya-modal-close-hit', { settleMs: 0 });
     await page.waitForTimeout(120);
+    const closedEarly = await page.evaluate(() =>
+      !window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection'));
+    if (!closedEarly) {
+      await tap('ofeliya-modal-close-hit');
+      await page.waitForTimeout(120);
+    }
     const afterTweenTeardown = await page.evaluate(() => {
       const menu = window.__game.scene.getScene('Menu');
       return {
@@ -1006,7 +1027,7 @@ const mark = (name, value, kind = 'real') => {
       };
     });
     await page.evaluate(() => { window.__game.scene.getScene('Menu').showCodex(); });
-    await tap('ofeliya-menu-collection');
+    await tap('ofeliya-meta-dock-collection');
     await page.waitForFunction(() => Boolean(window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection')));
     await page.evaluate(() => {
       window.__p11Tg.viewportHeight = 700;
@@ -1216,7 +1237,13 @@ const mark = (name, value, kind = 'real') => {
     // Synthetic quest clock only; retain the live GameScene runtime across host transfers.
     await page.evaluate(() => {
       const gs = window.__game.scene.getScene('Game');
-      window.__finalMidnight = Date.parse('2026-10-27T00:00:00Z');
+      // The synthetic midnight is the next UTC midnight after the real clock, so the
+      // sample below always lands in a day the quest state has not reached yet. The
+      // contract under test is the day roll: at 300 ms into a new UTC day the
+      // day-scoped metrics start from zero. A hard-coded date tied the gate to the
+      // calendar — it passed while the real clock was still before that date and
+      // failed from the next midnight on, on every commit.
+      window.__finalMidnight = (Math.floor(Date.now() / 86400000) + 1) * 86400000;
       window.__finalQuestNow = window.__finalMidnight - 800;
       gs.quests.clock.now = () => window.__finalQuestNow;
       window.__finalQuestRunId = gs.quests.checkpoint().id;
@@ -1521,16 +1548,17 @@ const mark = (name, value, kind = 'real') => {
       const events = gs.quests.snapshot().processedEvents;
       gs.finish(false);
       return { sameRun, midnight, pending, ended, repeated: read(), before, suppressed, events,
+        syntheticMidnight: window.__finalMidnight,
         deactivated: window.__p11Tg.count('deactivated') };
     });
     assert.equal(combined.sameRun, true, 'host pauses and transfers must retain the original quest run');
     assert.equal(combined.midnight.dayMetrics.q_nodmg, 0, 'after transfer: 300ms after midnight must credit zero whole seconds');
-    assert.equal(combined.midnight.lastTickAtMs, Date.parse('2026-10-27T00:00:00.300Z'));
+    assert.equal(combined.midnight.lastTickAtMs, combined.syntheticMidnight + 300);
     assert.equal(combined.pending.dayMetrics.q_nodmg, 59, 'after transfer: terminal sample must remain pending at 59');
     assert.equal(combined.suppressed, combined.before, 'pending tick must not be delivered early');
     assert.equal(combined.ended.dayMetrics.q_nodmg, 60, 'after transfer: finish must force 59 -> 60');
     assert.equal(combined.ended.lastTickTimeMs, 125950);
-    assert.equal(combined.ended.lastTickAtMs, Date.parse('2026-10-27T00:01:06.150Z'));
+    assert.equal(combined.ended.lastTickAtMs, combined.syntheticMidnight + 66150);
     assert.equal(combined.events, combined.before + 2, 'finish delivers exactly one pending tick and one completion');
     assert.deepEqual(combined.repeated, combined.ended, 'combined repeated finish must be idempotent');
     assert.equal(combined.deactivated, 0, 'combined finish removes lifecycle handler');

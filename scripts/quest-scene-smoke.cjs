@@ -25,7 +25,7 @@ for(const viewport of [{width:320,height:568},{width:390,height:844},{width:768,
  await page.goto(process.env.OFELIYA_BASE_URL||'http://127.0.0.1:5173/');
  await page.waitForFunction(()=>window.__game?.scene.isActive('Menu'));
  const show=async()=>{
-  const point=await page.evaluate(()=>{const m=window.__game.scene.getScene('Menu');m.showCodex();const b=m.codexOverlay.list.find(o=>o.name==='ofeliya-menu-quests').getBounds();const c=window.__game.canvas.getBoundingClientRect();return {x:c.x+(b.x+b.width/2)*c.width/m.scale.width,y:c.y+(b.y+b.height/2)*c.height/m.scale.height};});
+  const point=await page.evaluate(()=>{const m=window.__game.scene.getScene('Menu');m.showCodex();const find=(node,name)=>{for(const child of node.list??[]){if(child.name===name)return child;const hit=find(child,name);if(hit)return hit;}return null;};const b=find(m.codexOverlay,'ofeliya-meta-dock-tasks').getBounds();const c=window.__game.canvas.getBoundingClientRect();return {x:c.x+(b.x+b.width/2)*c.width/m.scale.width,y:c.y+(b.y+b.height/2)*c.height/m.scale.height};});
   await page.touchscreen.tap(point.x,point.y);
   await page.waitForFunction(()=>!!window.__game.scene.getScene('Menu').questBoard);
  };
@@ -34,10 +34,12 @@ for(const viewport of [{width:320,height:568},{width:390,height:844},{width:768,
   await show();
   const layout=await page.evaluate(()=>{const m=window.__game.scene.getScene('Menu'),root=m.children.getByName('ofeliya-quests');
    const texts=root.list.filter(o=>o.type==='Text').map(o=>({text:o.text,b:o.getBounds()}));
-   const close=root.list.find(o=>o.name==='ofeliya-quests-close');return {texts,close:close.getBounds(),W:m.scale.width,H:m.scale.height};});
+   const close=root.list.find(o=>o.name==='ofeliya-modal-close-hit');return {texts,close:close.getBounds(),W:m.scale.width,H:m.scale.height};});
   assert.equal(layout.close.height,44);
   for(const t of layout.texts)assert.ok(t.b.x>=0&&t.b.y>=0&&t.b.x+t.b.width<=layout.W&&t.b.y+t.b.height<=layout.H,JSON.stringify(t));
-  assert.equal(layout.texts.filter(t=>/Обновление в 00:00 UTC/.test(t.text)).length,1);
+  const countdowns=layout.texts.filter(t=>/Обновление через (?:(?:\d+) ч )?(?:\d+) мин/.test(t.text));
+  assert.equal(countdowns.length,1,'the daily board shows exactly one live countdown');
+  assert.ok(!/00:00|UTC/.test(countdowns[0].text),'the countdown is player-facing remaining time, not a static/technical reset');
   if(i===0){fs.mkdirSync('docs/qa/quest-evidence',{recursive:true});await page.screenshot({path:`docs/qa/quest-evidence/quests-${viewport.width}.png`});}
   await page.evaluate(()=>window.__game.scene.getScene('Menu').questBoard.destroy());
  }
@@ -106,7 +108,33 @@ for(const viewport of [{width:320,height:568},{width:390,height:844},{width:768,
  const boardDay=await page.evaluate(()=>{window.__questFirst=window.__game.scene.getScene('Menu').children.getByName('ofeliya-quests').list[0];return JSON.parse(localStorage.getItem('ofeliya.quests.v1')).dayKey;});
  await page.waitForTimeout(1100);
  assert.equal(await page.evaluate(()=>window.__questFirst===window.__game.scene.getScene('Menu').children.getByName('ofeliya-quests').list[0]),true,'no text/display rebuild within same day');
- await page.evaluate(()=>{const next=Date.now()+86400000;Date.now=()=>next;});
+ // The countdown line moves in place. The board is not rebuilt for it: the
+ // objects under the player's finger stay the same objects, and only the line
+ // that shows the time left is updated where it stands.
+ //
+ // The clock is pinned to synthetic instants inside the board's own UTC day,
+ // far from the midnight. Shifting the real clock back had a false-red window
+ // of one shift length around every midnight: there the shifted clock fell
+ // into the previous day, and the day key moved with it. The two synthetic
+ // instants also differ from each other, so the countdown certainly changes.
+ const dayKey=await page.evaluate(()=>JSON.parse(localStorage.getItem('ofeliya.quests.v1')).dayKey);
+ const dayStart=Date.parse(`${dayKey}T00:00:00.000Z`);
+ const noon=dayStart+12*3600000;
+ const morning=dayStart+6*3600000;
+ await page.evaluate((noon)=>{
+  const board=()=>window.__game.scene.getScene('Menu').children.getByName('ofeliya-quests');
+  window.__questText=()=>board().list.filter(o=>o&&typeof o.text==='string').map(o=>o.text).join('|');
+  window.__questRealNow=Date.now;
+  Date.now=()=>noon;
+ },noon);
+ await page.waitForFunction(()=>window.__questText().includes('12 ч 0 мин'),null,{timeout:120000});
+ assert.equal(await page.evaluate(()=>window.__questFirst===window.__game.scene.getScene('Menu').children.getByName('ofeliya-quests').list[0]),true,'the countdown moves without rebuilding the board');
+ await page.evaluate((morning)=>{Date.now=()=>morning;},morning);
+ // At 06:00 UTC the time left until the midnight is eighteen hours.
+ await page.waitForFunction(()=>window.__questText().includes('18 ч 0 мин'),null,{timeout:120000});
+ assert.equal(await page.evaluate(()=>window.__questFirst===window.__game.scene.getScene('Menu').children.getByName('ofeliya-quests').list[0]),true,'the countdown keeps moving inside the same day');
+ await page.evaluate(()=>{Date.now=window.__questRealNow;});
+ await page.evaluate((next)=>{Date.now=()=>next;},dayStart+86400000+300);
  await page.waitForFunction(day=>JSON.parse(localStorage.getItem('ofeliya.quests.v1')).dayKey!==day,boardDay);
  assert.equal(await page.evaluate(()=>window.__questFirst===window.__game.scene.getScene('Menu').children.getByName('ofeliya-quests').list[0]),false,'UTC rollover refreshes open board');
  assert.deepEqual(errors,[]);console.log('PASS actual GameScene/Enemy/Gem/choice/damage/end + board x10 '+viewport.width);

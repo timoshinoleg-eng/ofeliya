@@ -411,7 +411,7 @@ async function visibleUiText(page, wanted) {
         return flat.some(
           (obj) =>
             typeof obj?.text === 'string' &&
-            obj.text.replace(/\s+/g, ' ').trim() === 'ИММУНИТЕТ ПОДАВЛЕН' &&
+            obj.text.replace(/\s+/g, ' ').trim() === 'НОСИТЕЛЬ ЗАРАЖЁН' &&
             obj.visible !== false
         );
       },

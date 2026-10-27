@@ -56,7 +56,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
   {
     id: 'hoarder_2',
     title: 'Жадный штамм',
-    desc: 'Собери 2000 РНК за один забег',
+    desc: 'Собери 2 000 РНК за один забег',
     metric: 'q_rna',
     target: 2000,
     family: 'progress',
@@ -80,7 +80,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
   {
     id: 'ghost',
     title: 'Невидимка',
-    desc: '60 секунд подряд без урона',
+    desc: 'Продержись 60 секунд подряд без урона',
     metric: 'q_nodmg',
     target: 60,
     family: 'survival',
@@ -96,7 +96,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
   {
     id: 'hunter',
     title: 'Охотник за элитой',
-    desc: 'Уничтожь 5 элитных врагов за один забег',
+    desc: 'Уничтожь 5 элитных клеток за один забег',
     metric: 'q_elites',
     target: 5,
     family: 'combat',

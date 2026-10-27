@@ -247,7 +247,7 @@ async function touchText(ctx, page, sceneKey, label) {
       if (Array.isArray(obj?.list)) obj.list.forEach(visit);
     };
     ui.children.list.forEach(visit);
-    return flat.some((obj) => obj?.text === 'ЕЩЁ ОДИН ЦИКЛ' && obj.visible !== false);
+    return flat.some((obj) => obj?.text === 'НОВЫЙ ЗАБЕГ' && obj.visible !== false);
   });
   for (let i = 0; i < 20 && attempts.length === 0; i++) await sleep(50);
   if (attempts.length !== 1) throw new Error('duel attempt was not submitted exactly once');
@@ -260,7 +260,7 @@ async function touchText(ctx, page, sceneKey, label) {
   }
   if (scoreCalls !== 0) throw new Error('duel attempt leaked into canonical /api/score');
 
-  await touchText(ctx, page, 'UI', 'ЕЩЁ ОДИН ЦИКЛ');
+  await touchText(ctx, page, 'UI', 'НОВЫЙ ЗАБЕГ');
   await page.waitForFunction(
     () => window.__game.scene.isActive('Game') && !window.__game.registry.get('runResult'),
     null,

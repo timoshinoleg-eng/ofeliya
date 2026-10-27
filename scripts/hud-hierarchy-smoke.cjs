@@ -34,7 +34,7 @@ const SHOT_ONLY_VIEWPORTS = [
   { width: 390, height: 844 },
 ];
 const KILL_VALUES = [0, 99, 999, 2142, 5560, 99999];
-const RESULT_BUTTONS = ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В МЕНЮ'];
+const RESULT_BUTTONS = ['НОВЫЙ ЗАБЕГ', 'БРОСИТЬ ВЫЗОВ ДРУГУ', 'В МЕНЮ'];
 
 // Pinned HUD geometry contract - mirrors `src/ui/hudTokens.ts` (SLICE-HUD-01R).
 const HUD = {
@@ -458,12 +458,16 @@ async function resultContract(page) {
       .map((obj) => ({ text: obj.text, bounds: obj.getBounds() }))
       .filter(({ bounds }) => bounds.left < 1 || bounds.right > W - 1 || bounds.top < 1 || bounds.bottom > H - 1)
       .map(({ text, bounds }) => ({ text, left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom }));
-    const buttons = buttonLabels.map((label) => {
-      const text = texts.find((obj) => obj.text === label);
-      const bg = text && container.list.find((obj) => obj !== text && obj.input?.enabled && Math.abs((obj.y ?? -9999) - text.y) < 1 && typeof obj.getBounds === 'function');
+    const buttons = buttonLabels.map((label, index) => {
+      const name = ['ofeliya-result-retry', 'ofeliya-result-share', 'ofeliya-result-menu'][index];
+      const text = container.getByName(`${name}-label`);
+      const bg = container.getByName(`${name}-bg`);
+      const caption = container.getByName(`${name}-caption`);
       const tb = text?.getBounds?.();
       const bb = bg?.getBounds?.();
-      return { label, top: bb?.top, bottom: bb?.bottom, ok: !!tb && !!bb && tb.left >= bb.left + 4 && tb.right <= bb.right - 4 && tb.top >= bb.top + 1 && tb.bottom <= bb.bottom - 1 };
+      const cb = caption?.getBounds?.();
+      const inside = (b) => !!b && !!bb && b.left >= bb.left + 4 && b.right <= bb.right - 4 && b.top >= bb.top + 1 && b.bottom <= bb.bottom - 1;
+      return { label, top: bb?.top, bottom: bb?.bottom, ok: text?.text === label && !!bg?.input?.enabled && inside(tb) && (!caption || (inside(cb) && tb.bottom <= cb.top)) };
     });
     const hit = container.getByName('ofeliya-result-report-hit')?.getBounds();
     const stats = container.getByName('ofeliya-result-stats')?.getBounds();

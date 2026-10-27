@@ -5,21 +5,24 @@ try{for(const viewport of [{width:320,height:568},{width:360,height:640},{width:
  const page=await browser.newPage({viewport,reducedMotion:'reduce'});const errors=[];page.on('pageerror',e=>errors.push(String(e)));await page.route('https://st.max.ru/**',route=>route.fulfill({body:'',contentType:'application/javascript'}));
  await page.addInitScript(({volume,muted})=>localStorage.setItem('ofeliya_save_v1',JSON.stringify({runs:1,muted,musicVolume:volume,sfxVolume:volume})),{volume,muted});
  await page.goto(process.env.OFELIYA_BASE_URL||'http://127.0.0.1:5173/',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>window.__game?.scene.isActive('Menu'));
- const {row,button,freshRun}=await page.evaluate(()=>{const menu=window.__game.scene.getScene('Menu');const bounds=o=>o?JSON.parse(JSON.stringify(o.getBounds())):null;return {row:menu.children.list.filter(o=>o.type==='Text'&&/^(муз[·ы]|звук:|эфф[·е]|СВОДКА$|КОДЕКС )/.test(o.text)).map(o=>({text:o.text,font:parseFloat(o.style.fontSize),b:bounds(o),hit:{x:o.x-o.displayOriginX+o.input.hitArea.x,y:o.y-o.displayOriginY+o.input.hitArea.y,width:o.input.hitArea.width,height:o.input.hitArea.height}})),button:bounds(menu.children.list.find(o=>o.name==='ofeliya-menu-action-bg')),freshRun:bounds(menu.children.list.find(o=>o.name==='ofeliya-menu-new-run'))};});
- assert.equal(row.length,5,JSON.stringify(row));
- // Footer accessibility now keeps one utility band and wraps labels only when needed.
- // Check actual Phaser targets rather than requiring the obsolete text-sized/3+2 recipe.
- row.sort((a,b)=>a.hit.x-b.hit.x);
- for(const item of row){
-  assert.ok(item.font>=(viewport.height<650?11:12),'font floor');
-  assert.ok(item.b.x>=8-1e-6&&item.b.x+item.b.width<=viewport.width-8+1e-6,JSON.stringify({viewport,row}));
-  assert.ok(item.hit.width>=44&&item.hit.height>=44,'44px touch minimum');
-  assert.ok(item.hit.y>=(freshRun?freshRun.y+freshRun.height:button.y+button.height)-1e-6,'target clears CTA/new run');
- }
- for(let i=1;i<row.length;i++){
-  assert.ok(Math.abs(row[i].hit.y-row[0].hit.y)<1e-6,'one shared utility band');
-  assert.ok(row[i].hit.x-(row[i-1].hit.x+row[i-1].hit.width)>=4-1e-6,'four pixel target gap');
- }
+ const {row,nav,button,freshRun}=await page.evaluate(()=>{const menu=window.__game.scene.getScene('Menu');const bounds=o=>o?JSON.parse(JSON.stringify(o.getBounds())):null;return {row:menu.children.list.filter(o=>o.type==='Text'&&/(Музыка:|Звук:|Эффекты:)/.test(o.text)).map(o=>({text:o.text,font:parseFloat(o.style.fontSize),b:bounds(o)})),nav:menu.children.list.filter(o=>o.name&&o.name.startsWith('ofeliya-menu-nav-')).map(o=>({name:o.name,b:bounds(o)})),button:bounds(menu.children.list.find(o=>o.name==='ofeliya-menu-action-bg')),freshRun:bounds(menu.children.list.find(o=>o.name==='ofeliya-menu-new-run'))};});
+ // The redesigned menu owns three audio switches and a 2x2 navigation grid.
+ assert.equal(row.length,3,JSON.stringify(row));
+ assert.equal(nav.length,4,JSON.stringify(nav));
+ const bands=[];for(const item of row){let band=bands.find(b=>Math.abs(b[0].b.y-item.b.y)<3);if(!band){band=[];bands.push(band)}band.push(item)}
+ bands.sort((a,b)=>a[0].b.y-b[0].b.y);for(const band of bands)band.sort((a,b)=>a.b.x-b.b.x);
+ const required=row.reduce((sum,item)=>sum+item.b.width,0)+16+4*(row.length-1);
+ assert.equal(bands.length,required>viewport.width+1e-6?2:1,JSON.stringify({viewport,volume,muted,row,required}));
+ if(bands.length===2)assert.deepEqual(bands.map(b=>b.length),[2,1],JSON.stringify({viewport,row}));
+ for(const band of bands)for(let i=1;i<band.length;i++)assert.ok(band[i].b.x-(band[i-1].b.x+band[i-1].b.width)>=4-1e-6,JSON.stringify({viewport,volume,muted,row}));
+ if(bands.length>1){const upperBottom=Math.max(...bands[0].map(o=>o.b.y+o.b.height));const lowerTop=Math.min(...bands[1].map(o=>o.b.y));assert.ok(lowerTop-upperBottom>=4-1e-6,JSON.stringify({viewport,row}));}
+ for(const item of row){assert.ok(item.font>=(viewport.height<650?11:12));assert.ok(item.b.x>=8-1e-6&&item.b.x+item.b.width<=viewport.width-8+1e-6,JSON.stringify({viewport,volume,muted,row}));}
+ // The navigation grid is two rows of two, every cell at least a touch target.
+ const navRows=new Set(nav.map(n=>Math.round(n.b.y/8)));
+ assert.equal(navRows.size,2,JSON.stringify({viewport,nav}));
+ for(const cell of nav){assert.ok(cell.b.height>=43.9,JSON.stringify({viewport,cell}));assert.ok(cell.b.width>=43.9,JSON.stringify({viewport,cell}));assert.ok(cell.b.x>=0&&cell.b.x+cell.b.width<=viewport.width+1e-6,JSON.stringify({viewport,cell}));}
+ const navBottom=Math.max(...nav.map(n=>n.b.y+n.b.height));
+ assert.ok(bands[0][0].b.y-navBottom>=4-1e-6,JSON.stringify({viewport,nav,row}));
  assert.deepEqual(errors,[]);console.log('utility variants PASS '+JSON.stringify({viewport,volume,muted}));await page.close();
  }
  for(const reducedMotion of ['reduce','no-preference']){

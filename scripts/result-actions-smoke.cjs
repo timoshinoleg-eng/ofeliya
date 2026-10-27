@@ -136,7 +136,7 @@ async function buttonCenter(page, label) {
   // Restart must create a fresh playable Game/UI pair, not leave the paused result scene.
   {
     const { ctx, page, errors } = await bootResult(browser);
-    const point = await buttonCenter(page, 'ЕЩЁ ОДИН ЦИКЛ');
+    const point = await buttonCenter(page, 'НОВЫЙ ЗАБЕГ');
     if (!point) throw new Error('restart button hit target missing');
     await touchAt(ctx, page, point);
     await sleep(650);

@@ -150,6 +150,20 @@ try {
     assert(typeof mutator.apply === 'function', `${mutator.id}: apply missing`);
   }
 
+  // The exact player-facing title of the sparse-lethal mutator. The word is
+  // "реже" ("rarer"), not "режие": a typo in a shipped title must never
+  // reach the player again, and the mechanics of the tier stay untouched.
+  const sparseLethal = DAILY_MUTATORS.find((m) => m.id === 'sparse-lethal');
+  assert(sparseLethal, 'the sparse-lethal mutator is gone');
+  assert(
+    sparseLethal.title === 'МУТАТОР ДНЯ · РЕЖЕ, НО КРЕПКИЕ',
+    `the sparse-lethal title drifted: ${sparseLethal.title}`
+  );
+  assert(
+    !/РЕЖИЕ/.test(DAILY_MUTATORS.map((m) => m.title).join(' ')),
+    'a mutator title carries the typo "РЕЖИЕ"'
+  );
+
   // Hash: pure, stable, unsigned 32-bit.
   assert(hashDateKey('2026-10-12') === hashDateKey('2026-10-12'), 'hash not deterministic');
   assert(hashDateKey('2026-10-12') !== hashDateKey('2026-10-13'), 'adjacent days hash identically');

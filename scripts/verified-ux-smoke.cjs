@@ -20,12 +20,13 @@ const { chromium } = require('playwright');
                 console.log('loaded');
                 await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
                 console.log('menu');
-                const targets = await page.evaluate(() => { const s = window.__game.scene.getScene('Menu'); return s.children.list.filter(o => o.type === 'Text' && o.input && /^(муз|звук:|эфф|СВОДКА$|КОДЕКС |О ПРИЛОЖЕНИИ|mini-app)/.test(o.text)).map(o => ({ text: o.text, w: o.input.hitArea.width * o.scaleX, h: o.input.hitArea.height * o.scaleY, x: o.x - o.displayOriginX + o.input.hitArea.x, y: o.y - o.displayOriginY + o.input.hitArea.y, font: parseFloat(o.style.fontSize), visual: o.getBounds() })); });
+                const targets = await page.evaluate(() => { const s = window.__game.scene.getScene('Menu'); const names = ['ofeliya-menu-nav-rating','ofeliya-menu-nav-tasks','ofeliya-menu-nav-codex','ofeliya-menu-nav-collection','ofeliya-menu-audio-music','ofeliya-menu-audio-sound','ofeliya-menu-audio-effects','ofeliya-menu-legal']; return names.map(name => { const o = s.children.getByName(name); if (!o) return { name, missing: true }; const b = o.getBounds(); return { name, w: b.width, h: b.height, x: b.x, y: b.y, visual: b }; }); });
                 fs.writeFileSync(path.join(dir, `menu-${viewport.width}-${reducedMotion}.json`), JSON.stringify(targets, null, 2));
                 await page.screenshot({ path: path.join(dir, `menu-${viewport.width}-${reducedMotion}.png`) });
                 if (process.argv.includes('--footer')) {
-                    assert.equal(targets.length, 7);
+                    assert.equal(targets.length, 8);
                     for (const t of targets) {
+                        assert.equal(t.missing, undefined, 'missing menu target: ' + JSON.stringify(t));
                         assert.ok(t.w >= 44 && t.h >= 44, 'footer target below44: ' + JSON.stringify(t));
                         assert.ok(t.x >= 0 && t.y >= 0 && t.x + t.w <= viewport.width + .01 && t.y + t.h <= viewport.height + .01, 'target in safe canvas');
                     }

@@ -36,7 +36,7 @@ try {
     entry,
     [
       `export * from '${sourcePath('src/game/DifficultyProfile.ts')}';`,
-      `export * from '${sourcePath('src/game/RunModeLabel.ts')}';`,
+      `export * from '${sourcePath('src/game/UiCopy.ts')}';`,
       `export { RunCheckpoint, RUN_CHECKPOINT_STORAGE_KEY, validateRunCheckpoint } from '${sourcePath('src/systems/RunCheckpoint.ts')}';`,
       `export { SaveSystem } from '${sourcePath('src/systems/SaveSystem.ts')}';`,
       `export { submitRunScore, buildScoreSubmission, beginRunCapability } from '${sourcePath('src/systems/ScoreClient.ts')}';`,
@@ -106,9 +106,11 @@ try {
     nextDifficultyId,
     readDifficultySelection,
     writeDifficultySelection,
-    runModeLabel,
-    runModeShareLabel,
-    isRankedResult,
+    RESULT_MODE_CHIP,
+    resultModeChip,
+    EASY_SHARE_SUFFIX,
+    shareModeSuffix,
+    buildShareText,
     RunCheckpoint,
     RUN_CHECKPOINT_STORAGE_KEY,
     validateRunCheckpoint,
@@ -242,31 +244,14 @@ try {
   assertEqual(isScoreSubmittable('standard'), true, 'Standard must stay submitted');
   assertEqual(isScoreSubmittable('strained'), true, 'Strained submission behaviour changed');
 
-  assertEqual(
-    isRankedResult({ difficultyId: 'easy', resumed: false, daily: false, duel: false }),
-    false,
-    'an Easy run must never claim a ranked place'
-  );
-  assertEqual(
-    isRankedResult({ difficultyId: 'standard', resumed: false, daily: false, duel: false }),
-    true,
-    'a fresh Standard run must still claim a ranked place'
-  );
-  assertEqual(
-    isRankedResult({ difficultyId: 'standard', resumed: true, daily: false, duel: false }),
-    false,
-    'a resumed Standard run must not be ranked'
-  );
-  assertEqual(
-    isRankedResult({ difficultyId: 'standard', resumed: false, daily: true, duel: false }),
-    false,
-    'a Daily Standard run must not be ranked'
-  );
-  assertEqual(
-    isRankedResult({ difficultyId: 'standard', resumed: false, daily: false, duel: true }),
-    false,
-    'a Duel Standard run must not be ranked'
-  );
+  // The ranking state of a run is expressed by the chip the result shows: only
+  // a fresh Standard run carries the ranked chip, every other mode is a
+  // training run.
+  assertEqual(RESULT_MODE_CHIP.easy, 'ЛЁГКИЙ · Тренировка', 'an Easy run must never claim a ranked place');
+  assertEqual(RESULT_MODE_CHIP.ranked, 'СТАНДАРТ · В зачёт рейтинга', 'a fresh Standard run must still claim a ranked place');
+  assertEqual(RESULT_MODE_CHIP.practice, 'Тренировка (продолженный забег)', 'a resumed Standard run must not be ranked');
+  assertEqual(RESULT_MODE_CHIP.daily, 'ЗАБЕГ ДНЯ · СТАНДАРТ', 'a Daily Standard run must not be ranked');
+  assertEqual(RESULT_MODE_CHIP.duel, 'ДУЭЛЬ · СТАНДАРТ', 'a Duel Standard run must not be ranked');
 
   // ===========================================================================
   // 4. Score submission is skipped for Easy
@@ -585,79 +570,126 @@ try {
   // ===========================================================================
   // 7. Result label
   // ===========================================================================
-  assertEqual(
-    runModeLabel({ difficultyId: 'easy', resumed: false, daily: false, duel: false, ranked: false }),
-    'РЕЖИМ: ЛЁГКИЙ · вне рейтинга',
-    'the Easy result label is wrong'
-  );
-  assertEqual(
-    runModeLabel({ difficultyId: 'easy', resumed: true, daily: false, duel: false, ranked: false }),
-    'РЕЖИМ: ЛЁГКИЙ · ВОЗОБНОВЛЁН · ВНЕ РЕЙТИНГА',
-    'the resumed Easy result label is wrong'
-  );
-  // Existing labels must not drift.
-  assertEqual(
-    runModeLabel({ difficultyId: 'standard', resumed: false, daily: false, duel: false, ranked: true }),
-    'РЕЖИМ: СТАНДАРТ · рейтинговый',
-    'the Standard result label drifted'
-  );
-  assertEqual(
-    runModeLabel({ difficultyId: 'strained', resumed: false, daily: false, duel: false, ranked: false }),
-    'РЕЖИМ: НАПРЯЖЕНИЕ · вне рейтинга',
-    'the Strained result label drifted'
-  );
-  assertEqual(
-    runModeLabel({ difficultyId: 'standard', resumed: true, daily: false, duel: false, ranked: false }),
-    'РЕЖИМ: СТАНДАРТ · ВОЗОБНОВЛЁН · ВНЕ РЕЙТИНГА',
-    'the resumed Standard result label drifted'
-  );
-  assertEqual(
-    runModeLabel({ difficultyId: 'standard', resumed: false, daily: true, duel: false, ranked: false }),
-    'РЕЖИМ: СТАНДАРТ · ежедневный забег',
-    'the Daily result label drifted'
-  );
-  assertEqual(
-    runModeLabel({ difficultyId: 'standard', resumed: false, daily: false, duel: true, ranked: false }),
-    'РЕЖИМ: ДУЭЛЬ · СТАНДАРТ · ВНЕ РЕЙТИНГА',
-    'the Duel result label drifted'
-  );
-  // The Easy label must read as a normal mode, never as a failure or a penalty.
-  const easyLabel = runModeLabel({ difficultyId: 'easy', resumed: false, daily: false, duel: false, ranked: false });
+  assertEqual(RESULT_MODE_CHIP.easy, 'ЛЁГКИЙ · Тренировка', 'the Easy result chip is wrong');
+  assertEqual(RESULT_MODE_CHIP.practice, 'Тренировка (продолженный забег)', 'the resumed Easy result chip is wrong');
+  // Existing chips must not drift.
+  assertEqual(RESULT_MODE_CHIP.ranked, 'СТАНДАРТ · В зачёт рейтинга', 'the Standard result chip drifted');
+  assertEqual(RESULT_MODE_CHIP.strained, 'НАПРЯЖЕНИЕ · Тренировка', 'the Strained result chip drifted');
+  assertEqual(RESULT_MODE_CHIP.daily, 'ЗАБЕГ ДНЯ · СТАНДАРТ', 'the Daily result chip drifted');
+  assertEqual(RESULT_MODE_CHIP.duel, 'ДУЭЛЬ · СТАНДАРТ', 'the Duel result chip drifted');
+  // No chip may carry the internal ranking flag.
+  for (const chip of Object.values(RESULT_MODE_CHIP)) {
+    assert(!chip.toLowerCase().includes('вне рейтинга'), 'a result chip must not use the internal ranking flag');
+  }
+  // The Easy chip must read as a normal mode, never as a failure or a penalty.
+  const easyLabel = RESULT_MODE_CHIP.easy;
   for (const forbidden of ['ШТРАФ', 'ПРОВАЛ', 'ОШИБКА', 'ЗАБАНЕН', 'ДИСКВАЛ']) {
-    assert(!easyLabel.includes(forbidden), `the Easy result label must not read as a penalty (${forbidden})`);
+    assert(!easyLabel.includes(forbidden), `the Easy result chip must not read as a penalty (${forbidden})`);
   }
 
-  // The shared result text must name the tier that was actually played.
+  // The chip the player actually reads is the one the production selection
+  // resolves. The catalog alone is not a contract: the selection decides which
+  // chip a run gets, and that decision is what the player sees.
+  const chipContext = (over) => ({
+    resumed: false,
+    daily: false,
+    duel: false,
+    difficultyId: 'standard',
+    platform: 'telegram',
+    ranked: true,
+    ...over,
+  });
   assertEqual(
-    runModeShareLabel({ difficultyId: 'easy', resumed: false, daily: false, duel: false, ranked: false }),
-    ' Режим: ЛЁГКИЙ.',
-    'the Easy share text names the wrong mode'
+    resultModeChip(chipContext({})),
+    'СТАНДАРТ · В зачёт рейтинга',
+    'a ranked Standard run must claim the rating'
   );
   assertEqual(
-    runModeShareLabel({ difficultyId: 'strained', resumed: false, daily: false, duel: false, ranked: false }),
-    ' Режим: НАПРЯЖЕНИЕ.',
-    'the Strained share text drifted'
+    resultModeChip(chipContext({ difficultyId: 'strained', ranked: false })),
+    'НАПРЯЖЕНИЕ · Тренировка',
+    'a Strained run must never claim the rating'
   );
   assertEqual(
-    runModeShareLabel({ difficultyId: 'standard', resumed: false, daily: false, duel: false, ranked: true }),
-    '',
-    'a ranked Standard share must not add a mode suffix'
+    resultModeChip(chipContext({ duel: true, ranked: false })),
+    'ДУЭЛЬ · СТАНДАРТ',
+    'a duel must name the duel'
   );
   assertEqual(
-    runModeShareLabel({ difficultyId: 'standard', resumed: false, daily: true, duel: false, ranked: false }),
-    ' Ежедневный забег.',
-    'the Daily share text drifted'
+    resultModeChip(chipContext({ difficultyId: 'easy', ranked: false })),
+    'ЛЁГКИЙ · Тренировка',
+    'an Easy run must never claim a ranked place'
   );
   assertEqual(
-    runModeShareLabel({ difficultyId: 'standard', resumed: false, daily: false, duel: true, ranked: false }),
-    ' Дуэль · вне глобального рейтинга.',
-    'the Duel share text drifted'
+    resultModeChip(chipContext({ resumed: true, ranked: false })),
+    'Тренировка (продолженный забег)',
+    'a continued run must be a training run'
   );
   assertEqual(
-    runModeShareLabel({ difficultyId: 'easy', resumed: true, daily: false, duel: false, ranked: false }),
-    ' Возобновлённый забег · вне рейтинга.',
-    'the resumed share text drifted'
+    resultModeChip(chipContext({ daily: true, ranked: false })),
+    'ЗАБЕГ ДНЯ · СТАНДАРТ',
+    'the daily run must name the daily mode'
   );
+  assertEqual(
+    resultModeChip(chipContext({ platform: 'browser', ranked: false })),
+    'СТАНДАРТ · Тренировка',
+    'a local run must not claim a rating'
+  );
+
+  // The matrix of the result identity, with the platform as a dimension. The
+  // tier of the run decides before the host does: a tier that is never ranked
+  // must never wear the chip of the standard tier, on any host.
+  const IDENTITY_MATRIX = [
+    ['fresh Standard', { difficultyId: 'standard', platform: 'browser', ranked: false }, 'СТАНДАРТ · Тренировка'],
+    ['fresh Standard', { difficultyId: 'standard', platform: 'telegram', ranked: true }, 'СТАНДАРТ · В зачёт рейтинга'],
+    ['fresh Standard', { difficultyId: 'standard', platform: 'max', ranked: true }, 'СТАНДАРТ · В зачёт рейтинга'],
+    ['fresh Standard', { difficultyId: 'standard', platform: 'telegram', ranked: false }, 'СТАНДАРТ · Тренировка'],
+    ['fresh EASY', { difficultyId: 'easy', platform: 'browser', ranked: false }, 'ЛЁГКИЙ · Тренировка'],
+    ['fresh EASY', { difficultyId: 'easy', platform: 'telegram', ranked: false }, 'ЛЁГКИЙ · Тренировка'],
+    ['fresh EASY', { difficultyId: 'easy', platform: 'max', ranked: false }, 'ЛЁГКИЙ · Тренировка'],
+    ['fresh STRAINED', { difficultyId: 'strained', platform: 'browser', ranked: false }, 'НАПРЯЖЕНИЕ · Тренировка'],
+    ['fresh STRAINED', { difficultyId: 'strained', platform: 'telegram', ranked: false }, 'НАПРЯЖЕНИЕ · Тренировка'],
+    ['fresh STRAINED', { difficultyId: 'strained', platform: 'max', ranked: false }, 'НАПРЯЖЕНИЕ · Тренировка'],
+    ['duel', { difficultyId: 'standard', platform: 'telegram', ranked: false, duel: true }, 'ДУЭЛЬ · СТАНДАРТ'],
+    ['duel', { difficultyId: 'strained', platform: 'telegram', ranked: false, duel: true }, 'ДУЭЛЬ · СТАНДАРТ'],
+    ['Daily', { difficultyId: 'standard', platform: 'telegram', ranked: false, daily: true }, 'ЗАБЕГ ДНЯ · СТАНДАРТ'],
+    ['Daily', { difficultyId: 'strained', platform: 'telegram', ranked: false, daily: true }, 'ЗАБЕГ ДНЯ · СТАНДАРТ'],
+    ['resumed', { difficultyId: 'standard', platform: 'telegram', ranked: false, resumed: true }, 'Тренировка (продолженный забег)'],
+    ['resumed', { difficultyId: 'easy', platform: 'browser', ranked: false, resumed: true }, 'Тренировка (продолженный забег)'],
+  ];
+  for (const [run, over, expected] of IDENTITY_MATRIX) {
+    assertEqual(
+      resultModeChip(chipContext(over)),
+      expected,
+      `the result chip of a ${run} run on ${over.platform} is wrong`
+    );
+  }
+
+  // The share text of an Easy run names the tier. The suffix is the live
+  // production output, not a copy of it.
+  assertEqual(EASY_SHARE_SUFFIX, '\nРежим: ЛЁГКИЙ.', 'the Easy share suffix drifted');
+  const easyShareText = buildShareText({ win: false, time: '00:26', kills: 18, infected: 2 })
+    + shareModeSuffix('easy');
+  assert(
+    easyShareText.endsWith('Режим: ЛЁГКИЙ.'),
+    `the Easy share text does not name the tier: ${JSON.stringify(easyShareText.slice(-40))}`
+  );
+  assertEqual(shareModeSuffix('standard'), '', 'a Standard share must carry no tier suffix');
+  assertEqual(shareModeSuffix('strained'), '', 'a Strained share must carry no tier suffix');
+  // The scene must use the production helpers, so the pins cannot drift from
+  // what the player reads.
+  const uisceneSource = readFileSync(resolve('src/scenes/UIScene.ts'), 'utf8');
+  assert(uisceneSource.includes('resultModeChip({'), 'the result scene must use the production chip selection');
+  assert(uisceneSource.includes('shareModeSuffix(res.difficultyId)'), 'the result scene must use the production share suffix');
+
+  // The shared result text must never name a tier the player did not run, and
+  // must never carry the internal ranking flag.
+  const easyShare = buildShareText({ win: false, time: '00:26', kills: 18, infected: 2 });
+  assert(!easyShare.includes('НАПРЯЖЕНИЕ'), 'the Easy share text names the wrong mode');
+  assert(!easyShare.toLowerCase().includes('вне рейтинга'), 'the share text must not carry the internal ranking flag');
+  assert(easyShare.startsWith('OFELIYA'), 'the share text must start with the product name');
+  assert(easyShare.includes('@ofeliya_game_bot'), 'the share text must name the bot');
+  const dailyShare = buildShareText({ win: false, time: '00:26', kills: 18, infected: 2, suffix: ' Ежедневный забег.' });
+  assert(dailyShare.includes('Ежедневный забег.'), 'the Daily share text drifted');
 
   // ===========================================================================
   // 8. The selector exposes the tier

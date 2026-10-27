@@ -70,7 +70,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       source: host.dataset.viewportSource,
       challenge: texts.includes('ВЫЗОВ ПОЛУЧЕН'),
       accept: texts.includes('ПРИНЯТЬ ВЫЗОВ'),
-      legal: texts.includes('О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА'),
+      legal: texts.includes('О приложении · Политика · Поддержка'),
       greeting: texts.some((text) => text.includes('Носитель: QA Carrier')),
       overflow,
       targetAcceptGap:
@@ -96,7 +96,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   await page.evaluate(() => {
     const menu = window.__game.scene.getScene('Menu');
-    const legal = menu.children.list.find((obj) => obj.text === 'О ПРИЛОЖЕНИИ · ПОЛИТИКА · ПОДДЕРЖКА');
+    const legal = menu.children.getByName('ofeliya-menu-legal');
     if (!legal) throw new Error('legal footer missing');
     legal.emit('pointerup');
   });
@@ -155,23 +155,31 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
     const normalize = (value) => String(value ?? '').replace(/\n/g, ' ');
     const title = flat.find(
-      (obj) => typeof obj.text === 'string' && ['ШТАММ УНИЧТОЖЕН', 'ИММУНИТЕТ ПОДАВЛЕН'].includes(normalize(obj.text))
+      (obj) => typeof obj.text === 'string' && ['ШТАММ УНИЧТОЖЕН', 'НОСИТЕЛЬ ЗАРАЖЁН'].includes(normalize(obj.text))
     );
     const container = title?.parentContainer;
     const modalTexts = container?.list?.filter(
       (obj) => typeof obj.text === 'string' && obj.visible !== false && (obj.alpha ?? 1) > 0.01 && typeof obj.getBounds === 'function'
     ) ?? [];
     const time = modalTexts.find((obj) => /^\d{2}:\d{2}$/.test(obj.text));
-    const stats = modalTexts.find((obj) => obj.text.startsWith('УНИЧТОЖЕНО:') && obj.text.includes('Заражено:'));
-    const shareText = modalTexts.find((obj) => obj.text === 'БРОСИТЬ ВЫЗОВ');
+    const stats = modalTexts.find((obj) => obj.text.startsWith('Уничтожено:') && obj.text.includes('Заражено клеток:'));
+    const shareText = modalTexts.find((obj) => obj.text === 'БРОСИТЬ ВЫЗОВ ДРУГУ');
     const report = container?.getByName('ofeliya-result-report');
     const reportHit = container?.getByName('ofeliya-result-report-hit');
     const reportRows = report?.list?.filter((obj) => typeof obj.text === 'string') ?? [];
     const verdict = reportRows.find((obj) => obj.text.includes('ВЫЗОВ ПРЕВЗОЙДЁН'));
-    const buttons = modalTexts.filter((obj) => ['ЕЩЁ ОДИН ЦИКЛ', 'БРОСИТЬ ВЫЗОВ', 'В МЕНЮ'].includes(obj.text));
+    const buttons = modalTexts.filter((obj) => ['НОВЫЙ ЗАБЕГ', 'БРОСИТЬ ВЫЗОВ ДРУГУ', 'В МЕНЮ'].includes(obj.text));
     const buttonSet = new Set(buttons);
+    const buttonCaptions = new Set(modalTexts.filter((obj) => String(obj.name ?? '').endsWith('-caption')));
     const details = modalTexts
-      .filter((obj) => obj !== title && obj !== time && obj !== stats && !buttonSet.has(obj))
+      .filter((obj) =>
+        obj !== title &&
+        obj !== time &&
+        obj !== stats &&
+        !buttonSet.has(obj) &&
+        !buttonCaptions.has(obj) &&
+        obj.name !== 'ofeliya-result-scroll-hint'
+      )
       .sort((a, b) => a.getBounds().top - b.getBounds().top);
 
     const overflow = modalTexts
@@ -206,9 +214,13 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     }
 
     const buttonChecks = buttons.map((label) => {
-      const bg = container?.list?.find(
-        (obj) => obj !== label && obj.input?.enabled && Math.abs((obj.y ?? -9999) - label.y) < 1 && typeof obj.getBounds === 'function'
-      );
+      const bgName =
+        label.text === 'НОВЫЙ ЗАБЕГ'
+          ? 'ofeliya-result-retry-bg'
+          : label.text === 'БРОСИТЬ ВЫЗОВ ДРУГУ'
+            ? 'ofeliya-result-share-bg'
+            : 'ofeliya-result-menu-bg';
+      const bg = container?.getByName?.(bgName);
       const lb = label.getBounds();
       const bb = bg?.getBounds?.();
       return {
@@ -226,12 +238,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const detailBottom = Math.max(reportHit?.getBounds().bottom ?? 0, details.length ? Math.max(...details.map((obj) => obj.getBounds().bottom)) : statsBounds?.bottom ?? 0);
     const contentButtonGap = firstButtonTop - detailBottom;
 
-    let shareControl = null;
-    if (shareText?.parentContainer?.list) {
-      shareControl = shareText.parentContainer.list.find((obj) =>
-        obj !== shareText && obj.input?.enabled && Math.abs((obj.y ?? -9999) - shareText.y) < 1
-      );
-    }
+    const shareControl = container?.getByName?.('ofeliya-result-share-bg') ?? null;
 
     return {
       share: !!shareText,
@@ -276,10 +283,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       if (Array.isArray(obj?.list)) obj.list.forEach(visit);
     };
     ui.children.list.forEach(visit);
-    const shareText = flat.find((obj) => obj.text === 'БРОСИТЬ ВЫЗОВ');
-    const control = shareText?.parentContainer?.list?.find((obj) =>
-      obj !== shareText && obj.input?.enabled && Math.abs((obj.y ?? -9999) - shareText.y) < 1
-    );
+    const shareText = flat.find((obj) => obj.text === 'БРОСИТЬ ВЫЗОВ ДРУГУ');
+    const control = shareText?.parentContainer?.getByName?.('ofeliya-result-share-bg') ?? null;
     if (!control) throw new Error('interactive share control missing');
     const pointer = { id: 0 };
     control.emit('pointerdown', pointer);

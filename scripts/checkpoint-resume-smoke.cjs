@@ -202,8 +202,17 @@ async function startFresh(ctx, page, seed) {
     await waitMenu(page);
     const menuTexts = await sceneTexts(page, 'Menu');
     assert(menuTexts.includes('ПРОДОЛЖИТЬ ЗАБЕГ'), 'reload menu has no Continue', menuTexts);
-    assert(menuTexts.includes('НАЧАТЬ НОВЫЙ'), 'reload menu has no New Run', menuTexts);
-    assert(menuTexts.some((text) => text.includes('НЕЗАВЕРШЁННЫЙ ЗАБЕГ') && text.includes('МУТАЦИЯ 9')), 'resume summary missing', menuTexts);
+    assert(menuTexts.includes('НОВЫЙ ЗАБЕГ'), 'reload menu has no New Run', menuTexts);
+    assert(
+      menuTexts.some((text) => text.includes('Кровоток') && text.includes('Уровень 9') && text.includes('Стандарт')),
+      'resume summary missing',
+      menuTexts
+    );
+    assert(
+      !menuTexts.some((text) => text.includes('НЕЗАВЕРШЁННЫЙ ЗАБЕГ')),
+      'the duplicated resume banner must be gone',
+      menuTexts
+    );
 
     await touchLabel(ctx, page, 'Menu', 'ПРОДОЛЖИТЬ ЗАБЕГ');
     await page.waitForFunction(() => window.__game.scene.isActive('Game') && window.__game.scene.isActive('UI'));
@@ -276,9 +285,13 @@ async function startFresh(ctx, page, seed) {
     assert(score.count === 0, 'resumed Standard reached score API', score.payloads);
     assert(await page.evaluate((key) => localStorage.getItem(key), KEY) === null, 'death did not clear checkpoint');
     const resultTexts = await sceneTexts(page, 'UI');
-    assert(resultTexts.some((text) => text.includes('ВОЗОБНОВЛЁН') && text.includes('ВНЕ РЕЙТИНГА')), 'resumed result not visibly unranked', resultTexts);
+    assert(
+      resultTexts.some((text) => text.includes('Тренировка') && text.includes('продолженный забег')),
+      'resumed result not visibly unranked',
+      resultTexts
+    );
 
-    await touchLabel(ctx, page, 'UI', 'ЕЩЁ ОДИН ЦИКЛ');
+    await touchLabel(ctx, page, 'UI', 'НОВЫЙ ЗАБЕГ');
     await page.waitForFunction(() => window.__game.scene.isActive('Game') && !window.__game.scene.isPaused('Game'));
     const freshRestart = await page.evaluate((key) => {
       const gs = window.__game.scene.getScene('Game');
@@ -302,7 +315,7 @@ async function startFresh(ctx, page, seed) {
     await page.goto(URL, { waitUntil: 'domcontentloaded' });
     await waitMenu(page);
     await page.evaluate(() => window.__game.registry.set('runSeedOverride', 'replacement-seed'));
-    await touchLabel(ctx, page, 'Menu', 'НАЧАТЬ НОВЫЙ');
+    await touchLabel(ctx, page, 'Menu', 'НОВЫЙ ЗАБЕГ');
     await page.waitForFunction(() => window.__game.scene.isActive('Game'));
     await page.evaluate(() => window.__game.scene.pause('Game'));
     const state = await page.evaluate((key) => {

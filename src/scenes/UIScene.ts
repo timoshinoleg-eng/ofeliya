@@ -1,5 +1,4 @@
 import Phaser from 'phaser';
-import { getAchievementDef } from '../game/AchievementSystem';
 import {
   createChallengePayload,
   encodeChallengePayload,
@@ -28,7 +27,6 @@ import { DualMoveControls } from '../game/DualMoveControls';
 import { getLegendaryDefinition, type LegendaryId } from '../game/LegendarySystem';
 import { TwinStickControls } from '../game/TwinStickControls';
 import { readControlMode, type ControlMode } from '../game/ControlMode';
-import { runModeLabel, runModeShareLabel, isRankedResult } from '../game/RunModeLabel';
 import type { RunResult, RunSnapshot } from '../game/RunContracts';
 import {
   EVOLUTION_NAMES,
@@ -38,10 +36,17 @@ import {
   type UpgradeDef,
 } from '../game/UpgradeSystem';
 import {
+  META_COPY,
   MUTATION_CARD_HEADERS,
+  RESULT_COPY,
+  resultModeChip,
+  shareModeSuffix,
+  buildDuelShareText,
+  buildShareText,
   formatBuildSummary,
   mutationCardHeader,
 } from '../game/UiCopy';
+import { fmtInt } from '../game/UiFormat';
 import { PlatformBridge } from '../platform';
 import { Sfx } from '../systems/Sfx';
 import { VideoInterstitial, type VideoInterstitialId } from '../systems/VideoInterstitial';
@@ -206,9 +211,10 @@ export class UIScene extends Phaser.Scene {
 
     const W = this.scale.width;
 
+    // No stroke on the plate: the membrane below owns the frame, so the HUD strip
+    // never shows two parallel border lines.
     this.hudBackdrop = this.add
       .rectangle(W / 2, 50, W - 12, 90, VISUAL.ink, HUD.plateAlpha)
-      .setStrokeStyle(BORDER.hair, VISUAL.line, 0.35)
       .setDepth(DEPTH - 2);
     this.hudMembrane = createSpecimenSurface(this, W / 2, 50, W - 12, 90, {
       accent: VISUAL.player, fill: VISUAL.ink, alpha: 0, detail: 'quiet',
@@ -1099,6 +1105,33 @@ export class UIScene extends Phaser.Scene {
       this.bossFrame.lineBetween(coreX, topY, rightX, midY);
       this.bossFrame.lineBetween(rightX, midY, coreX, bottomY);
       this.bossFrame.lineBetween(coreX, bottomY, tipX, midY);
+    }
+  }
+
+  /**
+   * Hide the gameplay HUD while a full-screen surface owns the screen.
+   *
+   * The always-present HUD parts are made invisible, the conditional ones are
+   * faded out. The HUD comes back when the surface that hid it is gone.
+   */
+  private setHudHidden(hidden: boolean): void {
+    this.setHudCinematicAlpha(hidden ? 0 : 1);
+    for (const obj of [
+      this.hudBackdrop,
+      this.hudMembrane,
+      this.xpBack,
+      this.xpFill,
+      this.hpBack,
+      this.hpFill,
+      this.timerText,
+      this.levelText,
+      this.killsText,
+      this.hpText,
+      this.muteText,
+      this.pauseHit,
+      this.pauseText,
+    ]) {
+      obj?.setVisible(!hidden);
     }
   }
 
@@ -2170,33 +2203,29 @@ export class UIScene extends Phaser.Scene {
     switch (status) {
       case 'ok':
         scoreStatus
-          .setText(
-            rank
-              ? `ЕЖЕДНЕВНЫЙ ЗАБЕГ · #${rank} СРЕДИ ИГРОКОВ СЕГОДНЯ`
-              : 'ЕЖЕДНЕВНЫЙ ЗАБЕГ · РЕЗУЛЬТАТ СОХРАНЁН'
-          )
+          .setText(rank ? RESULT_COPY.dailyRank(rank) : RESULT_COPY.dailyStatus.ok)
           .setColor('#8fe8ff');
         break;
       case 'rejected':
-        scoreStatus.setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · РЕЗУЛЬТАТ НЕ СИНХРОНИЗИРОВАН').setColor('#ff9b66');
+        scoreStatus.setText(RESULT_COPY.dailyStatus.rejected).setColor('#ff9b66');
         break;
       case 'closed':
-        scoreStatus.setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · ОКНО РЕЗУЛЬТАТА ЗАКРЫТО').setColor('#ff9b66');
+        scoreStatus.setText(RESULT_COPY.dailyStatus.closed).setColor('#ff9b66');
         break;
       case 'expired':
-        scoreStatus.setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · ВРЕМЯ РЕЗУЛЬТАТА ИСТЕКЛО').setColor('#ff9b66');
+        scoreStatus.setText(RESULT_COPY.dailyStatus.expired).setColor('#ff9b66');
         break;
       case 'denied':
-        scoreStatus.setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · НУЖЕН ПОДТВЕРЖДЁННЫЙ ЗАПУСК').setColor('#ff9b66');
+        scoreStatus.setText(RESULT_COPY.dailyStatus.denied).setColor('#ff9b66');
         break;
       case 'http':
-        scoreStatus.setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · СЕРВИС НЕДОСТУПЕН').setColor('#8f9ab7');
+        scoreStatus.setText(RESULT_COPY.dailyStatus.http).setColor('#8f9ab7');
         break;
       case 'network':
-        scoreStatus.setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · ПРОВЕРЬТЕ СОЕДИНЕНИЕ').setColor('#8f9ab7');
+        scoreStatus.setText(RESULT_COPY.dailyStatus.network).setColor('#8f9ab7');
         break;
       case 'unavailable':
-        scoreStatus.setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · НУЖНА ИДЕНТИЧНОСТЬ МЕССЕНДЖЕРА').setColor('#8f9ab7');
+        scoreStatus.setText(RESULT_COPY.dailyStatus.unavailable).setColor('#8f9ab7');
         break;
     }
   }
@@ -2215,20 +2244,17 @@ export class UIScene extends Phaser.Scene {
       now: Date.now(),
     });
     const standardFresh = res.difficultyId === 'standard' && !res.resumed;
-    // A daily-launched run must never render global-ranking semantics, and only
-    // a fresh Standard run may claim a ranked place.
-    const ranked = isRankedResult({
-      difficultyId: res.difficultyId,
-      resumed: res.resumed,
-      daily: dailyIntent !== null,
-      duel: duelChallenge !== null,
-    });
+    // A daily-launched run must never render global-ranking semantics.
+    const ranked = standardFresh && !duelChallenge && dailyIntent === null;
     const duelCreatable = standardFresh && res.win;
     const W = this.scale.width;
     const H = this.scale.height;
     const compact = H < 650;
     const c = this.add.container(0, 0).setName('ofeliya-result').setDepth(110);
     this.resultOverlay = c;
+    // The result owns the screen: the gameplay HUD (HP, RNA, timer, pause) is
+    // hidden so nothing competes with the run summary.
+    this.setHudHidden(true);
     this.resultViewport = { width: W, height: H };
 
     c.add(
@@ -2251,12 +2277,12 @@ export class UIScene extends Phaser.Scene {
       accent: res.win ? VISUAL.host : VISUAL.player, alpha: 0.72,
     });
     c.add(summarySurface);
-    const resultBrand = this.add.text(W / 2, titleY - (compact ? 25 : 30), 'STRAIN ZERO / ИТОГ ЦИКЛА', {
+    const resultBrand = this.add.text(W / 2, titleY - (compact ? 25 : 30), RESULT_COPY.header, {
       fontFamily: FONT, fontSize: '10px', letterSpacing: 2, color: VISUAL_TEXT.muted,
     }).setOrigin(0.5).setResolution(2);
     c.add(resultBrand);
     const resultTitle = this.add
-        .text(W / 2, titleY, res.win ? (W < 360 ? 'ИММУНИТЕТ\nПОДАВЛЕН' : 'ИММУНИТЕТ ПОДАВЛЕН') : 'ШТАММ УНИЧТОЖЕН', {
+        .text(W / 2, titleY, res.win ? RESULT_COPY.victory : RESULT_COPY.defeat, {
           fontFamily: FONT,
           fontSize: res.win ? (compact ? '22px' : '27px') : compact ? '27px' : '32px',
           fontStyle: 'bold',
@@ -2297,7 +2323,7 @@ export class UIScene extends Phaser.Scene {
         .text(
           W / 2,
           statY,
-          `${IDENTITY.kills}: ${res.kills}  ·  Заражено: ${res.hostCellsInfected}\nПик мутации: ${res.highestLevel}  ·  Комбо ×${res.comboBest}`,
+          `Уничтожено: ${fmtInt(res.kills)} · Заражено клеток: ${fmtInt(res.hostCellsInfected)}\nУровень мутации: ${res.highestLevel} · Комбо ×${fmtInt(res.comboBest)}`,
           {
             fontFamily: FONT,
             fontSize: compact ? '11px' : '13px',
@@ -2317,52 +2343,55 @@ export class UIScene extends Phaser.Scene {
     statsText.setY(statY);
     const reportStart = c.list.length;
     let detailY = statY + 35;
-    const evoText = res.evolutions.length > 0
-      ? res.evolutions.map((id) => EVOLUTION_NAMES[id]).join(' · ')
-      : 'нет';
-    c.add(
-      this.add
-        .text(W / 2, detailY, `КРИТ. МУТАЦИИ: ${evoText}`, {
-          fontFamily: FONT,
-          fontSize: compact ? '10px' : '11px',
-          fontStyle: 'bold',
-          color: res.evolutions.length > 0 ? '#ffe066' : '#5a6480',
-          align: 'center',
-          wordWrap: { width: W - 42 },
-        })
-        .setOrigin(0.5)
-        .setResolution(2)
-    );
+    // A critical or legendary mutation that did not happen renders nothing: an
+    // empty "КРИТ. МУТАЦИИ: нет" line is noise, not information.
+    if (res.evolutions.length > 0) {
+      c.add(
+        this.add
+          .text(W / 2, detailY, `◆ ${RESULT_COPY.critical}: ${res.evolutions.map((id) => EVOLUTION_NAMES[id]).join(' · ')}`, {
+            fontFamily: FONT,
+            fontSize: compact ? '10px' : '11px',
+            fontStyle: 'bold',
+            color: '#ffe066',
+            align: 'center',
+            wordWrap: { width: W - 42 },
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+      );
+      detailY += compact ? 24 : 28;
+    }
 
-    detailY += compact ? 24 : 28;
-    const legendaryText =
-      res.legendaryIds.length > 0
-        ? res.legendaryIds.map((id) => getLegendaryDefinition(id).title).join(' · ')
-        : 'нет';
-    c.add(
-      this.add
-        .text(W / 2, detailY, `ЛЕГЕНДАРНЫЕ: ${legendaryText}`, {
-          fontFamily: FONT,
-          fontSize: compact ? '9px' : '10px',
-          fontStyle: 'bold',
-          color: res.legendaryIds.length > 0 ? '#ffe066' : '#5a6480',
-          align: 'center',
-          wordWrap: { width: W - 42 },
-        })
-        .setOrigin(0.5)
-        .setResolution(2)
-    );
-
-    detailY += compact ? 23 : 27;
+    if (res.legendaryIds.length > 0) {
+      c.add(
+        this.add
+          .text(W / 2, detailY, `◆ ${MUTATION_CARD_HEADERS.legendary}: ${res.legendaryIds.map((id) => getLegendaryDefinition(id).title).join(' · ')}`, {
+            fontFamily: FONT,
+            fontSize: compact ? '9px' : '10px',
+            fontStyle: 'bold',
+            color: '#ffe066',
+            align: 'center',
+            wordWrap: { width: W - 42 },
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+      );
+      detailY += compact ? 23 : 27;
+    }
+    // The archetype is a deterministic classification of the build that actually
+    // emerged, so it can be named. The tags are only meaningful for a focused
+    // build; a hybrid build has no single set of signals.
     const runIdentity = assessRunIdentity(res);
-    const identitySignals =
-      runIdentity.signals.length > 0 ? runIdentity.signals.join(' · ') : 'базовая конфигурация';
+    const identityTags =
+      runIdentity.focused && runIdentity.signals.length > 0
+        ? ` (${runIdentity.signals.join(' · ')})`
+        : '';
     c.add(
       this.add
         .text(
           W / 2,
           detailY,
-          `ПРОФИЛЬ ШТАММА: ${runIdentity.shortLabel} · ${identitySignals}`,
+          `Архетип: ${runIdentity.label}${identityTags}`,
           {
             fontFamily: FONT,
             fontSize: compact ? '9px' : '10px',
@@ -2382,11 +2411,12 @@ export class UIScene extends Phaser.Scene {
         .text(
           W / 2,
           detailY,
-          runModeLabel({
-            difficultyId: res.difficultyId,
+          resultModeChip({
             resumed: res.resumed,
             daily: dailyIntent !== null,
             duel: duelChallenge !== null,
+            difficultyId: res.difficultyId,
+            platform: PlatformBridge.kind,
             ranked,
           }),
           {
@@ -2402,7 +2432,7 @@ export class UIScene extends Phaser.Scene {
 
     detailY += compact ? 20 : 23;
     const scoreStatus = this.add
-      .text(W / 2, detailY, duelChallenge ? 'ДУЭЛЬ: синхронизация…' : 'СЧЁТ: синхронизация…', {
+      .text(W / 2, detailY, duelChallenge ? RESULT_COPY.duelSubmitting : RESULT_COPY.submitting, {
         fontFamily: FONT,
         fontSize: compact ? '9px' : '10px',
         fontStyle: 'bold',
@@ -2414,7 +2444,7 @@ export class UIScene extends Phaser.Scene {
     c.add(scoreStatus);
 
     if (dailyBranch === 'resumed') {
-      scoreStatus.setText('ЗАБЕГ ВОЗОБНОВЛЁН · ВНЕ РЕЙТИНГА').setColor('#ffe066');
+      scoreStatus.setText(RESULT_COPY.resumed).setColor('#ffe066');
     } else if (dailyBranch === 'daily' && dailyTicket) {
       // Keep Daily identity through the interstitial so the result screen renders the
       // correct branch, then settle the intent before awaiting network synchronization.
@@ -2444,7 +2474,7 @@ export class UIScene extends Phaser.Scene {
       // Fail-closed: a daily intent with a missing/mismatched/expired ticket submits NOTHING.
       clearDailyIntent(this.registry);
       scoreStatus
-        .setText('ЕЖЕДНЕВНЫЙ ЗАБЕГ · РЕЗУЛЬТАТ НЕ СИНХРОНИЗИРОВАН')
+        .setText(RESULT_COPY.dailyBlocked)
         .setColor('#ff9b66');
     } else if (duelChallenge) {
       const submission = this.preVideoDuelAttempt ?? submitDuelAttempt(duelChallenge.challengeId, res, PlatformBridge);
@@ -2452,7 +2482,7 @@ export class UIScene extends Phaser.Scene {
       void submission.then((attempt) => {
         if (!scoreStatus.active) return;
         if (!attempt) {
-          scoreStatus.setText('ДУЭЛЬ · РЕЗУЛЬТАТ НЕ СИНХРОНИЗИРОВАН').setColor('#ff9b66');
+          scoreStatus.setText(RESULT_COPY.duelUnconfirmed).setColor('#ff9b66');
           return;
         }
         if (attempt.beaten) {
@@ -2478,12 +2508,6 @@ export class UIScene extends Phaser.Scene {
       void submission.then((score) => {
         if (!scoreStatus.active) return;
         if (!score) {
-          // An unranked tier that never submits gets a neutral line instead of a
-          // vanishing one: the run is complete, it simply carries no place.
-          if (res.difficultyId === 'easy') {
-            scoreStatus.setText('РЕЖИМ ЛЁГКИЙ · РЕЗУЛЬТАТ БЕЗ РЕЙТИНГА').setColor('#8f9ab7');
-            return;
-          }
           scoreStatus.setVisible(false);
           return;
         }
@@ -2492,9 +2516,9 @@ export class UIScene extends Phaser.Scene {
             .setText(score.rank ? `РЕЙТИНГ · МЕСТО #${score.rank}` : 'РЕЙТИНГ · РЕЗУЛЬТАТ СОХРАНЁН')
             .setColor('#8fe8ff');
         } else if (PlatformBridge.kind === 'browser') {
-          scoreStatus.setText('ТЕСТОВЫЙ РЕЗУЛЬТАТ · ВНЕ РЕЙТИНГА').setColor('#8f9ab7');
+          scoreStatus.setText('ТЕСТОВЫЙ РЕЗУЛЬТАТ').setColor('#8f9ab7');
         } else {
-          scoreStatus.setText('РЕЗУЛЬТАТ СОХРАНЁН · ВНЕ РЕЙТИНГА').setColor('#ffe066');
+          scoreStatus.setText('РЕЗУЛЬТАТ СОХРАНЁН').setColor('#ffe066');
         }
       });
     }
@@ -2507,7 +2531,7 @@ export class UIScene extends Phaser.Scene {
       detailY += compact ? 24 : 28;
       c.add(
         this.add
-          .text(W / 2, detailY, `НОВЫЕ ЗАПИСИ: ${rec.join(' · ')}`, {
+          .text(W / 2, detailY, META_COPY.newRecords(rec), {
             fontFamily: FONT,
             fontSize: compact ? '10px' : '11px',
             fontStyle: 'bold',
@@ -2520,21 +2544,27 @@ export class UIScene extends Phaser.Scene {
 
     if (res.newAchievements.length > 0) {
       detailY += compact ? 24 : 29;
-      const labels = res.newAchievements.slice(0, 2).map((id) => getAchievementDef(id).name);
-      const extra = res.newAchievements.length > 2 ? ` +${res.newAchievements.length - 2}` : '';
-      c.add(
-        this.add
-          .text(W / 2, detailY, `НОВОЕ ДОСТИЖЕНИЕ: ${labels.join(' · ')}${extra}`, {
-            fontFamily: FONT,
-            fontSize: compact ? '9px' : '10px',
-            fontStyle: 'bold',
-            color: '#ffe066',
-            align: 'center',
-            wordWrap: { width: W - 42 },
-          })
-          .setOrigin(0.5)
-          .setResolution(2)
-      );
+      // The records the run opened are named once, and the plate is a way into
+      // the codex: the player never has to guess where a new record went.
+      const codexPlate = this.add
+        .text(W / 2, detailY, `${META_COPY.codexEntries(res.newAchievements.length)} ›`, {
+          fontFamily: FONT,
+          fontSize: compact ? '9px' : '10px',
+          fontStyle: 'bold',
+          color: '#ffe066',
+          align: 'center',
+          wordWrap: { width: W - 42 },
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setName('ofeliya-result-codex-entries');
+      codexPlate.setInteractive({ useHandCursor: true });
+      codexPlate.on('pointerup', () => {
+        this.registry.set('openCodexOnMenu', true);
+        this.gs?.scene.stop();
+        this.scene.start('Menu');
+      });
+      c.add(codexPlate);
     }
 
     const challengeTarget = this.registry.get('challengeTarget') as ChallengePayload | null | undefined;
@@ -2599,7 +2629,7 @@ export class UIScene extends Phaser.Scene {
     const reportTop = Math.max(statY + 36, statsBottom + 24);
     const reportRows = c.list.slice(reportStart).filter((child): child is Phaser.GameObjects.Text => child instanceof Phaser.GameObjects.Text);
     createResultReport(this, c, reportRows, W / 2, reportTop, W - 32, Math.max(50, y - 55 - reportTop), scoreStatus);
-    this.button(c, 'ЕЩЁ ОДИН ЦИКЛ', W / 2, y, true, () => {
+    this.button(c, RESULT_COPY.newRun, W / 2, y, true, () => {
       const gameScene = this.gs;
       if (!gameScene) return;
       void trackProductEvent('replay', PlatformBridge, {
@@ -2627,37 +2657,44 @@ export class UIScene extends Phaser.Scene {
     y += gap;
     const legacyChallengeCreatable = ranked && !res.win;
     const shareButtonLabel = challengeTarget || legacyChallengeCreatable
-      ? 'БРОСИТЬ ВЫЗОВ'
+      ? RESULT_COPY.challenge
       : duelCreatable
-        ? 'БРОСИТЬ ДУЭЛЬ'
-        : 'ПОДЕЛИТЬСЯ РЕЗУЛЬТАТОМ';
+        ? RESULT_COPY.duel
+        : RESULT_COPY.share;
+    const challengeCaption =
+      challengeTarget || legacyChallengeCreatable
+        ? `Побить результат ${fmtTime(res.timeMs)} · ${fmtInt(res.kills)} кл.`
+        : undefined;
     this.button(c, shareButtonLabel, W / 2, y, false, () => {
       const mins = fmtTime(res.timeMs);
-      const evoShare = res.evolutions.length > 0 ? ` Критические мутации: ${res.evolutions.map((id) => EVOLUTION_NAMES[id]).join(', ')}.` : '';
-      const legendaryShare =
-        res.legendaryIds.length > 0
-          ? ` Легендарные: ${res.legendaryIds.map((id) => getLegendaryDefinition(id).title).join(', ')}.`
-          : '';
-      const identityShare = ` Профиль штамма: ${runIdentity.label}.`;
-      const modeShare = runModeShareLabel({
-        difficultyId: res.difficultyId,
-        resumed: res.resumed,
-        daily: dailyIntent !== null,
-        duel: duelChallenge !== null,
-        ranked,
-      });
+      // The share text leaves the game: it names the product, states the outcome
+      // and never carries the strain code, the build profile, a ranking
+      // disclaimer or a same-seed promise.
+      const legendaryName =
+        res.legendaryIds.length > 0 ? getLegendaryDefinition(res.legendaryIds[0]).title : null;
       const dailySuffix = dailyIntent ? buildDailyShareSuffix({ timeMs: res.timeMs }) : '';
-      const shareText = (res.win
-        ? `OFELIYA / STRAIN-0 завершила кампанию за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${identityShare}${evoShare}${legendaryShare}`
-        : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}.${modeShare}${identityShare}${evoShare}${legendaryShare}`
-      ).trim() + (dailySuffix ? `\n\n${dailySuffix}` : '');
+      let shareText = buildShareText({
+        win: res.win,
+        time: mins,
+        kills: res.kills,
+        infected: res.hostCellsInfected,
+        firstRun: SaveSystem.get().runs <= 1,
+        legendaryName: res.win ? legendaryName : null,
+        suffix: dailySuffix,
+      });
+      shareText += shareModeSuffix(res.difficultyId);
 
       if (challengeTarget || legacyChallengeCreatable) {
         const payload = ranked ? encodeChallengePayload(createChallengePayload(res)) : null;
         const link = payload ? PlatformBridge.buildStartLink(payload) : null;
-        const legacyText = res.win
-          ? `OFELIYA / STRAIN-0 завершила кампанию за ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}. Сможешь быстрее?`
-          : `Мой STRAIN-0 выжил ${mins}. Иммунных клеток: ${res.kills}, заражено клеток: ${res.hostCellsInfected}. Сможешь дольше?`;
+        const legacyText = buildShareText({
+          win: res.win,
+          time: mins,
+          kills: res.kills,
+          infected: res.hostCellsInfected,
+          firstRun: SaveSystem.get().runs <= 1,
+          legendaryName: res.win ? legendaryName : null,
+        });
         void PlatformBridge.shareResult(legacyText, link ?? undefined).then((ok) => {
           if (!ok) {
             this.toast(c, 'Нативный шаринг недоступен в этом клиенте');
@@ -2691,17 +2728,15 @@ export class UIScene extends Phaser.Scene {
           this.toast(c, 'Ссылка дуэли не настроена для этой платформы');
           return;
         }
-        const duelText =
-          `OFELIYA · ДУЭЛЬ: мой результат ${fmtTime(created.targetTimeMs)}. ` +
-          'Тот же забег, сложность СТАНДАРТ и управление. Сможешь пройти кампанию быстрее?';
+        const duelText = buildDuelShareText(fmtTime(created.targetTimeMs));
         void PlatformBridge.shareResult(duelText, link).then((ok) => {
           this.toast(c, ok ? 'ДУЭЛЬ СОЗДАНА · ссылка готова' : 'Нативный шаринг недоступен в этом клиенте');
           if (ok) void trackProductEvent('share', PlatformBridge, { kind: 'duel', runSeed: res.runSeed, daily: false });
         });
       });
-    }, 'ofeliya-result-share');
+    }, 'ofeliya-result-share', challengeCaption);
     y += gap;
-    this.button(c, 'В МЕНЮ', W / 2, y, false, () => {
+    this.button(c, RESULT_COPY.menu, W / 2, y, false, () => {
       this.gs?.scene.stop();
       this.scene.start('Menu');
     }, 'ofeliya-result-menu');
@@ -2718,7 +2753,8 @@ export class UIScene extends Phaser.Scene {
     y: number,
     primary: boolean,
     cb: () => void,
-    layoutName?: string
+    layoutName?: string,
+    caption?: string
   ): void {
     const w = 230;
     const h = 46;
@@ -2727,8 +2763,10 @@ export class UIScene extends Phaser.Scene {
       .rectangle(x, y, w, h, primary ? VISUAL.host : VISUAL.panel, primary ? BUTTON.primaryFill : BUTTON.secondaryFill)
       .setStrokeStyle(BUTTON.strokeWidth, primary ? VISUAL.host : VISUAL.line, BUTTON.strokeAlpha);
     if (layoutName) bg.setName(layoutName + '-bg');
+    // A captioned button keeps its label above the caption, both inside the
+    // touch target: the caption states what the action is about.
     const t = this.add
-      .text(x, y, label, {
+      .text(x, caption ? y - 9 : y, label, {
         fontFamily: FONT,
         fontSize: '16px',
         fontStyle: 'bold',
@@ -2739,6 +2777,19 @@ export class UIScene extends Phaser.Scene {
     if (layoutName) t.setName(layoutName + '-label');
     if (t.width > w - 20) t.setFontSize(14);
     if (t.width > w - 20) t.setFontSize(13);
+    let captionText: Phaser.GameObjects.Text | null = null;
+    if (caption) {
+      captionText = this.add
+        .text(x, y + 9, caption, {
+          fontFamily: FONT,
+          fontSize: '10px',
+          fontStyle: 'bold',
+          color: primary ? '#080f14' : VISUAL_TEXT.muted,
+        })
+        .setOrigin(0.5)
+        .setResolution(2);
+      if (layoutName) captionText.setName(layoutName + '-caption');
+    }
     let armedPointer: number | null = null;
     bg.setInteractive({ useHandCursor: true });
     bg.on('pointerdown', (pointer: Phaser.Input.Pointer) => { armedPointer = pointer.id; });
@@ -2753,6 +2804,8 @@ export class UIScene extends Phaser.Scene {
       bg.setFillStyle(primary ? VISUAL.host : VISUAL.panel, primary ? BUTTON.primaryFill : BUTTON.secondaryFill);
     });
     c.add([bg, t]);
+    // The caption is drawn above the plate: it is part of the button.
+    if (captionText) c.add(captionText);
   }
 
   private toast(c: Phaser.GameObjects.Container, msg: string): void {
