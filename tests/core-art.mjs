@@ -123,8 +123,11 @@ test('Menu host and hero keep the layout portraits and tween endpoints', () => {
   // The hero art is the elastic band of the menu layout: it keeps its ratio to
   // the layout height and never loses its proportions.
   assert.ok(layout.artHeight >= 34, 'the hero art keeps a visible minimum');
-  assert.equal(hero.displayWidth, layout.artHeight);
-  assert.equal(host.displayWidth, layout.artHeight * 1.25);
+  // The portrait width travels through the bake factor (a division and a
+  // multiplication), so the contract is a length, not a bit pattern: the
+  // tolerance is a nanometre, ten orders of magnitude below a pixel.
+  assert.ok(Math.abs(hero.displayWidth - layout.artHeight) < 1e-9, 'the hero portrait is the height of the hero band');
+  assert.ok(Math.abs(host.displayWidth - layout.artHeight * 1.25) < 1e-9, 'the host portrait is 1.25x the height of the hero band');
   assert.ok(Math.abs(f.tweens.find(t => t.targets === host && t.scale !== undefined).scale * host.width - layout.artHeight * 1.25 * 1.07) < 1e-9);
   assert.ok(Math.abs(f.tweens.find(t => t.targets === hero && t.scale !== undefined).scale * hero.width - layout.artHeight * 1.06) < 1e-9);
  }
@@ -142,8 +145,8 @@ test('Menu reduced-motion portraits keep dimensions and register no decorative t
   new Function('W', 'H', 'artScale', 'ROLE', 'BORDER', 'PANEL', 'VISUAL', 'prefersReducedMotion', 'layout', body).call(f.scene, 390, H, artScale, ROLE, BORDER, PANEL, VISUAL, () => true, layout);
   const host = f.objects.find(o => o.texture?.key === 'host-cell-shadow');
   const hero = f.objects.find(o => o.texture?.key === 'virus-player');
-  assert.equal(host.displayWidth, layout.artHeight * 1.25);
-  assert.equal(hero.displayWidth, layout.artHeight);
+  assert.ok(Math.abs(host.displayWidth - layout.artHeight * 1.25) < 1e-9, 'the host portrait is 1.25x the height of the hero band');
+  assert.ok(Math.abs(hero.displayWidth - layout.artHeight) < 1e-9, 'the hero portrait is the height of the hero band');
   assert.equal(host.alpha, .1);
   assert.equal(hero.rotation, 0);
   assert.deepEqual(f.tweens, []);

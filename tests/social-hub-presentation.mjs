@@ -17,6 +17,10 @@ new Function('require', 'module', 'exports', ts.transpileModule(source, {
         friendsEmpty: 'Здесь появятся результаты друзей, которые играют в OFELIYA.',
         inviteFriends: 'ПРИГЛАСИТЬ ДРУЗЕЙ',
         retry: 'ПОВТОРИТЬ',
+        dailyLaunchRetry: 'ПОВТОРИТЬ',
+        dailyLaunchServerError: 'Сервер не ответил — попробуй ещё раз',
+        dailyLaunchNetworkError: 'Нет соединения — попробуй ещё раз',
+        dailyLaunchCapacity: 'Забег дня сейчас недоступен — попробуй позже',
         dailyCta: 'НАЧАТЬ ЗАБЕГ ДНЯ',
         dailyEmpty: 'Сегодня ты ещё не играл',
         dailyRow: (name, time, kills, rank) => `${name} · ${time} · уничтожено ${kills} · ★ место #${rank}`,
@@ -41,6 +45,11 @@ for (const status of ['idle','loading','unavailable','denied','incompatible','ca
   const state = hub.dailyButtonState(false);
   assert.equal(state.enabled, ['idle','capacity','http','network'].includes(status), `${status} interaction policy`);
   assert.ok(state.label.length > 0);
+  // The retryable states offer the retry and nothing else: the reason of the
+  // failure is a line of its own, above the button.
+  if (['capacity', 'http', 'network'].includes(status)) {
+    assert.equal(state.label, 'ПОВТОРИТЬ', `the ${status} button offers the retry and nothing else`);
+  }
 }
 hub.platform.kind = 'browser';
 assert.equal(hub.dailyButtonState(false).enabled, false, 'unsigned browser must stay disabled');
