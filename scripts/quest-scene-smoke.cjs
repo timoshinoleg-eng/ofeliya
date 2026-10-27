@@ -108,6 +108,21 @@ for(const viewport of [{width:320,height:568},{width:390,height:844},{width:768,
  const boardDay=await page.evaluate(()=>{window.__questFirst=window.__game.scene.getScene('Menu').children.getByName('ofeliya-quests').list[0];return JSON.parse(localStorage.getItem('ofeliya.quests.v1')).dayKey;});
  await page.waitForTimeout(1100);
  assert.equal(await page.evaluate(()=>window.__questFirst===window.__game.scene.getScene('Menu').children.getByName('ofeliya-quests').list[0]),true,'no text/display rebuild within same day');
+ // The countdown line moves in place. The board is not rebuilt for it: the
+ // objects under the player's finger stay the same objects, and only the line
+ // that shows the time left is updated where it stands. The clock is moved back
+ // by two minutes so the remaining time certainly changes, and the real clock is
+ // restored before the rollover.
+ await page.evaluate(()=>{
+  const board=()=>window.__game.scene.getScene('Menu').children.getByName('ofeliya-quests');
+  window.__questText=()=>board().list.filter(o=>o&&typeof o.text==='string').map(o=>o.text).join('|');
+  window.__questTextBefore=window.__questText();
+  window.__questRealNow=Date.now;
+  Date.now=()=>window.__questRealNow()-125000;
+ });
+ await page.waitForFunction(()=>window.__questText()!==window.__questTextBefore,null,{timeout:60000});
+ assert.equal(await page.evaluate(()=>window.__questFirst===window.__game.scene.getScene('Menu').children.getByName('ofeliya-quests').list[0]),true,'the countdown moves without rebuilding the board');
+ await page.evaluate(()=>{Date.now=window.__questRealNow;});
  await page.evaluate(()=>{const next=Date.now()+86400000;Date.now=()=>next;});
  await page.waitForFunction(day=>JSON.parse(localStorage.getItem('ofeliya.quests.v1')).dayKey!==day,boardDay);
  assert.equal(await page.evaluate(()=>window.__questFirst===window.__game.scene.getScene('Menu').children.getByName('ofeliya-quests').list[0]),false,'UTC rollover refreshes open board');

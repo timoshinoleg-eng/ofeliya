@@ -31,11 +31,25 @@ export class QuestBoard {
     runtime.mirrorLifetime(SaveSystem.get().runs);
     let day = '';
     let countdown = '';
+    let progressLine: Phaser.GameObjects.Text | null = null;
     const render = () => {
       // UI only mirrors the product lifetime; it cannot emit gameplay or claim rewards.
       const snapshot = runtime.snapshot();
       const remaining = fmtCountdown(nextUtcMidnightMs(Date.now()) - Date.now());
-      if (day === snapshot.dayKey && countdown === remaining) return;
+      const completed = snapshot.progress.filter((p) => p.complete).length;
+      if (day === snapshot.dayKey) {
+        // Inside a day the board is not rebuilt: the objects under the player's
+        // finger stay the same objects. Only the countdown line moves, and it is
+        // updated in place — a rebuild would replace the whole board once a
+        // minute for a line that only shows the time left.
+        if (countdown !== remaining) {
+          countdown = remaining;
+          progressLine?.setText(
+            META_COPY.tasksProgress(completed, snapshot.progress.length, remaining)
+          );
+        }
+        return;
+      }
       day = snapshot.dayKey;
       countdown = remaining;
       this.root.removeAll(true);
@@ -79,8 +93,7 @@ export class QuestBoard {
         return t;
       };
 
-      const completed = snapshot.progress.filter((p) => p.complete).length;
-      text(
+      progressLine = text(
         left + MODAL.padX,
         frame.bodyTop,
         META_COPY.tasksProgress(completed, snapshot.progress.length, remaining),
