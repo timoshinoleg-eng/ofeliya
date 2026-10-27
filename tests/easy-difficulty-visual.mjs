@@ -152,7 +152,7 @@ try {
           descriptionText: description ? description.text : null,
           // Horizontal fit, vertical start inside the panel, and how far the
           // copy reaches past the panel bottom (no tier has an accepted
-          // overflow baseline; every tier must fit inside its panel).
+          // overflow baseline — every tier must stay within its panel).
           horizontalFits: db
             ? db.left >= pb.left - 1 && db.right <= pb.right + 1
             : true,
@@ -200,8 +200,10 @@ try {
 
     // --- The control card obeys the same contract ----------------------------
     // The control card is the second run-configuration card of the menu. Its
-    // description must stay inside the card in every control mode, and the
-    // one-hand mode is named explicitly: its copy is the longest of the three.
+    // description must stay inside the card in every control mode, and every
+    // mode is named explicitly: the one-hand copy is the longest of the three.
+    // Rows are recorded AFTER each click, and the menu starts in one-hand, so
+    // the rows are [two-hand, dual-move, one-hand] in click order.
     const controlRows = [];
     for (let i = 0; i < 3; i += 1) {
       const point = await page.evaluate(() => {
@@ -221,8 +223,8 @@ try {
         const db = description ? description.getBounds() : null;
         return {
           valueText: value ? value.text : null,
-          descriptionText: description ? description.text : null,
           mode: window.__game.registry.get('controlMode'),
+          descriptionText: description ? description.text : null,
           overflow: db ? Math.round(db.bottom - pb.bottom) : 0,
         };
       });
@@ -234,15 +236,31 @@ try {
         `${width}: the control description "${row.descriptionText}" overflows the panel by ${row.overflow}px`
       );
     }
-    // The menu starts in one-hand; each state is recorded AFTER clicking.
+    // The first row after the first click is two-hand, the second dual-move,
+    // the third one-hand again — the mode of every row is pinned, not assumed.
     const twoHand = controlRows[0];
+    assert.ok(twoHand, `${width}: the control card did not reach the two-hand mode`);
+    assert.equal(twoHand.mode, 'two-hand', `${width}: the first control row is not two-hand`);
+    assert.ok(
+      twoHand.overflow <= 0,
+      `${width}: the two-hand control description overflows the panel by ${twoHand.overflow}px`
+    );
     const dualMove = controlRows[1];
+    assert.ok(dualMove, `${width}: the control card did not reach the dual-move mode`);
+    assert.equal(dualMove.mode, 'dual-move', `${width}: the second control row is not dual-move`);
+    assert.ok(
+      dualMove.overflow <= 0,
+      `${width}: the dual-move control description overflows the panel by ${dualMove.overflow}px`
+    );
+    // The one-hand mode is the one the player meets first, and its copy is the
+    // longest: it must fit the card like every other mode.
     const oneHand = controlRows[2];
-    for (const [row, mode] of [[twoHand, 'two-hand'], [dualMove, 'dual-move'], [oneHand, 'one-hand']]) {
-      assert.ok(row, `${width}: control card never reached ${mode}`);
-      assert.equal(row.mode, mode, `${width}: control row mislabeled (got ${row.mode})`);
-      assert.ok(row.overflow <= 0, `${width}: the ${mode} description overflows by ${row.overflow}px`);
-    }
+    assert.ok(oneHand, `${width}: the control card was never rendered`);
+    assert.equal(oneHand.mode, 'one-hand', `${width}: the third control row is not one-hand`);
+    assert.ok(
+      oneHand.overflow <= 0,
+      `${width}: the one-hand control description overflows the panel by ${oneHand.overflow}px`
+    );
 
     // --- The result screen names the tier and its unranked state ------------
     await page.evaluate(() => {
