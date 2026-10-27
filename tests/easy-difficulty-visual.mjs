@@ -151,8 +151,8 @@ try {
           steps: steps?.text ?? null,
           descriptionText: description ? description.text : null,
           // Horizontal fit, vertical start inside the panel, and how far the
-          // copy reaches past the panel bottom (the shipped Strained tier is
-          // the baseline every tier has to stay within).
+          // copy reaches past the panel bottom (no tier has an accepted
+          // overflow baseline; every tier must fit inside its panel).
           horizontalFits: db
             ? db.left >= pb.left - 1 && db.right <= pb.right + 1
             : true,
@@ -222,6 +222,7 @@ try {
         return {
           valueText: value ? value.text : null,
           descriptionText: description ? description.text : null,
+          mode: window.__game.registry.get('controlMode'),
           overflow: db ? Math.round(db.bottom - pb.bottom) : 0,
         };
       });
@@ -233,20 +234,15 @@ try {
         `${width}: the control description "${row.descriptionText}" overflows the panel by ${row.overflow}px`
       );
     }
-    // The one-hand mode is the one the player meets first, and its copy is the
-    // longest: it must fit the card like every other mode.
-    const oneHand = controlRows[0];
-    assert.ok(oneHand, `${width}: the control card was never rendered`);
-    assert.ok(
-      oneHand.overflow <= 0,
-      `${width}: the one-hand control description overflows the panel by ${oneHand.overflow}px`
-    );
-    const twoHand = controlRows[1];
-    assert.ok(twoHand, `${width}: the control card did not reach the two-hand mode`);
-    assert.ok(
-      twoHand.overflow <= 0,
-      `${width}: the two-hand control description overflows the panel by ${twoHand.overflow}px`
-    );
+    // The menu starts in one-hand; each state is recorded AFTER clicking.
+    const twoHand = controlRows[0];
+    const dualMove = controlRows[1];
+    const oneHand = controlRows[2];
+    for (const [row, mode] of [[twoHand, 'two-hand'], [dualMove, 'dual-move'], [oneHand, 'one-hand']]) {
+      assert.ok(row, `${width}: control card never reached ${mode}`);
+      assert.equal(row.mode, mode, `${width}: control row mislabeled (got ${row.mode})`);
+      assert.ok(row.overflow <= 0, `${width}: the ${mode} description overflows by ${row.overflow}px`);
+    }
 
     // --- The result screen names the tier and its unranked state ------------
     await page.evaluate(() => {
