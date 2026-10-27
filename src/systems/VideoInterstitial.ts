@@ -107,13 +107,22 @@ export class VideoInterstitial {
     if (video.error) return false;
     video.preload = 'auto';
 
-    const overlay = document.createElement('div');
+    const previousFocus = document.activeElement;
+    const overlay = document.createElement('button');
+    overlay.type = 'button';
     overlay.dataset.ofeliyaVideo = id;
-    overlay.setAttribute('role', 'button');
     overlay.setAttribute('aria-label', options.ariaLabel ?? 'Пропустить видео');
     Object.assign(overlay.style, {
       position: 'absolute',
       inset: '0',
+      width: '100%',
+      height: '100%',
+      display: 'block',
+      padding: '0',
+      margin: '0',
+      border: '0',
+      borderRadius: '0',
+      outlineOffset: '-4px',
       zIndex: '10000',
       overflow: 'hidden',
       background: '#12070d',
@@ -155,6 +164,7 @@ export class VideoInterstitial {
     };
 
     const cleanup = (): void => {
+      const restoreFocus = document.activeElement === overlay;
       clearTimers();
       video.pause();
       video.removeAttribute('src');
@@ -164,6 +174,9 @@ export class VideoInterstitial {
         // Best-effort media release.
       }
       overlay.remove();
+      if (restoreFocus && previousFocus instanceof HTMLElement && previousFocus.isConnected) {
+        previousFocus.focus({ preventScroll: true });
+      }
       if (this.cancelActivePlayback === cancelOnly) this.cancelActivePlayback = null;
     };
 
@@ -250,7 +263,9 @@ export class VideoInterstitial {
     video.addEventListener('error', () => finish('fail'));
     video.addEventListener('abort', () => finish('fail'));
     video.addEventListener('ended', () => finish('complete'));
+    overlay.addEventListener('pointerdown', (event) => event.preventDefault());
     overlay.addEventListener('pointerup', () => finish('complete'));
+    overlay.addEventListener('click', () => finish('complete'));
 
     const startWait = options.maxStartWaitMs ?? DEFAULT_START_WATCHDOG_MS;
     startTimer = window.setTimeout(() => {
@@ -258,6 +273,7 @@ export class VideoInterstitial {
     }, startWait);
 
     this.cancelActivePlayback = cancelOnly;
+    overlay.focus({ preventScroll: true });
 
     try {
       video.currentTime = 0;

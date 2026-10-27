@@ -4,6 +4,7 @@ import { PlatformBridge } from '../platform';
 import { platformLabel } from '../game/UiCopy';
 
 const ID = 'ofeliya-legal-overlay';
+let closeActiveOverlay: (() => void) | undefined;
 const HTML_ESCAPES: Record<string, string> = {
   '&': '&amp;',
   '<': '&lt;',
@@ -22,11 +23,14 @@ function row(label: string, value: string): string {
 }
 
 export function showLegalOverlay(): void {
+  closeActiveOverlay?.();
   document.getElementById(ID)?.remove();
+  const previousFocus = document.activeElement;
   const info = RELEASE_INFO;
   const missing = missingReleaseLegalFields(info);
   const root = document.createElement('div');
   root.id = ID;
+  root.tabIndex = -1;
   root.setAttribute('role', 'dialog');
   root.setAttribute('aria-modal', 'true');
   root.setAttribute('aria-label', 'Информация о приложении');
@@ -91,15 +95,41 @@ export function showLegalOverlay(): void {
     </div>`;
 
   const onKey = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape') close();
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest('[role="dialog"], [aria-modal="true"]') && !root.contains(target)) return;
+    if (event.key === 'Tab' && (event.altKey || event.ctrlKey || event.metaKey)) return;
+    if (root.contains(target) || event.key === 'Tab' || event.key === 'Escape') event.stopPropagation();
+    if (event.type !== 'keydown') return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      close();
+    } else if (event.key === 'Tab') {
+      const focusable = Array.from(root.querySelectorAll<HTMLElement>('button:not(:disabled), a[href]'))
+        .filter((element) => element.tabIndex >= 0 && !element.closest('[inert]') &&
+          element.getClientRects().length > 0 && getComputedStyle(element).visibility === 'visible');
+      const index = focusable.indexOf(document.activeElement as HTMLElement);
+      event.preventDefault();
+      const next = index < 0 ? (event.shiftKey ? focusable.length - 1 : 0) :
+        (index + (event.shiftKey ? -1 : 1) + focusable.length) % focusable.length;
+      (focusable[next] ?? root).focus();
+    }
   };
   const close = (): void => {
-    document.removeEventListener('keydown', onKey);
+    const restoreFocus = root.isConnected &&
+      (root.contains(document.activeElement) || document.activeElement === document.body);
+    document.removeEventListener('keydown', onKey, true);
+    document.removeEventListener('keyup', onKey, true);
     root.remove();
+    if (closeActiveOverlay === close) closeActiveOverlay = undefined;
+    if (restoreFocus && previousFocus instanceof HTMLElement && previousFocus.isConnected) {
+      previousFocus.focus({ preventScroll: true });
+    }
   };
   root.querySelector<HTMLButtonElement>('.legal-close')?.addEventListener('click', close);
   root.addEventListener('click', (event) => { if (event.target === root) close(); });
-  document.addEventListener('keydown', onKey);
+  closeActiveOverlay = close;
+  document.addEventListener('keydown', onKey, true);
+  document.addEventListener('keyup', onKey, true);
   document.body.appendChild(root);
   root.querySelector<HTMLButtonElement>('.legal-close')?.focus();
 }
