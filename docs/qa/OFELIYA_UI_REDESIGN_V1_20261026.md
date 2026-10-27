@@ -1276,6 +1276,7 @@ automatic second attempt.
 | `efe6c9b` | this document (the third pass) |
 | `c77263d` | the `test:presentation` repair — the portrait widths compared with the 1e-9 px tolerance the file already uses, and the `SocialHub` copy stub extended with the new keys |
 | `6cd4c6e` | the calendar repair of the cross-flow gate — §16.9 |
+| `f17b1d7` | the repair of the task board — §16.10 |
 | the report | this document, after the repair |
 
 ### 16.7 The gates and the CI of the third pass
@@ -1332,6 +1333,11 @@ three jobs — `build`, `production-contract` and `browser-smoke` (run
 step failed on five consecutive heads — including the untouched base head, run
 locally — with `65 !== 0`. The gate was bound to the calendar, not to the code:
 §16.9 gives the measurement, the root cause and the repair.
+
+**One CI failure of this pass was a real regression, and it was mine.** The step
+`Muse quest-to-Phaser scenes and touch lifecycle` failed with `no text/display
+rebuild within same day`: the redesign rebuilt the whole task board once a
+minute to move the countdown. §16.10 gives the cause and the repair.
 
 ### 16.8 The limits of this pass
 
@@ -1431,3 +1437,76 @@ A scan of the other gates found no second instance of this pattern: the
 remaining hard-coded dates (`2026-10-12`, `2026-10-22`, `2027-01-01`, …) are
 pure fixtures — deterministic inputs for the hashing and day-key logic — and
 none of them is compared against the live clock.
+
+### 16.10 The task board rebuilt itself once a minute (a real regression)
+
+The step `Muse quest-to-Phaser scenes and touch lifecycle` failed on the head
+that carried only this report:
+
+```
+AssertionError [ERR_ASSERTION]: no text/display rebuild within same day
+    at scripts/quest-scene-smoke.cjs:110
+```
+
+**The code was identical to the green run** — the only difference between the
+two heads was this document. So this was not a flake of the runner and not a
+side effect of the correction pass: it was a latent regression of the
+**redesign itself**, and the CI only found it now because the previous run had
+not landed in the failing window.
+
+**The contract the smoke encodes.** The task board must keep its objects inside
+a day. The board that existed before the redesign did exactly that:
+
+```ts
+if (day === snapshot.dayKey) return;   // the board is rebuilt only at the day rollover
+```
+
+**The regression.** The redesign gave the board a countdown to the next UTC
+midnight — a real improvement — and put the countdown into the rebuild
+condition:
+
+```ts
+if (day === snapshot.dayKey && countdown === remaining) return;
+…
+this.root.removeAll(true);   // the whole board is destroyed and built again
+```
+
+The remaining time is formatted in whole minutes (`4 ч 15 мин`), so the
+countdown string changes once a minute and the board was destroyed and rebuilt
+once a minute — the objects under the player's finger replaced, for a line that
+only shows the time left. The failing window is the ≈1.1 s in which the
+remaining time crosses a whole minute (≈1.8% of runs); the CI landed in it.
+
+**The repair.** The board is rebuilt only when the day changes. The countdown
+line is updated **in place**, where it stands:
+
+```ts
+if (day === snapshot.dayKey) {
+  if (countdown !== remaining) {
+    countdown = remaining;
+    progressLine?.setText(META_COPY.tasksProgress(completed, snapshot.progress.length, remaining));
+  }
+  return;
+}
+```
+
+The countdown stays live, the board keeps its objects inside a day, and the
+rollover still rebuilds it — the last two assertions of the smoke (the rollover
+must rebuild the board) keep their exact meaning.
+
+**The new regression check.** The smoke now moves the page clock two minutes
+back, waits for the board's own tick, and asserts that the countdown line
+moved **and** that the board was not rebuilt:
+
+```js
+assert.equal(..., true, 'the countdown moves without rebuilding the board');
+```
+
+The check is deterministic: it does not depend on where the wall clock happens
+to be inside its minute.
+
+**The local verification.** `npm run test:quest-scenes` passes at 320×568 and
+390×740. The 768×1024 pass reaches the *next* wait in the same script — the
+30 s budget of the repository for the day rollover, which this sandbox misses
+(its Phaser clock needs more wall clock than the runner's) and which the CI
+runner meets; the step was green in the previous CI runs.
