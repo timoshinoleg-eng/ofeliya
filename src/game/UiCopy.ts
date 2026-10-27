@@ -219,11 +219,70 @@ export const RESULT_MODE_CHIP = {
   duel: 'ДУЭЛЬ · СТАНДАРТ',
   /** A fresh Easy run: beginner mode, never ranked. */
   easy: 'ЛЁГКИЙ · Тренировка',
-  /** A fresh strained run: the server does not rank it. */
+  /** A fresh strained run: the server does not rank it, on any host. */
   strained: 'НАПРЯЖЕНИЕ · Тренировка',
-  /** A local run with no server behind it. */
+  /** A standard run that does not count for the rating: no board behind it. */
   local: 'СТАНДАРТ · Тренировка',
 } as const;
+
+/**
+ * The context the result screen resolves its mode chip from.
+ *
+ * Every field is a fact of the run that has just ended. The chip is never
+ * assembled by the scene: the scene hands the facts over, and the catalog
+ * decides what the player reads.
+ */
+export interface ResultModeContext {
+  /** The run was continued from a checkpoint. */
+  resumed: boolean;
+  /** The run came from the daily ticket. */
+  daily: boolean;
+  /** The run is a fixed-seed duel. */
+  duel: boolean;
+  /** The tier the run was played on. */
+  difficultyId: string;
+  /** The platform the run happened on. */
+  platform: 'browser' | 'telegram' | 'max';
+  /** The server ranked the run. */
+  ranked: boolean;
+}
+
+/**
+ * The mode chip of the result screen, resolved from the real run context.
+ *
+ * The order is the contract, and it is the order of the questions the chip
+ * answers:
+ *
+ *  1. a continued run is a training run;
+ *  2. the daily and the duel name their own mode;
+ *  3. **the tier of the run decides** — a tier that is never ranked must never
+ *     wear the chip of the standard tier, on any host;
+ *  4. only a standard run is left, and only it can claim the rating: an
+ *     eligible host counts it, a browser has no board behind it.
+ */
+export function resultModeChip(ctx: ResultModeContext): string {
+  if (ctx.resumed) return RESULT_MODE_CHIP.practice;
+  if (ctx.daily) return RESULT_MODE_CHIP.daily;
+  if (ctx.duel) return RESULT_MODE_CHIP.duel;
+  if (ctx.difficultyId === 'easy') return RESULT_MODE_CHIP.easy;
+  if (ctx.difficultyId === 'strained') return RESULT_MODE_CHIP.strained;
+  if (ctx.platform === 'browser') return RESULT_MODE_CHIP.local;
+  return ctx.ranked ? RESULT_MODE_CHIP.ranked : RESULT_MODE_CHIP.local;
+}
+
+/**
+ * The suffix the share text of an Easy run carries.
+ *
+ * The share text leaves the game, so it names the tier the player actually
+ * ran. Every other tier has no suffix: the standard share text already says
+ * what the run was.
+ */
+export const EASY_SHARE_SUFFIX = '\nРежим: ЛЁГКИЙ.';
+
+/** The mode suffix of the share text of a run; empty for every tier but Easy. */
+export function shareModeSuffix(difficultyId: string): string {
+  return difficultyId === 'easy' ? EASY_SHARE_SUFFIX : '';
+}
 
 /** Copy of the three meta surfaces and of the rating surface. */
 /**

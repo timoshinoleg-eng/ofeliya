@@ -110,20 +110,31 @@ for(const viewport of [{width:320,height:568},{width:390,height:844},{width:768,
  assert.equal(await page.evaluate(()=>window.__questFirst===window.__game.scene.getScene('Menu').children.getByName('ofeliya-quests').list[0]),true,'no text/display rebuild within same day');
  // The countdown line moves in place. The board is not rebuilt for it: the
  // objects under the player's finger stay the same objects, and only the line
- // that shows the time left is updated where it stands. The clock is moved back
- // by two minutes so the remaining time certainly changes, and the real clock is
- // restored before the rollover.
- await page.evaluate(()=>{
+ // that shows the time left is updated where it stands.
+ //
+ // The clock is pinned to synthetic instants inside the board's own UTC day,
+ // far from the midnight. Shifting the real clock back had a false-red window
+ // of one shift length around every midnight: there the shifted clock fell
+ // into the previous day, and the day key moved with it. The two synthetic
+ // instants also differ from each other, so the countdown certainly changes.
+ const dayKey=await page.evaluate(()=>JSON.parse(localStorage.getItem('ofeliya.quests.v1')).dayKey);
+ const dayStart=Date.parse(`${dayKey}T00:00:00.000Z`);
+ const noon=dayStart+12*3600000;
+ const morning=dayStart+6*3600000;
+ await page.evaluate((noon)=>{
   const board=()=>window.__game.scene.getScene('Menu').children.getByName('ofeliya-quests');
   window.__questText=()=>board().list.filter(o=>o&&typeof o.text==='string').map(o=>o.text).join('|');
-  window.__questTextBefore=window.__questText();
   window.__questRealNow=Date.now;
-  Date.now=()=>window.__questRealNow()-125000;
- });
- await page.waitForFunction(()=>window.__questText()!==window.__questTextBefore,null,{timeout:60000});
+  Date.now=()=>noon;
+ },noon);
+ await page.waitForFunction(()=>window.__questText().includes('12 ч 0 мин'),null,{timeout:120000});
  assert.equal(await page.evaluate(()=>window.__questFirst===window.__game.scene.getScene('Menu').children.getByName('ofeliya-quests').list[0]),true,'the countdown moves without rebuilding the board');
+ await page.evaluate((morning)=>{Date.now=()=>morning;},morning);
+ // At 06:00 UTC the time left until the midnight is eighteen hours.
+ await page.waitForFunction(()=>window.__questText().includes('18 ч 0 мин'),null,{timeout:120000});
+ assert.equal(await page.evaluate(()=>window.__questFirst===window.__game.scene.getScene('Menu').children.getByName('ofeliya-quests').list[0]),true,'the countdown keeps moving inside the same day');
  await page.evaluate(()=>{Date.now=window.__questRealNow;});
- await page.evaluate(()=>{const next=Date.now()+86400000;Date.now=()=>next;});
+ await page.evaluate((next)=>{Date.now=()=>next;},dayStart+86400000+300);
  await page.waitForFunction(day=>JSON.parse(localStorage.getItem('ofeliya.quests.v1')).dayKey!==day,boardDay);
  assert.equal(await page.evaluate(()=>window.__questFirst===window.__game.scene.getScene('Menu').children.getByName('ofeliya-quests').list[0]),false,'UTC rollover refreshes open board');
  assert.deepEqual(errors,[]);console.log('PASS actual GameScene/Enemy/Gem/choice/damage/end + board x10 '+viewport.width);

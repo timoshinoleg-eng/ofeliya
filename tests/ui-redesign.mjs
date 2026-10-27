@@ -100,14 +100,34 @@ const layoutModule = await (async () => {
   return import(bundle);
 })();
 
-/** The states the menu can be in. The challenge state carries the most controls. */
+/**
+ * The states the menu can be in. The challenge state carries the most controls.
+ *
+ * `resume+challenge+record2` is the tightest combination of the flags: a
+ * checkpoint to continue, an incoming challenge and a record that needs two
+ * lines. The product never shows a checkpoint and an incoming challenge at the
+ * same time, so this state is a contract of the layout module, not of the
+ * shipped menu — but the layout must survive it all the same.
+ */
 const MENU_STATES = {
   fresh: { hasCheckpoint: false, hasRecord: true, recordLines: 1, hasChallenge: false },
   resume: { hasCheckpoint: true, hasRecord: true, recordLines: 1, hasChallenge: false },
   'resume+record': { hasCheckpoint: true, hasRecord: true, recordLines: 2, hasChallenge: false },
   challenge: { hasCheckpoint: false, hasRecord: true, recordLines: 1, hasChallenge: true },
   'resume+challenge': { hasCheckpoint: true, hasRecord: true, recordLines: 1, hasChallenge: true },
+  'resume+challenge+record2': { hasCheckpoint: true, hasRecord: true, recordLines: 2, hasChallenge: true },
 };
+
+/**
+ * The states the product can actually render. The brand text may only give up
+ * its room in a state the product never produces.
+ */
+const PRODUCT_STATES = [
+  'fresh',
+  'resume',
+  'resume+record',
+  'challenge',
+];
 
 /** The boxes of the interactive bands, in the order the menu stacks them. */
 function menuBandBoxes(layout) {
@@ -180,6 +200,14 @@ for (const viewport of VIEWPORTS) {
       resume.artHeight >= 64,
       `the resume hero collapsed to ${resume.artHeight.toFixed(1)}px at 320x568`
     );
+  }
+
+  // The brand text is a promise of the menu, not a luxury: it gives up its room
+  // only in a state the product never renders.
+  for (const state of PRODUCT_STATES) {
+    const layout = layoutModule.computeMenuLayout(viewport.width, viewport.height, MENU_STATES[state]);
+    assert.ok(layout.showStrain, `the strain eyebrow is gone in the ${state} at ${viewport.width}x${viewport.height}`);
+    assert.ok(layout.showTagline, `the promise line is gone in the ${state} at ${viewport.width}x${viewport.height}`);
   }
 }
 console.log('ui redesign menu geometry: ok (pure layout contract)');

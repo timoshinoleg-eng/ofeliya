@@ -39,7 +39,8 @@ import {
   META_COPY,
   MUTATION_CARD_HEADERS,
   RESULT_COPY,
-  RESULT_MODE_CHIP,
+  resultModeChip,
+  shareModeSuffix,
   buildDuelShareText,
   buildShareText,
   formatBuildSummary,
@@ -2410,19 +2411,14 @@ export class UIScene extends Phaser.Scene {
         .text(
           W / 2,
           detailY,
-          res.resumed
-            ? RESULT_MODE_CHIP.practice
-            : dailyIntent
-              ? RESULT_MODE_CHIP.daily
-              : duelChallenge
-                ? RESULT_MODE_CHIP.duel
-                : res.difficultyId === 'easy'
-                  ? RESULT_MODE_CHIP.easy
-                  : PlatformBridge.kind === 'browser'
-                    ? RESULT_MODE_CHIP.local
-                    : ranked
-                      ? RESULT_MODE_CHIP.ranked
-                      : RESULT_MODE_CHIP.strained,
+          resultModeChip({
+            resumed: res.resumed,
+            daily: dailyIntent !== null,
+            duel: duelChallenge !== null,
+            difficultyId: res.difficultyId,
+            platform: PlatformBridge.kind,
+            ranked,
+          }),
           {
             fontFamily: FONT,
             fontSize: compact ? '9px' : '10px',
@@ -2686,7 +2682,7 @@ export class UIScene extends Phaser.Scene {
         legendaryName: res.win ? legendaryName : null,
         suffix: dailySuffix,
       });
-      if (res.difficultyId === 'easy') shareText += '\nРежим: ЛЁГКИЙ.';
+      shareText += shareModeSuffix(res.difficultyId);
 
       if (challengeTarget || legacyChallengeCreatable) {
         const payload = ranked ? encodeChallengePayload(createChallengePayload(res)) : null;

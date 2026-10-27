@@ -15,6 +15,7 @@ import { chromium } from 'playwright';
 
 const MATRIX = [
   [320, 568],
+  [390, 740],
   [390, 844],
   [768, 1024],
   [1080, 1920],
@@ -166,16 +167,13 @@ try {
       lastState = state;
       labels.push(state.valueText.replace(/\s*›\s*$/, '').trim().toLocaleUpperCase('ru-RU'));
     }
-    // The new tier must fit the panel at least as well as the tiers that ship
-    // today: the Strained description defines the accepted baseline.
-    const strainedOverflow = Math.max(
-      ...overflows.filter((row) => row.tier === 'strained').map((row) => row.overflow),
-      0
-    );
+    // Every tier must fit inside its panel. There is no accepted baseline: the
+    // Strained description used to overflow the card, and that overflow is not a
+    // budget any more — the one-line variant of the copy takes its place.
     for (const row of overflows) {
       assert.ok(
-        row.overflow <= strainedOverflow,
-        `${width}: the ${row.tier} description overflows the panel by ${row.overflow}px (baseline ${strainedOverflow}px)`
+        row.overflow <= 0,
+        `${width}: the ${row.tier} description overflows the panel by ${row.overflow}px`
       );
     }
     const easyOverflow = overflows.filter((row) => row.tier === 'easy').map((row) => row.overflow);
@@ -183,12 +181,72 @@ try {
       easyOverflow.every((overflow) => overflow <= 0),
       `${width}: the Easy description must fit inside the panel (${easyOverflow.join(', ')})`
     );
+    // The Strained tier is named explicitly: its description is the longest of
+    // the three and must not be the one that breaks the card.
+    const strainedRows = overflows.filter((row) => row.tier === 'strained');
+    assert.ok(strainedRows.length > 0, `${width}: the Strained tier was never rendered`);
+    for (const row of strainedRows) {
+      assert.ok(
+        row.overflow <= 0,
+        `${width}: the Strained description overflows the panel by ${row.overflow}px`
+      );
+    }
     assert.deepEqual(
       labels,
       ['ЛЁГКИЙ', 'СТАНДАРТ', 'НАПРЯЖЕНИЕ', 'ЛЁГКИЙ'],
       `${width}: the difficulty cycle is wrong: ${labels.join(' → ')}`
     );
     assert.equal(lastState.stored, 'easy', `${width}: the cycle did not persist the selection`);
+
+    // --- The control card obeys the same contract ----------------------------
+    // The control card is the second run-configuration card of the menu. Its
+    // description must stay inside the card in every control mode, and the
+    // one-hand mode is named explicitly: its copy is the longest of the three.
+    const controlRows = [];
+    for (let i = 0; i < 3; i += 1) {
+      const point = await page.evaluate(() => {
+        const menu = window.__game.scene.getScene('Menu');
+        const panel = menu.children.list.find((o) => o.name === 'ofeliya-menu-control-selector');
+        const b = panel.getBounds();
+        return { x: b.centerX, y: b.centerY };
+      });
+      await page.mouse.click(point.x, point.y);
+      await page.waitForTimeout(160);
+      const state = await page.evaluate(() => {
+        const menu = window.__game.scene.getScene('Menu');
+        const panel = menu.children.list.find((o) => o.name === 'ofeliya-menu-control-selector');
+        const description = menu.children.list.find((o) => o.name === 'ofeliya-menu-control-selector-desc');
+        const value = menu.children.list.find((o) => o.name === 'ofeliya-menu-control-selector-value');
+        const pb = panel.getBounds();
+        const db = description ? description.getBounds() : null;
+        return {
+          valueText: value ? value.text : null,
+          descriptionText: description ? description.text : null,
+          overflow: db ? Math.round(db.bottom - pb.bottom) : 0,
+        };
+      });
+      controlRows.push(state);
+    }
+    for (const row of controlRows) {
+      assert.ok(
+        row.overflow <= 0,
+        `${width}: the control description "${row.descriptionText}" overflows the panel by ${row.overflow}px`
+      );
+    }
+    // The one-hand mode is the one the player meets first, and its copy is the
+    // longest: it must fit the card like every other mode.
+    const oneHand = controlRows[0];
+    assert.ok(oneHand, `${width}: the control card was never rendered`);
+    assert.ok(
+      oneHand.overflow <= 0,
+      `${width}: the one-hand control description overflows the panel by ${oneHand.overflow}px`
+    );
+    const twoHand = controlRows[1];
+    assert.ok(twoHand, `${width}: the control card did not reach the two-hand mode`);
+    assert.ok(
+      twoHand.overflow <= 0,
+      `${width}: the two-hand control description overflows the panel by ${twoHand.overflow}px`
+    );
 
     // --- The result screen names the tier and its unranked state ------------
     await page.evaluate(() => {
@@ -279,6 +337,98 @@ try {
 
     assert.equal(errors.length, 0, errors.join('\n'));
     console.log(`easy difficulty visual ${width}x${height}: selector, cycle, result label and retry PASS`);
+    await context.close();
+  }
+
+  // --- The result chip names the tier the player actually ran --------------
+  // A browser host has no rating board behind it, but the chip must still name
+  // the tier of the run. A fresh STRAINED run in a browser is a STRAINED run,
+  // not a standard one: the chip used to read "СТАНДАРТ · Тренировка" because
+  // the platform was asked before the tier.
+  {
+    const context = await browser.newContext({
+      viewport: { width: 320, height: 568 },
+      hasTouch: true,
+      serviceWorkers: 'block',
+    });
+    await context.route('https://st.max.ru/**', (r) =>
+      r.fulfill({ status: 200, contentType: 'application/javascript', body: '' })
+    );
+    await context.route('**/api/**', (r) =>
+      r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true,"entries":[],"ranked":false}' })
+    );
+    const page = await context.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    await page.goto(server.resolvedUrls.local[0], { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.__game?.scene.isActive('Menu'), null, { timeout: 60000 });
+    const host = await page.evaluate(() => ({
+      telegram: typeof window.Telegram?.WebApp?.initData === 'string' && window.Telegram.WebApp.initData.length > 0,
+      webApp: typeof window.WebApp !== 'undefined',
+    }));
+    assert.equal(host.telegram, false, 'the browser result context must not boot the Telegram host');
+    assert.equal(host.webApp, false, 'the browser result context must not fake a host bridge');
+
+    const renderResult = async (difficultyId) => page.evaluate((difficultyId) => {
+      const ui = window.__game.scene.getScene('UI');
+      const gs = window.__game.scene.getScene('Game');
+      if (ui.dismissProgressionForStageBoundary) ui.dismissProgressionForStageBoundary();
+      if (gs && gs.scene) gs.scene.pause();
+      ui.renderGameOver({
+        win: false,
+        reason: 'death',
+        difficultyId,
+        runSeed: 'result-identity-seed',
+        controlMode: 'one-hand',
+        resumed: false,
+        timeMs: 42_000,
+        kills: 120,
+        hostCellsInfected: 3,
+        level: 9,
+        highestLevel: 9,
+        comboBest: 12,
+        stageId: 'bloodstream',
+        stageOrder: 1,
+        bossesDefeated: 0,
+        boss1ClearMs: 0,
+        stacks: {},
+        evolutions: [],
+        legendaryIds: [],
+        stageBuilds: {},
+        newAchievements: [],
+        records: { timeRecord: false, killsRecord: false, levelRecord: false },
+      });
+      const overlay = ui.resultOverlay;
+      const texts = [];
+      const visit = (o) => { if (o.type === 'Text') texts.push(o); o.list?.forEach(visit); };
+      overlay.list.forEach(visit);
+      const chip = texts
+        .map((o) => o.text)
+        .find((t) => typeof t === 'string' && (t.includes('Тренировка') || t.includes('зачёт')));
+      const share = overlay.getByName('ofeliya-result-share-label');
+      return { chip: chip ?? null, share: share ? share.text : null };
+    }, difficultyId);
+
+    await page.evaluate(() => {
+      const game = window.__game;
+      game.registry.set('difficultyId', 'strained');
+      game.scene.getScene('Menu').scene.start('Game');
+    });
+    await page.waitForFunction(() => window.__game.scene.isActive('UI'), null, { timeout: 30000 });
+    const strained = await renderResult('strained');
+    assert.equal(
+      strained.chip,
+      'НАПРЯЖЕНИЕ · Тренировка',
+      `a fresh Strained run in a browser must name the Strained tier (${JSON.stringify(strained.chip)})`
+    );
+    // The share text of a browser Strained run names no tier: the canonical
+    // share contract names the tier only for the beginner tier.
+    assert.ok(
+      strained.share && !strained.share.includes('ЛЁГКИЙ'),
+      `the Strained share text names the wrong tier (${JSON.stringify(strained.share)})`
+    );
+    console.log('result identity browser PASS: a fresh Strained run names the Strained tier');
+    assert.equal(errors.length, 0, errors.join('\n'));
     await context.close();
   }
 } finally {

@@ -107,6 +107,9 @@ try {
     readDifficultySelection,
     writeDifficultySelection,
     RESULT_MODE_CHIP,
+    resultModeChip,
+    EASY_SHARE_SUFFIX,
+    shareModeSuffix,
     buildShareText,
     RunCheckpoint,
     RUN_CHECKPOINT_STORAGE_KEY,
@@ -583,6 +586,100 @@ try {
   for (const forbidden of ['ШТРАФ', 'ПРОВАЛ', 'ОШИБКА', 'ЗАБАНЕН', 'ДИСКВАЛ']) {
     assert(!easyLabel.includes(forbidden), `the Easy result chip must not read as a penalty (${forbidden})`);
   }
+
+  // The chip the player actually reads is the one the production selection
+  // resolves. The catalog alone is not a contract: the selection decides which
+  // chip a run gets, and that decision is what the player sees.
+  const chipContext = (over) => ({
+    resumed: false,
+    daily: false,
+    duel: false,
+    difficultyId: 'standard',
+    platform: 'telegram',
+    ranked: true,
+    ...over,
+  });
+  assertEqual(
+    resultModeChip(chipContext({})),
+    'СТАНДАРТ · В зачёт рейтинга',
+    'a ranked Standard run must claim the rating'
+  );
+  assertEqual(
+    resultModeChip(chipContext({ difficultyId: 'strained', ranked: false })),
+    'НАПРЯЖЕНИЕ · Тренировка',
+    'a Strained run must never claim the rating'
+  );
+  assertEqual(
+    resultModeChip(chipContext({ duel: true, ranked: false })),
+    'ДУЭЛЬ · СТАНДАРТ',
+    'a duel must name the duel'
+  );
+  assertEqual(
+    resultModeChip(chipContext({ difficultyId: 'easy', ranked: false })),
+    'ЛЁГКИЙ · Тренировка',
+    'an Easy run must never claim a ranked place'
+  );
+  assertEqual(
+    resultModeChip(chipContext({ resumed: true, ranked: false })),
+    'Тренировка (продолженный забег)',
+    'a continued run must be a training run'
+  );
+  assertEqual(
+    resultModeChip(chipContext({ daily: true, ranked: false })),
+    'ЗАБЕГ ДНЯ · СТАНДАРТ',
+    'the daily run must name the daily mode'
+  );
+  assertEqual(
+    resultModeChip(chipContext({ platform: 'browser', ranked: false })),
+    'СТАНДАРТ · Тренировка',
+    'a local run must not claim a rating'
+  );
+
+  // The matrix of the result identity, with the platform as a dimension. The
+  // tier of the run decides before the host does: a tier that is never ranked
+  // must never wear the chip of the standard tier, on any host.
+  const IDENTITY_MATRIX = [
+    ['fresh Standard', { difficultyId: 'standard', platform: 'browser', ranked: false }, 'СТАНДАРТ · Тренировка'],
+    ['fresh Standard', { difficultyId: 'standard', platform: 'telegram', ranked: true }, 'СТАНДАРТ · В зачёт рейтинга'],
+    ['fresh Standard', { difficultyId: 'standard', platform: 'max', ranked: true }, 'СТАНДАРТ · В зачёт рейтинга'],
+    ['fresh Standard', { difficultyId: 'standard', platform: 'telegram', ranked: false }, 'СТАНДАРТ · Тренировка'],
+    ['fresh EASY', { difficultyId: 'easy', platform: 'browser', ranked: false }, 'ЛЁГКИЙ · Тренировка'],
+    ['fresh EASY', { difficultyId: 'easy', platform: 'telegram', ranked: false }, 'ЛЁГКИЙ · Тренировка'],
+    ['fresh EASY', { difficultyId: 'easy', platform: 'max', ranked: false }, 'ЛЁГКИЙ · Тренировка'],
+    ['fresh STRAINED', { difficultyId: 'strained', platform: 'browser', ranked: false }, 'НАПРЯЖЕНИЕ · Тренировка'],
+    ['fresh STRAINED', { difficultyId: 'strained', platform: 'telegram', ranked: false }, 'НАПРЯЖЕНИЕ · Тренировка'],
+    ['fresh STRAINED', { difficultyId: 'strained', platform: 'max', ranked: false }, 'НАПРЯЖЕНИЕ · Тренировка'],
+    ['duel', { difficultyId: 'standard', platform: 'telegram', ranked: false, duel: true }, 'ДУЭЛЬ · СТАНДАРТ'],
+    ['duel', { difficultyId: 'strained', platform: 'telegram', ranked: false, duel: true }, 'ДУЭЛЬ · СТАНДАРТ'],
+    ['Daily', { difficultyId: 'standard', platform: 'telegram', ranked: false, daily: true }, 'ЗАБЕГ ДНЯ · СТАНДАРТ'],
+    ['Daily', { difficultyId: 'strained', platform: 'telegram', ranked: false, daily: true }, 'ЗАБЕГ ДНЯ · СТАНДАРТ'],
+    ['resumed', { difficultyId: 'standard', platform: 'telegram', ranked: false, resumed: true }, 'Тренировка (продолженный забег)'],
+    ['resumed', { difficultyId: 'easy', platform: 'browser', ranked: false, resumed: true }, 'Тренировка (продолженный забег)'],
+  ];
+  for (const [run, over, expected] of IDENTITY_MATRIX) {
+    assertEqual(
+      resultModeChip(chipContext(over)),
+      expected,
+      `the result chip of a ${run} run on ${over.platform} is wrong`
+    );
+  }
+
+  // The share text of an Easy run names the tier. The suffix is the live
+  // production output, not a copy of it.
+  assertEqual(EASY_SHARE_SUFFIX, '\nРежим: ЛЁГКИЙ.', 'the Easy share suffix drifted');
+  const easyShareText = buildShareText({ win: false, time: '00:26', kills: 18, infected: 2 })
+    + shareModeSuffix('easy');
+  assert(
+    easyShareText.endsWith('Режим: ЛЁГКИЙ.'),
+    `the Easy share text does not name the tier: ${JSON.stringify(easyShareText.slice(-40))}`
+  );
+  assertEqual(shareModeSuffix('standard'), '', 'a Standard share must carry no tier suffix');
+  assertEqual(shareModeSuffix('strained'), '', 'a Strained share must carry no tier suffix');
+  // The scene must use the production helpers, so the pins cannot drift from
+  // what the player reads.
+  const uisceneSource = readFileSync(resolve('src/scenes/UIScene.ts'), 'utf8');
+  assert(uisceneSource.includes('resultModeChip({'), 'the result scene must use the production chip selection');
+  assert(uisceneSource.includes('shareModeSuffix(res.difficultyId)'), 'the result scene must use the production share suffix');
 
   // The shared result text must never name a tier the player did not run, and
   // must never carry the internal ranking flag.

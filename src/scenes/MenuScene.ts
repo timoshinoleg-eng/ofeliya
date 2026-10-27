@@ -246,7 +246,7 @@ export class MenuScene extends Phaser.Scene {
       .setDepth(5);
     title.setShadow(0, 2, '#080f14', 0, true, true);
 
-    this.add
+    const strainLabel = this.add
       .text(W / 2, layout.strainY, 'STRAIN ZERO', {
         fontFamily: FONT,
         fontSize: layout.compact ? '9px' : '12px',
@@ -257,6 +257,9 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setResolution(2)
       .setDepth(5);
+    // The brand text gives up its room before the hero collapses. The layout
+    // decides; the menu only obeys.
+    if (!layout.showStrain) strainLabel.setVisible(false);
 
     // Cosmetic meta is fail-closed: only a strictly parsed, signed server profile can
     // surface the founder entitlement. No local save/registry state can manufacture it.
@@ -300,7 +303,7 @@ export class MenuScene extends Phaser.Scene {
       .setName('ofeliya-menu-hook')
       .setDepth(5);
 
-    this.add
+    const tagline = this.add
       .text(W / 2, layout.taglineY, MENU_COPY.tagline, {
         fontFamily: UI_FONT,
         fontSize: `${layout.taglineFont}px`,
@@ -312,6 +315,7 @@ export class MenuScene extends Phaser.Scene {
       .setResolution(2)
       .setName('ofeliya-menu-subtitle')
       .setDepth(5);
+    if (!layout.showTagline) tagline.setVisible(false);
 
     // One compact record line. Every value is a real counter of the product save:
     // the display name of the carrier, the best survival time and the best kills of
@@ -457,7 +461,10 @@ export class MenuScene extends Phaser.Scene {
           fontStyle: '650',
           color: UI_TEXT.secondary,
           wordWrap: { width: cardW - 28, useAdvancedWrap: true },
-          maxLines: layout.compact ? 1 : 2,
+          // Two lines are allowed everywhere: the one-line variant of the copy
+          // is chosen by the fit, not by the viewport, so the text is never cut
+          // in the middle of a line.
+          maxLines: 2,
         })
         .setOrigin(0, 0.5)
         .setResolution(2)
@@ -511,23 +518,21 @@ export class MenuScene extends Phaser.Scene {
       );
       difficultyCard.value.setColor(profile.id === 'strained' || challengeLocked ? '#ffe066' : '#fff4ec');
       difficultySteps.setText(MENU_COPY.difficultySteps[profile.id] ?? '');
-      difficultyCard.desc.setText(
-        challengeLocked
-          ? (duelLocked ? 'фиксировано дуэлью' : 'фиксировано вызовом')
-          : resumeCheckpoint
-            ? MENU_COPY.nextRunHint
-            : cardW < 170
-            ? profile.id === 'strained'
-              ? 'сложнее'
-              : profile.id === 'easy'
-                ? 'спокойнее'
-                : 'базовый'
-            : profile.description
-      );
-      // Keep EASY's existing compact copy when its full description would leave the card.
-      if (!challengeLocked && profile.id === 'easy' &&
-          difficultyCard.desc.getBounds().bottom > cardY + cardH / 2) {
-        difficultyCard.desc.setText('спокойнее');
+      // The description of a run-configuration card stays inside the card: the
+      // full copy is used when it fits, and the one-line variant of the same
+      // fact takes its place when it does not. The readability floor of the
+      // description is never lowered to make it fit.
+      const difficultyHint =
+        profile.id === 'strained' ? 'сложнее' : profile.id === 'easy' ? 'спокойнее' : 'базовый';
+      if (challengeLocked) {
+        difficultyCard.desc.setText(duelLocked ? 'фиксировано дуэлью' : 'фиксировано вызовом');
+      } else if (resumeCheckpoint) {
+        difficultyCard.desc.setText(MENU_COPY.nextRunHint);
+      } else {
+        difficultyCard.desc.setText(cardW < 170 ? difficultyHint : profile.description);
+        if (difficultyCard.desc.getBounds().bottom > cardY + cardH / 2) {
+          difficultyCard.desc.setText(difficultyHint);
+        }
       }
       difficultyCard.rail.setFillStyle(difficultyAccent, 0.94);
       difficultyCard.bg.setFillStyle(
@@ -563,17 +568,25 @@ export class MenuScene extends Phaser.Scene {
             ? toTitleCase(controlModeCompactLabel(selectedControlMode))
             : `${toTitleCase(controlModeCompactLabel(selectedControlMode))} ›`
       );
-      controlCard.desc.setText(
-        duelLoading
-          ? 'фиксировано'
-          : duelFixed
-            ? 'задано вызовом'
-            : resumeCheckpoint
-              ? MENU_COPY.nextRunHint
-              : cardW < 170
-              ? controlModeTinyHint(selectedControlMode)
-              : controlModeCompactDescription(selectedControlMode)
-      );
+      // The control card obeys the same rule as the difficulty card: the full
+      // copy when it fits, the one-line variant of the same fact when it does
+      // not. The hint is the compact copy of the control mode, so it names the
+      // same difference as the full description.
+      const controlHint = controlModeTinyHint(selectedControlMode);
+      if (duelLoading) {
+        controlCard.desc.setText('фиксировано');
+      } else if (duelFixed) {
+        controlCard.desc.setText('задано вызовом');
+      } else if (resumeCheckpoint) {
+        controlCard.desc.setText(MENU_COPY.nextRunHint);
+      } else {
+        controlCard.desc.setText(
+          cardW < 170 ? controlHint : controlModeCompactDescription(selectedControlMode)
+        );
+        if (controlCard.desc.getBounds().bottom > cardY + cardH / 2) {
+          controlCard.desc.setText(controlHint);
+        }
+      }
       const controlAccent =
         selectedControlMode === 'two-hand'
           ? COLORS.cyan

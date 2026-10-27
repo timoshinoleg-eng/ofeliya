@@ -27,6 +27,7 @@ const SCOPED_FILES = [
   'src/game/UiCopy.ts',
   'src/game/DailyMutator.ts',
   'src/game/AchievementSystem.ts',
+  'src/game/collection/ClientCollection.ts',
   'src/scenes/MenuScene.ts',
   'src/scenes/UIScene.ts',
   'src/ui/SocialHub.ts',
@@ -71,6 +72,11 @@ const FORBIDDEN_IN_CYRILLIC = [
   /\bXP\b/,
   /\bRNA\b/,
 ];
+
+// Rule C: a raw timezone token in player copy. The day mechanics of the
+// product may stay UTC-based, but the player reads a day, not a timezone: the
+// wording must describe the day itself.
+const FORBIDDEN_RAW_UTC = [/\bUTC\b/];
 
 const CYRILLIC = /[\u0400-\u04FF]/;
 
@@ -179,6 +185,11 @@ for (const file of SCOPED_FILES) {
         if (token.test(testable)) {
           violations.push(`${file}:${line} forbidden token '${token.source}' in cyrillic copy: ${value.slice(0, 90)}`);
         }
+      }
+    }
+    for (const token of FORBIDDEN_RAW_UTC) {
+      if (token.test(testable)) {
+        violations.push(`${file}:${line} raw timezone token '${token.source}' in player copy: ${value.slice(0, 90)}`);
       }
     }
   }

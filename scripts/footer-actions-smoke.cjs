@@ -86,12 +86,43 @@ async function audioLabel(page, name) {
             o.on('pointerup', () => window.__footerEvents.push(name));
           }, t.name);
           const beforeLabel = AUDIO_PREFIX[t.name] ? await audioLabel(p, t.name) : null;
+          // A tap outside the target must not reach it: the hit area belongs to
+          // the target and to nothing else. The point is picked outside the
+          // target and outside every other target, so the check measures the
+          // hit area and not the neighbour.
+          // The point stays in the band of the target, so the check measures
+          // the hit area and not the control above the footer.
+          const free = [
+            { x: t.x - 6, y: t.y + t.h / 2 },
+            { x: t.x + t.w + 6, y: t.y + t.h / 2 },
+          ].find((c) => c.x >= 0 && c.y >= 0 && c.x <= viewport.width && c.y <= viewport.height
+            && !targets.some((o) => o.name !== t.name
+              && c.x > o.x && c.x < o.x + o.w && c.y > o.y && c.y < o.y + o.h));
+          if (free) {
+            await p.touchscreen.tap(free.x, free.y);
+            assert.deepEqual(await p.evaluate(() => window.__footerEvents), [], 'a tap outside the target reached it ' + t.name);
+          }
           await p.touchscreen.tap(t.x + t.w / 2, t.y + t.h - 2);
           const got = await p.evaluate(() => window.__footerEvents);
           assert.deepEqual(got, [t.name], 'one intended action per tap ' + t.name);
           if (AUDIO_PREFIX[t.name]) {
             const after = await audioLabel(p, t.name);
             assert.ok(beforeLabel && after && beforeLabel !== after, 'audio handler changed label ' + t.name);
+            // The switch reaches both extremes of its cycle: off, and on again.
+            // The label is what the player reads, so the label is the contract.
+            await p.evaluate(() => { window.__footerEvents = []; });
+            for (let cycle = 0; cycle < 4; cycle += 1) {
+              const label = await audioLabel(p, t.name);
+              if (label && label.endsWith(': выкл')) break;
+              await p.touchscreen.tap(t.x + t.w / 2, t.y + t.h - 2);
+              await p.waitForTimeout(60);
+            }
+            const offLabel = await audioLabel(p, t.name);
+            assert.ok(offLabel && offLabel.endsWith(': выкл'), 'the switch never reached the off extreme ' + t.name + ' (' + offLabel + ')');
+            await p.touchscreen.tap(t.x + t.w / 2, t.y + t.h - 2);
+            await p.waitForTimeout(60);
+            const onLabel = await audioLabel(p, t.name);
+            assert.ok(onLabel && onLabel.endsWith(': вкл'), 'the switch never returned from the off extreme ' + t.name + ' (' + onLabel + ')');
             check(await geometry(p), viewport);
           } else if (t.name === 'ofeliya-menu-nav-rating') {
             assert.equal(await p.evaluate(() => !!window.__game.scene.getScene('Menu').socialHub), true);

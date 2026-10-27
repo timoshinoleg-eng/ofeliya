@@ -69,6 +69,10 @@ export interface MenuLayout {
   gridWidth: number;
   audioY: number;
   legalY: number;
+  /** The strain eyebrow is on screen: it gives up its room only in a desperate state. */
+  showStrain: boolean;
+  /** The promise line is on screen: it gives up its room only in a desperate state. */
+  showTagline: boolean;
 }
 
 interface Band {
@@ -76,6 +80,12 @@ interface Band {
   height: number;
   /** Elastic bands absorb the free space. */
   elastic?: boolean;
+  /**
+   * A decorative band carries brand text only: no run information, no control.
+   * It gives up its room before the hero collapses, so the menu never loses
+   * the run state to keep a promise line.
+   */
+  decorative?: boolean;
 }
 
 const LOGICAL_VIRUS_SIZE = 56;
@@ -122,10 +132,10 @@ export function computeMenuLayout(
 
   const bands: Band[] = [
     { key: 'title', height: titleFont * 1.24 },
-    { key: 'strain', height: strainFont * 1.4 },
+    { key: 'strain', height: strainFont * 1.4, decorative: true },
     { key: 'art', height: 0, elastic: true },
     { key: 'hook', height: hookFont * 2.4 },
-    { key: 'tagline', height: taglineFont * 1.35 },
+    { key: 'tagline', height: taglineFont * 1.35, decorative: true },
     { key: 'record', height: recordHeight },
     { key: 'challenge', height: challengeHeight },
     { key: 'cards', height: cardHeight },
@@ -135,10 +145,6 @@ export function computeMenuLayout(
     { key: 'audio', height: audioHeight },
     { key: 'legal', height: legalHeight },
   ];
-
-  const fixedBands = bands
-    .filter((band) => !band.elastic)
-    .reduce((sum, band) => sum + band.height, 0);
 
   const minArt = 24;
   const maxArt = 240;
@@ -150,6 +156,32 @@ export function computeMenuLayout(
   const gapCount = bands.length - 1;
   const gapMinTotal = hardMinGap * gapCount;
   const gapBaseTotal = minGap * gapCount;
+
+  // The room is given up in a fixed order, and the hero has the last word:
+  //  1. the spacing gives up its room first;
+  //  2. the decorative brand text (the strain eyebrow, then the promise line)
+  //     gives up its room;
+  //  3. nothing else. A control, the challenge, the record, the navigation and
+  //     the legal and audio rows keep their space.
+  // The state in which the brand text has to go is a state the product never
+  // renders — a checkpoint and an incoming challenge never arrive together —
+  // so this is the guarantee of the layout contract, not a change of the
+  // shipped menu.
+  const available = height - padTop - padBottom;
+  const fixedOf = (): number =>
+    bands.filter((band) => !band.elastic).reduce((sum, band) => sum + band.height, 0);
+  let strainHidden = false;
+  let taglineHidden = false;
+  for (const band of bands) {
+    if (!band.decorative) continue;
+    if (fixedOf() + heroMin + gapMinTotal <= available) break;
+    if (band.height <= 0) continue;
+    band.height = 0;
+    if (band.key === 'strain') strainHidden = true;
+    if (band.key === 'tagline') taglineHidden = true;
+  }
+
+  const fixedBands = fixedOf();
   const flow = height - padTop - padBottom - fixedBands;
   let gapTotal = gapBaseTotal;
   let artHeight = Math.max(minArt, Math.min(maxArt, flow - gapTotal));
@@ -232,5 +264,7 @@ export function computeMenuLayout(
     gridWidth: contentWidth,
     audioY: top.audio + audioHeight / 2,
     legalY: top.legal + legalHeight / 2,
+    showStrain: !strainHidden,
+    showTagline: !taglineHidden,
   };
 }
