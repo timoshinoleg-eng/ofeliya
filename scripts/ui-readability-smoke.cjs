@@ -113,8 +113,8 @@ async function inspectMenu(page, size) {
       pickNamed('ofeliya-menu-record'),
       pickNamed('ofeliya-menu-difficulty-selector-value'),
       pickNamed('ofeliya-menu-control-selector-value'),
-      pick((t) => t === 'Базовый ритм кампании'),
-      pick((t) => t.includes('оба стика')),
+      pickNamed('ofeliya-menu-difficulty-selector-desc'),
+      pickNamed('ofeliya-menu-control-selector-desc'),
       pick((t) => t.includes('Музыка:')),
       pick((t) => t.startsWith('Звук:')),
       pick((t) => t.startsWith('Эффекты:')),
@@ -146,11 +146,15 @@ function assertMenu(contract, compact) {
   // The body text of the menu is the readable content: the tagline, the record,
   // the run-configuration cards, the audio row and the legal row. The statement
   // and the navigation labels are display elements and keep the display font.
+  // The description of a run-configuration card is identified by its object,
+  // not by its wording: the card shows the full copy when it fits and the
+  // one-line variant of the same fact when it does not, and both are body
+  // text of the same size.
   const bodyRows = contract.rows.filter((row) =>
     row.name === 'ofeliya-menu-subtitle' ||
     row.name === 'ofeliya-menu-record' ||
-    row.text === 'Базовый ритм кампании' ||
-    row.text.includes('оба стика') ||
+    row.name === 'ofeliya-menu-difficulty-selector-desc' ||
+    row.name === 'ofeliya-menu-control-selector-desc' ||
     row.text.includes('Музыка:') ||
     row.text.startsWith('Звук:') ||
     row.text.startsWith('Эффекты:') ||
@@ -168,8 +172,8 @@ function assertMenu(contract, compact) {
       [(row) => row.name === 'ofeliya-menu-record', 12, 'menu record'],
       [(row) => row.name === 'ofeliya-menu-difficulty-selector-value', 13, 'difficulty value'],
       [(row) => row.name === 'ofeliya-menu-control-selector-value', 13, 'control value'],
-      [(row) => row.text === 'Базовый ритм кампании', 13, 'difficulty description'],
-      [(row) => row.text.includes('оба стика'), 13, 'control description'],
+      [(row) => row.name === 'ofeliya-menu-difficulty-selector-desc', 13, 'difficulty description'],
+      [(row) => row.name === 'ofeliya-menu-control-selector-desc', 13, 'control description'],
       [(row) => row.text.includes('Музыка:'), 11, 'audio row'],
       [(row) => row.text === 'РЕЙТИНГ', 12, 'navigation grid'],
       [(row) => row.text === 'О приложении · Политика · Поддержка', 11, 'menu legal footer'],
