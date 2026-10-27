@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const { existsSync } = require('node:fs');
 const { chromium } = require('playwright');
 const { startCombatFixture } = require('../scripts/lib/combat-fixture.cjs');
 
@@ -8,7 +9,10 @@ const { startCombatFixture } = require('../scripts/lib/combat-fixture.cjs');
   let browser;
   try {
     await server.listen();
-    browser = await chromium.launch({ headless: true });
+    const executablePath = process.platform === 'win32' ? undefined
+      : ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(existsSync);
+    browser = await chromium.launch({ executablePath, headless: true,
+      args: process.platform === 'win32' ? [] : ['--no-sandbox', '--disable-dev-shm-usage'] });
     const page = await browser.newPage({ viewport: { width: 390, height: 740 }, hasTouch: true, isMobile: true });
     await page.route('https://st.max.ru/**', r => r.fulfill({ body: '', contentType: 'application/javascript' }));
     await page.route('**/api/**', r => r.fulfill({ status: 503, body: '{}' }));
