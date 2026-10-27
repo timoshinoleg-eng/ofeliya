@@ -6,6 +6,14 @@
 
 ---
 
+> **Fourth correction (2026-10-27) — the calendar-bound cross-flow gate.**
+> The CI failure `after transfer: 300ms after midnight must credit zero whole
+> seconds` (`65 !== 0`) was **not a code regression**: the untouched base head
+> fails it the same way, because the gate pinned its synthetic midnight to a
+> literal date and the day roll it tests only fires while the real clock is
+> before that date. The gate now derives the synthetic midnight from the real
+> clock. **§16.9** has the measurement, the root cause and the repair.
+>
 > **Third pass — Muse review correction (2026-10-27).** The independent Muse
 > review of this pull request was classified finding by finding against the
 > **current remote head** `a105f7c750ae275f5febbe4ab3eb6c1fae7a704e`; every
@@ -83,6 +91,7 @@ Everything else in the first pass was confirmed by the documents and kept.
 | Final head (the PR) | the commit that carries this report — the App push path creates one commit per push, so the head is the last push of this pass |
 | Final head (the local branch) | the commit that carries this report |
 | The head the CI was green on before this pass | `a105f7c750ae275f5febbe4ab3eb6c1fae7a704e` — run `40418654178`, `build` / `production-contract` / `browser-smoke` **success** |
+| The head this pass produces | `6cd4c6eb56e23f1c049b1ec39fd9f191d8c105b6` — `test(quests): derive the synthetic midnight from the real clock — the cross-flow gate no longer depends on the calendar` — run `40455271533`, `build` / `production-contract` / `browser-smoke` **success** |
 
 `origin/main` was fetched before the work started. **Main did not advance while
 this work was made** — the branch was cut from the current main and the working
@@ -1264,7 +1273,10 @@ automatic second attempt.
 | `f1e3e65b` | the code, the gates and the regression tests of §16.2–§16.5 |
 | `82b397e3` | the deletion of the dead `src/game/RunModeLabel.ts` |
 | `be9e9272` | the deletion of the dead `src/ui/FooterTouchTargets.ts` |
-| the report | this document |
+| `efe6c9b` | this document (the third pass) |
+| `c77263d` | the `test:presentation` repair — the portrait widths compared with the 1e-9 px tolerance the file already uses, and the `SocialHub` copy stub extended with the new keys |
+| `6cd4c6e` | the calendar repair of the cross-flow gate — §16.9 |
+| the report | this document, after the repair |
 
 ### 16.7 The gates and the CI of the third pass
 
@@ -1308,8 +1320,18 @@ The other two parts of `npm run test:startup` (`startup-font-timeout`,
 
 **GitHub CI.** The head this pass started from, `a105f7c…`, is green in all
 three jobs — `build`, `production-contract` and `browser-smoke` (run
-`40418654178`), including the `UI redesign v1 surfaces contract` step. The run
-of the head this pass produces is reported in the final response.
+`40418654178`), including the `UI redesign v1 surfaces contract` step.
+
+**The head this pass produces is green in all three jobs as well** — run
+`40455271533` on `6cd4c6e…`: `build` **success** (59 steps), `production-contract`
+**success** (23 steps), `browser-smoke` **success** (61 steps), including
+`UI redesign v1 surfaces contract` and `Combined Muse convergence cross-flow
+(platform, collection, quests, cosmetics)`.
+
+**One CI failure of this pass was not a code failure at all.** The cross-flow
+step failed on five consecutive heads — including the untouched base head, run
+locally — with `65 !== 0`. The gate was bound to the calendar, not to the code:
+§16.9 gives the measurement, the root cause and the repair.
 
 ### 16.8 The limits of this pass
 
@@ -1327,3 +1349,85 @@ of the head this pass produces is reported in the final response.
 * The PNG evidence of the third pass is in
   `docs/qa/ui-redesign-v1-evidence/` (40 files) and travels with this report;
   the App cannot carry binary files (§2).
+
+### 16.9 The cross-flow gate was bound to the calendar
+
+The step `Combined Muse convergence cross-flow (platform, collection, quests,
+cosmetics)` failed on every head of this pass with
+
+```
+after transfer: 300ms after midnight must credit zero whole seconds
+65 !== 0
+```
+
+**The control: the untouched base head fails the same way.** The base commit
+`a105f7c…` was checked out into a second worktree, served by its own dev
+server, and the unmodified gate was run against it: the same assertion, the
+same line (`scripts/muse-convergence-crossflow-smoke.cjs:1548`), the same
+numbers — `actual 65`, `expected 0`. The runtime was never the cause.
+
+**The cause is in the test, not in the product.** The gate installs a synthetic
+quest clock. The synthetic midnight was pinned to a literal date:
+
+```js
+window.__finalMidnight = Date.parse('2026-10-27T00:00:00Z');   // the old line
+```
+
+and the two date assertions were pinned to the same literal. The contract under
+test is the **day roll**: a sample taken 300 ms into a *new* UTC day must find
+the day-scoped counters at zero, because the roll resets them. The roll only
+fires when the mocked sample falls in a day the persisted state has not reached
+yet — and the persisted `dayKey` comes from the **real** clock.
+
+While the real UTC day was still `2026-10-26`, the mocked `2026-10-27T00:00:00.300Z`
+was in the next day, the roll fired, the counters were reset, and the assertion
+read `0`. From `2026-10-27T00:00:00Z` onwards the mocked sample fell in the
+*same* day as the persisted `dayKey`, the roll did not fire, the day-scoped
+counter kept the value the run had accrued during the host-lifecycle phase (65
+seconds of the real run clock), and the assertion read `65`.
+
+**The measurement at the failing point** (the state dumped in the same turn as
+the failing assertion):
+
+| Field | Value |
+| --- | --- |
+| the real clock | `2026-10-27T05:15:48Z` |
+| the persisted `dayKey` | `2026-10-27` — the **real** day, not the previous one |
+| `dayMetrics.q_nodmg` | `65` — the counter the roll was supposed to reset |
+| `baseline.q_nodmg` | `0` |
+| `lastTickAtMs` | `1793059266150` — the mocked `midnight + 66150` |
+| `streakLast` | `60` |
+| the quest run id | unchanged across the transfer (`sameRun` was `true`) |
+
+**The calendar boundary is visible in the CI history itself.** The green run of
+the untouched base head, `40418654178`, started at `2026-10-26T23:16:52Z` —
+before the pinned midnight. Every run that started after `2026-10-27T00:00:00Z`
+failed at this step, on every head: `f1e3e65b`, `82b397e3`, `be9e9272`,
+`efe6c9b`, `c77263d`.
+
+**The repair is in the isolation, not in the contract.** The synthetic midnight
+is now derived from the real clock — the next UTC midnight after it — so the
+mocked sample always lands in a day the state has not reached, and the two date
+assertions are now relative to that same synthetic midnight:
+
+```js
+window.__finalMidnight = (Math.floor(Date.now() / 86400000) + 1) * 86400000;
+…
+assert.equal(combined.midnight.lastTickAtMs, combined.syntheticMidnight + 300);
+assert.equal(combined.ended.lastTickAtMs, combined.syntheticMidnight + 66150);
+```
+
+**`q_nodmg === 0` is untouched.** The assertion that 300 ms into a new UTC day
+the day-scoped no-damage counter must be zero is still exact and still strict —
+the repair makes the gate *exercise* the day roll on every calendar day instead
+of skipping it.
+
+**The verification.** The repaired gate was run locally three times, once
+against the base runtime of `a105f7c…` and twice against the runtime of this
+pass: exit `0` every time. GitHub CI run `40455271533` on `6cd4c6e…` is green
+in all three jobs.
+
+A scan of the other gates found no second instance of this pattern: the
+remaining hard-coded dates (`2026-10-12`, `2026-10-22`, `2027-01-01`, …) are
+pure fixtures — deterministic inputs for the hashing and day-key logic — and
+none of them is compared against the live clock.
