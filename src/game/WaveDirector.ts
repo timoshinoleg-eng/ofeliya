@@ -457,10 +457,6 @@ export class WaveDirector {
     this.threat.recordDamage(damage, maxHp, this.scene.runState.stage.timeMs);
   }
 
-  get debugAdaptiveThreatState(): ThreatAssessment {
-    return this.threatAssessment;
-  }
-
   private updateAdaptiveThreat(delta: number): void {
     this.threatAccMs += Math.max(0, delta);
     if (this.threatAccMs < 120) return;

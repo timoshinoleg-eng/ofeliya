@@ -333,6 +333,9 @@ jobs:
       - name: HUD hierarchy contract
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/hud-hierarchy-smoke.cjs
 
+      - name: HUD retained graphics and invalidation
+        run: npm run test:hud-retained-graphics
+
       - name: High-DPI WebGL and Canvas fallback smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/renderer-smoke.cjs
 

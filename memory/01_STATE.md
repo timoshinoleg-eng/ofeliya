@@ -1,6 +1,11 @@
+2026-10-28: #251 merged into main (8cf4e8c); this branch merged new main, combining package.json scripts and memory notes.
 CI fix (Muse, 2026-10-28): video-cap-clock stub implements focus() for the native skip button; menu keyboard test uses system-Chrome launch. Hosted CI pending.
 
 A11Y follow-up: post-redesign menu, legal and video keyboard interactions have regression coverage; native MAX/Telegram device acceptance remains separate.
+
+CI fix (Muse, 2026-10-28): retained-graphics test uses system-Chrome launch (playwright-core has no bundled browser in CI). Hosted CI pending.
+
+HUD follow-up: visual bar updates remain driven by HP/RNA/boss state and layout; boss identity animation and low-HP pulse remain dynamic.
 
 PR249 convergence 2026-10-27: notification tap waits for settled card; legal and diagnostics have disjoint 44px targets and actual touch coverage; FIFO/action assertions retained. EASY visual uses redesign locators and falls back to existing compact description if full copy overflows. Current CI and exact HEAD status in PR249. No merge/deploy.
 

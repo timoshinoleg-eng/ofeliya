@@ -1,4 +1,5 @@
 A11Y follow-up: share menu action callbacks between pointer and keyboard; keep DOM focus within legal dialog and restore it on close.
+HUD follow-up: cache retained bar geometry and redraw affected fills when values change; invalidate on layout.
 
 PR249 convergence 2026-10-27: notification tap waits for settled card; legal and diagnostics have disjoint 44px targets and actual touch coverage; FIFO/action assertions retained. EASY visual uses redesign locators and falls back to existing compact description if full copy overflows. Current CI and exact HEAD status in PR249. No merge/deploy.
 

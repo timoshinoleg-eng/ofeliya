@@ -1,4 +1,5 @@
 A11Y follow-up after #249: keyboard menu, legal focus trap/restoration, and native video skip are in review. No gameplay or ranking changes. See focused tests and PR for exact CI.
+HUD follow-up after #249: retained bar graphics and removed unused adaptiveThreat registry publishing; exact CI and device/performance evidence remain review gates.
 
 PR249 convergence 2026-10-27: notification tap waits for settled card; legal and diagnostics have disjoint 44px targets and actual touch coverage; FIFO/action assertions retained. EASY visual uses redesign locators and falls back to existing compact description if full copy overflows. Current CI and exact HEAD status in PR249. No merge/deploy.
 
