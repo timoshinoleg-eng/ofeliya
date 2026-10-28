@@ -234,6 +234,8 @@ try {
     'the run-configuration cards belong to the next run'
   );
   assert.equal(copy.MENU_COPY.music, '♪ Музыка', 'the music switch carries its glyph');
+  assert.equal(copy.MENU_COPY.lab, 'ЛАБОРАТОРИЯ', 'the lab entry');
+  assert.equal(copy.MENU_COPY.strains, 'ШТАММЫ', 'the strains entry');
   assert.deepEqual(
     { ...copy.MENU_COPY.difficultySteps },
     { easy: '• ◦ ◦', standard: '• • ◦', strained: '• • •' },

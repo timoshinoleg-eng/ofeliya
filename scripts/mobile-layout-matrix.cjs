@@ -88,6 +88,8 @@ async function assertCompactResumeMenu(browser) {
       tasks: bounds(text((value) => value === 'ЗАДАЧИ ДНЯ')),
       codex: bounds(text((value) => value === 'КОДЕКС')),
       collection: bounds(text((value) => value === 'КОЛЛЕКЦИЯ')),
+      lab: bounds(text((value) => value === 'ЛАБОРАТОРИЯ')),
+      strains: bounds(text((value) => value === 'ШТАММЫ')),
       music: bounds(text((value) => value.includes('Музыка:'))),
       sound: bounds(text((value) => value.startsWith('Звук:'))),
       effects: bounds(text((value) => value.startsWith('Эффекты:'))),
@@ -95,12 +97,12 @@ async function assertCompactResumeMenu(browser) {
     };
   });
 
-  const required = ['action', 'newRun', 'rating', 'tasks', 'codex', 'collection', 'music', 'sound', 'effects', 'legal'];
+  const required = ['action', 'newRun', 'rating', 'tasks', 'codex', 'collection', 'lab', 'strains', 'music', 'sound', 'effects', 'legal'];
   for (const key of required) {
     if (!layout[key]) throw new Error(`resume menu missing ${key}: ${JSON.stringify(layout)}`);
   }
-  const navTops = [layout.rating, layout.tasks, layout.codex, layout.collection].map((item) => item.top);
-  const navBottoms = [layout.rating, layout.tasks, layout.codex, layout.collection].map((item) => item.bottom);
+  const navTops = [layout.rating, layout.tasks, layout.codex, layout.collection, layout.lab, layout.strains].map((item) => item.top);
+  const navBottoms = [layout.rating, layout.tasks, layout.codex, layout.collection, layout.lab, layout.strains].map((item) => item.bottom);
   const audioTops = [layout.music, layout.sound, layout.effects].map((item) => item.top);
   const audioBottoms = [layout.music, layout.sound, layout.effects].map((item) => item.bottom);
   if (
@@ -250,6 +252,8 @@ async function assertCompactResumeMenu(browser) {
         tasks: boundsOf(visible.find((obj) => obj.text === 'ЗАДАЧИ ДНЯ')),
         codex: boundsOf(visible.find((obj) => obj.text === 'КОДЕКС')),
         collection: boundsOf(visible.find((obj) => obj.text === 'КОЛЛЕКЦИЯ')),
+        lab: boundsOf(visible.find((obj) => obj.text === 'ЛАБОРАТОРИЯ')),
+        strains: boundsOf(visible.find((obj) => obj.text === 'ШТАММЫ')),
       };
       const audio = {
         music: boundsOf(visible.find((obj) => obj.text.includes('Музыка:'))),
@@ -277,21 +281,27 @@ async function assertCompactResumeMenu(browser) {
     const utility = menu.utility;
     const nav = utility.nav;
     const audio = utility.audio;
-    const navItems = [nav.rating, nav.tasks, nav.codex, nav.collection];
+    const navItems = [nav.rating, nav.tasks, nav.codex, nav.collection, nav.lab, nav.strains];
     const audioItems = [audio.music, audio.sound, audio.effects];
     const allPresent = navItems.every(Boolean) && audioItems.every(Boolean) && utility.legal;
-    // The navigation grid is two rows of two: the top row holds the rating and the
-    // daily tasks, the bottom row the codex and the collection.
+    // The navigation grid is two rows of three: the top row holds the rating,
+    // the daily tasks and the codex; the bottom row the collection, the lab
+    // and the strains. The labels are centred in their cells, so the columns
+    // are compared by their centre — except the codex column, whose label
+    // shifts left to clear its progress badge, so that column is pinned by
+    // the row gaps instead of by centre.
     const navGridOk = allPresent &&
       Math.abs(nav.rating.top - nav.tasks.top) <= 3 &&
-      Math.abs(nav.codex.top - nav.collection.top) <= 3 &&
-      nav.rating.bottom + 4 <= nav.codex.top &&
+      Math.abs(nav.tasks.top - nav.codex.top) <= 3 &&
+      Math.abs(nav.collection.top - nav.lab.top) <= 3 &&
+      Math.abs(nav.lab.top - nav.strains.top) <= 3 &&
+      nav.rating.bottom + 4 <= nav.collection.top &&
       nav.rating.right + 4 <= nav.tasks.left &&
-      nav.codex.right + 4 <= nav.collection.left &&
-      // The labels are centred in their cells, so the columns are compared by
-      // their centre, not by the left edge of the text.
-      Math.abs((nav.rating.left + nav.rating.right) / 2 - (nav.codex.left + nav.codex.right) / 2) <= 3 &&
-      Math.abs((nav.tasks.left + nav.tasks.right) / 2 - (nav.collection.left + nav.collection.right) / 2) <= 3;
+      nav.tasks.right + 4 <= nav.codex.left &&
+      nav.collection.right + 4 <= nav.lab.left &&
+      nav.lab.right + 4 <= nav.strains.left &&
+      Math.abs((nav.rating.left + nav.rating.right) / 2 - (nav.collection.left + nav.collection.right) / 2) <= 3 &&
+      Math.abs((nav.tasks.left + nav.tasks.right) / 2 - (nav.lab.left + nav.lab.right) / 2) <= 3;
     // The audio row is one row of three switches, between the grid and the legal row.
     const audioRowOk = allPresent &&
       Math.abs(audio.music.top - audio.sound.top) <= 3 &&

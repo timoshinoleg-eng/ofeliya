@@ -122,6 +122,8 @@ async function inspectMenu(page, size) {
       pick((t) => t === 'ЗАДАЧИ ДНЯ'),
       pick((t) => t === 'КОДЕКС'),
       pick((t) => t === 'КОЛЛЕКЦИЯ'),
+      pick((t) => t === 'ЛАБОРАТОРИЯ'),
+      pick((t) => t === 'ШТАММЫ'),
       pick((t) => t === 'О приложении · Политика · Поддержка'),
     ].filter(Boolean);
     const overflow = rows.filter(({ bounds }) =>

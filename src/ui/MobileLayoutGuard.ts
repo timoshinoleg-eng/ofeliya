@@ -21,6 +21,8 @@ const MENU_NAV_ANCHORS = [
   'ofeliya-menu-nav-tasks',
   'ofeliya-menu-nav-codex',
   'ofeliya-menu-nav-collection',
+  'ofeliya-menu-nav-lab',
+  'ofeliya-menu-nav-strains',
 ] as const;
 
 const MENU_AUDIO_ANCHORS = [

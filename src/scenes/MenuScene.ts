@@ -36,6 +36,7 @@ import { clearDailyIntent, launchDailyRun } from '../game/DailyRunIntent';
 import { FeatureFlags } from '../game/FeatureFlags';
 import { getDailyStatus } from '../game/daily/DailyCalendar';
 import { showDailyModal, showMetaToast } from '../ui/RetentionOverlays';
+import { showLabPanel } from '../ui/LabOverlays';
 import { showLegalOverlay } from '../legal/LegalOverlay';
 import { SocialHub } from '../ui/SocialHub';
 import { MenuKeyboard } from '../ui/MenuKeyboard';
@@ -74,6 +75,8 @@ export class MenuScene extends Phaser.Scene {
   private questBoard: QuestBoard | null = null;
   private codexOverlay: Phaser.GameObjects.Container | null = null;
   private socialHub: SocialHub | null = null;
+  private labPanel: { close: () => void } | null = null;
+  private strainsStub: Phaser.GameObjects.Container | null = null;
   private founderBadge: Phaser.GameObjects.Container | null = null;
   private profileLoadGeneration = 0;
 
@@ -104,6 +107,8 @@ export class MenuScene extends Phaser.Scene {
     const recordText = recordParts.join(' · ');
     this.codexOverlay = null;
     this.socialHub = null;
+    this.labPanel = null;
+    this.strainsStub = null;
     this.founderBadge?.destroy();
     this.founderBadge = null;
     const profileLoadGeneration = ++this.profileLoadGeneration;
@@ -111,13 +116,18 @@ export class MenuScene extends Phaser.Scene {
     Sfx.stopMusic();
     PlatformBridge.setBackHandler(null);
     const keyboard = new MenuKeyboard(this, {
-      blocked: () => Boolean(this.collectionBoard || this.questBoard || this.codexOverlay || this.socialHub),
+      blocked: () => Boolean(this.collectionBoard || this.questBoard || this.codexOverlay || this.socialHub || this.labPanel || this.strainsStub),
       escape: () => {
         if (this.collectionBoard) { this.collectionBoard.destroy(); return true; }
         if (this.questBoard) { this.questBoard.destroy(); return true; }
         if (this.socialHub) { this.socialHub.destroy(); return true; }
         if (this.codexOverlay) {
           this.codexOverlay.getByName('ofeliya-modal-close-hit')?.emit('pointerup');
+          return true;
+        }
+        if (this.labPanel) { this.labPanel.close(); return true; }
+        if (this.strainsStub) {
+          this.strainsStub.getByName('ofeliya-modal-close-hit')?.emit('pointerup');
           return true;
         }
         return false;
@@ -841,11 +851,20 @@ export class MenuScene extends Phaser.Scene {
       keyboard.add(newRunHit, () => MENU_COPY.newRun, activateNewRun);
     }
     // ---- Navigation grid --------------------------------------------------
-    // The four meta destinations are a 2x2 grid. Four columns would be cramped at
-    // 320px, and a grid keeps the navigation visually apart from the audio row.
+    // The six meta destinations are a 3x2 grid. A third row was measured first
+    // and rejected: it costs 48px the compact menu does not have (resume+record
+    // at 320x568 sits exactly at the 64px hero floor with the brand text still
+    // visible, so a new row would hide the brand text or break the floor).
+    // Three columns cost zero vertical space: the band stays two rows, and the
+    // labels fit because the compact font drops to 11px — the readability
+    // contract floors compact menu text at 11px — and MobileLayoutGuard
+    // trims the longest label, ЛАБОРАТОРИЯ, to the cell width (measured
+    // 90.6px at 11px in an 88.7px cell, guard scale 0.85, floor 0.72 intact).
+    // A grid keeps the navigation visually apart from the audio row.
     const gridW = layout.gridWidth;
     const colGap = 10;
-    const cellW = (gridW - colGap) / 2;
+    const gridCols = 3;
+    const cellW = (gridW - colGap * (gridCols - 1)) / gridCols;
     const gridLeft = W / 2 - gridW / 2;
     const codexSave = SaveSystem.get();
     const codexFound = codexSave.evolutionsSeen.length + codexSave.legendarySeen.length;
@@ -854,10 +873,12 @@ export class MenuScene extends Phaser.Scene {
       { name: 'ofeliya-menu-nav-tasks', label: MENU_COPY.tasks, onTap: () => this.showQuestBoard() },
       { name: 'ofeliya-menu-nav-codex', label: MENU_COPY.codex, badge: `${codexFound}/9`, onTap: () => this.showCodex() },
       { name: 'ofeliya-menu-nav-collection', label: MENU_COPY.collection, onTap: () => this.showCollectionBoard() },
+      { name: 'ofeliya-menu-nav-lab', label: MENU_COPY.lab, onTap: () => this.showLab() },
+      { name: 'ofeliya-menu-nav-strains', label: MENU_COPY.strains, onTap: () => this.showStrainsStub() },
     ];
     navItems.forEach((item, index) => {
-      const col = index % 2;
-      const row = Math.floor(index / 2);
+      const col = index % gridCols;
+      const row = Math.floor(index / gridCols);
       const cx = gridLeft + cellW / 2 + col * (cellW + colGap);
       const cy = layout.gridTop + layout.gridRowHeight / 2 +
         row * (layout.gridRowHeight + layout.gridGap);
@@ -867,10 +888,10 @@ export class MenuScene extends Phaser.Scene {
         .setDepth(5)
         .setName(item.name)
         .setInteractive({ useHandCursor: true });
-      this.add
+      const label = this.add
         .text(cx, cy, item.label, {
           fontFamily: FONT,
-          fontSize: layout.compact ? '12px' : '13px',
+          fontSize: layout.compact ? '11px' : '13px',
           fontStyle: 'bold',
           color: '#c9f6ff',
           letterSpacing: 0.6,
@@ -879,7 +900,7 @@ export class MenuScene extends Phaser.Scene {
         .setResolution(2)
         .setDepth(6);
       if (item.badge) {
-        this.add
+        const badge = this.add
           .text(cx + cellW / 2 - 10, cy, item.badge, {
             fontFamily: UI_FONT,
             fontSize: layout.compact ? '9px' : '10px',
@@ -889,6 +910,12 @@ export class MenuScene extends Phaser.Scene {
           .setOrigin(1, 0.5)
           .setResolution(2)
           .setDepth(6);
+        // In a narrow cell the centred label can reach the badge: shift the
+        // label left so at least 4px stay between the label and the badge.
+        // (The guard skips a shifted label — it is short and never needs fitting.)
+        const labelRight = label.x + label.width / 2;
+        const badgeLeft = badge.x - badge.width;
+        if (labelRight + 4 > badgeLeft) label.x -= (labelRight + 4 - badgeLeft);
       }
       const activateNavigation = () => {
         Sfx.play('click');
@@ -1061,6 +1088,10 @@ export class MenuScene extends Phaser.Scene {
       this.questBoard = null;
       this.socialHub?.destroy();
       this.socialHub = null;
+      this.labPanel?.close();
+      this.labPanel = null;
+      this.strainsStub?.destroy();
+      this.strainsStub = null;
       this.profileLoadGeneration += 1;
       this.founderBadge?.destroy();
       this.founderBadge = null;
@@ -1168,6 +1199,67 @@ export class MenuScene extends Phaser.Scene {
       this,
       () => { this.collectionBoard = null; },
       (target) => this.openMetaSurface(target)
+    );
+  }
+
+  /**
+   * The lab panel (Phase 4) finally has a menu entry. Gated by economy.lab
+   * like the collection entry is gated by its flag: a disabled flag leaves a
+   * visible cell whose tap does nothing.
+   */
+  private showLab(): void {
+    if (this.labPanel || this.codexOverlay || this.socialHub || this.questBoard || this.collectionBoard || this.strainsStub) return;
+    if (!FeatureFlags.get('economy.lab')) return;
+    this.labPanel = showLabPanel(this, () => { this.labPanel = null; });
+  }
+
+  /**
+   * Placeholder entry for the strains gallery (Phase 5, not ported yet).
+   * A stub modal on the shared frame: no skin logic is invented here, the
+   * Phase 5 port replaces this method body with the gallery and keeps the
+   * cell, the name and the layout untouched.
+   */
+  private showStrainsStub(): void {
+    if (this.strainsStub || this.codexOverlay || this.socialHub || this.questBoard || this.collectionBoard || this.labPanel) return;
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const compact = H < 650;
+    const overlay = this.add.container(0, 0).setDepth(40).setName('ofeliya-strains-stub');
+    this.strainsStub = overlay;
+
+    const panelW = Math.min(W - 22, 400);
+    const panelH = Math.min(H - 34, 320);
+    const dismiss = () => {
+      if (this.strainsStub !== overlay) return;
+      overlay.destroy();
+      this.strainsStub = null;
+    };
+    const frame = createModalFrame(this, overlay, {
+      x: W / 2,
+      y: H / 2,
+      width: panelW,
+      height: panelH,
+      title: MENU_COPY.strains,
+      compact,
+      onClose: dismiss,
+    });
+    overlay.add(
+      this.add
+        .text(
+          W / 2,
+          frame.bodyTop + 8,
+          'Коллекция обликов откроется здесь.\nРазблокировка — через достижения.',
+          {
+            fontFamily: UI_FONT,
+            fontSize: compact ? '12px' : '13px',
+            color: VISUAL_TEXT.muted,
+            align: 'center',
+            lineSpacing: 6,
+          }
+        )
+        .setOrigin(0.5, 0)
+        .setResolution(2)
     );
   }
 

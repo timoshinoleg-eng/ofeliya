@@ -118,6 +118,8 @@ export const MENU_COPY = {
   tasks: 'ЗАДАЧИ ДНЯ',
   codex: 'КОДЕКС',
   collection: 'КОЛЛЕКЦИЯ',
+  lab: 'ЛАБОРАТОРИЯ',
+  strains: 'ШТАММЫ',
   /** Footer row. */
   legal: 'О приложении · Политика · Поддержка',
   /** Labels of the three audio switches. The music switch carries its glyph. */
