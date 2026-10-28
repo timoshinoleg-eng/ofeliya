@@ -229,7 +229,7 @@ export function showDailyModal(
       Sfx.play('levelup');
       PlatformBridge.haptic('medium');
       btn.disableInteractive();
-      btnLabel.setText(`+${res.reward.rna} RNA`);
+      btnLabel.setText(`+${res.reward.rna} РНК`);
       // Панч-метка выдачи (в меню нет Juice-пампа — обычный твин сцены).
       scene.tweens.add({
         targets: btnLabel,
@@ -254,7 +254,7 @@ export function showDailyModal(
         showMetaToast(
           scene,
           def.title,
-          def.reward.kind === 'rna' ? `+${def.reward.amount} RNA` : 'Новый штамм'
+          def.reward.kind === 'rna' ? `+${def.reward.amount} РНК` : 'Новый штамм'
         );
       }
     });

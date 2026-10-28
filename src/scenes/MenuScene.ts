@@ -1083,7 +1083,7 @@ export class MenuScene extends Phaser.Scene {
         showDailyModal(
           this,
           (streak, rewardRna) => {
-            showMetaToast(this, 'ЕЖЕДНЕВНАЯ НАГРАДА', `+${rewardRna} RNA · ${streak} дн.`);
+            showMetaToast(this, 'ЕЖЕДНЕВНАЯ НАГРАДА', `+${rewardRna} РНК · ${streak} дн.`);
           },
           () => {
             void this.launchDailyRunFromModal();

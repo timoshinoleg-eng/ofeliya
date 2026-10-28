@@ -80,8 +80,8 @@ const D: Def[] = [
   // Связка «достижение → скин» (роадмап): выдача скина — Фаза 5, здесь только грант.
   { id: 'stars_500', title: 'ИНВЕСТОР', desc: 'Потратить 500 звёзд', reward: { kind: 'skin', skinId: 'skin.gilded-prime' }, check: (s) => s.starsSpent >= 500 },
   { id: 'deaths_100', title: 'БЕССМЕРТНЫЙ', desc: 'Погибнуть 100 раз', reward: { kind: 'rna', amount: 200 }, check: (s) => s.deaths >= 100 },
-  { id: 'rna_1k', title: 'НАКОПИТЕЛЬ', desc: 'Заработать 1 000 RNA (мета)', reward: { kind: 'rna', amount: 75 }, check: (s) => s.rnaEarned >= 1000 },
-  { id: 'rna_10k', title: 'МАГНАТ RNA', desc: 'Заработать 10 000 RNA (мета)', reward: { kind: 'rna', amount: 250 }, check: (s) => s.rnaEarned >= 10000 },
+  { id: 'rna_1k', title: 'НАКОПИТЕЛЬ', desc: 'Заработать 1 000 РНК (мета)', reward: { kind: 'rna', amount: 75 }, check: (s) => s.rnaEarned >= 1000 },
+  { id: 'rna_10k', title: 'МАГНАТ РНК', desc: 'Заработать 10 000 РНК (мета)', reward: { kind: 'rna', amount: 250 }, check: (s) => s.rnaEarned >= 10000 },
   { id: 'combo_50', title: 'РЕЗНЯ', desc: 'Комбо ×50 за один забег', reward: { kind: 'rna', amount: 200 }, check: (s) => s.comboBest >= 50 },
   { id: 'ghost_120', title: 'ПРИЗРАК', desc: '120 секунд без урона за забег', reward: { kind: 'rna', amount: 250 }, check: (s) => s.maxNoDamageMs >= 120000 },
   { id: 'winner', title: 'ИДЕАЛЬНЫЙ ЦИКЛ', desc: 'Победить в забеге', reward: { kind: 'rna', amount: 500 }, check: (s) => s.won },

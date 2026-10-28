@@ -2477,7 +2477,7 @@ export class GameScene extends Phaser.Scene {
       showMetaToast(
         this,
         def.title,
-        def.reward.kind === 'rna' ? `+${def.reward.amount} RNA` : 'Новый штамм'
+        def.reward.kind === 'rna' ? `+${def.reward.amount} РНК` : 'Новый штамм'
       );
     }
     this.milestones.reset();
