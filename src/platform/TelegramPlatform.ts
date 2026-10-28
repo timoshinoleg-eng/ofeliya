@@ -72,6 +72,30 @@ declare global {
   }
 }
 
+/**
+ * Чистый компаратор версий Bot API: '8.0' >= '8.0', '7.10' < '8.0', '' < любой.
+ * Не зависит от нативного WebApp.isVersionAtLeast — детерминирован и тестируем.
+ * Порт из Фазы TMA (стек): там же живёт как экспорт для node-теста; здесь же
+ * используется как fallback в TelegramPlatform.isVersionAtLeast.
+ * Строгость — как в main: malformed-строка ('garbage', '8.', '') → false,
+ * а не тихий 0 (отличие от дословного компаратора стека — только на мусоре).
+ */
+export function isTelegramVersionAtLeast(current: string, required: string): boolean {
+  const parse = (value: string): number[] | null => {
+    if (!/^\d+(?:\.\d+)*$/.test(value.trim())) return null;
+    return value.trim().split('.').map(Number);
+  };
+  const cur = parse(current);
+  const req = parse(required);
+  if (!cur || !req) return false;
+  for (let i = 0; i < Math.max(cur.length, req.length); i++) {
+    const c = cur[i] ?? 0;
+    const r = req[i] ?? 0;
+    if (c !== r) return c > r;
+  }
+  return true;
+}
+
 export class TelegramPlatform implements PlatformAdapter {
   readonly kind = 'telegram' as const;
   private backHandler: (() => void) | null = null;
@@ -129,19 +153,7 @@ export class TelegramPlatform implements PlatformAdapter {
     } catch {
       // Fall through to the stable version-string comparison.
     }
-    const compare = (value: string): number[] | null => {
-      if (!/^\d+(?:\.\d+)*$/.test(value.trim())) return null;
-      return value.trim().split('.').map(Number);
-    };
-    const current = compare(this.version);
-    const minimum = compare(required);
-    if (!current || !minimum) return false;
-    for (let i = 0; i < Math.max(current.length, minimum.length); i++) {
-      const a = current[i] ?? 0;
-      const b = minimum[i] ?? 0;
-      if (a !== b) return a > b;
-    }
-    return true;
+    return isTelegramVersionAtLeast(this.version, required);
   }
 
   getSafeAreaInsets(): { top: number; right: number; bottom: number; left: number } | null {
