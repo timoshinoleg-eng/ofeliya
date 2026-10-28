@@ -854,8 +854,10 @@ export class MenuScene extends Phaser.Scene {
     // at 320x568 sits exactly at the 64px hero floor with the brand text still
     // visible, so a new row would hide the brand text or break the floor).
     // Three columns cost zero vertical space: the band stays two rows, and the
-    // labels fit because the compact font drops to 10px (measured: ЛАБОРАТОРИЯ
-    // is 81.8px in an 88.7px cell, and MobileLayoutGuard trims the last 6%).
+    // labels fit because the compact font drops to 11px — the readability
+    // contract floors compact menu text at 11px — and MobileLayoutGuard
+    // trims the longest label, ЛАБОРАТОРИЯ, to the cell width (measured
+    // 90.6px at 11px in an 88.7px cell, guard scale 0.85, floor 0.72 intact).
     // A grid keeps the navigation visually apart from the audio row.
     const gridW = layout.gridWidth;
     const colGap = 10;
@@ -887,7 +889,7 @@ export class MenuScene extends Phaser.Scene {
       const label = this.add
         .text(cx, cy, item.label, {
           fontFamily: FONT,
-          fontSize: layout.compact ? '10px' : '13px',
+          fontSize: layout.compact ? '11px' : '13px',
           fontStyle: 'bold',
           color: '#c9f6ff',
           letterSpacing: 0.6,
