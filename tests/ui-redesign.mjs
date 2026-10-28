@@ -331,8 +331,13 @@ try {
       'the ambiguous "Клеток: N" counter must be gone'
     );
 
-    // Navigation: a 2x2 grid, not a cramped row of four.
-    assert.equal(menu.nav.length, 4, `the navigation grid must have four cells at ${viewport.width}`);
+    // Navigation: a 3x2 grid (six cells since the menu redesign: the lab and
+    // the strains entries joined the four meta destinations), not a cramped
+    // row, and still two rows — the third row was rejected on geometry.
+    assert.equal(menu.nav.length, 6, `the navigation grid must have six cells at ${viewport.width}`);
+    const navNames = menu.nav.map((n) => n.name);
+    assert.ok(navNames.includes('ofeliya-menu-nav-lab'), `the lab entry is missing at ${viewport.width}`);
+    assert.ok(navNames.includes('ofeliya-menu-nav-strains'), `the strains entry is missing at ${viewport.width}`);
     const navRows = new Set(menu.nav.map((n) => Math.round(n.bounds.y / 8)));
     assert.equal(navRows.size, 2, `the navigation grid must have two rows at ${viewport.width}`);
     const navWidths = menu.nav.map((n) => n.bounds.width);

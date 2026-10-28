@@ -5,6 +5,8 @@ const TARGETS = [
   'ofeliya-menu-nav-tasks',
   'ofeliya-menu-nav-codex',
   'ofeliya-menu-nav-collection',
+  'ofeliya-menu-nav-lab',
+  'ofeliya-menu-nav-strains',
   'ofeliya-menu-audio-music',
   'ofeliya-menu-audio-sound',
   'ofeliya-menu-audio-effects',
@@ -132,6 +134,10 @@ async function audioLabel(page, name) {
             assert.equal(await p.evaluate(() => !!window.__game.scene.getScene('Menu').codexOverlay), true);
           } else if (t.name === 'ofeliya-menu-nav-collection') {
             assert.equal(await p.evaluate(() => !!window.__game.scene.getScene('Menu').collectionBoard), true);
+          } else if (t.name === 'ofeliya-menu-nav-lab') {
+            assert.equal(await p.evaluate(() => !!window.__game.scene.getScene('Menu').labPanel), true);
+          } else if (t.name === 'ofeliya-menu-nav-strains') {
+            assert.equal(await p.evaluate(() => !!window.__game.scene.getScene('Menu').strainsStub), true);
           } else if (t.name === 'ofeliya-menu-diagnostics') {
             for (let n = 0; n < 4; n++) await p.touchscreen.tap(t.x + t.w / 2, t.y + t.h - 2);
             assert.equal(await p.locator('#ofeliya-startup-trace').count(), 1, 'five diagnostic taps reveal the trace');

@@ -46,7 +46,8 @@ try {
     await page.waitForFunction(() => Boolean(window.__game.scene.getScene('Menu').codexOverlay));
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => !window.__game.scene.getScene('Menu').codexOverlay);
-    for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowDown');
+    // From codex: collection, lab, strains, then the three audio switches, then legal.
+    for (let i = 0; i < 7; i++) await page.keyboard.press('ArrowDown');
     await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label')?.toUpperCase().includes('О ПРИЛОЖЕНИИ'));
     await page.keyboard.press('Enter');
     await page.waitForSelector('#ofeliya-legal-overlay');

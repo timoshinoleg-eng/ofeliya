@@ -80,9 +80,16 @@ function closeButton(
 /**
  * Панель лаборатории: 3 ветки апгрейдов + блок престижа.
  * Перерисовывается после каждой покупки/сброса (render()).
+ *
+ * Возвращает handle для внешнего закрытия (например, по Escape из меню):
+ * close() идемпотентен и вызывает тот же onClose, что и внутренние пути
+ * закрытия (крестик, клик по затемнению). В неактивной сцене возвращает null.
  */
-export function showLabPanel(scene: Phaser.Scene, onClose: () => void): void {
-  if (!scene || !scene.scene.isActive()) return;
+export function showLabPanel(
+  scene: Phaser.Scene,
+  onClose: () => void
+): { close: () => void } | null {
+  if (!scene || !scene.scene.isActive()) return null;
   const W = scene.scale.width;
   const H = scene.scale.height;
 
@@ -131,7 +138,10 @@ export function showLabPanel(scene: Phaser.Scene, onClose: () => void): void {
   const content = scene.add.container(0, 0);
   root.add(content);
 
+  let closed = false;
   function destroy(): void {
+    if (closed) return;
+    closed = true;
     root.destroy();
     onClose();
   }
@@ -249,6 +259,7 @@ export function showLabPanel(scene: Phaser.Scene, onClose: () => void): void {
     scene.tweens.add({ targets: root, alpha: 1, duration: 160 });
     scene.tweens.add({ targets: panel, scale: 1, duration: 200, ease: 'Back.easeOut' });
   }
+  return { close: destroy };
 }
 
 /** Блок престижа внизу панели + диалог подтверждения. */
