@@ -246,6 +246,7 @@ const PRODUCT_EVENTS = new Set([
   'infection_resumed', 'first_lysis', 'second_host_cell_completed_without_hint',
   'onboarding_step', 'onboarding_exit',
   'daily_claimed', 'achievement_unlocked',
+  'lab_upgrade_bought', 'prestige_done',
 ]);
 
 function emptyStore() {

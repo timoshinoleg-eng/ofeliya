@@ -57,6 +57,7 @@
     "test:analytics-events": "node scripts/check-analytics-events.mjs",
     "test:daily-streak": "node tests/daily-streak.mjs",
     "test:meta-achievements": "node tests/meta-achievements.mjs",
+    "test:lab-economy": "node tests/lab-economy.mjs",
     "test:daily-v2": "node scripts/check-daily-v2.mjs",
     "test:score-outbox": "node scripts/check-score-outbox.mjs",
     "test:daily-cta": "node scripts/check-daily-cta.mjs",
