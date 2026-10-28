@@ -11,7 +11,7 @@ function exercise({lateCap=false}={}){
  const advance=ms=>{const end=now+ms;while(true){const due=[...timers].filter(([,t])=>t.at<=end).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;now=due[1].at;timers.delete(due[0]);due[1].fn();}now=end;};
  class Element extends EventTarget{
   constructor(){super();this.style={};this.dataset={};this.children=[];this.currentTime=0;}
-  appendChild(el){this.children.push(el);el.parent=this;}remove(){if(this.parent)this.parent.children=this.parent.children.filter(e=>e!==this);}setAttribute(){}removeAttribute(){}load(){}pause(){}play(){return Promise.resolve();}
+  appendChild(el){this.children.push(el);el.parent=this;}remove(){if(this.parent)this.parent.children=this.parent.children.filter(e=>e!==this);}setAttribute(){}removeAttribute(){}load(){}pause(){}play(){return Promise.resolve();}focus(){}
  }
  const host=new Element();let media;
  const document={getElementById:id=>id==='game'?host:null,createElement:tag=>{const e=new Element();if(tag==='video')media=e;return e;}};

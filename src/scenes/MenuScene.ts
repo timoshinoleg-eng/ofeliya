@@ -35,6 +35,7 @@ import { ensureCinematicTextures } from '../game/CinematicTextures';
 import { clearDailyIntent, launchDailyRun } from '../game/DailyRunIntent';
 import { showLegalOverlay } from '../legal/LegalOverlay';
 import { SocialHub } from '../ui/SocialHub';
+import { MenuKeyboard } from '../ui/MenuKeyboard';
 import { BORDER, PANEL, ROLE } from '../ui/tokens';
 import { CTA } from '../ui/cta';
 import { computeMenuLayout, MIN_TOUCH } from '../ui/menuLayout';
@@ -106,6 +107,19 @@ export class MenuScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(COLORS.bg);
     Sfx.stopMusic();
     PlatformBridge.setBackHandler(null);
+    const keyboard = new MenuKeyboard(this, {
+      blocked: () => Boolean(this.collectionBoard || this.questBoard || this.codexOverlay || this.socialHub),
+      escape: () => {
+        if (this.collectionBoard) { this.collectionBoard.destroy(); return true; }
+        if (this.questBoard) { this.questBoard.destroy(); return true; }
+        if (this.socialHub) { this.socialHub.destroy(); return true; }
+        if (this.codexOverlay) {
+          this.codexOverlay.getByName('ofeliya-modal-close-hit')?.emit('pointerup');
+          return true;
+        }
+        return false;
+      },
+    });
 
     const startParam = PlatformBridge.getStartParam();
     const incomingDuelId = parseDuelStartPayload(startParam);
@@ -547,7 +561,7 @@ export class MenuScene extends Phaser.Scene {
     renderDifficulty();
     applyCardDim(difficultyCard);
     applyCardDim(controlCard);
-    difficultyCard.bg.on('pointerup', () => {
+    const selectDifficulty = () => {
       Sfx.play('click');
       PlatformBridge.haptic('light');
       if (incomingChallenge || (incomingDuelId && !duelUnavailable)) return;
@@ -555,7 +569,9 @@ export class MenuScene extends Phaser.Scene {
       writeDifficultySelection(selectedDifficulty);
       this.registry.set('difficultyId', selectedDifficulty);
       renderDifficulty();
-    });
+    };
+    difficultyCard.bg.on('pointerup', selectDifficulty);
+    keyboard.add(difficultyCard.bg, () => `Сложность: ${difficultyCard.value.text}`, selectDifficulty);
     difficultyCard.bg.on('pointerover', () => difficultyCard.bg.setAlpha(hoverAlpha));
     difficultyCard.bg.on('pointerout', () => difficultyCard.bg.setAlpha(0.97));
 
@@ -601,7 +617,7 @@ export class MenuScene extends Phaser.Scene {
     };
     renderControlMode();
     applyCardDim(controlCard);
-    controlCard.bg.on('pointerup', () => {
+    const selectControl = () => {
       Sfx.play('click');
       PlatformBridge.haptic('light');
       if (duelLoading || incomingDuel) return;
@@ -609,7 +625,9 @@ export class MenuScene extends Phaser.Scene {
       writeControlMode(selectedControlMode);
       this.registry.set('controlMode', selectedControlMode);
       renderControlMode();
-    });
+    };
+    controlCard.bg.on('pointerup', selectControl);
+    keyboard.add(controlCard.bg, () => `Управление: ${controlCard.value.text}`, selectControl);
     controlCard.bg.on('pointerover', () => controlCard.bg.setAlpha(hoverAlpha));
     controlCard.bg.on('pointerout', () => controlCard.bg.setAlpha(0.96));
 
@@ -733,7 +751,7 @@ export class MenuScene extends Phaser.Scene {
     btnBg.on('pointerdown', () => {
       if (!resumeCheckpoint) VideoInterstitial.preload('startIntro');
     });
-    btnBg.on('pointerup', () => {
+    const activateStart = () => {
       Sfx.play('click');
       PlatformBridge.haptic('medium');
       if (duelLoading) return;
@@ -746,7 +764,9 @@ export class MenuScene extends Phaser.Scene {
         return;
       }
       startFreshRun();
-    });
+    };
+    btnBg.on('pointerup', activateStart);
+    keyboard.add(btnBg, () => startButtonText.text, activateStart);
     btnBg.on('pointerover', () => btnBg.setFillStyle(CTA.fillHover, 1));
     btnBg.on('pointerout', () => btnBg.setFillStyle(CTA.fill, 0.97));
     btnBg.on('pointerdown', () => btnBg.setFillStyle(CTA.fillPressed, 1));
@@ -809,11 +829,13 @@ export class MenuScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setResolution(2)
         .setDepth(8);
-      newRunHit.on('pointerup', () => {
+      const activateNewRun = () => {
         Sfx.play('click');
         PlatformBridge.haptic('medium');
         startFreshRun();
-      });
+      };
+      newRunHit.on('pointerup', activateNewRun);
+      keyboard.add(newRunHit, () => MENU_COPY.newRun, activateNewRun);
     }
     // ---- Navigation grid --------------------------------------------------
     // The four meta destinations are a 2x2 grid. Four columns would be cramped at
@@ -865,11 +887,13 @@ export class MenuScene extends Phaser.Scene {
           .setResolution(2)
           .setDepth(6);
       }
-      plate.on('pointerup', () => {
+      const activateNavigation = () => {
         Sfx.play('click');
         PlatformBridge.haptic('light');
         item.onTap();
-      });
+      };
+      plate.on('pointerup', activateNavigation);
+      keyboard.add(plate, () => item.label, activateNavigation);
       plate.on('pointerover', () => plate.setFillStyle(VISUAL.panelRaised, 0.96));
       plate.on('pointerout', () => plate.setFillStyle(VISUAL.panel, 0.92));
     });
@@ -950,11 +974,13 @@ export class MenuScene extends Phaser.Scene {
         plate.setFillStyle(on ? VISUAL.panelRaised : VISUAL.panel, on ? 0.75 : 0.4);
       };
       renderAudio();
-      plate.on('pointerup', () => {
+      const activateAudio = () => {
         const on = item.toggle();
         renderAudio();
         if (on) Sfx.play('click');
-      });
+      };
+      plate.on('pointerup', activateAudio);
+      keyboard.add(plate, () => label.text, activateAudio);
       plate.on('pointerover', () => plate.setAlpha(1));
       plate.on('pointerout', () => plate.setAlpha(1));
     });
@@ -980,10 +1006,12 @@ export class MenuScene extends Phaser.Scene {
       .setDepth(5)
       .setName('ofeliya-menu-legal')
       .setInteractive({ useHandCursor: true });
-    legalHit.on('pointerup', () => {
+    const activateLegal = () => {
       Sfx.play('click');
       showLegalOverlay();
-    });
+    };
+    legalHit.on('pointerup', activateLegal);
+    keyboard.add(legalHit, () => MENU_COPY.legal, activateLegal);
 
     // ---- Hidden diagnostics gesture ----------------------------------------
     // The visible build information lives in the About surface, so the five-tap

@@ -1,3 +1,7 @@
+CI fix (Muse, 2026-10-28): video-cap-clock stub implements focus() for the native skip button; menu keyboard test uses system-Chrome launch. Hosted CI pending.
+
+A11Y follow-up: post-redesign menu, legal and video keyboard interactions have regression coverage; native MAX/Telegram device acceptance remains separate.
+
 PR249 convergence 2026-10-27: notification tap waits for settled card; legal and diagnostics have disjoint 44px targets and actual touch coverage; FIFO/action assertions retained. EASY visual uses redesign locators and falls back to existing compact description if full copy overflows. Current CI and exact HEAD status in PR249. No merge/deploy.
 
 UX CI follow-up: new ordering/touch tests PASS; legacy mobile matrix uses center alignment for wrapped footer labels, retaining spacing/overflow guards. No runtime delta. Exact final SHA CI required.
