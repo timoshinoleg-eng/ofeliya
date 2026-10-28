@@ -34,8 +34,9 @@ export interface OptionalWebAnalyticsClient {
 
 const pendingByDocument = new WeakMap<Document, Map<string, Promise<boolean>>>();
 const EVENT_NAMES = new Set<OptionalWebEvent>([
-  'app_open', 'run_start', 'run_60s', 'boss1', 'heart', 'death', 'win', 'replay', 'share', 'daily', 'referral',
+  'app_open', 'run_start', 'run_60s', 'run_10min', 'boss1', 'heart', 'death', 'win', 'replay', 'share', 'daily', 'referral',
   'first_enemy_hit', 'first_enemy_kill', 'first_rna_pickup', 'first_mutation_opened', 'first_mutation_selected',
+  'mutation_chosen',
   'host_cell_approached', 'infection_started', 'infection_interrupted', 'infection_resumed', 'first_lysis',
   'second_host_cell_completed_without_hint', 'onboarding_step', 'onboarding_exit',
 ]);

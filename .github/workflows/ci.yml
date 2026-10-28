@@ -137,6 +137,12 @@ jobs:
       - name: Analytics read path contract
         run: npm run test:analytics-readpath
 
+      - name: Client feature flags contract
+        run: npm run test:feature-flags
+
+      - name: Analytics event names in sync
+        run: npm run test:analytics-events
+
       - name: Daily V2 client contract smoke
         run: npm run test:daily-v2
 

@@ -1,3 +1,5 @@
+Phase 2 port: геймплейные флаги — отдельным модулем src/game/FeatureFlags.ts (micro-flags, ноль зависимостей), а НЕ в ClientFeatureFlags: тот резолвер — presentation-only по архитектурному решению main, запиненному тестом check-muse-telemetry.mjs («gameplay flags must not exist» — первая попытка портировать флаги туда уронила CI на этом тесте). Umami-клиент не дублируется: в main уже есть OptionalWebAnalytics, новые WebEvent-имена не вводятся — фаннел идёт через существующий trackProductEvent. storefront.variant — stub в FeatureFlags до порта витрины (там появится первый читатель). run_ended не добавляется: win/death + derived run_end покрывают.
+
 A11Y follow-up: share menu action callbacks between pointer and keyboard; keep DOM focus within legal dialog and restore it on close.
 HUD follow-up: cache retained bar geometry and redraw affected fills when values change; invalidate on layout.
 

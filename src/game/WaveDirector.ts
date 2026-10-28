@@ -18,6 +18,22 @@ import {
   type WaveEventSpawn,
 } from './WaveEvents';
 import { miniBossSpawnedByStageTime, type MiniBossDefinition } from './AnomalyPrime';
+import { FeatureFlags } from './FeatureFlags';
+
+/** First 3 minutes of a run — the window of the difficulty.earlyGame flag. */
+const EARLY_GAME_WINDOW_MS = 180_000;
+
+/**
+ * Early-run difficulty scale from the feature flag (1 = authored).
+ * Divides the spawn interval: >1 — more aggressive (spawns more often),
+ * <1 — gentler (rarer). Flag default 1 → behavior unchanged; the flag is
+ * resolved once per frame from the already-frozen client flags.
+ */
+function earlyGameDifficultyScale(runTimeMs: number): number {
+  if (runTimeMs >= EARLY_GAME_WINDOW_MS) return 1;
+  const s = FeatureFlags.get('difficulty.earlyGame');
+  return Number.isFinite(s) && s > 0 ? s : 1;
+}
 
 export interface WaveDirectorSnapshot {
   spawnAcc: number;
@@ -155,6 +171,8 @@ export class WaveDirector {
     );
     interval *= this.difficulty.spawnIntervalMultiplier;
     interval *= this.pacingDirective.spawnIntervalMultiplier;
+    // Ported Phase 2: early-run difficulty flag (default 1 = authored).
+    interval /= earlyGameDifficultyScale(this.scene.runState.run.timeMs);
     if (this.boss) interval /= waves.bossPhaseSpawnMultiplier;
     this.spawnAcc += delta;
     while (this.spawnAcc >= interval) {

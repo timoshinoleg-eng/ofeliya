@@ -1,3 +1,5 @@
+Phase 2 port (Muse, 2026-10-28): Фаза 0 уже в main (a865b21) — отдельный PR не нужен. Фаза 2 портируется адаптированно: flags/analytics main уже есть (ClientFeatureFlags/OptionalWebAnalytics), поэтому новых FeatureFlags.ts/UmamiAnalytics.ts нет — добавлены events.doubleRna + difficulty.earlyGame в ClientFeatureFlags, run_10min + mutation_chosen в 4 списка событий, швы в GameScene/WaveDirector. Ветка feat/port-phase2-flags.
+
 A11Y follow-up after #249: keyboard menu, legal focus trap/restoration, and native video skip are in review. No gameplay or ranking changes. See focused tests and PR for exact CI.
 HUD follow-up after #249: retained bar graphics and removed unused adaptiveThreat registry publishing; exact CI and device/performance evidence remain review gates.
 

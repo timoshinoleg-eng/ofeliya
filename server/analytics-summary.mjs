@@ -29,10 +29,11 @@ export const ANALYTICS_SUMMARY_TOKEN_MIN_LENGTH = 16;
  * defence-in-depth allowlist so an unexpected row name can never be echoed back out.
  */
 export const ANALYTICS_EVENT_NAMES = Object.freeze([
-  'app_open', 'run_start', 'run_60s', 'boss1', 'heart', 'death',
+  'app_open', 'run_start', 'run_60s', 'run_10min', 'boss1', 'heart', 'death',
   'win', 'replay', 'share', 'daily', 'referral',
   'first_enemy_hit', 'first_enemy_kill', 'first_rna_pickup',
   'first_mutation_opened', 'first_mutation_selected',
+  'mutation_chosen',
   'host_cell_approached', 'infection_started', 'infection_interrupted',
   'infection_resumed', 'first_lysis', 'second_host_cell_completed_without_hint',
   'onboarding_step', 'onboarding_exit',
