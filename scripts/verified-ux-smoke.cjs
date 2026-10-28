@@ -24,7 +24,7 @@ const { chromium } = require('playwright');
                 fs.writeFileSync(path.join(dir, `menu-${viewport.width}-${reducedMotion}.json`), JSON.stringify(targets, null, 2));
                 await page.screenshot({ path: path.join(dir, `menu-${viewport.width}-${reducedMotion}.png`) });
                 if (process.argv.includes('--footer')) {
-                    assert.equal(targets.length, 8);
+                    assert.equal(targets.length, 10);
                     for (const t of targets) {
                         assert.equal(t.missing, undefined, 'missing menu target: ' + JSON.stringify(t));
                         assert.ok(t.w >= 44 && t.h >= 44, 'footer target below44: ' + JSON.stringify(t));
