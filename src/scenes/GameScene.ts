@@ -58,6 +58,7 @@ import { Player } from '../game/Player';
 import { Enemy } from '../game/Enemy';
 import { Bullet } from '../game/Bullet';
 import { Gem } from '../game/Gem';
+import { FeatureFlags } from '../game/FeatureFlags';
 import type { RunResult, RunSnapshot } from '../game/RunContracts';
 import { RunMilestones } from '../game/RunMilestones';
 import { RunState } from '../game/RunState';
@@ -2901,7 +2902,7 @@ export class GameScene extends Phaser.Scene {
     // Ported Phase 2: «double RNA» event flag (enabled without rebuild).
     // Both grant paths scale: a pooled gem and the fallback top-up of the
     // first live gem (the original patch scaled only the pooled path).
-    const scaled = clientFlags().events.doubleRna ? value * 2 : value;
+    const scaled = FeatureFlags.get('events.doubleRna') ? value * 2 : value;
     const g = this.gems.get(x, y) as Gem | null;
     if (g) {
       g.activate(this, x, y, scaled);

@@ -15,6 +15,7 @@ import { runStartupBoundary } from './systems/StartupBoundary';
 import { ensureTelegramBridge } from './platform/TelegramBridgeLoader';
 import { trackProductEvent } from './systems/AnalyticsClient';
 import { retryPendingDailySubmission } from './systems/ScoreClient';
+import { FeatureFlags } from './game/FeatureFlags';
 import { RELEASE_MARKER, RELEASE_SHA, RELEASE_SHORT } from './release';
 
 declare global {
@@ -302,6 +303,14 @@ async function boot(signal: AbortSignal): Promise<void> {
   StartupTrace.mark('renderer.select.end');
   StartupTrace.setMeta('rendererRequested', rendererType === Phaser.WEBGL ? 'webgl' : 'canvas');
   if (rendererType === Phaser.CANVAS) installCanvasTextResolutionGuard();
+
+  // Ported Phase 2: gameplay feature flags. Fire-and-forget: defaults apply
+  // until init resolves; ?flag. overrides only in QA builds (dev or
+  // VITE_QA_TOOLS=1). Never blocks or breaks boot.
+  void FeatureFlags.init(
+    {},
+    { qaTools: import.meta.env.DEV || import.meta.env.VITE_QA_TOOLS === '1' }
+  );
 
   let game: Phaser.Game;
   try {

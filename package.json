@@ -53,7 +53,7 @@
     "test:social-hub": "node scripts/social-hub-smoke.cjs",
     "test:analytics": "node scripts/check-analytics-client.mjs",
     "test:analytics-readpath": "node tests/analytics-readpath.test.mjs",
-    "test:client-feature-flags": "node tests/client-feature-flags.mjs",
+    "test:feature-flags": "node tests/feature-flags.mjs",
     "test:analytics-events": "node scripts/check-analytics-events.mjs",
     "test:daily-v2": "node scripts/check-daily-v2.mjs",
     "test:score-outbox": "node scripts/check-score-outbox.mjs",

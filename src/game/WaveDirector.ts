@@ -18,7 +18,7 @@ import {
   type WaveEventSpawn,
 } from './WaveEvents';
 import { miniBossSpawnedByStageTime, type MiniBossDefinition } from './AnomalyPrime';
-import { clientFlags } from '../systems/ClientExperience';
+import { FeatureFlags } from './FeatureFlags';
 
 /** First 3 minutes of a run — the window of the difficulty.earlyGame flag. */
 const EARLY_GAME_WINDOW_MS = 180_000;
@@ -31,7 +31,7 @@ const EARLY_GAME_WINDOW_MS = 180_000;
  */
 function earlyGameDifficultyScale(runTimeMs: number): number {
   if (runTimeMs >= EARLY_GAME_WINDOW_MS) return 1;
-  const s = clientFlags().difficulty.earlyGame;
+  const s = FeatureFlags.get('difficulty.earlyGame');
   return Number.isFinite(s) && s > 0 ? s : 1;
 }
 
