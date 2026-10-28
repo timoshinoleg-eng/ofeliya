@@ -1,3 +1,8 @@
+2026-10-28: #251 merged into main (8cf4e8c); this branch merged new main, combining package.json scripts and memory notes.
+CI fix (Muse, 2026-10-28): video-cap-clock stub implements focus() for the native skip button; menu keyboard test uses system-Chrome launch. Hosted CI pending.
+
+A11Y follow-up: post-redesign menu, legal and video keyboard interactions have regression coverage; native MAX/Telegram device acceptance remains separate.
+
 CI fix (Muse, 2026-10-28): retained-graphics test uses system-Chrome launch (playwright-core has no bundled browser in CI). Hosted CI pending.
 
 HUD follow-up: visual bar updates remain driven by HP/RNA/boss state and layout; boss identity animation and low-HP pulse remain dynamic.

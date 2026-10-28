@@ -6,6 +6,7 @@
   "description": "Мобильный roguelite-survivor OFELIYA: STRAIN ZERO для MAX Mini Apps",
   "scripts": {
     "dev": "vite",
+    "test:keyboard-a11y": "node tests/legal-overlay-focus.mjs && node tests/video-interstitial-a11y.mjs && node tests/menu-keyboard-redesign.mjs",
     "test:hud-retained-graphics": "node tests/hud-retained-graphics.cjs",
     "test:challenge": "node scripts/check-challenge.mjs",
     "test:save": "node scripts/check-save-migration.mjs",

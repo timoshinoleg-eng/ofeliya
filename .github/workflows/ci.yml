@@ -324,6 +324,9 @@ jobs:
       - name: Utility text extremes and reduced-motion browser contracts
         run: npm run test:integration-visual-browser
 
+      - name: Keyboard access to menu, legal dialog and video skip
+        run: npm run test:keyboard-a11y
+
       - name: MAX compact viewport matrix
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/mobile-layout-matrix.cjs
 

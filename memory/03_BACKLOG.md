@@ -1,3 +1,4 @@
+A11Y follow-up: review exact-head CI and exercise keyboard/focus in actual embedded WebViews before claiming native acceptance.
 HUD follow-up: verify exact-head CI, viewport changes and actual device performance before claiming an FPS improvement.
 
 PR249 convergence 2026-10-27: notification tap waits for settled card; legal and diagnostics have disjoint 44px targets and actual touch coverage; FIFO/action assertions retained. EASY visual uses redesign locators and falls back to existing compact description if full copy overflows. Current CI and exact HEAD status in PR249. No merge/deploy.
