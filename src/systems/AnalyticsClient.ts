@@ -29,7 +29,9 @@ export type ProductEvent =
   | 'first_lysis'
   | 'second_host_cell_completed_without_hint'
   | 'onboarding_step'
-  | 'onboarding_exit';
+  | 'onboarding_exit'
+  | 'daily_claimed'
+  | 'achievement_unlocked';
 
 export type ProductEventProps = Record<string, string | number | boolean>;
 

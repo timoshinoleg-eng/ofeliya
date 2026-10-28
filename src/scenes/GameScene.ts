@@ -110,6 +110,15 @@ import {
   type HostCellLysisEvent,
 } from '../systems/HostCellSystem';
 import { trackProductEvent, type ProductEvent, type ProductEventProps } from '../systems/AnalyticsClient';
+import { dailyStreakSummary } from '../systems/DailyHistory';
+import { showMetaToast } from '../ui/RetentionOverlays';
+import {
+  collectLifetimeStats,
+  getMetaAchievementDef,
+  grantAchievementSkin,
+  unlockMetaAchievements,
+} from '../game/achievements/MetaAchievements';
+import { addRna, recordQuestCompleted, recordRunEnd, recordStreak } from '../game/meta/MetaWallet';
 import { beginRunCapability } from '../systems/ScoreClient';
 import type { UIScene } from './UIScene';
 
@@ -134,6 +143,8 @@ const COMPREHENSION_STATE_KEY = 'ofeliya_comprehension_v1';
 
 export class GameScene extends Phaser.Scene {
   private quests!: QuestRuntime;
+  /** Quest ids already complete when the run started (for the meta counter). */
+  private metaQuestsCompletedAtRunStart = new Set<string>();
   player!: Player;
   runState!: RunState;
 
@@ -332,6 +343,9 @@ export class GameScene extends Phaser.Scene {
       kills: this.runState.run.kills, timeMs: this.runState.run.timeMs,
       noDamageMs: this.runState.stage.noDamageMs, savedAtEpochMs: resume.savedAtEpochMs,
     } : undefined);
+    this.metaQuestsCompletedAtRunStart = new Set(
+      this.quests.snapshot().progress.filter((p) => p.complete).map((p) => p.questId)
+    );
 
     // A ranked Standard run must prove that the server observed its start. Request
     // the capability here, after seed/control are final but before meaningful play.
@@ -2442,6 +2456,30 @@ export class GameScene extends Phaser.Scene {
         evolutions:[...run.evolutionsSeen],legendaryIds:[...run.legendaryIds],won:win});
     }
     this.captureAchievements(true, false);
+    // Phase 3 (port): retention — lifetime counters, quest-completion diff
+    // (main's quest core grants nothing; the counter feeds quests_10/50),
+    // meta achievements with rewards.
+    recordRunEnd({ timeSec: run.timeMs / 1000, won: win });
+    recordStreak(dailyStreakSummary().best);
+    for (const p of this.quests.snapshot().progress) {
+      if (p.complete && !this.metaQuestsCompletedAtRunStart.has(p.questId)) recordQuestCompleted();
+    }
+    const metaStats = collectLifetimeStats({
+      comboBest: run.comboBest,
+      maxNoDamageMs: run.maxNoDamageMs,
+      won: win,
+    });
+    for (const id of unlockMetaAchievements(metaStats)) {
+      const def = getMetaAchievementDef(id);
+      if (def.reward.kind === 'rna') addRna(def.reward.amount);
+      else grantAchievementSkin(def.reward.skinId);
+      void trackProductEvent('achievement_unlocked', PlatformBridge, { achievementId: id });
+      showMetaToast(
+        this,
+        def.title,
+        def.reward.kind === 'rna' ? `+${def.reward.amount} RNA` : 'Новый штамм'
+      );
+    }
     this.milestones.reset();
     this.registry.set('run', this.snapshot());
     const result: RunResult = {

@@ -1,3 +1,4 @@
+Phase 3 port: exact-head CI на PR; после мержа — Фаза 4 (лаборатория, MetaWallet + Decimal) → Фаза 5 (скины, выдача через достижения; шов purchase→grant — follow-up к партии 3). Дальше по плану: витрина+Stars, Juice, фиксы №10–16.
 Phase 2 port: exact-head CI на PR; после мержа — TMA-порт. Дальше по плану: retention/lab/skins, витрина+Stars (там же storefront.variant), Juice.
 
 A11Y follow-up: review exact-head CI and exercise keyboard/focus in actual embedded WebViews before claiming native acceptance.

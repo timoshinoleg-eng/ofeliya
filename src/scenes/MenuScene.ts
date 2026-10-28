@@ -33,6 +33,9 @@ import {
 import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
 import { ensureCinematicTextures } from '../game/CinematicTextures';
 import { clearDailyIntent, launchDailyRun } from '../game/DailyRunIntent';
+import { FeatureFlags } from '../game/FeatureFlags';
+import { getDailyStatus } from '../game/daily/DailyCalendar';
+import { showDailyModal, showMetaToast } from '../ui/RetentionOverlays';
 import { showLegalOverlay } from '../legal/LegalOverlay';
 import { SocialHub } from '../ui/SocialHub';
 import { MenuKeyboard } from '../ui/MenuKeyboard';
@@ -1070,6 +1073,25 @@ export class MenuScene extends Phaser.Scene {
       this.showCodex();
     }
 
+    // Phase 3 (port): daily reward — auto-show the daily modal when a
+    // server-anchored daily run was played today and the reward is unclaimed.
+    // The modal re-appears on the next menu entry until claimed; closing it
+    // with ✕ only dismisses it for this entry.
+    if (FeatureFlags.get('retention.quests') && getDailyStatus().canClaim) {
+      this.time.delayedCall(900, () => {
+        if (!this.scene.isActive()) return;
+        showDailyModal(
+          this,
+          (streak, rewardRna) => {
+            showMetaToast(this, 'ЕЖЕДНЕВНАЯ НАГРАДА', `+${rewardRna} RNA · ${streak} дн.`);
+          },
+          () => {
+            void this.launchDailyRunFromModal();
+          }
+        );
+      });
+    }
+
     StartupTrace.setMeta('platformFinal', PlatformBridge.kind);
     StartupTrace.setMeta('platformVersionFinal', PlatformBridge.version || '');
     StartupTrace.mark('menu.create.end');
@@ -1101,6 +1123,21 @@ export class MenuScene extends Phaser.Scene {
         this.socialHub = null;
       }
     );
+  }
+
+  /**
+   * Daily run launch from the daily modal (mirrors the SocialHub launcher).
+   * Used when the modal is opened before today's daily run was played.
+   */
+  private async launchDailyRunFromModal(): Promise<void> {
+    const status = await launchDailyRun({
+      registry: this.registry,
+      platform: PlatformBridge,
+    });
+    if (status === 'ok') {
+      void trackProductEvent('daily', PlatformBridge, { action: 'launch' });
+      this.scene.start('Game');
+    }
   }
 
   /**

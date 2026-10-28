@@ -5,8 +5,9 @@
  * lifecycle (defaults before init, overrides via init, setOverride/reset).
  * Compiles the TS module with tsc like the other node-side contract tests.
  *
- * Scope: Phase 2 keys only (events.doubleRna, difficulty.earlyGame,
- * storefront.variant). Later phases add their own keys with their own tests.
+ * Scope: Phase 2 keys (events.doubleRna, difficulty.earlyGame,
+ * storefront.variant) + Phase 3 key (retention.quests, порт Фазы 3).
+ * Later phases add their own keys here.
  */
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -64,7 +65,7 @@ try {
   // --- defaults ---
   deepEq(
     FLAG_DEFAULTS,
-    { 'events.doubleRna': false, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden' },
+    { 'events.doubleRna': false, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden', 'retention.quests': true },
     'FLAG_DEFAULTS'
   );
 
@@ -72,13 +73,18 @@ try {
   deepEq(resolveFlags(), FLAG_DEFAULTS, 'resolveFlags() with no args = defaults');
   deepEq(
     resolveFlags({ 'events.doubleRna': true }),
-    { 'events.doubleRna': true, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden' },
+    { 'events.doubleRna': true, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden', 'retention.quests': true },
     'resolveFlags partial override'
   );
   deepEq(
     resolveFlags({ 'difficulty.earlyGame': 1.25, 'storefront.variant': 'featured' }),
-    { 'events.doubleRna': false, 'difficulty.earlyGame': 1.25, 'storefront.variant': 'featured' },
+    { 'events.doubleRna': false, 'difficulty.earlyGame': 1.25, 'storefront.variant': 'featured', 'retention.quests': true },
     'resolveFlags multiple overrides'
+  );
+  deepEq(
+    resolveFlags({ 'retention.quests': false }),
+    { 'events.doubleRna': false, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden', 'retention.quests': false },
+    'resolveFlags retention override'
   );
   deepEq(
     resolveFlags({ 'unknown.flag': true }),
@@ -109,6 +115,16 @@ try {
     'URL garbage values ignored'
   );
   deepEq(
+    readUrlFlagOverrides('?flag.retention.quests=false'),
+    { 'retention.quests': false },
+    'URL retention bool false'
+  );
+  deepEq(
+    readUrlFlagOverrides('?flag.retention.quests=yes'),
+    {},
+    'URL retention garbage ignored'
+  );
+  deepEq(
     readUrlFlagOverrides('?flag.unknown.flag=1'),
     {},
     'URL unknown flags ignored'
@@ -124,6 +140,7 @@ try {
     // Before init: safe defaults, never throws.
     eq(FeatureFlags.get('events.doubleRna'), false, 'get() before init = default');
     eq(FeatureFlags.get('difficulty.earlyGame'), 1, 'get() number before init = default');
+    eq(FeatureFlags.get('retention.quests'), true, 'retention default true before init');
     eq(FeatureFlags.isInitialized(), false, 'not initialized before init()');
 
     // init() with overrides resolves through the micro-flags pipeline.
@@ -132,12 +149,16 @@ try {
     eq(FeatureFlags.get('events.doubleRna'), true, 'init override bool applied');
     eq(FeatureFlags.get('difficulty.earlyGame'), 1.25, 'init override number applied');
     eq(FeatureFlags.get('storefront.variant'), 'hidden', 'non-overridden flag keeps default');
+    eq(FeatureFlags.get('retention.quests'), true, 'retention keeps default when not overridden');
 
     // setOverride / reset round-trip.
     FeatureFlags.setOverride('storefront.variant', 'featured');
     eq(FeatureFlags.get('storefront.variant'), 'featured', 'setOverride applies');
+    FeatureFlags.setOverride('retention.quests', false);
+    eq(FeatureFlags.get('retention.quests'), false, 'retention setOverride applies');
     FeatureFlags.reset();
     eq(FeatureFlags.get('storefront.variant'), 'hidden', 'reset restores default');
+    eq(FeatureFlags.get('retention.quests'), true, 'reset restores retention default');
     eq(FeatureFlags.isInitialized(), false, 'reset clears initialized');
 
     // init() with no overrides = pure defaults through the provider.
@@ -147,6 +168,7 @@ try {
         'events.doubleRna': FeatureFlags.get('events.doubleRna'),
         'difficulty.earlyGame': FeatureFlags.get('difficulty.earlyGame'),
         'storefront.variant': FeatureFlags.get('storefront.variant'),
+        'retention.quests': FeatureFlags.get('retention.quests'),
       },
       FLAG_DEFAULTS,
       'init() with no overrides = defaults'
@@ -160,12 +182,13 @@ try {
   await (async () => {
     FeatureFlags.reset();
     globalThis.location = {
-      search: '?flag.events.doubleRna=true&flag.storefront.variant=mock',
+      search: '?flag.events.doubleRna=true&flag.storefront.variant=mock&flag.retention.quests=false',
     };
     try {
       await FeatureFlags.init({}, { qaTools: true });
       eq(FeatureFlags.get('events.doubleRna'), true, 'qaTools: URL bool override applied');
       eq(FeatureFlags.get('storefront.variant'), 'mock', 'qaTools: URL variant override applied');
+      eq(FeatureFlags.get('retention.quests'), false, 'qaTools: URL retention override applied');
 
       FeatureFlags.reset();
       await FeatureFlags.init({}, { qaTools: false });
@@ -175,6 +198,7 @@ try {
         'hidden',
         'qaTools:false: variant keeps default'
       );
+      eq(FeatureFlags.get('retention.quests'), true, 'qaTools:false: retention keeps default');
 
       FeatureFlags.reset();
       await FeatureFlags.init({});
