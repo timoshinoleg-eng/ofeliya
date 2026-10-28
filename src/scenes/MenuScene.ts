@@ -107,6 +107,8 @@ export class MenuScene extends Phaser.Scene {
     const recordText = recordParts.join(' · ');
     this.codexOverlay = null;
     this.socialHub = null;
+    this.labPanel = null;
+    this.strainsStub = null;
     this.founderBadge?.destroy();
     this.founderBadge = null;
     const profileLoadGeneration = ++this.profileLoadGeneration;
@@ -1086,6 +1088,10 @@ export class MenuScene extends Phaser.Scene {
       this.questBoard = null;
       this.socialHub?.destroy();
       this.socialHub = null;
+      this.labPanel?.close();
+      this.labPanel = null;
+      this.strainsStub?.destroy();
+      this.strainsStub = null;
       this.profileLoadGeneration += 1;
       this.founderBadge?.destroy();
       this.founderBadge = null;
