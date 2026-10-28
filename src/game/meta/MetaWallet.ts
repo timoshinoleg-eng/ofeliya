@@ -6,8 +6,9 @@
  * стека не портируется — daily в main на локальных днях, см. DailyCalendar).
  *
  * Сейчас: простое localStorage-хранилище для наград daily/достижений.
- * Фаза 4 (break_infinity.js Decimal) заменит number-арифметику и добавит
- * кривые стоимости — интерфейс addRna/spendRna спроектирован с запасом.
+ * Фаза 4 (порт, plain numbers): Decimal НЕ вводится — см. LabBranches.ts
+ * (максимумы экономики ~1e8, float64 точен до 9e15). resetRnaBalance —
+ * для престижа лаборатории (счётчики при этом не трогаются).
  *
  * Счётчики (для meta-достижений): questsCompleted, timeSecTotal, deaths,
  * rnaEarned, starsSpent, maxStreak. runs/totalKills берутся из SaveSystem.
@@ -91,6 +92,17 @@ export function spendRna(amount: number): boolean {
   st.rna -= n;
   saveMeta(st);
   return true;
+}
+
+/**
+ * Обнулить баланс RNA (престиж лаборатории, Фаза 4).
+ * Lifetime-счётчики (rnaEarned и др.) НЕ трогаются — престиж не стирает
+ * достижения и meta-прогресс.
+ */
+export function resetRnaBalance(): void {
+  const st = loadMeta();
+  st.rna = 0;
+  saveMeta(st);
 }
 
 /** Записать завершение забега в lifetime-счётчики. */

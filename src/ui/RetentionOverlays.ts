@@ -38,7 +38,7 @@ import {
   getDailyStatus,
   rewardForDayIndex,
 } from '../game/daily/DailyCalendar';
-import { addRna } from '../game/meta/MetaWallet';
+import { grantMetaRna } from '../game/lab/LabState';
 import {
   collectLifetimeStats,
   getMetaAchievementDef,
@@ -248,7 +248,7 @@ export function showDailyModal(
       onClaimed(res.streak, res.reward.rna);
       for (const id of fresh) {
         const def = getMetaAchievementDef(id);
-        if (def.reward.kind === 'rna') addRna(def.reward.amount);
+        if (def.reward.kind === 'rna') grantMetaRna(def.reward.amount);
         else grantAchievementSkin(def.reward.skinId);
         void trackProductEvent('achievement_unlocked', PlatformBridge, { achievementId: id });
         showMetaToast(

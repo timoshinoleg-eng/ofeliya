@@ -1,4 +1,5 @@
-Phase 3 port: exact-head CI на PR; после мержа — Фаза 4 (лаборатория, MetaWallet + Decimal) → Фаза 5 (скины, выдача через достижения; шов purchase→grant — follow-up к партии 3). Дальше по плану: витрина+Stars, Juice, фиксы №10–16.
+Phase 4 port: exact-head CI на PR; после мержа — Фаза 5 (скины; та же открытая проблема точки входа в меню «ШТАММЫ»). ОТКРЫТОЕ РЕШЕНИЕ (Mark): точка входа лаборатории в меню — layout main не даёт места без редизайна (см. 00_HANDOFF); варианты: редизайн меню под полосу/док/сетку, вход из daily-модалки/экрана результатов, другое. Дальше по плану: витрина+Stars, Juice, фиксы №10–16.
+Phase 3 port: exact-head CI на PR; после мержа — Фаза 4 (лаборатория, MetaWallet, без Decimal) → Фаза 5 (скины, выдача через достижения; шов purchase→grant — follow-up к партии 3). Дальше по плану: витрина+Stars, Juice, фиксы №10–16.
 Phase 2 port: exact-head CI на PR; после мержа — TMA-порт. Дальше по плану: retention/lab/skins, витрина+Stars (там же storefront.variant), Juice.
 
 A11Y follow-up: review exact-head CI and exercise keyboard/focus in actual embedded WebViews before claiming native acceptance.

@@ -6,7 +6,8 @@
  * Compiles the TS module with tsc like the other node-side contract tests.
  *
  * Scope: Phase 2 keys (events.doubleRna, difficulty.earlyGame,
- * storefront.variant) + Phase 3 key (retention.quests, порт Фазы 3).
+ * storefront.variant) + Phase 3 key (retention.quests, порт Фазы 3)
+ * + Phase 4 key (economy.lab, порт Фазы 4).
  * Later phases add their own keys here.
  */
 import { execFileSync } from 'node:child_process';
@@ -65,7 +66,7 @@ try {
   // --- defaults ---
   deepEq(
     FLAG_DEFAULTS,
-    { 'events.doubleRna': false, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden', 'retention.quests': true },
+    { 'events.doubleRna': false, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden', 'retention.quests': true, 'economy.lab': true },
     'FLAG_DEFAULTS'
   );
 
@@ -73,18 +74,23 @@ try {
   deepEq(resolveFlags(), FLAG_DEFAULTS, 'resolveFlags() with no args = defaults');
   deepEq(
     resolveFlags({ 'events.doubleRna': true }),
-    { 'events.doubleRna': true, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden', 'retention.quests': true },
+    { 'events.doubleRna': true, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden', 'retention.quests': true, 'economy.lab': true },
     'resolveFlags partial override'
   );
   deepEq(
     resolveFlags({ 'difficulty.earlyGame': 1.25, 'storefront.variant': 'featured' }),
-    { 'events.doubleRna': false, 'difficulty.earlyGame': 1.25, 'storefront.variant': 'featured', 'retention.quests': true },
+    { 'events.doubleRna': false, 'difficulty.earlyGame': 1.25, 'storefront.variant': 'featured', 'retention.quests': true, 'economy.lab': true },
     'resolveFlags multiple overrides'
   );
   deepEq(
     resolveFlags({ 'retention.quests': false }),
-    { 'events.doubleRna': false, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden', 'retention.quests': false },
+    { 'events.doubleRna': false, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden', 'retention.quests': false, 'economy.lab': true },
     'resolveFlags retention override'
+  );
+  deepEq(
+    resolveFlags({ 'economy.lab': false }),
+    { 'events.doubleRna': false, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden', 'retention.quests': true, 'economy.lab': false },
+    'resolveFlags lab override'
   );
   deepEq(
     resolveFlags({ 'unknown.flag': true }),
@@ -125,6 +131,16 @@ try {
     'URL retention garbage ignored'
   );
   deepEq(
+    readUrlFlagOverrides('?flag.economy.lab=false'),
+    { 'economy.lab': false },
+    'URL lab bool false'
+  );
+  deepEq(
+    readUrlFlagOverrides('?flag.economy.lab=yes'),
+    {},
+    'URL lab garbage ignored'
+  );
+  deepEq(
     readUrlFlagOverrides('?flag.unknown.flag=1'),
     {},
     'URL unknown flags ignored'
@@ -141,6 +157,7 @@ try {
     eq(FeatureFlags.get('events.doubleRna'), false, 'get() before init = default');
     eq(FeatureFlags.get('difficulty.earlyGame'), 1, 'get() number before init = default');
     eq(FeatureFlags.get('retention.quests'), true, 'retention default true before init');
+    eq(FeatureFlags.get('economy.lab'), true, 'lab default true before init');
     eq(FeatureFlags.isInitialized(), false, 'not initialized before init()');
 
     // init() with overrides resolves through the micro-flags pipeline.
@@ -150,15 +167,19 @@ try {
     eq(FeatureFlags.get('difficulty.earlyGame'), 1.25, 'init override number applied');
     eq(FeatureFlags.get('storefront.variant'), 'hidden', 'non-overridden flag keeps default');
     eq(FeatureFlags.get('retention.quests'), true, 'retention keeps default when not overridden');
+    eq(FeatureFlags.get('economy.lab'), true, 'lab keeps default when not overridden');
 
     // setOverride / reset round-trip.
     FeatureFlags.setOverride('storefront.variant', 'featured');
     eq(FeatureFlags.get('storefront.variant'), 'featured', 'setOverride applies');
     FeatureFlags.setOverride('retention.quests', false);
     eq(FeatureFlags.get('retention.quests'), false, 'retention setOverride applies');
+    FeatureFlags.setOverride('economy.lab', false);
+    eq(FeatureFlags.get('economy.lab'), false, 'lab setOverride applies');
     FeatureFlags.reset();
     eq(FeatureFlags.get('storefront.variant'), 'hidden', 'reset restores default');
     eq(FeatureFlags.get('retention.quests'), true, 'reset restores retention default');
+    eq(FeatureFlags.get('economy.lab'), true, 'reset restores lab default');
     eq(FeatureFlags.isInitialized(), false, 'reset clears initialized');
 
     // init() with no overrides = pure defaults through the provider.
@@ -169,6 +190,7 @@ try {
         'difficulty.earlyGame': FeatureFlags.get('difficulty.earlyGame'),
         'storefront.variant': FeatureFlags.get('storefront.variant'),
         'retention.quests': FeatureFlags.get('retention.quests'),
+        'economy.lab': FeatureFlags.get('economy.lab'),
       },
       FLAG_DEFAULTS,
       'init() with no overrides = defaults'

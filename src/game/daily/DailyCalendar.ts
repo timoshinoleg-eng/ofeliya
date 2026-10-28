@@ -22,12 +22,13 @@
  *   за игру, а не за визит.
  * - Награда — 7-дневный цикл RNA (таблица стека сохранена): позиция в цикле
  *   = стрик с учётом сегодня. После 7-го дня цикл начинается заново.
- * - Грант — локальный (MetaWallet.addRna): серверной экономики пока нет
- *   (нет /api/daily/claim, нет /api/economy/* — дизайн ofeliya-server-economy-design.md
- *   future-only). Единственная точка минта награды — claimDaily ниже;
- *   claim пишется в ofeliya.daily.v1 ДО возврата, повторный claim
- *   невозможен. Когда появится серверный claim — этот модуль станет
- *   тонким клиентом поверх него, а локальный грант уйдёт.
+ * - Грант — локальный (grantMetaRna, Фаза 4: доход идёт через множитель
+ *   лаборатории — метаболизм × престиж; при нулевых уровнях = MetaWallet.addRna):
+ *   серверной экономики пока нет (нет /api/daily/claim, нет /api/economy/* —
+ *   дизайн ofeliya-server-economy-design.md future-only). Единственная точка
+ *   минта награды — claimDaily ниже; claim пишется в ofeliya.daily.v1 ДО
+ *   возврата, повторный claim невозможен. Когда появится серверный claim —
+ *   этот модуль станет тонким клиентом поверх него, а локальный грант уйдёт.
  * - Офлайн — кэш: стрик и playedToday читаются из локальной DailyHistory,
  *   claim — из локального ofeliya.daily.v1. Без сети ничего не ломается.
  * - maxStreak в MetaWallet синхронизируется из DailyHistory.best при claim
@@ -39,7 +40,8 @@
  */
 
 import { dailyStreakSummary, localDayKey, type DailyStreakSummary } from '../../systems/DailyHistory';
-import { addRna, recordStreak } from '../meta/MetaWallet';
+import { grantMetaRna } from '../lab/LabState';
+import { recordStreak } from '../meta/MetaWallet';
 
 export interface DailyReward {
   day: number; // 1..7
@@ -190,7 +192,7 @@ export type ClaimResult =
 export function claimDaily(now: Date = new Date(), deps: DailyCalendarDeps = {}): ClaimResult {
   const summary = deps.summary ?? dailyStreakSummary(undefined, now);
   const claims = deps.claims ?? loadClaims();
-  const wallet: DailyWallet = deps.wallet ?? { addRna, recordStreak };
+  const wallet: DailyWallet = deps.wallet ?? { addRna: grantMetaRna, recordStreak };
   const status = getDailyStatus(now, { summary, claims });
   if (!status.playedToday) return { ok: false, reason: 'not_played' };
   if (status.claimedToday) return { ok: false, reason: 'already_claimed' };

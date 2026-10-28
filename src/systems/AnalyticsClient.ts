@@ -31,7 +31,9 @@ export type ProductEvent =
   | 'onboarding_step'
   | 'onboarding_exit'
   | 'daily_claimed'
-  | 'achievement_unlocked';
+  | 'achievement_unlocked'
+  | 'lab_upgrade_bought'
+  | 'prestige_done';
 
 export type ProductEventProps = Record<string, string | number | boolean>;
 

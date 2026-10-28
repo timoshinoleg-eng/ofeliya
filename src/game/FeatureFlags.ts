@@ -47,7 +47,8 @@ export type FlagKey =
   | 'events.doubleRna'
   | 'difficulty.earlyGame'
   | 'storefront.variant'
-  | 'retention.quests';
+  | 'retention.quests'
+  | 'economy.lab';
 
 /**
  * Варианты витрины (storefront.variant):
@@ -72,6 +73,13 @@ export interface FlagValues {
    * (квесты main — src/quests — флагом не гейтятся).
    */
   'retention.quests': boolean;
+  /**
+   * Лаборатория мутаций Фазы 4 (порт): апгрейды веток, престиж, множитель
+   * дохода meta-RNA. Дефолт true — слой включён; выключение отключает
+   * покупки/престиж и делает grantMetaRna эквивалентным addRna
+   * (модификаторы забега при этом не применяются).
+   */
+  'economy.lab': boolean;
 }
 
 export const FLAG_DEFAULTS: FlagValues = {
@@ -79,6 +87,7 @@ export const FLAG_DEFAULTS: FlagValues = {
   'difficulty.earlyGame': 1,
   'storefront.variant': 'hidden',
   'retention.quests': true,
+  'economy.lab': true,
 };
 
 /** Чистая функция: дефолты + оверрайды. Неизвестные ключи игнорируются. */
@@ -88,6 +97,7 @@ export function resolveFlags(overrides: Partial<FlagValues> = {}): FlagValues {
     'difficulty.earlyGame': overrides['difficulty.earlyGame'] ?? FLAG_DEFAULTS['difficulty.earlyGame'],
     'storefront.variant': overrideString(overrides['storefront.variant']),
     'retention.quests': overrides['retention.quests'] ?? FLAG_DEFAULTS['retention.quests'],
+    'economy.lab': overrides['economy.lab'] ?? FLAG_DEFAULTS['economy.lab'],
   };
 }
 
@@ -131,6 +141,9 @@ export function readUrlFlagOverrides(search: string): Partial<FlagValues> {
   const rawRetention = params.get('flag.retention.quests');
   if (rawRetention === 'true' || rawRetention === '1') out['retention.quests'] = true;
   else if (rawRetention === 'false' || rawRetention === '0') out['retention.quests'] = false;
+  const rawLab = params.get('flag.economy.lab');
+  if (rawLab === 'true' || rawLab === '1') out['economy.lab'] = true;
+  else if (rawLab === 'false' || rawLab === '0') out['economy.lab'] = false;
   return out;
 }
 

@@ -118,7 +118,9 @@ import {
   grantAchievementSkin,
   unlockMetaAchievements,
 } from '../game/achievements/MetaAchievements';
-import { addRna, recordQuestCompleted, recordRunEnd, recordStreak } from '../game/meta/MetaWallet';
+import { recordQuestCompleted, recordRunEnd, recordStreak } from '../game/meta/MetaWallet';
+import { grantMetaRna, loadLabState } from '../game/lab/LabState';
+import { applyLabRunModifiers } from '../game/lab/LabModifiers';
 import { beginRunCapability } from '../systems/ScoreClient';
 import type { UIScene } from './UIScene';
 
@@ -336,6 +338,13 @@ export class GameScene extends Phaser.Scene {
     if (resume) this.heartbeatPulse.restore(resume.heartbeat);
     this.runState = new RunState(this.stageDirector.currentStage);
     if (resume) this.runState.restoreFromCheckpoint(resume.runState);
+    // Лаборатория (Фаза 4): модификаторы забега применяются один раз на fresh run,
+    // после restoreFromCheckpoint и до первого кадра. На resume чекпоинт уже
+    // содержит запечённые значения — повторное применение удвоило бы бонус.
+    // При нулевых уровнях множители = 1: поведение идентично до-Фазе-4.
+    if (!resume && FeatureFlags.get('economy.lab')) {
+      applyLabRunModifiers(this.runState.stage, loadLabState());
+    }
     this.resumed = resume !== null;
     this.run10MinTracked = false;
     this.quests = new QuestRuntime();
@@ -2471,7 +2480,7 @@ export class GameScene extends Phaser.Scene {
     });
     for (const id of unlockMetaAchievements(metaStats)) {
       const def = getMetaAchievementDef(id);
-      if (def.reward.kind === 'rna') addRna(def.reward.amount);
+      if (def.reward.kind === 'rna') grantMetaRna(def.reward.amount);
       else grantAchievementSkin(def.reward.skinId);
       void trackProductEvent('achievement_unlocked', PlatformBridge, { achievementId: id });
       showMetaToast(

@@ -39,6 +39,7 @@ try {
       'src/game/daily/DailyCalendar.ts',
       'src/systems/DailyHistory.ts',
       'src/game/meta/MetaWallet.ts',
+      'src/game/lab/LabState.ts',
       '--target',
       'ES2020',
       '--module',
@@ -59,6 +60,7 @@ try {
 
   const dc = require(join(temp, 'game/daily/DailyCalendar.js'));
   const dh = require(join(temp, 'systems/DailyHistory.js'));
+  const mw = require(join(temp, 'game/meta/MetaWallet.js'));
 
   // --- localDayKey: локальный календарь, не UTC ---
   eq(dh.localDayKey(at(2026, 10, 21)), '2026-10-21', 'localDayKey noon');
@@ -182,7 +184,26 @@ try {
   eq(r.reason, 'already_claimed', 'reason already_claimed');
   eq(w.calls.addRna.length, 1, 'still one grant');
 
+  // Default wallet (без deps.wallet): грант идёт через grantMetaRna
+  // (Фаза 4: множитель лаборатории; при нулевых уровнях = addRna).
+  // Требует localStorage: grantMetaRna читает ofeliya.lab.v1.
+  const store = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => void store.set(k, String(v)),
+    removeItem: (k) => void store.delete(k),
+  };
+  const claims2 = {};
+  const sum2 = summaryFor([dayKey(2026, 10, 20), dayKey(2026, 10, 21)], at(2026, 10, 21));
+  const before = mw.loadMeta().rna;
+  r = dc.claimDaily(at(2026, 10, 21), { summary: sum2, claims: claims2 });
+  eq(r.ok, true, 'default wallet claim ok');
+  eq(r.reward.rna, 75, 'default wallet reward 75');
+  eq(mw.loadMeta().rna, before + 75, 'default wallet grants via grantMetaRna');
+  delete globalThis.localStorage;
+
   console.log('daily-streak: OK');
 } finally {
   rmSync(temp, { recursive: true, force: true });
+  delete globalThis.localStorage;
 }
