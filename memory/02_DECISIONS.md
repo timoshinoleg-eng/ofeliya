@@ -1,3 +1,5 @@
+Phase 2 port: не дублировать системы main — FeatureFlags.ts/UmamiAnalytics.ts из стека НЕ портируются как файлы (в main уже есть эволюционировавшие ClientFeatureFlags/OptionalWebAnalytics с тем же назначением; второй umami-клиент дал бы двойную загрузку скрипта). Флаги и события добавляются в существующие системы. storefront.variant — строковый флаг без читателя до порта витрины, отложен. run_ended не добавляется: win/death + derived run_end покрывают.
+
 A11Y follow-up: share menu action callbacks between pointer and keyboard; keep DOM focus within legal dialog and restore it on close.
 HUD follow-up: cache retained bar geometry and redraw affected fills when values change; invalidate on layout.
 

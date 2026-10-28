@@ -1,3 +1,5 @@
+Phase 2 port: exact-head CI на PR; после мержа — TMA-порт. Дальше по плану: retention/lab/skins, витрина+Stars (там же storefront.variant), Juice.
+
 A11Y follow-up: review exact-head CI and exercise keyboard/focus in actual embedded WebViews before claiming native acceptance.
 HUD follow-up: verify exact-head CI, viewport changes and actual device performance before claiming an FPS improvement.
 

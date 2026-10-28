@@ -190,6 +190,8 @@ export class GameScene extends Phaser.Scene {
   private pendingLegendaryCeremony: LegendaryId | null = null;
   private newAchievements: AchievementId[] = [];
   private achievementCheckAcc = 0;
+  /** Ported Phase 2: run_10min is tracked once per run (reset in create()). */
+  private run10MinTracked = false;
   private detachHostLifecycle: (()=>void) | null = null;
   private hitStopUntil = 0;
   private hitStopped = false;
@@ -323,6 +325,7 @@ export class GameScene extends Phaser.Scene {
     this.runState = new RunState(this.stageDirector.currentStage);
     if (resume) this.runState.restoreFromCheckpoint(resume.runState);
     this.resumed = resume !== null;
+    this.run10MinTracked = false;
     this.quests = new QuestRuntime();
     this.quests.begin(SaveSystem.get().runs, resume?.quest, resume ? {
       kills: this.runState.run.kills, timeMs: this.runState.run.timeMs,
@@ -662,6 +665,14 @@ export class GameScene extends Phaser.Scene {
       this.trackComprehensionOnce('run_60s', {
         runSeed: this.runSeed,
         timeMs: Math.round(this.runState.run.timeMs),
+        kills: this.runState.run.kills,
+        level: this.runState.stage.level,
+      });
+    }
+    // Ported Phase 2: funnel milestone run_start → run_10min, once per run.
+    if (!this.run10MinTracked && !this.resumed && this.runState.run.timeMs >= 600_000) {
+      this.run10MinTracked = true;
+      void trackProductEvent('run_10min', PlatformBridge, {
         kills: this.runState.run.kills,
         level: this.runState.stage.level,
       });
@@ -1285,6 +1296,8 @@ export class GameScene extends Phaser.Scene {
     if (!def) return this.awaitingChoice;
     const rewardChoice = this.legendaryRewardPending;
     def.apply(this.runState);
+    // Ported Phase 2: funnel — which mutation was chosen (no PII).
+    void trackProductEvent('mutation_chosen', PlatformBridge, { mutationId: def.id });
     this.quests.mutation();
     this.trackComprehensionOnce('first_mutation_selected', {
       id: def.id,
@@ -2885,13 +2898,17 @@ export class GameScene extends Phaser.Scene {
   };
 
   private spawnGem(x: number, y: number, value: number): void {
+    // Ported Phase 2: «double RNA» event flag (enabled without rebuild).
+    // Both grant paths scale: a pooled gem and the fallback top-up of the
+    // first live gem (the original patch scaled only the pooled path).
+    const scaled = clientFlags().events.doubleRna ? value * 2 : value;
     const g = this.gems.get(x, y) as Gem | null;
     if (g) {
-      g.activate(this, x, y, value);
+      g.activate(this, x, y, scaled);
       return;
     }
     const first = this.gems.getFirstAlive() as Gem | null;
-    if (first) first.value += value;
+    if (first) first.value += scaled;
   }
 
   private captureAchievements(runRecorded: boolean, showToast: boolean): void {

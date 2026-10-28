@@ -1,4 +1,5 @@
 2026-10-28: #251 merged into main (8cf4e8c); this branch merged new main, combining package.json scripts and memory notes.
+Phase 2 port (Muse, 2026-10-28): events.doubleRna (gem x2, дефолт off) + difficulty.earlyGame (масштаб спавна первые 3 мин, дефолт 1) в ClientFeatureFlags с ?flag.-оверрайдами (QA-гейт VITE_QA_TOOLS); run_10min + mutation_chosen трекаются через trackProductEvent; списки событий синхронизированы (ProductEvent / PRODUCT_EVENTS / EVENT_NAMES / ANALYTICS_EVENT_NAMES). storefront.variant отложен до порта витрины; run_ended покрыт win/death + derived run_end.
 CI fix (Muse, 2026-10-28): video-cap-clock stub implements focus() for the native skip button; menu keyboard test uses system-Chrome launch. Hosted CI pending.
 
 A11Y follow-up: post-redesign menu, legal and video keyboard interactions have regression coverage; native MAX/Telegram device acceptance remains separate.
