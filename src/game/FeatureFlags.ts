@@ -46,7 +46,8 @@
 export type FlagKey =
   | 'events.doubleRna'
   | 'difficulty.earlyGame'
-  | 'storefront.variant';
+  | 'storefront.variant'
+  | 'retention.quests';
 
 /**
  * Варианты витрины (storefront.variant):
@@ -65,12 +66,19 @@ export interface FlagValues {
   'difficulty.earlyGame': number;
   /** Вариант витрины (см. StorefrontVariant выше). */
   'storefront.variant': string;
+  /**
+   * Retention-слой Фазы 3 (порт): daily-модалка в меню + meta-достижения.
+   * Дефолт true — слой виден всем; выключение прячет только UI
+   * (квесты main — src/quests — флагом не гейтятся).
+   */
+  'retention.quests': boolean;
 }
 
 export const FLAG_DEFAULTS: FlagValues = {
   'events.doubleRna': false,
   'difficulty.earlyGame': 1,
   'storefront.variant': 'hidden',
+  'retention.quests': true,
 };
 
 /** Чистая функция: дефолты + оверрайды. Неизвестные ключи игнорируются. */
@@ -79,6 +87,7 @@ export function resolveFlags(overrides: Partial<FlagValues> = {}): FlagValues {
     'events.doubleRna': overrides['events.doubleRna'] ?? FLAG_DEFAULTS['events.doubleRna'],
     'difficulty.earlyGame': overrides['difficulty.earlyGame'] ?? FLAG_DEFAULTS['difficulty.earlyGame'],
     'storefront.variant': overrideString(overrides['storefront.variant']),
+    'retention.quests': overrides['retention.quests'] ?? FLAG_DEFAULTS['retention.quests'],
   };
 }
 
@@ -119,6 +128,9 @@ export function readUrlFlagOverrides(search: string): Partial<FlagValues> {
   if (rawStr !== null && rawStr.length > 0 && rawStr.length <= 64) {
     out['storefront.variant'] = rawStr;
   }
+  const rawRetention = params.get('flag.retention.quests');
+  if (rawRetention === 'true' || rawRetention === '1') out['retention.quests'] = true;
+  else if (rawRetention === 'false' || rawRetention === '0') out['retention.quests'] = false;
   return out;
 }
 

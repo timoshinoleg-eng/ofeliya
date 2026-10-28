@@ -54,4 +54,12 @@ for (const event of ['run_10min', 'mutation_chosen']) {
   assert(fromSummary.includes(event), `ANALYTICS_EVENT_NAMES must include ${event}`);
 }
 
+// The ported Phase 3 retention events must be present in all four lists.
+for (const event of ['daily_claimed', 'achievement_unlocked']) {
+  assert(fromClient.includes(event), `ProductEvent must include ${event}`);
+  assert(fromServer.includes(event), `PRODUCT_EVENTS must include ${event}`);
+  assert(fromUmami.includes(event), `EVENT_NAMES must include ${event}`);
+  assert(fromSummary.includes(event), `ANALYTICS_EVENT_NAMES must include ${event}`);
+}
+
 console.log(`analytics-events: OK (${fromClient.length} events in sync)`);
