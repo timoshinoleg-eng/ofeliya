@@ -52,7 +52,16 @@ const DAMAGE_POPUP_MS = 700;
 export class Juice {
   private readonly group = new Group();
   private readonly hooks: JuiceHooks;
-  private hitStopTween: Tween<{ v: number }> | null = null;
+  private hitStopDip: Tween<{ v: number }> | null = null;
+  private hitStopRecover: Tween<{ v: number }> | null = null;
+
+  /** Остановить оба твина цепочки hitStop (dip + recover). */
+  private stopHitStop(): void {
+    this.hitStopDip?.stop();
+    this.hitStopRecover?.stop();
+    this.hitStopDip = null;
+    this.hitStopRecover = null;
+  }
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -73,7 +82,7 @@ export class Juice {
   /** Остановить все juice-твины и вернуть timeScale в 1 (на shutdown сцены). */
   reset(): void {
     this.group.removeAll();
-    this.hitStopTween = null;
+    this.stopHitStop();
     this.scene.time.timeScale = 1;
     const world = this.scene.physics?.world as { timeScale?: number } | undefined;
     if (world) world.timeScale = 1;
@@ -120,13 +129,14 @@ export class Juice {
    * 1 → HIT_STOP_FLOOR → 1 поверх существующего контракта ImpactDirector
    * (12/20/220 мс) — фриз держит длительность, твин даёт плавный slow-mo хвост.
    * Повторный вызов перезапускает дип (предыдущий останавливается).
+   * Пост-ревью (патч №11): dip и recover — отдельные поля, остановка
+   * явная (stopHitStop), а не через каскад stop() tween.js в chained-твины:
+   * в установленном tween.js каскад есть, но инвариант должен читаться
+   * из кода Juice, а не из версии библиотеки.
    */
   hitStop(ms: number): void {
     if (ms <= 0) return;
-    if (this.hitStopTween) {
-      this.hitStopTween.stop();
-      this.hitStopTween = null;
-    }
+    this.stopHitStop();
     const time = this.scene.time;
     const world = this.scene.physics?.world as { timeScale: number } | undefined;
     const proxy = { v: 1 };
@@ -144,9 +154,11 @@ export class Juice {
       .onComplete(() => {
         time.timeScale = 1;
         if (world) world.timeScale = 1;
-        this.hitStopTween = null;
+        this.hitStopDip = null;
+        this.hitStopRecover = null;
       });
-    this.hitStopTween = new Tween(proxy, this.group)
+    this.hitStopRecover = recover;
+    this.hitStopDip = new Tween(proxy, this.group)
       .to({ v: HIT_STOP_FLOOR }, dipMs)
       .easing(Easing.Cubic.In)
       .onUpdate(apply)

@@ -249,11 +249,13 @@ export function showDailyModal(
       onClaimed(res.streak, res.reward.rna);
       for (const id of fresh) {
         const def = getMetaAchievementDef(id);
-        if (def.reward.kind === 'rna') grantMetaRna(def.reward.amount);
+        // Пост-ревью (патч №11): тост показывает РЕАЛЬНО начисленное.
+        let grantedRna = 0;
+        if (def.reward.kind === 'rna') grantedRna = grantMetaRna(def.reward.amount).granted;
         else grantAchievementSkin(def.reward.skinId);
         void trackProductEvent('achievement_unlocked', PlatformBridge, { achievementId: id });
         // Фаза 5: скин — тост с превью штамма и анимацией выдачи.
-        if (def.reward.kind === 'rna') showMetaToast(scene, def.title, `+${def.reward.amount} РНК`);
+        if (def.reward.kind === 'rna') showMetaToast(scene, def.title, `+${grantedRna} РНК`);
         else showSkinGrantToast(scene, def.reward.skinId);
       }
     });

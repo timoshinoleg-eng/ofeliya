@@ -15,20 +15,32 @@
  *  POST /api/webhook  (Telegram → воркер)
  *    → pre_checkout_query: сверка payload/цены → answerPreCheckoutQuery
  *      (ОБЯЗАТЕЛЬНО в течение 10 секунд, иначе платёж отменяется)
- *    → message.successful_payment: структурированный лог.
- *      Клиентская выдача при этом уже есть: сцена витрины грантит покупку
- *      через grantPurchase (скины → SkinOwnership, РНК → MetaWallet,
- *      бустер → boosterUntilMs). Серверная выдача entitlements — позже;
- *      серверный контракт scripts/check-profile-client.mjs:162
- *      ('purchase' must never be accepted) в этом скоупе НЕ меняется —
- *      отдельное решение.
+ *    → message.successful_payment: идемпотентная запись в KV (по
+ *      telegram_payment_charge_id) + пополнение списка товаров пользователя.
+ *
+ *  POST /api/entitlements {initData}
+ *    → валидирует initData (та же схема, что /api/invoice)
+ *    → {products: [...]} — товары пользователя из KV;
+ *      501, если KV-биндинг не настроен.
  *
  *  GET /api/health → {ok:true} (проверка деплоя).
+ *
+ * KV (Cloudflare, бесплатный тир) — опционален: без биндинга PAYMENTS
+ * /api/entitlements отвечает 501, а successful_payment только логируется
+ * (как раньше). С биндингом клиент сверяет покупку с сервером вместо
+ * доверия клиентскому колбэку openInvoice.
+ *
+ * Серверный контракт scripts/check-profile-client.mjs:162
+ * ('purchase' must never be accepted) в этом скоупе НЕ меняется:
+ * KV воркера — его собственное хранилище entitlements, а не inventory
+ * профильного сервера. Отдельное решение.
  *
  * Секреты (wrangler secret put, НЕ в репозиторий):
  *  TELEGRAM_BOT_TOKEN — токен бота из BotFather;
  *  WEBHOOK_SECRET     — опционально; сверяется с заголовком
  *                       X-Telegram-Bot-Api-Secret-Token.
+ *
+ * KV: npx wrangler kv:namespace create PAYMENTS (см. worker/README_DEPLOY.md).
  *
  * Деплой: см. worker/README_DEPLOY.md. Ничего из этого файла не деплоится
  * автоматически — только руками Mark.
@@ -37,6 +49,17 @@
 interface Env {
   TELEGRAM_BOT_TOKEN: string;
   WEBHOOK_SECRET?: string;
+  /**
+   * Пост-ревью (патч №11): Cloudflare KV для entitlements.
+   * Минимальный интерфейс вместо @cloudflare/workers-types (zero deps).
+   */
+  PAYMENTS?: KVNamespace;
+}
+
+/** Минимальный сабсет KV API, достаточный воркеру. */
+interface KVNamespace {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string): Promise<void>;
 }
 
 /**
@@ -268,24 +291,75 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
     return json({ ok: true });
   }
 
-  // 2. Успешный платёж: логируем. Выдача entitlements в игру — позже
-  // (нужен бэкенд Фазы 6 + решение по check-profile-client.mjs:162).
+  // 2. Успешный платёж: структурированный лог + идемпотентная запись
+  // в KV (пост-ревью, патч №11). Без KV-биндинга — только лог, как раньше.
   const sp = update.message?.successful_payment;
   if (sp) {
     const { productId } = parsePayload(sp.invoice_payload);
+    const userId = update.message?.from?.id;
+    const chargeId = sp.telegram_payment_charge_id;
     console.log(
       JSON.stringify({
         event: 'stars_payment',
         productId,
-        userId: update.message?.from?.id,
+        userId,
         stars: sp.total_amount,
         currency: sp.currency,
-        telegramChargeId: sp.telegram_payment_charge_id,
+        telegramChargeId: chargeId,
         providerChargeId: sp.provider_payment_charge_id,
       })
     );
+    if (env.PAYMENTS && chargeId && productId && typeof userId === 'number') {
+      try {
+        // Идемпотентность: повторный вебхук того же charge_id не дублирует выдачу.
+        const chargeKey = `charge:${chargeId}`;
+        if (!(await env.PAYMENTS.get(chargeKey))) {
+          await env.PAYMENTS.put(
+            chargeKey,
+            JSON.stringify({ productId, userId, stars: sp.total_amount ?? 0, ts: Date.now() })
+          );
+          const userKey = `user:${userId}:products`;
+          const raw = await env.PAYMENTS.get(userKey);
+          const list: unknown = raw ? JSON.parse(raw) : [];
+          const products = Array.isArray(list) ? list.filter((p) => typeof p === 'string') : [];
+          if (!products.includes(productId)) {
+            products.push(productId);
+            await env.PAYMENTS.put(userKey, JSON.stringify(products));
+          }
+        }
+      } catch {
+        // KV не должен ронять вебхук: платёж уже подтверждён Telegram.
+      }
+    }
   }
   return json({ ok: true });
+}
+
+/**
+ * Пост-ревью (патч №11): серверный список покупок пользователя.
+ * Клиент сверяет с ним колбэк openInvoice вместо слепого доверия.
+ * 501 — KV-биндинг не настроен (клиент падает на fallback-выдачу с варном).
+ */
+async function handleEntitlements(request: Request, env: Env): Promise<Response> {
+  if (!env.PAYMENTS) return json({ error: 'entitlements-unavailable' }, 501);
+  if (!env.TELEGRAM_BOT_TOKEN) return json({ error: 'backend-misconfigured' }, 500);
+  let body: { initData?: unknown };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return json({ error: 'bad-json' }, 400);
+  }
+  const initData = typeof body.initData === 'string' ? body.initData : '';
+  const v = await validateInitData(initData, env.TELEGRAM_BOT_TOKEN);
+  if (!v.ok || v.userId == null) return json({ error: 'bad-init-data', reason: v.reason }, 401);
+  try {
+    const raw = await env.PAYMENTS.get(`user:${v.userId}:products`);
+    const list: unknown = raw ? JSON.parse(raw) : [];
+    const products = Array.isArray(list) ? list.filter((p) => typeof p === 'string') : [];
+    return json({ products });
+  } catch {
+    return json({ error: 'kv-read-failed' }, 502);
+  }
 }
 
 export default {
@@ -300,6 +374,9 @@ export default {
     }
     if (request.method === 'POST' && url.pathname === '/api/webhook') {
       return handleWebhook(request, env);
+    }
+    if (request.method === 'POST' && url.pathname === '/api/entitlements') {
+      return handleEntitlements(request, env);
     }
     return new Response('not found', { status: 404 });
   },

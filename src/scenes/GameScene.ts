@@ -2519,11 +2519,14 @@ export class GameScene extends Phaser.Scene {
     });
     for (const id of unlockMetaAchievements(metaStats)) {
       const def = getMetaAchievementDef(id);
-      if (def.reward.kind === 'rna') grantMetaRna(def.reward.amount);
+      // Пост-ревью (патч №11): тост показывает РЕАЛЬНО начисленное
+      // (с множителями лаборатории и бустером), а не базовую награду.
+      let grantedRna = 0;
+      if (def.reward.kind === 'rna') grantedRna = grantMetaRna(def.reward.amount).granted;
       else grantAchievementSkin(def.reward.skinId);
       void trackProductEvent('achievement_unlocked', PlatformBridge, { achievementId: id });
       // Фаза 5: скин — тост с превью штамма и анимацией выдачи.
-      if (def.reward.kind === 'rna') showMetaToast(this, def.title, `+${def.reward.amount} РНК`);
+      if (def.reward.kind === 'rna') showMetaToast(this, def.title, `+${grantedRna} РНК`);
       else showSkinGrantToast(this, def.reward.skinId);
     }
     this.milestones.reset();

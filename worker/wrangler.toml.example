@@ -9,3 +9,12 @@
 name = "ofeliya-payments"
 main = "src/index.ts"
 compatibility_date = "2026-10-21"
+
+# Пост-ревью (патч №11): Cloudflare KV для серверных entitlements
+# (идемпотентность платежей + POST /api/entitlements).
+# Создать: npx wrangler kv:namespace create PAYMENTS
+# и подставить выданный id ниже. Без биндинга воркер работает как раньше
+# (логирование платежей, /api/entitlements → 501).
+# [[kv_namespaces]]
+# binding = "PAYMENTS"
+# id = "<вставить id из wrangler kv:namespace create>"

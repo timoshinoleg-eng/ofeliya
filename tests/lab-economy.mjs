@@ -229,7 +229,14 @@ try {
   eq(res.ok, false, 'prestige gated without levels');
   eq(res.reason, 'no_levels', 'reason no_levels');
 
-  store.set('ofeliya.lab.v1', JSON.stringify({ levels: { metabolism: 2, chitin: 1 }, prestigeCount: 1 }));
+  // Пост-ревью (патч №11): порог 10 + prestigeCount*5. При prestigeCount 1
+  // нужно 15 уровней: 14 — ещё закрыто, 15 — открыто.
+  store.set('ofeliya.lab.v1', JSON.stringify({ levels: { metabolism: 10, chitin: 4 }, prestigeCount: 1 }));
+  res = lab.doPrestige();
+  eq(res.ok, false, 'prestige gated below scaled threshold');
+  eq(res.reason, 'no_levels', 'reason no_levels below threshold');
+
+  store.set('ofeliya.lab.v1', JSON.stringify({ levels: { metabolism: 10, chitin: 5 }, prestigeCount: 1 }));
   store.set('ofeliya.meta.v1', JSON.stringify({ rna: 5000, rnaEarned: 9999 }));
   res = lab.doPrestige();
   eq(res.ok, true, 'prestige ok');

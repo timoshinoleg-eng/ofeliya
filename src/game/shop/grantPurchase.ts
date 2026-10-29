@@ -19,7 +19,7 @@
  * в Node. applyPurchaseGrants — рантайм: выполняет действия, никогда не
  * бросает (витрина не падает из-за хранилища).
  */
-import { addRna, setBoosterUntilMs } from '../meta/MetaWallet';
+import { addRna, getBoosterUntilMs, setBoosterUntilMs } from '../meta/MetaWallet';
 import { grantSkin } from '../skins/SkinOwnership';
 import type { Product } from './PaymentProvider';
 
@@ -61,7 +61,9 @@ export function applyPurchaseGrants(product: Product): PurchaseGrant[] {
     try {
       if (grant.type === 'skin') grantSkin(grant.skinId, 'purchase');
       else if (grant.type === 'rna') addRna(grant.amount);
-      else setBoosterUntilMs(Date.now() + grant.durationMs);
+      // Пост-ревью (патч №11): повторная покупка продлевает от
+      // max(now, текущий срок) — время не сгорает.
+      else setBoosterUntilMs(Math.max(Date.now(), getBoosterUntilMs()) + grant.durationMs);
     } catch {
       /* выдача не ломает витрину */
     }

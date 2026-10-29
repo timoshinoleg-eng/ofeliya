@@ -28,6 +28,15 @@ import { VISUAL_TEXT } from '../ui/visualTokens';
 import { STOREFRONT_MAX, STOREFRONT_TELEGRAM, isStorefrontVisible, resolveProvider } from '../game/shop/Storefront';
 import { applyPurchaseGrants } from '../game/shop/grantPurchase';
 import { formatPrice, validateCatalog } from '../game/shop/products';
+import { grantMetaRna } from '../game/lab/LabState';
+import {
+  collectLifetimeStats,
+  getMetaAchievementDef,
+  grantAchievementSkin,
+  unlockMetaAchievements,
+} from '../game/achievements/MetaAchievements';
+import { showMetaToast } from '../ui/RetentionOverlays';
+import { showSkinGrantToast } from '../ui/SkinGallery';
 import type {
   PaymentProvider,
   Product,
@@ -479,7 +488,7 @@ export class StorefrontScene extends Phaser.Scene {
       .setStrokeStyle(BORDER.thin, 0x0b0f1a, 0.6)
       .setInteractive({ useHandCursor: true });
     const btnLabel = this.add
-      .text(btnX, btnY, buying ? '···' : formatPrice(product.price), {
+      .text(btnX, btnY, buying ? '···' : this.priceLabel(product), {
         fontFamily: FONT,
         fontSize: '13px',
         fontStyle: 'bold',
@@ -496,6 +505,15 @@ export class StorefrontScene extends Phaser.Scene {
     }
     card.add([btnBg, btnLabel]);
     parent.add(card);
+  }
+
+  /**
+   * Ценник кнопки покупки (пост-ревью, патч №11): для Stars — «N ★»,
+   * иначе денежный формат каталога.
+   */
+  private priceLabel(product: Product): string {
+    if (this.provider?.id === 'telegram-stars' && product.stars) return `${product.stars} ★`;
+    return formatPrice(product.price);
   }
 
   // ---------- purchase flow ----------
@@ -530,6 +548,21 @@ export class StorefrontScene extends Phaser.Scene {
         productId: product.id,
         provider: provider.id,
       });
+      // Пост-ревью (патч №11): достижения за покупку разблокируются
+      // СРАЗУ, а не на следующем конце забега (паттерн GameScene /
+      // RetentionOverlays: тот же unlock + тост с РЕАЛЬНО начисленным).
+      // Тосты сами no-op при неактивной сцене — выдача не теряется.
+      for (const id of unlockMetaAchievements(collectLifetimeStats())) {
+        const def = getMetaAchievementDef(id);
+        if (def.reward.kind === 'rna') {
+          const granted = grantMetaRna(def.reward.amount).granted;
+          showMetaToast(this, def.title, `+${granted} РНК`);
+        } else {
+          grantAchievementSkin(def.reward.skinId);
+          showSkinGrantToast(this, def.reward.skinId);
+        }
+        void trackProductEvent('achievement_unlocked', PlatformBridge, { achievementId: id });
+      }
     } else {
       void trackProductEvent('purchase_failed', PlatformBridge, {
         productId: product.id,

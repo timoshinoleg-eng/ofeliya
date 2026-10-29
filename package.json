@@ -56,6 +56,7 @@
     "test:feature-flags": "node tests/feature-flags.mjs",
     "test:shop": "node tests/shop-catalog.mjs && node tests/shop-flow.mjs && node tests/shop-provider.mjs && node tests/shop-grants.mjs",
     "test:stars": "node tests/telegram-stars.mjs && node tests/worker-payments.mjs",
+    "test:worker-entitlements": "node tests/worker-entitlements.mjs",
     "test:juice": "node tests/juice-driver.mjs",
     "test:analytics-events": "node scripts/check-analytics-events.mjs",
     "test:daily-streak": "node tests/daily-streak.mjs",
@@ -115,7 +116,8 @@
     "test:difficulty-comparison": "node scripts/check-difficulty-comparison.mjs",
     "test:difficulty-comparison-browser": "node scripts/difficulty-comparison-smoke.cjs",
     "test:ui-redesign": "node tests/ui-redesign.mjs",
-    "test:skins": "node tests/skins.mjs"
+    "test:skins": "node tests/skins.mjs",
+    "test:post-review-fixes": "node tests/post-review-fixes.mjs"
   },
   "overrides": {
     "source-map-js": "1.2.2"

@@ -15,8 +15,17 @@
  *  3. клиент: window.Telegram.WebApp.openInvoice(url, cb);
  *  4. cb(status): 'paid' → success; 'cancelled' → cancelled;
  *     'failed' → failed; 'pending' → failed (reason stars-payment-pending).
+ *  4b. Пост-ревью (патч №11): после 'paid' клиент сверяется с сервером
+ *     через POST /api/entitlements {initData} (до 3 попыток, таймаут 8 с):
+ *     'verified' — товар в серверном списке; 'denied' — после 3 попыток
+ *     товара нет → failed (server-verification-failed); 'unavailable' —
+ *     бэкенд без KV (501), нет initData/apiBaseUrl или сеть недоступна →
+ *     выдача по клиентскому колбэку с console.warn (осознанный trade-off:
+ *     лучше выдать оплаченное, чем потерять платёж из-за недоступного KV).
  *  5. бот отвечает на pre_checkout_query через answerPreCheckoutQuery
  *     (обязательно в течение 10 секунд) и получает successful_payment.
+ *  6. restore() сливает серверный список в локальный (идемпотентно) —
+ *     серверная запись переживает смену устройства.
  *
  * Клиент НЕ может создавать инвойсы сам (нужен bot token) — без
  * сконфигурированного бэкенда (VITE_PAYMENTS_API_URL) провайдер
@@ -53,6 +62,14 @@ export const ENTITLEMENTS_KEY = 'ofeliya.telegram.entitlements.v1';
 
 /** Максимум ожидания callback openInvoice: дальше считаем зависшим. */
 const INVOICE_CALLBACK_TIMEOUT_MS = 120_000;
+
+/** Серверная сверка: попыток, пауза между ними, таймаут запроса. */
+const VERIFY_ATTEMPTS = 3;
+const VERIFY_RETRY_DELAY_MS = 2000;
+const VERIFY_TIMEOUT_MS = 8000;
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
 
 type InvoiceStatus = 'paid' | 'cancelled' | 'failed' | 'pending';
 
@@ -250,6 +267,15 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
       const mapped = mapInvoiceStatus(status, productId);
       if (mapped.state !== 'paid') return mapped;
 
+      // 3a. Серверная сверка покупки (пост-ревью, патч №11; см. шапку 4b).
+      const verification = await this.verifyOnServer(productId);
+      if (verification === 'denied') return fail('server-verification-failed');
+      if (verification === 'unavailable') {
+        console.warn(
+          '[telegram-stars] /api/entitlements unavailable — granting on client callback (unverified)'
+        );
+      }
+
       // 3. Успех: учёт потраченных звёзд (достижение «Инвестор») — сбой
       // учёта не отменяет оплаченную покупку; локальный entitlement —
       // журнал чеков для restore(), а грант делает сцена (grantPurchase).
@@ -272,9 +298,76 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
 
   async restore(): Promise<RestoreResult> {
     try {
-      return { productIds: this.readEntitlements().map((e) => e.productId) };
+      const local = this.readEntitlements();
+      // Пост-ревью (патч №11): серверный список сливается в локальный
+      // идемпотентно; сбой сверки не роняет restore (локальный журнал остаётся).
+      const serverIds = await this.fetchServerEntitlements();
+      if (serverIds) {
+        let changed = false;
+        for (const productId of serverIds) {
+          if (!local.some((e) => e.productId === productId)) {
+            local.push({ productId, receipt: `server:${productId}`, ts: Date.now() });
+            changed = true;
+          }
+        }
+        if (changed) this.writeEntitlements(local);
+      }
+      return { productIds: local.map((e) => e.productId) };
     } catch {
       return { productIds: [] };
+    }
+  }
+
+  /**
+   * Серверная сверка покупки (пост-ревью, патч №11).
+   * 'verified' — товар в серверном списке; 'denied' — сервер отвечает OK,
+   * но товара нет после всех попыток (вебхук мог опоздать — поэтому ретраи);
+   * 'unavailable' — нет apiBaseUrl/initData, сервер без KV (501) или сеть
+   * недоступна: выдача по клиентскому колбэку (см. шапку 4b).
+   */
+  private async verifyOnServer(productId: string): Promise<'verified' | 'unavailable' | 'denied'> {
+    const initData = readTelegramInitData();
+    if (!this.apiBaseUrl || !initData) return 'unavailable';
+    for (let attempt = 0; attempt < VERIFY_ATTEMPTS; attempt++) {
+      const products = await this.fetchServerEntitlementsOnce(initData);
+      if (products === null) return 'unavailable';
+      if (products.includes(productId)) return 'verified';
+      if (attempt < VERIFY_ATTEMPTS - 1) await sleep(VERIFY_RETRY_DELAY_MS);
+    }
+    return 'denied';
+  }
+
+  /**
+   * Серверный список покупок пользователя (POST /api/entitlements).
+   * null при любой неудаче (нет бэкенда/initData, 501 без KV, сеть, плохой JSON).
+   */
+  async fetchServerEntitlements(): Promise<string[] | null> {
+    const initData = readTelegramInitData();
+    if (!this.apiBaseUrl || !initData) return null;
+    return this.fetchServerEntitlementsOnce(initData);
+  }
+
+  private async fetchServerEntitlementsOnce(initData: string): Promise<string[] | null> {
+    if (!this.apiBaseUrl) return null;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), VERIFY_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${this.apiBaseUrl}/api/entitlements`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ initData }),
+        signal: controller.signal,
+      });
+      if (!res.ok) return null;
+      const data: unknown = await res.json();
+      if (!data || typeof data !== 'object') return null;
+      const products = (data as { products?: unknown }).products;
+      if (!Array.isArray(products)) return null;
+      return products.filter((p): p is string => typeof p === 'string');
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
