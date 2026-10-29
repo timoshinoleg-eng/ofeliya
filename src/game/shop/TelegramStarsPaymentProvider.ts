@@ -35,17 +35,27 @@
  *     (запись остаётся + ручная кнопка «Проверить оплату»). Плюс мерж
  *     серверного списка POST /api/entitlements v2
  *     ({purchases:[{chargeId,productId,status,createdAt}]}):
- *     каждую покупку со status='paid' прогоняем через fulfillPurchase
- *     (идемпотентность по chargeId) — товар выдаётся, даже если локальные
- *     данные потеряны (Mini App закрыт до выдачи); 'refunded' — пропуск,
- *     уже credited — пропуск, продукта нет в каталоге — warn + пропуск
- *     БЕЗ пометки; локальный список entitlements обновляется ПОСЛЕ
- *     успешной выдачи (для UI).
+ *     все записи со status='paid' И 'fulfilled' (кроме 'refunded'), которых
+ *     нет в локальном журнале выданных (ofeliya.payments.credited.v1 по
+ *     chargeId), — через единую fulfillPurchase() (патч №14, P0-1).
+ *     Локальный credited.v1 даёт exactly-once на устройстве; журнал
+ *     сервера — источник правды о покупках. 'refunded' — пропуск без
+ *     перевыдачи; продукта нет в каталоге — warn + пропуск БЕЗ пометки.
+ *     Плюс обработка pending-записей: verify → verified → fulfillPurchase
+ *     → снять запись (только при ok); не подтверждено — ретраи с бэкоффом
+ *     2с/5с/15с/60с в сессии, затем стоп (запись остаётся + ручная кнопка
+ *     «Проверить оплату»). Локальный список entitlements обновляется
+ *     ПОСЛЕ успешной выдачи (для UI).
+ *     ИЗВЕСТНОЕ ОГРАНИЧЕНИЕ: два живых устройства материализуют покупки
+ *     локально каждое (двойной локальный баланс) — окончательно решается
+ *     только серверной экономикой (дизайн-док
+ *     ofeliya-server-economy-design.md).
  *  7. Патч №13 (P1-d): после УСПЕШНОЙ локальной выдачи (fulfillPurchase →
  *     ok) — fire-and-forget POST {apiBaseUrl}/api/ack {initData, chargeId}:
  *     воркер переводит платёж paid→fulfilled (только свой charge_id, только
  *     из 'paid'; без DB → 501). Чистый bookkeeping: никогда не блокирует
- *     выдачу, не влияет на её результат, ошибки глотаются.
+ *     выдачу, не влияет на её результат, ошибки глотаются. Патч №14 (E-b):
+ *     ack — только при outcome==='granted', не при 'duplicate'.
  *
  * Схема патча №11 (сверка через /api/entitlements {products} + выдача
  * по колбэку при недоступности) заменена протоколом №12 полностью:
@@ -86,7 +96,6 @@ import {
   isChargeCredited,
   loadPendingPurchases,
   makePaymentNonce,
-  markChargeCredited,
   removePendingPurchase,
   verifyPurchase,
   type PendingRecord,
@@ -113,11 +122,9 @@ interface Entitlement {
 }
 
 /**
- * Патч №13 (worker v3): POST /api/entitlements →
+ * Патч №14: POST /api/entitlements →
  * {purchases:[{chargeId, productId, status, createdAt}]}.
- * status: 'paid' | 'fulfilled' | 'refunded' ('credited' зарезервирован
- * воркером как пометка «сервер утверждает, что выдача уже была» —
- * клиент её только помечает, гранта нет).
+ * status: 'paid' | 'fulfilled' | 'refunded' (воркер, D1-журнал).
  */
 interface ServerPurchase {
   chargeId: string;
@@ -408,17 +415,21 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
       /* ignore */
     }
     try {
-      // Патч №13 (P0-1): серверный список покупок —
-      // {purchases:[{chargeId, productId, status, createdAt}]} —
-      // ЕДИНСТВЕННЫЙ источник истины о списанных деньгах. Каждую покупку
-      // со status='paid' прогоняем через fulfillPurchase (идемпотентность
-      // по chargeId): товар выдаётся, даже если локальные данные потеряны
-      // (Mini App закрыт между successful_payment и выдачей). Раньше ветка
-      // просто помечала chargeId выданным БЕЗ гранта — товар терялся.
-      // 'refunded' — пропуск; уже credited — пропуск; продукта нет в
-      // каталоге — warn + пропуск БЕЗ пометки (не терять след платежа).
-      // Локальный список entitlements обновляем ПОСЛЕ успешной выдачи
-      // (нужен только UI витрины).
+      // Патч №14 (P0-1): restore сверяет ЖУРНАЛ сервера (все записи со
+      // статусами paid И fulfilled) с ЛОКАЛЬНЫМ журналом выданных
+      // (ofeliya.payments.credited.v1 по chargeId). Каждая запись, которой
+      // нет локально и у которой статус != 'refunded', — через единую
+      // fulfillPurchase(). Локальный credited.v1 даёт exactly-once на
+      // устройстве; журнал сервера — источник правды о покупках.
+      // Сценарий: fulfilled на старом устройстве + потеря localStorage /
+      // новое устройство → restore догрантит (раньше 'fulfilled' падал
+      // в else-ветку и товар терялся навсегда).
+      // 'refunded' — пропуск без перевыдачи. Неизвестный статус —
+      // fail-closed: ни гранта, ни пометки.
+      // ИЗВЕСТНОЕ ОГРАНИЧЕНИЕ: два живых устройства материализуют покупки
+      // локально каждое (двойной локальный баланс). Окончательно решается
+      // только серверной экономикой (дизайн-док ofeliya-server-economy-
+      // design.md); при локальной экономике это не блокер.
       const server = await this.fetchServerEntitlements();
       if (server) {
         const local = this.readEntitlements();
@@ -426,33 +437,31 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
         for (const p of server) {
           if (p.status === 'refunded') continue;
           if (isChargeCredited(p.chargeId)) continue;
-          if (p.status === 'credited') {
-            // Зарезервировано воркером: сервер утверждает, что выдача уже
-            // была, — только помечаем, гранта нет.
-            markChargeCredited(p.chargeId);
-          } else if (p.status === 'paid') {
-            const product = SHOP_CATALOG.find((x) => x.id === p.productId);
-            if (!product) {
-              console.warn('[telegram-stars] server purchase for unknown product:', p.productId);
-              continue;
-            }
-            const grant = fulfillPurchase(product, {
-              chargeId: p.chargeId,
-              providerId: this.id,
-            });
-            if (!grant.ok) {
-              console.warn(
-                '[telegram-stars] fulfillPurchase failed for server purchase:',
-                grant.error
-              );
-              continue;
-            }
-            // P1-d: bookkeeping paid→fulfilled (fire-and-forget, не блокирует).
-            this.acknowledgeCharge(p.chargeId);
-          } else {
+          if (p.status !== 'paid' && p.status !== 'fulfilled') {
             // Неизвестный статус — fail-closed: ни гранта, ни пометки.
             continue;
           }
+          const product = SHOP_CATALOG.find((x) => x.id === p.productId);
+          if (!product) {
+            // E-a: товар вне каталога — warn, БЕЗ пометки credited и БЕЗ
+            // ack: запись остаётся 'paid' в журнале, ручное разрешение позже.
+            console.warn('[telegram-stars] server purchase for unknown product:', p.productId);
+            continue;
+          }
+          const grant = fulfillPurchase(product, {
+            chargeId: p.chargeId,
+            providerId: this.id,
+          });
+          if (!grant.ok) {
+            console.warn(
+              '[telegram-stars] fulfillPurchase failed for server purchase:',
+              grant.error
+            );
+            continue;
+          }
+          // E-b: ack — только при реальном начислении ('granted'), не при
+          // 'duplicate'. Серверный ack идемпотентен, но семантика точная.
+          if (grant.outcome === 'granted') this.acknowledgeCharge(p.chargeId);
           if (!local.some((e) => e.productId === p.productId)) {
             local.push({
               productId: p.productId,
@@ -521,8 +530,10 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
             console.warn('[telegram-stars] fulfillPurchase failed:', grant.error);
             return null;
           }
-          // P1-d: bookkeeping paid→fulfilled (fire-and-forget, не блокирует).
-          this.acknowledgeCharge(chargeId);
+          // E-b (патч №14): ack — только при реальном начислении
+          // ('granted'), не при 'duplicate'. Серверный ack идемпотентен,
+          // но семантика должна быть точной.
+          if (grant.outcome === 'granted') this.acknowledgeCharge(chargeId);
           removePendingPurchase(nonce);
           return fresh.productId;
         }

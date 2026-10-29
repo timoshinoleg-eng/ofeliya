@@ -35,9 +35,22 @@
  *        WHERE nonce=? AND status='pending'.
  *      Идемпотентность: повторная доставка того же charge_id даёт
  *      meta.changes==0 у INSERT → skip+лог (без гонки: OR IGNORE атомарен).
- *      Ошибка batch → лог + 500 (Telegram переотправит; повтор безопасен
- *      благодаря OR IGNORE).
- *      Без PAYMENTS_DB — только структурированный лог (как раньше без KV).
+ *      Ошибка batch или отсутствие PAYMENTS_DB → 503 (Telegram переотправит
+ *      апдейт; повтор безопасен благодаря OR IGNORE). Ретраи Telegram:
+ *      не-200 ответ → повторная доставка с бэкоффом до ~24ч; батч
+ *      идемпотентен, двойной записи не будет.
+ *      Невалидные/чужие платежи (плохой nonce, чужой user, amount mismatch)
+ *      только логируются → 200: ретрай не поможет, платеж невалиден.
+ *      Товар вне каталога (unknown-product): записывается как 'paid' +
+ *      громкий лог, БЕЗ пометки fulfilled — ручное разрешение позже
+ *      (выдача на клиенте упадёт на invalid-product, товар не потерян
+ *      из виду).
+ *
+ *  POST /api/admin/refund {chargeId, reason} — ручная пометка возврата.
+ *    Авторизация: заголовок Authorization: Bearer <ADMIN_TOKEN> (НЕ bot
+ *    token). ADMIN_TOKEN обязателен в env (fail-closed 401). Возвраты Stars
+ *    у Telegram не приходят автоматически — только руками Mark.
+ *    → {ok:true} / {ok:false, error}.
  *
  *  POST /api/verify {initData, nonce} — СТРОГАЯ точечная проверка
  *  (клиент зовёт после колбэка openInvoice вместо слепого доверия):
@@ -62,7 +75,7 @@
  *  GET /api/health → {ok:true} (проверка деплоя).
  *
  * Схема: worker/schema.sql (orders, payments, индексы).
- * Статус 'refunded' — ТОЛЬКО вручную через SQL (см. schema.sql);
+ * Статус 'refunded' — ТОЛЬКО вручную: POST /api/admin/refund (патч №14, E-c);
  * воркер его не выставляет. Возвраты Stars — отдельное решение Mark.
  *
  * Серверный контракт scripts/check-profile-client.mjs:162
@@ -114,6 +127,12 @@ interface Env {
    * KV-биндинг PAYMENTS удалён полностью (чистая замена, не fallback).
    */
   PAYMENTS_DB?: D1Database;
+  /**
+   * Патч №14 (E-c): секрет для POST /api/admin/refund. ОБЯЗАТЕЛЕН для
+   * ручной пометки возвратов (fail-closed 401). НЕ bot token — отдельный
+   * случайный токен (wrangler secret put ADMIN_TOKEN).
+   */
+  ADMIN_TOKEN?: string;
 }
 
 /**
@@ -155,7 +174,8 @@ export const SERVER_PRODUCTS: Record<string, { title: string; description: strin
 };
 
 /**
- * Статус платежа в D1. 'refunded' выставляется ТОЛЬКО вручную через SQL
+ * Статус платежа в D1. 'refunded' выставляется ТОЛЬКО вручную:
+ * POST /api/admin/refund (патч №14, E-c), воркер сам — никогда.
  * (см. worker/schema.sql) — воркер его не пишет.
  */
 export type PaymentStatus = 'paid' | 'fulfilled' | 'refunded';
@@ -411,14 +431,18 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
   }
 
   // 2. Успешный платёж → атомарная запись в журнал D1 (протокол v3).
-  //    Без D1-биндинга — только структурированный лог, как раньше без KV.
+  //    Fail-closed (патч №14, P0-2): ЛЮБАЯ ошибка инфраструктуры (нет
+  //    биндинга PAYMENTS_DB, сбой batch) → 503. Telegram считает апдейт
+  //    необработанным и переотправит его (ретраи с бэкоффом до ~24ч);
+  //    батч идемпотентен (INSERT OR IGNORE), двойной записи не будет.
+  //    Возвращать 200 здесь — значит потерять оплату: Telegram больше
+  //    не доставит апдейт, а журнал пуст. Невалидные платежи (плохой
+  //    nonce, чужой user, amount mismatch) — 200: ретрай не поможет.
   const sp = update.message?.successful_payment;
   if (sp) {
     try {
       await recordSuccessfulPayment(sp, update.message?.from?.id, env);
     } catch (err) {
-      // Сбой записи: платёж уже подтверждён Telegram, но журнал не обновлён.
-      // 500 — Telegram переотправит апдейт; повтор безопасен (OR IGNORE).
       logEvent('stars_payment_db_error', {
         stars: sp.total_amount,
         currency: sp.currency,
@@ -427,7 +451,7 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
         userId: update.message?.from?.id,
         error: String(err),
       });
-      return json({ ok: false }, 500);
+      return json({ ok: false, error: 'db_unavailable' }, 503);
     }
   }
   return json({ ok: true });
@@ -454,9 +478,11 @@ async function recordSuccessfulPayment(
     providerChargeId: sp.provider_payment_charge_id,
     nonce,
   };
+  // Патч №14 (P0-2): отсутствие биндинга — инфраструктурная ошибка,
+  // а не повод молча вернуть 200. Бросаем → хендлер ответит 503,
+  // Telegram переотправит апдейт, когда D1 появится.
   if (!env.PAYMENTS_DB) {
-    logEvent('stars_payment_unverified', { ...base, userId: fromId });
-    return;
+    throw new Error('db_unavailable');
   }
   if (!isValidNonce(nonce) || !chargeId || typeof fromId !== 'number') {
     logEvent('stars_payment_invalid', { ...base, userId: fromId });
@@ -477,7 +503,37 @@ async function recordSuccessfulPayment(
     return;
   }
   const server = SERVER_PRODUCTS[order.product_id];
-  if (!server || sp.currency !== 'XTR' || sp.total_amount !== server.stars) {
+  const now = Date.now();
+  if (!server) {
+    // E-a: товар оплачен, но его нет в каталоге (каталог сменился между
+    // созданием инвойса и оплатой). НЕ silent-skip: пишем как 'paid' +
+    // громкий лог; fulfilled НЕ ставим — ручное разрешение позже.
+    // Клиентская выдача для него упадёт на invalid-product (без гранта),
+    // запись останется видимой в журнале для разбора.
+    const results = await db.batch([
+      db
+        .prepare(
+          'INSERT OR IGNORE INTO payments ' +
+            '(charge_id, user_id, product_id, amount, currency, status, nonce, created_at, fulfilled_at) ' +
+            'VALUES (?,?,?,?,?,?,?,?,?)'
+        )
+        .bind(chargeId, fromId, order.product_id, sp.total_amount, sp.currency, 'paid', nonce, now, null),
+      db
+        .prepare("UPDATE orders SET status='paid' WHERE nonce=? AND status='pending'")
+        .bind(nonce),
+    ]);
+    if (results[0]?.meta.changes === 0) {
+      logEvent('stars_payment_duplicate', { ...base, userId: fromId });
+      return;
+    }
+    logEvent('stars_payment_unknown_product', {
+      ...base,
+      userId: fromId,
+      productId: order.product_id,
+    });
+    return;
+  }
+  if (sp.currency !== 'XTR' || sp.total_amount !== server.stars) {
     logEvent('stars_payment_amount_mismatch', {
       ...base,
       userId: fromId,
@@ -486,7 +542,6 @@ async function recordSuccessfulPayment(
     });
     return;
   }
-  const now = Date.now();
   // Атомарно: платёж + перевод заказа в 'paid'. OR IGNORE делает повторную
   // доставку того же charge_id безопасной: meta.changes==0 → дубликат.
   const results = await db.batch([
@@ -546,7 +601,8 @@ async function handleVerify(request: Request, env: Env): Promise<Response> {
       .first<DbPaymentRow>();
     if (!payment) return json({ verified: false, reason: 'pending' });
     // Строгая сверка: настоящий charge_id от Telegram, свой userId,
-    // товар совпадает с заказом.
+    // товар совпадает с заказом. Патч №14 (P0-3): status='refunded'
+    // ЯВНО исключается — возвращённый платёж нельзя перевыдать.
     if (
       typeof payment.charge_id !== 'string' ||
       payment.charge_id.length === 0 ||
@@ -554,6 +610,9 @@ async function handleVerify(request: Request, env: Env): Promise<Response> {
       payment.product_id !== order.product_id
     ) {
       return json({ verified: false, reason: 'mismatch' });
+    }
+    if (payment.status === 'refunded') {
+      return json({ verified: false, reason: 'refunded' });
     }
     return json({ verified: true, chargeId: payment.charge_id, productId: payment.product_id });
   } catch {
@@ -631,6 +690,47 @@ async function handleAck(request: Request, env: Env): Promise<Response> {
   }
 }
 
+/**
+ * POST /api/admin/refund {chargeId, reason?} — РУЧНАЯ пометка возврата.
+ * Патч №14 (E-c): у Telegram Stars нет автоматического refund-webhook
+ * для ботов — возвраты только руками Mark. Авторизация: заголовок
+ * Authorization: Bearer <ADMIN_TOKEN> (НЕ bot token). ADMIN_TOKEN
+ * обязателен в env (fail-closed 401). Повтор безопасен: повторная пометка
+ * того же charge_id — ok:false, состояние не меняется. Возврат НЕ отзывает уже выданный товар
+ * на клиенте (отзыв — отдельное ручное решение, см. README_DEPLOY).
+ * → {ok:true} / {ok:false, error}. Без PAYMENTS_DB → 501.
+ */
+async function handleAdminRefund(request: Request, env: Env): Promise<Response> {
+  const auth = request.headers.get('authorization') ?? '';
+  if (!env.ADMIN_TOKEN || auth !== `Bearer ${env.ADMIN_TOKEN}`) {
+    return json({ error: 'unauthorized' }, 401);
+  }
+  if (!env.PAYMENTS_DB) return json({ error: 'db_unavailable' }, 501);
+  let body: { chargeId?: unknown; reason?: unknown };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return json({ error: 'bad-json' }, 400);
+  }
+  const chargeId = typeof body.chargeId === 'string' && body.chargeId.length > 0 ? body.chargeId : '';
+  if (!chargeId) return json({ error: 'bad-charge-id' }, 400);
+  const reason = typeof body.reason === 'string' ? body.reason.slice(0, 200) : '';
+  try {
+    const result = await env.PAYMENTS_DB.prepare(
+      "UPDATE payments SET status='refunded' WHERE charge_id=? AND status IN ('paid','fulfilled')"
+    )
+      .bind(chargeId)
+      .run();
+    if (result.meta.changes === 0) {
+      return json({ ok: false, error: 'not-found-or-already-refunded' });
+    }
+    logEvent('stars_payment_refunded_manual', { telegramChargeId: chargeId, reason });
+    return json({ ok: true });
+  } catch {
+    return json({ error: 'db-write-failed' }, 502);
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -652,6 +752,9 @@ export default {
     }
     if (request.method === 'POST' && url.pathname === '/api/ack') {
       return handleAck(request, env);
+    }
+    if (request.method === 'POST' && url.pathname === '/api/admin/refund') {
+      return handleAdminRefund(request, env);
     }
     return new Response('not found', { status: 404 });
   },

@@ -141,3 +141,69 @@ Telegram webhook (`POST /api/telegram/webhook`, секрет проверяет�
 сервис со своим секретом (`WEBHOOK_SECRET`) и своим URL
 (`https://<worker>/api/webhook`); общий обработчик им не нужен.
 При `setWebhook` для платёжного бота указывай именно URL воркера.
+
+### Статус: прокси реализован (патч №14)
+
+Вариант (а) теперь не только описан, но и реализован:
+`server/stars-proxy.mjs` (`isStarsUpdate` / `forwardStarsUpdate`, таймаут 8 с,
+fail-closed) подключён в `server/index.mjs` в `POST /api/telegram/webhook`
+сразу после проверки секрета: Stars-апдейты уходят на воркер,
+остальные — в существующий игровой хендлер.
+
+Включение — через env Render:
+
+```bash
+OFELIYA_STARS_WORKER_URL=https://<worker>.workers.dev
+OFELIYA_STARS_WORKER_SECRET=<тот же WEBHOOK_SECRET, что у воркера>
+```
+
+Без `OFELIYA_STARS_WORKER_URL`/`OFELIYA_STARS_WORKER_SECRET` Stars-апдейты
+получают 503 (fail-closed: Telegram переотправит апдейт, когда прокси
+настроят); не-Stars апдейты идут как раньше.
+`WEBHOOK_SECRET` обязателен с обеих сторон; секрет воркера **не равен**
+`TG_WEBHOOK_SECRET` (разные секреты — разные blast radius).
+
+Важно: воркер + D1 остаются standalone-альтернативой. Если `setWebhook`
+направить **напрямую на воркер** (`/api/webhook`), игровой `POST
+/api/telegram/webhook` на Render перестанет получать апдейты бота
+(команды `/start`/`/help`) — Bot API держит один URL на бота. Варианты:
+
+| | setWebhook → Render + прокси | setWebhook → воркер напрямую |
+|---|---|---|
+| Игровые команды бота | работают | **не работают** (нужен отдельный бот/путь) |
+| Платёжный журнал | D1 воркера | D1 воркера |
+| Сетевой хоп для Stars | +1 (Render→воркер) | 0 |
+| Риск для игрового сервера | минимальный (прокси изолирован) | ноль (не трогаем) |
+
+### Рекомендация
+
+**Прокси (Render + воркер)** — основной путь: игровой webhook и команды бота
+сохраняются, платёжный журнал — в D1 воркера (атомарные батчи, протокол v3),
+риск для score-контракта минимален. Прямой webhook на воркер — только если
+игровые команды бота не нужны вообще.
+
+`pre_checkout_query` требует ответа ≤ 10 с: прокси имеет таймаут 8 с,
+воркер отвечает `ok` из D1 за миллисекунды; Render cold start > 8 с
+закрыт ретраем Telegram (воркер идемпотентен по `charge_id`).
+
+## 10. Admin: ручная пометка refunded (патч №14)
+
+`POST /api/admin/refund` — ручное разрешение споров (возврат вне Telegram,
+двойное списание и т.п.):
+
+```bash
+curl -X POST https://<worker>/api/admin/refund \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"chargeId":"<telegram_charge_id>","reason":"manual refund"}'
+```
+
+- `ADMIN_TOKEN` — отдельный секрет воркера (не bot token!), обязателен;
+  без него/при неверном — 401, эндпоинт fail-closed.
+- Переводит платёж `paid|fulfilled → refunded` (повтор безопасен: уже
+  refunded → ok:false, состояние не меняется).
+- После refund: `/api/verify` → `{verified:false, reason:'refunded'}`,
+  клиентский `restore()` и `/api/entitlements` исключают запись из выдачи —
+  перевыдачи не будет.
+- Возвраты Stars получателю выполняет человек через Bot API / банк-эквайринг —
+  воркер только фиксирует факт в журнале (см. `worker/schema.sql`).

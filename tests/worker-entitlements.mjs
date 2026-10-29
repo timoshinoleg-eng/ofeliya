@@ -7,8 +7,9 @@
  *   db.batch(): INSERT OR IGNORE INTO payments + UPDATE orders → 'paid';
  * - повторный вебхук того же charge_id: meta.changes==0 → duplicate, журнал
  *   не дублируется (атомарно, без гонки);
- * - batch failure → 500 {ok:false} (Telegram redelivers; retry безопасен
- *   через OR IGNORE), повтор после починки записывает;
+ * - batch failure → 503 {ok:false, error:'db_unavailable'} (патч №14, P0-2;
+ *   Telegram redelivers; retry безопасен через OR IGNORE), повтор после
+ *   починки записывает; webhook без D1 → тоже 503 fail-closed;
  * - negative webhooks: unknown order / user mismatch / amount mismatch /
  *   currency mismatch / invalid → 200 без записи;
  * - pre_checkout: nonce → order → сверка цены (ok:true/false в Bot API);
@@ -317,7 +318,7 @@ try {
   eq(db.payments.size, 2, 'second charge recorded');
   eq(db.orders.get('nonce-002').status, 'paid', 'second order paid');
 
-  // --- batch failure → 500 {ok:false}, повтор после починки записывает ---
+  // --- batch failure → 503 {ok:false}, повтор после починки записывает (патч №14, P0-2) ---
   await db
     .prepare('INSERT INTO orders (nonce, user_id, product_id, status, created_at) VALUES (?,?,?,?,?)')
     .bind('nonce-003', 777001, 'currency.rna-pack-s', 'pending', Date.now())
@@ -330,8 +331,9 @@ try {
     webhookBody({ userId: 777001, nonce: 'nonce-003', chargeId: 'charge-test-3', stars: 35 }),
     hookHeaders
   );
-  eq(failed.status, 500, 'batch failure → 500 (Telegram redelivers)');
+  eq(failed.status, 503, 'batch failure → 503 (Telegram redelivers)');
   eq(failed.json.ok, false, 'batch failure body ok:false');
+  eq(failed.json.error, 'db_unavailable', 'batch failure body error code');
   assert(!db.payments.has('charge-test-3'), 'failed batch writes nothing');
   eq(db.orders.get('nonce-003').status, 'pending', 'failed batch leaves order pending');
   const retried = await post(
@@ -508,7 +510,8 @@ try {
   );
   eq(noHeader.status, 403, 'webhook missing secret header → 403');
 
-  // --- вебхук без D1 не падает (только лог, как раньше) ---
+  // --- вебхук без D1 → 503 fail-closed (патч №14, P0-2): раньше было 200
+  // "log only" — Telegram считал апдейт обработанным, оплата терялась ---
   const noDbHook = await post(
     worker,
     { TELEGRAM_BOT_TOKEN: BOT_TOKEN, WEBHOOK_SECRET: SECRET },
@@ -516,7 +519,8 @@ try {
     webhookBody({ userId: 777001, nonce: 'nonce-001', chargeId: 'charge-test-9', stars: 100 }),
     hookHeaders
   );
-  eq(noDbHook.status, 200, 'webhook without DB still ok');
+  eq(noDbHook.status, 503, 'webhook without DB → 503 fail-closed (Telegram retries)');
+  eq(noDbHook.json.error, 'db_unavailable', 'webhook without DB error code');
 
   console.log('worker-entitlements: OK');
 } finally {
