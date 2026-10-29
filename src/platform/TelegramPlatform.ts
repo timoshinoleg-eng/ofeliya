@@ -49,6 +49,12 @@ interface TelegramWebApp {
   shareMessage?: (messageId: string, callback?: (success: boolean) => void) => void;
   openTelegramLink?: (url: string) => void;
   /**
+   * Stars-инвойсы (Bot API 6.1+). Использует витрина
+   * (TelegramStarsPaymentProvider, src/game/shop). Статусы callback:
+   * 'paid' | 'cancelled' | 'failed' | 'pending'.
+   */
+  openInvoice?: (url: string, callback?: (status: string) => void) => void;
+  /**
    * Telegram WebApp 7.7+. Locks the host page so a vertical drag cannot scroll the Mini App
    * viewport away from the game instead of reaching the on-screen controls.
    */

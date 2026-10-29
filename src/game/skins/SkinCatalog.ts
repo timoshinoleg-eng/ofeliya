@@ -2,11 +2,8 @@
  * SkinCatalog — каталог скинов-штаммов (Фаза 5, DiceBear).
  *
  * Данные, не код. Шоп-скины берутся из SHOP_CATALOG (src/game/shop/products.ts)
- * как единого источника: id/title/seed/palette — оттуда, дублирования нет.
- * Редкость — галерейная аннотация (в каталоге витрины её нет), а цены в
- * звёздах (XTR) пока заданы здесь же: витрина партии 3 несёт только RUB-цены,
- * поле stars в SHOP_CATALOG добавит партия Stars — тогда и stars переедут
- * туда, а productId уже сейчас совпадают с id товаров.
+ * как единого источника: id/title/seed/palette/stars — оттуда, дублирования
+ * нет. Редкость — галерейная аннотация (в каталоге витрины её нет).
  * Дефолтный скин 'strain-zero' — каноничный арт 'virus-player' (без DiceBear).
  *
  * Модуль Phaser-free: чистые функции, тестируются в Node.
@@ -29,7 +26,7 @@ export interface SkinDef {
   rarity: SkinRarity;
   /** id товара в будущей витрине (цена/stars — оттуда) или null (бесплатный). */
   productId: string | null;
-  /** Цена в звёздах Telegram (XTR); null — бесплатный. До партии 3 — из этих данных. */
+  /** Цена в звёздах Telegram (XTR) из SHOP_CATALOG; null — бесплатный. */
   stars: number | null;
 }
 
@@ -55,10 +52,10 @@ export function paletteColors(palette: string): {
 }
 
 /** Галерейные аннотации шоп-скинов (rarity нет в каталоге витрины). */
-const SHOP_SKIN_META: Record<string, { rarity: SkinRarity; stars: number }> = {
-  'skin.virulent-magenta': { rarity: 'rare', stars: 100 },
-  'skin.abyssal-teal': { rarity: 'rare', stars: 100 },
-  'skin.gilded-prime': { rarity: 'legendary', stars: 250 },
+const SHOP_SKIN_META: Record<string, { rarity: SkinRarity }> = {
+  'skin.virulent-magenta': { rarity: 'rare' },
+  'skin.abyssal-teal': { rarity: 'rare' },
+  'skin.gilded-prime': { rarity: 'legendary' },
 };
 
 export const SKIN_CATALOG: readonly SkinDef[] = [
@@ -71,9 +68,8 @@ export const SKIN_CATALOG: readonly SkinDef[] = [
     productId: null,
     stars: null,
   },
-  // Шоп-скины: id/title/seed/palette — из SHOP_CATALOG (единый источник);
-  // rarity и stars — галерейные аннотации (см. шапку: stars переедут
-  // в SHOP_CATALOG с партией Stars).
+  // Шоп-скины: id/title/seed/palette/stars — из SHOP_CATALOG (единый
+  // источник); rarity — галерейная аннотация.
   ...SHOP_CATALOG.filter((p) => p.kind === 'skin').map((p) => ({
     id: p.id,
     title: p.title,
@@ -81,7 +77,7 @@ export const SKIN_CATALOG: readonly SkinDef[] = [
     palette: p.art.palette,
     rarity: SHOP_SKIN_META[p.id]?.rarity ?? 'rare',
     productId: p.id,
-    stars: SHOP_SKIN_META[p.id]?.stars ?? null,
+    stars: p.stars ?? null,
   })),
 ];
 
