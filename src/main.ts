@@ -8,6 +8,7 @@ import { BootScene } from './scenes/BootScene';
 import { MenuScene } from './scenes/MenuScene';
 import { GameScene } from './scenes/GameScene';
 import { UIScene } from './scenes/UIScene';
+import { StorefrontScene } from './scenes/StorefrontScene';
 import { installMobileLayoutGuard } from './ui/MobileLayoutGuard';
 import { PlatformBridge } from './platform';
 import { StartupTrace } from './systems/StartupTrace';
@@ -344,7 +345,7 @@ async function boot(signal: AbortSignal): Promise<void> {
       input: {
         activePointers: 3,
       },
-      scene: [BootScene, MenuScene, GameScene, UIScene],
+      scene: [BootScene, MenuScene, GameScene, UIScene, StorefrontScene],
     });
     StartupTrace.mark('phaser.construct.end');
     StartupTrace.setMeta('rendererActual', game.renderer.type === Phaser.WEBGL ? 'webgl' : 'canvas');

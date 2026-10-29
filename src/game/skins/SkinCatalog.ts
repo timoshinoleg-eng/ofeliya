@@ -1,18 +1,18 @@
 /**
  * SkinCatalog — каталог скинов-штаммов (Фаза 5, DiceBear).
  *
- * Данные, не код. В стеке шоп-скины брались из SHOP_CATALOG
- * (src/game/shop/products.ts) — seed, palette, title и цена жили там и НЕ
- * дублировались здесь. В main витрина ещё не портирована (партия 3), поэтому
- * данные трёх шоп-скинов заданы здесь же, с ТЕМИ ЖЕ значениями, что в
- * каталоге стека (seed/palette/title/stars). Когда партия 3 принесёт
- * shop/products.ts, этот модуль переключится на SHOP_CATALOG как единый
- * источник, а productId уже сейчас совпадают с будущими id товаров.
+ * Данные, не код. Шоп-скины берутся из SHOP_CATALOG (src/game/shop/products.ts)
+ * как единого источника: id/title/seed/palette — оттуда, дублирования нет.
+ * Редкость — галерейная аннотация (в каталоге витрины её нет), а цены в
+ * звёздах (XTR) пока заданы здесь же: витрина партии 3 несёт только RUB-цены,
+ * поле stars в SHOP_CATALOG добавит партия Stars — тогда и stars переедут
+ * туда, а productId уже сейчас совпадают с id товаров.
  * Дефолтный скин 'strain-zero' — каноничный арт 'virus-player' (без DiceBear).
  *
  * Модуль Phaser-free: чистые функции, тестируются в Node.
  * Рендер SVG — в SkinArt.ts (там же зависимость @dicebear/*).
  */
+import { SHOP_CATALOG } from '../shop/products';
 
 export type SkinRarity = 'common' | 'rare' | 'legendary';
 
@@ -54,6 +54,13 @@ export function paletteColors(palette: string): {
   return PALETTE_COLORS[palette] ?? PALETTE_COLORS.bio;
 }
 
+/** Галерейные аннотации шоп-скинов (rarity нет в каталоге витрины). */
+const SHOP_SKIN_META: Record<string, { rarity: SkinRarity; stars: number }> = {
+  'skin.virulent-magenta': { rarity: 'rare', stars: 100 },
+  'skin.abyssal-teal': { rarity: 'rare', stars: 100 },
+  'skin.gilded-prime': { rarity: 'legendary', stars: 250 },
+};
+
 export const SKIN_CATALOG: readonly SkinDef[] = [
   {
     id: DEFAULT_SKIN_ID,
@@ -64,33 +71,18 @@ export const SKIN_CATALOG: readonly SkinDef[] = [
     productId: null,
     stars: null,
   },
-  {
-    id: 'skin.virulent-magenta',
-    title: 'Штамм «Вирулентный»',
-    seed: 'virulent-01',
-    palette: 'magenta',
-    rarity: 'rare',
-    productId: 'skin.virulent-magenta',
-    stars: 100,
-  },
-  {
-    id: 'skin.abyssal-teal',
-    title: 'Штамм «Бездонный»',
-    seed: 'abyssal-02',
-    palette: 'teal',
-    rarity: 'rare',
-    productId: 'skin.abyssal-teal',
-    stars: 100,
-  },
-  {
-    id: 'skin.gilded-prime',
-    title: 'Штамм «Позолоченный»',
-    seed: 'gilded-03',
-    palette: 'gold',
-    rarity: 'legendary',
-    productId: 'skin.gilded-prime',
-    stars: 250,
-  },
+  // Шоп-скины: id/title/seed/palette — из SHOP_CATALOG (единый источник);
+  // rarity и stars — галерейные аннотации (см. шапку: stars переедут
+  // в SHOP_CATALOG с партией Stars).
+  ...SHOP_CATALOG.filter((p) => p.kind === 'skin').map((p) => ({
+    id: p.id,
+    title: p.title,
+    seed: p.art.seed,
+    palette: p.art.palette,
+    rarity: SHOP_SKIN_META[p.id]?.rarity ?? 'rare',
+    productId: p.id,
+    stars: SHOP_SKIN_META[p.id]?.stars ?? null,
+  })),
 ];
 
 const BY_ID = new Map(SKIN_CATALOG.map((s) => [s.id, s]));

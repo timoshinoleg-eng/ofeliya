@@ -33,6 +33,8 @@ import {
 } from '../game/skins/SkinCatalog';
 import { ensureSkinTexture } from '../game/skins/SkinArt';
 import { equipSkin, getEquippedSkinId, isSkinOwned } from '../game/skins/SkinOwnership';
+import { FeatureFlags } from '../game/FeatureFlags';
+import { isStorefrontVisible } from '../game/shop/Storefront';
 
 const RARITY_COLOR: Record<string, string> = {
   common: '#9fb4c8',
@@ -203,11 +205,10 @@ export function showSkinGallery(
       const cardW = (panelW - pad * (cols + 1)) / cols;
       const cardH = 196;
       const gridTop = cy - panelH / 2 + 84;
-      // TODO(партия 3 — витрина): заменить на
-      // isStorefrontVisible(FeatureFlags.get('storefront.variant'), { apiBaseUrl })
-      // из shop/Storefront, когда витрина будет портирована. Пока витрины нет —
-      // шоп-скины показывают цену и «СКОРО», кнопка «КУПИТЬ» не рисуется.
-      const shopVisible = false;
+      // Витрина портирована (партия 3): шоп-скины показывают цену и кнопку
+      // «КУПИТЬ» только когда витрина видима по флагу storefront.variant;
+      // при дефолтном 'hidden' — «СКОРО», как раньше.
+      const shopVisible = isStorefrontVisible(FeatureFlags.get('storefront.variant'));
 
       skins.forEach((def, i) => {
         const col = i % cols;

@@ -143,6 +143,9 @@ jobs:
       - name: Analytics event names in sync
         run: npm run test:analytics-events
 
+      - name: Storefront contract
+        run: npm run test:shop
+
       - name: Daily V2 client contract smoke
         run: npm run test:daily-v2
 

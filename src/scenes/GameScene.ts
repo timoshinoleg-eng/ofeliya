@@ -122,7 +122,7 @@ import {
   grantAchievementSkin,
   unlockMetaAchievements,
 } from '../game/achievements/MetaAchievements';
-import { recordQuestCompleted, recordRunEnd, recordStreak } from '../game/meta/MetaWallet';
+import { isBoosterActive, recordQuestCompleted, recordRunEnd, recordStreak } from '../game/meta/MetaWallet';
 import { grantMetaRna, loadLabState } from '../game/lab/LabState';
 import { applyLabRunModifiers } from '../game/lab/LabModifiers';
 import { beginRunCapability } from '../systems/ScoreClient';
@@ -2971,7 +2971,11 @@ export class GameScene extends Phaser.Scene {
     // Ported Phase 2: «double RNA» event flag (enabled without rebuild).
     // Both grant paths scale: a pooled gem and the fallback top-up of the
     // first live gem (the original patch scaled only the pooled path).
-    const scaled = FeatureFlags.get('events.doubleRna') ? value * 2 : value;
+    // Порт витрины: бустер «РНК ×2» из магазина — тот же множитель, та же
+    // точка (флаг ивента и бустер складываются независимо: ×2 ×2 = ×4).
+    const mult =
+      (FeatureFlags.get('events.doubleRna') ? 2 : 1) * (isBoosterActive() ? 2 : 1);
+    const scaled = value * mult;
     const g = this.gems.get(x, y) as Gem | null;
     if (g) {
       g.activate(this, x, y, scaled);
