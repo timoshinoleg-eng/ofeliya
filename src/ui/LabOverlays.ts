@@ -33,11 +33,11 @@ import {
   type LabBranch,
 } from '../game/lab/LabBranches';
 import {
-  PRESTIGE_MIN_LEVELS,
   buyLabUpgrade,
   doPrestige,
   getBranchLevel,
   loadLabState,
+  prestigeRequiredLevels,
   totalLevels,
 } from '../game/lab/LabState';
 import { showMetaToast } from './RetentionOverlays';
@@ -296,9 +296,12 @@ function renderPrestige(
       })
       .setResolution(2)
   );
+  // Пост-ревью (патч №11): порог растёт с престижем (10 + count*5).
+  const required = prestigeRequiredLevels(st.prestigeCount);
+
   content.add(
     scene.add
-      .text(left, top + 36, 'Сброс уровней и запаса РНК ради постоянного бонуса.', {
+      .text(left, top + 36, `Сброс уровней и запаса РНК ради постоянного бонуса. Нужно уровней: ${required}.`, {
         fontFamily: FONT,
         fontSize: '11px',
         color: VISUAL_TEXT.muted,
@@ -307,7 +310,7 @@ function renderPrestige(
       .setResolution(2)
   );
 
-  const canPrestige = totalLevels(st) >= PRESTIGE_MIN_LEVELS;
+  const canPrestige = totalLevels(st) >= required;
   const btnW = 150;
   const btnH = 34;
   const btnX = cx;

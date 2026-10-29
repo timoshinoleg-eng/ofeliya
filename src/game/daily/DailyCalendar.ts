@@ -192,7 +192,12 @@ export type ClaimResult =
 export function claimDaily(now: Date = new Date(), deps: DailyCalendarDeps = {}): ClaimResult {
   const summary = deps.summary ?? dailyStreakSummary(undefined, now);
   const claims = deps.claims ?? loadClaims();
-  const wallet: DailyWallet = deps.wallet ?? { addRna: grantMetaRna, recordStreak };
+  const wallet: DailyWallet = deps.wallet ?? {
+    // DailyWallet.addRna возвращает баланс — адаптер к новому
+    // GrantMetaRnaResult (пост-ревью, патч №11).
+    addRna: (amount) => grantMetaRna(amount).balance,
+    recordStreak,
+  };
   const status = getDailyStatus(now, { summary, claims });
   if (!status.playedToday) return { ok: false, reason: 'not_played' };
   if (status.claimedToday) return { ok: false, reason: 'already_claimed' };

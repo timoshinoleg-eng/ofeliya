@@ -145,12 +145,21 @@ export function recordStreak(streak: number): void {
 
 /**
  * Бустер «РНК ×2» (витрина, порт партии 3): установить окончание действия.
- * Вызывается из выдачи покупки (shop/grantPurchase); продление — перезаписью.
+ * Вызывается из выдачи покупки (shop/grantPurchase).
  */
 export function setBoosterUntilMs(untilMs: number): void {
   const st = loadMeta();
   st.boosterUntilMs = Math.max(0, Math.floor(untilMs));
   saveMeta(st);
+}
+
+/** Окончание действия бустера «РНК ×2» (epoch ms; 0 = неактивен). */
+export function getBoosterUntilMs(): number {
+  try {
+    return loadMeta().boosterUntilMs;
+  } catch {
+    return 0;
+  }
 }
 
 /** Активен ли бустер «РНК ×2» сейчас (применяется в GameScene.spawnGem). */

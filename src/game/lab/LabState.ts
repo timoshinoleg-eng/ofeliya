@@ -17,7 +17,7 @@
  */
 
 import { FeatureFlags } from '../FeatureFlags';
-import { loadMeta, addRna, spendRna, resetRnaBalance } from '../meta/MetaWallet';
+import { loadMeta, addRna, spendRna, resetRnaBalance, isBoosterActive } from '../meta/MetaWallet';
 import { LAB_BRANCHES, costForLevel, getLabBranch, prestigeBonus } from './LabBranches';
 import { computeLabModifiers } from './LabModifiers';
 
@@ -77,8 +77,14 @@ export function totalLevels(state: LabState): number {
   return LAB_BRANCHES.reduce((acc, b) => acc + getBranchLevel(state, b.id), 0);
 }
 
-/** Мин. число купленных уровней для престижа. */
-export const PRESTIGE_MIN_LEVELS = 1;
+/**
+ * Порог престижа: 10 уровней + 5 за каждый уже совершённый престиж.
+ * Пост-ревью (патч №11): фиксированный порог 1 позволял престижить
+ * сразу после первого апгрейда — престиж должен быть долгосрочной целью.
+ */
+export function prestigeRequiredLevels(prestigeCount: number): number {
+  return 10 + Math.max(0, Math.floor(prestigeCount)) * 5;
+}
 
 export interface BuyResult {
   ok: boolean;
@@ -110,18 +116,32 @@ export function buyLabUpgrade(branchId: string): BuyResult {
   return { ok: true, level: level + 1 };
 }
 
+/** Результат начисления: новый баланс и РЕАЛЬНО начисленная сумма (с бонусами). */
+export interface GrantMetaRnaResult {
+  balance: number;
+  granted: number;
+}
+
 /**
  * Единая точка начисления дохода meta-RNA: метаболизм × престиж.
- * Возвращает новый баланс кошелька.
+ * Пост-ревью (патч №11): активный бустер из витрины (booster.rna-x2-7d)
+ * удваивает ДОХОД (не баланс) — независимо от флага economy.lab.
+ * Возвращает и баланс, и granted — UI обязан показывать granted,
+ * а не базовую награду (иначе рассинхрон).
+ * Никогда не бросает; отрицательный вход → 0.
  */
-export function grantMetaRna(amount: number): number {
-  const meta = loadMeta();
-  const mult = FeatureFlags.get('economy.lab')
+export function grantMetaRna(amount: number): GrantMetaRnaResult {
+  let mult = FeatureFlags.get('economy.lab')
     ? computeLabModifiers(loadLabState()).metaRnaMul
     : 1;
-  const granted = Math.floor(amount * mult);
-  addRna(granted);
-  return meta.rna + granted;
+  try {
+    if (isBoosterActive()) mult *= 2;
+  } catch {
+    /* ignore — бустер не ломает начисление */
+  }
+  const granted = Math.max(0, Math.floor(amount * mult));
+  const balance = addRna(granted);
+  return { balance, granted };
 }
 
 export interface PrestigeResult {
@@ -141,7 +161,9 @@ export interface PrestigeResult {
 export function doPrestige(): PrestigeResult {
   if (!FeatureFlags.get('economy.lab')) return { ok: false, reason: 'disabled' };
   const state = loadLabState();
-  if (totalLevels(state) < PRESTIGE_MIN_LEVELS) return { ok: false, reason: 'no_levels' };
+  if (totalLevels(state) < prestigeRequiredLevels(state.prestigeCount)) {
+    return { ok: false, reason: 'no_levels' };
+  }
   resetRnaBalance();
   const previousCount = state.prestigeCount;
   const next: LabState = { levels: {}, prestigeCount: previousCount + 1 };

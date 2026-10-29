@@ -21,6 +21,11 @@ cp wrangler.toml.example wrangler.toml   # поправь name при желан
 npx wrangler secret put TELEGRAM_BOT_TOKEN   # токен из шага 1
 npx wrangler secret put WEBHOOK_SECRET       # придумай строку, напр. openssl rand -hex 32
 
+# KV для серверных entitlements (пост-ревью, патч №11; опционально —
+# без него воркер работает как раньше, а /api/entitlements отвечает 501):
+npx wrangler kv:namespace create PAYMENTS
+# → подставь выданный id в wrangler.toml в блок [[kv_namespaces]] (см. wrangler.toml.example)
+
 npx wrangler deploy
 # → получишь https://ofeliya-payments.<твой-аккаунт>.workers.dev
 ```
