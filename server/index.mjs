@@ -256,7 +256,7 @@ const PRODUCT_EVENTS = new Set([
   'daily_claimed', 'achievement_unlocked',
   'lab_upgrade_bought', 'prestige_done',
   'skin_granted', 'skin_equipped',
-  'store_viewed', 'purchase_started', 'purchase_completed', 'purchase_failed', 'purchase_pending', 'purchase_grant_failed',
+  'store_viewed', 'purchase_started', 'purchase_completed', 'purchase_failed', 'purchase_pending', 'purchase_grant_failed', 'purchase_sync_pending', 'purchase_sync_recovered', 'purchase_sync_retry_failed',
 ]);
 
 function emptyStore() {
