@@ -16,7 +16,8 @@
 -- Статусы payments.status:
 --   'paid'      — платёж подтверждён Telegram, ожидает локальной выдачи клиентом;
 --   'fulfilled' — клиент выдал товар и вызвал POST /api/ack (только учёт);
---   'refunded'  — ТОЛЬКО вручную через SQL (воркер этот статус не выставляет).
+--   'refunded'  — ТОЛЬКО вручную: POST /api/admin/refund (патч №14, E-c)
+--                 с ADMIN_TOKEN; воркер сам этот статус не выставляет.
 --
 -- Статусы orders.status:
 --   'pending' — инвойс создан, оплата ещё не пришла;
@@ -25,8 +26,10 @@
 --               (pre_checkout_query такие заказы отклоняет).
 --
 -- Возврат денег (refunded) — ручная операция Mark:
---   UPDATE payments SET status='refunded'
---     WHERE charge_id='<telegram_payment_charge_id>';
+--   curl -X POST https://<worker>/api/admin/refund \
+--     -H "Authorization: Bearer $ADMIN_TOKEN" \
+--     -H 'content-type: application/json' \
+--     -d '{"chargeId":"<telegram_payment_charge_id>","reason":"..."}'
 -- Возврат Stars пользователю делается отдельно через Bot API
 -- (refundStarPayment); воркер только помечает запись в журнале.
 --

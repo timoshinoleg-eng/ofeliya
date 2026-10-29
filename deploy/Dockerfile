@@ -19,6 +19,7 @@ COPY --chown=node:node server/analytics-summary.mjs ./server/analytics-summary.m
 COPY --chown=node:node server/telegram-share.mjs ./server/telegram-share.mjs
 COPY --chown=node:node server/telegram-api.mjs ./server/telegram-api.mjs
 COPY --chown=node:node server/telegram-webhook.mjs ./server/telegram-webhook.mjs
+COPY --chown=node:node server/stars-proxy.mjs ./server/stars-proxy.mjs
 USER node
 CMD ["node", "server/index.mjs"]
 

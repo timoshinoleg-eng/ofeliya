@@ -17,6 +17,10 @@
  *   падение ack не блокирует выдачу (fire-and-forget);
  * - P0-2: verifyPurchase возвращает серверный productId;
  * - P1-a: fulfillPurchase → {ok:false} на invalid-product.
+ * - Патч №14 (P0-1): restore догрантит 'fulfilled' после потери localStorage
+ *   (новое устройство); E-b: ack только при outcome==='granted', не при
+ *   'duplicate'; мёртвая ветка 'credited' убрана (неизвестный статус —
+ *   fail-closed: ни гранта, ни пометки).
  *
  * Адаптация к main (в отличие от стека): MetaWallet на plain numbers
  * (rna — число, не Decimal-строка), debugResetMeta нет — сброс через
@@ -199,17 +203,53 @@ try {
   eq(mw.loadMeta().rna, 0, 'already credited: повторного гранта нет');
   eq(ackCalls.length, 0, 'already credited: ack нет (skip-путь)');
 
-  // === status 'credited' (зарезервирован воркером): пометка без гранта ===
+  // === Неизвестный статус сервера ('credited' — воркер его никогда не
+  // возвращает; статусы D1: paid/fulfilled/refunded): fail-closed —
+  // ни гранта, ни пометки, ни ack, ни UI. Патч №14 убрал мёртвую ветку.
   resetAll();
   entitlementPurchases = [
     { chargeId: 'ch_crd_1', productId: packS.id, status: 'credited', createdAt: 0 },
   ];
   const rCrd = await provider.restore();
   await flush();
-  eq(mw.loadMeta().rna, 0, 'credited: гранта нет (сервер утверждает, что выдал)');
-  assert(ledger.isChargeCredited('ch_crd_1'), 'credited: помечен');
-  assert(rCrd.productIds.includes(packS.id), 'credited: виден UI');
-  eq(ackCalls.length, 0, 'credited: ack нет (локального гранта не было)');
+  eq(mw.loadMeta().rna, 0, 'unknown status: гранта нет (fail-closed)');
+  assert(!ledger.isChargeCredited('ch_crd_1'), 'unknown status: не помечен');
+  assert(!rCrd.productIds.includes(packS.id), 'unknown status: не виден UI');
+  eq(ackCalls.length, 0, 'unknown status: ack нет');
+
+  // === Патч №14 (P0-1): restore догрантит 'fulfilled' после потери localStorage ===
+  // Сценарий: товар куплен и выдан на старом устройстве (сервер пометил
+  // 'fulfilled' по /api/ack), localStorage потерян / новое устройство.
+  // Раньше 'fulfilled' падал в else-ветку restore() и товар терялся навсегда.
+  resetAll();
+  entitlementPurchases = [
+    { chargeId: 'ch_p14_fulfilled', productId: packS.id, status: 'fulfilled', createdAt: 1700000000001 },
+  ];
+  eq(mw.loadMeta().rna, 0, 'P0-1: баланс пуст (новое устройство)');
+  await provider.restore();
+  await flush();
+  eq(mw.loadMeta().rna, 500, 'P0-1: restore догрантил fulfilled-запись');
+  eq(ackCalls.length, 1, 'P0-1: ack отправлен при granted');
+
+  // Повторный restore — тишина: локальный credited.v1 даёт exactly-once.
+  // E-b: ack НЕ повторяется (только outcome==='granted', не 'duplicate').
+  await provider.restore();
+  await flush();
+  eq(mw.loadMeta().rna, 500, 'P0-1: повторный restore не дублирует грант');
+  eq(ackCalls.length, 1, 'E-b: ack только при granted, не при duplicate');
+
+  // Смешанный журнал: paid + fulfilled + refunded.
+  resetAll();
+  entitlementPurchases = [
+    { chargeId: 'ch_p14_paid', productId: packS.id, status: 'paid', createdAt: 1700000000002 },
+    { chargeId: 'ch_p14_ful', productId: packS.id, status: 'fulfilled', createdAt: 1700000000003 },
+    { chargeId: 'ch_p14_ref', productId: packS.id, status: 'refunded', createdAt: 1700000000004 },
+  ];
+  await provider.restore();
+  await flush();
+  // paid → +500, fulfilled → +500 (новое устройство), refunded → пропуск.
+  eq(mw.loadMeta().rna, 1000, 'P0-1: paid+fulfilled выданы, refunded пропущен');
+  eq(ackCalls.length, 2, 'P0-1: ack по одному на каждую реальную выдачу');
 
   // === ack НЕ вызывается при неуспешной выдаче (fulfillPurchase → ok=false) ===
   resetAll();

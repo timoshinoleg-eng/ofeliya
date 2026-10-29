@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { saveTelegramPreparedMessage } from './telegram-share.mjs';
 import { telegramApiJson } from './telegram-api.mjs';
 import { buildTelegramWebhookMethod, telegramWebhookSecretMatches } from './telegram-webhook.mjs';
+import { isStarsUpdate, forwardStarsUpdate } from './stars-proxy.mjs';
 import { DurableState } from './durable-state.mjs';
 import { TelegramUserRegistry } from './telegram-users.mjs';
 import { proxyHops, clientIp, corsHeaders } from './request-policy.mjs';
@@ -48,6 +49,13 @@ const stateSnapshot = () => ({ store, profiles: profileStore, tg_users: telegram
 const TG_TOKEN = process.env.TG_BOT_TOKEN ?? '';
 const TG_WEBHOOK_SECRET = process.env.TG_WEBHOOK_SECRET ?? '';
 const TG_OUTBOUND_ENABLED = process.env.OFELIYA_TELEGRAM_OUTBOUND_ENABLED === '1';
+// Патч №14 (P0-4): прокси Stars-апдейтов на Cloudflare Worker с D1-журналом.
+// setWebhook бота остаётся на этом сервере (/start, /help — живы);
+// pre_checkout_query / successful_payment уходят на воркер.
+// Секреты РАЗНЫЕ: TG_WEBHOOK_SECRET — для входящих апдейтов Telegram сюда,
+// OFELIYA_STARS_WORKER_SECRET — WEBHOOK_SECRET воркера (для прокси-запроса).
+const STARS_WORKER_URL = process.env.OFELIYA_STARS_WORKER_URL ?? '';
+const STARS_WORKER_SECRET = process.env.OFELIYA_STARS_WORKER_SECRET ?? '';
 // MAX initData не содержит app audience. A shared bot token would authenticate
 // launch data from every Mini App attached to that bot, so fail closed without
 // the dedicated application token.
@@ -1274,6 +1282,23 @@ const server = createServer(async (req, res) => {
         return send(res, 403, { ok: false, error: 'invalid Telegram webhook secret' });
       }
       const update = await readBody(req);
+      // Патч №14 (P0-4): Stars-апдейты — прокси на воркер с D1-журналом.
+      // setWebhook НЕ перенастраиваем: /start и остальные команды живы здесь.
+      // Fail-closed: прокси не настроен или воркер недоступен → 503,
+      // Telegram переотправит апдейт. Молча глотать (200 без обработки)
+      // запрещено — это потерянные оплаты.
+      if (isStarsUpdate(update)) {
+        try {
+          const proxied = await forwardStarsUpdate(update, {
+            workerUrl: STARS_WORKER_URL,
+            workerSecret: STARS_WORKER_SECRET,
+          });
+          return send(res, proxied.status, proxied.body);
+        } catch (err) {
+          console.error('[stars-proxy] forward failed:', err instanceof Error ? err.message : err);
+          return send(res, 503, { ok: false, error: 'stars-worker-unavailable' });
+        }
+      }
       telegramUsers.registerPrivateStart(update);
       const method = buildTelegramWebhookMethod(update, { gameUrl: GAME_URL });
       return send(res, 200, method ?? { ok: true });
