@@ -39,6 +39,7 @@ export const ANALYTICS_EVENT_NAMES = Object.freeze([
   'onboarding_step', 'onboarding_exit',
   'daily_claimed', 'achievement_unlocked',
   'lab_upgrade_bought', 'prestige_done',
+  'skin_granted', 'skin_equipped',
 ]);
 
 const ANALYTICS_EVENT_NAME_SET = new Set(ANALYTICS_EVENT_NAMES);

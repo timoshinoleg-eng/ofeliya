@@ -21,6 +21,9 @@ export function artSourceFactor(key: string): number {
   // packaged-pixel/texture-identity contract while adapting actor/animation art.
   if (key === 'mutation-prism' || key === 'mutation-halo' || key === 'mutation-singularity') return 4;
   if (key === 'bio-cycle-virus-player' || key === 'bio-cycle-immune-antibody' || key === 'bio-hit-virus-player' || key === 'bio-hit-immune-antibody') return BAKE_FACTOR;
+  // Скины-штаммы Фазы 5: запечённые DiceBear-текстуры ('skin-tex-*') идут
+  // тем же bake-фактором, что процедурный арт (см. SkinArt.ensureSkinTexture).
+  if (key.startsWith('skin-tex-')) return BAKE_FACTOR;
   return Object.prototype.hasOwnProperty.call(CORE_ART, key) ? BAKE_FACTOR : 1;
 }
 

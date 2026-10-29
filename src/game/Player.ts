@@ -21,6 +21,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private biologicalFrame = -1;
   private biologicalHitAt = -Infinity;
   private biologicalHitDirection = 0;
+  /**
+   * Экипированный скин Фазы 5: ключ запечённой DiceBear-текстуры или null
+   * для каноничного арта 'virus-player'. Ставится из GameScene
+   * (applyEquippedSkin); когда текстура готова, preUpdate держит её вместо
+   * bio-цикла (масштаб — через тот же artScale: ключи 'skin-tex-*' дают
+   * bakeFactor в ArtMetrics). Hit-flash атлас по-прежнему выигрывает во
+   * время hit-кадров — фидбэк урона важнее косметики.
+   */
+  skinTextureKey: string | null = null;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'virus-player');
@@ -92,21 +101,38 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   preUpdate(time: number, delta: number): void {
     super.preUpdate(time, delta);
     if (!this.active) return;
-    const atlas = biologicalAtlasKey('virus-player');
-    if (this.scene.textures.exists(atlas)) {
+    // Фаза 5: активный скин (текстура запечена) заменяет bio-цикл, но не
+    // hit-flash: во время hit-кадров атлас урона всё равно выигрывает.
+    const skinActive = this.skinTextureKey !== null && this.scene.textures.exists(this.skinTextureKey);
+    if (skinActive) {
       const reduced = this.scene.registry.get('performanceTier') === 'reduced' || this.scene.registry.get('runtimeQuality')?.level === 'low';
-      const frame = biologicalFrameAt(time, 0, reduced);
       const hitAtlas = biologicalHitAtlasKey('virus-player');
       const hitFrame = biologicalHitFrame(this.scene.time.now - this.biologicalHitAt, this.biologicalHitDirection, reduced);
-      const texture = hitFrame && this.scene.textures.exists(hitAtlas) ? hitAtlas : atlas;
-      const pose = texture === hitAtlas ? hitFrame! : `bio-${frame}`;
-      if (this.texture.key !== texture || this.frame.name !== pose) this.setTexture(texture, pose);
-      this.biologicalFrame = frame;
+      if (hitFrame && this.scene.textures.exists(hitAtlas)) {
+        if (this.texture.key !== hitAtlas || this.frame.name !== hitFrame) this.setTexture(hitAtlas, hitFrame);
+      } else if (this.texture.key !== this.skinTextureKey) {
+        this.setTexture(this.skinTextureKey!);
+      }
+    } else {
+      const atlas = biologicalAtlasKey('virus-player');
+      if (this.scene.textures.exists(atlas)) {
+        const reduced = this.scene.registry.get('performanceTier') === 'reduced' || this.scene.registry.get('runtimeQuality')?.level === 'low';
+        const frame = biologicalFrameAt(time, 0, reduced);
+        const hitAtlas = biologicalHitAtlasKey('virus-player');
+        const hitFrame = biologicalHitFrame(this.scene.time.now - this.biologicalHitAt, this.biologicalHitDirection, reduced);
+        const texture = hitFrame && this.scene.textures.exists(hitAtlas) ? hitAtlas : atlas;
+        const pose = texture === hitAtlas ? hitFrame! : `bio-${frame}`;
+        if (this.texture.key !== texture || this.frame.name !== pose) this.setTexture(texture, pose);
+        this.biologicalFrame = frame;
+      }
     }
 
     // Slow virion drift + membrane breathing. The 0.9 visual scale keeps the richer 56px texture
     // close to the old footprint while preserving readable spikes on small phones.
-    if (this.scene.time.now >= this.hurtUntil && !this.tintFill) this.setTint(this.cosmeticTint);
+    // Активный скин несёт свою палитру в SVG — тинт коллекции гасится до
+    // белого, иначе палитра удваивалась бы (тинт × SVG тех же цветов).
+    // Пока текстура скина печётся — bio-цикл с тинтом коллекции, как раньше.
+    if (this.scene.time.now >= this.hurtUntil && !this.tintFill) this.setTint(skinActive ? 0xffffff : this.cosmeticTint);
     const baseRotation = time * 0.00014;
     const breathe = 0.9 + Math.sin(time * 0.0042) * 0.028;
     this.setRotation(baseRotation);

@@ -41,6 +41,7 @@ const EVENT_NAMES = new Set<OptionalWebEvent>([
   'second_host_cell_completed_without_hint', 'onboarding_step', 'onboarding_exit',
   'daily_claimed', 'achievement_unlocked',
   'lab_upgrade_bought', 'prestige_done',
+  'skin_granted', 'skin_equipped',
 ]);
 const ENUM_VALUES: Record<string, ReadonlySet<string>> = {
   screen: new Set(['menu', 'game', 'result', 'codex', 'collection']),

@@ -37,6 +37,7 @@ import { FeatureFlags } from '../game/FeatureFlags';
 import { getDailyStatus } from '../game/daily/DailyCalendar';
 import { showDailyModal, showMetaToast } from '../ui/RetentionOverlays';
 import { showLabPanel } from '../ui/LabOverlays';
+import { showSkinGallery } from '../ui/SkinGallery';
 import { showLegalOverlay } from '../legal/LegalOverlay';
 import { SocialHub } from '../ui/SocialHub';
 import { MenuKeyboard } from '../ui/MenuKeyboard';
@@ -76,7 +77,7 @@ export class MenuScene extends Phaser.Scene {
   private codexOverlay: Phaser.GameObjects.Container | null = null;
   private socialHub: SocialHub | null = null;
   private labPanel: { close: () => void } | null = null;
-  private strainsStub: Phaser.GameObjects.Container | null = null;
+  private skinGallery: { close: () => void } | null = null;
   private founderBadge: Phaser.GameObjects.Container | null = null;
   private profileLoadGeneration = 0;
 
@@ -108,7 +109,7 @@ export class MenuScene extends Phaser.Scene {
     this.codexOverlay = null;
     this.socialHub = null;
     this.labPanel = null;
-    this.strainsStub = null;
+    this.skinGallery = null;
     this.founderBadge?.destroy();
     this.founderBadge = null;
     const profileLoadGeneration = ++this.profileLoadGeneration;
@@ -116,7 +117,7 @@ export class MenuScene extends Phaser.Scene {
     Sfx.stopMusic();
     PlatformBridge.setBackHandler(null);
     const keyboard = new MenuKeyboard(this, {
-      blocked: () => Boolean(this.collectionBoard || this.questBoard || this.codexOverlay || this.socialHub || this.labPanel || this.strainsStub),
+      blocked: () => Boolean(this.collectionBoard || this.questBoard || this.codexOverlay || this.socialHub || this.labPanel || this.skinGallery),
       escape: () => {
         if (this.collectionBoard) { this.collectionBoard.destroy(); return true; }
         if (this.questBoard) { this.questBoard.destroy(); return true; }
@@ -126,10 +127,7 @@ export class MenuScene extends Phaser.Scene {
           return true;
         }
         if (this.labPanel) { this.labPanel.close(); return true; }
-        if (this.strainsStub) {
-          this.strainsStub.getByName('ofeliya-modal-close-hit')?.emit('pointerup');
-          return true;
-        }
+        if (this.skinGallery) { this.skinGallery.close(); return true; }
         return false;
       },
     });
@@ -874,7 +872,7 @@ export class MenuScene extends Phaser.Scene {
       { name: 'ofeliya-menu-nav-codex', label: MENU_COPY.codex, badge: `${codexFound}/9`, onTap: () => this.showCodex() },
       { name: 'ofeliya-menu-nav-collection', label: MENU_COPY.collection, onTap: () => this.showCollectionBoard() },
       { name: 'ofeliya-menu-nav-lab', label: MENU_COPY.lab, onTap: () => this.showLab() },
-      { name: 'ofeliya-menu-nav-strains', label: MENU_COPY.strains, onTap: () => this.showStrainsStub() },
+      { name: 'ofeliya-menu-nav-strains', label: MENU_COPY.strains, onTap: () => this.showSkins() },
     ];
     navItems.forEach((item, index) => {
       const col = index % gridCols;
@@ -1090,8 +1088,8 @@ export class MenuScene extends Phaser.Scene {
       this.socialHub = null;
       this.labPanel?.close();
       this.labPanel = null;
-      this.strainsStub?.destroy();
-      this.strainsStub = null;
+      this.skinGallery?.close();
+      this.skinGallery = null;
       this.profileLoadGeneration += 1;
       this.founderBadge?.destroy();
       this.founderBadge = null;
@@ -1208,59 +1206,20 @@ export class MenuScene extends Phaser.Scene {
    * visible cell whose tap does nothing.
    */
   private showLab(): void {
-    if (this.labPanel || this.codexOverlay || this.socialHub || this.questBoard || this.collectionBoard || this.strainsStub) return;
+    if (this.labPanel || this.codexOverlay || this.socialHub || this.questBoard || this.collectionBoard || this.skinGallery) return;
     if (!FeatureFlags.get('economy.lab')) return;
     this.labPanel = showLabPanel(this, () => { this.labPanel = null; });
   }
 
   /**
-   * Placeholder entry for the strains gallery (Phase 5, not ported yet).
-   * A stub modal on the shared frame: no skin logic is invented here, the
-   * Phase 5 port replaces this method body with the gallery and keeps the
-   * cell, the name and the layout untouched.
+   * The strains gallery (Phase 5) in the Task 1 grid cell: the stub is
+   * replaced by the real gallery, the cell, the name and the layout are
+   * untouched. Gated by skins.gallery like the lab is gated by economy.lab.
    */
-  private showStrainsStub(): void {
-    if (this.strainsStub || this.codexOverlay || this.socialHub || this.questBoard || this.collectionBoard || this.labPanel) return;
-
-    const W = this.scale.width;
-    const H = this.scale.height;
-    const compact = H < 650;
-    const overlay = this.add.container(0, 0).setDepth(40).setName('ofeliya-strains-stub');
-    this.strainsStub = overlay;
-
-    const panelW = Math.min(W - 22, 400);
-    const panelH = Math.min(H - 34, 320);
-    const dismiss = () => {
-      if (this.strainsStub !== overlay) return;
-      overlay.destroy();
-      this.strainsStub = null;
-    };
-    const frame = createModalFrame(this, overlay, {
-      x: W / 2,
-      y: H / 2,
-      width: panelW,
-      height: panelH,
-      title: MENU_COPY.strains,
-      compact,
-      onClose: dismiss,
-    });
-    overlay.add(
-      this.add
-        .text(
-          W / 2,
-          frame.bodyTop + 8,
-          'Коллекция обликов откроется здесь.\nРазблокировка — через достижения.',
-          {
-            fontFamily: UI_FONT,
-            fontSize: compact ? '12px' : '13px',
-            color: VISUAL_TEXT.muted,
-            align: 'center',
-            lineSpacing: 6,
-          }
-        )
-        .setOrigin(0.5, 0)
-        .setResolution(2)
-    );
+  private showSkins(): void {
+    if (this.skinGallery || this.codexOverlay || this.socialHub || this.questBoard || this.collectionBoard || this.labPanel) return;
+    if (!FeatureFlags.get('skins.gallery')) return;
+    this.skinGallery = showSkinGallery(this, () => { this.skinGallery = null; });
   }
 
   private showCodex(): void {

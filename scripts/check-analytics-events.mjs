@@ -70,4 +70,12 @@ for (const event of ['lab_upgrade_bought', 'prestige_done']) {
   assert(fromSummary.includes(event), `ANALYTICS_EVENT_NAMES must include ${event}`);
 }
 
+// The ported Phase 5 skins events must be present in all four lists.
+for (const event of ['skin_granted', 'skin_equipped']) {
+  assert(fromClient.includes(event), `ProductEvent must include ${event}`);
+  assert(fromServer.includes(event), `PRODUCT_EVENTS must include ${event}`);
+  assert(fromUmami.includes(event), `EVENT_NAMES must include ${event}`);
+  assert(fromSummary.includes(event), `ANALYTICS_EVENT_NAMES must include ${event}`);
+}
+
 console.log(`analytics-events: OK (${fromClient.length} events in sync)`);

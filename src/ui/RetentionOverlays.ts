@@ -45,6 +45,7 @@ import {
   grantAchievementSkin,
   unlockMetaAchievements,
 } from '../game/achievements/MetaAchievements';
+import { showSkinGrantToast } from './SkinGallery';
 
 function dimBackground(scene: Phaser.Scene, depth: number): Phaser.GameObjects.Rectangle {
   const W = scene.scale.width;
@@ -251,11 +252,9 @@ export function showDailyModal(
         if (def.reward.kind === 'rna') grantMetaRna(def.reward.amount);
         else grantAchievementSkin(def.reward.skinId);
         void trackProductEvent('achievement_unlocked', PlatformBridge, { achievementId: id });
-        showMetaToast(
-          scene,
-          def.title,
-          def.reward.kind === 'rna' ? `+${def.reward.amount} РНК` : 'Новый штамм'
-        );
+        // Фаза 5: скин — тост с превью штамма и анимацией выдачи.
+        if (def.reward.kind === 'rna') showMetaToast(scene, def.title, `+${def.reward.amount} РНК`);
+        else showSkinGrantToast(scene, def.reward.skinId);
       }
     });
   } else if (!status.claimedToday) {

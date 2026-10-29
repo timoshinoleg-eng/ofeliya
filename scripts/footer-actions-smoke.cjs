@@ -137,7 +137,7 @@ async function audioLabel(page, name) {
           } else if (t.name === 'ofeliya-menu-nav-lab') {
             assert.equal(await p.evaluate(() => !!window.__game.scene.getScene('Menu').labPanel), true);
           } else if (t.name === 'ofeliya-menu-nav-strains') {
-            assert.equal(await p.evaluate(() => !!window.__game.scene.getScene('Menu').strainsStub), true);
+            assert.equal(await p.evaluate(() => !!window.__game.scene.getScene('Menu').skinGallery), true);
           } else if (t.name === 'ofeliya-menu-diagnostics') {
             for (let n = 0; n < 4; n++) await p.touchscreen.tap(t.x + t.w / 2, t.y + t.h - 2);
             assert.equal(await p.locator('#ofeliya-startup-trace').count(), 1, 'five diagnostic taps reveal the trace');
