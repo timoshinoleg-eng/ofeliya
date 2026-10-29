@@ -3,8 +3,10 @@
 #
 # Секреты ставятся отдельно (НЕ в этот файл):
 #   npx wrangler secret put TELEGRAM_BOT_TOKEN   # токен бота из BotFather
-#   npx wrangler secret put WEBHOOK_SECRET       # опционально, строка для
-#                                               # X-Telegram-Bot-Api-Secret-Token
+#   npx wrangler secret put WEBHOOK_SECRET       # ОБЯЗАТЕЛЕН (патч №12):
+#                                               # без него /api/webhook отвечает
+#                                               # 401 fail-closed. Та же строка,
+#                                               # что в secret_token при setWebhook.
 
 name = "ofeliya-payments"
 main = "src/index.ts"

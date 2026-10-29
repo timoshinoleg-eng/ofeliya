@@ -148,6 +148,107 @@ try {
     'server catalog has no extra products'
   );
 
+  // --- /api/invoice: nonce → createInvoiceLink + order в KV (протокол v2) ---
+  // worker.fetch для вебхуков в этом файле не вызывается (только validateInitData
+  // и каталог выше), поэтому WEBHOOK_SECRET здесь не нужен; invoice-блок ниже
+  // стабит только Bot API (createInvoiceLink).
+  const worker = require(join(temp, 'index.js')).default;
+  const realFetch = globalThis.fetch;
+  const botCalls = [];
+  globalThis.fetch = async (_url, init) => {
+    botCalls.push(JSON.parse(init.body));
+    return { ok: true, json: async () => ({ ok: true, result: 'https://t.me/$inv-test' }) };
+  };
+  try {
+    const kvMap = new Map();
+    const kv = {
+      async get(k) {
+        return kvMap.has(k) ? kvMap.get(k) : null;
+      },
+      async put(k, v, _options) {
+        kvMap.set(k, v);
+      },
+    };
+    const invoicePost = async (env, body) => {
+      const res = await worker.fetch(
+        new Request('https://worker.test/api/invoice', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        }),
+        env
+      );
+      let json = null;
+      try {
+        json = await res.json();
+      } catch {
+        // страховка
+      }
+      return { status: res.status, json };
+    };
+    const goodInit = buildInitData(fields);
+    const invEnv = { TELEGRAM_BOT_TOKEN: BOT_TOKEN, PAYMENTS: kv };
+    let inv = await invoicePost(invEnv, {
+      initData: goodInit,
+      productId: 'currency.rna-pack-s',
+      nonce: 'nonce-inv-1',
+    });
+    assert(inv.status === 200, `invoice ok, got ${inv.status}`);
+    assert(inv.json.invoiceUrl === 'https://t.me/$inv-test', 'invoice returns bot url');
+    assert(inv.json.nonce === 'nonce-inv-1', 'invoice echoes nonce');
+    const call = botCalls[botCalls.length - 1];
+    assert(call.payload === 'nonce-inv-1', 'createInvoiceLink payload is the raw nonce');
+    assert(call.currency === 'XTR', 'createInvoiceLink currency XTR');
+    assert(call.provider_token === '', 'createInvoiceLink provider_token empty for Stars');
+    assert(call.prices[0].amount === 35, 'createInvoiceLink amount is server stars price');
+    const orderRaw = kvMap.get('order:nonce-inv-1');
+    assert(orderRaw !== undefined, 'order written to KV');
+    const order = JSON.parse(orderRaw);
+    assert(order.userId === 777001, 'order stores userId');
+    assert(order.productId === 'currency.rna-pack-s', 'order stores productId');
+    inv = await invoicePost(invEnv, {
+      initData: goodInit,
+      productId: 'currency.rna-pack-s',
+      nonce: 'x',
+    });
+    assert(inv.status === 400, 'bad nonce → 400');
+    inv = await invoicePost(invEnv, {
+      initData: goodInit,
+      productId: 'nope.not-real',
+      nonce: 'nonce-inv-2',
+    });
+    assert(inv.status === 400, 'unknown product → 400');
+    inv = await invoicePost(invEnv, {
+      initData: 'garbage',
+      productId: 'currency.rna-pack-s',
+      nonce: 'nonce-inv-3',
+    });
+    assert(inv.status === 401, 'bad initData → 401');
+    // Без KV инвойс всё равно создаётся, заказ не трекается.
+    inv = await invoicePost(
+      { TELEGRAM_BOT_TOKEN: BOT_TOKEN },
+      { initData: goodInit, productId: 'currency.rna-pack-s', nonce: 'nonce-inv-4' }
+    );
+    assert(inv.status === 200, 'invoice without KV still ok');
+    assert(!kvMap.has('order:nonce-inv-4'), 'no order tracked without KV');
+    // Падение записи заказа → честный 502 вместо битого трекинга.
+    const throwingKv = {
+      async get() {
+        return null;
+      },
+      async put() {
+        throw new Error('kv down');
+      },
+    };
+    inv = await invoicePost(
+      { TELEGRAM_BOT_TOKEN: BOT_TOKEN, PAYMENTS: throwingKv },
+      { initData: goodInit, productId: 'currency.rna-pack-s', nonce: 'nonce-inv-5' }
+    );
+    assert(inv.status === 502, 'order-store failure → 502');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+
   console.log('worker-payments: all assertions passed');
 } finally {
   rmSync(temp, { recursive: true, force: true });

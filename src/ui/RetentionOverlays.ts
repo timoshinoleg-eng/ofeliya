@@ -230,7 +230,9 @@ export function showDailyModal(
       Sfx.play('levelup');
       PlatformBridge.haptic('medium');
       btn.disableInteractive();
-      btnLabel.setText(`+${res.reward.rna} РНК`);
+      // Патч №12 (E1): на кнопке — РЕАЛЬНО начисленное (с бонусами),
+      // а не базовая награда.
+      btnLabel.setText(`+${res.granted} РНК`);
       // Панч-метка выдачи (в меню нет Juice-пампа — обычный твин сцены).
       scene.tweens.add({
         targets: btnLabel,
@@ -246,7 +248,8 @@ export function showDailyModal(
         delay: 650,
         onComplete: () => root.destroy(),
       });
-      onClaimed(res.streak, res.reward.rna);
+      // Патч №12 (E1): колбэк получает РЕАЛЬНО начисленное, а не базовую награду.
+      onClaimed(res.streak, res.granted);
       for (const id of fresh) {
         const def = getMetaAchievementDef(id);
         // Пост-ревью (патч №11): тост показывает РЕАЛЬНО начисленное.

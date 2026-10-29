@@ -47,14 +47,40 @@ export interface Product {
   stars?: number;
 }
 
-export type PurchaseState = 'success' | 'cancelled' | 'failed' | 'unavailable';
+/**
+ * Патч №12 — протокол nonce/verify (согласован с потоком воркера):
+ * - 'paid' — деньги списаны, сервер подтвердил (chargeId). Mock (id 'mock') —
+ *   QA-дубль: 'paid' сразу, без chargeId/nonce/verify;
+ * - 'pending' — сервер НЕ подтвердил оплату. Выдачи нет; клиент сохраняет
+ *   запись в ofeliya.payments.pending.v1 (PaymentLedger) и перепроверяет
+ *   в restore() + кнопкой «Проверить оплату»;
+ * - 'cancelled' | 'failed' | 'unavailable' — как раньше.
+ */
+export type PurchaseState = 'paid' | 'pending' | 'cancelled' | 'failed' | 'unavailable';
 
-export interface PurchaseSuccess {
-  state: 'success';
+export interface PaidPurchase {
+  state: 'paid';
   productId: string;
   provider: ProviderId;
+  /**
+   * Telegram payment charge id — ключ идемпотентности выдачи
+   * (PaymentLedger.markChargeCredited). Отсутствует у mock (QA-дубль).
+   */
+  chargeId?: string;
+  /** Nonce инвойса — только telegram-stars (для /api/verify и журнала). */
+  nonce?: string;
   /** Непрозрачный чек провайдера; у мока — сгенерированный. */
-  receipt: string;
+  receipt?: string;
+}
+
+export interface PendingPurchase {
+  state: 'pending';
+  productId: string;
+  provider: ProviderId;
+  /** Nonce инвойса — ключ для POST /api/verify и pending-журнала. */
+  nonce: string;
+  /** Машиночитаемая причина: 'verify-unconfirmed' | 'verify-unreachable' | … */
+  reason?: string;
 }
 
 export interface PurchaseFailure {
@@ -66,10 +92,12 @@ export interface PurchaseFailure {
   reason: string;
 }
 
-export type PurchaseResult = PurchaseSuccess | PurchaseFailure;
+export type PurchaseResult = PaidPurchase | PendingPurchase | PurchaseFailure;
 
 export interface RestoreResult {
   productIds: string[];
+  /** Патч №12: productId, выданные из pending-журнала в этом вызове. */
+  pendingFulfilled?: string[];
 }
 
 /**

@@ -1673,3 +1673,6 @@ Fix #10 port (Muse, 2026-10-29, партия 4а задача 1): аудит-ф�
 
 
 Fix #11 port (Muse, 2026-10-29, партия 4а задача 2): пост-ревью фиксы на main be9ae0c (#262 merged), ветка feat/port-fix11-postreview. grantMetaRna → {balance, granted} + бустер ×2 на доход; StorefrontScene: ценник «N ★» + achievements unlock при покупке; Juice hitStop — два поля (hardening, баг стека в main не воспроизводится — tween.js stop() каскадит); престиж 10 + count*5; воркер KV entitlements + /api/entitlements (код только, деплоя нет); клиент verifyOnServer + restore-слияние; booster extend от max(now, срок); storageKeys.ts doc-only. Тесты post-review-fixes + worker-entitlements новые. Локально: tsc/build/10 node-сьютов зелёные; browser NOT RUN — смотреть CI. После мержа — фикс №12.
+
+
+Fix #12 port (Muse, 2026-10-29, партия 4а задача 3): review2-фиксы на main db7ba35 (#263 merged), ветка feat/port-fix12-review2. Схема №11 полностью заменена nonce/verify-протоколом v2 (клиент PaymentLedger + pending/credited журналы, воркер order/pay/nonce/journal + /api/verify + /api/entitlements v2, WEBHOOK_SECRET fail-closed). Коммит 3 стека (micro-flags) уже в main — кода не потребовалось. Локально: tsc/build/10 node-сьютов зелёные; browser NOT RUN — смотреть CI. После мержа — фикс №13.

@@ -75,10 +75,14 @@ try {
 
   const firstId = SHOP_CATALOG[0].id;
   const ok = await mock.purchase(firstId);
-  eq(ok.state, 'success', 'purchase succeeds');
-  eq(ok.productId, firstId, 'success carries productId');
-  eq(ok.provider, 'mock', 'success carries provider');
-  assert(typeof ok.receipt === 'string' && ok.receipt.length > 0, 'success carries receipt');
+  // Протокол v2 (патч №12): 'success' переименован в 'paid' — только это
+  // состояние означает подтверждённую оплату; mock платит сразу, без
+  // nonce/chargeId (серверной верификации у mock нет).
+  eq(ok.state, 'paid', 'purchase succeeds');
+  eq(ok.productId, firstId, 'paid carries productId');
+  eq(ok.provider, 'mock', 'paid carries provider');
+  assert(typeof ok.receipt === 'string' && ok.receipt.length > 0, 'paid carries receipt');
+  assert(ok.chargeId === undefined && ok.nonce === undefined, 'mock paid has no chargeId/nonce');
 
   // --- mock: restore returns granted entitlements ---
   const restored = await mock.restore();
@@ -98,7 +102,7 @@ try {
   const forcedOne = await single.purchase(firstId);
   eq(forcedOne.state, 'failed', 'per-product forced failure fails');
   const other = await single.purchase(SHOP_CATALOG[1].id);
-  eq(other.state, 'success', 'other products unaffected by per-product fail');
+  eq(other.state, 'paid', 'other products unaffected by per-product fail');
 
   // --- max-bridge stub: unavailable, never crashes the caller contract ---
   const stub = new MaxBridgePaymentProvider();
