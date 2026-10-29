@@ -41,7 +41,13 @@ export type ProductEvent =
   | 'purchase_completed'
   | 'purchase_failed'
   | 'purchase_pending'
-  | 'purchase_grant_failed';
+  | 'purchase_grant_failed'
+  /** Патч №16 (A3): оплата подтверждена, но синк кошелька не удался — товар в pending-sync. */
+  | 'purchase_sync_pending'
+  /** Патч №16 (A3): ручной «Повторить» подтвердил материализацию. */
+  | 'purchase_sync_recovered'
+  /** Патч №16 (A3): ручной «Повторить» не удался. */
+  | 'purchase_sync_retry_failed';
 
 export type ProductEventProps = Record<string, string | number | boolean>;
 

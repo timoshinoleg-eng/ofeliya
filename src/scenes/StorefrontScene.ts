@@ -31,6 +31,11 @@ import {
   fulfillPurchase,
   loadPendingPurchases,
 } from '../game/shop/PaymentLedger';
+import {
+  enqueuePendingWalletSync,
+  getPendingSyncChargeIds,
+  hasManualCheckEntries,
+} from '../game/shop/PendingWalletSync';
 import { formatPrice, validateCatalog } from '../game/shop/products';
 import { grantMetaRna } from '../game/lab/LabState';
 import {
@@ -46,8 +51,8 @@ import type {
   Product,
   PurchaseResult,
 } from '../game/shop/PaymentProvider';
-// Type-only: нужен лишь для acknowledgeCharge (P1-d); стирается при
-// компиляции, рантайм-цикла нет, Node-тесты сцену не импортируют.
+// Type-only: нужен для acknowledgeCharge и syncWalletAndDrainPending;
+// стирается при компиляции, рантайм-цикла нет, Node-тесты сцену не импортируют.
 import type { TelegramStarsPaymentProvider } from '../game/shop/TelegramStarsPaymentProvider';
 
 type SceneState =
@@ -57,7 +62,16 @@ type SceneState =
   | 'error'
   | 'purchasing'
   | 'success'
+  | 'sync-pending'
   | 'unavailable';
+
+/** Патч №16 (A3): покупка, чей синк кошелька не подтверждён. */
+interface SyncPendingInfo {
+  productId: string;
+  productTitle: string;
+  chargeId: string;
+  error: string;
+}
 
 /** Палитры заглушек арта (до DiceBear-рендера Фазы 5). */
 const STUB_PALETTES: Record<string, number> = {
@@ -89,6 +103,8 @@ export class StorefrontScene extends Phaser.Scene {
   private errorReason = '';
   private purchasingId: string | null = null;
   private lastBought: Product | null = null;
+  /** Патч №16 (A3): покупка с неподтверждённым синком (баннер + «Повторить»). */
+  private syncPending: SyncPendingInfo | null = null;
 
   private root: Phaser.GameObjects.Container | null = null;
   private listContainer: Phaser.GameObjects.Container | null = null;
@@ -252,6 +268,11 @@ export class StorefrontScene extends Phaser.Scene {
       case 'purchasing':
         this.renderList(x, top, width, height);
         break;
+      case 'sync-pending':
+        // Патч №16 (A3): список + баннер «Оплата подтверждена, товар ожидает
+        // синхронизации» с кнопкой «Повторить» (рисуется в renderList).
+        this.renderList(x, top, width, height);
+        break;
       case 'success':
         this.renderList(x, top, width, height);
         this.renderSuccessOverlay();
@@ -370,6 +391,23 @@ export class StorefrontScene extends Phaser.Scene {
       const pending = loadPendingPurchases();
       if (pending.length > 0) {
         this.buildPendingBanner(list, 0, cy, width, pending.length);
+        cy += 76 + gap;
+      }
+    }
+    // Патч №16 (A3): баннер неподтверждённого синка кошелька —
+    // «Оплата подтверждена, товар ожидает синхронизации» + «Повторить».
+    // Отличается от баннера verify-pending: оплата УЖЕ подтверждена
+    // сервером, не хватает только материализации гранта.
+    if (this.state === 'ready' || this.state === 'sync-pending') {
+      const syncInfo = this.syncPending;
+      const queued = getPendingSyncChargeIds();
+      const manual = hasManualCheckEntries();
+      if (syncInfo || queued.length > 0 || manual) {
+        this.buildSyncBanner(list, 0, cy, width, {
+          title: syncInfo ? syncInfo.productTitle : undefined,
+          queued: queued.length,
+          manual,
+        });
         cy += 76 + gap;
       }
     }
@@ -606,6 +644,135 @@ export class StorefrontScene extends Phaser.Scene {
   }
 
   /**
+   * Патч №16 (A3): баннер «Оплата подтверждена, товар ожидает
+   * синхронизации». Различимый UI-статус: это НЕ «товар получен» —
+   * сервер оплату подтвердил, но грант ещё не материализован локально
+   * (синк не удался / несовместимый воркер). Кнопка «ПОВТОРИТЬ» запускает
+   * синк + дрэйн вручную; ack уходит только при r.ok.
+   */
+  private buildSyncBanner(
+    parent: Phaser.GameObjects.Container,
+    cx: number,
+    cy: number,
+    width: number,
+    opts: { title?: string; queued: number; manual: boolean }
+  ): void {
+    const bannerH = 76;
+    const banner = this.add.container(cx, cy);
+    const accent = opts.manual ? 0xff9f6a : 0x8fe8ff;
+    const bg = this.add
+      .rectangle(0, 0, width, bannerH, ROLE.surface.panel, PANEL.card)
+      .setStrokeStyle(BORDER.thin, accent, 0.9)
+      .setOrigin(0.5, 0);
+    const label = this.add
+      .text(
+        -width / 2 + 16,
+        12,
+        opts.manual ? 'ТРЕБУЕТСЯ ПРОВЕРКА ОПЛАТЫ' : 'ОПЛАТА ПОДТВЕРЖДЕНА',
+        {
+          fontFamily: FONT,
+          fontSize: '12px',
+          fontStyle: 'bold',
+          color: '#8fe8ff',
+        }
+      )
+      .setOrigin(0, 0)
+      .setResolution(2);
+    const subText = opts.manual
+      ? 'Автопроверка исчерпана. Товар не потерян — напишите в поддержку с чеком.'
+      : `Товар ожидает синхронизации${opts.queued > 1 ? ` · ${opts.queued}` : ''}${
+          opts.title ? `: ${opts.title}` : ''
+        }. Появится автоматически.`;
+    const sub = this.add
+      .text(-width / 2 + 16, 32, subText, {
+        fontFamily: UI_FONT,
+        fontSize: '11px',
+        color: VISUAL_TEXT.muted,
+        wordWrap: { width: width - 140 },
+      })
+      .setOrigin(0, 0)
+      .setResolution(2);
+    const btnW = 108;
+    const btnH = Math.max(TOUCH.min, 40);
+    const btnX = width / 2 - 12 - btnW / 2;
+    const btnBg = this.add
+      .rectangle(btnX, bannerH / 2, btnW, btnH, ROLE.surface.panelHover, PANEL.button)
+      .setStrokeStyle(BORDER.thin, accent, 0.8)
+      .setInteractive({ useHandCursor: true });
+    const btnLabel = this.add
+      .text(btnX, bannerH / 2, 'ПОВТОРИТЬ', {
+        fontFamily: FONT,
+        fontSize: '11px',
+        fontStyle: 'bold',
+        color: '#8fe8ff',
+      })
+      .setOrigin(0.5)
+      .setResolution(2);
+    let retrying = false;
+    btnBg.on('pointerdown', () => btnBg.setAlpha(0.6));
+    btnBg.on('pointerup', () => {
+      btnBg.setAlpha(1);
+      if (retrying) return;
+      retrying = true;
+      btnLabel.setText('···');
+      // Ручной ретрай не сбрасывает кап попыток (без бесконечного цикла):
+      // дрэйн подтвердит по ledger'у или оставит запись в очереди.
+      void this.retryWalletSync().finally(() => {
+        retrying = false;
+        if (this.sys.isActive()) this.renderContent();
+        else btnLabel.setText('ПОВТОРИТЬ');
+      });
+    });
+    banner.add([bg, label, sub, btnBg, btnLabel]);
+    parent.add(banner);
+  }
+
+  /**
+   * Патч №16 (A3): ручной повтор синка кошелька (кнопка баннера).
+   * r.ok → тост «Товар успешно получен» + ack; !r.ok → баннер остаётся,
+   * запись — в pending-sync очереди. Никогда не бросает.
+   */
+  private async retryWalletSync(): Promise<void> {
+    try {
+      const provider = this.provider;
+      if (!provider || provider.id !== 'telegram-stars') return;
+      const tg = provider as TelegramStarsPaymentProvider;
+      const target = this.syncPending;
+      const r = await tg.syncWalletAndDrainPending();
+      if (!this.sys.isActive()) return;
+      // P1-1: ack и тост — только при подтверждённой материализации
+      // chargeId в серверном ledger (а не просто r.ok).
+      const targetCharge = (target?.chargeId ?? '').trim();
+      const materialized =
+        r.ok && !!targetCharge && r.applied.grantChargeIds.includes(targetCharge);
+      if (materialized) {
+        tg.acknowledgeCharge(targetCharge);
+        this.syncPending = null;
+        showMetaToast(this, 'Товар успешно получен', target?.productTitle ?? '');
+        const product = target
+          ? this.products.find((p) => p.id === target.productId) ?? null
+          : null;
+        this.lastBought = product;
+        this.setState(product ? 'success' : 'ready');
+        void trackProductEvent('purchase_sync_recovered', PlatformBridge, {
+          provider: provider.id,
+          productId: target?.productId ?? '',
+        });
+      } else {
+        if (target) this.syncPending = { ...target, error: r.ok ? 'not-materialized' : r.error };
+        this.setState('sync-pending');
+        showMetaToast(this, 'Синхронизация не удалась', 'Проверьте соединение и повторите');
+        void trackProductEvent('purchase_sync_retry_failed', PlatformBridge, {
+          provider: provider.id,
+          error: r.ok ? 'not-materialized' : r.error,
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /**
    * Патч №12: допроверка pending-покупок + аналитика выданных +
    * перерендер, когда уместно (состояние ready/empty). Вызывается при
    * открытии витрины и кнопкой «Проверить оплату». Никогда не бросает
@@ -638,6 +805,7 @@ export class StorefrontScene extends Phaser.Scene {
     const provider = this.provider;
     if (!provider || this.state !== 'ready') return;
     this.purchasingId = product.id;
+    this.syncPending = null;
     this.setState('purchasing');
     void trackProductEvent('purchase_started', PlatformBridge, {
       productId: product.id,
@@ -670,9 +838,9 @@ export class StorefrontScene extends Phaser.Scene {
     if (result.state === 'paid') {
       // Выдача — только через ledger: идемпотентность по chargeId,
       // recordStarsSpent — только у реальных провайдеров (не 'mock').
-      // Патч №15 (P0-3): у telegram-stars выдача серверно-авторитетная —
+      // Патч №16 (A4): у telegram-stars выдача серверно-авторитетная —
       // fulfillPurchase лишь учитывает платёж (needsServerSync), грант
-      // материализуется через syncWalletFromServer ниже.
+      // материализуется seq-синком кошелька ниже.
       // purchase_completed — только при первой выдаче ('granted'), чтобы
       // повтор ('duplicate') не считал покупку дважды.
       const grant = fulfillPurchase(product, { chargeId: result.chargeId, providerId: provider.id });
@@ -692,18 +860,45 @@ export class StorefrontScene extends Phaser.Scene {
           error: grant.error ?? grant.outcome,
         });
       } else {
-        // Патч №15 (P0-3): выдача серверно-авторитетная — материализуем
+        // Патч №16 (A3): выдача серверно-авторитетная — материализуем
         // серверный кошелёк ДО достижений/тостов, чтобы UI видел покупку.
-        // syncWalletFromServer никогда не бросает (внутри — таймаут 8с).
-        // Патч №13 (P1-d): bookkeeping воркера paid→fulfilled — ПОСЛЕ синка:
-        // ack теперь означает «клиент применил серверный кошелёк».
-        // Только telegram-провайдер; fire-and-forget, на результат не влияет.
+        // SyncResult НЕ игнорируется (был P0 A3):
+        //   r.ok  → тост «Товар успешно получен» + acknowledgeCharge
+        //           ТОЛЬКО здесь;
+        //   !r.ok → pending-sync очередь + различимый UI-статус
+        //           «Оплата подтверждена, товар ожидает синхронизации»
+        //           (ack НЕ уходит, «товар получен» НЕ показываем).
+        // P1-1 (независимый review): r.ok означает «синк прошёл», а не
+        // «грант ЭТОГО chargeId применён» (unknown-product пишется paid
+        // без гранта; платёж могли вернуть между verify и синком).
+        // Тост и ack — только если chargeId есть в серверном ledger.
         if (provider.id === 'telegram-stars') {
           const tg = provider as TelegramStarsPaymentProvider;
-          await tg.syncWalletFromServer();
-          tg.acknowledgeCharge(result.chargeId);
+          const r = await tg.syncWalletAndDrainPending();
+          const chargeId = (result.chargeId ?? '').trim();
+          const materialized =
+            r.ok && !!chargeId && r.applied.grantChargeIds.includes(chargeId);
+          if (materialized) {
+            tg.acknowledgeCharge(result.chargeId);
+          } else {
+            if (chargeId) enqueuePendingWalletSync({ chargeId, productId: product.id });
+            const syncError = r.ok ? 'not-materialized' : r.error;
+            this.syncPending = {
+              productId: product.id,
+              productTitle: product.title,
+              chargeId,
+              error: syncError,
+            };
+            void trackProductEvent('purchase_sync_pending', PlatformBridge, {
+              productId: product.id,
+              provider: provider.id,
+              error: syncError,
+            });
+          }
         }
-        // Достижения проверяем сразу: игрок получает награду (напр. скин
+        // Достижения проверяем независимо от исхода синка: звёзды реально
+        // списаны (оплату подтвердил сервер), товар не потерян — он встанет
+        // из pending-sync дрэйном. Игрок получает награду (напр. скин
         // «Инвестора» за 500 звёзд) не дожидаясь конца забега.
         for (const id of unlockMetaAchievements(collectLifetimeStats())) {
           const def = getMetaAchievementDef(id);
@@ -747,8 +942,14 @@ export class StorefrontScene extends Phaser.Scene {
     }
     this.purchasingId = null;
     if (result.state === 'paid' && !grantFailed) {
-      this.lastBought = product;
-      this.setState('success');
+      if (this.syncPending) {
+        // Патч №16 (A3): оплата подтверждена, грант не материализован —
+        // различимый статус + баннер с «Повторить» (не «товар получен»).
+        this.setState('sync-pending');
+      } else {
+        this.lastBought = product;
+        this.setState('success');
+      }
     } else if (result.state === 'paid') {
       // Платёж подтверждён сервером, но выдача не удалась (ok=false):
       // товар не потерян — допроверка и повторная выдача в restore().

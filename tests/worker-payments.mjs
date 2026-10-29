@@ -49,12 +49,16 @@ try {
     [
       resolve('node_modules/typescript/bin/tsc'),
       'worker/src/index.ts',
+      'worker/src/grants.ts',
+      'worker/src/sql.ts',
       '--target',
       'ES2021',
       '--module',
       'commonjs',
       '--moduleResolution',
       'node',
+      '--strict',
+      'true',
       '--outDir',
       temp,
       '--skipLibCheck',
@@ -182,9 +186,10 @@ try {
               throw new Error('d1 injected failure');
             }
             if (sql.startsWith('INSERT INTO orders')) {
-              const [nonce, userId, productId, status, createdAt] = params;
+              // v16 (B2+P1-2): заказ иммутабелен — amount_stars, sku_version и снапшот гранта пишутся сразу.
+              const [nonce, userId, productId, amountStars, skuVersion, grantRna, grantBoosterDays, grantSkinId, createdAt] = params;
               if (orders.has(nonce)) throw new Error('UNIQUE constraint failed: orders.nonce');
-              orders.set(nonce, { user_id: userId, product_id: productId, status, created_at: createdAt });
+              orders.set(nonce, { user_id: userId, product_id: productId, amount_stars: amountStars, sku_version: skuVersion, grant_rna: grantRna, grant_booster_days: grantBoosterDays, grant_skin_id: grantSkinId, status: 'pending', created_at: createdAt });
               return { meta: { changes: 1 } };
             }
             throw new Error(`worker-payments D1 stub: unknown SQL: ${sql}`);
@@ -229,6 +234,10 @@ try {
     assert(order.user_id === 777001, 'order stores userId');
     assert(order.product_id === 'currency.rna-pack-s', 'order stores productId');
     assert(order.status === 'pending', 'order status pending');
+    // v16 (B2): заказ иммутабелен — цена и версия каталога зафиксированы.
+    assert(order.amount_stars === 35, 'order amount_stars');
+    assert(order.sku_version === 2, 'order sku_version');
+    assert(order.grant_rna === 500, 'order grant snapshot rna');
     inv = await invoicePost(invEnv, {
       initData: goodInit,
       productId: 'currency.rna-pack-s',

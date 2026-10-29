@@ -114,9 +114,9 @@ try {
   eq(isTelegramWebApp(), false, 'WebApp without openInvoice: false');
   withWindow({ initData: 'a=1' });
   eq(isTelegramWebApp(), false, 'WebApp without openInvoice fn: false');
-  withWindow({ openInvoice: () => {}, initData: 'a=1&hash=b' });
+  withWindow({ openInvoice: () => {}, initData: 'user={"id":777001}&hash=b' });
   eq(isTelegramWebApp(), true, 'WebApp with openInvoice: true');
-  eq(readTelegramInitData(), 'a=1&hash=b', 'initData passthrough');
+  eq(readTelegramInitData(), 'user={"id":777001}&hash=b', 'initData passthrough');
   clearWindow();
 
   // --- status mapping: pure function ---
@@ -145,7 +145,7 @@ try {
   withWindow({ openInvoice: () => {} });
   const noInit = new TelegramStarsPaymentProvider({ apiBaseUrl: 'https://pay.example' });
   eq(noInit.isAvailable(), false, 'no initData: unavailable');
-  withWindow({ openInvoice: () => {}, initData: 'a=1&hash=b' });
+  withWindow({ openInvoice: () => {}, initData: 'user={"id":777001}&hash=b' });
   const ready = new TelegramStarsPaymentProvider({ apiBaseUrl: 'https://pay.example/' });
   eq(ready.isAvailable(), true, 'telegram + initData + backend: available');
   clearWindow();
@@ -216,10 +216,22 @@ try {
     entitlementsMode: 'ok', // 'ok' | 'unavailable'
     ackCalls: [],
     ackBehavior: 'ok', // 'ok' | 'fail'
-    // Патч №15 (P0-3): симуляция серверного кошелька воркера (POST /api/wallet).
-    wallet: { purchased_rna: 0, booster_until_ms: 0, skins: [], ledger_tip: null },
+    // Патч №16 (A4): симуляция серверного кошелька воркера (POST /api/wallet, v2-контракт).
+    wallet: { ledger: [], skins: [], booster_until_ms: 0 },
   };
   let lastInvoiceNonce = '';
+  let walletSeq = 0;
+  const grantEvent = (chargeId, amount) => ({
+    seq: ++walletSeq, charge_id: chargeId, kind: 'grant', grant_type: 'rna',
+    amount, skin_id: null, created_at: Date.now(),
+  });
+  const walletV2 = (since) => ({
+    ok: true, user_id: 777001, server_id: 'test-server', schema_version: 2,
+    purchased_rna: 0, booster_until_ms: server.wallet.booster_until_ms,
+    skins: [...server.wallet.skins],
+    ledger: server.wallet.ledger.filter((e) => e.seq > since),
+    tip_seq: walletSeq, ledger_tip: null,
+  });
   const resetServer = () => {
     server.orders.clear();
     server.payments.clear();
@@ -229,7 +241,8 @@ try {
     server.entitlementsMode = 'ok';
     server.ackCalls.length = 0;
     server.ackBehavior = 'ok';
-    server.wallet = { purchased_rna: 0, booster_until_ms: 0, skins: [], ledger_tip: null };
+    server.wallet = { ledger: [], skins: [], booster_until_ms: 0 };
+    walletSeq = 0;
     lastInvoiceNonce = '';
   };
   // fire-and-forget ack выполняется вне await restore() — даём микрозадачам долететь.
@@ -280,7 +293,8 @@ try {
     }
     if (url.endsWith('/api/wallet')) {
       assert(typeof body.initData === 'string' && body.initData.length > 0, 'wallet: initData');
-      return { ok: true, json: async () => ({ ...server.wallet }) };
+      const since = typeof body.since_seq === 'number' ? body.since_seq : -1;
+      return { ok: true, json: async () => walletV2(since) };
     }
     throw new Error(`unexpected fetch url ${url}`);
   };
@@ -298,7 +312,7 @@ try {
       server.nonceToCharge.set(lastInvoiceNonce, chargeId);
       cb('paid');
     },
-    initData: 'a=1&hash=b',
+    initData: 'user={"id":777001}&hash=b',
   });
 
   const packS = SHOP_CATALOG.find((p) => p.id === 'currency.rna-pack-s');
@@ -331,7 +345,7 @@ try {
   eq(f.needsServerSync, true, 'telegram: needsServerSync');
   eq(loadMeta().rna, 0, 'no local grant: issuance is server-side');
   // сервер применил грант (симуляция воркера) → синк материализует
-  server.wallet.purchased_rna = 500;
+  server.wallet.ledger.push(grantEvent(r.chargeId, 500));
   const sync1 = await p1.syncWalletFromServer();
   eq(sync1.ok, true, 'wallet sync ok');
   eq(loadMeta().rna, 500, 'pack-s grants 500 RNA flat via server wallet');
@@ -343,7 +357,7 @@ try {
   eqGrant(f, 'duplicate', 'same chargeId is duplicate');
   const sync2 = await p1.syncWalletFromServer();
   eq(sync2.ok, true, 'repeat sync ok');
-  eq(sync2.applied.rna, 0, 'repeat sync: no double grant (watermark)');
+  eq(sync2.applied.rna, 0, 'repeat sync: no double grant (seq cursor)');
   eq(loadMeta().rna, 500, 'duplicate grants no extra RNA');
   eq(loadMeta().starsSpent, 35, 'duplicate records no extra stars');
 
@@ -369,8 +383,8 @@ try {
   // (4) pending → restore() → verify → paid + grant exactly once, record
   // removed; a second restore fulfills nothing.
   server.verifyMode = 'ok';
-  // сервер уже применил грант (симуляция воркера №15) — restore материализует
-  server.wallet.purchased_rna = 500;
+  // сервер уже применил грант (симуляция воркера №16) — restore материализует
+  server.wallet.ledger.push(grantEvent(`charge-${pendingNonce}`, 500));
   const restored = await p1.restore();
   assert(restored.pendingFulfilled.includes(packS.id), 'restore fulfills pending pack');
   eq(loadMeta().rna, 500, 'restore grants exactly 500 RNA');
@@ -412,9 +426,9 @@ try {
     status: 'paid',
     createdAt: 1003,
   });
-  withWindow({ openInvoice: () => {}, initData: 'a=1&hash=b' });
-  // сервер применил грант за charge-valid (симуляция воркера №15)
-  server.wallet.purchased_rna = 500;
+  withWindow({ openInvoice: () => {}, initData: 'user={"id":777001}&hash=b' });
+  // сервер применил грант за charge-valid (симуляция воркера №16)
+  server.wallet.ledger.push(grantEvent('charge-valid', 500));
   const merged = await p1.restore();
   await flush(); // fire-and-forget ack долетел
   assert(merged.productIds.includes(packS.id), 'entitlements merge returns granted product');
@@ -425,7 +439,7 @@ try {
   eq(loadMeta().starsSpent, 35, 'starsSpent recorded on server-purchase grant');
   eq(server.ackCalls.length, 1, 'ack called once after server-purchase grant');
   eq(server.ackCalls[0].chargeId, 'charge-valid', 'ack carries the chargeId');
-  eq(server.ackCalls[0].initData, 'a=1&hash=b', 'ack carries initData');
+  eq(server.ackCalls[0].initData, 'user={"id":777001}&hash=b', 'ack carries initData');
   // повторный fulfill по серверному chargeId — duplicate, гранта нет:
   f = fulfillPurchase(packS, { chargeId: 'charge-valid', providerId: 'telegram-stars' });
   eqGrant(f, 'duplicate', 'server chargeId dedupes fulfill');
@@ -477,7 +491,7 @@ try {
   eq(f.needsServerSync, true, 'booster needsServerSync');
   eq(getBoosterUntilMs(), 0, 'no local grant: issuance is server-side');
   // сервер применил грант: max(now, текущий) + 7 дней (симуляция воркера)
-  server.wallet = { purchased_rna: 0, booster_until_ms: Date.now() + 7 * 86400000, skins: [], ledger_tip: null };
+  server.wallet = { ledger: [], skins: [], booster_until_ms: Date.now() + 7 * 86400000 };
   const pBoost = new TelegramStarsPaymentProvider({ apiBaseUrl: 'https://pay.example' });
   const syncB = await pBoost.syncWalletFromServer();
   eq(syncB.ok, true, 'booster sync ok');
@@ -503,7 +517,7 @@ try {
   eqGrant(f, 'granted', 'skin accounted via ledger');
   eq(f.needsServerSync, true, 'skin needsServerSync');
   eq(isSkinOwned(skinMagenta.id), false, 'no local grant: issuance is server-side');
-  server.wallet = { purchased_rna: 0, booster_until_ms: 0, skins: [skinMagenta.id], ledger_tip: null };
+  server.wallet = { ledger: [], skins: [skinMagenta.id], booster_until_ms: 0 };
   const pSkin = new TelegramStarsPaymentProvider({ apiBaseUrl: 'https://pay.example' });
   const syncS = await pSkin.syncWalletFromServer();
   eq(syncS.ok, true, 'skin sync ok');
@@ -589,7 +603,7 @@ try {
   // (12) cancelled invoice → cancelled, no pending record.
   resetPayments();
   resetServer();
-  withWindow({ openInvoice: (_url, cb) => cb('cancelled'), initData: 'a=1&hash=b' });
+  withWindow({ openInvoice: (_url, cb) => cb('cancelled'), initData: 'user={"id":777001}&hash=b' });
   // Restore the honest fetch mock for the invoice call (mock section replaced it).
   globalThis.fetch = async (url, init) => {
     const body = init?.body ? JSON.parse(init.body) : {};

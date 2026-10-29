@@ -39,6 +39,16 @@ export interface ServerGrant {
 }
 
 /**
+ * Версия серверного каталога (патч №16, B2). Пишется в orders.sku_version и
+ * payments.sku_version при создании заказа/платежа. Вебхук сверяет платёж
+ * с НЕИЗМЕНЯЕМЫМ заказом (sp.total_amount === order.amount_stars); дрейф
+ * версии между инвойсом и оплатой — громкий диагностический лог
+ * ('stars_payment_sku_drift'), заказ при этом остаётся контрактом.
+ * При ЛЮБОМ изменении цен/грантов ниже — увеличить на 1.
+ */
+export const GRANTS_VERSION = 2;
+
+/**
  * Серверный каталог: ЦЕНА И ГРАНТ ВСЕГДА С СЕРВЕРА.
  * Должен совпадать с src/game/shop/products.ts (см. шапку файла).
  * Описания — как в main (client products.ts / бывший SERVER_PRODUCTS);

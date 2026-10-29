@@ -26,6 +26,7 @@ import { createRequire } from 'node:module';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { makeD1, seedOrder } from './d1-v16-stub.mjs';
 
 const temp = mkdtempSync(join(tmpdir(), 'ofeliya-worker-v4-'));
 writeFileSync(join(temp, 'package.json'), JSON.stringify({ type: 'commonjs' }));
@@ -55,180 +56,6 @@ function buildInitData(fields) {
   for (const [k, v] of Object.entries(fields)) params.set(k, v);
   params.set('hash', hash);
   return params.toString();
-}
-
-function makeD1() {
-  const orders = new Map();
-  const payments = new Map();
-  // Патч №15: серверный кошелёк (wallets) + журнал грантов (wallet_ledger).
-  const wallets = new Map();
-  const ledger = new Map();
-  const norm = (sql) => sql.replace(/\s+/g, ' ').trim();
-
-  function execRun(sql, params) {
-    const q = norm(sql);
-    if (q.startsWith('INSERT INTO orders')) {
-      const [nonce, user_id, product_id, status, created_at] = params;
-      if (orders.has(nonce)) throw new Error('UNIQUE constraint failed: orders.nonce');
-      orders.set(nonce, { nonce, user_id, product_id, status, created_at });
-      return { success: true, meta: { changes: 1 } };
-    }
-    if (q.startsWith('INSERT OR IGNORE INTO payments')) {
-      const [charge_id, user_id, product_id, amount, currency, status, nonce, created_at, fulfilled_at] = params;
-      if (payments.has(charge_id)) return { success: true, meta: { changes: 0 } };
-      // UNIQUE(payments.nonce) — OR IGNORE гасит и его (как настоящий SQLite).
-      for (const row of payments.values()) {
-        if (row.nonce === nonce && nonce != null) return { success: true, meta: { changes: 0 } };
-      }
-      payments.set(charge_id, {
-        charge_id, user_id, product_id, amount, currency, status, nonce, created_at, fulfilled_at,
-      });
-      return { success: true, meta: { changes: 1 } };
-    }
-    // Патч №15: UPSERT кошелька (атомарная серверная выдача).
-    if (q.startsWith('INSERT INTO wallets')) {
-      const [user_id, purchased_rna, booster_until_ms, skins_json, updated_at] = params;
-      wallets.set(user_id, { user_id, purchased_rna, booster_until_ms, skins_json, updated_at });
-      return { success: true, meta: { changes: 1 } };
-    }
-    if (q.startsWith('INSERT OR IGNORE INTO wallet_ledger')) {
-      const [user_id, charge_id, kind, amount_text, created_at] = params;
-      if (ledger.has(charge_id)) return { success: true, meta: { changes: 0 } };
-      ledger.set(charge_id, { user_id, charge_id, kind, amount_text, created_at });
-      return { success: true, meta: { changes: 1 } };
-    }
-    // Патч №15: откат кошелька при refund.
-    if (q.startsWith('UPDATE wallets SET purchased_rna=')) {
-      const [purchased_rna, updated_at, user_id] = params;
-      const w = wallets.get(user_id);
-      if (w) {
-        w.purchased_rna = purchased_rna;
-        w.updated_at = updated_at;
-        return { success: true, meta: { changes: 1 } };
-      }
-      return { success: true, meta: { changes: 0 } };
-    }
-    if (q.startsWith('UPDATE wallets SET skins_json=')) {
-      const [skins_json, updated_at, user_id] = params;
-      const w = wallets.get(user_id);
-      if (w) {
-        w.skins_json = skins_json;
-        w.updated_at = updated_at;
-        return { success: true, meta: { changes: 1 } };
-      }
-      return { success: true, meta: { changes: 0 } };
-    }
-    if (q.startsWith("UPDATE orders SET status='paid'")) {
-      const [nonce] = params;
-      const row = orders.get(nonce);
-      if (row && row.status === 'pending') {
-        row.status = 'paid';
-        return { success: true, meta: { changes: 1 } };
-      }
-      return { success: true, meta: { changes: 0 } };
-    }
-    if (q.startsWith("UPDATE payments SET status='refunded'")) {
-      const [charge_id] = params;
-      const row = payments.get(charge_id);
-      if (row && (row.status === 'paid' || row.status === 'fulfilled')) {
-        row.status = 'refunded';
-        return { success: true, meta: { changes: 1 } };
-      }
-      return { success: true, meta: { changes: 0 } };
-    }
-    throw new Error(`d1-stub: unsupported run SQL: ${q}`);
-  }
-
-  function execSelect(sql, params) {
-    const q = norm(sql);
-    if (q === 'SELECT user_id, product_id, status FROM orders WHERE nonce=?') {
-      const row = orders.get(params[0]);
-      return row ? [{ user_id: row.user_id, product_id: row.product_id, status: row.status }] : [];
-    }
-    if (q === 'SELECT charge_id, user_id, product_id, status, created_at FROM payments WHERE nonce=?') {
-      for (const row of payments.values()) {
-        if (row.nonce === params[0]) {
-          return [{
-            charge_id: row.charge_id, user_id: row.user_id, product_id: row.product_id,
-            status: row.status, created_at: row.created_at,
-          }];
-        }
-      }
-      return [];
-    }
-    // Патч №15: backstop nonce-reuse и pre-check дубликатов.
-    if (q === 'SELECT charge_id FROM payments WHERE nonce=?') {
-      for (const row of payments.values()) {
-        if (row.nonce === params[0]) return [{ charge_id: row.charge_id }];
-      }
-      return [];
-    }
-    if (q === 'SELECT 1 AS one FROM wallet_ledger WHERE charge_id=?') {
-      return ledger.has(params[0]) ? [{ one: 1 }] : [];
-    }
-    if (q === 'SELECT purchased_rna, booster_until_ms, skins_json FROM wallets WHERE user_id=?') {
-      const w = wallets.get(params[0]);
-      return w
-        ? [{ purchased_rna: w.purchased_rna, booster_until_ms: w.booster_until_ms, skins_json: w.skins_json }]
-        : [];
-    }
-    // Патч №15: двухшаговый refund — чтение платежа и записи журнала.
-    if (q === 'SELECT charge_id, user_id, product_id, status FROM payments WHERE charge_id=?') {
-      const row = payments.get(params[0]);
-      return row
-        ? [{ charge_id: row.charge_id, user_id: row.user_id, product_id: row.product_id, status: row.status }]
-        : [];
-    }
-    if (q === 'SELECT kind, amount_text FROM wallet_ledger WHERE charge_id=?') {
-      const row = ledger.get(params[0]);
-      return row ? [{ kind: row.kind, amount_text: row.amount_text }] : [];
-    }
-    if (q === 'SELECT purchased_rna, skins_json FROM wallets WHERE user_id=?') {
-      const w = wallets.get(params[0]);
-      return w ? [{ purchased_rna: w.purchased_rna, skins_json: w.skins_json }] : [];
-    }
-    throw new Error(`d1-stub: unsupported select SQL: ${q}`);
-  }
-
-  const db = {
-    orders,
-    payments,
-    wallets,
-    ledger,
-    _failNext: false,
-    prepare(sql) {
-      const st = {
-        _params: [],
-        bind(...params) {
-          st._params = params;
-          return st;
-        },
-        async run() {
-          if (db._failNext) {
-            db._failNext = false;
-            throw new Error('d1-stub: injected failure');
-          }
-          return execRun(sql, st._params);
-        },
-        async first(column) {
-          const rows = execSelect(sql, st._params);
-          const row = rows[0] ?? null;
-          if (row == null) return null;
-          return column != null ? (row[column] ?? null) : row;
-        },
-        async all() {
-          return { results: execSelect(sql, st._params) };
-        },
-      };
-      return st;
-    },
-    async batch(statements) {
-      const out = [];
-      for (const st of statements) out.push(await st.run());
-      return out;
-    },
-  };
-  return db;
 }
 
 function paymentBody(chargeId, nonce, { productId = 'skin.virulent-magenta', userId = USER_ID, amount = 100, currency = 'XTR' } = {}) {
@@ -264,12 +91,16 @@ try {
     [
       resolve('node_modules/typescript/bin/tsc'),
       'worker/src/index.ts',
+      'worker/src/grants.ts',
+      'worker/src/sql.ts',
       '--target',
       'ES2021',
       '--module',
       'commonjs',
       '--moduleResolution',
       'node',
+      '--strict',
+      'true',
       '--outDir',
       temp,
       '--skipLibCheck',
@@ -302,10 +133,7 @@ try {
   {
     const db = makeD1();
     const env = { ...baseEnv, WEBHOOK_SECRET, PAYMENTS_DB: db };
-    await db
-      .prepare('INSERT INTO orders (nonce, user_id, product_id, status, created_at) VALUES (?,?,?,?,?)')
-      .bind('nonce-v4-fail-1', USER_ID, 'skin.virulent-magenta', 'pending', Date.now())
-      .run();
+    await seedOrder(db, 'nonce-v4-fail-1', USER_ID, 'skin.virulent-magenta', 100);
     db._failNext = true; // инжекция сбоя записи
     const res = await post(handler, '/api/webhook', paymentBody('ch-v4-fail', 'nonce-v4-fail-1'), env, secretHeader());
     eq(res.status, 503, 'webhook → 503 on D1 write failure');
@@ -321,10 +149,7 @@ try {
     const db = makeD1();
     const env = { ...baseEnv, WEBHOOK_SECRET, PAYMENTS_DB: db };
     // Заказ с товаром вне каталога (каталог сменился после создания инвойса).
-    await db
-      .prepare('INSERT INTO orders (nonce, user_id, product_id, status, created_at) VALUES (?,?,?,?,?)')
-      .bind('nonce-v4-unknown-1', USER_ID, 'skin.removed-legacy', 'pending', Date.now())
-      .run();
+    await seedOrder(db, 'nonce-v4-unknown-1', USER_ID, 'skin.removed-legacy', 50);
     const res = await post(
       handler, '/api/webhook',
       paymentBody('ch-v4-unknown', 'nonce-v4-unknown-1', { productId: 'skin.removed-legacy', amount: 50 }),
@@ -352,10 +177,7 @@ try {
     eq(r3.status, 401, 'admin refund → 401 without header');
 
     // Создаём оплаченный платёж через webhook.
-    await db
-      .prepare('INSERT INTO orders (nonce, user_id, product_id, status, created_at) VALUES (?,?,?,?,?)')
-      .bind('nonce-v4-refund-1', USER_ID, 'skin.virulent-magenta', 'pending', Date.now())
-      .run();
+    await seedOrder(db, 'nonce-v4-refund-1', USER_ID, 'skin.virulent-magenta', 100);
     const wh = await post(handler, '/api/webhook', paymentBody('ch-v4-refund', 'nonce-v4-refund-1'), env, secretHeader());
     eq(wh.status, 200, 'payment recorded');
     eq(db.payments.get('ch-v4-refund').status, 'paid', 'payment paid');
@@ -365,7 +187,7 @@ try {
     eq((await v1.json()).verified, true, 'verify true before refund');
 
     // Refund через admin-эндпоинт.
-    const rf = await post(handler, '/api/admin/refund', { chargeId: 'ch-v4-refund', reason: 'test' }, env, adminHeader());
+    const rf = await post(handler, '/api/admin/refund', { chargeId: 'ch-v4-refund', reason: 'test', confirmExternalRefund: true, operationId: 'op-v4-1' }, env, adminHeader());
     eq(rf.status, 200, 'admin refund → 200');
     eq((await rf.json()).ok, true, 'admin refund ok:true');
     eq(db.payments.get('ch-v4-refund').status, 'refunded', 'status → refunded');

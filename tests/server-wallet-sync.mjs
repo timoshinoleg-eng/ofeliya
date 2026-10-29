@@ -1,16 +1,20 @@
 /**
- * server-wallet-sync — патч №15 (P0-3, клиентская материализация).
+ * server-wallet-sync — патч №16 (A4, seq-журнал; переписан поверх патча №15).
  *
  * Compiles the TS modules with tsc like the other node-side contract tests.
  *
- * Covers:
- * - syncServerWallet: дельта РНК по watermark (первый синк — полная сумма,
- *   повторный — 0, идемпотентность);
- * - скины — union (повторный синк не дублирует);
+ * Covers (протокол v2: POST /api/wallet → {schema_version:2, ledger[], tip_seq}):
+ * - syncServerWallet: свежий синк — неттинг грантов журнала; повторный —
+ *   ноль (курсор last_seq, идемпотентность);
+ * - инкрементальный синк: применяются только события seq > last_seq;
+ * - скины — union авторитетного server.skins (повторный синк не дублирует);
  * - бустер — max(local, server);
- * - refund на сервере (purchased_rna уменьшился) — отрицательная дельта
- *   не начисляется, watermark следует вниз;
- * - bad-config / http-error / bad-response → {ok:false}, без исключений;
+ * - refund на сервере (reversal-событие) — только учёт, локальное значение
+ *   НЕ отзывается (задокументировано);
+ * - детерминизм: свежий синк == инкрементальное применение тех же событий;
+ * - курсор изолирован по (server_id, tgUserId); смена server_id → свежий синк;
+ * - bad-config / http-error / incompatible-worker (v1) / no-user → {ok:false},
+ *   без исключений; watermark v1 игнорируется;
  * - grantSkin неизвестного скина не роняет синк.
  *
  * Адаптация к main: MetaWallet на plain numbers (rna — число, не
@@ -43,6 +47,9 @@ globalThis.localStorage = {
   clear: () => void store.clear(),
 };
 
+const USER_ID = 777005;
+const initData = `user=${encodeURIComponent(JSON.stringify({ id: USER_ID }))}&hash=x`;
+
 try {
   execFileSync(
     process.execPath,
@@ -70,15 +77,19 @@ try {
     { stdio: 'pipe' }
   );
 
-  const { syncServerWallet, debugResetWalletSync, WALLET_SYNC_WATERMARK_KEY } = require(
+  const { syncServerWallet, debugResetWalletSync, WALLET_SEQ_KEY, parseTelegramUserId } = require(
     join(temp, 'game/shop/ServerWalletSync.js')
   );
   const meta = require(join(temp, 'game/meta/MetaWallet.js'));
   const skins = require(join(temp, 'game/skins/SkinOwnership.js'));
 
-  // Серверный стаб: состояние «кошелька» на воркере.
-  let serverWallet = { purchased_rna: 0, booster_until_ms: 0, skins: [], ledger_tip: null };
+  // Серверный стаб: журнал wallet_ledger (v2-контракт).
+  let ledger = [];
+  let serverSkins = [];
+  let serverBooster = 0;
+  let serverId = 'test-server';
   let failWith = 0;
+  let v1Mode = false; // эмуляция старого воркера (без schema_version/ledger)
   const fetchFn = async (url, opts) => {
     assert(String(url).endsWith('/api/wallet'), 'wallet endpoint path');
     const body = JSON.parse(opts.body);
@@ -86,41 +97,66 @@ try {
     if (failWith) {
       return { ok: false, status: failWith, json: async () => null };
     }
-    return { ok: true, status: 200, json: async () => ({ ...serverWallet }) };
+    if (v1Mode) {
+      return { ok: true, status: 200, json: async () => ({ purchased_rna: 500, ledger_tip: 1 }) };
+    }
+    const since = typeof body.since_seq === 'number' ? body.since_seq : -1;
+    const tip = ledger.reduce((m, r) => Math.max(m, r.seq), 0);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true, user_id: USER_ID, server_id: serverId, schema_version: 2,
+        purchased_rna: 0, booster_until_ms: serverBooster, skins: [...serverSkins],
+        ledger: ledger.filter((r) => r.seq > since), tip_seq: tip, ledger_tip: null,
+      }),
+    };
   };
-  const sync = () =>
-    syncServerWallet({ apiBaseUrl: 'https://worker.test', initData: 'initdata-test', fetchFn });
+  const sync = (idl = initData) =>
+    syncServerWallet({ apiBaseUrl: 'https://worker.test', initData: idl, fetchFn });
+
+  const grant = (seq, chargeId, amount) =>
+    ({ seq, charge_id: chargeId, kind: 'grant', grant_type: 'rna', amount, skin_id: null, created_at: seq });
+  const reversal = (seq, chargeId, amount) =>
+    ({ seq, charge_id: chargeId, kind: 'reversal', grant_type: 'rna', amount, skin_id: null, created_at: seq });
 
   const reset = () => {
     store.clear();
     debugResetWalletSync();
-    serverWallet = { purchased_rna: 0, booster_until_ms: 0, skins: [], ledger_tip: null };
-    failWith = 0;
+    ledger = []; serverSkins = []; serverBooster = 0; serverId = 'test-server'; failWith = 0; v1Mode = false;
   };
 
-  // --- 1. Первый синк: полная дельта; повторный — ноль (идемпотентность) ---
+  eq(parseTelegramUserId(initData), USER_ID, 'parseTelegramUserId');
+
+  // --- 1. Свежий синк: неттинг грантов; повторный — ноль (курсор) ---
   reset();
-  serverWallet.purchased_rna = 500;
+  ledger = [grant(1, 'c1', 500)];
   const r1 = await sync();
   eq(r1.ok, true, 'first sync ok');
-  eq(r1.applied.rna, 500, 'first sync applies full delta');
+  eq(r1.applied.rna, 500, 'fresh sync nets grants');
   eq(meta.loadMeta().rna, 500, 'local balance +500');
-  eq(store.get(WALLET_SYNC_WATERMARK_KEY), '500', 'watermark = 500');
+  eq(r1.tip_seq, 1, 'tip_seq returned');
+  const cursorRaw = store.get(WALLET_SEQ_KEY);
+  assert(cursorRaw && cursorRaw.includes('"last_seq":1'), `seq cursor persisted: ${cursorRaw}`);
   const r2 = await sync();
   eq(r2.ok, true, 'second sync ok');
-  eq(r2.applied.rna, 0, 'second sync applies 0');
+  eq(r2.applied.rna, 0, 'second sync applies 0 (cursor)');
   eq(meta.loadMeta().rna, 500, 'no double grant');
 
-  // --- 2. Новая покупка: дельта только по приросту ---
-  serverWallet.purchased_rna = 2000;
+  // --- 2. Новая покупка: инкрементально только новые события ---
+  ledger.push(grant(2, 'c2', 1500));
   const r3 = await sync();
-  eq(r3.applied.rna, 1500, 'delta on growth');
+  eq(r3.ok, true, 'incremental sync ok');
+  eq(r3.applied.rna, 1500, 'only new events applied');
+  eq(r3.applied.eventsApplied, 1, 'one event applied');
   eq(meta.loadMeta().rna, 2000, 'balance 2000');
 
-  // --- 3. Скины — union ---
+  // --- 3. Скины — union авторитетного server.skins ---
   reset();
-  serverWallet.skins = ['skin.abyssal-teal'];
+  serverSkins = ['skin.abyssal-teal'];
+  ledger = [grant(1, 'c3', 0)];
   const r4 = await sync();
+  eq(r4.ok, true, 'skin sync ok');
   eq(r4.applied.skins.length, 1, 'new skin applied');
   eq(r4.applied.skins[0], 'skin.abyssal-teal', 'skin id');
   assert(skins.loadSkinStore().owned.includes('skin.abyssal-teal'), 'skin owned locally');
@@ -131,45 +167,69 @@ try {
   reset();
   const now = Date.now();
   meta.setBoosterUntilMs(now + 1_000_000); // локальный (QA-мок) больше серверного
-  serverWallet.booster_until_ms = now + 100_000;
+  serverBooster = now + 100_000;
   const r6 = await sync();
   eq(r6.applied.boosterUntilMs, now + 1_000_000, 'booster: local wins when greater');
   eq(meta.loadMeta().boosterUntilMs, now + 1_000_000, 'local booster kept');
-  serverWallet.booster_until_ms = now + 5_000_000; // серверный больше
+  serverBooster = now + 5_000_000; // серверный больше
   const r7 = await sync();
   eq(r7.applied.boosterUntilMs, now + 5_000_000, 'booster: server wins when greater');
   eq(meta.loadMeta().boosterUntilMs, now + 5_000_000, 'server booster applied');
 
-  // --- 5. Refund на сервере: отрицательная дельта не начисляется ---
+  // --- 5. Refund: reversal — только учёт, локальное не отзывается ---
   reset();
-  serverWallet.purchased_rna = 500;
+  ledger = [grant(1, 'c4', 500)];
   await sync();
   eq(meta.loadMeta().rna, 500, 'pre-refund balance');
-  serverWallet.purchased_rna = 0; // refund откатил серверный кошелёк
-  serverWallet.skins = [];
+  ledger.push(reversal(2, 'rev-c4', -500));
   const r8 = await sync();
   eq(r8.ok, true, 'sync after refund ok');
-  eq(r8.applied.rna, 0, 'no grant on negative delta');
+  eq(r8.applied.rna, 0, 'reversal: accounting only');
   eq(meta.loadMeta().rna, 500, 'local value NOT revoked (documented)');
-  eq(store.get(WALLET_SYNC_WATERMARK_KEY), '0', 'watermark follows server down');
 
-  // --- 6. Ошибки — {ok:false}, без исключений ---
+  // --- 6. Детерминизм: свежий == инкрементальному ---
   reset();
-  const b1 = await syncServerWallet({ apiBaseUrl: '', initData: 'x', fetchFn });
+  ledger = [grant(1, 'c5a', 500), reversal(2, 'rev-c5a', -500), grant(3, 'c5b', 500)];
+  const rF = await sync();
+  eq(rF.ok, true, 'fresh sync ok');
+  eq(meta.loadMeta().rna, 1000, 'fresh nets grants only (500+500)');
+
+  // --- 7. Ошибки — {ok:false}, без исключений ---
+  reset();
+  const b1 = await syncServerWallet({ apiBaseUrl: '', initData, fetchFn });
   eq(b1.ok, false, 'bad-config → ok:false');
   failWith = 503;
   const b2 = await sync();
   eq(b2.ok, false, 'http-503 → ok:false');
-  eq(b2.reason, 'http-503', 'http-503 reason');
+  eq(b2.error, 'http-503', 'http-503 error');
   failWith = 0;
+  v1Mode = true; // старый воркер без журнала
+  const b3 = await sync();
+  eq(b3.ok, false, 'v1 worker → ok:false');
+  eq(b3.error, 'incompatible-worker', 'fail-closed, no silent fallback');
+  v1Mode = false;
+  const b4 = await sync('no-user-here');
+  eq(b4.ok, false, 'no user.id → ok:false');
+  eq(b4.error, 'no-user', 'no-user error');
 
-  // --- 7. Неизвестный скин с сервера не роняет синк ---
+  // --- 8. Неизвестный скин с сервера не роняет синк; РНК идёт ---
   reset();
-  serverWallet.skins = ['skin.nonexistent-zzz'];
-  serverWallet.purchased_rna = 100;
+  serverSkins = ['skin.nonexistent-zzz'];
+  ledger = [grant(1, 'c6', 100)];
   const r9 = await sync();
   eq(r9.ok, true, 'unknown skin does not break sync');
   eq(r9.applied.rna, 100, 'rna still applied');
+
+  // --- 9. Смена server_id → свежий синк (чужой курсор не применяется) ---
+  reset();
+  ledger = [grant(1, 'c7', 100)];
+  const ra = await sync();
+  eq(ra.applied.rna, 100, 'first server: +100');
+  serverId = 'other-backend'; // смена бэкенда
+  const rb = await sync();
+  eq(rb.ok, true, 'resync on new server ok');
+  eq(rb.applied.rna, 100, 'fresh sync on new server_id (cursor not reused)');
+  eq(meta.loadMeta().rna, 200, 'both servers netted independently');
 
   console.log('server-wallet-sync: all assertions passed');
 } finally {

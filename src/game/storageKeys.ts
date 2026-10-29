@@ -81,8 +81,18 @@ export const STORAGE_KEYS: Record<string, StorageKeyInfo> = {
     format: 'JSON: массив chargeId (string[])',
   },
   'ofeliya.wallet.sync.v1': {
+    owner: 'src/game/shop/ServerWalletSync.ts (legacy)',
+    format: 'LEGACY (патч №15): больше НЕ читается; контракт v2 — всегда seq (см. ofeliya.wallet.seq.v2)',
+  },
+  // Seq-курсор журнала wallet_ledger (патч №16, A4).
+  'ofeliya.wallet.seq.v2': {
     owner: 'src/game/shop/ServerWalletSync.ts',
-    format: 'JSON: number — серверный purchased_rna, уже материализованный локально (watermark per-device)',
+    format: 'JSON: {serverId: {tgUserId: {last_seq}}} — seq-курсор журнала wallet_ledger',
+  },
+  // Очередь «оплата подтверждена, товар ожидает синхронизации» (патч №16, A3).
+  'ofeliya.payments.pending-sync.v1': {
+    owner: 'src/game/shop/PendingWalletSync.ts',
+    format: 'JSON: массив {chargeId, productId, addedAt, attempts, status} — оплата подтверждена, грант не материализован',
   },
   // Журнал чеков mock-покупок для restore() (только DEV/QA).
   'ofeliya.mock.entitlements.v1': {
