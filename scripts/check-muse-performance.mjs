@@ -21,7 +21,7 @@ const prefix=update.body.getText(ast).slice(1).split('    if (len > 0.1)')[0];
 const compiled=ts.transpileModule(`function step(time:number,delta:number){${prefix}}`,{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText;
 const step=new Function('PLAYER','SIMULATION',`${compiled};return step;`)({speed:180},{maxDeltaMs:50});
 const samples=[],questSamples=[],velocity=[];
-const game={maybeCompleteBossDefeatCeremony(){},stageDirector:{phase:'RUNNING',currentStage:{}},
+const game={juice:{update(){}},maybeCompleteBossDefeatCeremony(){},stageDirector:{phase:'RUNNING',currentStage:{}},
   runtimeQuality:{recordFrame(delta){samples.push(delta);return false;}},runtimeQualityRegistryAt:Infinity,
   visualDensityRefreshAt:Infinity,runState:{run:{timeMs:0},stage:{noDamageMs:0,speedMul:1},tick(delta){this.run.timeMs+=delta;}},
   quests:{tick(...args){questSamples.push(args);}},resumed:true,achievementCheckAcc:0,captureAchievements(){},
