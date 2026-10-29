@@ -1,6 +1,9 @@
 /**
  * Worker entitlements v3 — журнал платежей в Cloudflare D1
  * (протокол v3, патч №13; полностью заменяет схему №12 на KV).
+ * Патч №16 (v5): инлайн-D1-стаб заменён общим tests/d1-v16-stub.mjs
+ * (эмуляция триггера, атомарный batch, wallet_skins, refund_ops);
+ * заказы сеются через seedOrder с amount_stars/sku_version.
  *
  * Covers:
  * - webhook successful_payment (invoice_payload = raw nonce) → ОДИН
@@ -43,6 +46,7 @@ import { createRequire } from 'node:module';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { makeD1, seedOrder } from './d1-v16-stub.mjs';
 
 const temp = mkdtempSync(join(tmpdir(), 'ofeliya-worker-ent-'));
 writeFileSync(join(temp, 'package.json'), JSON.stringify({ type: 'commonjs' }));
@@ -74,163 +78,6 @@ function buildInitData(userId) {
   for (const [k, v] of Object.entries(fields)) params.set(k, v);
   params.set('hash', signInitData(fields));
   return params.toString();
-}
-
-/**
- * In-memory D1-стаб. Узнаёт SQL по точным строкам воркера
- * (нормализация пробелов), иначе бросает — стаб не должен молча
- * проглатывать неизвестный запрос.
- */
-function makeD1() {
-  const orders = new Map(); // nonce → {user_id, product_id, status, created_at}
-  const payments = new Map(); // charge_id → row
-  // Патч №15: серверный кошелёк (wallets) + журнал грантов (wallet_ledger).
-  const wallets = new Map(); // user_id → row
-  const ledger = new Map(); // charge_id → row
-  let failNext = false;
-  const norm = (s) => s.replace(/\s+/g, ' ').trim();
-  const runSql = (sql, params) => {
-    if (failNext) {
-      failNext = false;
-      throw new Error('d1 injected failure');
-    }
-    if (sql.startsWith('INSERT INTO orders')) {
-      const [nonce, userId, productId, status, createdAt] = params;
-      if (orders.has(nonce)) throw new Error('UNIQUE constraint failed: orders.nonce');
-      orders.set(nonce, { user_id: userId, product_id: productId, status, created_at: createdAt });
-      return { meta: { changes: 1 } };
-    }
-    if (sql.startsWith('INSERT OR IGNORE INTO payments')) {
-      const [chargeId, userId, productId, amount, currency, status, nonce, createdAt, fulfilledAt] =
-        params;
-      if (payments.has(chargeId)) return { meta: { changes: 0 } };
-      payments.set(chargeId, {
-        charge_id: chargeId,
-        user_id: userId,
-        product_id: productId,
-        amount,
-        currency,
-        status,
-        nonce,
-        created_at: createdAt,
-        fulfilled_at: fulfilledAt,
-      });
-      return { meta: { changes: 1 } };
-    }
-    if (sql.startsWith("UPDATE orders SET status='paid'")) {
-      const [nonce] = params;
-      const o = orders.get(nonce);
-      if (o && o.status === 'pending') {
-        o.status = 'paid';
-        return { meta: { changes: 1 } };
-      }
-      return { meta: { changes: 0 } };
-    }
-    // Патч №15: UPSERT кошелька (атомарная серверная выдача).
-    if (sql.startsWith('INSERT INTO wallets')) {
-      const [userId, purchasedRna, boosterUntilMs, skinsJson, updatedAt] = params;
-      wallets.set(userId, {
-        user_id: userId,
-        purchased_rna: purchasedRna,
-        booster_until_ms: boosterUntilMs,
-        skins_json: skinsJson,
-        updated_at: updatedAt,
-      });
-      return { meta: { changes: 1 } };
-    }
-    if (sql.startsWith('INSERT OR IGNORE INTO wallet_ledger')) {
-      const [userId, chargeId, kind, amountText, createdAt] = params;
-      if (ledger.has(chargeId)) return { meta: { changes: 0 } };
-      ledger.set(chargeId, { user_id: userId, charge_id: chargeId, kind, amount_text: amountText, created_at: createdAt });
-      return { meta: { changes: 1 } };
-    }
-    if (sql.startsWith("UPDATE payments SET status='fulfilled'")) {
-      const [fulfilledAt, chargeId, userId] = params;
-      const p = payments.get(chargeId);
-      if (p && p.user_id === userId && p.status === 'paid') {
-        p.status = 'fulfilled';
-        p.fulfilled_at = fulfilledAt;
-        return { meta: { changes: 1 } };
-      }
-      return { meta: { changes: 0 } };
-    }
-    throw new Error(`makeD1: unknown write SQL: ${sql}`);
-  };
-  const firstSql = (sql, params) => {
-    if (failNext) {
-      failNext = false;
-      throw new Error('d1 injected failure');
-    }
-    if (sql === 'SELECT user_id, product_id, status FROM orders WHERE nonce=?') {
-      return orders.get(params[0]) ?? null;
-    }
-    if (sql === 'SELECT charge_id, user_id, product_id, status, created_at FROM payments WHERE nonce=?') {
-      for (const p of payments.values()) if (p.nonce === params[0]) return p;
-      return null;
-    }
-    // Патч №15: backstop nonce-reuse, self-heal дубликатов, чтение кошелька.
-    if (sql === 'SELECT charge_id FROM payments WHERE nonce=?') {
-      for (const p of payments.values()) if (p.nonce === params[0]) return { charge_id: p.charge_id };
-      return null;
-    }
-    if (sql === 'SELECT 1 AS one FROM wallet_ledger WHERE charge_id=?') {
-      return ledger.has(params[0]) ? { one: 1 } : null;
-    }
-    if (sql === 'SELECT purchased_rna, booster_until_ms, skins_json FROM wallets WHERE user_id=?') {
-      return wallets.get(params[0]) ?? null;
-    }
-    throw new Error(`makeD1: unknown first SQL: ${sql}`);
-  };
-  const allSql = (sql, params) => {
-    if (failNext) {
-      failNext = false;
-      throw new Error('d1 injected failure');
-    }
-    if (
-      sql ===
-      'SELECT charge_id, product_id, status, created_at FROM payments WHERE user_id=? ORDER BY created_at ASC'
-    ) {
-      return {
-        results: [...payments.values()]
-          .filter((p) => p.user_id === params[0])
-          .sort((a, b) => a.created_at - b.created_at),
-      };
-    }
-    throw new Error(`makeD1: unknown all SQL: ${sql}`);
-  };
-  return {
-    orders,
-    payments,
-    wallets,
-    ledger,
-    failNext: () => {
-      failNext = true;
-    },
-    prepare(query) {
-      const sql = norm(query);
-      let params = [];
-      return {
-        bind(...args) {
-          params = args;
-          return this;
-        },
-        async run() {
-          return runSql(sql, params);
-        },
-        async first() {
-          return firstSql(sql, params);
-        },
-        async all() {
-          return allSql(sql, params);
-        },
-      };
-    },
-    async batch(statements) {
-      const results = [];
-      for (const st of statements) results.push(await st.run());
-      return results;
-    },
-  };
 }
 
 function webhookBody({ userId, nonce, chargeId, stars, currency = 'XTR' }) {
@@ -285,12 +132,16 @@ try {
     [
       resolve('node_modules/typescript/bin/tsc'),
       'worker/src/index.ts',
+      'worker/src/grants.ts',
+      'worker/src/sql.ts',
       '--target',
       'ES2021',
       '--module',
       'commonjs',
       '--moduleResolution',
       'node',
+      '--strict',
+      'true',
       '--outDir',
       temp,
       '--skipLibCheck',
@@ -308,14 +159,8 @@ try {
   const hookHeaders = { 'x-telegram-bot-api-secret-token': SECRET };
 
   // Seed orders (как если бы /api/invoice их записал: INSERT INTO orders).
-  await db
-    .prepare('INSERT INTO orders (nonce, user_id, product_id, status, created_at) VALUES (?,?,?,?,?)')
-    .bind('nonce-001', 777001, 'skin.virulent-magenta', 'pending', Date.now())
-    .run();
-  await db
-    .prepare('INSERT INTO orders (nonce, user_id, product_id, status, created_at) VALUES (?,?,?,?,?)')
-    .bind('nonce-002', 777001, 'booster.rna-x2-7d', 'pending', Date.now())
-    .run();
+  await seedOrder(db, 'nonce-001', 777001, 'skin.virulent-magenta', 100);
+  await seedOrder(db, 'nonce-002', 777001, 'booster.rna-x2-7d', 75);
 
   // --- webhook → атомарный batch: payment + order → 'paid' ---
   const first = await post(
@@ -358,11 +203,8 @@ try {
   eq(db.orders.get('nonce-002').status, 'paid', 'second order paid');
 
   // --- batch failure → 503 {ok:false}, повтор после починки записывает (патч №14, P0-2) ---
-  await db
-    .prepare('INSERT INTO orders (nonce, user_id, product_id, status, created_at) VALUES (?,?,?,?,?)')
-    .bind('nonce-003', 777001, 'currency.rna-pack-s', 'pending', Date.now())
-    .run();
-  db.failNext();
+  await seedOrder(db, 'nonce-003', 777001, 'currency.rna-pack-s', 35);
+  db._failNext = true;
   const failed = await post(
     worker,
     env,
@@ -410,10 +252,7 @@ try {
   try {
     // Патч №15: ok:true — только для pending-заказа. nonce-001 к этому
     // моменту уже оплачен вебхуками выше, поэтому сеем свежий pending.
-    await db
-      .prepare('INSERT INTO orders (nonce, user_id, product_id, status, created_at) VALUES (?,?,?,?,?)')
-      .bind('nonce-pc-ok', 777001, 'skin.virulent-magenta', 'pending', Date.now())
-      .run();
+    await seedOrder(db, 'nonce-pc-ok', 777001, 'skin.virulent-magenta', 100);
     let res = await post(worker, env, '/api/webhook', preCheckoutBody({ nonce: 'nonce-pc-ok', stars: 100 }), hookHeaders);
     eq(res.status, 200, 'pre_checkout ok');
     eq(botCalls[botCalls.length - 1].ok, true, 'pre_checkout correct price → ok:true');
@@ -431,17 +270,11 @@ try {
     );
     eq(botCalls[botCalls.length - 1].ok, false, 'pre_checkout without DB → ok:false fail-closed');
     // Expired order → ok:false.
-    await db
-      .prepare('INSERT INTO orders (nonce, user_id, product_id, status, created_at) VALUES (?,?,?,?,?)')
-      .bind('nonce-exp', 777001, 'currency.rna-pack-s', 'expired', Date.now())
-      .run();
+    await seedOrder(db, 'nonce-exp', 777001, 'currency.rna-pack-s', 35, { status: 'expired' });
     res = await post(worker, env, '/api/webhook', preCheckoutBody({ nonce: 'nonce-exp', stars: 35 }), hookHeaders);
     eq(botCalls[botCalls.length - 1].ok, false, 'pre_checkout expired order → ok:false');
     // Патч №15 (P0-2): чужой from.id → ok:false (нельзя оплатить чужой инвойс).
-    await db
-      .prepare('INSERT INTO orders (nonce, user_id, product_id, status, created_at) VALUES (?,?,?,?,?)')
-      .bind('nonce-pc-alien', 777001, 'skin.virulent-magenta', 'pending', Date.now())
-      .run();
+    await seedOrder(db, 'nonce-pc-alien', 777001, 'skin.virulent-magenta', 100);
     res = await post(
       worker,
       env,
@@ -452,10 +285,7 @@ try {
     eq(botCalls[botCalls.length - 1].ok, false, 'pre_checkout ok=false on user mismatch');
     // Патч №15 (P0-2): уже оплаченный заказ (status='paid') → ok:false
     // (повторная оплата того же nonce невозможна через гейт pending).
-    await db
-      .prepare('INSERT INTO orders (nonce, user_id, product_id, status, created_at) VALUES (?,?,?,?,?)')
-      .bind('nonce-pc-paid', 777001, 'skin.virulent-magenta', 'paid', Date.now())
-      .run();
+    await seedOrder(db, 'nonce-pc-paid', 777001, 'skin.virulent-magenta', 100, { status: 'paid' });
     res = await post(worker, env, '/api/webhook', preCheckoutBody({ nonce: 'nonce-pc-paid', stars: 100 }), hookHeaders);
     eq(botCalls[botCalls.length - 1].ok, false, 'pre_checkout ok=false on paid order');
   } finally {
@@ -475,10 +305,7 @@ try {
   eq(v.json.verified, false, 'verify false for other user');
   eq(v.json.reason, 'mismatch', 'verify mismatch reason');
   // order есть, payment нет → pending (а не not_found).
-  await db
-    .prepare('INSERT INTO orders (nonce, user_id, product_id, status, created_at) VALUES (?,?,?,?,?)')
-    .bind('nonce-pend', 777001, 'currency.rna-pack-s', 'pending', Date.now())
-    .run();
+  await seedOrder(db, 'nonce-pend', 777001, 'currency.rna-pack-s', 35);
   v = await post(worker, env, '/api/verify', { initData: buildInitData(777001), nonce: 'nonce-pend' });
   eq(v.json.verified, false, 'verify false for unpaid order');
   eq(v.json.reason, 'pending', 'verify pending reason');
@@ -530,7 +357,7 @@ try {
   eq(ack.status, 401, 'ack bad initData → 401');
 
   // --- без PAYMENTS_DB → 501 db_unavailable (verify/entitlements/ack),
-  // invoice → 503, webhook → 200 log-only ---
+  // invoice → 503, webhook → 503 fail-closed (патч №14) ---
   const noDbEnv = { TELEGRAM_BOT_TOKEN: BOT_TOKEN, WEBHOOK_SECRET: SECRET };
   const noDbVerify = await post(worker, noDbEnv, '/api/verify', { initData: buildInitData(777001), nonce: 'nonce-001' });
   eq(noDbVerify.status, 501, 'verify without DB → 501');

@@ -23,7 +23,7 @@
  *   fail-closed: ни гранта, ни пометки).
  * - Патч №15 (P0-3): серверная выдача — fulfillPurchase для telegram-stars
  *   начислений не делает (needsServerSync); грант материализует
- *   ServerWalletSync по /api/wallet (watermark-дельта). Симуляция кошелька
+ *   ServerWalletSync по /api/wallet (seq-журнал, патч №16). Симуляция кошелька
  *   в honestFetch — зеркало worker/src/grants.ts (в main гранты клиента —
  *   в grantPurchase, на products.ts grantRna нет).
  *
@@ -122,23 +122,38 @@ try {
       return { ok: true, json: async () => ({ ok: true }) };
     }
     if (String(url).endsWith('/api/wallet')) {
-      // Патч №15 (P0-3): симуляция серверного кошелька воркера — гранты
-      // применены сервером для всех не-refunded записей журнала.
+      // Патч №16 (A4): симуляция серверного кошелька воркера (v2-контракт) —
+      // гранты применены сервером для всех не-refunded записей журнала.
       // Зеркало worker/src/grants.ts (rna-суммы; скины — union).
       assert(typeof body.initData === 'string' && body.initData.length > 0, 'wallet: initData');
       const WORKER_RNA = { 'currency.rna-pack-s': 500, 'currency.rna-pack-m': 1500 };
-      let purchased_rna = 0;
-      const skins = [];
+      const ledgerEvents = [];
+      let seq = 0;
       for (const p of entitlementPurchases) {
         // Зеркало воркера: грант применён только для paid/fulfilled
         // (refunded откачен, неизвестные статусы гранта не имеют).
         if (p.status !== 'paid' && p.status !== 'fulfilled') continue;
-        if (WORKER_RNA[p.productId]) purchased_rna += WORKER_RNA[p.productId];
-        if (p.productId.startsWith('skin.')) skins.push(p.productId);
+        seq += 1;
+        if (WORKER_RNA[p.productId]) {
+          ledgerEvents.push({
+            seq, charge_id: p.chargeId, kind: 'grant', grant_type: 'rna',
+            amount: WORKER_RNA[p.productId], skin_id: null, created_at: seq,
+          });
+        } else if (p.productId.startsWith('skin.')) {
+          ledgerEvents.push({
+            seq, charge_id: p.chargeId, kind: 'grant', grant_type: 'skin',
+            amount: 0, skin_id: p.productId, created_at: seq,
+          });
+        }
       }
       return {
         ok: true,
-        json: async () => ({ purchased_rna, booster_until_ms: 0, skins, ledger_tip: 1 }),
+        json: async () => ({
+          ok: true, user_id: 777001, server_id: 'test-server', schema_version: 2,
+          purchased_rna: 0, booster_until_ms: 0,
+          skins: ledgerEvents.filter((e) => e.grant_type === 'skin').map((e) => e.skin_id),
+          ledger: ledgerEvents, tip_seq: seq, ledger_tip: null,
+        }),
       };
     }
     throw new Error(`payments-trust: unexpected fetch ${url}`);
@@ -156,7 +171,7 @@ try {
 
   const packS = SHOP_CATALOG.find((p) => p.id === 'currency.rna-pack-s');
   assert(packS, 'pack-s fixture present');
-  withWindow({ openInvoice: () => {}, initData: 'tg-init-data' });
+  withWindow({ openInvoice: () => {}, initData: 'user={"id":777001}&hash=b' });
   const provider = new TelegramStarsPaymentProvider({ apiBaseUrl: 'https://pay.example' });
 
   // === P1-e: successful_payment получен, Mini App закрыт до выдачи ===
@@ -179,7 +194,7 @@ try {
   assert(ledger.isChargeCredited('ch_p1e_1'), 'P1-e: chargeId помечен выданным');
   eq(ackCalls.length, 1, 'P1-e: ack отправлен после успешной выдачи');
   eq(ackCalls[0].chargeId, 'ch_p1e_1', 'P1-e: ack несёт chargeId');
-  eq(ackCalls[0].initData, 'tg-init-data', 'P1-e: ack несёт initData');
+  eq(ackCalls[0].initData, 'user={"id":777001}&hash=b', 'P1-e: ack несёт initData');
   // Повторный restore — тишина (идемпотентность по chargeId).
   const r2 = await provider.restore();
   await flush();

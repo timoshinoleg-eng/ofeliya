@@ -50,12 +50,21 @@
  *     локально каждое (двойной локальный баланс) — окончательно решается
  *     только серверной экономикой (дизайн-док
  *     ofeliya-server-economy-design.md).
- *  7. Патч №13 (P1-d): после УСПЕШНОЙ локальной выдачи (fulfillPurchase →
- *     ok) — fire-and-forget POST {apiBaseUrl}/api/ack {initData, chargeId}:
- *     воркер переводит платёж paid→fulfilled (только свой charge_id, только
- *     из 'paid'; без DB → 501). Чистый bookkeeping: никогда не блокирует
- *     выдачу, не влияет на её результат, ошибки глотаются. Патч №14 (E-b):
- *     ack — только при outcome==='granted', не при 'duplicate'.
+ *  7. Патч №16 (A3/A4): выдача материализуется seq-синком кошелька
+ *     (ServerWalletSync: POST /api/wallet {initData, since_seq} →
+ *     schema_version:2 + ledger; курсор per (server_id, tgUserId), ключ
+ *     ofeliya.wallet.seq.v2; старый watermark v1 игнорируется).
+ *     acknowledgeCharge БЕЗОПАСЕН: /api/ack уходит только за chargeId,
+ *     чья материализация подтверждена синком (grant-событие в ledger'е),
+ *     иначе — запись в pending-sync очередь
+ *     (ofeliya.payments.pending-sync.v1). Дрэйн очереди: старт приложения,
+ *     открытие витрины (restore), событие 'online', после каждого успешного
+ *     синка; кап 24ч/50 попыток → 'needs-manual-check' (авто-ретрай стоп).
+ *     StorefrontScene.buy: r.ok → тост «Товар успешно получен» + ack;
+ *     !r.ok → «Оплата подтверждена, товар ожидает синхронизации» + кнопка
+ *     «Повторить», ack не уходит. Новый клиент + старый воркер (без
+ *     schema_version:2) → {ok:false, error:'incompatible-worker'} →
+ *     pending-sync, не молча (fail-closed).
  *
  * Схема патча №11 (сверка через /api/entitlements {products} + выдача
  * по колбэку при недоступности) заменена протоколом №12 полностью:
@@ -101,6 +110,12 @@ import {
   type PendingRecord,
 } from './PaymentLedger';
 import { syncServerWallet, type SyncResult } from './ServerWalletSync';
+import {
+  drainPendingWalletSync,
+  enqueuePendingWalletSync,
+  getPendingSyncChargeIds,
+  type DrainResult,
+} from './PendingWalletSync';
 
 export const TELEGRAM_STARS_UNAVAILABLE = 'stars-unavailable';
 export const ENTITLEMENTS_KEY = 'ofeliya.telegram.entitlements.v1';
@@ -247,13 +262,30 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
   private readonly pendingInFlight = new Set<string>();
   /** Nonce с запланированным бэкофф-ретраем (патч №12). */
   private readonly pendingRetryTimers = new Set<string>();
-  /** In-flight синк кошелька: параллельные вызовы дедуплицируются. */
-  private walletSyncInFlight: Promise<SyncResult> | null = null;
-  /** Токен текущего синка (сброс поля — только своим запуском). */
-  private walletSyncToken: object | null = null;
+  /** In-flight синки кошелька: параллельные вызовы дедуплицируются. */
+  private readonly walletSyncInFlight = new Map<string, Promise<SyncResult>>();
+  /**
+   * chargeId, чья материализация подтверждена успешным синком
+   * (grant-события ledger'а). acknowledgeCharge шлёт /api/ack ТОЛЬКО для
+   * них; остальное — в pending-sync очередь (патч №16, A3).
+   * Cap 1000: ack удаляет, переполнение вытесняет старейшие.
+   */
+  private readonly walletConfirmedCharges = new Set<string>();
 
   constructor(options: TelegramStarsOptions = {}) {
     this.apiBaseUrl = (options.apiBaseUrl ?? '').trim().replace(/\/+$/, '');
+    // Патч №16 (A3): дрэйн pending-sync по событию 'online'.
+    // Отдельный инстанс на каждое открытие витрины — слушатели копятся,
+    // но дрэйн без записей в очереди — no-op без сетевого запроса.
+    try {
+      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('online', () => {
+          void this.syncWalletAndDrainPending().catch(() => undefined);
+        });
+      }
+    } catch {
+      /* ignore */
+    }
   }
 
   /**
@@ -397,40 +429,104 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
   }
 
   /**
-   * Материализация серверно-авторитетной выдачи (патч №15, P0-3).
+   * Материализация серверно-авторитетной выдачи (патч №16, A4 — seq-журнал).
    *
-   * Тянет POST /api/wallet и применяет серверный результат (скины — union,
-   * бустер — max, РНК — дельта по per-device watermark). Идемпотентна:
-   * безопасно вызывать после каждой покупки, в restore() и повторно.
-   * Вызывать после каждого fulfillPurchase с needsServerSync (purchase,
-   * restore, processPendingRecord). Параллельные вызовы дедуплицируются
-   * (один in-flight синк на всех).
+   * Тянет POST /api/wallet {initData, since_seq} и применяет события
+   * журнала: свежий синк — неттинг грантов, инкрементальный — события
+   * seq > last_seq (курсор per (server_id, tgUserId), ключ
+   * ofeliya.wallet.seq.v2). Ответ без schema_version:2/tip_seq →
+   * {ok:false, error:'incompatible-worker'} (fail-closed).
    *
-   * Возвращает промис, который НИКОГДА не реджектится: снаружи можно как
-   * `void provider.syncWalletFromServer()` (fire-and-forget), так и
-   * `await` для обновления UI после покупки.
+   * Возвращает SyncResult КАК ЕСТЬ — вызывающий код обязан проверить ok:
+   * fire-and-forget внутри purchase-flow запрещён (патч №16, A3).
+   * Параллельные вызовы с тем же sinceSeq дедуплицируются.
+   * Никогда не бросает (и не реджектит).
    */
-  syncWalletFromServer(): Promise<SyncResult> {
-    if (this.walletSyncInFlight) return this.walletSyncInFlight;
-    const token: object = {};
+  syncWalletFromServer(sinceSeq?: number): Promise<SyncResult> {
+    const key = sinceSeq == null ? 'inc' : `seq:${Math.max(0, Math.floor(sinceSeq))}`;
+    const inFlight = this.walletSyncInFlight.get(key);
+    if (inFlight) return inFlight;
     const p: Promise<SyncResult> = (async (): Promise<SyncResult> => {
       try {
         const initData = readTelegramInitData();
-        return await syncServerWallet({ apiBaseUrl: this.apiBaseUrl, initData });
-      } catch {
-        return { ok: false, reason: 'unexpected' };
-      } finally {
-        // Сбрасываем поле только своим запуском (гонка невозможна при
-        // синхронном присвоении ниже, токен — пояс надёжности).
-        if (this.walletSyncToken === token) {
-          this.walletSyncToken = null;
-          this.walletSyncInFlight = null;
+        const r = await syncServerWallet({ apiBaseUrl: this.apiBaseUrl, initData, sinceSeq });
+        if (r.ok) {
+          // Накапливаем подтверждённые chargeId: грант мог материализовать
+          // более ранний синк, а ack вызывают позже (buy/restore/дрэйн).
+          for (const cid of r.applied.grantChargeIds ?? []) {
+            this.walletConfirmedCharges.add(cid);
+          }
+          while (this.walletConfirmedCharges.size > 1000) {
+            const oldest = this.walletConfirmedCharges.values().next();
+            if (oldest.done) break;
+            this.walletConfirmedCharges.delete(oldest.value);
+          }
         }
+        return r;
+      } catch {
+        return { ok: false, error: 'unexpected', reason: 'unexpected' };
+      } finally {
+        // Значение под ключом — только этот промис (остальные получили его
+        // же через дедупликацию), поэтому безусловное удаление корректно.
+        this.walletSyncInFlight.delete(key);
       }
     })();
-    this.walletSyncToken = token;
-    this.walletSyncInFlight = p;
+    this.walletSyncInFlight.set(key, p);
     return p;
+  }
+
+  /**
+   * Патч №16 (A3): синк + дрэйн pending-sync очереди.
+   * После каждого успешного синка очередь допроверяется (подтверждённые
+   * chargeId снимаются + ack). Возвращает результат синка как есть.
+   * Никогда не бросает.
+   */
+  async syncWalletAndDrainPending(): Promise<SyncResult> {
+    let r: SyncResult;
+    try {
+      r = await this.syncWalletFromServer();
+    } catch {
+      r = { ok: false, error: 'unexpected', reason: 'unexpected' };
+    }
+    if (r.ok) {
+      try {
+        await this.drainPendingWalletSyncQueue();
+      } catch {
+        /* дрэйн не роняет синк */
+      }
+    }
+    return r;
+  }
+
+  /**
+   * Патч №16 (A3): дрэйн очереди «оплата подтверждена, товар ожидает
+   * синхронизации». Очередь пуста → no-op без сетевого запроса.
+   * Подтверждённые chargeId: снятие + /api/ack (материализация доказана
+   * ledger'ом). Никогда не бросает.
+   */
+  drainPendingWalletSyncQueue(): Promise<DrainResult> {
+    try {
+      return drainPendingWalletSync((sinceSeq) => this.syncWalletFromServer(sinceSeq), {
+        onConfirmed: (chargeId) => {
+          this.walletConfirmedCharges.add(chargeId);
+          this.postAck(chargeId);
+        },
+      });
+    } catch {
+      return Promise.resolve({ ok: false, confirmed: [], error: 'unexpected' });
+    }
+  }
+
+  /**
+   * Патч №16 (A3): chargeId записей pending-sync со статусом 'pending'
+   * (UI-баннер, тесты). Никогда не бросает.
+   */
+  getPendingSyncCharges(): string[] {
+    try {
+      return getPendingSyncChargeIds();
+    } catch {
+      return [];
+    }
   }
 
   /**
@@ -444,11 +540,18 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
    */
   async restore(): Promise<RestoreResult> {
     const pendingFulfilled: string[] = [];
+    // Патч №16 (A3): кандидаты на /api/ack. Ack — ТОЛЬКО после подтверждённой
+    // материализации (успешный синк кошелька); иначе — в pending-sync очередь.
+    const ackCandidates: Array<{ chargeId: string; productId: string }> = [];
     try {
       for (const rec of loadPendingPurchases()) {
         try {
-          const pid = await this.processPendingRecord(rec);
-          if (pid) pendingFulfilled.push(pid);
+          const done = await this.processPendingRecord(rec);
+          if (done) {
+            pendingFulfilled.push(done.productId);
+            // chargeId '' — товар исчез из каталога: допроверять нечего.
+            if (done.chargeId) ackCandidates.push({ chargeId: done.chargeId, productId: done.productId });
+          }
         } catch {
           /* одна запись не роняет остальные */
         }
@@ -503,9 +606,11 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
           }
           // E-b: ack — только при реальном начислении ('granted'), не при
           // 'duplicate'. Серверный ack идемпотентен, но семантика точная.
-          // Патч №15 (P0-3): выдача серверная — ack теперь означает
-          // «клиент применил серверный кошелёк» (синк — в конце restore()).
-          if (grant.outcome === 'granted') this.acknowledgeCharge(p.chargeId);
+          // Патч №16 (A3): ack НЕ здесь — только после подтверждённого синка
+          // кошелька (в конце restore()). Кандидат запоминается; выдача
+          // серверная, грант материализует финальный синк.
+          if (grant.outcome === 'granted')
+            ackCandidates.push({ chargeId: p.chargeId, productId: p.productId });
           if (!local.some((e) => e.productId === p.productId)) {
             local.push({
               productId: p.productId,
@@ -520,12 +625,40 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
     } catch {
       /* ignore */
     }
+    let syncResult: SyncResult;
+    let drainedConfirmed: string[] = [];
     try {
-      // Патч №15 (P0-3): один итоговый синк материализует ВСЕ серверные
-      // гранты (watermark-идемпотентно). Догоняет и случаи, когда
-      // fire-and-forget синк из processPendingRecord не долетел.
-      // Никогда не бросает.
-      await this.syncWalletFromServer();
+      // Патч №16 (A3/A4): один итоговый синк материализует ВСЕ серверные
+      // гранты (seq-идемпотентно) + дрэйн pending-sync очереди (подтверждённые
+      // chargeId — снятие + ack). Догоняет и случаи, когда синк
+      // из processPendingRecord не долетел. Никогда не бросает.
+      syncResult = await this.syncWalletFromServer();
+      if (syncResult.ok) {
+        try {
+          drainedConfirmed = (await this.drainPendingWalletSyncQueue()).confirmed;
+        } catch {
+          drainedConfirmed = [];
+        }
+      }
+    } catch {
+      syncResult = { ok: false, error: 'unexpected', reason: 'unexpected' };
+    }
+    try {
+      if (syncResult.ok) {
+        // Материализация подтверждена — bookkeeping воркера paid→fulfilled.
+        // Уже подтверждённые дрэйном (drain: снятие + ack) — пропуск, чтобы
+        // не дублировать POST (серверный ack идемпотентен, но семантика точная).
+        const alreadyAcked = new Set(drainedConfirmed);
+        for (const c of ackCandidates) {
+          if (!alreadyAcked.has(c.chargeId)) this.acknowledgeCharge(c.chargeId);
+        }
+      } else {
+        // Синк не подтверждён: ack НЕ уходит; кандидаты — в pending-sync
+        // очередь (допроверка дрэйном: старт приложения, 'online',
+        // следующий успешный синк). Товар не теряется.
+        for (const c of ackCandidates)
+          enqueuePendingWalletSync({ chargeId: c.chargeId, productId: c.productId });
+      }
     } catch {
       /* ignore */
     }
@@ -536,13 +669,16 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
   }
 
   /**
-   * Одна попытка допроверки pending-записи. Возвращает productId, если
-   * сервер подтвердил и выдача выполнена (запись снята).
+   * Одна попытка допроверки pending-записи. Возвращает {productId, chargeId},
+   * если сервер подтвердил и выдача выполнена (запись снята); ack и синк —
+   * дело restore() (единый финальный синк + ack только при r.ok).
    * Патч №13: chargeId — только настоящий от сервера (синтетики нет),
    * productId — только серверный (mismatch → не выдавать, лог);
    * запись снимается ТОЛЬКО при ok от fulfillPurchase.
    */
-  private async processPendingRecord(rec: PendingRecord): Promise<string | null> {
+  private async processPendingRecord(
+    rec: PendingRecord
+  ): Promise<{ productId: string; chargeId: string } | null> {
     const nonce = rec.nonce;
     if (this.pendingInFlight.has(nonce)) return null;
     this.pendingInFlight.add(nonce);
@@ -571,7 +707,7 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
             // Каталог сменился, а платёж настоящий — не крутить вечно.
             console.warn('[telegram-stars] pending product vanished from catalog:', fresh.productId);
             removePendingPurchase(nonce);
-            return fresh.productId;
+            return { productId: fresh.productId, chargeId: '' };
           }
           // Выдача — только через ledger (идемпотентность по chargeId).
           // P1-a: запись снимаем ТОЛЬКО при успешной выдаче.
@@ -583,16 +719,11 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
             console.warn('[telegram-stars] fulfillPurchase failed:', grant.error);
             return null;
           }
-          // E-b (патч №14): ack — только при реальном начислении
-          // ('granted'), не при 'duplicate'. Серверный ack идемпотентен,
-          // но семантика должна быть точной.
-          if (grant.outcome === 'granted') this.acknowledgeCharge(chargeId);
-          // Патч №15 (P0-3): выдача серверная — материализуем кошелёк.
-          // Fire-and-forget: итоговая синхронизация — в restore(); синк
-          // идемпотентен, повтор безопасен. Никогда не бросает.
-          if (grant.needsServerSync) void this.syncWalletFromServer();
+          // Патч №16 (A3): ack и материализация — в restore(): единый
+          // финальный синк кошелька, ack только при r.ok. Fire-and-forget
+          // синка здесь больше нет (был P0 A3: результат игнорировался).
           removePendingPurchase(nonce);
-          return fresh.productId;
+          return { productId: fresh.productId, chargeId };
         }
       }
       // Не подтверждено / не выдано: бэкофф-ретраи в сессии, затем стоп.
@@ -613,16 +744,41 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
   }
 
   /**
-   * Патч №13 (P1-d): bookkeeping статусов журнала воркера.
-   * После успешной локальной выдачи клиент сообщает воркеру
-   * POST /api/ack {initData, chargeId} — платёж переходит paid→fulfilled
-   * (воркер: только свой charge_id, только из 'paid'; без DB → 501).
-   * Fire-and-forget: никогда не блокирует выдачу и не влияет на её
-   * результат; ошибки глотаются. Вызывать только для telegram-провайдера
-   * (метод — на нём) и только с реальным chargeId — пустой/без бэкенда/
-   * без initData вызов просто no-op. Никогда не бросает.
+   * Патч №16 (A3): БЕЗОПАСНЫЙ ack. /api/ack уходит ТОЛЬКО если материализация
+   * chargeId подтверждена успешным синком кошелька (grant-событие в ledger'е:
+   * syncWalletFromServer / дрэйн pending-sync). Иначе — запись в pending-sync
+   * очередь (допроверка дрэйном), ack НЕ уходит: сервер не должен помечать
+   * fulfilled то, что клиент не применил.
+   *
+   * Идемпотентен: повторный вызов после ack — запись уже снята из
+   * confirmed-множества → уйдёт в очередь, а дрэйн её тут же подтвердит
+   * по ledger'у и снимет (ack на сервере идемпотентен).
+   * Никогда не бросает.
    */
   acknowledgeCharge(chargeId: string | undefined): void {
+    try {
+      const id = (chargeId ?? '').trim();
+      if (!id) return;
+      if (this.walletConfirmedCharges.has(id)) {
+        this.walletConfirmedCharges.delete(id);
+        this.postAck(id);
+      } else {
+        // Материализация не подтверждена — не помечаем fulfilled на сервере.
+        // productId неизвестен (сигнатура) — дрэйну он не нужен.
+        enqueuePendingWalletSync({ chargeId: id, productId: '' });
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /**
+   * Сырой POST /api/ack {initData, chargeId} (fire-and-forget).
+   * Вызывать только после подтверждённой материализации (см.
+   * acknowledgeCharge / дрэйн). Пустой chargeId / без бэкенда / без
+   * initData — no-op. Никогда не бросает.
+   */
+  private postAck(chargeId: string): void {
     try {
       const id = (chargeId ?? '').trim();
       if (!id || this.apiBaseUrl === '') return;

@@ -1293,6 +1293,13 @@ const server = createServer(async (req, res) => {
             workerUrl: STARS_WORKER_URL,
             workerSecret: STARS_WORKER_SECRET,
           });
+          // Патч №16 (B4, P1): не-2xx от воркера (401 — неверный
+          // OFELIYA_STARS_WORKER_SECRET, 503 — D1 недоступен) — громкий лог:
+          // иначе misconfiguration тонет в проксируемых статусах, а
+          // Telegram молча ретраит.
+          if (proxied.status < 200 || proxied.status >= 300) {
+            console.error('[stars-proxy] worker non-2xx:', proxied.status, JSON.stringify(proxied.body)?.slice(0, 300));
+          }
           return send(res, proxied.status, proxied.body);
         } catch (err) {
           console.error('[stars-proxy] forward failed:', err instanceof Error ? err.message : err);

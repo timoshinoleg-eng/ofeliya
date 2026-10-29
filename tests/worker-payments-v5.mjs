@@ -28,6 +28,7 @@ import { createRequire } from 'node:module';
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { makeD1, seedOrder } from './d1-v16-stub.mjs';
 
 const temp = mkdtempSync(join(tmpdir(), 'ofeliya-worker-v5-'));
 writeFileSync(join(temp, 'package.json'), JSON.stringify({ type: 'commonjs' }));
@@ -66,179 +67,6 @@ function buildInitData(userId) {
 }
 
 /** In-memory D1-стаб: orders/payments/wallets/wallet_ledger. */
-function makeD1() {
-  const orders = new Map();
-  const payments = new Map();
-  const wallets = new Map();
-  const ledger = new Map();
-  const norm = (sql) => sql.replace(/\s+/g, ' ').trim();
-
-  function execRun(sql, params) {
-    const q = norm(sql);
-    if (q.startsWith('INSERT INTO orders')) {
-      const [nonce, user_id, product_id, status, created_at] = params;
-      if (orders.has(nonce)) throw new Error('UNIQUE constraint failed: orders.nonce');
-      orders.set(nonce, { nonce, user_id, product_id, status, created_at });
-      return { success: true, meta: { changes: 1 } };
-    }
-    if (q.startsWith('INSERT OR IGNORE INTO payments')) {
-      const [charge_id, user_id, product_id, amount, currency, status, nonce, created_at, fulfilled_at] = params;
-      if (payments.has(charge_id)) return { success: true, meta: { changes: 0 } };
-      for (const row of payments.values()) {
-        if (row.nonce === nonce && nonce != null) return { success: true, meta: { changes: 0 } };
-      }
-      payments.set(charge_id, {
-        charge_id, user_id, product_id, amount, currency, status, nonce, created_at, fulfilled_at,
-      });
-      return { success: true, meta: { changes: 1 } };
-    }
-    if (q.startsWith("UPDATE orders SET status='paid'")) {
-      const [nonce] = params;
-      const row = orders.get(nonce);
-      if (row && row.status === 'pending') {
-        row.status = 'paid';
-        return { success: true, meta: { changes: 1 } };
-      }
-      return { success: true, meta: { changes: 0 } };
-    }
-    if (q.startsWith('INSERT INTO wallets')) {
-      const [user_id, purchased_rna, booster_until_ms, skins_json, updated_at] = params;
-      wallets.set(user_id, { user_id, purchased_rna, booster_until_ms, skins_json, updated_at });
-      return { success: true, meta: { changes: 1 } };
-    }
-    if (q.startsWith('INSERT OR IGNORE INTO wallet_ledger')) {
-      const [user_id, charge_id, kind, amount_text, created_at] = params;
-      if (ledger.has(charge_id)) return { success: true, meta: { changes: 0 } };
-      ledger.set(charge_id, { user_id, charge_id, kind, amount_text, created_at });
-      return { success: true, meta: { changes: 1 } };
-    }
-    if (q.startsWith("UPDATE payments SET status='refunded'")) {
-      const [charge_id] = params;
-      const row = payments.get(charge_id);
-      if (row && (row.status === 'paid' || row.status === 'fulfilled')) {
-        row.status = 'refunded';
-        return { success: true, meta: { changes: 1 } };
-      }
-      return { success: true, meta: { changes: 0 } };
-    }
-    if (q.startsWith('UPDATE wallets SET purchased_rna=')) {
-      const [purchased_rna, updated_at, user_id] = params;
-      const w = wallets.get(user_id);
-      if (w) {
-        w.purchased_rna = purchased_rna;
-        w.updated_at = updated_at;
-        return { success: true, meta: { changes: 1 } };
-      }
-      return { success: true, meta: { changes: 0 } };
-    }
-    if (q.startsWith('UPDATE wallets SET skins_json=')) {
-      const [skins_json, updated_at, user_id] = params;
-      const w = wallets.get(user_id);
-      if (w) {
-        w.skins_json = skins_json;
-        w.updated_at = updated_at;
-        return { success: true, meta: { changes: 1 } };
-      }
-      return { success: true, meta: { changes: 0 } };
-    }
-    throw new Error(`d1-stub: unsupported run SQL: ${q}`);
-  }
-
-  function execSelect(sql, params) {
-    const q = norm(sql);
-    if (q === 'SELECT user_id, product_id, status FROM orders WHERE nonce=?') {
-      const row = orders.get(params[0]);
-      return row ? [{ user_id: row.user_id, product_id: row.product_id, status: row.status }] : [];
-    }
-    if (q === 'SELECT charge_id FROM payments WHERE nonce=?') {
-      for (const row of payments.values()) {
-        if (row.nonce === params[0]) return [{ charge_id: row.charge_id }];
-      }
-      return [];
-    }
-    if (q === 'SELECT 1 AS one FROM wallet_ledger WHERE charge_id=?') {
-      return ledger.has(params[0]) ? [{ one: 1 }] : [];
-    }
-    if (q === 'SELECT purchased_rna, booster_until_ms, skins_json FROM wallets WHERE user_id=?') {
-      const w = wallets.get(params[0]);
-      return w
-        ? [{ purchased_rna: w.purchased_rna, booster_until_ms: w.booster_until_ms, skins_json: w.skins_json }]
-        : [];
-    }
-    if (q === 'SELECT purchased_rna, skins_json FROM wallets WHERE user_id=?') {
-      const w = wallets.get(params[0]);
-      return w ? [{ purchased_rna: w.purchased_rna, skins_json: w.skins_json }] : [];
-    }
-    if (q === 'SELECT charge_id, user_id, product_id, status FROM payments WHERE charge_id=?') {
-      const row = payments.get(params[0]);
-      return row
-        ? [{ charge_id: row.charge_id, user_id: row.user_id, product_id: row.product_id, status: row.status }]
-        : [];
-    }
-    if (q === 'SELECT kind, amount_text FROM wallet_ledger WHERE charge_id=?') {
-      const row = ledger.get(params[0]);
-      return row ? [{ kind: row.kind, amount_text: row.amount_text }] : [];
-    }
-    if (q === 'SELECT MAX(created_at) AS tip FROM wallet_ledger WHERE user_id=?') {
-      let tip = null;
-      for (const row of ledger.values()) {
-        if (row.user_id === params[0] && (tip == null || row.created_at > tip)) tip = row.created_at;
-      }
-      return [{ tip }];
-    }
-    if (q.startsWith("SELECT nonce, user_id, product_id, status, created_at FROM orders WHERE status='pending'")) {
-      const [cutoff] = params;
-      return [...orders.values()]
-        .filter((r) => r.status === 'pending' && r.created_at < cutoff)
-        .sort((a, b) => a.created_at - b.created_at)
-        .slice(0, 200);
-    }
-    if (q.startsWith("SELECT charge_id, user_id, product_id, created_at FROM payments WHERE status='paid'")) {
-      const [cutoff] = params;
-      return [...payments.values()]
-        .filter((r) => r.status === 'paid' && r.created_at < cutoff)
-        .sort((a, b) => a.created_at - b.created_at)
-        .slice(0, 200);
-    }
-    throw new Error(`d1-stub: unsupported select SQL: ${q}`);
-  }
-
-  const db = {
-    orders,
-    payments,
-    wallets,
-    ledger,
-    prepare(sql) {
-      const st = {
-        _params: [],
-        bind(...params) {
-          st._params = params;
-          return st;
-        },
-        async run() {
-          return execRun(sql, st._params);
-        },
-        async first(column) {
-          const rows = execSelect(sql, st._params);
-          const row = rows[0] ?? null;
-          if (row == null) return null;
-          return column != null ? (row[column] ?? null) : row;
-        },
-        async all() {
-          return { results: execSelect(sql, st._params) };
-        },
-      };
-      return st;
-    },
-    async batch(statements) {
-      const out = [];
-      for (const st of statements) out.push(await st.run());
-      return out;
-    },
-  };
-  return db;
-}
-
 function paymentBody(chargeId, nonce, { productId = 'currency.rna-pack-s', userId = USER_ID, amount = 35, currency = 'XTR' } = {}) {
   return {
     message: {
@@ -301,6 +129,9 @@ globalThis.fetch = async (url, opts) => {
 };
 
 const secretHeader = () => ({ 'x-telegram-bot-api-secret-token': WEBHOOK_SECRET });
+/** v16: владение скинами — wallet_skins (status='active'); skins_json deprecated. */
+const activeSkins = (db, userId) =>
+  [...db.walletSkins.values()].filter((r) => r.user_id === userId && r.status === 'active').map((r) => r.skin_id);
 const adminHeader = () => ({ authorization: `Bearer ${ADMIN_TOKEN}` });
 
 try {
@@ -310,12 +141,15 @@ try {
       resolve('node_modules/typescript/bin/tsc'),
       'worker/src/index.ts',
       'worker/src/grants.ts',
+      'worker/src/sql.ts',
       '--target',
       'ES2021',
       '--module',
       'commonjs',
       '--moduleResolution',
       'node',
+      '--strict',
+      'true',
       '--outDir',
       temp,
       '--skipLibCheck',
@@ -339,21 +173,16 @@ try {
   const initData = buildInitData(USER_ID);
   const baseEnv = { TELEGRAM_BOT_TOKEN: BOT_TOKEN, WEBHOOK_SECRET };
 
-  async function seedOrder(db, nonce, userId, productId, status = 'pending', createdAt = Date.now()) {
-    await db
-      .prepare('INSERT INTO orders (nonce, user_id, product_id, status, created_at) VALUES (?,?,?,?,?)')
-      .bind(nonce, userId, productId, status, createdAt)
-      .run();
-  }
+
 
   // === P0-2: строгий pre_checkout ===
   {
     const db = makeD1();
     const env = { ...baseEnv, PAYMENTS_DB: db };
     botCalls.length = 0;
-    await seedOrder(db, 'nonce-v5-pc-ok', USER_ID, 'currency.rna-pack-s', 'pending');
-    await seedOrder(db, 'nonce-v5-pc-paid', USER_ID, 'currency.rna-pack-s', 'paid');
-    await seedOrder(db, 'nonce-v5-pc-exp', USER_ID, 'currency.rna-pack-s', 'expired');
+    await seedOrder(db, 'nonce-v5-pc-ok', USER_ID, 'currency.rna-pack-s', 35);
+    await seedOrder(db, 'nonce-v5-pc-paid', USER_ID, 'currency.rna-pack-s', 35, { status: 'paid' });
+    await seedOrder(db, 'nonce-v5-pc-exp', USER_ID, 'currency.rna-pack-s', 35, { status: 'expired' });
 
     const r1 = await post(handler, '/api/webhook', preCheckoutBody('q-ok', 'nonce-v5-pc-ok'), env, secretHeader());
     eq(r1.status, 200, 'pre_checkout http 200');
@@ -390,7 +219,7 @@ try {
 
     const db = makeD1();
     const env = { ...baseEnv, PAYMENTS_DB: db };
-    await seedOrder(db, 'nonce-v5-reuse', USER_ID, 'currency.rna-pack-s', 'pending');
+    await seedOrder(db, 'nonce-v5-reuse', USER_ID, 'currency.rna-pack-s', 35);
     const w1 = await post(handler, '/api/webhook', paymentBody('ch-v5-first', 'nonce-v5-reuse'), env, secretHeader());
     eq(w1.status, 200, 'first payment 200');
     eq(db.wallets.get(USER_ID).purchased_rna, 500, 'grant applied once');
@@ -408,7 +237,7 @@ try {
   {
     const db = makeD1();
     const env = { ...baseEnv, PAYMENTS_DB: db };
-    await seedOrder(db, 'nonce-v5-dup', USER_ID, 'currency.rna-pack-m', 'pending');
+    await seedOrder(db, 'nonce-v5-dup', USER_ID, 'currency.rna-pack-m', 100);
     const body = paymentBody('ch-v5-dup', 'nonce-v5-dup', { productId: 'currency.rna-pack-m', amount: 100 });
     const d1 = await post(handler, '/api/webhook', body, env, secretHeader());
     eq(d1.status, 200, 'first delivery 200');
@@ -417,20 +246,21 @@ try {
     eq(db.wallets.get(USER_ID).purchased_rna, 1500, 'rna granted exactly once');
     eq(db.ledger.size, 1, 'ledger: exactly one row');
     const entry = db.ledger.get('ch-v5-dup');
-    eq(entry.kind, 'rna', 'ledger kind rna');
+    eq(entry.kind, 'grant', 'ledger kind grant (v16 schema)');
+    eq(entry.grant_type, 'rna', 'ledger grant_type rna');
     eq(entry.amount_text, '1500', 'ledger amount 1500');
 
     // Скин: аддитивное множество, повтор — без дубля.
-    await seedOrder(db, 'nonce-v5-skin', USER_ID, 'skin.gilded-prime', 'pending');
+    await seedOrder(db, 'nonce-v5-skin', USER_ID, 'skin.gilded-prime', 250);
     const sbody = paymentBody('ch-v5-skin', 'nonce-v5-skin', { productId: 'skin.gilded-prime', amount: 250 });
     await post(handler, '/api/webhook', sbody, env, secretHeader());
     await post(handler, '/api/webhook', sbody, env, secretHeader());
-    const skins = JSON.parse(db.wallets.get(USER_ID).skins_json);
+    const skins = activeSkins(db, USER_ID);
     eq(skins.length, 1, 'skin granted once');
     eq(skins[0], 'skin.gilded-prime', 'skin id');
 
     // Бустер: max(now, текущий) + дни; повторная доставка не продлевает.
-    await seedOrder(db, 'nonce-v5-boost', USER_ID, 'booster.rna-x2-7d', 'pending');
+    await seedOrder(db, 'nonce-v5-boost', USER_ID, 'booster.rna-x2-7d', 75);
     const bbody = paymentBody('ch-v5-boost', 'nonce-v5-boost', { productId: 'booster.rna-x2-7d', amount: 75 });
     await post(handler, '/api/webhook', bbody, env, secretHeader());
     const firstUntil = db.wallets.get(USER_ID).booster_until_ms;
@@ -458,9 +288,9 @@ try {
     eq(u3j.ledger_tip, null, 'wallet empty ledger_tip');
 
     // После платежей — значения сервера.
-    await seedOrder(db, 'nonce-v5-w1', USER_ID, 'currency.rna-pack-s', 'pending');
+    await seedOrder(db, 'nonce-v5-w1', USER_ID, 'currency.rna-pack-s', 35);
     await post(handler, '/api/webhook', paymentBody('ch-v5-w1', 'nonce-v5-w1'), env, secretHeader());
-    await seedOrder(db, 'nonce-v5-w2', USER_ID, 'skin.abyssal-teal', 'pending');
+    await seedOrder(db, 'nonce-v5-w2', USER_ID, 'skin.abyssal-teal', 100);
     await post(
       handler, '/api/webhook',
       paymentBody('ch-v5-w2', 'nonce-v5-w2', { productId: 'skin.abyssal-teal', amount: 100 }),
@@ -483,26 +313,31 @@ try {
     const db = makeD1();
     const envNoToken = { ...baseEnv, WEBHOOK_SECRET, PAYMENTS_DB: db, ADMIN_TOKEN };
     const env = { ...envNoToken, TELEGRAM_BOT_TOKEN: BOT_TOKEN };
-    await seedOrder(db, 'nonce-v5-r1', USER_ID, 'currency.rna-pack-s', 'pending');
+    await seedOrder(db, 'nonce-v5-r1', USER_ID, 'currency.rna-pack-s', 35);
     await post(handler, '/api/webhook', paymentBody('ch-v5-r1', 'nonce-v5-r1'), env, secretHeader());
     eq(db.wallets.get(USER_ID).purchased_rna, 500, 'grant before refund');
     botCalls.length = 0;
 
-    // execute=true без TELEGRAM_BOT_TOKEN → 503, статус НЕ меняется.
+    // execute=true без TELEGRAM_BOT_TOKEN → 503, но шаг 1 (бронь) уже
+    // выполнен: платёж 'refund_requested', операция 'requested' — её можно
+    // resume позже тем же operationId (v16: двухшаговый флоу).
     const e1 = await post(
       handler, '/api/admin/refund',
-      { chargeId: 'ch-v5-r1', execute: true },
+      { chargeId: 'ch-v5-r1', execute: true, confirmExternalRefund: true, operationId: 'op-v5-resume-1' },
       { ...envNoToken, TELEGRAM_BOT_TOKEN: undefined },
       adminHeader()
     );
     eq(e1.status, 503, 'execute without bot token → 503');
-    eq((await e1.json()).error, 'bot-token-misconfigured', 'bot-token-misconfigured code');
-    eq(db.payments.get('ch-v5-r1').status, 'paid', 'status unchanged on 503');
+    const e1j = await e1.json();
+    eq(e1j.error, 'bot-token-misconfigured', 'bot-token-misconfigured code');
+    eq(db.payments.get('ch-v5-r1').status, 'refund_requested', 'step-1 reservation kept on 503');
+    eq(db.refundOps.get('op-v5-resume-1').status, 'requested', 'op requested (resumable)');
 
-    // execute=true: реальный refundStarPayment, затем пометка + откат кошелька.
+    // execute=true: resume операции e1 тем же operationId → реальный
+    // refundStarPayment, затем пометка + откат кошелька.
     const e2 = await post(
       handler, '/api/admin/refund',
-      { chargeId: 'ch-v5-r1', reason: 'test', execute: true },
+      { chargeId: 'ch-v5-r1', reason: 'test', execute: true, confirmExternalRefund: true, operationId: 'op-v5-resume-1' },
       env, adminHeader()
     );
     const e2j = await e2.json();
@@ -517,7 +352,7 @@ try {
     eq(db.wallets.get(USER_ID).purchased_rna, 0, 'wallet rna rolled back');
 
     // Повтор → {ok:true, already:true} (аудит №5: было {ok:false}).
-    const e3 = await post(handler, '/api/admin/refund', { chargeId: 'ch-v5-r1', execute: true }, env, adminHeader());
+    const e3 = await post(handler, '/api/admin/refund', { chargeId: 'ch-v5-r1', execute: true, confirmExternalRefund: true }, env, adminHeader());
     const e3j = await e3.json();
     eq(e3j.ok, true, 'repeat → ok:true');
     eq(e3j.already, true, 'repeat → already:true');
@@ -527,17 +362,17 @@ try {
     eq((await e4.json()).ok, false, 'unknown charge → ok:false');
 
     // execute=false (mark only): пометка без вызова Telegram.
-    await seedOrder(db, 'nonce-v5-r2', USER_ID, 'skin.virulent-magenta', 'pending');
+    await seedOrder(db, 'nonce-v5-r2', USER_ID, 'skin.virulent-magenta', 100);
     await post(
       handler, '/api/webhook',
       paymentBody('ch-v5-r2', 'nonce-v5-r2', { productId: 'skin.virulent-magenta', amount: 100 }),
       env, secretHeader()
     );
-    assert(JSON.parse(db.wallets.get(USER_ID).skins_json).includes('skin.virulent-magenta'), 'skin granted');
+    assert(activeSkins(db, USER_ID).includes('skin.virulent-magenta'), 'skin granted');
     botCalls.length = 0;
     const e5 = await post(
       handler, '/api/admin/refund',
-      { chargeId: 'ch-v5-r2', reason: 'manual via BotFather', execute: false },
+      { chargeId: 'ch-v5-r2', reason: 'manual via BotFather', execute: false, confirmExternalRefund: true },
       env, adminHeader()
     );
     const e5j = await e5.json();
@@ -546,7 +381,7 @@ try {
     assert(!botCalls.some((c) => c.method === 'refundStarPayment'), 'no Telegram call on mark-only');
     eq(db.payments.get('ch-v5-r2').status, 'refunded', 'mark-only status → refunded');
     assert(
-      !JSON.parse(db.wallets.get(USER_ID).skins_json).includes('skin.virulent-magenta'),
+      !activeSkins(db, USER_ID).includes('skin.virulent-magenta'),
       'skin removed from server wallet on refund'
     );
     // /api/wallet после refund: скин больше не выдаётся новым устройствам.
@@ -554,14 +389,16 @@ try {
     assert(!wj.skins.includes('skin.virulent-magenta'), 'wallet skins exclude refunded');
 
     // refundStarPayment упал → 502, статус НЕ меняется.
-    await seedOrder(db, 'nonce-v5-r3', USER_ID, 'currency.rna-pack-s', 'pending');
+    await seedOrder(db, 'nonce-v5-r3', USER_ID, 'currency.rna-pack-s', 35);
     await post(handler, '/api/webhook', paymentBody('ch-v5-r3', 'nonce-v5-r3'), env, secretHeader());
     globalThis.__v5_refundShouldFail = true;
-    const e6 = await post(handler, '/api/admin/refund', { chargeId: 'ch-v5-r3', execute: true }, env, adminHeader());
+    const e6 = await post(handler, '/api/admin/refund', { chargeId: 'ch-v5-r3', execute: true, confirmExternalRefund: true }, env, adminHeader());
     globalThis.__v5_refundShouldFail = false;
     eq(e6.status, 502, 'failed refund → 502');
     eq((await e6.json()).error, 'refund-failed', 'refund-failed code');
-    eq(db.payments.get('ch-v5-r3').status, 'paid', 'status unchanged on failed refund');
+    // v16: бронь шага 1 сохраняется — повтор тем же operationId продолжит
+    // (refundStarPayment идемпотентен на стороне Telegram).
+    eq(db.payments.get('ch-v5-r3').status, 'refund_requested', 'reservation kept on failed refund');
   }
 
   // === P1-5: GET /api/admin/stale-orders ===
@@ -570,16 +407,16 @@ try {
     const env = { ...baseEnv, WEBHOOK_SECRET, PAYMENTS_DB: db, ADMIN_TOKEN };
     const old = Date.now() - 120 * 60_000; // 2 часа назад
     const fresh = Date.now() - 5 * 60_000; // 5 минут назад
-    await seedOrder(db, 'nonce-v5-stale-1', USER_ID, 'currency.rna-pack-s', 'pending', old);
-    await seedOrder(db, 'nonce-v5-stale-2', USER_ID, 'currency.rna-pack-s', 'pending', fresh);
-    await seedOrder(db, 'nonce-v5-stale-3', USER_ID, 'currency.rna-pack-s', 'pending', old);
+    await seedOrder(db, 'nonce-v5-stale-1', USER_ID, 'currency.rna-pack-s', 35, { createdAt: old });
+    await seedOrder(db, 'nonce-v5-stale-2', USER_ID, 'currency.rna-pack-s', 35, { createdAt: fresh });
+    await seedOrder(db, 'nonce-v5-stale-3', USER_ID, 'currency.rna-pack-s', 35, { createdAt: old });
     // Старый платёж paid без fulfilled (вставляем напрямую со старым created_at:
     // вебхук ставит created_at=now, а нам нужен «зависший» платёж).
     await db
       .prepare(
-        'INSERT OR IGNORE INTO payments (charge_id, user_id, product_id, amount, currency, status, nonce, created_at, fulfilled_at) VALUES (?,?,?,?,?,?,?,?,?)'
+        'INSERT OR IGNORE INTO payments (charge_id, user_id, product_id, amount, currency, status, nonce, sku_version, created_at, fulfilled_at) VALUES (?,?,?,?,?,?,?,?,?,?)'
       )
-      .bind('ch-v5-stale-p', USER_ID, 'currency.rna-pack-s', 35, 'XTR', 'paid', 'nonce-v5-stale-p', old, null)
+      .bind('ch-v5-stale-p', USER_ID, 'currency.rna-pack-s', 35, 'XTR', 'paid', 'nonce-v5-stale-p', 2, old, null)
       .run();
 
     // 401 без токена.

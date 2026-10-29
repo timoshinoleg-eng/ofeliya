@@ -122,7 +122,10 @@
     "test:difficulty-comparison-browser": "node scripts/difficulty-comparison-smoke.cjs",
     "test:ui-redesign": "node tests/ui-redesign.mjs",
     "test:skins": "node tests/skins.mjs",
-    "test:post-review-fixes": "node tests/post-review-fixes.mjs"
+    "test:post-review-fixes": "node tests/post-review-fixes.mjs",
+    "test:patch16-regress": "node tests/patch16-regress.mjs",
+    "test:patch16-concurrency": "node --experimental-strip-types tests/patch16-concurrency.mjs",
+    "test:patch16-scenarios": "node tests/patch16-scenarios.mjs"
   },
   "overrides": {
     "source-map-js": "1.2.2"

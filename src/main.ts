@@ -17,6 +17,7 @@ import { ensureTelegramBridge } from './platform/TelegramBridgeLoader';
 import { trackProductEvent } from './systems/AnalyticsClient';
 import { retryPendingDailySubmission } from './systems/ScoreClient';
 import { FeatureFlags } from './game/FeatureFlags';
+import { TelegramStarsPaymentProvider } from './game/shop/TelegramStarsPaymentProvider';
 import { RELEASE_MARKER, RELEASE_SHA, RELEASE_SHORT } from './release';
 
 declare global {
@@ -371,6 +372,25 @@ async function boot(signal: AbortSignal): Promise<void> {
     waitForMenuReady(game, signal),
   ]);
   signal.throwIfAborted();
+
+  // Патч №16 (A3): дрэйн платёжной очереди при старте приложения.
+  // Сценарий «закрыли Mini App между платежом и синком»: restore()
+  // допроверяет pending-покупки (verify), тянет серверный журнал
+  // (/api/entitlements) и материализует гранты seq-синком кошелька;
+  // неподтверждённые встают в pending-sync очередь. Только Telegram +
+  // сконфигурированный бэкенд (isAvailable); fire-and-forget — старт игры
+  // не блокируется, restore() никогда не бросает.
+  try {
+    const apiBaseUrl = (import.meta.env.VITE_PAYMENTS_API_URL as string | undefined) ?? '';
+    if (apiBaseUrl.trim() !== '') {
+      const starsProvider = new TelegramStarsPaymentProvider({ apiBaseUrl });
+      if (starsProvider.isAvailable()) {
+        void starsProvider.restore().catch(() => undefined);
+      }
+    }
+  } catch {
+    /* платёжный контур не ломает старт игры */
+  }
 
   // Production builds stay opaque. The release visual-matrix workflow enables this hook
   // only in its dedicated QA bundle so Playwright can inspect real production rendering.
