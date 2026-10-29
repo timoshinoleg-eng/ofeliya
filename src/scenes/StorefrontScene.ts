@@ -520,8 +520,9 @@ export class StorefrontScene extends Phaser.Scene {
         reason: e instanceof Error ? e.message : 'unknown',
       };
     }
-    if (!this.sys.isActive()) return;
-    this.purchasingId = null;
+    // Аудит (порт №10): грант и аналитика не зависят от сцены — выполняем ДО
+    // проверки isActive. Сцена могла деактивироваться во время асинхронной
+    // оплаты (жест «назад», рестарт), и успешный платёж не должен теряться молча.
     if (result.state === 'success') {
       // Выдача — до экрана успеха: «Выдано» означает выданное.
       applyPurchaseGrants(product);
@@ -529,14 +530,19 @@ export class StorefrontScene extends Phaser.Scene {
         productId: product.id,
         provider: provider.id,
       });
-      this.lastBought = product;
-      this.setState('success');
     } else {
       void trackProductEvent('purchase_failed', PlatformBridge, {
         productId: product.id,
         provider: provider.id,
         reason: result.reason,
       });
+    }
+    if (!this.sys.isActive()) return;
+    this.purchasingId = null;
+    if (result.state === 'success') {
+      this.lastBought = product;
+      this.setState('success');
+    } else {
       this.errorReason =
         result.state === 'cancelled' ? 'Покупка отменена' : `Не удалось: ${result.reason}`;
       this.setState('error');
