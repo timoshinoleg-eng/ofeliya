@@ -28,7 +28,10 @@ const game = readFileSync('src/scenes/GameScene.ts', 'utf8');
 const enemy = readFileSync('src/game/Enemy.ts', 'utf8');
 const ui = readFileSync('src/scenes/UIScene.ts', 'utf8');
 assert.match(game, /import \{ prefersReducedMotion \} from '\.\.\/systems\/MotionPreferences'/);
-assert.match(game, /if \(prefersReducedMotion\(\)\) return;[\s\S]{0,100}cameras\.main\.shake/,
+// Актуатор тряски — Juice.screenShake (делегирует cameras.main.shake внутри
+// Juice; доказано juice-driver тестом: governor-скейлинг + вызов shake).
+// Гард по-прежнему стоит первым в shake() и подавляет любой вызов актуатора.
+assert.match(game, /if \(prefersReducedMotion\(\)\) return;[\s\S]{0,300}(cameras\.main\.shake|juice\.screenShake)/,
   'reduced motion suppresses decorative camera shake');
 assert.match(enemy, /if \(prefersReducedMotion\(\)\) \{[\s\S]{0,260}setRotation\(0\)[\s\S]{0,260}return;/,
   'boss world aura rotation and breathing are neutralized');
