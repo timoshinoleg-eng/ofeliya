@@ -72,8 +72,12 @@ try {
   // --- provider resolution ---
   eq(resolveProvider('hidden'), null, 'hidden resolves to null');
   eq(resolveProvider('bogus'), null, 'unknown resolves to null');
-  const mock = resolveProvider('mock');
-  assert(mock instanceof MockPaymentProvider, 'mock resolves to MockPaymentProvider');
+  // Патч №13 (P1-f): mock — только QA-сборки, fail-closed без qaTools.
+  eq(resolveProvider('mock'), null, 'mock without opts: fail-closed null');
+  eq(resolveProvider('mock', {}), null, 'mock with empty opts: fail-closed null');
+  eq(resolveProvider('mock', { qaTools: false }), null, 'mock qaTools:false: fail-closed null');
+  const mock = resolveProvider('mock', { qaTools: true });
+  assert(mock instanceof MockPaymentProvider, 'mock qaTools:true resolves to MockPaymentProvider');
   assert(mock.isAvailable(), 'resolved mock is available');
   const stub = resolveProvider('max');
   assert(stub instanceof MaxBridgePaymentProvider, 'max resolves to MaxBridgePaymentProvider');

@@ -42,7 +42,7 @@ const EVENT_NAMES = new Set<OptionalWebEvent>([
   'daily_claimed', 'achievement_unlocked',
   'lab_upgrade_bought', 'prestige_done',
   'skin_granted', 'skin_equipped',
-  'store_viewed', 'purchase_started', 'purchase_completed', 'purchase_failed', 'purchase_pending',
+  'store_viewed', 'purchase_started', 'purchase_completed', 'purchase_failed', 'purchase_pending', 'purchase_grant_failed',
 ]);
 const ENUM_VALUES: Record<string, ReadonlySet<string>> = {
   screen: new Set(['menu', 'game', 'result', 'codex', 'collection']),

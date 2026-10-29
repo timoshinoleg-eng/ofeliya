@@ -43,6 +43,20 @@ export interface PendingRecord {
 
 export type FulfillOutcome = 'granted' | 'duplicate' | 'invalid-product';
 
+/**
+ * Патч №13 (P1-a): результат выдачи — структура вместо голого outcome.
+ * Вызывающий код обязан проверять ok: успех UI — ТОЛЬКО при ok=true
+ * ('granted' или 'duplicate' — товар уже был выдан, повтор не нужен).
+ * ok=false — товар НЕ выдан (invalid-product / исключение в гранте):
+ * запись pending/purchase НЕ снимать, ретрай — в restore().
+ */
+export interface FulfillResult {
+  ok: boolean;
+  outcome: FulfillOutcome;
+  /** Машиночитаемая причина при ok=false. */
+  error?: string;
+}
+
 export interface FulfillOptions {
   /** Telegram payment charge id — ключ идемпотентности. У mock отсутствует. */
   chargeId?: string;
@@ -218,16 +232,17 @@ export function clearCreditedCharges(): void {
  * - аналитику purchase_completed трекает вызывающий код (сцена витрины),
  *   а не ledger — см. шапку.
  *
- * Никогда не бросает.
+ * Никогда не бросает (исключение → {ok:false}).
  */
 export function fulfillPurchase(
   product: Product | undefined | null,
   opts: FulfillOptions
-): FulfillOutcome {
+): FulfillResult {
   try {
-    if (!product || typeof product.id !== 'string' || !product.id) return 'invalid-product';
+    if (!product || typeof product.id !== 'string' || !product.id)
+      return { ok: false, outcome: 'invalid-product', error: 'invalid-product' };
     const chargeId = (opts.chargeId ?? '').trim();
-    if (chargeId && isChargeCredited(chargeId)) return 'duplicate';
+    if (chargeId && isChargeCredited(chargeId)) return { ok: true, outcome: 'duplicate' };
 
     // Грант по виду товара — через единую точку выдачи main.
     applyPurchaseGrants(product);
@@ -235,10 +250,14 @@ export function fulfillPurchase(
     if (opts.providerId !== 'mock' && product.stars) recordStarsSpent(product.stars);
 
     if (chargeId) markChargeCredited(chargeId);
-    return 'granted';
-  } catch {
+    return { ok: true, outcome: 'granted' };
+  } catch (e) {
     // Грант не удался — chargeId НЕ помечаем, ретрай/restore повторит.
-    return 'invalid-product';
+    return {
+      ok: false,
+      outcome: 'invalid-product',
+      error: e instanceof Error ? e.message : 'grant-failed',
+    };
   }
 }
 
@@ -252,8 +271,15 @@ export interface VerifyOptions {
   nonce: string;
 }
 
+/**
+ * Патч №13 (P0-2): verify возвращает и СЕРВЕРНЫЙ productId.
+ * Протокол воркера v3: {verified:true, chargeId, productId} —
+ * productId берётся из заказа по nonce на сервере. Клиент использует ТОЛЬКО
+ * серверный productId для выдачи; расхождение с локальным (каталог подменили
+ * или товар удалён) → mismatch: не выдавать, лог, запись остаётся в pending.
+ */
 export type VerifyResult =
-  | { verified: true; chargeId: string }
+  | { verified: true; chargeId: string; productId: string }
   | { verified: false; reason: 'verify-unreachable' | 'verify-unconfirmed' | 'verify-bad-config' };
 
 /** Протокол патча №12: 3 попытки × 2с паузы, таймаут попытки 8с. */
@@ -263,7 +289,8 @@ export const VERIFY_TIMEOUT_MS = 8000;
 
 /**
  * Верификация покупки на бэкенде: POST {api}/api/verify {initData, nonce}.
- * - {verified:true, chargeId} — сервер видел successful_payment по nonce;
+ * - {verified:true, chargeId, productId} — сервер видел successful_payment
+ *   по nonce (productId — серверный, из заказа);
  * - verified!==true после ретраев (гонка с вебхуком) → 'verify-unconfirmed';
  * - сеть упала сразу → 'verify-unreachable' (быстрый путь в pending-UI,
  *   допроверка — в restore()).
@@ -295,11 +322,13 @@ export async function verifyPurchase(opts: VerifyOptions): Promise<VerifyResult>
           const data: unknown = await res.json().catch(() => null);
           const v =
             !!data && typeof data === 'object'
-              ? (data as { verified?: unknown; chargeId?: unknown })
+              ? (data as { verified?: unknown; chargeId?: unknown; productId?: unknown })
               : null;
           if (v?.verified === true) {
             const chargeId = typeof v.chargeId === 'string' ? v.chargeId.trim() : '';
-            return { verified: true, chargeId };
+            // Патч №13 (P0-2): productId — только серверный (из заказа по nonce).
+            const productId = typeof v.productId === 'string' ? v.productId.trim() : '';
+            return { verified: true, chargeId, productId };
           }
           // verified !== true — возможно, вебхук ещё не долетел; ретрай.
         }
@@ -319,15 +348,26 @@ export async function verifyPurchase(opts: VerifyOptions): Promise<VerifyResult>
 }
 
 /**
- * Nonce инвойса. crypto.randomUUID с Math.random-фолбэком.
- * Node-safe (глобальный crypto есть в Node 18+ и браузерах).
+ * Nonce инвойса — ТОЛЬКО криптографический RNG.
+ * crypto.randomUUID приоритетно, иначе crypto.getRandomValues.
+ * Нет crypto — БРОСАЕТ (патч №13, P1-b): Math.random-фолбэка больше нет,
+ * т.к. nonce — ключ идемпотентности платежа; предсказуемый nonce позволяет
+ * подменить заказ (pre_checkout сверяется по nonce).
+ * Node 18+ и все браузеры crypto имеют; вызов — внутри try вызывающего кода.
  */
 export function makePaymentNonce(): string {
-  try {
-    const c = (globalThis as unknown as { crypto?: { randomUUID?: () => string } }).crypto;
-    if (c?.randomUUID) return c.randomUUID();
-  } catch {
-    /* fallback ниже */
+  const c = (
+    globalThis as unknown as {
+      crypto?: { randomUUID?: () => string; getRandomValues?: (a: Uint8Array) => Uint8Array };
+    }
+  ).crypto;
+  if (c?.randomUUID) return c.randomUUID();
+  if (c?.getRandomValues) {
+    const buf = new Uint8Array(16);
+    c.getRandomValues(buf);
+    let hex = '';
+    for (const b of buf) hex += b.toString(16).padStart(2, '0');
+    return hex;
   }
-  return `n-${Date.now().toString(36)}-${Math.floor(Math.random() * 0xffffffff).toString(36)}`;
+  throw new Error('payments: secure RNG unavailable (no crypto.randomUUID/getRandomValues)');
 }

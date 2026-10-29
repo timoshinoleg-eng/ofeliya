@@ -13,27 +13,39 @@
  *     (currency='XTR', provider_token='', prices=[{label, amount}] —
  *     amount в ЦЕЛЫХ звёздах) → {invoiceUrl};
  *  3. клиент: window.Telegram.WebApp.openInvoice(url, cb);
- * Флоу (патч №12, протокол nonce/verify — согласован с потоком воркера):
- *  1. purchase(productId): nonce = makePaymentNonce();
+ * Флоу (патч №13, протокол nonce/verify — согласован с потоком воркера):
+ *  1. purchase(productId): nonce = makePaymentNonce() (только crypto-RNG);
  *     POST {apiBaseUrl}/api/invoice {productId, initData, nonce} (таймаут 15с);
  *  2. клиент: window.Telegram.WebApp.openInvoice(url, cb) (120с-гард);
  *  3. cb(status): 'paid' → verify(nonce): POST /api/verify {initData, nonce}
- *     (3 попытки × 2с, таймаут 8с) → {verified:true, chargeId} →
- *     {state:'paid', chargeId, productId, nonce};
- *     иначе → {state:'pending', nonce, productId} БЕЗ выдачи
+ *     (3 попытки × 2с, таймаут 8с) → {verified:true, chargeId, productId}:
+ *     доверяем ТОЛЬКО серверу целиком — настоящий непустой chargeId
+ *     обязателен (синтетики `nonce-${nonce}` больше нет) и серверный
+ *     productId обязан совпасть с локальным, иначе mismatch → 'pending'
+ *     БЕЗ выдачи; иначе → {state:'pending', nonce, productId} БЕЗ выдачи
  *     (запись в pending-журнал + допроверка — дело вызывающего кода /
  *     restore(); fallback-выдачи по колбэку больше нет — патч №12);
  *  4. 'cancelled'/'failed' → как раньше (mapInvoiceStatus);
  *  5. бот отвечает на pre_checkout_query через answerPreCheckoutQuery
  *     (обязательно в течение 10 секунд) и получает successful_payment;
- *     воркер пишет charge в KV по nonce (идемпотентно).
+ *     воркер пишет charge в D1 по nonce (атомарный batch, идемпотентно).
  *  6. restore(): обрабатывает pending-записи — verify → verified →
- *     fulfillPurchase → снять запись; не подтверждено — ретраи с бэкоффом
- *     2с/5с/15с/60с в сессии (setTimeout), затем стоп (запись остаётся +
- *     ручная кнопка «Проверить оплату»). Плюс мерж серверного списка
- *     POST /api/entitlements v2 ({purchases:[{chargeId,productId,status,
- *     createdAt}]}): идемпотентно + chargeId сразу в credited-журнал
- *     (сервер видел платёж — повторный fulfill 'duplicate').
+ *     fulfillPurchase → снять запись (только при ok); не подтверждено —
+ *     ретраи с бэкоффом 2с/5с/15с/60с в сессии (setTimeout), затем стоп
+ *     (запись остаётся + ручная кнопка «Проверить оплату»). Плюс мерж
+ *     серверного списка POST /api/entitlements v2
+ *     ({purchases:[{chargeId,productId,status,createdAt}]}):
+ *     каждую покупку со status='paid' прогоняем через fulfillPurchase
+ *     (идемпотентность по chargeId) — товар выдаётся, даже если локальные
+ *     данные потеряны (Mini App закрыт до выдачи); 'refunded' — пропуск,
+ *     уже credited — пропуск, продукта нет в каталоге — warn + пропуск
+ *     БЕЗ пометки; локальный список entitlements обновляется ПОСЛЕ
+ *     успешной выдачи (для UI).
+ *  7. Патч №13 (P1-d): после УСПЕШНОЙ локальной выдачи (fulfillPurchase →
+ *     ok) — fire-and-forget POST {apiBaseUrl}/api/ack {initData, chargeId}:
+ *     воркер переводит платёж paid→fulfilled (только свой charge_id, только
+ *     из 'paid'; без DB → 501). Чистый bookkeeping: никогда не блокирует
+ *     выдачу, не влияет на её результат, ошибки глотаются.
  *
  * Схема патча №11 (сверка через /api/entitlements {products} + выдача
  * по колбэку при недоступности) заменена протоколом №12 полностью:
@@ -71,6 +83,7 @@ import { SHOP_CATALOG } from './products';
 import {
   fulfillPurchase,
   incrementPendingAttempts,
+  isChargeCredited,
   loadPendingPurchases,
   makePaymentNonce,
   markChargeCredited,
@@ -100,9 +113,11 @@ interface Entitlement {
 }
 
 /**
- * Патч №12 (worker v2, breaking): POST /api/entitlements →
+ * Патч №13 (worker v3): POST /api/entitlements →
  * {purchases:[{chargeId, productId, status, createdAt}]}.
- * status: 'paid' | 'credited' ('credited' зарезервирован воркером).
+ * status: 'paid' | 'fulfilled' | 'refunded' ('credited' зарезервирован
+ * воркером как пометка «сервер утверждает, что выдача уже была» —
+ * клиент её только помечает, гранта нет).
  */
 interface ServerPurchase {
   chargeId: string;
@@ -326,7 +341,35 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
       // Явное === true: тестовые tsc-прогоны игнорируют tsconfig (non-strict),
       // а без strictNullChecks truthiness не сужает boolean-дискриминант.
       if (verification.verified === true) {
-        const chargeId = verification.chargeId || `nonce-${nonce}`;
+        // Патч №13 (P0-2): доверяем серверу целиком. Настоящий непустой
+        // chargeId обязателен — синтетики `nonce-${nonce}` больше нет:
+        // иначе платёж считается неподтверждённым → 'pending', не 'paid'.
+        const chargeId = verification.chargeId;
+        if (!chargeId) {
+          return {
+            state: 'pending',
+            productId,
+            provider: 'telegram-stars',
+            nonce,
+            reason: 'verify-no-charge-id',
+          };
+        }
+        // Серверный productId — единственный источник истины о том, ЧТО
+        // куплено. Расхождение с локальным → mismatch: не выдавать, лог,
+        // запись в pending-журнал (дело сцены) — допроверка в restore().
+        if (verification.productId !== productId) {
+          console.warn('[telegram-stars] verify productId mismatch:', {
+            server: verification.productId,
+            local: productId,
+          });
+          return {
+            state: 'pending',
+            productId,
+            provider: 'telegram-stars',
+            nonce,
+            reason: 'verify-product-mismatch',
+          };
+        }
         return { state: 'paid', productId, provider: 'telegram-stars', chargeId, nonce };
       }
       return {
@@ -342,11 +385,11 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
   }
 
   /**
-   * Патч №12: обрабатывает pending-журнал (ofeliya.payments.pending.v1):
-   * verify → verified → fulfillPurchase → снять запись.
+   * Патч №13: обрабатывает pending-журнал (ofeliya.payments.pending.v1):
+   * verify → verified → fulfillPurchase → снять запись (только при ok).
    * Не подтверждено — ретраи с бэкоффом 2с/5с/15с/60с в сессии (setTimeout,
    * unref в Node), затем стоп: запись остаётся + ручная кнопка сцены.
-   * Плюс мерж серверного списка /api/entitlements v2 (идемпотентно).
+   * Плюс мерж серверного списка /api/entitlements (идемпотентно).
    * Вызывается сценой при открытии витрины и кнопкой «Проверить оплату».
    * Никогда не бросает.
    */
@@ -365,17 +408,51 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
       /* ignore */
     }
     try {
-      // Патч №12 (worker v2): серверный список покупок —
-      // {purchases:[{chargeId, productId, status, createdAt}]}.
-      // Мержим в локальный список (идемпотентно) и помечаем chargeId
-      // выданными — сервер видел эти платежи, повторный fulfill по тем же
-      // chargeId станет 'duplicate', а не двойным грантом.
+      // Патч №13 (P0-1): серверный список покупок —
+      // {purchases:[{chargeId, productId, status, createdAt}]} —
+      // ЕДИНСТВЕННЫЙ источник истины о списанных деньгах. Каждую покупку
+      // со status='paid' прогоняем через fulfillPurchase (идемпотентность
+      // по chargeId): товар выдаётся, даже если локальные данные потеряны
+      // (Mini App закрыт между successful_payment и выдачей). Раньше ветка
+      // просто помечала chargeId выданным БЕЗ гранта — товар терялся.
+      // 'refunded' — пропуск; уже credited — пропуск; продукта нет в
+      // каталоге — warn + пропуск БЕЗ пометки (не терять след платежа).
+      // Локальный список entitlements обновляем ПОСЛЕ успешной выдачи
+      // (нужен только UI витрины).
       const server = await this.fetchServerEntitlements();
       if (server) {
         const local = this.readEntitlements();
         let changed = false;
         for (const p of server) {
-          markChargeCredited(p.chargeId);
+          if (p.status === 'refunded') continue;
+          if (isChargeCredited(p.chargeId)) continue;
+          if (p.status === 'credited') {
+            // Зарезервировано воркером: сервер утверждает, что выдача уже
+            // была, — только помечаем, гранта нет.
+            markChargeCredited(p.chargeId);
+          } else if (p.status === 'paid') {
+            const product = SHOP_CATALOG.find((x) => x.id === p.productId);
+            if (!product) {
+              console.warn('[telegram-stars] server purchase for unknown product:', p.productId);
+              continue;
+            }
+            const grant = fulfillPurchase(product, {
+              chargeId: p.chargeId,
+              providerId: this.id,
+            });
+            if (!grant.ok) {
+              console.warn(
+                '[telegram-stars] fulfillPurchase failed for server purchase:',
+                grant.error
+              );
+              continue;
+            }
+            // P1-d: bookkeeping paid→fulfilled (fire-and-forget, не блокирует).
+            this.acknowledgeCharge(p.chargeId);
+          } else {
+            // Неизвестный статус — fail-closed: ни гранта, ни пометки.
+            continue;
+          }
           if (!local.some((e) => e.productId === p.productId)) {
             local.push({
               productId: p.productId,
@@ -399,6 +476,9 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
   /**
    * Одна попытка допроверки pending-записи. Возвращает productId, если
    * сервер подтвердил и выдача выполнена (запись снята).
+   * Патч №13: chargeId — только настоящий от сервера (синтетики нет),
+   * productId — только серверный (mismatch → не выдавать, лог);
+   * запись снимается ТОЛЬКО при ok от fulfillPurchase.
    */
   private async processPendingRecord(rec: PendingRecord): Promise<string | null> {
     const nonce = rec.nonce;
@@ -411,21 +491,43 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
       const fresh = loadPendingPurchases().find((p) => p.nonce === nonce);
       if (!fresh) return null; // запись сняли (параллельный вызов)
       if (v.verified === true) {
-        const product = SHOP_CATALOG.find((p) => p.id === fresh.productId);
-        if (product) {
-          // Выдача — только через ledger (идемпотентность по chargeId).
-          fulfillPurchase(product, {
-            chargeId: v.chargeId || `nonce-${nonce}`,
-            providerId: this.id,
+        const chargeId = v.chargeId;
+        if (!chargeId) {
+          // Сервер подтвердил, но chargeId не прислал (гонка с вебхуком) —
+          // не выдавать: допроверим позже по бэкоффу ниже.
+        } else if (v.productId !== fresh.productId) {
+          // P0-2: расхождение серверного productId с локальным — mismatch:
+          // не выдавать, лог; запись остаётся для ручной разборки.
+          console.warn('[telegram-stars] verify productId mismatch:', {
+            nonce,
+            server: v.productId,
+            local: fresh.productId,
           });
         } else {
-          // Каталог сменился, а платёж настоящий — не крутить вечно.
-          console.warn('[telegram-stars] pending product vanished from catalog:', fresh.productId);
+          const product = SHOP_CATALOG.find((p) => p.id === v.productId);
+          if (!product) {
+            // Каталог сменился, а платёж настоящий — не крутить вечно.
+            console.warn('[telegram-stars] pending product vanished from catalog:', fresh.productId);
+            removePendingPurchase(nonce);
+            return fresh.productId;
+          }
+          // Выдача — только через ledger (идемпотентность по chargeId).
+          // P1-a: запись снимаем ТОЛЬКО при успешной выдаче.
+          const grant = fulfillPurchase(product, {
+            chargeId,
+            providerId: this.id,
+          });
+          if (!grant.ok) {
+            console.warn('[telegram-stars] fulfillPurchase failed:', grant.error);
+            return null;
+          }
+          // P1-d: bookkeeping paid→fulfilled (fire-and-forget, не блокирует).
+          this.acknowledgeCharge(chargeId);
+          removePendingPurchase(nonce);
+          return fresh.productId;
         }
-        removePendingPurchase(nonce);
-        return fresh.productId;
       }
-      // Не подтверждено: бэкофф-ретраи в сессии, затем стоп.
+      // Не подтверждено / не выдано: бэкофф-ретраи в сессии, затем стоп.
       if (attempts <= PENDING_RETRY_BACKOFF_MS.length && !this.pendingRetryTimers.has(nonce)) {
         const delayMs = PENDING_RETRY_BACKOFF_MS[attempts - 1];
         const timer = setTimeout(() => {
@@ -443,7 +545,40 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
   }
 
   /**
-   * Патч №12 (worker v2): серверный список покупок для restore() —
+   * Патч №13 (P1-d): bookkeeping статусов журнала воркера.
+   * После успешной локальной выдачи клиент сообщает воркеру
+   * POST /api/ack {initData, chargeId} — платёж переходит paid→fulfilled
+   * (воркер: только свой charge_id, только из 'paid'; без DB → 501).
+   * Fire-and-forget: никогда не блокирует выдачу и не влияет на её
+   * результат; ошибки глотаются. Вызывать только для telegram-провайдера
+   * (метод — на нём) и только с реальным chargeId — пустой/без бэкенда/
+   * без initData вызов просто no-op. Никогда не бросает.
+   */
+  acknowledgeCharge(chargeId: string | undefined): void {
+    try {
+      const id = (chargeId ?? '').trim();
+      if (!id || this.apiBaseUrl === '') return;
+      const initData = readTelegramInitData();
+      if (!initData) return;
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000);
+      void fetch(`${this.apiBaseUrl}/api/ack`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ initData, chargeId: id }),
+        signal: ctrl.signal,
+      })
+        .catch(() => undefined)
+        .finally(() => {
+          clearTimeout(timer);
+        });
+    } catch {
+      /* fire-and-forget: выдача уже выполнена, bookkeeping не критичен */
+    }
+  }
+
+  /**
+   * Патч №13 (worker v3): серверный список покупок для restore() —
    * POST /api/entitlements → {purchases:[{chargeId, productId, status,
    * createdAt}]}. null — endpoint недоступен (остаётся локальный список).
    * Никогда не бросает.
@@ -462,7 +597,7 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
           body: JSON.stringify({ initData }),
           signal: ctrl.signal,
         });
-        if (!res.ok) return null; // 501 kv_unavailable — как недоступность
+        if (!res.ok) return null; // 501 db_unavailable — как недоступность
         const data: unknown = await res.json().catch(() => null);
         const raw =
           !!data && typeof data === 'object' && Array.isArray((data as { purchases?: unknown }).purchases)

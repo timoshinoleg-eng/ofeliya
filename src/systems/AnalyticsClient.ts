@@ -40,7 +40,8 @@ export type ProductEvent =
   | 'purchase_started'
   | 'purchase_completed'
   | 'purchase_failed'
-  | 'purchase_pending';
+  | 'purchase_pending'
+  | 'purchase_grant_failed';
 
 export type ProductEventProps = Record<string, string | number | boolean>;
 
