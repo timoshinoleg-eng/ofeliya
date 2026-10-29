@@ -9,10 +9,14 @@
  *   не поможет, платёж невалиден.
  * - P0-3: /api/verify для status='refunded' → {verified:false, reason:'refunded'}.
  * - E-c: POST /api/admin/refund — 401 без/без верного ADMIN_TOKEN
- *   (fail-closed), 200 + смена статуса, идемпотентный повтор,
- *   verify после refund → refunded.
+ *   (fail-closed), 200 + смена статуса, идемпотентный повтор
+ *   (патч №15: {ok:true, already:true}), verify после refund → refunded.
  * - E-a: unknown-product в webhook → 200 + запись 'paid' в журнале
  *   (не silent-skip), fulfilled НЕ ставится.
+ *
+ * Патч №15: стаб расширен серверным кошельком (wallets + wallet_ledger),
+ * backstop nonce-reuse и двухшаговым refund (SELECT платежа/журнала,
+ * откат кошелька).
  *
  * D1 — in-memory стаб (копия из worker-entitlements.mjs + кейс refunded).
  */
@@ -56,6 +60,9 @@ function buildInitData(fields) {
 function makeD1() {
   const orders = new Map();
   const payments = new Map();
+  // Патч №15: серверный кошелёк (wallets) + журнал грантов (wallet_ledger).
+  const wallets = new Map();
+  const ledger = new Map();
   const norm = (sql) => sql.replace(/\s+/g, ' ').trim();
 
   function execRun(sql, params) {
@@ -69,10 +76,47 @@ function makeD1() {
     if (q.startsWith('INSERT OR IGNORE INTO payments')) {
       const [charge_id, user_id, product_id, amount, currency, status, nonce, created_at, fulfilled_at] = params;
       if (payments.has(charge_id)) return { success: true, meta: { changes: 0 } };
+      // UNIQUE(payments.nonce) — OR IGNORE гасит и его (как настоящий SQLite).
+      for (const row of payments.values()) {
+        if (row.nonce === nonce && nonce != null) return { success: true, meta: { changes: 0 } };
+      }
       payments.set(charge_id, {
         charge_id, user_id, product_id, amount, currency, status, nonce, created_at, fulfilled_at,
       });
       return { success: true, meta: { changes: 1 } };
+    }
+    // Патч №15: UPSERT кошелька (атомарная серверная выдача).
+    if (q.startsWith('INSERT INTO wallets')) {
+      const [user_id, purchased_rna, booster_until_ms, skins_json, updated_at] = params;
+      wallets.set(user_id, { user_id, purchased_rna, booster_until_ms, skins_json, updated_at });
+      return { success: true, meta: { changes: 1 } };
+    }
+    if (q.startsWith('INSERT OR IGNORE INTO wallet_ledger')) {
+      const [user_id, charge_id, kind, amount_text, created_at] = params;
+      if (ledger.has(charge_id)) return { success: true, meta: { changes: 0 } };
+      ledger.set(charge_id, { user_id, charge_id, kind, amount_text, created_at });
+      return { success: true, meta: { changes: 1 } };
+    }
+    // Патч №15: откат кошелька при refund.
+    if (q.startsWith('UPDATE wallets SET purchased_rna=')) {
+      const [purchased_rna, updated_at, user_id] = params;
+      const w = wallets.get(user_id);
+      if (w) {
+        w.purchased_rna = purchased_rna;
+        w.updated_at = updated_at;
+        return { success: true, meta: { changes: 1 } };
+      }
+      return { success: true, meta: { changes: 0 } };
+    }
+    if (q.startsWith('UPDATE wallets SET skins_json=')) {
+      const [skins_json, updated_at, user_id] = params;
+      const w = wallets.get(user_id);
+      if (w) {
+        w.skins_json = skins_json;
+        w.updated_at = updated_at;
+        return { success: true, meta: { changes: 1 } };
+      }
+      return { success: true, meta: { changes: 0 } };
     }
     if (q.startsWith("UPDATE orders SET status='paid'")) {
       const [nonce] = params;
@@ -112,12 +156,45 @@ function makeD1() {
       }
       return [];
     }
+    // Патч №15: backstop nonce-reuse и pre-check дубликатов.
+    if (q === 'SELECT charge_id FROM payments WHERE nonce=?') {
+      for (const row of payments.values()) {
+        if (row.nonce === params[0]) return [{ charge_id: row.charge_id }];
+      }
+      return [];
+    }
+    if (q === 'SELECT 1 AS one FROM wallet_ledger WHERE charge_id=?') {
+      return ledger.has(params[0]) ? [{ one: 1 }] : [];
+    }
+    if (q === 'SELECT purchased_rna, booster_until_ms, skins_json FROM wallets WHERE user_id=?') {
+      const w = wallets.get(params[0]);
+      return w
+        ? [{ purchased_rna: w.purchased_rna, booster_until_ms: w.booster_until_ms, skins_json: w.skins_json }]
+        : [];
+    }
+    // Патч №15: двухшаговый refund — чтение платежа и записи журнала.
+    if (q === 'SELECT charge_id, user_id, product_id, status FROM payments WHERE charge_id=?') {
+      const row = payments.get(params[0]);
+      return row
+        ? [{ charge_id: row.charge_id, user_id: row.user_id, product_id: row.product_id, status: row.status }]
+        : [];
+    }
+    if (q === 'SELECT kind, amount_text FROM wallet_ledger WHERE charge_id=?') {
+      const row = ledger.get(params[0]);
+      return row ? [{ kind: row.kind, amount_text: row.amount_text }] : [];
+    }
+    if (q === 'SELECT purchased_rna, skins_json FROM wallets WHERE user_id=?') {
+      const w = wallets.get(params[0]);
+      return w ? [{ purchased_rna: w.purchased_rna, skins_json: w.skins_json }] : [];
+    }
     throw new Error(`d1-stub: unsupported select SQL: ${q}`);
   }
 
   const db = {
     orders,
     payments,
+    wallets,
+    ledger,
     _failNext: false,
     prepare(sql) {
       const st = {
@@ -293,9 +370,11 @@ try {
     eq((await rf.json()).ok, true, 'admin refund ok:true');
     eq(db.payments.get('ch-v4-refund').status, 'refunded', 'status → refunded');
 
-    // Идемпотентный повтор.
+    // Идемпотентный повтор (патч №15, P1-4: однозначный {ok:true, already:true}).
     const rf2 = await post(handler, '/api/admin/refund', { chargeId: 'ch-v4-refund' }, env, adminHeader());
-    eq((await rf2.json()).ok, false, 'repeat refund → ok:false');
+    const rf2j = await rf2.json();
+    eq(rf2j.ok, true, 'repeat refund → ok:true');
+    eq(rf2j.already, true, 'repeat refund → already:true');
 
     // P0-3: verify после refund → false/refunded.
     const v2 = await post(handler, '/api/verify', { initData, nonce: 'nonce-v4-refund-1' }, env);

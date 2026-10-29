@@ -144,12 +144,15 @@ export function recordStreak(streak: number): void {
 }
 
 /**
- * Бустер «РНК ×2» (витрина, порт партии 3): установить окончание действия.
- * Вызывается из выдачи покупки (shop/grantPurchase).
+ * Установить абсолютный срок бустера (патч №15, P0-3): серверный синк
+ * берёт max(локальный, серверный). Санитизация: неотрицательное целое,
+ * иначе no-op. Прямая установка вместо продления — срок уже вычислен
+ * сервером (max(текущий, now) + дни). Никогда не бросает.
  */
-export function setBoosterUntilMs(untilMs: number): void {
+export function setBoosterUntilMs(ms: number): void {
+  if (!Number.isFinite(ms) || ms < 0) return;
   const st = loadMeta();
-  st.boosterUntilMs = Math.max(0, Math.floor(untilMs));
+  st.boosterUntilMs = Math.floor(ms);
   saveMeta(st);
 }
 

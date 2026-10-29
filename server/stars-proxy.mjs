@@ -12,7 +12,10 @@
  * (можно слать setWebhook прямо на него, если /start не нужен).
  *
  * Конфигурация (env):
- *   OFELIYA_STARS_WORKER_URL     — https://<worker>/api/webhook
+ *   OFELIYA_STARS_WORKER_URL     — https://<worker>.workers.dev
+ *                                  (прокси САМ добавляет /api/webhook;
+ *                                  полный путь тоже принимается и не
+ *                                  дублируется — см. normalizeWorkerUrl)
  *   OFELIYA_STARS_WORKER_SECRET  — WEBHOOK_SECRET воркера (НЕ TG_WEBHOOK_SECRET
  *                                  этого сервера — секреты разные!)
  *
@@ -35,16 +38,37 @@ export function isStarsUpdate(update) {
 }
 
 /**
+ * Нормализация URL воркера (патч №15, P0-1 — фикс аудита №5).
+ *
+ * Было: прокси POSTил на «голый» OFELIYA_STARS_WORKER_URL, а обработчик
+ * воркера живёт на /api/webhook → при настройке строго по README
+ * (https://<worker>.workers.dev) запрос уходил в / и получал 404.
+ *
+ * Теперь: путь /api/webhook добавляется ВСЕГДА (trailing slash срезается,
+ * уже имеющийся /api/webhook не дублируется).
+ */
+export function normalizeWorkerUrl(raw) {
+  const base = typeof raw === 'string' ? raw.trim().replace(/\/+$/, '') : '';
+  if (!base) throw new Error('stars worker url not configured');
+  return /\/api\/webhook$/.test(base) ? base : `${base}/api/webhook`;
+}
+
+/**
  * Проксирует Stars-апдейт на воркер.
  * @returns {Promise<{status:number, body:unknown}>} ответ воркера как есть.
  * @throws при отсутствии конфигурации или недоступности воркера.
  */
 export async function forwardStarsUpdate(
   update,
-  { workerUrl, workerSecret, timeoutMs = 8000, request = fetch } = {}
+  { workerUrl, workerSecret, timeoutMs = 8000, request = fetch, allowInsecure = false } = {}
 ) {
-  const url = typeof workerUrl === 'string' ? workerUrl.trim().replace(/\/+$/, '') : '';
-  if (!url || !url.startsWith('https://')) {
+  // allowInsecure — только для интеграционных тестов (http://127.0.0.1);
+  // в проде всегда https.
+  const url = normalizeWorkerUrl(workerUrl);
+  if (!allowInsecure && !url.startsWith('https://')) {
+    throw new Error('stars worker url must be https');
+  }
+  if (allowInsecure && !/^https?:\/\//.test(url)) {
     throw new Error('stars worker url not configured');
   }
   if (typeof workerSecret !== 'string' || workerSecret.length < 16) {

@@ -670,6 +670,9 @@ export class StorefrontScene extends Phaser.Scene {
     if (result.state === 'paid') {
       // Выдача — только через ledger: идемпотентность по chargeId,
       // recordStarsSpent — только у реальных провайдеров (не 'mock').
+      // Патч №15 (P0-3): у telegram-stars выдача серверно-авторитетная —
+      // fulfillPurchase лишь учитывает платёж (needsServerSync), грант
+      // материализуется через syncWalletFromServer ниже.
       // purchase_completed — только при первой выдаче ('granted'), чтобы
       // повтор ('duplicate') не считал покупку дважды.
       const grant = fulfillPurchase(product, { chargeId: result.chargeId, providerId: provider.id });
@@ -689,11 +692,16 @@ export class StorefrontScene extends Phaser.Scene {
           error: grant.error ?? grant.outcome,
         });
       } else {
-        // Патч №13 (P1-d): bookkeeping воркера — после успешной выдачи
-        // сообщаем paid→fulfilled. Только telegram-провайдер и только
-        // реальный chargeId; fire-and-forget, на результат не влияет.
+        // Патч №15 (P0-3): выдача серверно-авторитетная — материализуем
+        // серверный кошелёк ДО достижений/тостов, чтобы UI видел покупку.
+        // syncWalletFromServer никогда не бросает (внутри — таймаут 8с).
+        // Патч №13 (P1-d): bookkeeping воркера paid→fulfilled — ПОСЛЕ синка:
+        // ack теперь означает «клиент применил серверный кошелёк».
+        // Только telegram-провайдер; fire-and-forget, на результат не влияет.
         if (provider.id === 'telegram-stars') {
-          (provider as TelegramStarsPaymentProvider).acknowledgeCharge(result.chargeId);
+          const tg = provider as TelegramStarsPaymentProvider;
+          await tg.syncWalletFromServer();
+          tg.acknowledgeCharge(result.chargeId);
         }
         // Достижения проверяем сразу: игрок получает награду (напр. скин
         // «Инвестора» за 500 звёзд) не дожидаясь конца забега.

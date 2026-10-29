@@ -21,6 +21,11 @@
  *   (новое устройство); E-b: ack только при outcome==='granted', не при
  *   'duplicate'; мёртвая ветка 'credited' убрана (неизвестный статус —
  *   fail-closed: ни гранта, ни пометки).
+ * - Патч №15 (P0-3): серверная выдача — fulfillPurchase для telegram-stars
+ *   начислений не делает (needsServerSync); грант материализует
+ *   ServerWalletSync по /api/wallet (watermark-дельта). Симуляция кошелька
+ *   в honestFetch — зеркало worker/src/grants.ts (в main гранты клиента —
+ *   в grantPurchase, на products.ts grantRna нет).
  *
  * Адаптация к main (в отличие от стека): MetaWallet на plain numbers
  * (rna — число, не Decimal-строка), debugResetMeta нет — сброс через
@@ -116,6 +121,26 @@ try {
       if (ackBehavior === 'fail') throw new Error('ack backend down');
       return { ok: true, json: async () => ({ ok: true }) };
     }
+    if (String(url).endsWith('/api/wallet')) {
+      // Патч №15 (P0-3): симуляция серверного кошелька воркера — гранты
+      // применены сервером для всех не-refunded записей журнала.
+      // Зеркало worker/src/grants.ts (rna-суммы; скины — union).
+      assert(typeof body.initData === 'string' && body.initData.length > 0, 'wallet: initData');
+      const WORKER_RNA = { 'currency.rna-pack-s': 500, 'currency.rna-pack-m': 1500 };
+      let purchased_rna = 0;
+      const skins = [];
+      for (const p of entitlementPurchases) {
+        // Зеркало воркера: грант применён только для paid/fulfilled
+        // (refunded откачен, неизвестные статусы гранта не имеют).
+        if (p.status !== 'paid' && p.status !== 'fulfilled') continue;
+        if (WORKER_RNA[p.productId]) purchased_rna += WORKER_RNA[p.productId];
+        if (p.productId.startsWith('skin.')) skins.push(p.productId);
+      }
+      return {
+        ok: true,
+        json: async () => ({ purchased_rna, booster_until_ms: 0, skins, ledger_tip: 1 }),
+      };
+    }
     throw new Error(`payments-trust: unexpected fetch ${url}`);
   };
   globalThis.fetch = honestFetch;
@@ -137,7 +162,8 @@ try {
   // === P1-e: successful_payment получен, Mini App закрыт до выдачи ===
   // Серверный журнал: 'paid'. Локальные credited/pending: пусто
   // (процесс умер между вебхуком и выдачей).
-  // → restore() вызывает fulfillPurchase и начисляет. Товар не теряется.
+  // → restore() учитывает платёж через fulfillPurchase, грант материализует
+  // ServerWalletSync (патч №15). Товар не теряется.
   resetAll();
   entitlementPurchases = [
     { chargeId: 'ch_p1e_1', productId: packS.id, status: 'paid', createdAt: 1700000000000 },
@@ -192,7 +218,11 @@ try {
   eq(mw.loadMeta().rna, 0, 'unknown product: гранта нет');
   eq(ackCalls.length, 0, 'unknown product: ack нет');
 
-  // === Уже credited — пропуск без повторного гранта ===
+  // === Уже credited — пропуск обработки, синк кошелька догоняет ===
+  // Патч №15: credited.v1 = «обработан», а не «начислен локально».
+  // Сценарий: fulfillPurchase пометил charge, приложение убили до синка.
+  // restore пропускает запись (skip-путь, без ack), а финальный
+  // syncWalletFromServer применяет серверную дельту по watermark.
   resetAll();
   ledger.markChargeCredited('ch_old_1');
   entitlementPurchases = [
@@ -200,8 +230,12 @@ try {
   ];
   await provider.restore();
   await flush();
-  eq(mw.loadMeta().rna, 0, 'already credited: повторного гранта нет');
+  eq(mw.loadMeta().rna, 500, 'already credited: синк догнал серверный грант');
   eq(ackCalls.length, 0, 'already credited: ack нет (skip-путь)');
+  // Повторный restore — тишина: watermark уже догнал сервер.
+  await provider.restore();
+  await flush();
+  eq(mw.loadMeta().rna, 500, 'already credited: повторный restore не дублирует');
 
   // === Неизвестный статус сервера ('credited' — воркер его никогда не
   // возвращает; статусы D1: paid/fulfilled/refunded): fail-closed —
@@ -251,7 +285,9 @@ try {
   eq(mw.loadMeta().rna, 1000, 'P0-1: paid+fulfilled выданы, refunded пропущен');
   eq(ackCalls.length, 2, 'P0-1: ack по одному на каждую реальную выдачу');
 
-  // === ack НЕ вызывается при неуспешной выдаче (fulfillPurchase → ok=false) ===
+  // === Сбой материализации: watermark не продвинут, ретрай через синк ===
+  // Патч №15: у telegram-stars fulfillPurchase начислений не делает —
+  // «неуспешная выдача» теперь означает падение syncServerWallet.
   resetAll();
   entitlementPurchases = [
     { chargeId: 'ch_fail_1', productId: packS.id, status: 'paid', createdAt: 0 },
@@ -266,9 +302,19 @@ try {
   } finally {
     mw.addRna = origAddRna;
   }
+  // Патч №15: fulfillPurchase для telegram начислений не делает (бросать
+  // нечему) — пометка credited ставится; сбой материализации ловит синк,
+  // watermark НЕ продвигается, следующий restore повторит дельту.
   eq(mw.loadMeta().rna, 0, 'failed grant: начисления нет');
-  assert(!ledger.isChargeCredited('ch_fail_1'), 'failed grant: не помечен (ретрай возможен)');
-  eq(ackCalls.length, 0, 'failed grant: ack НЕ вызван');
+  assert(ledger.isChargeCredited('ch_fail_1'), 'failed grant: обработан (учет)');
+  assert(
+    store.get('ofeliya.wallet.sync.v1') == null,
+    'failed grant: watermark не продвинут — ретрай возможен'
+  );
+  // Починили addRna — следующий restore догоняет через watermark.
+  await provider.restore();
+  await flush();
+  eq(mw.loadMeta().rna, 500, 'failed grant: ретрай через watermark начислил');
 
   // === Падение ack не блокирует выдачу (fire-and-forget) ===
   resetAll();

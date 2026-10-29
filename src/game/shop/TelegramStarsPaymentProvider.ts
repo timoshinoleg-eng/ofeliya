@@ -100,6 +100,7 @@ import {
   verifyPurchase,
   type PendingRecord,
 } from './PaymentLedger';
+import { syncServerWallet, type SyncResult } from './ServerWalletSync';
 
 export const TELEGRAM_STARS_UNAVAILABLE = 'stars-unavailable';
 export const ENTITLEMENTS_KEY = 'ofeliya.telegram.entitlements.v1';
@@ -246,6 +247,10 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
   private readonly pendingInFlight = new Set<string>();
   /** Nonce с запланированным бэкофф-ретраем (патч №12). */
   private readonly pendingRetryTimers = new Set<string>();
+  /** In-flight синк кошелька: параллельные вызовы дедуплицируются. */
+  private walletSyncInFlight: Promise<SyncResult> | null = null;
+  /** Токен текущего синка (сброс поля — только своим запуском). */
+  private walletSyncToken: object | null = null;
 
   constructor(options: TelegramStarsOptions = {}) {
     this.apiBaseUrl = (options.apiBaseUrl ?? '').trim().replace(/\/+$/, '');
@@ -392,6 +397,43 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
   }
 
   /**
+   * Материализация серверно-авторитетной выдачи (патч №15, P0-3).
+   *
+   * Тянет POST /api/wallet и применяет серверный результат (скины — union,
+   * бустер — max, РНК — дельта по per-device watermark). Идемпотентна:
+   * безопасно вызывать после каждой покупки, в restore() и повторно.
+   * Вызывать после каждого fulfillPurchase с needsServerSync (purchase,
+   * restore, processPendingRecord). Параллельные вызовы дедуплицируются
+   * (один in-flight синк на всех).
+   *
+   * Возвращает промис, который НИКОГДА не реджектится: снаружи можно как
+   * `void provider.syncWalletFromServer()` (fire-and-forget), так и
+   * `await` для обновления UI после покупки.
+   */
+  syncWalletFromServer(): Promise<SyncResult> {
+    if (this.walletSyncInFlight) return this.walletSyncInFlight;
+    const token: object = {};
+    const p: Promise<SyncResult> = (async (): Promise<SyncResult> => {
+      try {
+        const initData = readTelegramInitData();
+        return await syncServerWallet({ apiBaseUrl: this.apiBaseUrl, initData });
+      } catch {
+        return { ok: false, reason: 'unexpected' };
+      } finally {
+        // Сбрасываем поле только своим запуском (гонка невозможна при
+        // синхронном присвоении ниже, токен — пояс надёжности).
+        if (this.walletSyncToken === token) {
+          this.walletSyncToken = null;
+          this.walletSyncInFlight = null;
+        }
+      }
+    })();
+    this.walletSyncToken = token;
+    this.walletSyncInFlight = p;
+    return p;
+  }
+
+  /**
    * Патч №13: обрабатывает pending-журнал (ofeliya.payments.pending.v1):
    * verify → verified → fulfillPurchase → снять запись (только при ok).
    * Не подтверждено — ретраи с бэкоффом 2с/5с/15с/60с в сессии (setTimeout,
@@ -461,6 +503,8 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
           }
           // E-b: ack — только при реальном начислении ('granted'), не при
           // 'duplicate'. Серверный ack идемпотентен, но семантика точная.
+          // Патч №15 (P0-3): выдача серверная — ack теперь означает
+          // «клиент применил серверный кошелёк» (синк — в конце restore()).
           if (grant.outcome === 'granted') this.acknowledgeCharge(p.chargeId);
           if (!local.some((e) => e.productId === p.productId)) {
             local.push({
@@ -473,6 +517,15 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
         }
         if (changed) this.writeEntitlements(local);
       }
+    } catch {
+      /* ignore */
+    }
+    try {
+      // Патч №15 (P0-3): один итоговый синк материализует ВСЕ серверные
+      // гранты (watermark-идемпотентно). Догоняет и случаи, когда
+      // fire-and-forget синк из processPendingRecord не долетел.
+      // Никогда не бросает.
+      await this.syncWalletFromServer();
     } catch {
       /* ignore */
     }
@@ -534,6 +587,10 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
           // ('granted'), не при 'duplicate'. Серверный ack идемпотентен,
           // но семантика должна быть точной.
           if (grant.outcome === 'granted') this.acknowledgeCharge(chargeId);
+          // Патч №15 (P0-3): выдача серверная — материализуем кошелёк.
+          // Fire-and-forget: итоговая синхронизация — в restore(); синк
+          // идемпотентен, повтор безопасен. Никогда не бросает.
+          if (grant.needsServerSync) void this.syncWalletFromServer();
           removePendingPurchase(nonce);
           return fresh.productId;
         }

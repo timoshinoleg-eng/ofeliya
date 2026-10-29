@@ -216,6 +216,8 @@ try {
     entitlementsMode: 'ok', // 'ok' | 'unavailable'
     ackCalls: [],
     ackBehavior: 'ok', // 'ok' | 'fail'
+    // Патч №15 (P0-3): симуляция серверного кошелька воркера (POST /api/wallet).
+    wallet: { purchased_rna: 0, booster_until_ms: 0, skins: [], ledger_tip: null },
   };
   let lastInvoiceNonce = '';
   const resetServer = () => {
@@ -227,6 +229,7 @@ try {
     server.entitlementsMode = 'ok';
     server.ackCalls.length = 0;
     server.ackBehavior = 'ok';
+    server.wallet = { purchased_rna: 0, booster_until_ms: 0, skins: [], ledger_tip: null };
     lastInvoiceNonce = '';
   };
   // fire-and-forget ack выполняется вне await restore() — даём микрозадачам долететь.
@@ -275,6 +278,10 @@ try {
       if (server.ackBehavior === 'fail') throw new Error('ack backend down');
       return { ok: true, json: async () => ({ ok: true }) };
     }
+    if (url.endsWith('/api/wallet')) {
+      assert(typeof body.initData === 'string' && body.initData.length > 0, 'wallet: initData');
+      return { ok: true, json: async () => ({ ...server.wallet }) };
+    }
     throw new Error(`unexpected fetch url ${url}`);
   };
   const paidWindow = () => ({
@@ -301,7 +308,8 @@ try {
   const booster = SHOP_CATALOG.find((p) => p.id === 'booster.rna-x2-7d');
   assert(packS && packM && skinTeal && skinMagenta && booster, 'catalog fixtures present');
 
-  // (1) verified → paid + fulfillPurchase grant (pack-s: 500 RNA flat, 35★).
+  // (1) verified → paid + учёт через ledger + материализация серверного
+  // кошелька (как StorefrontScene.buy после патча №15).
   resetPayments();
   resetServer();
   withWindow(paidWindow());
@@ -319,14 +327,23 @@ try {
   );
   eq(loadMeta().rna, 0, 'no grant before fulfill');
   let f = fulfillPurchase(packS, { chargeId: r.chargeId, providerId: 'telegram-stars' });
-  eqGrant(f, 'granted', 'first fulfill grants');
-  eq(loadMeta().rna, 500, 'pack-s grants 500 RNA flat');
+  eqGrant(f, 'granted', 'first fulfill ok');
+  eq(f.needsServerSync, true, 'telegram: needsServerSync');
+  eq(loadMeta().rna, 0, 'no local grant: issuance is server-side');
+  // сервер применил грант (симуляция воркера) → синк материализует
+  server.wallet.purchased_rna = 500;
+  const sync1 = await p1.syncWalletFromServer();
+  eq(sync1.ok, true, 'wallet sync ok');
+  eq(loadMeta().rna, 500, 'pack-s grants 500 RNA flat via server wallet');
   eq(loadMeta().starsSpent, 35, 'pack-s records 35 stars spent');
   assert(isChargeCredited(r.chargeId), 'fulfilled charge is credited');
 
   // (2) same chargeId again → duplicate, no double grant/stars.
   f = fulfillPurchase(packS, { chargeId: r.chargeId, providerId: 'telegram-stars' });
   eqGrant(f, 'duplicate', 'same chargeId is duplicate');
+  const sync2 = await p1.syncWalletFromServer();
+  eq(sync2.ok, true, 'repeat sync ok');
+  eq(sync2.applied.rna, 0, 'repeat sync: no double grant (watermark)');
   eq(loadMeta().rna, 500, 'duplicate grants no extra RNA');
   eq(loadMeta().starsSpent, 35, 'duplicate records no extra stars');
 
@@ -352,6 +369,8 @@ try {
   // (4) pending → restore() → verify → paid + grant exactly once, record
   // removed; a second restore fulfills nothing.
   server.verifyMode = 'ok';
+  // сервер уже применил грант (симуляция воркера №15) — restore материализует
+  server.wallet.purchased_rna = 500;
   const restored = await p1.restore();
   assert(restored.pendingFulfilled.includes(packS.id), 'restore fulfills pending pack');
   eq(loadMeta().rna, 500, 'restore grants exactly 500 RNA');
@@ -394,6 +413,8 @@ try {
     createdAt: 1003,
   });
   withWindow({ openInvoice: () => {}, initData: 'a=1&hash=b' });
+  // сервер применил грант за charge-valid (симуляция воркера №15)
+  server.wallet.purchased_rna = 500;
   const merged = await p1.restore();
   await flush(); // fire-and-forget ack долетел
   assert(merged.productIds.includes(packS.id), 'entitlements merge returns granted product');
@@ -448,10 +469,18 @@ try {
   eq(r.reason, 'verify-product-mismatch', 'pending reason is verify-product-mismatch');
   eq(loadMeta().rna, 0, 'no grant on productId mismatch');
 
-  // (7) booster fulfill → ~7 days, duplicate does not re-extend.
+  // (7) booster: серверный грант → синк берёт max(local, server).
+  // Патч №15: fulfillPurchase начислений не делает; срок вычисляет сервер.
   resetPayments();
   f = fulfillPurchase(booster, { chargeId: 'c-booster', providerId: 'telegram-stars' });
-  eqGrant(f, 'granted', 'booster first fulfill grants');
+  eqGrant(f, 'granted', 'booster accounted');
+  eq(f.needsServerSync, true, 'booster needsServerSync');
+  eq(getBoosterUntilMs(), 0, 'no local grant: issuance is server-side');
+  // сервер применил грант: max(now, текущий) + 7 дней (симуляция воркера)
+  server.wallet = { purchased_rna: 0, booster_until_ms: Date.now() + 7 * 86400000, skins: [], ledger_tip: null };
+  const pBoost = new TelegramStarsPaymentProvider({ apiBaseUrl: 'https://pay.example' });
+  const syncB = await pBoost.syncWalletFromServer();
+  eq(syncB.ok, true, 'booster sync ok');
   const exp1 = getBoosterUntilMs();
   const sevenDays = 7 * 24 * 3600 * 1000;
   assert(
@@ -460,20 +489,30 @@ try {
   );
   f = fulfillPurchase(booster, { chargeId: 'c-booster', providerId: 'telegram-stars' });
   eqGrant(f, 'duplicate', 'booster duplicate');
+  const syncB2 = await pBoost.syncWalletFromServer();
+  eq(syncB2.applied.boosterUntilMs, exp1, 'repeat sync: booster unchanged');
   eq(getBoosterUntilMs(), exp1, 'duplicate does not re-extend booster');
 
-  // (8) skin fulfill: pure grantSkinTo checks + ledger grant, exactly-once
-  // ownership, starsSpent 100.
+  // (8) skin: серверный грант → синк делает union.
+  // Патч №15: grantSkin вызывается из ServerWalletSync, не из fulfillPurchase.
   resetPayments();
   const pure = grantSkinTo(loadSkinStore(), skinMagenta.id);
   eq(pure.granted, true, 'pure grantSkinTo grants unknown skin');
   eq(isSkinOwned(skinMagenta.id), false, 'pure check does not persist ownership');
   f = fulfillPurchase(skinMagenta, { chargeId: 'c-skin', providerId: 'telegram-stars' });
-  eqGrant(f, 'granted', 'skin fulfill grants');
-  eq(isSkinOwned(skinMagenta.id), true, 'skin owned after fulfill');
+  eqGrant(f, 'granted', 'skin accounted via ledger');
+  eq(f.needsServerSync, true, 'skin needsServerSync');
+  eq(isSkinOwned(skinMagenta.id), false, 'no local grant: issuance is server-side');
+  server.wallet = { purchased_rna: 0, booster_until_ms: 0, skins: [skinMagenta.id], ledger_tip: null };
+  const pSkin = new TelegramStarsPaymentProvider({ apiBaseUrl: 'https://pay.example' });
+  const syncS = await pSkin.syncWalletFromServer();
+  eq(syncS.ok, true, 'skin sync ok');
+  eq(isSkinOwned(skinMagenta.id), true, 'skin owned after sync');
   eq(loadMeta().starsSpent, 100, 'skin records 100 stars spent');
   f = fulfillPurchase(skinMagenta, { chargeId: 'c-skin', providerId: 'telegram-stars' });
   eqGrant(f, 'duplicate', 'skin duplicate');
+  const syncS2 = await pSkin.syncWalletFromServer();
+  eq(syncS2.applied.skins.length, 0, 'repeat sync: no duplicate skin');
   eq(
     loadSkinStore().owned.filter((id) => id === skinMagenta.id).length,
     1,

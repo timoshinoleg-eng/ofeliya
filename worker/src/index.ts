@@ -1,8 +1,17 @@
+import { SERVER_GRANTS, grantForProduct, grantAmountText } from './grants';
+import type { GrantKind, ServerGrant } from './grants';
+
 /**
  * OFELIYA payments reference backend — Cloudflare Worker (TypeScript, zero deps).
  *
  * Зачем: Telegram Stars-инвойсы НЕЛЬЗЯ создавать из клиента (нужен bot token),
  * поэтому игре нужен минимальный бэкенд.
+ *
+ * Протокол v4 (патч №15, серверно-авторитетная выдача):
+ *  Ключевое изменение: грант (РНК/бустер/скин) применяет СЕРВЕР — в том же
+ *  атомарном D1-батче, что и запись платежа. Клиент выдачу НЕ начисляет сам:
+ *  он тянет GET/POST /api/wallet и материализует серверный результат
+ *  (watermark per-device). Threat model — см. раздел «Модель угроз» ниже.
  *
  * Протокол v3 (патч №13, журнал на Cloudflare D1):
  *
@@ -46,11 +55,14 @@
  *      (выдача на клиенте упадёт на invalid-product, товар не потерян
  *      из виду).
  *
- *  POST /api/admin/refund {chargeId, reason} — ручная пометка возврата.
+ *  POST /api/admin/refund {chargeId, reason, execute?} — двухшаговый возврат
+ *    (патч №15; раньше — только пометка).
  *    Авторизация: заголовок Authorization: Bearer <ADMIN_TOKEN> (НЕ bot
  *    token). ADMIN_TOKEN обязателен в env (fail-closed 401). Возвраты Stars
  *    у Telegram не приходят автоматически — только руками Mark.
- *    → {ok:true} / {ok:false, error}.
+ *    execute !== true → только пометка + откат серверного кошелька;
+ *    execute === true → сначала refundStarPayment, пометка — только после
+ *    подтверждения Telegram. Повтор при уже 'refunded' → {ok:true, already:true}.
  *
  *  POST /api/verify {initData, nonce} — СТРОГАЯ точечная проверка
  *  (клиент зовёт после колбэка openInvoice вместо слепого доверия):
@@ -68,15 +80,39 @@
  *      миграции не требуется — KV ещё не в проде.
  *
  *  POST /api/ack {initData, chargeId} — bookkeeping, не защита:
- *    клиент зовёт ПОСЛЕ локальной выдачи товара; воркер помечает
+ *    клиент зовёт ПОСЛЕ применения серверного кошелька; воркер помечает
  *    payments.status='fulfilled' (только из 'paid', только свой charge_id).
  *    → {ok:true|false}. Без PAYMENTS_DB → 501.
  *
+ *  POST /api/wallet {initData} — серверный кошелёк пользователя
+ *    → {purchased_rna, booster_until_ms, skins[], ledger_tip}.
+ *    purchased_rna — append-only сумма выданных сервером РНК (целые);
+ *    уменьшается только при ручном refund (mark/execute). Без PAYMENTS_DB → 501.
+ *
+ *  GET /api/admin/stale-orders?olderThanMin=N — заказы 'pending' и платежи
+ *    'paid'-без-fulfilled старше N минут (default 60) для ручной сверки.
+ *    Авторизация: Authorization: Bearer <ADMIN_TOKEN>. Runbook — в
+ *    worker/README_DEPLOY.md.
+ *
  *  GET /api/health → {ok:true} (проверка деплоя).
  *
- * Схема: worker/schema.sql (orders, payments, индексы).
- * Статус 'refunded' — ТОЛЬКО вручную: POST /api/admin/refund (патч №14, E-c);
- * воркер его не выставляет. Возвраты Stars — отдельное решение Mark.
+ * Схема: worker/schema.sql (orders, payments, wallets, wallet_ledger).
+ * Статус 'refunded' — ТОЛЬКО вручную: POST /api/admin/refund
+ * (патч №14 E-c, двухшаговый с патча №15); воркер сам его не выставляет.
+ *
+ * Модель угроз (патч №15, P0-3) — честно:
+ *  - Сервер гарантирует: не записать ложный платёж (проверки webhook +
+ *    строгий pre_checkout) и не потерять честный (атомарный батч,
+ *    503→ретрай Telegram, идемпотентность по charge_id).
+ *  - Клиент и так может править свой localStorage — подделка ЛОКАЛЬНОГО
+ *    баланса вне модели угроз до полной серверной экономики
+ *    (дизайн-док ofeliya-server-economy-design.md). Серверный кошелёк —
+ *    источник правды о ПОКУПКАХ, а не античит локального баланса.
+ *  - Два живых устройства материализуют покупки независимо (watermark
+ *    per-device): окончательно решается только серверными расходуемыми
+ *    балансами. Возврат (refunded) уменьшает серверный кошелёк, но уже
+ *    материализованное локальное значение НЕ отзывается.
+ *  - Подмена каталога на клиенте бессмысленна: цена и грант — с сервера.
  *
  * Серверный контракт scripts/check-profile-client.mjs:162
  * ('purchase' must never be accepted) в этом скоупе НЕ меняется:
@@ -136,42 +172,17 @@ interface Env {
 }
 
 /**
- * Серверный каталог: ЦЕНА ВСЕГДА С СЕРВЕРА. Должен совпадать с
- * src/game/shop/products.ts (stars), но клиентскому значению не доверяем.
- * Экспортирован для Node-тестов.
+ * @deprecated Цены и гранты — в SERVER_GRANTS (worker/src/grants.ts).
+ * Алиас оставлен для tests/worker-payments.mjs (сверка stars с клиентом).
+ * Новый код использует SERVER_GRANTS напрямую.
  */
-export const SERVER_PRODUCTS: Record<string, { title: string; description: string; stars: number }> = {
-  'skin.virulent-magenta': {
-    title: 'Штамм «Вирулентный»',
-    description: 'Пурпурный боевой окрас STRAIN-0. Чистая косметика.',
-    stars: 100,
-  },
-  'skin.abyssal-teal': {
-    title: 'Штамм «Бездонный»',
-    description: 'Глубоководный тил. Виден даже в темной плазме.',
-    stars: 100,
-  },
-  'skin.gilded-prime': {
-    title: 'Штамм «Позолоченный»',
-    description: 'Праймовый золотой штамм для ветеранов кровотока.',
-    stars: 250,
-  },
-  'booster.rna-x2-7d': {
-    title: 'РНК ×2 — 7 дней',
-    description: 'Двойной дроп РНК со всех гемов в течение недели.',
-    stars: 75,
-  },
-  'currency.rna-pack-s': {
-    title: 'Набор РНК ×500',
-    description: 'Малая капсула чистой РНК для лаборатории мутаций.',
-    stars: 35,
-  },
-  'currency.rna-pack-m': {
-    title: 'Набор РНК ×1500',
-    description: 'Средняя капсула. Выгоднее малого набора на 13%.',
-    stars: 100,
-  },
-};
+export const SERVER_PRODUCTS: Record<string, { title: string; description: string; stars: number }> =
+  Object.fromEntries(
+    Object.entries(SERVER_GRANTS).map(([id, g]) => [
+      id,
+      { title: g.title, description: g.description, stars: g.stars },
+    ])
+  );
 
 /**
  * Статус платежа в D1. 'refunded' выставляется ТОЛЬКО вручную:
@@ -308,7 +319,7 @@ async function handleInvoice(request: Request, env: Env): Promise<Response> {
   const productId = typeof body.productId === 'string' ? body.productId : '';
   const initData = typeof body.initData === 'string' ? body.initData : '';
   const nonce = body.nonce;
-  const product = SERVER_PRODUCTS[productId];
+  const product = SERVER_GRANTS[productId];
   if (!product) return json({ error: 'unknown-product' }, 400);
   if (!isValidNonce(nonce)) return json({ error: 'bad-nonce' }, 400);
   const v = await validateInitData(initData, env.TELEGRAM_BOT_TOKEN);
@@ -347,6 +358,8 @@ interface PreCheckoutQuery {
   invoice_payload?: string;
   currency?: string;
   total_amount?: number;
+  /** Патч №15 (P0-2): обязателен для строгой проверки владельца заказа. */
+  from?: { id?: number };
 }
 
 interface SuccessfulPayment {
@@ -406,18 +419,36 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
   }
 
   // 1. Pre-checkout: ответить ОБЯЗАТЕЛЬНО в течение 10 секунд.
+  //    СТРОГО (патч №15, P0-2): order.status ДОЛЖЕН быть 'pending'
+  //    (раньше было `!== 'expired'` — оплаченный/неизвестный заказ проходил)
+  //    И q.from.id ДОЛЖЕН совпадать с order.user_id (чужой инвойс — отказ:
+  //    иначе пользователь платит, а платёж потом отвергается как чужой).
   //    Payload — nonce: order резолвится из D1, цена сверяется с серверным
-  //    каталогом. Без PAYMENTS_DB — ok:false (fail-closed всей цепочки,
-  //    патч №13; раньше без KV было ok:true — больше нет).
+  //    каталогом. Без PAYMENTS_DB — ok:false (fail-closed всей цепочки).
+  //    Бюджет 10с: Telegram → Render-прокси (таймаут 8с) → воркер → D1 →
+  //    answerPreCheckoutQuery. Замеряем латентность: warn при >7с —
+  //    503-ретраи Telegram best-effort, а не гарантия (см. README_DEPLOY).
   const q = update.pre_checkout_query;
   if (q) {
+    const t0 = Date.now();
     const nonce = q.invoice_payload ?? '';
     let ok = false;
     if (isValidNonce(nonce) && env.PAYMENTS_DB) {
       try {
         const order = await getOrder(env.PAYMENTS_DB, nonce);
-        const server = order && order.status !== 'expired' ? SERVER_PRODUCTS[order.product_id] : undefined;
+        const fromId = q.from?.id;
+        const server =
+          order && order.status === 'pending' && typeof fromId === 'number' && fromId === order.user_id
+            ? SERVER_GRANTS[order.product_id]
+            : undefined;
         ok = !!server && q.currency === 'XTR' && q.total_amount === server.stars;
+        if (!ok) {
+          logEvent('pre_checkout_rejected', {
+            nonce,
+            orderStatus: order?.status ?? 'no-order',
+            userMatch: typeof fromId === 'number' && !!order && fromId === order.user_id,
+          });
+        }
       } catch {
         ok = false;
       }
@@ -427,6 +458,13 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
       ok,
       ...(ok ? {} : { error_message: 'Товар недоступен. Попробуйте позже.' }),
     });
+    const elapsedMs = Date.now() - t0;
+    if (elapsedMs > 7000) {
+      // Бюджет Telegram — 10с от отправки pre_checkout_query. 503-ретраи
+      // не спасут уже истёкший pre-checkout: это сигнал, что цепочка
+      // Render→воркер→D1 слишком медленная (см. runbook в README_DEPLOY).
+      logEvent('pre_checkout_slow', { elapsedMs, nonce, ok });
+    }
     return json({ ok: true });
   }
 
@@ -458,10 +496,12 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
 }
 
 /**
- * successful_payment → ОДИН db.batch():
- *   INSERT OR IGNORE INTO payments (...)  +  UPDATE orders → 'paid'.
- * Бросает при сбое записи (вызывающий отвечает 500, Telegram переотправит).
- * Невалидные/чужие платежи только логируются (200, ретрай не поможет).
+ * successful_payment → батч 1 (платёж + заказ → 'paid') + батч 2
+ * (серверная выдача: wallets + wallet_ledger, патч №15).
+ * Бросает при сбое инфраструктуры (вызывающий отвечает 503, Telegram
+ * переотправит). Невалидные/чужие платежи только логируются (200,
+ * ретрай не поможет). Товар вне каталога (unknown-product): записывается
+ * как 'paid' + громкий лог, БЕЗ пометки fulfilled.
  */
 
 async function recordSuccessfulPayment(
@@ -502,9 +542,26 @@ async function recordSuccessfulPayment(
     });
     return;
   }
-  const server = SERVER_PRODUCTS[order.product_id];
+  // Патч №15 (P0-2): backstop повторного использования nonce. Один nonce —
+  // один платёж (UNIQUE(payments.nonce) в схеме). Основной гейт — строгий
+  // pre_checkout (status==='pending'); это защита от гонки двух pre_checkout
+  // до записи платежа. 200, не 503: ретрай не поможет, это не сбой
+  // инфраструктуры.
+  const nonceRow = await db
+    .prepare('SELECT charge_id FROM payments WHERE nonce=?')
+    .bind(nonce)
+    .first<{ charge_id: string }>();
+  if (nonceRow && nonceRow.charge_id !== chargeId) {
+    logEvent('stars_payment_nonce_reuse', {
+      ...base,
+      userId: fromId,
+      existingChargeId: nonceRow.charge_id,
+    });
+    return;
+  }
+  const resolved = grantForProduct(order.product_id);
   const now = Date.now();
-  if (!server) {
+  if (!resolved) {
     // E-a: товар оплачен, но его нет в каталоге (каталог сменился между
     // созданием инвойса и оплатой). НЕ silent-skip: пишем как 'paid' +
     // громкий лог; fulfilled НЕ ставим — ручное разрешение позже.
@@ -533,18 +590,20 @@ async function recordSuccessfulPayment(
     });
     return;
   }
-  if (sp.currency !== 'XTR' || sp.total_amount !== server.stars) {
+  const { kind, grant } = resolved;
+  if (sp.currency !== 'XTR' || sp.total_amount !== grant.stars) {
     logEvent('stars_payment_amount_mismatch', {
       ...base,
       userId: fromId,
       productId: order.product_id,
-      expected: server?.stars,
+      expected: grant.stars,
     });
     return;
   }
-  // Атомарно: платёж + перевод заказа в 'paid'. OR IGNORE делает повторную
-  // доставку того же charge_id безопасной: meta.changes==0 → дубликат.
-  const results = await db.batch([
+  // Батч 1 (атомарно): платёж + перевод заказа в 'paid'. OR IGNORE делает
+  // повторную доставку того же charge_id безопасной: meta.changes==0 →
+  // дубликат, грант повторно НЕ применяется (см. self-heal ниже).
+  const r1 = await db.batch([
     db
       .prepare(
         'INSERT OR IGNORE INTO payments ' +
@@ -556,15 +615,95 @@ async function recordSuccessfulPayment(
       .prepare("UPDATE orders SET status='paid' WHERE nonce=? AND status='pending'")
       .bind(nonce),
   ]);
-  if (results[0]?.meta.changes === 0) {
+  if (r1[0]?.meta.changes === 0) {
+    // Дубликат доставки. Грант уже применён? Self-heal на случай падения
+    // между батчами в прошлой доставке: платёж есть, а гранта в журнале нет.
+    const lg = await db
+      .prepare('SELECT 1 AS one FROM wallet_ledger WHERE charge_id=?')
+      .bind(chargeId)
+      .first();
+    if (!lg) await applyGrantBatch(db, fromId, chargeId, kind, grant, now);
     logEvent('stars_payment_duplicate', { ...base, userId: fromId });
     return;
   }
+  // Батч 2: СЕРВЕРНО-АВТОРИТЕТНАЯ выдача (патч №15, P0-3) — кошелёк +
+  // журнал. Клиент сам ничего не начисляет: он тянет /api/wallet.
+  await applyGrantBatch(db, fromId, chargeId, kind, grant, now);
   logEvent('stars_payment_recorded', {
     ...base,
     userId: fromId,
     productId: order.product_id,
+    grantKind: kind,
   });
+}
+
+/**
+ * Серверная выдача гранта (патч №15, P0-3): UPSERT wallets + INSERT
+ * wallet_ledger — одним батчем. Чтение текущего кошелька и вычисление новых
+ * значений — в JS (D1 не умеет Decimal-арифметику; суммы целые, но держим
+ * код явным). Конкурентные доставки Telegram по одному чату идут
+ * последовательно; wallet_ledger.charge_id UNIQUE + INSERT OR IGNORE —
+ * двойной грант невозможен даже при повторном вызове.
+ *
+ * Семантика гранта (зеркало клиентской выдачи до патча №15):
+ *  - rna: purchased_rna += grant.rna (плоско, БЕЗ бонуса лаборатории);
+ *  - booster: booster_until_ms = max(текущий, now) + days (время не сгорает);
+ *  - skin: skins_json — аддитивное множество (union).
+ */
+async function applyGrantBatch(
+  db: D1Database,
+  userId: number,
+  chargeId: string,
+  kind: GrantKind,
+  grant: ServerGrant,
+  now: number
+): Promise<void> {
+  const wallet = await db
+    .prepare('SELECT purchased_rna, booster_until_ms, skins_json FROM wallets WHERE user_id=?')
+    .bind(userId)
+    .first<{ purchased_rna: number; booster_until_ms: number; skins_json: string }>();
+  const curRna =
+    typeof wallet?.purchased_rna === 'number' && wallet.purchased_rna >= 0
+      ? Math.floor(wallet.purchased_rna)
+      : 0;
+  const curBooster =
+    typeof wallet?.booster_until_ms === 'number' && wallet.booster_until_ms > 0
+      ? Math.floor(wallet.booster_until_ms)
+      : 0;
+  let curSkins: string[] = [];
+  try {
+    const parsed: unknown = JSON.parse(wallet?.skins_json ?? '[]');
+    if (Array.isArray(parsed)) curSkins = parsed.filter((s): s is string => typeof s === 'string');
+  } catch {
+    curSkins = [];
+  }
+  let newRna = curRna;
+  let newBooster = curBooster;
+  let newSkins = curSkins;
+  if (kind === 'rna') {
+    newRna = curRna + Math.max(0, Math.floor(grant.rna));
+  } else if (kind === 'booster') {
+    newBooster = Math.max(curBooster, now) + Math.max(0, Math.floor(grant.boosterDays)) * 86_400_000;
+  } else if (kind === 'skin' && grant.skinId && !newSkins.includes(grant.skinId)) {
+    newSkins = [...newSkins, grant.skinId];
+  }
+  await db.batch([
+    db
+      .prepare(
+        'INSERT INTO wallets (user_id, purchased_rna, booster_until_ms, skins_json, updated_at) ' +
+          'VALUES (?,?,?,?,?) ' +
+          'ON CONFLICT(user_id) DO UPDATE SET purchased_rna=excluded.purchased_rna, ' +
+          'booster_until_ms=excluded.booster_until_ms, skins_json=excluded.skins_json, ' +
+          'updated_at=excluded.updated_at'
+      )
+      .bind(userId, newRna, newBooster, JSON.stringify(newSkins), now),
+    db
+      .prepare(
+        'INSERT OR IGNORE INTO wallet_ledger (user_id, charge_id, kind, amount_text, created_at) ' +
+          'VALUES (?,?,?,?,?)'
+      )
+      .bind(userId, chargeId, kind, grantAmountText(kind, grant), now),
+  ]);
 }
 
 /**
@@ -691,14 +830,85 @@ async function handleAck(request: Request, env: Env): Promise<Response> {
 }
 
 /**
- * POST /api/admin/refund {chargeId, reason?} — РУЧНАЯ пометка возврата.
- * Патч №14 (E-c): у Telegram Stars нет автоматического refund-webhook
- * для ботов — возвраты только руками Mark. Авторизация: заголовок
- * Authorization: Bearer <ADMIN_TOKEN> (НЕ bot token). ADMIN_TOKEN
- * обязателен в env (fail-closed 401). Повтор безопасен: повторная пометка
- * того же charge_id — ok:false, состояние не меняется. Возврат НЕ отзывает уже выданный товар
- * на клиенте (отзыв — отдельное ручное решение, см. README_DEPLOY).
- * → {ok:true} / {ok:false, error}. Без PAYMENTS_DB → 501.
+ * POST /api/wallet {initData} — серверный кошелёк (патч №15, P0-3).
+ * Источник правды о ПОКУПКАХ: что сервер выдал этому user_id.
+ * → {purchased_rna, booster_until_ms, skins[], ledger_tip}.
+ * purchased_rna — append-only сумма выданных РНК (целые); уменьшается только
+ * ручным refund (mark/execute). Клиент материализует дельту по watermark
+ * (см. src/game/shop/ServerWalletSync.ts) и сам суммы не выдумывает.
+ * POST, а не GET: initData в теле, а не в query (не светится в логах).
+ * 501 — D1-биндинг не настроен; 401 — плохой initData.
+ */
+async function handleWallet(request: Request, env: Env): Promise<Response> {
+  if (!env.PAYMENTS_DB) return json({ error: 'db_unavailable' }, 501);
+  if (!env.TELEGRAM_BOT_TOKEN) return json({ error: 'backend-misconfigured' }, 500);
+  let body: { initData?: unknown };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return json({ error: 'bad-json' }, 400);
+  }
+  const initData = typeof body.initData === 'string' ? body.initData : '';
+  const v = await validateInitData(initData, env.TELEGRAM_BOT_TOKEN);
+  if (!v.ok || v.userId == null) return json({ error: 'bad-init-data', reason: v.reason }, 401);
+  try {
+    const wallet = await env.PAYMENTS_DB.prepare(
+      'SELECT purchased_rna, booster_until_ms, skins_json FROM wallets WHERE user_id=?'
+    )
+      .bind(v.userId)
+      .first<{ purchased_rna: number; booster_until_ms: number; skins_json: string }>();
+    let skins: string[] = [];
+    try {
+      const parsed: unknown = JSON.parse(wallet?.skins_json ?? '[]');
+      if (Array.isArray(parsed)) skins = parsed.filter((s): s is string => typeof s === 'string');
+    } catch {
+      skins = [];
+    }
+    const tip = await env.PAYMENTS_DB.prepare(
+      'SELECT MAX(created_at) AS tip FROM wallet_ledger WHERE user_id=?'
+    )
+      .bind(v.userId)
+      .first<{ tip: number | null }>();
+    return json({
+      purchased_rna:
+        typeof wallet?.purchased_rna === 'number' && wallet.purchased_rna >= 0
+          ? Math.floor(wallet.purchased_rna)
+          : 0,
+      booster_until_ms:
+        typeof wallet?.booster_until_ms === 'number' && wallet.booster_until_ms > 0
+          ? Math.floor(wallet.booster_until_ms)
+          : 0,
+      skins,
+      ledger_tip: typeof tip?.tip === 'number' ? tip.tip : null,
+    });
+  } catch {
+    return json({ error: 'db-read-failed' }, 502);
+  }
+}
+
+/**
+ * POST /api/admin/refund {chargeId, reason?, execute?} — ДВУХШАГОВЫЙ возврат
+ * (патч №15, P1-4; раньше — только пометка в журнале).
+ *
+ * У Telegram Stars нет автоматического refund-webhook для ботов — возвраты
+ * только руками Mark. Авторизация: Authorization: Bearer <ADMIN_TOKEN>
+ * (НЕ bot token). ADMIN_TOKEN обязателен в env (fail-closed 401).
+ *
+ * Два РАЗНЫХ действия, не путать (см. README_DEPLOY §10):
+ *  - execute !== true → «ПОМЕТИТЬ»: только статус payments→'refunded' +
+ *    откат серверного кошелька (см. reverseWalletGrant). Для возвратов,
+ *    выполненных вручную через BotFather/поддержку Telegram.
+ *  - execute === true → «ВЫПОЛНИТЬ»: сначала Bot API refundStarPayment
+ *    (тем же TELEGRAM_BOT_TOKEN — отдельный OFELIYA_BOT_TOKEN не нужен),
+ *    пометка 'refunded' + откат кошелька — ТОЛЬКО после подтверждения
+ *    Telegram. Без токена → 503 {error:'bot-token-misconfigured'}.
+ *
+ * Идемпотентность: повторный вызов при уже 'refunded' →
+ * {ok:true, already:true} (однозначно; раньше было {ok:false} — аудит №5).
+ * Не найден → {ok:false, error:'not-found'}.
+ * Возврат НЕ отзывает уже материализованное локальное значение на клиенте
+ * (отзыв локального — вне модели угроз; см. «Модель угроз» в шапке).
+ * Без PAYMENTS_DB → 501.
  */
 async function handleAdminRefund(request: Request, env: Env): Promise<Response> {
   const auth = request.headers.get('authorization') ?? '';
@@ -706,7 +916,7 @@ async function handleAdminRefund(request: Request, env: Env): Promise<Response> 
     return json({ error: 'unauthorized' }, 401);
   }
   if (!env.PAYMENTS_DB) return json({ error: 'db_unavailable' }, 501);
-  let body: { chargeId?: unknown; reason?: unknown };
+  let body: { chargeId?: unknown; reason?: unknown; execute?: unknown };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -715,19 +925,144 @@ async function handleAdminRefund(request: Request, env: Env): Promise<Response> 
   const chargeId = typeof body.chargeId === 'string' && body.chargeId.length > 0 ? body.chargeId : '';
   if (!chargeId) return json({ error: 'bad-charge-id' }, 400);
   const reason = typeof body.reason === 'string' ? body.reason.slice(0, 200) : '';
+  const execute = body.execute === true;
   try {
-    const result = await env.PAYMENTS_DB.prepare(
-      "UPDATE payments SET status='refunded' WHERE charge_id=? AND status IN ('paid','fulfilled')"
-    )
+    const db = env.PAYMENTS_DB;
+    const payment = await db
+      .prepare('SELECT charge_id, user_id, product_id, status FROM payments WHERE charge_id=?')
+      .bind(chargeId)
+      .first<{ charge_id: string; user_id: number; product_id: string; status: string }>();
+    if (!payment) return json({ ok: false, error: 'not-found' });
+    if (payment.status === 'refunded') return json({ ok: true, already: true });
+    if (execute) {
+      // «Выполнить»: реальный возврат Stars через Bot API — ДО пометки.
+      if (!env.TELEGRAM_BOT_TOKEN) {
+        return json({ ok: false, error: 'bot-token-misconfigured' }, 503);
+      }
+      try {
+        await botApi(env.TELEGRAM_BOT_TOKEN, 'refundStarPayment', {
+          user_id: payment.user_id,
+          telegram_payment_charge_id: chargeId,
+        });
+      } catch (e) {
+        logEvent('stars_refund_failed', {
+          telegramChargeId: chargeId,
+          userId: payment.user_id,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        return json({ ok: false, error: 'refund-failed' }, 502);
+      }
+    }
+    const result = await db
+      .prepare("UPDATE payments SET status='refunded' WHERE charge_id=? AND status IN ('paid','fulfilled')")
       .bind(chargeId)
       .run();
     if (result.meta.changes === 0) {
-      return json({ ok: false, error: 'not-found-or-already-refunded' });
+      // Статус сменился между SELECT и UPDATE (конкурентный refund) —
+      // идемпотентный ответ, состояние не портится.
+      return json({ ok: true, already: true });
     }
-    logEvent('stars_payment_refunded_manual', { telegramChargeId: chargeId, reason });
-    return json({ ok: true });
+    // Откат серверного кошелька: будущие устройства/синки этот грант
+    // больше не материализуют. Локальное значение на устройстве НЕ
+    // отзывается (честно задокументировано в «Модели угроз»).
+    await reverseWalletGrant(db, payment.user_id, chargeId);
+    logEvent('stars_payment_refunded_manual', {
+      telegramChargeId: chargeId,
+      reason,
+      executed: execute,
+    });
+    return json({ ok: true, executed: execute });
   } catch {
     return json({ error: 'db-write-failed' }, 502);
+  }
+}
+
+/**
+ * Откат серверного гранта при refund (патч №15, P1-4).
+ *  - rna: purchased_rna = max(0, purchased_rna − выданное);
+ *  - skin: убрать skinId из skins_json (новые устройства не получат);
+ *  - booster: НЕ трогаем — время вспять не отматывается; задокументировано.
+ * Локальные значения на устройствах не отзываются (модель угроз).
+ */
+async function reverseWalletGrant(
+  db: D1Database,
+  userId: number,
+  chargeId: string
+): Promise<void> {
+  const entry = await db
+    .prepare('SELECT kind, amount_text FROM wallet_ledger WHERE charge_id=?')
+    .bind(chargeId)
+    .first<{ kind: string; amount_text: string }>();
+  if (!entry) return; // гранта не было (unknown-product) — нечего откатывать
+  const wallet = await db
+    .prepare('SELECT purchased_rna, skins_json FROM wallets WHERE user_id=?')
+    .bind(userId)
+    .first<{ purchased_rna: number; skins_json: string }>();
+  if (!wallet) return;
+  const now = Date.now();
+  if (entry.kind === 'rna') {
+    const amount = Math.max(0, Math.floor(Number(entry.amount_text) || 0));
+    const cur = typeof wallet.purchased_rna === 'number' && wallet.purchased_rna > 0 ? Math.floor(wallet.purchased_rna) : 0;
+    await db
+      .prepare('UPDATE wallets SET purchased_rna=?, updated_at=? WHERE user_id=?')
+      .bind(Math.max(0, cur - amount), now, userId)
+      .run();
+  } else if (entry.kind === 'skin' && entry.amount_text) {
+    let skins: string[] = [];
+    try {
+      const parsed: unknown = JSON.parse(wallet.skins_json ?? '[]');
+      if (Array.isArray(parsed)) skins = parsed.filter((s): s is string => typeof s === 'string');
+    } catch {
+      skins = [];
+    }
+    const next = skins.filter((s) => s !== entry.amount_text);
+    if (next.length !== skins.length) {
+      await db
+        .prepare('UPDATE wallets SET skins_json=?, updated_at=? WHERE user_id=?')
+        .bind(JSON.stringify(next), now, userId)
+        .run();
+    }
+  }
+  // booster: время не отматываем (см. комментарий выше).
+}
+
+/**
+ * GET /api/admin/stale-orders?olderThanMin=N — ручная сверка (патч №15, P1-5).
+ * Возвращает заказы 'pending' и платежи 'paid' (без fulfilled) старше N минут
+ * (default 60, кап 1440): кандидаты на разбор — платёж потерян, завис или
+ * требует ручного refund. Авторизация: Authorization: Bearer <ADMIN_TOKEN>.
+ * Runbook — worker/README_DEPLOY.md (§11).
+ * → {orders:[...], unpaidPayments:[...]}. Без PAYMENTS_DB → 501.
+ */
+async function handleStaleOrders(request: Request, env: Env): Promise<Response> {
+  const auth = request.headers.get('authorization') ?? '';
+  if (!env.ADMIN_TOKEN || auth !== `Bearer ${env.ADMIN_TOKEN}`) {
+    return json({ error: 'unauthorized' }, 401);
+  }
+  if (!env.PAYMENTS_DB) return json({ error: 'db_unavailable' }, 501);
+  const url = new URL(request.url);
+  const rawN = Number(url.searchParams.get('olderThanMin'));
+  const olderThanMin = Number.isFinite(rawN) ? Math.min(1440, Math.max(1, Math.floor(rawN))) : 60;
+  const cutoff = Date.now() - olderThanMin * 60_000;
+  try {
+    const db = env.PAYMENTS_DB;
+    const { results: orders } = await db
+      .prepare(
+        'SELECT nonce, user_id, product_id, status, created_at FROM orders ' +
+          "WHERE status='pending' AND created_at < ? ORDER BY created_at ASC LIMIT 200"
+      )
+      .bind(cutoff)
+      .all<{ nonce: string; user_id: number; product_id: string; status: string; created_at: number }>();
+    const { results: unpaidPayments } = await db
+      .prepare(
+        'SELECT charge_id, user_id, product_id, created_at FROM payments ' +
+          "WHERE status='paid' AND created_at < ? ORDER BY created_at ASC LIMIT 200"
+      )
+      .bind(cutoff)
+      .all<{ charge_id: string; user_id: number; product_id: string; created_at: number }>();
+    return json({ olderThanMin, orders, unpaidPayments });
+  } catch {
+    return json({ error: 'db-read-failed' }, 502);
   }
 }
 
@@ -753,8 +1088,14 @@ export default {
     if (request.method === 'POST' && url.pathname === '/api/ack') {
       return handleAck(request, env);
     }
+    if (request.method === 'POST' && url.pathname === '/api/wallet') {
+      return handleWallet(request, env);
+    }
     if (request.method === 'POST' && url.pathname === '/api/admin/refund') {
       return handleAdminRefund(request, env);
+    }
+    if (request.method === 'GET' && url.pathname === '/api/admin/stale-orders') {
+      return handleStaleOrders(request, env);
     }
     return new Response('not found', { status: 404 });
   },

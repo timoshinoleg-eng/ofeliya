@@ -160,6 +160,12 @@ OFELIYA_STARS_WORKER_SECRET=<тот же WEBHOOK_SECRET, что у воркер�
 Без `OFELIYA_STARS_WORKER_URL`/`OFELIYA_STARS_WORKER_SECRET` Stars-апдейты
 получают 503 (fail-closed: Telegram переотправит апдейт, когда прокси
 настроят); не-Stars апдейты идут как раньше.
+
+Патч №15 (P0-1, фикс аудита №5): прокси **сам** добавляет `/api/webhook`
+(`normalizeWorkerUrl` в `server/stars-proxy.mjs`); голый URL выше —
+правильный и рекомендуемый. Полный путь
+`https://<worker>.workers.dev/api/webhook` тоже принимается и не
+дублируется. Раньше прокси POSTил на голый URL → 404; больше не так.
 `WEBHOOK_SECRET` обязателен с обеих сторон; секрет воркера **не равен**
 `TG_WEBHOOK_SECRET` (разные секреты — разные blast radius).
 
@@ -182,28 +188,115 @@ OFELIYA_STARS_WORKER_SECRET=<тот же WEBHOOK_SECRET, что у воркер�
 риск для score-контракта минимален. Прямой webhook на воркер — только если
 игровые команды бота не нужны вообще.
 
-`pre_checkout_query` требует ответа ≤ 10 с: прокси имеет таймаут 8 с,
-воркер отвечает `ok` из D1 за миллисекунды; Render cold start > 8 с
-закрыт ретраем Telegram (воркер идемпотентен по `charge_id`).
+`pre_checkout_query` требует ответа ≤ 10 с **от отправки Telegram** — это
+бюджет всей цепочки: Telegram → Render → прокси (таймаут 8 с) → воркер →
+D1 → `answerPreCheckoutQuery` через Bot API. Воркер замеряет латентность и
+пишет `pre_checkout_slow` в лог при > 7 с — это сигнал, что цепочка слишком
+медленная (см. runbook §11).
 
-## 10. Admin: ручная пометка refunded (патч №14)
+Честно про ретраи (патч №15, P1-5): 503 при сбое D1 — правильный ответ, и
+Bot API действительно переотправляет неуспешные webhook-апдейты, но
+гарантирует лишь «разумное число попыток», а не доставку через произвольное
+время. Уже истёкший `pre_checkout` ретрай не спасёт: пользователь увидит
+«Товар недоступен», заказ останется `pending` — разгребать через
+`/api/admin/stale-orders` (§11). Двойной `successful_payment` безопасен
+(идемпотентность по `charge_id` + `wallet_ledger`).
 
-`POST /api/admin/refund` — ручное разрешение споров (возврат вне Telegram,
-двойное списание и т.п.):
+## 10. Admin: двухшаговый возврат (патч №15; было — только пометка, №14)
+
+`POST /api/admin/refund` — ручное разрешение споров. Два РАЗНЫХ действия,
+не путать:
 
 ```bash
+# Шаг 1 — только ПОМЕТИТЬ (возврат уже выполнен вручную через BotFather):
 curl -X POST https://<worker>/api/admin/refund \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H 'content-type: application/json' \
   -d '{"chargeId":"<telegram_charge_id>","reason":"manual refund"}'
+
+# Шаг 2 — ВЫПОЛНИТЬ возврат через Telegram (пометка — только после
+# подтверждения refundStarPayment):
+curl -X POST https://<worker>/api/admin/refund \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"chargeId":"<telegram_charge_id>","reason":"...","execute":true}'
 ```
 
 - `ADMIN_TOKEN` — отдельный секрет воркера (не bot token!), обязателен;
   без него/при неверном — 401, эндпоинт fail-closed.
-- Переводит платёж `paid|fulfilled → refunded` (повтор безопасен: уже
-  refunded → ok:false, состояние не меняется).
+- `execute=true` использует тот же `TELEGRAM_BOT_TOKEN` (отдельный
+  `OFELIYA_BOT_TOKEN` не нужен); без токена → 503
+  `{error:'bot-token-misconfigured'}`; провал `refundStarPayment` → 502
+  `{error:'refund-failed'}`, статус НЕ меняется.
+- Оба пути: `paid|fulfilled → refunded` + **откат серверного кошелька**
+  (РНК вычитается, скин убирается из `skins_json`; время бустера не
+  отматывается). Уже материализованное локальное значение на устройстве
+  НЕ отзывается (см. «Модель угроз» в `worker/src/index.ts`).
+- Идемпотентность: повтор при уже `refunded` → `{ok:true, already:true}`
+  (однозначно); не найден → `{ok:false, error:'not-found'}`.
 - После refund: `/api/verify` → `{verified:false, reason:'refunded'}`,
   клиентский `restore()` и `/api/entitlements` исключают запись из выдачи —
-  перевыдачи не будет.
-- Возвраты Stars получателю выполняет человек через Bot API / банк-эквайринг —
-  воркер только фиксирует факт в журнале (см. `worker/schema.sql`).
+  перевыдачи не будет; `/api/wallet` больше не содержит откатаный грант.
+
+## 11. Runbook: завиcшие платежи (патч №15, P1-5)
+
+`GET /api/admin/stale-orders?olderThanMin=N` (default 60, кап 1440) —
+заказы `pending` и платежи `paid`-без-`fulfilled` старше N минут:
+
+```bash
+curl "https://<worker>/api/admin/stale-orders?olderThanMin=60" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+# → {olderThanMin, orders:[{nonce,user_id,product_id,created_at}], unpaidPayments:[...]}
+```
+
+Разбор по сценариям:
+
+1. **Заказ `pending`, платежа нет** — пользователь не оплатил (закрыл
+   инвойс). Ничего делать не нужно; для чистоты — пометить `expired`
+   (SQL в `worker/schema.sql`, раздел чистки).
+2. **Заказ `pending`, платёж `paid`, клиент не забрал** — воркер грант
+   применил (кошелёк), клиент не синкнулся. Действие: попросить
+   пользователя открыть витрину (restore+sync) или сверить
+   `/api/wallet` вручную.
+3. **Платёж `paid` без кошелька** — не должно случаться (атомарный батч);
+   если случилось — смотреть логи `stars_payment_*` и `pre_checkout_slow`.
+4. **`pre_checkout_slow` в логах** — цепочка не укладывается в 10 с:
+   проверить cold start Render, латентность D1, таймаут прокси (8 с).
+   Временно: прямой webhook на воркер (минус хоп), см. §9.
+5. **Двойное списание** — сверить `wallet_ledger` по `user_id`: один
+   `charge_id` = один грант (UNIQUE). Лишнее — через `/api/admin/refund`
+   с `execute:true` (§10).
+
+## 12. Миграция существующей D1 (если база уже создана)
+
+Свежая схема (`worker/schema.sql`) — основной путь: Mark ещё не деплоил.
+Если D1 уже существует со схемой патча №13/№14, применить дельту:
+
+```sql
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_nonce_unique ON payments(nonce);
+CREATE TABLE IF NOT EXISTS wallets (
+  user_id          INTEGER PRIMARY KEY,
+  purchased_rna    INTEGER NOT NULL DEFAULT 0,
+  booster_until_ms INTEGER NOT NULL DEFAULT 0,
+  skins_json       TEXT NOT NULL DEFAULT '[]',
+  updated_at       INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS wallet_ledger (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL,
+  charge_id   TEXT NOT NULL UNIQUE,
+  kind        TEXT NOT NULL,
+  amount_text TEXT NOT NULL DEFAULT '',
+  created_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_wallet_ledger_user ON wallet_ledger(user_id);
+```
+
+```bash
+wrangler d1 execute ofeliya-payments --file=worker/migration-15.sql  # или вставить SQL выше
+```
+
+Важно: платежи, записанные воркером до №15, в `wallets` не попадут
+(бэкфилла нет — нельзя отличить уже выданное локально). Их гранты уже
+материализованы старыми клиентами локально; новые клиенты увидят
+`purchased_rna=0` — это корректно, задвоения не будет.
