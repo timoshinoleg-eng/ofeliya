@@ -104,6 +104,7 @@ import { EnemyHealthOverlay } from '../systems/EnemyHealthOverlay';
 import { VideoInterstitial } from '../systems/VideoInterstitial';
 import { PERFORMANCE } from '../systems/PerformanceProfile';
 import { RuntimeQualityGovernor } from '../systems/RuntimeQualityGovernor';
+import { Juice } from '../game/Juice';
 import {
   HostCellSystem,
   type HostCellInteractionEvent,
@@ -225,6 +226,7 @@ export class GameScene extends Phaser.Scene {
   private visualDensityRefreshAt = 0;
   private runtimeQuality!: RuntimeQualityGovernor;
   private runtimeQualityRegistryAt = 0;
+  private juice!: Juice;
   private keys: Record<string, Phaser.Input.Keyboard.Key> = {};
   private introHint: Phaser.GameObjects.Container | null = null;
   private transitionGeneration = 0;
@@ -335,6 +337,11 @@ export class GameScene extends Phaser.Scene {
     // already allocates fewer ambient/VFX objects, so it must not be double-penalized on launch.
     this.runtimeQuality = new RuntimeQualityGovernor();
     this.runtimeQualityRegistryAt = 0;
+    // Juice — единый движок game feel (tween.js). Интенсивность масштабируется
+    // профилем governor: в Canvas-фолбэке косметика деградирует вместе с частицами.
+    this.juice = new Juice(this, {
+      intensityScale: () => this.runtimeQuality.profile.particleScale,
+    });
 
     this.heartbeatPulse = new HeartbeatPulseDirector(
       heartbeatProfileForDifficulty(this.difficulty)
@@ -417,6 +424,7 @@ export class GameScene extends Phaser.Scene {
     this.haloRing = null;
     this.hitStopUntil = 0;
     this.hitStopped = false;
+    this.juice.reset();
     this.lastDmg = null;
     this.lastDmgAt = 0;
     this.dmgCursor = 0;
@@ -675,6 +683,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number): void {
+    // Juice твины двигаются ДО любых early-return (включая хит-стоп фриз),
+    // чтобы дип timeScale прогрессировал и во время фриза. На часах tween.js,
+    // а не на времени сцены (см. шапку Juice.ts).
+    this.juice.update();
     this.maybeCompleteBossDefeatCeremony(time);
     if (this.stageDirector.phase === 'RUN_ENDED') return;
     // A stage transition is a frozen transaction: no movement, combat, wave spawns or stage clocks.
@@ -1199,6 +1211,9 @@ export class GameScene extends Phaser.Scene {
     this.hitStopUntil = now + ms;
     this.hitStopped = true;
     this.physics.world.pause();
+    // Slow-mo хвост твином timeScale поверх жёсткого фриза (контракт
+    // ImpactDirector не тронут: длительность фриза та же).
+    this.juice.hitStop(ms);
   }
 
   private showDamage(x: number, y: number, amount: number): void {
@@ -2959,7 +2974,9 @@ export class GameScene extends Phaser.Scene {
   private shake(duration: number, intensity: number, preGranted = false): void {
     if (prefersReducedMotion()) return;
     if (preGranted || this.impact.allowCameraShake(this.time.now)) {
-      this.cameras.main.shake(duration, intensity);
+      // Актуатор — camera.shake внутри Juice (корректен при follow-lerp);
+      // интенсивность скейлится governor через Juice.
+      this.juice.screenShake(duration, intensity);
     }
   }
 
