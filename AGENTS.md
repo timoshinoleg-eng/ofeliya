@@ -5,12 +5,12 @@
 
 ## Что это за проект
 
-OFELIYA: STRAIN ZERO — мобильный portrait roguelite-survivor для MAX Mini Apps.
+OFELIYA: STRAIN ZERO — мобильный portrait roguelite-survivor для Telegram Mini Apps и MAX Mini Apps (Telegram-first).
 Игрок управляет синтетическим вирусом внутри организма.
 Кампания: КРОВОТОК → IMMUNE PRIME → СЕРДЦЕ → CARDIAC TITAN.
 
-Стек: Phaser 3 + TypeScript + Vite; MAX Bridge через `src/platform/*`; аудио в `public/audio/` (CC0);
-шрифт Chakra Petch (self-hosted). Сервер: `server/` (trusted MAX score + профили), бот: `bot/`.
+Стек: Phaser 3 + TypeScript + Vite; platform-neutral слой `src/platform/*` (MAX Bridge и Telegram WebApp); аудио в `public/audio/` (CC0);
+шрифт Chakra Petch (self-hosted). Сервер: `server/` (trusted score + профили), бот: `bot/`, воркер: `worker/` (Telegram Stars, Cloudflare D1).
 
 Канонические документы (при расхождении — они главнее любых старых заметок):
 
@@ -25,6 +25,8 @@ OFELIYA: STRAIN ZERO — мобильный portrait roguelite-survivor для M
 Локальный запуск: `npm install` → `npm run dev`.
 Тесты и гейты: `npm run test:*` (см. `package.json`), канонический build-гейт — как в `README.md`.
 Публикационный RC: **только** `npm run build:max` (требует release env; placeholder-значения останавливают сборку).
+Production deploy — Render (сервис `ofeliya-game`, автодеплой из `main`); детали — в `deploy/RENDER.md`.
+Cloud.ru/compose — не живой путь деплоя.
 
 ## Жёсткие правила
 
@@ -35,6 +37,8 @@ OFELIYA: STRAIN ZERO — мобильный portrait roguelite-survivor для M
 - Исторические спринт-документы — не источник истины. При конфликте исправляй устаревший документ.
 - Секреты и ключи — только локально (env / локальные конфиги). В репозиторий не коммитить.
 - Не коммитить напрямую в `main` — только ветки и PR.
+- Платформенная повестка — Telegram-first: приоритет разработки и монетизации — Telegram (Stars/TON); вопрос payments API MAX деприоритизирован и как актуальный план не подаётся.
+- Документы о платформе и деплоях сверять с `PROJECT_IDENTITY.md` и `deploy/RENDER.md`.
 
 ## Память проекта (протокол HANDOFF)
 
