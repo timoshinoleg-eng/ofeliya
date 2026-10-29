@@ -1,9 +1,11 @@
 /**
  * Каталог витрины — данные, не код (витрина OFELIYA, rail-agnostic).
  *
- * Цены — нейтральный формат {amount, currency}. Скины несут DiceBear-совместимые
- * поля art.seed/art.palette (Фаза 5 сгенерирует из них SVG-арт); сейчас UI
- * рисует детерминированную заглушку по хешу seed.
+ * Цены — нейтральный формат {amount, currency} + опциональные stars (XTR,
+ * целые) для Telegram Stars (см. TelegramStarsPaymentProvider).
+ * Скины несут DiceBear-совместимые поля art.seed/art.palette
+ * (Фаза 5 сгенерирует из них SVG-арт); сейчас UI рисует детерминированную
+ * заглушку по хешу seed.
  *
  * Модуль Phaser-free: validateCatalog/formatPrice — чистые функции,
  * тестируются в Node.
@@ -17,6 +19,7 @@ export const SHOP_CATALOG: readonly Product[] = [
     title: 'Штамм «Вирулентный»',
     description: 'Пурпурный боевой окрас STRAIN-0. Чистая косметика.',
     price: { amount: 149, currency: 'RUB' },
+    stars: 100,  // Telegram Stars (XTR)
     art: { seed: 'virulent-01', palette: 'magenta' },
     tag: 'HIT',
   },
@@ -26,6 +29,7 @@ export const SHOP_CATALOG: readonly Product[] = [
     title: 'Штамм «Бездонный»',
     description: 'Глубоководный тил. Виден даже в темной плазме.',
     price: { amount: 149, currency: 'RUB' },
+    stars: 100,  // Telegram Stars (XTR)
     art: { seed: 'abyssal-02', palette: 'teal' },
     tag: 'NEW',
   },
@@ -35,6 +39,7 @@ export const SHOP_CATALOG: readonly Product[] = [
     title: 'Штамм «Позолоченный»',
     description: 'Праймовый золотой штамм для ветеранов кровотока.',
     price: { amount: 299, currency: 'RUB' },
+    stars: 250,  // Telegram Stars (XTR)
     art: { seed: 'gilded-03', palette: 'gold' },
   },
   {
@@ -43,6 +48,7 @@ export const SHOP_CATALOG: readonly Product[] = [
     title: 'РНК ×2 — 7 дней',
     description: 'Двойной дроп РНК со всех гемов в течение недели.',
     price: { amount: 99, currency: 'RUB' },
+    stars: 75,  // Telegram Stars (XTR)
     art: { seed: 'booster-rna-x2', palette: 'green' },
   },
   {
@@ -51,6 +57,7 @@ export const SHOP_CATALOG: readonly Product[] = [
     title: 'Набор РНК ×500',
     description: 'Малая капсула чистой РНК для лаборатории мутаций.',
     price: { amount: 49, currency: 'RUB' },
+    stars: 35,  // Telegram Stars (XTR)
     art: { seed: 'rna-pack-s', palette: 'cyan' },
   },
   {
@@ -59,6 +66,7 @@ export const SHOP_CATALOG: readonly Product[] = [
     title: 'Набор РНК ×1500',
     description: 'Средняя капсула. Выгоднее малого набора на 13%.',
     price: { amount: 129, currency: 'RUB' },
+    stars: 100,  // Telegram Stars (XTR)
     art: { seed: 'rna-pack-m', palette: 'cyan' },
     tag: '-13%',
   },
@@ -106,6 +114,8 @@ export function validateCatalog(products: readonly Product[]): string[] {
     }
     if (p.tag !== undefined && (typeof p.tag !== 'string' || !p.tag))
       errors.push(`${where}: bad tag`);
+    if (p.stars !== undefined && (!Number.isInteger(p.stars) || p.stars <= 0))
+      errors.push(`${where}: bad stars (want positive integer XTR)`);
   });
   return errors;
 }

@@ -1080,11 +1080,13 @@ export class MenuScene extends Phaser.Scene {
       if (StartupTrace.showDebugOverlay()) PlatformBridge.haptic('light');
     });
     // Точка входа в витрину (storefront, порт партии 3): только когда флаг
-    // storefront.variant видим ('mock'/'max'/'telegram' — 'telegram' добавит
-    // партия Stars); при дефолтном 'hidden' не рисуется — раскладка меню
-    // не меняется. Чип в правом верхнем углу, вне измеренных зон меню
-    // (заголовок и founder-бейдж центрированы).
-    if (isStorefrontVisible(FeatureFlags.get('storefront.variant'))) {
+    // storefront.variant видим ('mock'/'max'/'telegram' + авто-детект
+    // Telegram при сконфигурированном бэкенде); при дефолтном 'hidden'
+    // без бэкенда не рисуется — раскладка меню не меняется. Чип в правом
+    // верхнем углу, вне измеренных зон меню (заголовок и founder-бейдж
+    // центрированы).
+    const paymentsApiUrl = (import.meta.env.VITE_PAYMENTS_API_URL as string | undefined) ?? '';
+    if (isStorefrontVisible(FeatureFlags.get('storefront.variant'), { apiBaseUrl: paymentsApiUrl })) {
       const shopW = 104;
       const shopH = 40;
       const shopX = W - 12 - shopW / 2;

@@ -25,7 +25,7 @@ import { trackProductEvent } from '../systems/AnalyticsClient';
 import { prefersReducedMotion } from '../systems/MotionPreferences';
 import { BORDER, CLAMP, PANEL, ROLE, SPACE, TOUCH } from '../ui/tokens';
 import { VISUAL_TEXT } from '../ui/visualTokens';
-import { STOREFRONT_MAX, isStorefrontVisible, resolveProvider } from '../game/shop/Storefront';
+import { STOREFRONT_MAX, STOREFRONT_TELEGRAM, isStorefrontVisible, resolveProvider } from '../game/shop/Storefront';
 import { applyPurchaseGrants } from '../game/shop/grantPurchase';
 import { formatPrice, validateCatalog } from '../game/shop/products';
 import type {
@@ -91,11 +91,14 @@ export class StorefrontScene extends Phaser.Scene {
     this.variant = FeatureFlags.get('storefront.variant');
 
     // Fail-closed: без видимого варианта витрины тут делать нечего.
-    if (!isStorefrontVisible(this.variant)) {
+    // apiBaseUrl читаем здесь (import.meta.env безопасен только в браузере;
+    // shop-модули Phaser-free и компилируются Node-тестами).
+    const apiBaseUrl = (import.meta.env.VITE_PAYMENTS_API_URL as string | undefined) ?? '';
+    if (!isStorefrontVisible(this.variant, { apiBaseUrl })) {
       this.scene.start('Menu');
       return;
     }
-    this.provider = resolveProvider(this.variant);
+    this.provider = resolveProvider(this.variant, { apiBaseUrl });
 
     this.buildChrome();
     void trackProductEvent('store_viewed', PlatformBridge, {
@@ -160,7 +163,15 @@ export class StorefrontScene extends Phaser.Scene {
     this.root.add([backBg, backLabel]);
 
     // Подзаголовок-режим (видно, какой рельс активен — важно для QA).
-    const modeLabel = this.variant === STOREFRONT_MAX ? 'рельс MAX (заглушка)' : 'тестовый режим · без реальных платежей';
+    // Telegram — реальный биллинг Stars, а не тестовый режим (в стеке здесь
+    // был else-«тестовый режим» и для telegram — исправлено: иначе подпись
+    // врала бы про реальные деньги).
+    const modeLabel =
+      this.variant === STOREFRONT_MAX
+        ? 'рельс MAX (заглушка)'
+        : this.variant === STOREFRONT_TELEGRAM
+          ? 'Telegram Stars · оплата звёздами'
+          : 'тестовый режим · без реальных платежей';
     const mode = this.add
       .text(W / 2, 72, modeLabel, {
         fontFamily: UI_FONT,

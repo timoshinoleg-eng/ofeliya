@@ -57,7 +57,8 @@ export type FlagKey =
  * - 'mock' — витрина на MockPaymentProvider (dev/QA-дубль, НЕ реальный биллинг);
  * - 'max' — MaxBridgePaymentProvider (stub: unavailable → экран «скоро»);
  * - 'telegram' — TelegramStarsPaymentProvider (реальный биллинг Stars;
- *   провайдер приходит с партией Stars, до неё значение fail-closed).
+ *   доступен только в Telegram WebApp + при VITE_PAYMENTS_API_URL, иначе
+ *   провайдер unavailable → экран «скоро»).
  * Витрина портирована (партия 3): флаг больше не stub.
  */
 export type StorefrontVariant = 'hidden' | 'mock' | 'max' | 'telegram';

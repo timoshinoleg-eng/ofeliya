@@ -1,0 +1,11 @@
+# Скопируй в wrangler.toml и поправь под себя. Сам wrangler.toml НЕ коммить,
+# если боишься светить имя воркера — пример достаточен для деплоя руками.
+#
+# Секреты ставятся отдельно (НЕ в этот файл):
+#   npx wrangler secret put TELEGRAM_BOT_TOKEN   # токен бота из BotFather
+#   npx wrangler secret put WEBHOOK_SECRET       # опционально, строка для
+#                                               # X-Telegram-Bot-Api-Secret-Token
+
+name = "ofeliya-payments"
+main = "src/index.ts"
+compatibility_date = "2026-10-21"

@@ -146,6 +146,9 @@ jobs:
       - name: Storefront contract
         run: npm run test:shop
 
+      - name: Stars contract
+        run: npm run test:stars
+
       - name: Daily V2 client contract smoke
         run: npm run test:daily-v2
 

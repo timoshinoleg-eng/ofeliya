@@ -9,7 +9,7 @@
  * Модуль намеренно Phaser-free: чистая логика, тестируется в Node.
  */
 
-export type ProviderId = 'mock' | 'max-bridge';
+export type ProviderId = 'mock' | 'max-bridge' | 'telegram-stars';
 
 export type ProductKind = 'skin' | 'booster' | 'currency';
 
@@ -39,6 +39,12 @@ export interface Product {
   art: ProductArt;
   /** Бейдж на карточке: 'HIT' | 'NEW' | '-13%' … */
   tag?: string;
+  /**
+   * Цена в звёздах Telegram (XTR) — ЦЕЛОЕ число (1 star ≈ $0.013).
+   * TelegramStarsPaymentProvider берёт цену отсюда; если stars нет —
+   * товар недоступен к покупке через Stars (failed 'no-stars-price').
+   */
+  stars?: number;
 }
 
 export type PurchaseState = 'success' | 'cancelled' | 'failed' | 'unavailable';

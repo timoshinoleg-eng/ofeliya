@@ -1,3 +1,5 @@
+Stars port: exact-head CI на PR; после мержа — партия 3 задача 3 (Juice: @tweenjs/tween.js + Juice.ts, швы GameScene/UIScene; церемонию боссов не трогать). Дальше: фиксы №10–16. ОТКРЫТО (за Mark): унификация двух путей выбора скинов; деплой воркера + bot token + webhook (worker/README_DEPLOY.md).
+
 Storefront port: exact-head CI на PR; после мержа — партия 3 задача 2 (Stars: TelegramStarsPaymentProvider + worker/, stars в products.ts, stars в SkinCatalog из SHOP_CATALOG). Дальше: Juice, фиксы №10–16. ОТКРЫТО (за Mark): унификация двух путей выбора скинов (коллекция shells → тинт vs галерея → текстура).
 
 Phase 5 port: exact-head CI на PR; после мержа — партия 3 (витрина+Stars: ханк purchase→grant, кнопка КУПИТЬ, SHOP_CATALOG как источник каталога). Дальше по плану: Juice, фиксы №10–16. ОТКРЫТО (за Mark): унификация двух путей выбора скинов (коллекция shells → тинт vs галерея → текстура).
