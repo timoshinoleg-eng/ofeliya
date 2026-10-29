@@ -200,6 +200,10 @@ try {
   eq(r.ok, true, 'default wallet claim ok');
   eq(r.reward.rna, 75, 'default wallet reward 75');
   eq(mw.loadMeta().rna, before + 75, 'default wallet grants via grantMetaRna');
+  // E1 (патч №12): success-вариант несёт granted — фактически выданное
+  // количество (с бустом лаборатории), а не базовую награду. При нулевых
+  // уровнях лаборатории granted == base reward.
+  eq(r.granted, 75, 'default wallet granted equals base reward without lab levels');
   delete globalThis.localStorage;
 
   console.log('daily-streak: OK');

@@ -39,7 +39,8 @@ export type ProductEvent =
   | 'store_viewed'
   | 'purchase_started'
   | 'purchase_completed'
-  | 'purchase_failed';
+  | 'purchase_failed'
+  | 'purchase_pending';
 
 export type ProductEventProps = Record<string, string | number | boolean>;
 

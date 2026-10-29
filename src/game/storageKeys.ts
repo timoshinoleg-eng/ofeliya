@@ -65,10 +65,20 @@ export const STORAGE_KEYS: Record<string, StorageKeyInfo> = {
     owner: 'src/game/daily/DailyCalendar.ts',
     format: 'JSON: клеймы по датам (локальный кэш; сервер — источник правды)',
   },
-  // Журнал чеков Stars-покупок для restore() (+ серверный /api/entitlements).
+  // Журнал чеков Stars-покупок для restore() (+ серверный /api/entitlements v2).
   'ofeliya.telegram.entitlements.v1': {
     owner: 'src/game/shop/TelegramStarsPaymentProvider.ts',
     format: 'JSON: массив { productId, receipt, ts }',
+  },
+  // Pending-журнал: покупки, ждущие серверного подтверждения (патч №12).
+  'ofeliya.payments.pending.v1': {
+    owner: 'src/game/shop/PaymentLedger.ts',
+    format: 'JSON: массив { nonce, productId, stars, createdAt, attempts }',
+  },
+  // Журнал выданных charge id — идемпотентность выдачи (патч №12).
+  'ofeliya.payments.credited.v1': {
+    owner: 'src/game/shop/PaymentLedger.ts',
+    format: 'JSON: массив chargeId (string[])',
   },
   // Журнал чеков mock-покупок для restore() (только DEV/QA).
   'ofeliya.mock.entitlements.v1': {

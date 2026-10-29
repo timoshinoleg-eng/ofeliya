@@ -146,7 +146,7 @@ export class MockPaymentProvider implements PaymentProvider {
       list.push({ productId, receipt, ts: Date.now() });
       this.writeEntitlements(list);
     }
-    return { state: 'success', productId, provider: 'mock', receipt };
+    return { state: 'paid', productId, provider: 'mock', receipt };
   }
 
   async restore(): Promise<RestoreResult> {

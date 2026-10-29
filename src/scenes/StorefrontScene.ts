@@ -26,7 +26,11 @@ import { prefersReducedMotion } from '../systems/MotionPreferences';
 import { BORDER, CLAMP, PANEL, ROLE, SPACE, TOUCH } from '../ui/tokens';
 import { VISUAL_TEXT } from '../ui/visualTokens';
 import { STOREFRONT_MAX, STOREFRONT_TELEGRAM, isStorefrontVisible, resolveProvider } from '../game/shop/Storefront';
-import { applyPurchaseGrants } from '../game/shop/grantPurchase';
+import {
+  addPendingPurchase,
+  fulfillPurchase,
+  loadPendingPurchases,
+} from '../game/shop/PaymentLedger';
 import { formatPrice, validateCatalog } from '../game/shop/products';
 import { grantMetaRna } from '../game/lab/LabState';
 import {
@@ -120,6 +124,9 @@ export class StorefrontScene extends Phaser.Scene {
       return;
     }
     void this.loadProducts();
+    // Патч №12: при открытии витрины допроверяем pending-покупки
+    // (verify → verified → fulfillPurchase → снять запись; иначе бэкофф).
+    void this.refreshPendingAndRender();
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.clearListMask();
@@ -351,6 +358,14 @@ export class StorefrontScene extends Phaser.Scene {
     const cardH = 108;
     const gap = SPACE.md;
     let cy = 0;
+    // Патч №12: баннер неподтверждённых покупок + ручная допроверка.
+    if (this.state === 'ready') {
+      const pending = loadPendingPurchases();
+      if (pending.length > 0) {
+        this.buildPendingBanner(list, 0, cy, width, pending.length);
+        cy += 76 + gap;
+      }
+    }
     for (const product of this.products) {
       this.buildCard(list, product, 0, cy, width, cardH);
       cy += cardH + gap;
@@ -516,6 +531,100 @@ export class StorefrontScene extends Phaser.Scene {
     return formatPrice(product.price);
   }
 
+  /**
+   * Патч №12: баннер «Ожидание подтверждения» для pending-покупок
+   * (сервер ещё не подтвердил оплату — выдачи нет). Кнопка «Проверить
+   * оплату» — ручная допроверка через provider.restore()
+   * (авто-ретраи с бэкоффом 2с/5с/15с/60с идут в сессии сами).
+   */
+  private buildPendingBanner(
+    parent: Phaser.GameObjects.Container,
+    cx: number,
+    cy: number,
+    width: number,
+    count: number
+  ): void {
+    const bannerH = 76;
+    const banner = this.add.container(cx, cy);
+    const bg = this.add
+      .rectangle(0, 0, width, bannerH, ROLE.surface.panel, PANEL.card)
+      .setStrokeStyle(BORDER.thin, 0xffe066, 0.9)
+      .setOrigin(0.5, 0);
+    const label = this.add
+      .text(-width / 2 + 16, 12, `ОЖИДАНИЕ ПОДТВЕРЖДЕНИЯ${count > 1 ? ` · ${count}` : ''}`, {
+        fontFamily: FONT,
+        fontSize: '12px',
+        fontStyle: 'bold',
+        color: '#ffe066',
+      })
+      .setOrigin(0, 0)
+      .setResolution(2);
+    const sub = this.add
+      .text(-width / 2 + 16, 32, 'Платёж обрабатывается. Товар выдадим автоматически.', {
+        fontFamily: UI_FONT,
+        fontSize: '11px',
+        color: VISUAL_TEXT.muted,
+        wordWrap: { width: width - 140 },
+      })
+      .setOrigin(0, 0)
+      .setResolution(2);
+    const btnW = 108;
+    const btnH = Math.max(TOUCH.min, 40);
+    const btnX = width / 2 - 12 - btnW / 2;
+    const btnBg = this.add
+      .rectangle(btnX, bannerH / 2, btnW, btnH, ROLE.surface.panelHover, PANEL.button)
+      .setStrokeStyle(BORDER.thin, 0xffe066, 0.8)
+      .setInteractive({ useHandCursor: true });
+    const btnLabel = this.add
+      .text(btnX, bannerH / 2, 'ПРОВЕРИТЬ', {
+        fontFamily: FONT,
+        fontSize: '11px',
+        fontStyle: 'bold',
+        color: '#ffe066',
+      })
+      .setOrigin(0.5)
+      .setResolution(2);
+    let checking = false;
+    btnBg.on('pointerdown', () => btnBg.setAlpha(0.6));
+    btnBg.on('pointerup', () => {
+      btnBg.setAlpha(1);
+      if (checking || !this.provider) return;
+      checking = true;
+      btnLabel.setText('···');
+      // Перерендер заменяет баннер, поэтому текст кнопки назад не ставим.
+      void this.refreshPendingAndRender();
+    });
+    banner.add([bg, label, sub, btnBg, btnLabel]);
+    parent.add(banner);
+  }
+
+  /**
+   * Патч №12: допроверка pending-покупок + аналитика выданных +
+   * перерендер, когда уместно (состояние ready/empty). Вызывается при
+   * открытии витрины и кнопкой «Проверить оплату». Никогда не бросает
+   * (MaxBridge restore() бросает — stub).
+   */
+  private async refreshPendingAndRender(): Promise<void> {
+    const provider = this.provider;
+    if (!provider) return;
+    let fulfilled: string[] = [];
+    try {
+      const res = await provider.restore();
+      fulfilled = res.pendingFulfilled ?? [];
+    } catch {
+      /* restore не должен ронять витрину */
+    }
+    for (const id of fulfilled) {
+      void trackProductEvent('purchase_completed', PlatformBridge, {
+        productId: id,
+        provider: provider.id,
+      });
+    }
+    if (this.sys.isActive() && (this.state === 'ready' || this.state === 'empty')) {
+      this.renderContent();
+    }
+  }
+
   // ---------- purchase flow ----------
 
   private async buy(product: Product): Promise<void> {
@@ -538,31 +647,57 @@ export class StorefrontScene extends Phaser.Scene {
         reason: e instanceof Error ? e.message : 'unknown',
       };
     }
-    // Аудит (порт №10): грант и аналитика не зависят от сцены — выполняем ДО
-    // проверки isActive. Сцена могла деактивироваться во время асинхронной
-    // оплаты (жест «назад», рестарт), и успешный платёж не должен теряться молча.
-    if (result.state === 'success') {
-      // Выдача — до экрана успеха: «Выдано» означает выданное.
-      applyPurchaseGrants(product);
-      void trackProductEvent('purchase_completed', PlatformBridge, {
-        productId: product.id,
-        provider: provider.id,
-      });
-      // Пост-ревью (патч №11): достижения за покупку разблокируются
-      // СРАЗУ, а не на следующем конце забега (паттерн GameScene /
-      // RetentionOverlays: тот же unlock + тост с РЕАЛЬНО начисленным).
-      // Тосты сами no-op при неактивной сцене — выдача не теряется.
+    // Патч №12 (E3): грант, аналитика и разблокировка достижений не зависят
+    // от сцены — выполняем ДО проверки isActive. Сцена могла деактивироваться
+    // во время асинхронной оплаты (жест «назад», рестарт), и успешный платёж
+    // не должен теряться молча. Тосты — ТОЛЬКО на активной сцене (после
+    // проверки), поэтому здесь лишь собираем их данные.
+    interface PendingToast {
+      title: string;
+      sub: string;
+      skinId?: string;
+    }
+    const pendingToasts: PendingToast[] = [];
+    if (result.state === 'paid') {
+      // Выдача — только через ledger: идемпотентность по chargeId,
+      // recordStarsSpent — только у реальных провайдеров (не 'mock').
+      // purchase_completed — только при первой выдаче ('granted'), чтобы
+      // повтор ('duplicate') не считал покупку дважды.
+      const outcome = fulfillPurchase(product, { chargeId: result.chargeId, providerId: provider.id });
+      if (outcome === 'granted') {
+        void trackProductEvent('purchase_completed', PlatformBridge, {
+          productId: product.id,
+          provider: provider.id,
+        });
+      }
+      // Достижения проверяем сразу: игрок получает награду (напр. скин
+      // «Инвестора» за 500 звёзд) не дожидаясь конца забега.
       for (const id of unlockMetaAchievements(collectLifetimeStats())) {
         const def = getMetaAchievementDef(id);
         if (def.reward.kind === 'rna') {
           const granted = grantMetaRna(def.reward.amount).granted;
-          showMetaToast(this, def.title, `+${granted} РНК`);
+          pendingToasts.push({ title: def.title, sub: `+${granted} РНК` });
         } else {
           grantAchievementSkin(def.reward.skinId);
-          showSkinGrantToast(this, def.reward.skinId);
+          pendingToasts.push({ title: def.title, sub: '', skinId: def.reward.skinId });
         }
         void trackProductEvent('achievement_unlocked', PlatformBridge, { achievementId: id });
       }
+    } else if (result.state === 'pending') {
+      // Сервер не подтвердил оплату: БЕЗ выдачи. Сохраняем в pending-журнал —
+      // допроверка в restore() (при открытии витрины) и кнопкой
+      // «Проверить оплату». UI — баннер в renderList.
+      addPendingPurchase({
+        nonce: result.nonce,
+        productId: product.id,
+        stars: product.stars ?? 0,
+        createdAt: Date.now(),
+      });
+      void trackProductEvent('purchase_pending', PlatformBridge, {
+        productId: product.id,
+        provider: provider.id,
+        reason: result.reason ?? '',
+      });
     } else {
       void trackProductEvent('purchase_failed', PlatformBridge, {
         productId: product.id,
@@ -571,10 +706,18 @@ export class StorefrontScene extends Phaser.Scene {
       });
     }
     if (!this.sys.isActive()) return;
+    // E3: тосты — только после проверки isActive (Phaser-объекты сцены).
+    for (const t of pendingToasts) {
+      if (t.skinId) showSkinGrantToast(this, t.skinId);
+      else showMetaToast(this, t.title, t.sub);
+    }
     this.purchasingId = null;
-    if (result.state === 'success') {
+    if (result.state === 'paid') {
       this.lastBought = product;
       this.setState('success');
+    } else if (result.state === 'pending') {
+      // Баннер «Ожидание подтверждения» рисуется в renderList.
+      this.setState('ready');
     } else {
       this.errorReason =
         result.state === 'cancelled' ? 'Покупка отменена' : `Не удалось: ${result.reason}`;

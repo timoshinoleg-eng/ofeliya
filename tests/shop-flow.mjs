@@ -49,11 +49,14 @@ try {
     { stdio: 'inherit' }
   );
 
-  // tsc preserves structure from the common root (src/game/): shop/* land in shop/.
-  const { FLAG_DEFAULTS } = require(join(temp, 'FeatureFlags.js'));
-  const { resolveProvider, isStorefrontVisible } = require(join(temp, 'shop', 'Storefront.js'));
-  const { MockPaymentProvider } = require(join(temp, 'shop', 'MockPaymentProvider.js'));
-  const { MaxBridgePaymentProvider } = require(join(temp, 'shop', 'MaxBridgePaymentProvider.js'));
+  // tsc common root is now src/ (not src/game/): Storefront imports
+  // TelegramStars → PaymentLedger → grantPurchase → SkinOwnership →
+  // ClientExperience (src/systems/), so outputs land in game/shop/ and
+  // game/FeatureFlags.js. Same assertions, only the require paths moved.
+  const { FLAG_DEFAULTS } = require(join(temp, 'game', 'FeatureFlags.js'));
+  const { resolveProvider, isStorefrontVisible } = require(join(temp, 'game', 'shop', 'Storefront.js'));
+  const { MockPaymentProvider } = require(join(temp, 'game', 'shop', 'MockPaymentProvider.js'));
+  const { MaxBridgePaymentProvider } = require(join(temp, 'game', 'shop', 'MaxBridgePaymentProvider.js'));
 
   // --- flag default is fail-closed ---
   eq(FLAG_DEFAULTS['storefront.variant'], 'hidden', 'storefront.variant defaults to hidden');

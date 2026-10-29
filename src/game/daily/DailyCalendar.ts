@@ -180,7 +180,7 @@ export function getDailyStatus(now: Date = new Date(), deps: DailyCalendarDeps =
 }
 
 export type ClaimResult =
-  | { ok: true; streak: number; reward: DailyReward }
+  | { ok: true; streak: number; reward: DailyReward; granted: number }
   | { ok: false; reason: 'not_played' | 'already_claimed' };
 
 /**
@@ -188,14 +188,24 @@ export type ClaimResult =
  * Возвращает {ok:false} если сегодня не сыгран забег дня или награда
  * уже забрана. Грант (addRna + recordStreak) и запись claim — атомарно
  * внутри: повторный вызов после успеха всегда вернёт already_claimed.
+ * Патч №12 (E1): возвращается и РЕАЛЬНО начисленное (granted, с бонусами
+ * лаборатории/бустера), а не только базовая награда — кнопка и onClaimed
+ * показывают granted. С инжектированным wallet granted неизвестен
+ * (интерфейс возвращает только баланс) — тогда granted = базовая награда.
  */
 export function claimDaily(now: Date = new Date(), deps: DailyCalendarDeps = {}): ClaimResult {
   const summary = deps.summary ?? dailyStreakSummary(undefined, now);
   const claims = deps.claims ?? loadClaims();
+  let granted: number | null = null;
   const wallet: DailyWallet = deps.wallet ?? {
     // DailyWallet.addRna возвращает баланс — адаптер к новому
-    // GrantMetaRnaResult (пост-ревью, патч №11).
-    addRna: (amount) => grantMetaRna(amount).balance,
+    // GrantMetaRnaResult (пост-ревью, патч №11); granted захватываем
+    // замыканием для E1.
+    addRna: (amount) => {
+      const r = grantMetaRna(amount);
+      granted = r.granted;
+      return r.balance;
+    },
     recordStreak,
   };
   const status = getDailyStatus(now, { summary, claims });
@@ -206,5 +216,5 @@ export function claimDaily(now: Date = new Date(), deps: DailyCalendarDeps = {})
   wallet.recordStreak(status.bestStreak);
   claims[status.todayKey] = { streak: status.streak, reward: reward.rna, claimedAt: now.getTime() };
   saveClaims(claims);
-  return { ok: true, streak: status.streak, reward };
+  return { ok: true, streak: status.streak, reward, granted: granted ?? reward.rna };
 }

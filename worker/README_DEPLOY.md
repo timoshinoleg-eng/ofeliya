@@ -41,7 +41,8 @@ curl "https://api.telegram.org/bot<TOKEN>/setWebhook" \
 ```
 
 Воркер сверяет заголовок `X-Telegram-Bot-Api-Secret-Token` с `WEBHOOK_SECRET`.
-Без секрета webhook принимает любой (не рекомендуется для прода).
+Без `WEBHOOK_SECRET` в env воркер отвечает **401 fail-closed** (патч №12):
+молчаливого отключения проверки больше нет — секрет обязателен.
 
 ## 4. Клиент игры
 
@@ -58,16 +59,19 @@ VITE_PAYMENTS_API_URL=https://<worker>
 1. Открой Mini App внутри Telegram (не в браузере — там нет `window.Telegram`).
 2. Открой витрину → выбери товар → «Купить».
 3. Оплати Stars (для теста BotFather умеет тестовые платежи, либо купи Stars).
-4. Ожидаемо: нативный инвойс → `paid` → анимация выдачи (твины сцены),
-   событие `purchase_completed` (trackProductEvent), запись в localStorage
-   провайдера + грант через grantPurchase (скины/РНК/бустер).
+4. Ожидаемо: нативный инвойс → `paid` → верификация по nonce
+   (`POST /api/verify`) → анимация выдачи (твины сцены),
+   событие `purchase_completed` (trackProductEvent), выдача через
+   `PaymentLedger.fulfillPurchase` (скины/РНК/бустер, идемпотентно по chargeId).
+   Если сервер не подтвердил оплату сразу: баннер «Ожидание подтверждения»,
+   допроверка при открытии витрины и кнопкой «Проверить оплату».
 
 ## 6. Что НЕ делает этот воркер (осознанно)
 
 - **Серверная выдача entitlements в игровой инвентарь**: заблокирована
   серверным контрактом `scripts/check-profile-client.mjs:162`
   (`'purchase' must never be accepted`). Клиентская выдача уже есть
-  (сцена витрины → grantPurchase → SkinOwnership/MetaWallet).
+  (сцена витрины → PaymentLedger.fulfillPurchase → SkinOwnership/MetaWallet).
   Снятие запрета — отдельное решение Mark.
 - **Возвраты**: `refundStarPayment` — позже, по мере необходимости.
 - **Подписки**: Bot API 8.0 умеет Stars-подписки — отдельный скоуп.
@@ -80,3 +84,29 @@ VITE_PAYMENTS_API_URL=https://<worker>
 
 Сервер — источник истины: цену от клиента воркер игнорирует всегда.
 При смене цен обнови оба файла (и задеплой воркер заново).
+
+## 8. Протокол v2 (патч №12)
+
+Клиент генерирует nonce (`makePaymentNonce`) и шлёт его в `/api/invoice`;
+воркер кладёт заказ `order:{nonce}` в KV (TTL 3600) и ставит nonce
+в `payload` инвойса (сырой nonce, лимит Telegram 1–128 байт).
+Вебхук резолвит заказ по nonce, сверяет пользователя/сумму/валюту
+и пишет `pay:{charge_id}` + `nonce:{nonce}` + `user:{id}:journal`.
+Клиент после колбэка `paid` зовёт `/api/verify {initData, nonce}`:
+`{verified:true, chargeId}` → выдача, иначе — `pending` без выдачи
+(допроверка в `restore()` + кнопка «Проверить оплату»).
+`/api/entitlements` возвращает журнал `{purchases:[{chargeId, productId,
+status, createdAt}]}` — старый формат `{products:[...]}` (патч №11)
+заменён, миграции не требуется (KV ещё не в проде).
+Без KV-биндинга `/api/verify` и `/api/entitlements` отвечают
+`501 {error:'kv_unavailable'}`, а вебхук только логируется.
+Статус `credited` в типах зарезервирован под ручные возвраты/начисления.
+
+## 9. Интеграция с существующим webhook сервера
+
+Не путать с игровым сервером: `server/index.mjs` уже имеет свой
+Telegram webhook (`POST /api/telegram/webhook`, секрет проверяется
+отдельно, обрабатывает private start). Воркер оплат — независимый
+сервис со своим секретом (`WEBHOOK_SECRET`) и своим URL
+(`https://<worker>/api/webhook`); общий обработчик им не нужен.
+При `setWebhook` для платёжного бота указывай именно URL воркера.
