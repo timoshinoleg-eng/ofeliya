@@ -56,6 +56,7 @@
     "test:feature-flags": "node tests/feature-flags.mjs",
     "test:shop": "node tests/shop-catalog.mjs && node tests/shop-flow.mjs && node tests/shop-provider.mjs && node tests/shop-grants.mjs",
     "test:stars": "node tests/telegram-stars.mjs && node tests/worker-payments.mjs",
+    "test:juice": "node tests/juice-driver.mjs",
     "test:analytics-events": "node scripts/check-analytics-events.mjs",
     "test:daily-streak": "node tests/daily-streak.mjs",
     "test:meta-achievements": "node tests/meta-achievements.mjs",
@@ -120,9 +121,10 @@
     "source-map-js": "1.2.2"
   },
   "dependencies": {
-    "@maxhub/max-bot-api": "^0.3.1",
     "@dicebear/core": "^9.4.3",
     "@dicebear/shapes": "^9.4.2",
+    "@maxhub/max-bot-api": "^0.3.1",
+    "@tweenjs/tween.js": "^25.0.0",
     "phaser": "^3.90.0"
   },
   "devDependencies": {

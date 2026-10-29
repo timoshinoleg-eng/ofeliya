@@ -14,6 +14,7 @@ import { COLORS, COMBO, FONT, JUICE, UI_FONT, UI_TEXT, fmtTime } from '../game/c
 import { BORDER, BUTTON, ROLE, SCRIM } from '../ui/tokens';
 import { HUD } from '../ui/hudTokens';
 import { artScale, CORE_ART } from '../game/ArtMetrics';
+import { Juice } from '../game/Juice';
 import { VISUAL, VISUAL_TEXT } from '../ui/visualTokens';
 import { createSpecimenSurface, drawSpecimenSurface } from '../ui/specimenSurface';
 import { createResultReport } from '../ui/ResultReport';
@@ -108,6 +109,7 @@ type PendingBossReveal = {
 
 export class UIScene extends Phaser.Scene {
   private gs: GameScene | null = null;
+  private juice!: Juice;
 
   private hudBackdrop!: Phaser.GameObjects.Rectangle;
   private hudMembrane!: Phaser.GameObjects.Graphics;
@@ -181,6 +183,8 @@ export class UIScene extends Phaser.Scene {
   create(): void {
     this.hudBarState = null;
     this.gs = this.scene.get('Game') as GameScene;
+    // Juice для модалок/наград (tween.js). UI-сцена без governor — интенсивность 1.
+    this.juice = new Juice(this);
     this.modalOpen = false;
     this.pendingBossReveal = null;
     this.activeBossReveals = 0;
@@ -390,6 +394,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   update(): void {
+    this.juice.update();
     this.gs?.notificationRegion.setBlocked(this.uiBlocked || this.modalOpen || this.overShown ||
       this.activeBossReveals > 0 || this.contextHintKey !== null || this.pendingContextHints.length > 0 || document.visibilityState === 'hidden' || !this.scene.isActive('Game'));
     const run = this.registry.get('run') as RunSnapshot | undefined;
@@ -1976,7 +1981,9 @@ export class UIScene extends Phaser.Scene {
     name.setScale(0.72);
     this.tweens.add({ targets: c, alpha: 1, duration: 140, ease: 'Quad.Out' });
     this.tweens.add({ targets: name, scale: 1, duration: 360, ease: 'Back.Out' });
-    this.tweens.add({ targets: emblem, scale: 1, alpha: 1, duration: 430, ease: 'Back.Out' });
+    // Появление эмблемы награды — через единый Juice (tween.js, Back.Out).
+    // Визуально идентично прежнему твину scale 0.52→1 / alpha 0→1 за 430 мс.
+    this.juice.rewardReveal(emblem, { from: 0.52, durationMs: 430 });
     this.tweens.add({
       targets: halo,
       alpha: 0.86,

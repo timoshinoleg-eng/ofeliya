@@ -1,3 +1,5 @@
+Juice port: exact-head CI на PR; после мержа — партия 3 ЗАКРЫТА (витрина + Stars + Juice в main). Дальше: партия 4 — фиксы №10–16 (audit-fixes, post-review, review2–review6); при порте post-review сверить booster→boosterUntilMs с уже wired бустером из задачи 1 (не дублировать). ОТКРЫТО (за Mark): унификация двух путей выбора скинов; деплой воркера + bot token + webhook.
+
 Stars port: exact-head CI на PR; после мержа — партия 3 задача 3 (Juice: @tweenjs/tween.js + Juice.ts, швы GameScene/UIScene; церемонию боссов не трогать). Дальше: фиксы №10–16. ОТКРЫТО (за Mark): унификация двух путей выбора скинов; деплой воркера + bot token + webhook (worker/README_DEPLOY.md).
 
 Storefront port: exact-head CI на PR; после мержа — партия 3 задача 2 (Stars: TelegramStarsPaymentProvider + worker/, stars в products.ts, stars в SkinCatalog из SHOP_CATALOG). Дальше: Juice, фиксы №10–16. ОТКРЫТО (за Mark): унификация двух путей выбора скинов (коллекция shells → тинт vs галерея → текстура).
