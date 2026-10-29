@@ -1,12 +1,12 @@
 # OFELIYA: STRAIN ZERO
 
 <!-- product-snapshot:start -->
-> **Продукт:** мобильный roguelite-survivor для MAX Mini Apps с Telegram-compatible архитектурой, серверной валидацией и асинхронными социально-соревновательными механиками.
+> **Продукт:** мобильный roguelite-survivor для Telegram Mini Apps и MAX Mini Apps, с серверной валидацией и асинхронными социально-соревновательными механиками.
 >
-> **Стадия:** active / production hardening · **Основная платформа:** MAX · **Архитектура:** Telegram-compatible · **Фокус:** gameplay clarity, retention, horizontal mastery, social loops и дальнейшая монетизация.
+> **Стадия:** active / production hardening · **Основная платформа:** Telegram (приоритет), MAX — поддерживается · **Фокус:** gameplay clarity, retention, horizontal mastery, social loops и монетизация через Telegram Stars.
 <!-- product-snapshot:end -->
 
-Мобильный portrait roguelite-survivor для **MAX Mini Apps**. Канонический MAX-бот — `@id402806822924_5_bot`, production URL — `https://ofeliya.freeveol.dpdns.org/ofeliya/`. Игрок управляет синтетическим вирусом
+Мобильный portrait roguelite-survivor для **Telegram Mini Apps и MAX Mini Apps (Telegram-first)**. Production-развёртывание — Render (сервис `ofeliya-game`, автодеплой из `main`, см. раздел «Production deploy» ниже); Telegram-бот — `@ofeliya_game_bot`, MAX-вход — `@id402806822924_5_bot`. Полная карта идентичностей — в [`PROJECT_IDENTITY.md`](./PROJECT_IDENTITY.md). Игрок управляет синтетическим вирусом
 `STRAIN-0` внутри живого организма, собирает RNA, мутирует, заражает host cells и проходит
 двухактную кампанию: `КРОВОТОК -> IMMUNE PRIME -> СЕРДЦЕ -> CARDIAC TITAN`.
 
@@ -25,9 +25,11 @@ Legacy Chatbot24 migration/retirement map: [`docs/CHATBOT24_MIGRATION.md`](./doc
 ## Стек
 
 - **Phaser 3 + TypeScript + Vite** — gameplay и UI.
-- **MAX Bridge** через platform-neutral слой `src/platform/*` — launch context, viewport,
-  BackButton, haptics и share/deeplink surface.
-- **Telegram adapter** изолирован архитектурно, но отдельный Telegram release QA идёт после MAX RC.
+- **Platform-neutral слой `src/platform/*`** — launch context, viewport,
+  BackButton, haptics и share/deeplink surface для MAX Bridge и Telegram WebApp.
+- **Telegram-first:** приоритет разработки и монетизации — Telegram (Stars/TON).
+  Вопрос payments API MAX деприоритизирован: у MAX Bridge нет публичного payments API
+  для мини-аппов, и как актуальный план он не рассматривается.
 - Основной визуал генерируется кодом: вирус, иммунные клетки, кровоток, host cells, мутации и VFX.
 - Аудио лежит отдельно в `public/audio/`: SFX Kenney CC0 и CC0 Music с OpenGameArt.
 - Chakra Petch — self-hosted OFL font с системным fallback.
@@ -100,6 +102,19 @@ VITE_SUPPORT_PHONE
 
 В главном меню доступна ссылка **«О приложении · Политика · Поддержка»**. Она показывает сведения
 о разработчике, privacy notice, условия использования и контакты поддержки из release environment.
+
+## Production deploy (Render + Supabase)
+
+Живой путь деплоя — **Render**, а не Cloud.ru/compose:
+
+- сервис `ofeliya-game` (Frankfurt), ветка `main`, автодеплой после прохождения CI;
+- локальная файловая система Render Free эфемерна: состояние переживает рестарт/редеплой
+  только через снапшот в приватном Supabase `ofeliya-state` (детали — в `deploy/RENDER.md`);
+- секреты рантайма — только в окружении Render, никогда в репозитории.
+
+Cloud.ru-стек архивен (VM `chatgpt-ofeliya-1` выведена 2026-10-11, см. `PROJECT_IDENTITY.md`).
+Файл `deploy/compose.production.yml` — не живой путь деплоя; его судьба — отдельное решение,
+эта чистка документов его не предрешает.
 
 ## Challenge flow
 
@@ -280,7 +295,8 @@ host cell и partially infected host cell. Browser smoke сохраняет PNG 
 Автоматические гейты работают против mocked MAX bridge в desktop-браузере: они не воспроизводят
 нативное поведение клиента, реальный подписанный `initData`, реальные haptics/audio unlock,
 реальные restart-циклы, реальные deployment values и реальные network/thermal условия. Telegram
-release QA — отдельный более поздний трек, не покрытый ни одним CI job здесь.
+release QA — приоритетный трек приёмки наряду с MAX real-device acceptance для MAX-входа;
+ни один CI job здесь его не покрывает.
 
 Автоматический MAX mock не заменяет реальный клиент. `VIR-16` должен пройти на настоящем MAX
 Android/iOS RC с реальными deployment values:

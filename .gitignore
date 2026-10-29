@@ -30,3 +30,8 @@ skills
 .legal-proxy-capability.json
 .tyc-proxy-capability.json
 .tmp-browser-smoke/
+
+# локальные env-файлы с секретами — никогда не коммитить (публичный шаблон — в .env.example)
+.env
+.env.*
+!.env.example

@@ -1679,3 +1679,6 @@ Fix #12 port (Muse, 2026-10-29, партия 4а задача 3): review2-фик
 
 
 Fix #13 port (Muse, 2026-10-29, партия 4а задача 4): review3-фиксы на main 4b96e9f (#264 merged), ветка feat/port-fix13-review3. D1 вместо KV (schema.sql, batch, /api/ack, strict verify, fail-closed без D1), P0-1 restore-грант, P0-2 без синтетических chargeId, P1-a {ok,outcome}, P1-b crypto-only nonce, P1-d ack, P1-f mock-gate за qaTools; applyPurchaseGrants теперь бросает (P1-a иначе пуст). Локально: tsc/build/13 сьютов зелёные; browser NOT RUN — смотреть CI. После мержа — партия 4а закрыта; дальше партия 4б (№14–16).
+
+
+Docs cleanup (Muse, 2026-10-29, шаг 4 плана релиза): README.md + AGENTS.md + .gitignore на main 94beda1, ветка docs/readme-agents-cleanup. Telegram-first повествование, production deploy — Render ofeliya-game + Supabase ofeliya-state, Cloud.ru/compose — архив, не живой путь (PR #163 не предрешён, не тронут). .gitignore: .env/.env.* + !.env.example (отслеживаемых реальных .env нет). House rules, Joystick.ts, check-profile-client.mjs:162 — не тронуты. Локально: tsc/build зелёные; browser NOT RUN — смотреть CI.
