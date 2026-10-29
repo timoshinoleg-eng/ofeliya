@@ -12,11 +12,15 @@ name = "ofeliya-payments"
 main = "src/index.ts"
 compatibility_date = "2026-10-21"
 
-# Пост-ревью (патч №11): Cloudflare KV для серверных entitlements
-# (идемпотентность платежей + POST /api/entitlements).
-# Создать: npx wrangler kv:namespace create PAYMENTS
-# и подставить выданный id ниже. Без биндинга воркер работает как раньше
-# (логирование платежей, /api/entitlements → 501).
-# [[kv_namespaces]]
-# binding = "PAYMENTS"
-# id = "<вставить id из wrangler kv:namespace create>"
+# Патч №13: журнал платежей на Cloudflare D1 (схема — worker/schema.sql).
+# KV-биндинг PAYMENTS удалён из кода полностью (чистая замена, не fallback).
+#
+# Создать базу:        wrangler d1 create ofeliya-payments
+# Применить схему:     wrangler d1 execute ofeliya-payments --file=worker/schema.sql
+# Подставить выданный database_id ниже. Без биндинга воркер работает
+# в деградированном режиме (/api/invoice → 503, pre_checkout → ok:false,
+# /api/entitlements, /api/verify и /api/ack → 501).
+[[d1_databases]]
+binding = "PAYMENTS_DB"
+database_name = "ofeliya-payments"
+database_id = "REPLACE_ME"  # ← вставить id из `wrangler d1 create`

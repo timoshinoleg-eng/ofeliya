@@ -57,6 +57,7 @@
     "test:shop": "node tests/shop-catalog.mjs && node tests/shop-flow.mjs && node tests/shop-provider.mjs && node tests/shop-grants.mjs",
     "test:stars": "node tests/telegram-stars.mjs && node tests/worker-payments.mjs",
     "test:worker-entitlements": "node tests/worker-entitlements.mjs",
+    "test:payments-trust": "node tests/payments-trust.mjs",
     "test:juice": "node tests/juice-driver.mjs",
     "test:analytics-events": "node scripts/check-analytics-events.mjs",
     "test:daily-streak": "node tests/daily-streak.mjs",

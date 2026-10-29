@@ -152,6 +152,9 @@ jobs:
       - name: Worker entitlements contract
         run: npm run test:worker-entitlements
 
+      - name: Payments trust contract
+        run: npm run test:payments-trust
+
       - name: Juice driver contract
         run: npm run test:juice
 

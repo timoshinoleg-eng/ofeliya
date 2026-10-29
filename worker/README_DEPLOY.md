@@ -21,10 +21,12 @@ cp wrangler.toml.example wrangler.toml   # поправь name при желан
 npx wrangler secret put TELEGRAM_BOT_TOKEN   # токен из шага 1
 npx wrangler secret put WEBHOOK_SECRET       # придумай строку, напр. openssl rand -hex 32
 
-# KV для серверных entitlements (пост-ревью, патч №11; опционально —
-# без него воркер работает как раньше, а /api/entitlements отвечает 501):
-npx wrangler kv:namespace create PAYMENTS
-# → подставь выданный id в wrangler.toml в блок [[kv_namespaces]] (см. wrangler.toml.example)
+# D1 — журнал платежей (ОБЯЗАТЕЛЬНО, патч №13):
+# без биндинга PAYMENTS_DB воркер отвечает 503 на /api/invoice
+# и ok:false на pre_checkout_query (fail-closed всей цепочки).
+npx wrangler d1 create ofeliya-payments   # запомнить выданный database_id
+npx wrangler d1 execute ofeliya-payments --file=worker/schema.sql --remote
+# database_id → в wrangler.toml, [[d1_databases]] (см. wrangler.toml.example)
 
 npx wrangler deploy
 # → получишь https://ofeliya-payments.<твой-аккаунт>.workers.dev
@@ -74,6 +76,11 @@ VITE_PAYMENTS_API_URL=https://<worker>
   (сцена витрины → PaymentLedger.fulfillPurchase → SkinOwnership/MetaWallet).
   Снятие запрета — отдельное решение Mark.
 - **Возвраты**: `refundStarPayment` — позже, по мере необходимости.
+  В журнале D1 статусы: `'paid'` → `'fulfilled'` (клиент подтверждает
+  локальную выдачу через `POST /api/ack`) | `'refunded'` (только вручную
+  через SQL — см. §8; воркер его не выставляет). Сам возврат Stars
+  пользователю — отдельно через Bot API. Ручная пометка:
+  `UPDATE payments SET status='refunded' WHERE charge_id='<id>';`
 - **Подписки**: Bot API 8.0 умеет Stars-подписки — отдельный скоуп.
 
 ## 7. Каталог цен
@@ -85,22 +92,46 @@ VITE_PAYMENTS_API_URL=https://<worker>
 Сервер — источник истины: цену от клиента воркер игнорирует всегда.
 При смене цен обнови оба файла (и задеплой воркер заново).
 
-## 8. Протокол v2 (патч №12)
+## 8. Протокол v3 (патч №13) — журнал на D1
 
-Клиент генерирует nonce (`makePaymentNonce`) и шлёт его в `/api/invoice`;
-воркер кладёт заказ `order:{nonce}` в KV (TTL 3600) и ставит nonce
-в `payload` инвойса (сырой nonce, лимит Telegram 1–128 байт).
-Вебхук резолвит заказ по nonce, сверяет пользователя/сумму/валюту
-и пишет `pay:{charge_id}` + `nonce:{nonce}` + `user:{id}:journal`.
-Клиент после колбэка `paid` зовёт `/api/verify {initData, nonce}`:
-`{verified:true, chargeId}` → выдача, иначе — `pending` без выдачи
-(допроверка в `restore()` + кнопка «Проверить оплату»).
-`/api/entitlements` возвращает журнал `{purchases:[{chargeId, productId,
-status, createdAt}]}` — старый формат `{products:[...]}` (патч №11)
-заменён, миграции не требуется (KV ещё не в проде).
-Без KV-биндинга `/api/verify` и `/api/entitlements` отвечают
-`501 {error:'kv_unavailable'}`, а вебхук только логируется.
-Статус `credited` в типах зарезервирован под ручные возвраты/начисления.
+Схема: `worker/schema.sql` — таблицы `orders` (nonce PK, user_id, product_id,
+status, created_at) и `payments` (charge_id PK, user_id, product_id, amount,
+currency, status, nonce, created_at, fulfilled_at) + индексы.
+
+Эндпоинты:
+- `POST /api/invoice {initData, productId, nonce}` → `200 {invoiceUrl, nonce}`.
+  `nonce` генерирует клиент, формат `^[A-Za-z0-9_-]{8,64}$`; payload инвойса —
+  сырой nonce (лимит Telegram 1–128 байт). **Без D1-биндинга → 503.**
+- `POST /api/webhook` — `pre_checkout_query` (payload=nonce → заказ из D1,
+  сверка цены; **без DB → `ok:false`**) и `successful_payment` (проверки:
+  заказ существует, `from.id == order.user_id`, `(amount, currency)` совпадают
+  с серверным каталогом; запись — **одним атомарным `db.batch()`**:
+  `INSERT OR IGNORE INTO payments` + `UPDATE orders → 'paid'`; дубликат по
+  `meta.changes==0`). Ошибка batch → 500 (Telegram переотправит; повтор
+  безопасен).
+- `POST /api/verify {initData, nonce}` — **строго**: order.user_id == userId
+  И payment.charge_id настоящий (непустой) И payment.user_id == userId
+  И payment.product_id == order.product_id → `{verified:true, chargeId,
+  productId}` (productId — **серверный**). Order есть, payment нет →
+  `{verified:false, reason:'pending'}`. Иначе `'not_found'`/`'mismatch'`.
+  Без DB → `501 {error:'db_unavailable'}`.
+- `POST /api/entitlements {initData}` →
+  `{purchases:[{chargeId, productId, status, createdAt}]}` из D1.
+  Без DB → `501`.
+- `POST /api/ack {initData, chargeId}` — bookkeeping: `paid`→`fulfilled`
+  (только свой charge_id). Клиент зовёт после локальной выдачи.
+
+Статусы журнала: `'paid'` → `'fulfilled'` | `'refunded'` (только вручную).
+
+Чистка старых заказов (у D1 нет TTL как у KV — выполнять периодически):
+```sql
+-- пометить протухшими заказы старше 24ч без оплаты:
+UPDATE orders SET status='expired'
+  WHERE status='pending' AND created_at < (strftime('%s','now')*1000 - 86400000);
+-- удалить протухшие старше 30 дней (история payments не трогается):
+DELETE FROM orders
+  WHERE status='expired' AND created_at < (strftime('%s','now')*1000 - 2592000000);
+```
 
 ## 9. Интеграция с существующим webhook сервера
 

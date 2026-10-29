@@ -1676,3 +1676,6 @@ Fix #11 port (Muse, 2026-10-29, партия 4а задача 2): пост-ре�
 
 
 Fix #12 port (Muse, 2026-10-29, партия 4а задача 3): review2-фиксы на main db7ba35 (#263 merged), ветка feat/port-fix12-review2. Схема №11 полностью заменена nonce/verify-протоколом v2 (клиент PaymentLedger + pending/credited журналы, воркер order/pay/nonce/journal + /api/verify + /api/entitlements v2, WEBHOOK_SECRET fail-closed). Коммит 3 стека (micro-flags) уже в main — кода не потребовалось. Локально: tsc/build/10 node-сьютов зелёные; browser NOT RUN — смотреть CI. После мержа — фикс №13.
+
+
+Fix #13 port (Muse, 2026-10-29, партия 4а задача 4): review3-фиксы на main 4b96e9f (#264 merged), ветка feat/port-fix13-review3. D1 вместо KV (schema.sql, batch, /api/ack, strict verify, fail-closed без D1), P0-1 restore-грант, P0-2 без синтетических chargeId, P1-a {ok,outcome}, P1-b crypto-only nonce, P1-d ack, P1-f mock-gate за qaTools; applyPurchaseGrants теперь бросает (P1-a иначе пуст). Локально: tsc/build/13 сьютов зелёные; browser NOT RUN — смотреть CI. После мержа — партия 4а закрыта; дальше партия 4б (№14–16).

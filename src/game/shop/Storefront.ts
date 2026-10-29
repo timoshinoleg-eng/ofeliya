@@ -35,17 +35,30 @@ export const STOREFRONT_MAX = 'max';
 export const STOREFRONT_TELEGRAM = 'telegram';
 
 /** Опции резолва (бэкенд-URL приходит из сцены: import.meta.env там безопасен). */
-export interface ResolveOptions extends TelegramStarsOptions {}
+export interface ResolveOptions extends TelegramStarsOptions {
+  /**
+   * QA-инструменты включены (dev или сборка с VITE_QA_TOOLS=1).
+   * Без qaTools вариант 'mock' недоступен (fail-closed): QA-дубль с
+   * ненастоящими деньгами не должен резолвиться в проде.
+   * Сцена передаёт флаг из import.meta.env (browser-only, безопасно).
+   */
+  qaTools?: boolean;
+}
 
 /**
  * Чистая функция (+ env-sniffing под guard): резолвит реализацию провайдера
  * по значению флага. null = витрина скрыта (fail-closed, кроме авто-детекта).
+ *
+ * Патч №13 (P1-f): 'mock' — только при opts.qaTools. В проде без
+ * VITE_QA_TOOLS=1 resolveProvider('mock') → null: сцена покажет «скоро»
+ * вместо покупок на ненастоящие деньги.
  */
 export function resolveProvider(
   variant: string,
   opts: ResolveOptions = {}
 ): PaymentProvider | null {
   if (variant === STOREFRONT_MOCK) {
+    if (opts.qaTools !== true) return null;
     const search = typeof location === 'undefined' ? '' : location.search;
     return new MockPaymentProvider(readMockShopConfig(search));
   }

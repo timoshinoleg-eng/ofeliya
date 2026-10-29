@@ -79,7 +79,7 @@ for (const event of ['skin_granted', 'skin_equipped']) {
 }
 
 // The ported storefront funnel events must be present in all four lists.
-for (const event of ['store_viewed', 'purchase_started', 'purchase_completed', 'purchase_failed', 'purchase_pending']) {
+for (const event of ['store_viewed', 'purchase_started', 'purchase_completed', 'purchase_failed', 'purchase_pending', 'purchase_grant_failed']) {
   assert(fromClient.includes(event), `ProductEvent must include ${event}`);
   assert(fromServer.includes(event), `PRODUCT_EVENTS must include ${event}`);
   assert(fromUmami.includes(event), `EVENT_NAMES must include ${event}`);

@@ -148,10 +148,11 @@ try {
     'server catalog has no extra products'
   );
 
-  // --- /api/invoice: nonce → createInvoiceLink + order в KV (протокол v2) ---
+  // --- /api/invoice: nonce → order в D1 ДО createInvoiceLink (протокол v3) ---
   // worker.fetch для вебхуков в этом файле не вызывается (только validateInitData
   // и каталог выше), поэтому WEBHOOK_SECRET здесь не нужен; invoice-блок ниже
-  // стабит только Bot API (createInvoiceLink).
+  // стабит только Bot API (createInvoiceLink). D1 — минимальный стаб
+  // (только INSERT INTO orders + failNext-инъекция).
   const worker = require(join(temp, 'index.js')).default;
   const realFetch = globalThis.fetch;
   const botCalls = [];
@@ -160,13 +161,35 @@ try {
     return { ok: true, json: async () => ({ ok: true, result: 'https://t.me/$inv-test' }) };
   };
   try {
-    const kvMap = new Map();
-    const kv = {
-      async get(k) {
-        return kvMap.has(k) ? kvMap.get(k) : null;
+    const orders = new Map();
+    let failNext = false;
+    const db = {
+      orders,
+      failNext: () => {
+        failNext = true;
       },
-      async put(k, v, _options) {
-        kvMap.set(k, v);
+      prepare(query) {
+        const sql = query.replace(/\s+/g, ' ').trim();
+        let params = [];
+        return {
+          bind(...args) {
+            params = args;
+            return this;
+          },
+          async run() {
+            if (failNext) {
+              failNext = false;
+              throw new Error('d1 injected failure');
+            }
+            if (sql.startsWith('INSERT INTO orders')) {
+              const [nonce, userId, productId, status, createdAt] = params;
+              if (orders.has(nonce)) throw new Error('UNIQUE constraint failed: orders.nonce');
+              orders.set(nonce, { user_id: userId, product_id: productId, status, created_at: createdAt });
+              return { meta: { changes: 1 } };
+            }
+            throw new Error(`worker-payments D1 stub: unknown SQL: ${sql}`);
+          },
+        };
       },
     };
     const invoicePost = async (env, body) => {
@@ -187,7 +210,7 @@ try {
       return { status: res.status, json };
     };
     const goodInit = buildInitData(fields);
-    const invEnv = { TELEGRAM_BOT_TOKEN: BOT_TOKEN, PAYMENTS: kv };
+    const invEnv = { TELEGRAM_BOT_TOKEN: BOT_TOKEN, PAYMENTS_DB: db };
     let inv = await invoicePost(invEnv, {
       initData: goodInit,
       productId: 'currency.rna-pack-s',
@@ -201,11 +224,11 @@ try {
     assert(call.currency === 'XTR', 'createInvoiceLink currency XTR');
     assert(call.provider_token === '', 'createInvoiceLink provider_token empty for Stars');
     assert(call.prices[0].amount === 35, 'createInvoiceLink amount is server stars price');
-    const orderRaw = kvMap.get('order:nonce-inv-1');
-    assert(orderRaw !== undefined, 'order written to KV');
-    const order = JSON.parse(orderRaw);
-    assert(order.userId === 777001, 'order stores userId');
-    assert(order.productId === 'currency.rna-pack-s', 'order stores productId');
+    const order = orders.get('nonce-inv-1');
+    assert(order !== undefined, 'order written to D1 before invoice');
+    assert(order.user_id === 777001, 'order stores userId');
+    assert(order.product_id === 'currency.rna-pack-s', 'order stores productId');
+    assert(order.status === 'pending', 'order status pending');
     inv = await invoicePost(invEnv, {
       initData: goodInit,
       productId: 'currency.rna-pack-s',
@@ -224,27 +247,36 @@ try {
       nonce: 'nonce-inv-3',
     });
     assert(inv.status === 401, 'bad initData → 401');
-    // Без KV инвойс всё равно создаётся, заказ не трекается.
+    // Без D1 инвойс НЕ создаётся (fail-closed v3: 503 до createInvoiceLink).
+    const callsBeforeNoDb = botCalls.length;
     inv = await invoicePost(
       { TELEGRAM_BOT_TOKEN: BOT_TOKEN },
       { initData: goodInit, productId: 'currency.rna-pack-s', nonce: 'nonce-inv-4' }
     );
-    assert(inv.status === 200, 'invoice without KV still ok');
-    assert(!kvMap.has('order:nonce-inv-4'), 'no order tracked without KV');
-    // Падение записи заказа → честный 502 вместо битого трекинга.
-    const throwingKv = {
-      async get() {
-        return null;
-      },
-      async put() {
-        throw new Error('kv down');
-      },
-    };
-    inv = await invoicePost(
-      { TELEGRAM_BOT_TOKEN: BOT_TOKEN, PAYMENTS: throwingKv },
-      { initData: goodInit, productId: 'currency.rna-pack-s', nonce: 'nonce-inv-5' }
-    );
+    assert(inv.status === 503, 'invoice without DB → 503 fail-closed');
+    assert(inv.json.error === 'db_unavailable', 'invoice 503 error code');
+    assert(botCalls.length === callsBeforeNoDb, 'no Bot API call without DB');
+    assert(!orders.has('nonce-inv-4'), 'no order tracked without DB');
+    // Падение записи заказа → честный 502 ДО createInvoiceLink.
+    const callsBeforeFail = botCalls.length;
+    db.failNext();
+    inv = await invoicePost(invEnv, {
+      initData: goodInit,
+      productId: 'currency.rna-pack-s',
+      nonce: 'nonce-inv-5',
+    });
     assert(inv.status === 502, 'order-store failure → 502');
+    assert(inv.json.error === 'order-store-failed', 'order-store 502 error code');
+    assert(botCalls.length === callsBeforeFail, 'no Bot API call on order-store failure');
+    assert(!orders.has('nonce-inv-5'), 'failed order not tracked');
+    // Дубликат nonce (UNIQUE) → 502, инвойс не создаётся.
+    inv = await invoicePost(invEnv, {
+      initData: goodInit,
+      productId: 'currency.rna-pack-s',
+      nonce: 'nonce-inv-1',
+    });
+    assert(inv.status === 502, 'duplicate nonce → 502');
+    assert(botCalls.length === callsBeforeFail, 'no Bot API call on duplicate nonce');
   } finally {
     globalThis.fetch = realFetch;
   }

@@ -28,6 +28,11 @@ const assert = (condition, message) => {
 };
 const eq = (actual, expected, message) =>
   assert(actual === expected, `${message}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+// Патч №13 (P1-a): fulfillPurchase возвращает {ok, outcome, error?}.
+const eqGrant = (res, outcome, message) => {
+  eq(res.ok, true, `${message}: ok`);
+  eq(res.outcome, outcome, `${message}: outcome`);
+};
 
 const SHOP_DIR = 'src/game/shop';
 
@@ -207,8 +212,10 @@ try {
     payments: new Map(),
     nonceToCharge: new Map(),
     verifyNonces: [],
-    verifyMode: 'ok', // 'ok' | 'ok-no-charge' | 'not-found' | 'throw'
+    verifyMode: 'ok', // 'ok' | 'ok-no-charge' | 'mismatch' | 'not-found' | 'throw'
     entitlementsMode: 'ok', // 'ok' | 'unavailable'
+    ackCalls: [],
+    ackBehavior: 'ok', // 'ok' | 'fail'
   };
   let lastInvoiceNonce = '';
   const resetServer = () => {
@@ -218,8 +225,12 @@ try {
     server.verifyNonces.length = 0;
     server.verifyMode = 'ok';
     server.entitlementsMode = 'ok';
+    server.ackCalls.length = 0;
+    server.ackBehavior = 'ok';
     lastInvoiceNonce = '';
   };
+  // fire-and-forget ack выполняется вне await restore() — даём микрозадачам долететь.
+  const flush = () => new Promise((r) => setTimeout(r, 10));
   globalThis.fetch = async (url, init) => {
     const body = init?.body ? JSON.parse(init.body) : {};
     if (url.endsWith('/api/invoice')) {
@@ -244,13 +255,25 @@ try {
         return { ok: true, json: async () => ({ verified: false, reason: 'not_found' }) };
       }
       const pay = server.payments.get(chargeId);
-      return { ok: true, json: async () => ({ verified: true, chargeId, productId: pay.productId }) };
+      // Патч №13 (P0-2): mismatch — сервер возвращает чужой productId.
+      const serverProductId =
+        server.verifyMode === 'mismatch'
+          ? SHOP_CATALOG.find((p) => p.id !== pay.productId).id
+          : pay.productId;
+      return { ok: true, json: async () => ({ verified: true, chargeId, productId: serverProductId }) };
     }
     if (url.endsWith('/api/entitlements')) {
       if (server.entitlementsMode === 'unavailable') {
         return { ok: false, status: 501, json: async () => ({}) };
       }
       return { ok: true, json: async () => ({ purchases: [...server.payments.values()] }) };
+    }
+    if (url.endsWith('/api/ack')) {
+      assert(typeof body.initData === 'string' && body.initData.length > 0, 'ack: initData');
+      assert(typeof body.chargeId === 'string' && body.chargeId.length > 0, 'ack: chargeId');
+      server.ackCalls.push(body);
+      if (server.ackBehavior === 'fail') throw new Error('ack backend down');
+      return { ok: true, json: async () => ({ ok: true }) };
     }
     throw new Error(`unexpected fetch url ${url}`);
   };
@@ -296,14 +319,14 @@ try {
   );
   eq(loadMeta().rna, 0, 'no grant before fulfill');
   let f = fulfillPurchase(packS, { chargeId: r.chargeId, providerId: 'telegram-stars' });
-  eq(f, 'granted', 'first fulfill grants');
+  eqGrant(f, 'granted', 'first fulfill grants');
   eq(loadMeta().rna, 500, 'pack-s grants 500 RNA flat');
   eq(loadMeta().starsSpent, 35, 'pack-s records 35 stars spent');
   assert(isChargeCredited(r.chargeId), 'fulfilled charge is credited');
 
   // (2) same chargeId again → duplicate, no double grant/stars.
   f = fulfillPurchase(packS, { chargeId: r.chargeId, providerId: 'telegram-stars' });
-  eq(f, 'duplicate', 'same chargeId is duplicate');
+  eqGrant(f, 'duplicate', 'same chargeId is duplicate');
   eq(loadMeta().rna, 500, 'duplicate grants no extra RNA');
   eq(loadMeta().starsSpent, 35, 'duplicate records no extra stars');
 
@@ -340,38 +363,52 @@ try {
   eq(loadMeta().starsSpent, 35, 'second restore records nothing extra');
   assert(pendingNonce.length > 0, 'pending nonce tracked');
 
-  // (4b) entitlements v2 merge: valid + broken records; merge alone grants
-  // nothing, and fulfilling by the merged chargeId is a duplicate.
+  // (4b) entitlements v2 merge (патч №13, P0-1): серверный 'paid' → выдача
+  // через fulfillPurchase (раньше merge только помечал chargeId БЕЗ гранта —
+  // товар терялся при потере локальных данных); 'refunded' — пропуск;
+  // битые записи — пропуск.
   resetPayments();
   resetServer();
   server.payments.set('charge-valid', {
     chargeId: 'charge-valid',
-    productId: skinTeal.id,
+    productId: packS.id,
     status: 'paid',
     createdAt: 1000,
+  });
+  server.payments.set('charge-ref', {
+    chargeId: 'charge-ref',
+    productId: packM.id,
+    status: 'refunded',
+    createdAt: 1001,
   });
   server.payments.set('charge-broken', {
     chargeId: 'charge-broken',
     productId: '',
     status: 'paid',
-    createdAt: 1001,
+    createdAt: 1002,
   });
   server.payments.set('', {
     chargeId: '',
     productId: packS.id,
     status: 'paid',
-    createdAt: 1002,
+    createdAt: 1003,
   });
   withWindow({ openInvoice: () => {}, initData: 'a=1&hash=b' });
   const merged = await p1.restore();
-  assert(merged.productIds.includes(skinTeal.id), 'entitlements merge returns valid product');
-  assert(!merged.productIds.includes(packS.id), 'broken entitlements record skipped');
-  assert(isChargeCredited('charge-valid'), 'merged server charge marked credited');
-  eq(isSkinOwned(skinTeal.id), false, 'merge alone grants no skin');
-  eq(loadMeta().starsSpent, 0, 'merge alone records no stars');
-  f = fulfillPurchase(skinTeal, { chargeId: 'charge-valid', providerId: 'telegram-stars' });
-  eq(f, 'duplicate', 'fulfill by merged chargeId is duplicate');
-  eq(isSkinOwned(skinTeal.id), false, 'duplicate fulfill still grants no skin');
+  await flush(); // fire-and-forget ack долетел
+  assert(merged.productIds.includes(packS.id), 'entitlements merge returns granted product');
+  assert(!merged.productIds.includes(packM.id), 'refunded purchase not visible in UI');
+  assert(isChargeCredited('charge-valid'), 'server paid charge marked credited after grant');
+  assert(!isChargeCredited('charge-ref'), 'refunded purchase not credited');
+  eq(loadMeta().rna, 500, 'server paid purchase granted via fulfillPurchase');
+  eq(loadMeta().starsSpent, 35, 'starsSpent recorded on server-purchase grant');
+  eq(server.ackCalls.length, 1, 'ack called once after server-purchase grant');
+  eq(server.ackCalls[0].chargeId, 'charge-valid', 'ack carries the chargeId');
+  eq(server.ackCalls[0].initData, 'a=1&hash=b', 'ack carries initData');
+  // повторный fulfill по серверному chargeId — duplicate, гранта нет:
+  f = fulfillPurchase(packS, { chargeId: 'charge-valid', providerId: 'telegram-stars' });
+  eqGrant(f, 'duplicate', 'server chargeId dedupes fulfill');
+  eq(loadMeta().rna, 500, 'no double grant on duplicate');
 
   // (5) verify unreachable (fetch throws) → pending 'verify-unreachable',
   // fast (<3s): network error is an immediate fast path, not 3 retries.
@@ -387,23 +424,34 @@ try {
   assert(elapsed < 3000, `unreachable verify is fast, took ${elapsed}ms`);
   eq(loadMeta().rna, 0, 'unreachable verify grants nothing');
 
-  // (6) verified without chargeId → nonce-derived chargeId, grant + duplicate.
+  // (6) verified без chargeId → pending, НЕ paid (патч №13, P0-2) —
+  // синтетических chargeId вида `nonce-${nonce}` больше нет: настоящий
+  // непустой chargeId от сервера обязателен, иначе — pending без выдачи.
   resetPayments();
   resetServer();
   server.verifyMode = 'ok-no-charge';
   withWindow(paidWindow());
   r = await p1.purchase(packS.id);
-  eq(r.state, 'paid', 'verified-without-chargeId is paid');
-  eq(r.chargeId, `nonce-${r.nonce}`, 'chargeId derived from nonce');
-  f = fulfillPurchase(packS, { chargeId: r.chargeId, providerId: 'telegram-stars' });
-  eq(f, 'granted', 'nonce-derived charge grants');
-  f = fulfillPurchase(packS, { chargeId: r.chargeId, providerId: 'telegram-stars' });
-  eq(f, 'duplicate', 'nonce-derived charge duplicate');
+  eq(r.state, 'pending', 'verified without chargeId is pending, not paid');
+  eq(r.reason, 'verify-no-charge-id', 'pending reason is verify-no-charge-id');
+  assert(typeof r.nonce === 'string' && r.nonce.length > 0, 'pending carries nonce');
+  eq(loadMeta().rna, 0, 'no grant without server chargeId');
+  eq(loadMeta().starsSpent, 0, 'no starsSpent without server chargeId');
+
+  // (6b) verify productId mismatch → pending, НЕ paid (патч №13, P0-2).
+  resetPayments();
+  resetServer();
+  server.verifyMode = 'mismatch'; // сервер вернул чужой productId
+  withWindow(paidWindow());
+  r = await p1.purchase(packS.id);
+  eq(r.state, 'pending', 'productId mismatch is pending, not paid');
+  eq(r.reason, 'verify-product-mismatch', 'pending reason is verify-product-mismatch');
+  eq(loadMeta().rna, 0, 'no grant on productId mismatch');
 
   // (7) booster fulfill → ~7 days, duplicate does not re-extend.
   resetPayments();
   f = fulfillPurchase(booster, { chargeId: 'c-booster', providerId: 'telegram-stars' });
-  eq(f, 'granted', 'booster first fulfill grants');
+  eqGrant(f, 'granted', 'booster first fulfill grants');
   const exp1 = getBoosterUntilMs();
   const sevenDays = 7 * 24 * 3600 * 1000;
   assert(
@@ -411,7 +459,7 @@ try {
     `booster extends ~7 days, got ${exp1 - Date.now()}ms`
   );
   f = fulfillPurchase(booster, { chargeId: 'c-booster', providerId: 'telegram-stars' });
-  eq(f, 'duplicate', 'booster duplicate');
+  eqGrant(f, 'duplicate', 'booster duplicate');
   eq(getBoosterUntilMs(), exp1, 'duplicate does not re-extend booster');
 
   // (8) skin fulfill: pure grantSkinTo checks + ledger grant, exactly-once
@@ -421,11 +469,11 @@ try {
   eq(pure.granted, true, 'pure grantSkinTo grants unknown skin');
   eq(isSkinOwned(skinMagenta.id), false, 'pure check does not persist ownership');
   f = fulfillPurchase(skinMagenta, { chargeId: 'c-skin', providerId: 'telegram-stars' });
-  eq(f, 'granted', 'skin fulfill grants');
+  eqGrant(f, 'granted', 'skin fulfill grants');
   eq(isSkinOwned(skinMagenta.id), true, 'skin owned after fulfill');
   eq(loadMeta().starsSpent, 100, 'skin records 100 stars spent');
   f = fulfillPurchase(skinMagenta, { chargeId: 'c-skin', providerId: 'telegram-stars' });
-  eq(f, 'duplicate', 'skin duplicate');
+  eqGrant(f, 'duplicate', 'skin duplicate');
   eq(
     loadSkinStore().owned.filter((id) => id === skinMagenta.id).length,
     1,
@@ -444,21 +492,56 @@ try {
   eq(r.state, 'paid', 'mock purchase is paid');
   assert(r.chargeId === undefined && r.nonce === undefined, 'mock paid has no chargeId/nonce');
   f = fulfillPurchase(skinMagenta, { providerId: 'mock' });
-  eq(f, 'granted', 'mock fulfill without chargeId grants');
+  eqGrant(f, 'granted', 'mock fulfill without chargeId grants');
   eq(loadMeta().starsSpent, 0, 'mock records no stars');
   f = fulfillPurchase(skinMagenta, { providerId: 'mock' });
-  eq(f, 'granted', 'mock re-grant returns granted');
+  eqGrant(f, 'granted', 'mock re-grant returns granted');
   eq(
     loadSkinStore().owned.filter((id) => id === skinMagenta.id).length,
     1,
     'mock re-grant does not duplicate skin ownership'
   );
 
-  // (10) makePaymentNonce: unique, non-empty.
+  // (10) makePaymentNonce: только crypto-RNG (патч №13, P1-b).
   const n1 = makePaymentNonce();
   const n2 = makePaymentNonce();
   assert(typeof n1 === 'string' && n1.length > 0, 'nonce non-empty');
   assert(n1 !== n2, 'nonces unique');
+  assert(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(n1),
+    'nonce is crypto.randomUUID v4'
+  );
+  // Без crypto — throw (Math.random-фолбэка больше нет).
+  {
+    const desc = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+    let threw = false;
+    let skipped = false;
+    try {
+      Object.defineProperty(globalThis, 'crypto', {
+        value: undefined,
+        configurable: true,
+        writable: true,
+      });
+    } catch {
+      skipped = true;
+    }
+    try {
+      if (!skipped) {
+        try {
+          makePaymentNonce();
+        } catch {
+          threw = true;
+        }
+        assert(threw, 'makePaymentNonce throws without crypto');
+      }
+    } finally {
+      if (!skipped) {
+        if (desc) Object.defineProperty(globalThis, 'crypto', desc);
+        else delete globalThis.crypto;
+      }
+    }
+    assert(typeof makePaymentNonce() === 'string', 'nonce works after crypto restore');
+  }
 
   // (11) key consts match the documented storage keys.
   eq(PENDING_PAYMENTS_KEY, 'ofeliya.payments.pending.v1', 'pending key const');
@@ -518,7 +601,9 @@ try {
   eq(isStorefrontVisible('hidden'), false, 'hidden default not visible in Node');
   eq(resolveProvider('bogus'), null, 'unknown variant fail-closed');
   // auto-detect does not fire without window (Node) — explicit behavior preserved
-  eq(resolveProvider('mock')?.id, 'mock', 'mock still resolves');
+  // Патч №13 (P1-f): mock — только QA-сборки (VITE_QA_TOOLS=1 / dev).
+  eq(resolveProvider('mock'), null, 'mock without qaTools: fail-closed null');
+  eq(resolveProvider('mock', { qaTools: true })?.id, 'mock', 'mock+qaTools resolves');
 
   console.log('telegram-stars: all assertions passed');
 } finally {

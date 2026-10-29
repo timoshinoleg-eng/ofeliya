@@ -46,6 +46,9 @@ import type {
   Product,
   PurchaseResult,
 } from '../game/shop/PaymentProvider';
+// Type-only: нужен лишь для acknowledgeCharge (P1-d); стирается при
+// компиляции, рантайм-цикла нет, Node-тесты сцену не импортируют.
+import type { TelegramStarsPaymentProvider } from '../game/shop/TelegramStarsPaymentProvider';
 
 type SceneState =
   | 'loading'
@@ -106,12 +109,16 @@ export class StorefrontScene extends Phaser.Scene {
     // Fail-closed: без видимого варианта витрины тут делать нечего.
     // apiBaseUrl читаем здесь (import.meta.env безопасен только в браузере;
     // shop-модули Phaser-free и компилируются Node-тестами).
+    // Патч №13 (P1-f): QA-инструменты — только dev и сборки с VITE_QA_TOOLS=1.
+    // Без них ?flag.-оверрайды игнорируются, а mock-витрина недоступна
+    // (resolveProvider('mock') → null, сцена покажет «скоро»).
     const apiBaseUrl = (import.meta.env.VITE_PAYMENTS_API_URL as string | undefined) ?? '';
+    const qaTools = import.meta.env.DEV || import.meta.env.VITE_QA_TOOLS === '1';
     if (!isStorefrontVisible(this.variant, { apiBaseUrl })) {
       this.scene.start('Menu');
       return;
     }
-    this.provider = resolveProvider(this.variant, { apiBaseUrl });
+    this.provider = resolveProvider(this.variant, { apiBaseUrl, qaTools });
 
     this.buildChrome();
     void trackProductEvent('store_viewed', PlatformBridge, {
@@ -658,30 +665,49 @@ export class StorefrontScene extends Phaser.Scene {
       skinId?: string;
     }
     const pendingToasts: PendingToast[] = [];
+    // Патч №13 (P1-a): успех UI — ТОЛЬКО при ok от fulfillPurchase.
+    let grantFailed = false;
     if (result.state === 'paid') {
       // Выдача — только через ledger: идемпотентность по chargeId,
       // recordStarsSpent — только у реальных провайдеров (не 'mock').
       // purchase_completed — только при первой выдаче ('granted'), чтобы
       // повтор ('duplicate') не считал покупку дважды.
-      const outcome = fulfillPurchase(product, { chargeId: result.chargeId, providerId: provider.id });
-      if (outcome === 'granted') {
+      const grant = fulfillPurchase(product, { chargeId: result.chargeId, providerId: provider.id });
+      if (grant.outcome === 'granted') {
         void trackProductEvent('purchase_completed', PlatformBridge, {
           productId: product.id,
           provider: provider.id,
         });
       }
-      // Достижения проверяем сразу: игрок получает награду (напр. скин
-      // «Инвестора» за 500 звёзд) не дожидаясь конца забега.
-      for (const id of unlockMetaAchievements(collectLifetimeStats())) {
-        const def = getMetaAchievementDef(id);
-        if (def.reward.kind === 'rna') {
-          const granted = grantMetaRna(def.reward.amount).granted;
-          pendingToasts.push({ title: def.title, sub: `+${granted} РНК` });
-        } else {
-          grantAchievementSkin(def.reward.skinId);
-          pendingToasts.push({ title: def.title, sub: '', skinId: def.reward.skinId });
+      if (!grant.ok) {
+        // Товар не выдан (платёж при этом подтверждён сервером и не
+        // потерян: допроверка/повторная выдача — в restore()).
+        grantFailed = true;
+        void trackProductEvent('purchase_grant_failed', PlatformBridge, {
+          productId: product.id,
+          provider: provider.id,
+          error: grant.error ?? grant.outcome,
+        });
+      } else {
+        // Патч №13 (P1-d): bookkeeping воркера — после успешной выдачи
+        // сообщаем paid→fulfilled. Только telegram-провайдер и только
+        // реальный chargeId; fire-and-forget, на результат не влияет.
+        if (provider.id === 'telegram-stars') {
+          (provider as TelegramStarsPaymentProvider).acknowledgeCharge(result.chargeId);
         }
-        void trackProductEvent('achievement_unlocked', PlatformBridge, { achievementId: id });
+        // Достижения проверяем сразу: игрок получает награду (напр. скин
+        // «Инвестора» за 500 звёзд) не дожидаясь конца забега.
+        for (const id of unlockMetaAchievements(collectLifetimeStats())) {
+          const def = getMetaAchievementDef(id);
+          if (def.reward.kind === 'rna') {
+            const granted = grantMetaRna(def.reward.amount).granted;
+            pendingToasts.push({ title: def.title, sub: `+${granted} РНК` });
+          } else {
+            grantAchievementSkin(def.reward.skinId);
+            pendingToasts.push({ title: def.title, sub: '', skinId: def.reward.skinId });
+          }
+          void trackProductEvent('achievement_unlocked', PlatformBridge, { achievementId: id });
+        }
       }
     } else if (result.state === 'pending') {
       // Сервер не подтвердил оплату: БЕЗ выдачи. Сохраняем в pending-журнал —
@@ -712,9 +738,14 @@ export class StorefrontScene extends Phaser.Scene {
       else showMetaToast(this, t.title, t.sub);
     }
     this.purchasingId = null;
-    if (result.state === 'paid') {
+    if (result.state === 'paid' && !grantFailed) {
       this.lastBought = product;
       this.setState('success');
+    } else if (result.state === 'paid') {
+      // Платёж подтверждён сервером, но выдача не удалась (ok=false):
+      // товар не потерян — допроверка и повторная выдача в restore().
+      this.errorReason = 'Не удалось выдать товар — проверьте оплату позже';
+      this.setState('error');
     } else if (result.state === 'pending') {
       // Баннер «Ожидание подтверждения» рисуется в renderList.
       this.setState('ready');

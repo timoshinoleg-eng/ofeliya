@@ -4,67 +4,70 @@
  * Зачем: Telegram Stars-инвойсы НЕЛЬЗЯ создавать из клиента (нужен bot token),
  * поэтому игре нужен минимальный бэкенд.
  *
- * Протокол v2 (патч №12, согласован с потоком клиента):
+ * Протокол v3 (патч №13, журнал на Cloudflare D1):
  *
  *  POST /api/invoice {initData, productId, nonce}
  *    → валидирует initData по HMAC-SHA256 (документация Telegram:
  *      https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app)
  *    → сверяет товар с СЕРВЕРНЫМ whitelist (цену от клиента НЕ доверяет)
  *    → nonce обязан матчить ^[A-Za-z0-9_-]{8,64}$ (генерирует клиент)
+ *    → INSERT INTO orders (nonce, user_id, product_id, status='pending', created_at)
  *    → Bot API createInvoiceLink (currency='XTR', provider_token='',
  *      prices=[{label, amount}] — amount в ЦЕЛЫХ звёздах, payload=nonce
  *      (лимит Telegram: 1–128 байт))
- *    → сохраняет order:{nonce}={userId, productId, createdAt} в KV (TTL 3600)
- *    → 200 {invoiceUrl, nonce}
+ *    → 200 {invoiceUrl, nonce}; без PAYMENTS_DB → 503 {error:'db_unavailable'};
+ *      ошибка записи заказа → 502 (честно, вместо битого трекинга).
  *
  *  POST /api/webhook  (Telegram → воркер)
  *    → WEBHOOK_SECRET ОБЯЗАТЕЛЕН: не задан в env → 401 fail-closed.
  *      Заголовок X-Telegram-Bot-Api-Secret-Token сверяется со значением.
- *    → pre_checkout_query: payload — это nonce; с KV резолвится через
- *      order:{nonce} → сверка (amount, currency) с SERVER_PRODUCTS →
+ *    → pre_checkout_query: payload — это nonce; order резолвится из D1,
+ *      сверка (amount, currency) с SERVER_PRODUCTS →
  *      answerPreCheckoutQuery (ОБЯЗАТЕЛЬНО в течение 10 секунд, иначе
- *      платёж отменяется). Без KV — ok:true (цены зафиксированы сервером
- *      в самом инвойсе; деградация как раньше).
+ *      платёж отменяется). Без PAYMENTS_DB — ok:false (fail-closed всей
+ *      цепочки; раньше было ok:true при отсутствии KV — больше нет).
  *    → message.successful_payment {telegram_payment_charge_id,
  *      invoice_payload(=nonce), total_amount, currency, from:{id}}:
- *      проверки — order:{nonce} существует и from.id == order.userId;
+ *      проверки — order по nonce существует и from.id == order.user_id;
  *      (amount, currency) == SERVER_PRODUCTS[productId] (XTR, amount==stars);
- *      идемпотентность: pay:{charge_id} уже существует → skip
- *      (повторная доставка Telegram).
- *      Записи: pay:{charge_id}={userId, productId, amount, currency,
- *      status:'paid', nonce, createdAt}; nonce:{nonce}→charge_id;
- *      user:{userId}:journal=append charge_id (dedupe).
+ *      запись — ОДИН db.batch():
+ *        INSERT OR IGNORE INTO payments (...)  +  UPDATE orders SET status='paid'
+ *        WHERE nonce=? AND status='pending'.
+ *      Идемпотентность: повторная доставка того же charge_id даёт
+ *      meta.changes==0 у INSERT → skip+лог (без гонки: OR IGNORE атомарен).
+ *      Ошибка batch → лог + 500 (Telegram переотправит; повтор безопасен
+ *      благодаря OR IGNORE).
+ *      Без PAYMENTS_DB — только структурированный лог (как раньше без KV).
  *
- *  POST /api/verify {initData, nonce}
- *    → {verified:true, chargeId, productId} | {verified:false, reason:
- *      'not_found' | 'mismatch'}. Без KV → 501 {error:'kv_unavailable'}.
+ *  POST /api/verify {initData, nonce} — СТРОГАЯ точечная проверка
+ *  (клиент зовёт после колбэка openInvoice вместо слепого доверия):
+ *    order по nonce (user_id совпадает) + payment по nonce
+ *    (charge_id НЕПУСТОЙ, настоящий от Telegram — никаких синтетических) +
+ *    payment.user_id == userId + payment.product_id == order.product_id
+ *    → {verified:true, chargeId, productId}. Order есть, payment нет →
+ *    {verified:false, reason:'pending'}. Иначе {verified:false, reason:
+ *    'not_found' | 'mismatch'}. Без PAYMENTS_DB → 501 {error:'db_unavailable'}.
  *
  *  POST /api/entitlements {initData}
- *    → {purchases:[{chargeId, productId, status, createdAt}]} в порядке
- *      журнала. Без KV → 501 {error:'kv_unavailable'}.
+ *    → {purchases:[{chargeId, productId, status, createdAt}]} из payments
+ *      WHERE user_id=? ORDER BY created_at. Без PAYMENTS_DB → 501.
  *      ВНИМАНИЕ (v2, breaking): старый {products:[...]} заменён журналом;
  *      миграции не требуется — KV ещё не в проде.
  *
+ *  POST /api/ack {initData, chargeId} — bookkeeping, не защита:
+ *    клиент зовёт ПОСЛЕ локальной выдачи товара; воркер помечает
+ *    payments.status='fulfilled' (только из 'paid', только свой charge_id).
+ *    → {ok:true|false}. Без PAYMENTS_DB → 501.
+ *
  *  GET /api/health → {ok:true} (проверка деплоя).
  *
- * Раскладка ключей KV:
- *  order:{nonce}          — {userId, productId, createdAt}, TTL 3600
- *  pay:{charge_id}        — {userId, productId, amount, currency,
- *                           status:'paid'|'credited', nonce, createdAt}
- *  nonce:{nonce}          — charge_id (для /api/verify)
- *  user:{userId}:journal  — [charge_id, ...], порядок покупок, без дублей
- *
- * Статус 'credited' зарезервирован в типах/доках под ручные возвраты и
- * ручные начисления — вне скоупа воркера (возвраты — отдельное решение Mark).
- *
- * KV (Cloudflare, бесплатный тир) — опционален: без биндинга PAYMENTS
- * /api/entitlements и /api/verify отвечают 501, а successful_payment
- * только логируется (как раньше). С биндингом клиент сверяет покупку
- * с сервером вместо доверия клиентскому колбэку openInvoice.
+ * Схема: worker/schema.sql (orders, payments, индексы).
+ * Статус 'refunded' — ТОЛЬКО вручную через SQL (см. schema.sql);
+ * воркер его не выставляет. Возвраты Stars — отдельное решение Mark.
  *
  * Серверный контракт scripts/check-profile-client.mjs:162
  * ('purchase' must never be accepted) в этом скоупе НЕ меняется:
- * KV воркера — его собственное хранилище entitlements, а не inventory
+ * D1 воркера — его собственное хранилище entitlements, а не inventory
  * профильного сервера. Отдельное решение.
  *
  * Секреты (wrangler secret put, НЕ в репозиторий):
@@ -72,27 +75,45 @@
  *  WEBHOOK_SECRET     — ОБЯЗАТЕЛЕН (fail-closed 401 без него); сверяется
  *                       с заголовком X-Telegram-Bot-Api-Secret-Token.
  *
- * KV: npx wrangler kv:namespace create PAYMENTS (см. worker/README_DEPLOY.md).
+ * D1: wrangler d1 create ofeliya-payments (см. worker/README_DEPLOY.md и
+ * worker/wrangler.toml.example). Без биндинга PAYMENTS_DB /api/invoice
+ * отвечает 503, pre_checkout — ok:false, /api/entitlements, /api/verify
+ * и /api/ack — 501, successful_payment только логируется.
  *
  * Деплой: см. worker/README_DEPLOY.md. Ничего из этого файла не деплоится
  * автоматически — только руками Mark.
  */
+
+/**
+ * Минимальный zero-deps сабсет Cloudflare D1 API, достаточный воркеру
+ * (вместо @cloudflare/workers-types).
+ */
+interface D1PreparedStatement {
+  bind(...params: unknown[]): D1PreparedStatement;
+  run(): Promise<D1RunResult>;
+  first<T = Record<string, unknown>>(column?: string): Promise<T | null>;
+  all<T = Record<string, unknown>>(): Promise<{ results: T[] }>;
+}
+
+interface D1RunResult {
+  success: boolean;
+  meta: { changes: number };
+}
+
+interface D1Database {
+  prepare(query: string): D1PreparedStatement;
+  batch(statements: D1PreparedStatement[]): Promise<D1RunResult[]>;
+}
 
 interface Env {
   TELEGRAM_BOT_TOKEN: string;
   /** ОБЯЗАТЕЛЕН для /api/webhook: отсутствует → 401 fail-closed (патч №12). */
   WEBHOOK_SECRET?: string;
   /**
-   * Пост-ревью (патч №11): Cloudflare KV для entitlements.
-   * Минимальный интерфейс вместо @cloudflare/workers-types (zero deps).
+   * Патч №13: Cloudflare D1 для журнала платежей (схема — worker/schema.sql).
+   * KV-биндинг PAYMENTS удалён полностью (чистая замена, не fallback).
    */
-  PAYMENTS?: KVNamespace;
-}
-
-/** Минимальный сабсет KV API, достаточный воркеру. */
-interface KVNamespace {
-  get(key: string): Promise<string | null>;
-  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+  PAYMENTS_DB?: D1Database;
 }
 
 /**
@@ -134,32 +155,13 @@ export const SERVER_PRODUCTS: Record<string, { title: string; description: strin
 };
 
 /**
- * Статус платежа в KV. 'credited' зарезервирован под ручные возвраты и
- * ручные начисления — воркер его не выставляет (вне скоупа).
+ * Статус платежа в D1. 'refunded' выставляется ТОЛЬКО вручную через SQL
+ * (см. worker/schema.sql) — воркер его не пишет.
  */
-export type PaymentStatus = 'paid' | 'credited';
-
-interface OrderRecord {
-  userId: number;
-  productId: string;
-  createdAt: number;
-}
-
-interface PaymentRecord {
-  userId: number;
-  productId: string;
-  amount: number;
-  currency: string;
-  status: PaymentStatus;
-  nonce: string;
-  createdAt: number;
-}
+export type PaymentStatus = 'paid' | 'fulfilled' | 'refunded';
 
 /** initData старше суток считаем протухшей. */
 const INIT_DATA_MAX_AGE_S = 86400;
-
-/** TTL заказа в KV: инвойс живёт дольше, но сверка нужна только на окне оплаты. */
-const ORDER_TTL_S = 3600;
 
 /** Nonce генерирует клиент; формат — как start_param в server/telegram-webhook.mjs. */
 const NONCE_RE = /^[A-Za-z0-9_-]{8,64}$/;
@@ -269,8 +271,14 @@ async function botApi(
   return data.result;
 }
 
+/**
+ * POST /api/invoice {initData, productId, nonce} → {invoiceUrl, nonce}.
+ * Payload инвойса — это nonce (лимит Telegram 1–128 байт): по нему вебхук
+ * находит заказ в D1 и атрибутирует платёж. Без D1-биндинга — 503.
+ */
 async function handleInvoice(request: Request, env: Env): Promise<Response> {
   if (!env.TELEGRAM_BOT_TOKEN) return json({ error: 'backend-misconfigured' }, 500);
+  if (!env.PAYMENTS_DB) return json({ error: 'db_unavailable' }, 503);
   let body: { productId?: unknown; initData?: unknown; nonce?: unknown };
   try {
     body = (await request.json()) as typeof body;
@@ -287,30 +295,29 @@ async function handleInvoice(request: Request, env: Env): Promise<Response> {
   if (!v.ok) return json({ error: 'bad-init-data', reason: v.reason }, 401);
   // Атрибуция платежа требует userId: без него вебхук не сможет сверить from.id.
   if (v.userId == null) return json({ error: 'bad-init-data', reason: 'no-user-id' }, 401);
+  // Заказ пишем ДО createInvoiceLink: ошибка записи → честный 502 до того,
+  // как Telegram создаст инвойс (битый трекинг исключён).
+  try {
+    await env.PAYMENTS_DB.prepare(
+      'INSERT INTO orders (nonce, user_id, product_id, status, created_at) VALUES (?,?,?,?,?)'
+    )
+      .bind(nonce, v.userId, productId, 'pending', Date.now())
+      .run();
+  } catch {
+    return json({ error: 'order-store-failed' }, 502);
+  }
   let invoiceUrl: string;
   try {
     invoiceUrl = (await botApi(env.TELEGRAM_BOT_TOKEN, 'createInvoiceLink', {
       title: product.title,
       description: product.description,
-      payload: nonce, // v2: сырой nonce, не JSON (лимит Telegram 1–128 байт)
+      payload: nonce, // сырой nonce, не JSON (лимит Telegram 1–128 байт)
       provider_token: '', // пусто для Stars (цифровые товары)
       currency: 'XTR',
       prices: [{ label: product.title, amount: product.stars }],
     })) as string;
   } catch {
     return json({ error: 'invoice-create-failed' }, 502);
-  }
-  if (env.PAYMENTS) {
-    try {
-      const order: OrderRecord = { userId: v.userId, productId, createdAt: Date.now() };
-      await env.PAYMENTS.put(`order:${nonce}`, JSON.stringify(order), {
-        expirationTtl: ORDER_TTL_S,
-      });
-    } catch {
-      // Инвойс уже создан Telegram, но заказ не сохранён: вебхук не сможет
-      // его атрибутировать. Честно отвечаем 502 вместо битого трекинга.
-      return json({ error: 'order-store-failed' }, 502);
-    }
   }
   return json({ invoiceUrl, nonce });
 }
@@ -334,19 +341,27 @@ function logEvent(event: string, extra: Record<string, unknown> = {}): void {
   console.log(JSON.stringify({ event, ...extra }));
 }
 
-function parseOrder(raw: string | null): OrderRecord | null {
-  if (!raw) return null;
-  try {
-    const o = JSON.parse(raw) as { userId?: unknown; productId?: unknown; createdAt?: unknown };
-    if (typeof o.userId !== 'number' || typeof o.productId !== 'string') return null;
-    return {
-      userId: o.userId,
-      productId: o.productId,
-      createdAt: typeof o.createdAt === 'number' ? o.createdAt : 0,
-    };
-  } catch {
-    return null;
-  }
+interface DbOrderRow {
+  user_id: number;
+  product_id: string;
+  status: string;
+}
+
+interface DbPaymentRow {
+  charge_id: string;
+  user_id: number;
+  product_id: string;
+  status: string;
+  created_at: number;
+}
+
+async function getOrder(db: D1Database, nonce: string): Promise<DbOrderRow | null> {
+  const row = await db
+    .prepare('SELECT user_id, product_id, status FROM orders WHERE nonce=?')
+    .bind(nonce)
+    .first<DbOrderRow>();
+  if (!row || typeof row.user_id !== 'number' || typeof row.product_id !== 'string') return null;
+  return row;
 }
 
 /**
@@ -371,24 +386,20 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
   }
 
   // 1. Pre-checkout: ответить ОБЯЗАТЕЛЬНО в течение 10 секунд.
-  //    Payload — nonce (v2): с KV резолвим заказ и сверяем цену с серверным
-  //    каталогом. Без KV трекать нечего, но цены зафиксированы сервером
-  //    в самом инвойсе — отвечаем ok:true (деградация как раньше).
+  //    Payload — nonce: order резолвится из D1, цена сверяется с серверным
+  //    каталогом. Без PAYMENTS_DB — ok:false (fail-closed всей цепочки,
+  //    патч №13; раньше без KV было ok:true — больше нет).
   const q = update.pre_checkout_query;
   if (q) {
     const nonce = q.invoice_payload ?? '';
     let ok = false;
-    if (isValidNonce(nonce)) {
-      if (env.PAYMENTS) {
-        try {
-          const order = parseOrder(await env.PAYMENTS.get(`order:${nonce}`));
-          const server = order ? SERVER_PRODUCTS[order.productId] : undefined;
-          ok = !!server && q.currency === 'XTR' && q.total_amount === server.stars;
-        } catch {
-          ok = false;
-        }
-      } else {
-        ok = true;
+    if (isValidNonce(nonce) && env.PAYMENTS_DB) {
+      try {
+        const order = await getOrder(env.PAYMENTS_DB, nonce);
+        const server = order && order.status !== 'expired' ? SERVER_PRODUCTS[order.product_id] : undefined;
+        ok = !!server && q.currency === 'XTR' && q.total_amount === server.stars;
+      } catch {
+        ok = false;
       }
     }
     await botApi(env.TELEGRAM_BOT_TOKEN, 'answerPreCheckoutQuery', {
@@ -399,14 +410,35 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
     return json({ ok: true });
   }
 
-  // 2. Успешный платёж → идемпотентная запись в журнал KV (протокол v2).
-  //    Без KV-биндинга — только структурированный лог, как раньше.
+  // 2. Успешный платёж → атомарная запись в журнал D1 (протокол v3).
+  //    Без D1-биндинга — только структурированный лог, как раньше без KV.
   const sp = update.message?.successful_payment;
   if (sp) {
-    await recordSuccessfulPayment(sp, update.message?.from?.id, env);
+    try {
+      await recordSuccessfulPayment(sp, update.message?.from?.id, env);
+    } catch (err) {
+      // Сбой записи: платёж уже подтверждён Telegram, но журнал не обновлён.
+      // 500 — Telegram переотправит апдейт; повтор безопасен (OR IGNORE).
+      logEvent('stars_payment_db_error', {
+        stars: sp.total_amount,
+        currency: sp.currency,
+        telegramChargeId: sp.telegram_payment_charge_id,
+        nonce: sp.invoice_payload ?? '',
+        userId: update.message?.from?.id,
+        error: String(err),
+      });
+      return json({ ok: false }, 500);
+    }
   }
   return json({ ok: true });
 }
+
+/**
+ * successful_payment → ОДИН db.batch():
+ *   INSERT OR IGNORE INTO payments (...)  +  UPDATE orders → 'paid'.
+ * Бросает при сбое записи (вызывающий отвечает 500, Telegram переотправит).
+ * Невалидные/чужие платежи только логируются (200, ретрай не поможет).
+ */
 
 async function recordSuccessfulPayment(
   sp: SuccessfulPayment,
@@ -422,7 +454,7 @@ async function recordSuccessfulPayment(
     providerChargeId: sp.provider_payment_charge_id,
     nonce,
   };
-  if (!env.PAYMENTS) {
+  if (!env.PAYMENTS_DB) {
     logEvent('stars_payment_unverified', { ...base, userId: fromId });
     return;
   }
@@ -430,81 +462,66 @@ async function recordSuccessfulPayment(
     logEvent('stars_payment_invalid', { ...base, userId: fromId });
     return;
   }
-  try {
-    // Идемпотентность: повторная доставка того же charge_id — skip.
-    const payKey = `pay:${chargeId}`;
-    if (await env.PAYMENTS.get(payKey)) {
-      logEvent('stars_payment_duplicate', { ...base, userId: fromId });
-      return;
-    }
-    const order = parseOrder(await env.PAYMENTS.get(`order:${nonce}`));
-    if (!order) {
-      logEvent('stars_payment_unknown_order', { ...base, userId: fromId });
-      return;
-    }
-    if (order.userId !== fromId) {
-      logEvent('stars_payment_user_mismatch', {
-        ...base,
-        userId: fromId,
-        orderUserId: order.userId,
-      });
-      return;
-    }
-    const server = SERVER_PRODUCTS[order.productId];
-    if (!server || sp.currency !== 'XTR' || sp.total_amount !== server.stars) {
-      logEvent('stars_payment_amount_mismatch', {
-        ...base,
-        userId: fromId,
-        productId: order.productId,
-        expected: server?.stars,
-      });
-      return;
-    }
-    const now = Date.now();
-    const record: PaymentRecord = {
-      userId: fromId,
-      productId: order.productId,
-      amount: sp.total_amount ?? 0,
-      currency: sp.currency ?? '',
-      status: 'paid',
-      nonce,
-      createdAt: now,
-    };
-    await env.PAYMENTS.put(payKey, JSON.stringify(record));
-    await env.PAYMENTS.put(`nonce:${nonce}`, chargeId);
-    // Журнал пользователя: append charge_id с дедупликацией.
-    const journalKey = `user:${fromId}:journal`;
-    const rawJournal = await env.PAYMENTS.get(journalKey);
-    let journal: string[] = [];
-    try {
-      const parsed: unknown = rawJournal ? JSON.parse(rawJournal) : [];
-      if (Array.isArray(parsed)) journal = parsed.filter((x): x is string => typeof x === 'string');
-    } catch {
-      journal = [];
-    }
-    if (!journal.includes(chargeId)) {
-      journal.push(chargeId);
-      await env.PAYMENTS.put(journalKey, JSON.stringify(journal));
-    }
-    logEvent('stars_payment_recorded', {
+  const db = env.PAYMENTS_DB;
+  const order = await getOrder(db, nonce);
+  if (!order) {
+    logEvent('stars_payment_unknown_order', { ...base, userId: fromId });
+    return;
+  }
+  if (order.user_id !== fromId) {
+    logEvent('stars_payment_user_mismatch', {
       ...base,
       userId: fromId,
-      productId: order.productId,
+      orderUserId: order.user_id,
     });
-  } catch (err) {
-    // KV не должен ронять вебхук: платёж уже подтверждён Telegram.
-    // Разбор — по структурированным логам выше.
-    logEvent('stars_payment_kv_error', { ...base, userId: fromId, error: String(err) });
+    return;
   }
+  const server = SERVER_PRODUCTS[order.product_id];
+  if (!server || sp.currency !== 'XTR' || sp.total_amount !== server.stars) {
+    logEvent('stars_payment_amount_mismatch', {
+      ...base,
+      userId: fromId,
+      productId: order.product_id,
+      expected: server?.stars,
+    });
+    return;
+  }
+  const now = Date.now();
+  // Атомарно: платёж + перевод заказа в 'paid'. OR IGNORE делает повторную
+  // доставку того же charge_id безопасной: meta.changes==0 → дубликат.
+  const results = await db.batch([
+    db
+      .prepare(
+        'INSERT OR IGNORE INTO payments ' +
+          '(charge_id, user_id, product_id, amount, currency, status, nonce, created_at, fulfilled_at) ' +
+          'VALUES (?,?,?,?,?,?,?,?,?)'
+      )
+      .bind(chargeId, fromId, order.product_id, sp.total_amount, sp.currency, 'paid', nonce, now, null),
+    db
+      .prepare("UPDATE orders SET status='paid' WHERE nonce=? AND status='pending'")
+      .bind(nonce),
+  ]);
+  if (results[0]?.meta.changes === 0) {
+    logEvent('stars_payment_duplicate', { ...base, userId: fromId });
+    return;
+  }
+  logEvent('stars_payment_recorded', {
+    ...base,
+    userId: fromId,
+    productId: order.product_id,
+  });
 }
 
 /**
  * POST /api/verify {initData, nonce} — точечная проверка одного платежа
  * (клиент зовёт после колбэка openInvoice вместо слепого доверия).
- * 501 — KV-биндинг не настроен.
+ * СТРОГО (патч №13): order.user_id == userId И payment.charge_id непустой
+ * И payment.user_id == userId И payment.product_id == order.product_id.
+ * Никаких синтетических charge_id — только настоящий от Telegram.
+ * 501 — D1-биндинг не настроен.
  */
 async function handleVerify(request: Request, env: Env): Promise<Response> {
-  if (!env.PAYMENTS) return json({ error: 'kv_unavailable' }, 501);
+  if (!env.PAYMENTS_DB) return json({ error: 'db_unavailable' }, 501);
   if (!env.TELEGRAM_BOT_TOKEN) return json({ error: 'backend-misconfigured' }, 500);
   let body: { initData?: unknown; nonce?: unknown };
   try {
@@ -517,37 +534,40 @@ async function handleVerify(request: Request, env: Env): Promise<Response> {
   const v = await validateInitData(initData, env.TELEGRAM_BOT_TOKEN);
   if (!v.ok || v.userId == null) return json({ error: 'bad-init-data', reason: v.reason }, 401);
   try {
-    const chargeId = await env.PAYMENTS.get(`nonce:${body.nonce}`);
-    if (!chargeId) return json({ verified: false, reason: 'not_found' });
-    const payRaw = await env.PAYMENTS.get(`pay:${chargeId}`);
-    let pay: { userId?: unknown; productId?: unknown } | null = null;
-    try {
-      // NB: не `as typeof pay` — самореференция на объявляемую переменную
-      // резолвится в never.
-      pay = payRaw ? (JSON.parse(payRaw) as { userId?: unknown; productId?: unknown }) : null;
-    } catch {
-      pay = null;
-    }
-    const payUserId = typeof pay?.userId === 'number' ? pay.userId : undefined;
-    const payProductId = typeof pay?.productId === 'string' ? pay.productId : undefined;
-    if (payUserId === undefined || payProductId === undefined || payUserId !== v.userId) {
+    const db = env.PAYMENTS_DB;
+    const order = await getOrder(db, body.nonce);
+    if (!order) return json({ verified: false, reason: 'not_found' });
+    if (order.user_id !== v.userId) return json({ verified: false, reason: 'mismatch' });
+    const payment = await db
+      .prepare(
+        'SELECT charge_id, user_id, product_id, status, created_at FROM payments WHERE nonce=?'
+      )
+      .bind(body.nonce)
+      .first<DbPaymentRow>();
+    if (!payment) return json({ verified: false, reason: 'pending' });
+    // Строгая сверка: настоящий charge_id от Telegram, свой userId,
+    // товар совпадает с заказом.
+    if (
+      typeof payment.charge_id !== 'string' ||
+      payment.charge_id.length === 0 ||
+      payment.user_id !== v.userId ||
+      payment.product_id !== order.product_id
+    ) {
       return json({ verified: false, reason: 'mismatch' });
     }
-    return json({ verified: true, chargeId, productId: payProductId });
+    return json({ verified: true, chargeId: payment.charge_id, productId: payment.product_id });
   } catch {
-    return json({ error: 'kv-read-failed' }, 502);
+    return json({ error: 'db-read-failed' }, 502);
   }
 }
 
 /**
- * POST /api/entitlements {initData} — серверный журнал покупок (протокол v2).
- * ВНИМАНИЕ: формат ответа изменён с {products:[...]} на {purchases:[...]};
- * старый массив user:{id}:products больше не пишется и не читается.
- * Миграции не требуется — KV ещё не в проде.
- * 501 — KV-биндинг не настроен.
+ * POST /api/entitlements {initData} — серверный журнал покупок.
+ * {purchases:[{chargeId, productId, status, createdAt}]}, сортировка по
+ * created_at. 501 — D1-биндинг не настроен.
  */
 async function handleEntitlements(request: Request, env: Env): Promise<Response> {
-  if (!env.PAYMENTS) return json({ error: 'kv_unavailable' }, 501);
+  if (!env.PAYMENTS_DB) return json({ error: 'db_unavailable' }, 501);
   if (!env.TELEGRAM_BOT_TOKEN) return json({ error: 'backend-misconfigured' }, 500);
   let body: { initData?: unknown };
   try {
@@ -559,45 +579,55 @@ async function handleEntitlements(request: Request, env: Env): Promise<Response>
   const v = await validateInitData(initData, env.TELEGRAM_BOT_TOKEN);
   if (!v.ok || v.userId == null) return json({ error: 'bad-init-data', reason: v.reason }, 401);
   try {
-    const journalRaw = await env.PAYMENTS.get(`user:${v.userId}:journal`);
-    let journal: string[] = [];
-    try {
-      const parsed: unknown = journalRaw ? JSON.parse(journalRaw) : [];
-      if (Array.isArray(parsed)) journal = parsed.filter((x): x is string => typeof x === 'string');
-    } catch {
-      journal = [];
-    }
-    const purchases: Array<{
-      chargeId: string;
-      productId: string;
-      status: PaymentStatus;
-      createdAt: number;
-    }> = [];
-    for (const chargeId of journal) {
-      const payRaw = await env.PAYMENTS.get(`pay:${chargeId}`);
-      try {
-        const pay = payRaw
-          ? (JSON.parse(payRaw) as {
-              productId?: unknown;
-              status?: unknown;
-              createdAt?: unknown;
-            })
-          : null;
-        if (pay && typeof pay.productId === 'string') {
-          purchases.push({
-            chargeId,
-            productId: pay.productId,
-            status: pay.status === 'credited' ? 'credited' : 'paid',
-            createdAt: typeof pay.createdAt === 'number' ? pay.createdAt : 0,
-          });
-        }
-      } catch {
-        // Битый pay-запис пропускаем, журнал не роняем.
-      }
-    }
+    const { results } = await env.PAYMENTS_DB.prepare(
+      'SELECT charge_id, product_id, status, created_at FROM payments WHERE user_id=? ORDER BY created_at ASC'
+    )
+      .bind(v.userId)
+      .all<DbPaymentRow>();
+    const purchases = results.map((row) => ({
+      chargeId: row.charge_id,
+      productId: row.product_id,
+      status: (['paid', 'fulfilled', 'refunded'] as const).includes(row.status as PaymentStatus)
+        ? (row.status as PaymentStatus)
+        : ('paid' as PaymentStatus),
+      createdAt: typeof row.created_at === 'number' ? row.created_at : 0,
+    }));
     return json({ purchases });
   } catch {
-    return json({ error: 'kv-read-failed' }, 502);
+    return json({ error: 'db-read-failed' }, 502);
+  }
+}
+
+/**
+ * POST /api/ack {initData, chargeId} — bookkeeping после локальной выдачи.
+ * Помечает платёж 'paid' → 'fulfilled' (только свой charge_id, только из
+ * 'paid'). Это учёт, а не защита: выдача уже произошла на клиенте.
+ * → {ok:true} если пометка применена, иначе {ok:false}.
+ * 501 — D1-биндинг не настроен.
+ */
+async function handleAck(request: Request, env: Env): Promise<Response> {
+  if (!env.PAYMENTS_DB) return json({ error: 'db_unavailable' }, 501);
+  if (!env.TELEGRAM_BOT_TOKEN) return json({ error: 'backend-misconfigured' }, 500);
+  let body: { initData?: unknown; chargeId?: unknown };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return json({ error: 'bad-json' }, 400);
+  }
+  const initData = typeof body.initData === 'string' ? body.initData : '';
+  const chargeId = typeof body.chargeId === 'string' && body.chargeId.length > 0 ? body.chargeId : '';
+  if (!chargeId) return json({ error: 'bad-charge-id' }, 400);
+  const v = await validateInitData(initData, env.TELEGRAM_BOT_TOKEN);
+  if (!v.ok || v.userId == null) return json({ error: 'bad-init-data', reason: v.reason }, 401);
+  try {
+    const result = await env.PAYMENTS_DB.prepare(
+      "UPDATE payments SET status='fulfilled', fulfilled_at=? WHERE charge_id=? AND user_id=? AND status='paid'"
+    )
+      .bind(Date.now(), chargeId, v.userId)
+      .run();
+    return json({ ok: result.meta.changes === 1 });
+  } catch {
+    return json({ error: 'db-write-failed' }, 502);
   }
 }
 
@@ -619,6 +649,9 @@ export default {
     }
     if (request.method === 'POST' && url.pathname === '/api/entitlements') {
       return handleEntitlements(request, env);
+    }
+    if (request.method === 'POST' && url.pathname === '/api/ack') {
+      return handleAck(request, env);
     }
     return new Response('not found', { status: 404 });
   },

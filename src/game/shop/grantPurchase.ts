@@ -15,9 +15,15 @@
  *     множитель применяется в GameScene.spawnGem рядом с флагом
  *     events.doubleRna — та же точка, тот же смысл).
  *
+ * Патч №13 (P1-a): applyPurchaseGrants бросает при неудаче — см. его
+ * комментарий; fulfillPurchase ловит и возвращает {ok:false}, витрина
+ * не падает, но провал виден и ретраится (раньше ошибка глоталась
+ * внутри, и chargeId помечался выданным без товара).
+ *
  * purchaseGrants — чистая функция (маппинг товар → действия), тестируется
- * в Node. applyPurchaseGrants — рантайм: выполняет действия, никогда не
- * бросает (витрина не падает из-за хранилища).
+ * в Node. applyPurchaseGrants — рантайм: выполняет действия, бросает
+ * при неудаче (ловит fulfillPurchase → {ok:false}; витрина не падает,
+ * но провал виден — см. P1-a ниже).
  */
 import { addRna, getBoosterUntilMs, setBoosterUntilMs } from '../meta/MetaWallet';
 import { grantSkin } from '../skins/SkinOwnership';
@@ -53,20 +59,20 @@ export function purchaseGrants(product: Product): PurchaseGrant[] {
 
 /**
  * Рантайм: выдать награды за товар. Возвращает применённые действия.
- * Никогда не бросает.
+ * Патч №13 (P1-a): БРОСАЕТ при неудаче выдачи (раньше глотал ошибки
+ * per-grant) — иначе fulfillPurchase не может отличить успех от провала
+ * и пометил бы chargeId выданным без товара. Единственный рантайм-
+ * вызывающий — fulfillPurchase, у него свой try/catch → {ok:false}:
+ * витрина по-прежнему не падает, но провал виден и ретраится.
  */
 export function applyPurchaseGrants(product: Product): PurchaseGrant[] {
   const grants = purchaseGrants(product);
   for (const grant of grants) {
-    try {
-      if (grant.type === 'skin') grantSkin(grant.skinId, 'purchase');
-      else if (grant.type === 'rna') addRna(grant.amount);
-      // Пост-ревью (патч №11): повторная покупка продлевает от
-      // max(now, текущий срок) — время не сгорает.
-      else setBoosterUntilMs(Math.max(Date.now(), getBoosterUntilMs()) + grant.durationMs);
-    } catch {
-      /* выдача не ломает витрину */
-    }
+    if (grant.type === 'skin') grantSkin(grant.skinId, 'purchase');
+    else if (grant.type === 'rna') addRna(grant.amount);
+    // Пост-ревью (патч №11): повторная покупка продлевает от
+    // max(now, текущий срок) — время не сгорает.
+    else setBoosterUntilMs(Math.max(Date.now(), getBoosterUntilMs()) + grant.durationMs);
   }
   return grants;
 }
