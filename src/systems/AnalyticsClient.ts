@@ -35,7 +35,11 @@ export type ProductEvent =
   | 'lab_upgrade_bought'
   | 'prestige_done'
   | 'skin_granted'
-  | 'skin_equipped';
+  | 'skin_equipped'
+  | 'store_viewed'
+  | 'purchase_started'
+  | 'purchase_completed'
+  | 'purchase_failed';
 
 export type ProductEventProps = Record<string, string | number | boolean>;
 

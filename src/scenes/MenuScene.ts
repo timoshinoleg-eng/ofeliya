@@ -34,6 +34,7 @@ import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
 import { ensureCinematicTextures } from '../game/CinematicTextures';
 import { clearDailyIntent, launchDailyRun } from '../game/DailyRunIntent';
 import { FeatureFlags } from '../game/FeatureFlags';
+import { isStorefrontVisible } from '../game/shop/Storefront';
 import { getDailyStatus } from '../game/daily/DailyCalendar';
 import { showDailyModal, showMetaToast } from '../ui/RetentionOverlays';
 import { showLabPanel } from '../ui/LabOverlays';
@@ -1078,6 +1079,42 @@ export class MenuScene extends Phaser.Scene {
       }
       if (StartupTrace.showDebugOverlay()) PlatformBridge.haptic('light');
     });
+    // Точка входа в витрину (storefront, порт партии 3): только когда флаг
+    // storefront.variant видим ('mock'/'max'/'telegram' — 'telegram' добавит
+    // партия Stars); при дефолтном 'hidden' не рисуется — раскладка меню
+    // не меняется. Чип в правом верхнем углу, вне измеренных зон меню
+    // (заголовок и founder-бейдж центрированы).
+    if (isStorefrontVisible(FeatureFlags.get('storefront.variant'))) {
+      const shopW = 104;
+      const shopH = 40;
+      const shopX = W - 12 - shopW / 2;
+      const shopY = 30;
+      const shopBg = this.add
+        .rectangle(shopX, shopY, shopW, shopH, ROLE.surface.panel, PANEL.button)
+        .setStrokeStyle(BORDER.thin, ROLE.faction.reward, 0.75)
+        .setDepth(7)
+        .setName('ofeliya-menu-shop')
+        .setInteractive({ useHandCursor: true });
+      const shopLabel = this.add
+        .text(shopX, shopY, 'МАГАЗИН', {
+          fontFamily: FONT,
+          fontSize: '12px',
+          fontStyle: 'bold',
+          color: VISUAL_TEXT.ivory,
+          letterSpacing: 1,
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setDepth(8);
+      shopBg.on('pointerdown', () => shopBg.setAlpha(0.6));
+      shopBg.on('pointerup', () => {
+        shopBg.setAlpha(1);
+        Sfx.play('click');
+        PlatformBridge.haptic('light');
+        this.scene.start('Storefront');
+      });
+    }
+
     this.scale.on('resize', this.onResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.onResize, this);

@@ -24,6 +24,8 @@ export interface MetaState {
   rnaEarned: number;
   starsSpent: number;
   maxStreak: number;
+  /** Epoch-мс окончания бустера «РНК ×2» (витрина); 0 — бустера нет. */
+  boosterUntilMs: number;
 }
 
 const STORAGE_KEY = 'ofeliya.meta.v1';
@@ -37,6 +39,7 @@ const ZERO: MetaState = {
   rnaEarned: 0,
   starsSpent: 0,
   maxStreak: 0,
+  boosterUntilMs: 0,
 };
 
 function sanitize(p: Partial<MetaState>): MetaState {
@@ -49,6 +52,7 @@ function sanitize(p: Partial<MetaState>): MetaState {
     rnaEarned: n(p.rnaEarned),
     starsSpent: n(p.starsSpent),
     maxStreak: n(p.maxStreak),
+    boosterUntilMs: n(p.boosterUntilMs),
   };
 }
 
@@ -136,5 +140,24 @@ export function recordStreak(streak: number): void {
   if (streak > st.maxStreak) {
     st.maxStreak = streak;
     saveMeta(st);
+  }
+}
+
+/**
+ * Бустер «РНК ×2» (витрина, порт партии 3): установить окончание действия.
+ * Вызывается из выдачи покупки (shop/grantPurchase); продление — перезаписью.
+ */
+export function setBoosterUntilMs(untilMs: number): void {
+  const st = loadMeta();
+  st.boosterUntilMs = Math.max(0, Math.floor(untilMs));
+  saveMeta(st);
+}
+
+/** Активен ли бустер «РНК ×2» сейчас (применяется в GameScene.spawnGem). */
+export function isBoosterActive(nowMs: number = Date.now()): boolean {
+  try {
+    return loadMeta().boosterUntilMs > nowMs;
+  } catch {
+    return false;
   }
 }

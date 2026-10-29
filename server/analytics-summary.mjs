@@ -40,6 +40,7 @@ export const ANALYTICS_EVENT_NAMES = Object.freeze([
   'daily_claimed', 'achievement_unlocked',
   'lab_upgrade_bought', 'prestige_done',
   'skin_granted', 'skin_equipped',
+  'store_viewed', 'purchase_started', 'purchase_completed', 'purchase_failed',
 ]);
 
 const ANALYTICS_EVENT_NAME_SET = new Set(ANALYTICS_EVENT_NAMES);

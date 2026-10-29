@@ -56,8 +56,9 @@ export type FlagKey =
  * - 'hidden' (дефолт) — витрины нет, точка входа не рисуется;
  * - 'mock' — витрина на MockPaymentProvider (dev/QA-дубль, НЕ реальный биллинг);
  * - 'max' — MaxBridgePaymentProvider (stub: unavailable → экран «скоро»);
- * - 'telegram' — TelegramStarsPaymentProvider (реальный биллинг Stars).
- * Витрина ещё не перенесена в main: флаг — stub до её порта.
+ * - 'telegram' — TelegramStarsPaymentProvider (реальный биллинг Stars;
+ *   провайдер приходит с партией Stars, до неё значение fail-closed).
+ * Витрина портирована (партия 3): флаг больше не stub.
  */
 export type StorefrontVariant = 'hidden' | 'mock' | 'max' | 'telegram';
 
