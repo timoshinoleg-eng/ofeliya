@@ -111,13 +111,16 @@
     "test:easy-difficulty-visual": "node tests/easy-difficulty-visual.mjs",
     "test:difficulty-comparison": "node scripts/check-difficulty-comparison.mjs",
     "test:difficulty-comparison-browser": "node scripts/difficulty-comparison-smoke.cjs",
-    "test:ui-redesign": "node tests/ui-redesign.mjs"
+    "test:ui-redesign": "node tests/ui-redesign.mjs",
+    "test:skins": "node tests/skins.mjs"
   },
   "overrides": {
     "source-map-js": "1.2.2"
   },
   "dependencies": {
     "@maxhub/max-bot-api": "^0.3.1",
+    "@dicebear/core": "^9.4.3",
+    "@dicebear/shapes": "^9.4.2",
     "phaser": "^3.90.0"
   },
   "devDependencies": {

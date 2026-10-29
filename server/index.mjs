@@ -247,6 +247,7 @@ const PRODUCT_EVENTS = new Set([
   'onboarding_step', 'onboarding_exit',
   'daily_claimed', 'achievement_unlocked',
   'lab_upgrade_bought', 'prestige_done',
+  'skin_granted', 'skin_equipped',
 ]);
 
 function emptyStore() {

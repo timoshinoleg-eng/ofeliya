@@ -48,7 +48,8 @@ export type FlagKey =
   | 'difficulty.earlyGame'
   | 'storefront.variant'
   | 'retention.quests'
-  | 'economy.lab';
+  | 'economy.lab'
+  | 'skins.gallery';
 
 /**
  * Варианты витрины (storefront.variant):
@@ -80,6 +81,13 @@ export interface FlagValues {
    * (модификаторы забега при этом не применяются).
    */
   'economy.lab': boolean;
+  /**
+   * Галерея скинов-штаммов Фазы 5 (DiceBear).
+   * Дефолт true (то же обоснование, что у retention.quests/economy.lab):
+   * чистая косметика, чистый клиент, без бэкенда и платежей; дефолтный скин —
+   * каноничный арт, поведение игры не меняется; гасится флагом мгновенно.
+   */
+  'skins.gallery': boolean;
 }
 
 export const FLAG_DEFAULTS: FlagValues = {
@@ -88,6 +96,7 @@ export const FLAG_DEFAULTS: FlagValues = {
   'storefront.variant': 'hidden',
   'retention.quests': true,
   'economy.lab': true,
+  'skins.gallery': true,
 };
 
 /** Чистая функция: дефолты + оверрайды. Неизвестные ключи игнорируются. */
@@ -98,6 +107,7 @@ export function resolveFlags(overrides: Partial<FlagValues> = {}): FlagValues {
     'storefront.variant': overrideString(overrides['storefront.variant']),
     'retention.quests': overrides['retention.quests'] ?? FLAG_DEFAULTS['retention.quests'],
     'economy.lab': overrides['economy.lab'] ?? FLAG_DEFAULTS['economy.lab'],
+    'skins.gallery': overrides['skins.gallery'] ?? FLAG_DEFAULTS['skins.gallery'],
   };
 }
 
@@ -144,6 +154,9 @@ export function readUrlFlagOverrides(search: string): Partial<FlagValues> {
   const rawLab = params.get('flag.economy.lab');
   if (rawLab === 'true' || rawLab === '1') out['economy.lab'] = true;
   else if (rawLab === 'false' || rawLab === '0') out['economy.lab'] = false;
+  const rawGallery = params.get('flag.skins.gallery');
+  if (rawGallery === 'true' || rawGallery === '1') out['skins.gallery'] = true;
+  else if (rawGallery === 'false' || rawGallery === '0') out['skins.gallery'] = false;
   return out;
 }
 

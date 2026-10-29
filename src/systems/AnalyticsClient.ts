@@ -33,7 +33,9 @@ export type ProductEvent =
   | 'daily_claimed'
   | 'achievement_unlocked'
   | 'lab_upgrade_bought'
-  | 'prestige_done';
+  | 'prestige_done'
+  | 'skin_granted'
+  | 'skin_equipped';
 
 export type ProductEventProps = Record<string, string | number | boolean>;
 

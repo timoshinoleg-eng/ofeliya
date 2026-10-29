@@ -5,8 +5,9 @@
  * Честное разграничение: в проекте уже есть src/game/AchievementSystem.ts —
  * 9 достижений уровня забега (без наград, тосты в GameScene). Этот модуль
  * его НЕ дублирует, а добавляет meta-слой: lifetime-триггеры + награды
- * (RNA сейчас; {kind:'skin'} — слот под скины Фазы 5, выдача скинов
- * не реализована) + аналитика achievement_unlocked.
+ * (RNA сейчас; {kind:'skin'} — гранты скинов Фазы 5 через SkinOwnership,
+ * хранилище ofeliya.skins.v1, вне inventory-контракта) + аналитика
+ * achievement_unlocked.
  *
  * Отличие от стека (исправление): evo_5 → evo_3. В игре всего 3 критические
  * мутации (prism/halo/singularity — VALID_EVOLUTIONS в SaveSystem), поэтому
@@ -18,6 +19,7 @@
  */
 import { SaveSystem } from '../../systems/SaveSystem';
 import { loadMeta } from '../meta/MetaWallet';
+import { grantSkin } from '../skins/SkinOwnership';
 
 export type MetaAchievementId =
   | 'killer_500' | 'killer_1k' | 'killer_10k' | 'killer_100k'
@@ -99,7 +101,6 @@ export function getMetaAchievementDef(id: MetaAchievementId): MetaAchievementDef
 }
 
 const UNLOCKED_KEY = 'ofeliya.meta-ach.v1';
-const SKIN_GRANTS_KEY = 'ofeliya.ach-skins.v1';
 
 function loadUnlocked(): Set<string> {
   try {
@@ -162,16 +163,11 @@ export function unlockMetaAchievements(stats: LifetimeStats): MetaAchievementId[
 }
 
 /** Записать грант скина (слот под Фазу 5; рендер/применение — там). */
+/**
+ * Записать грант скина. Фаза 5: делегирует SkinOwnership (хранилище
+ * ofeliya.skins.v1, вне inventory-контракта); гранты, записанные сюда
+ * раньше (ofeliya.ach-skins.v1, Фаза 3), мигрируют при чтении.
+ */
 export function grantAchievementSkin(skinId: string): void {
-  try {
-    if (typeof localStorage === 'undefined') return;
-    const raw = localStorage.getItem(SKIN_GRANTS_KEY);
-    const list = raw ? (JSON.parse(raw) as string[]) : [];
-    if (!list.includes(skinId)) {
-      list.push(skinId);
-      localStorage.setItem(SKIN_GRANTS_KEY, JSON.stringify(list));
-    }
-  } catch {
-    /* ignore */
-  }
+  grantSkin(skinId, 'achievement');
 }

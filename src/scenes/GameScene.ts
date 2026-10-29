@@ -112,6 +112,10 @@ import {
 import { trackProductEvent, type ProductEvent, type ProductEventProps } from '../systems/AnalyticsClient';
 import { dailyStreakSummary } from '../systems/DailyHistory';
 import { showMetaToast } from '../ui/RetentionOverlays';
+import { showSkinGrantToast } from '../ui/SkinGallery';
+import { DEFAULT_SKIN_ID, getSkinDef, skinTextureKey } from '../game/skins/SkinCatalog';
+import { getEquippedSkinId } from '../game/skins/SkinOwnership';
+import { ensureSkinTexture } from '../game/skins/SkinArt';
 import {
   collectLifetimeStats,
   getMetaAchievementDef,
@@ -530,6 +534,10 @@ export class GameScene extends Phaser.Scene {
     }
     this.trailCursor = 0;
     this.trailAcc = 0;
+
+    // Фаза 5: экипированный скин штамма — DiceBear-текстура вместо
+    // каноничного арта (запекается асинхронно; Player держит её в preUpdate).
+    this.applyEquippedSkin();
 
     this.physics.add.overlap(this.bullets, this.enemies, this.onBulletHit, undefined, this);
     this.physics.add.overlap(this.player, this.enemies, this.onPlayerHit, undefined, this);
@@ -1232,6 +1240,22 @@ export class GameScene extends Phaser.Scene {
         t.setVisible(false).setActive(false);
         if (this.lastDmg && this.lastDmg.obj === t) this.lastDmg = null;
       },
+    });
+  }
+
+  /**
+   * Фаза 5: применить экипированный скин штамма. Ключ текстуры ставится
+   * синхронно (Player.preUpdate держит её, когда запечётся); след
+   * переключается на текстуру скина по готовности.
+   */
+  private applyEquippedSkin(): void {
+    const def = getSkinDef(getEquippedSkinId());
+    if (!def || def.id === DEFAULT_SKIN_ID) return;
+    const key = skinTextureKey(def.id);
+    this.player.skinTextureKey = key;
+    void ensureSkinTexture(this, def).then(() => {
+      if (!this.sys.isActive() || !this.textures.exists(key)) return;
+      for (const t of this.trail) t.setTexture(key);
     });
   }
 
@@ -2483,11 +2507,9 @@ export class GameScene extends Phaser.Scene {
       if (def.reward.kind === 'rna') grantMetaRna(def.reward.amount);
       else grantAchievementSkin(def.reward.skinId);
       void trackProductEvent('achievement_unlocked', PlatformBridge, { achievementId: id });
-      showMetaToast(
-        this,
-        def.title,
-        def.reward.kind === 'rna' ? `+${def.reward.amount} РНК` : 'Новый штамм'
-      );
+      // Фаза 5: скин — тост с превью штамма и анимацией выдачи.
+      if (def.reward.kind === 'rna') showMetaToast(this, def.title, `+${def.reward.amount} РНК`);
+      else showSkinGrantToast(this, def.reward.skinId);
     }
     this.milestones.reset();
     this.registry.set('run', this.snapshot());
