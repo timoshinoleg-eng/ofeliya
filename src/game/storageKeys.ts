@@ -80,6 +80,10 @@ export const STORAGE_KEYS: Record<string, StorageKeyInfo> = {
     owner: 'src/game/shop/PaymentLedger.ts',
     format: 'JSON: массив chargeId (string[])',
   },
+  'ofeliya.wallet.sync.v1': {
+    owner: 'src/game/shop/ServerWalletSync.ts',
+    format: 'JSON: number — серверный purchased_rna, уже материализованный локально (watermark per-device)',
+  },
   // Журнал чеков mock-покупок для restore() (только DEV/QA).
   'ofeliya.mock.entitlements.v1': {
     owner: 'src/game/shop/MockPaymentProvider.ts',

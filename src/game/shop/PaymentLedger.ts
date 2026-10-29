@@ -55,6 +55,13 @@ export interface FulfillResult {
   outcome: FulfillOutcome;
   /** Машиночитаемая причина при ok=false. */
   error?: string;
+  /**
+   * Патч №15 (P0-3): true — товар НЕ начислен локально. Выдача
+   * серверно-авторитетная (воркер применил грант в D1); вызывающий код
+   * обязан запустить ServerWalletSync для материализации. Только
+   * providerId 'telegram-stars'; у остальных грант прямой, как раньше.
+   */
+  needsServerSync?: boolean;
 }
 
 export interface FulfillOptions {
@@ -216,16 +223,25 @@ export function clearCreditedCharges(): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Идемпотентная выдача покупки — ЕДИНСТВЕННАЯ точка гранта за деньги.
+ * Идемпотентная выдача покупки — ЕДИНСТВЕННАЯ точка учёта гранта за деньги.
  *
- * - chargeId уже в журнале credited → 'duplicate': НИЧЕГО не начисляется
- *   (защита от двойной выдачи при повторных verify/restore/ретраях);
+ * Патч №15 (P0-3): для providerId 'telegram-stars' выдача
+ * СЕРВЕРНО-АВТОРИТЕТНАЯ — воркер уже применил грант в D1 (атомарный батч
+ * в successful_payment). Клиент здесь НЕ начисляет сам: помечает chargeId
+ * в credited-журнале (защита от повторной обработки), пишет
+ * recordStarsSpent + аналитику и возвращает needsServerSync:true —
+ * вызывающий код запускает ServerWalletSync (материализация серверного
+ * результата по watermark). Локальный credited.v1 теперь означает
+ * «обработан», а не «начислен локально».
+ *
+ * - chargeId уже в журнале credited → 'duplicate': НИЧЕГО не делается
+ *   (защита от двойной обработки при повторных verify/restore/ретраях);
  * - без chargeId (mock, QA-дубль) — грант напрямую, как раньше
  *   (повторный грант мока без chargeId не дедуплицируется — для скинов
  *   grantSkin сам идемпотентен, для РНК/бустера это поведение QA-дубля);
- * - грант — через shop/grantPurchase (скины → SkinOwnership вне
- *   inventory-контракта check-profile-client.mjs:162, РНК — плоское
- *   начисление, бустер — продление от max(now, срок));
+ * - грант у не-серверных провайдеров — через shop/grantPurchase (скины →
+ *   SkinOwnership вне inventory-контракта check-profile-client.mjs:162,
+ *   РНК — плоское начисление, бустер — продление от max(now, срок));
  * - recordStarsSpent — ТОЛЬКО для реальных провайдеров
  *   (providerId !== 'mock'): у мока звёзды не настоящие, достижения
  *   stars_1/stars_500 качать нельзя;
@@ -244,13 +260,25 @@ export function fulfillPurchase(
     const chargeId = (opts.chargeId ?? '').trim();
     if (chargeId && isChargeCredited(chargeId)) return { ok: true, outcome: 'duplicate' };
 
-    // Грант по виду товара — через единую точку выдачи main.
-    applyPurchaseGrants(product);
+    // Патч №15 (P0-3): серверная выдача — локального начисления нет.
+    // Воркер уже применил грант в D1 (атомарный батч в successful_payment);
+    // клиент здесь НЕ начисляет сам: помечает chargeId в credited-журнале
+    // (защита от повторной обработки), пишет recordStarsSpent + возвращает
+    // needsServerSync:true — вызывающий код запускает ServerWalletSync
+    // (материализация серверного результата по watermark). Локальный
+    // credited.v1 теперь означает «обработан», а не «начислен локально».
+    // У остальных провайдеров (mock, max-bridge) грант прямой, как раньше,
+    // через единую точку выдачи main (shop/grantPurchase).
+    const serverIssued = opts.providerId === 'telegram-stars';
+    if (!serverIssued) {
+      // Грант по виду товара — через единую точку выдачи main.
+      applyPurchaseGrants(product);
+    }
 
     if (opts.providerId !== 'mock' && product.stars) recordStarsSpent(product.stars);
 
     if (chargeId) markChargeCredited(chargeId);
-    return { ok: true, outcome: 'granted' };
+    return { ok: true, outcome: 'granted', ...(serverIssued ? { needsServerSync: true } : {}) };
   } catch (e) {
     // Грант не удался — chargeId НЕ помечаем, ретрай/restore повторит.
     return {

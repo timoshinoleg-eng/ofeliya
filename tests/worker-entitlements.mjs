@@ -14,7 +14,10 @@
  *   currency mismatch / invalid → 200 без записи;
  * - pre_checkout: nonce → order → сверка цены (ok:true/false в Bot API);
  *   без D1 → ok:false (fail-closed; деградация ok:true из №12 убрана);
- *   expired order → ok:false;
+ *   expired order → ok:false; патч №15 (P0-2): ok:true ТОЛЬКО при
+ *   status='pending' И from.id == order.user_id (чужой/оплаченный — отказ);
+ *   серверная выдача: successful_payment пишет кошелёк + журнал (wallets,
+ *   wallet_ledger в стабе);
  * - POST /api/verify СТРОГО: order + payment + сверка
  *   (charge_id/userId/productId) → {verified, chargeId, productId} /
  *   pending (order есть, payment нет) / not_found / mismatch;
@@ -23,8 +26,8 @@
  *   products НЕТ (наследие v1 удалено);
  * - POST /api/ack: paid→fulfilled (только свой charge_id, только из
  *   'paid') → {ok:true/false}; повтор/ чужой/ плохой chargeId;
- * - без PAYMENTS_DB: webhook 200 log-only, invoice 503 db_unavailable,
- *   verify/entitlements/ack 501 db_unavailable;
+ * - без PAYMENTS_DB: webhook 503 fail-closed (патч №14), invoice 503
+ *   db_unavailable, verify/entitlements/ack 501 db_unavailable;
  * - плохая initData → 401; плохой nonce → 400; WEBHOOK_SECRET fail-closed
  *   (нет в env → 401, неверный заголовок → 403).
  *
@@ -81,6 +84,9 @@ function buildInitData(userId) {
 function makeD1() {
   const orders = new Map(); // nonce → {user_id, product_id, status, created_at}
   const payments = new Map(); // charge_id → row
+  // Патч №15: серверный кошелёк (wallets) + журнал грантов (wallet_ledger).
+  const wallets = new Map(); // user_id → row
+  const ledger = new Map(); // charge_id → row
   let failNext = false;
   const norm = (s) => s.replace(/\s+/g, ' ').trim();
   const runSql = (sql, params) => {
@@ -120,6 +126,24 @@ function makeD1() {
       }
       return { meta: { changes: 0 } };
     }
+    // Патч №15: UPSERT кошелька (атомарная серверная выдача).
+    if (sql.startsWith('INSERT INTO wallets')) {
+      const [userId, purchasedRna, boosterUntilMs, skinsJson, updatedAt] = params;
+      wallets.set(userId, {
+        user_id: userId,
+        purchased_rna: purchasedRna,
+        booster_until_ms: boosterUntilMs,
+        skins_json: skinsJson,
+        updated_at: updatedAt,
+      });
+      return { meta: { changes: 1 } };
+    }
+    if (sql.startsWith('INSERT OR IGNORE INTO wallet_ledger')) {
+      const [userId, chargeId, kind, amountText, createdAt] = params;
+      if (ledger.has(chargeId)) return { meta: { changes: 0 } };
+      ledger.set(chargeId, { user_id: userId, charge_id: chargeId, kind, amount_text: amountText, created_at: createdAt });
+      return { meta: { changes: 1 } };
+    }
     if (sql.startsWith("UPDATE payments SET status='fulfilled'")) {
       const [fulfilledAt, chargeId, userId] = params;
       const p = payments.get(chargeId);
@@ -144,6 +168,17 @@ function makeD1() {
       for (const p of payments.values()) if (p.nonce === params[0]) return p;
       return null;
     }
+    // Патч №15: backstop nonce-reuse, self-heal дубликатов, чтение кошелька.
+    if (sql === 'SELECT charge_id FROM payments WHERE nonce=?') {
+      for (const p of payments.values()) if (p.nonce === params[0]) return { charge_id: p.charge_id };
+      return null;
+    }
+    if (sql === 'SELECT 1 AS one FROM wallet_ledger WHERE charge_id=?') {
+      return ledger.has(params[0]) ? { one: 1 } : null;
+    }
+    if (sql === 'SELECT purchased_rna, booster_until_ms, skins_json FROM wallets WHERE user_id=?') {
+      return wallets.get(params[0]) ?? null;
+    }
     throw new Error(`makeD1: unknown first SQL: ${sql}`);
   };
   const allSql = (sql, params) => {
@@ -166,6 +201,8 @@ function makeD1() {
   return {
     orders,
     payments,
+    wallets,
+    ledger,
     failNext: () => {
       failNext = true;
     },
@@ -211,13 +248,15 @@ function webhookBody({ userId, nonce, chargeId, stars, currency = 'XTR' }) {
   };
 }
 
-function preCheckoutBody({ nonce, stars, currency = 'XTR' }) {
+function preCheckoutBody({ nonce, stars, currency = 'XTR', userId = 777001 }) {
   return {
     pre_checkout_query: {
       id: 'q-1',
       invoice_payload: nonce,
       currency,
       total_amount: stars,
+      // Патч №15 (P0-2): строгий pre_checkout требует from.id == order.user_id.
+      from: { id: userId },
     },
   };
 }
@@ -369,10 +408,16 @@ try {
     return { ok: true, json: async () => ({ ok: true, result: true }) };
   };
   try {
-    let res = await post(worker, env, '/api/webhook', preCheckoutBody({ nonce: 'nonce-001', stars: 100 }), hookHeaders);
+    // Патч №15: ok:true — только для pending-заказа. nonce-001 к этому
+    // моменту уже оплачен вебхуками выше, поэтому сеем свежий pending.
+    await db
+      .prepare('INSERT INTO orders (nonce, user_id, product_id, status, created_at) VALUES (?,?,?,?,?)')
+      .bind('nonce-pc-ok', 777001, 'skin.virulent-magenta', 'pending', Date.now())
+      .run();
+    let res = await post(worker, env, '/api/webhook', preCheckoutBody({ nonce: 'nonce-pc-ok', stars: 100 }), hookHeaders);
     eq(res.status, 200, 'pre_checkout ok');
     eq(botCalls[botCalls.length - 1].ok, true, 'pre_checkout correct price → ok:true');
-    res = await post(worker, env, '/api/webhook', preCheckoutBody({ nonce: 'nonce-001', stars: 50 }), hookHeaders);
+    res = await post(worker, env, '/api/webhook', preCheckoutBody({ nonce: 'nonce-pc-ok', stars: 50 }), hookHeaders);
     eq(botCalls[botCalls.length - 1].ok, false, 'pre_checkout wrong price → ok:false');
     res = await post(worker, env, '/api/webhook', preCheckoutBody({ nonce: 'x', stars: 100 }), hookHeaders);
     eq(botCalls[botCalls.length - 1].ok, false, 'pre_checkout invalid nonce → ok:false');
@@ -392,6 +437,27 @@ try {
       .run();
     res = await post(worker, env, '/api/webhook', preCheckoutBody({ nonce: 'nonce-exp', stars: 35 }), hookHeaders);
     eq(botCalls[botCalls.length - 1].ok, false, 'pre_checkout expired order → ok:false');
+    // Патч №15 (P0-2): чужой from.id → ok:false (нельзя оплатить чужой инвойс).
+    await db
+      .prepare('INSERT INTO orders (nonce, user_id, product_id, status, created_at) VALUES (?,?,?,?,?)')
+      .bind('nonce-pc-alien', 777001, 'skin.virulent-magenta', 'pending', Date.now())
+      .run();
+    res = await post(
+      worker,
+      env,
+      '/api/webhook',
+      preCheckoutBody({ nonce: 'nonce-pc-alien', stars: 100, userId: 777001 + 999 }),
+      hookHeaders
+    );
+    eq(botCalls[botCalls.length - 1].ok, false, 'pre_checkout ok=false on user mismatch');
+    // Патч №15 (P0-2): уже оплаченный заказ (status='paid') → ok:false
+    // (повторная оплата того же nonce невозможна через гейт pending).
+    await db
+      .prepare('INSERT INTO orders (nonce, user_id, product_id, status, created_at) VALUES (?,?,?,?,?)')
+      .bind('nonce-pc-paid', 777001, 'skin.virulent-magenta', 'paid', Date.now())
+      .run();
+    res = await post(worker, env, '/api/webhook', preCheckoutBody({ nonce: 'nonce-pc-paid', stars: 100 }), hookHeaders);
+    eq(botCalls[botCalls.length - 1].ok, false, 'pre_checkout ok=false on paid order');
   } finally {
     globalThis.fetch = realFetch;
   }
