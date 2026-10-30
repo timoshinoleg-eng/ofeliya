@@ -63,6 +63,7 @@
     "test:stars-proxy": "node tests/stars-proxy.mjs",
     "test:payments-trust": "node tests/payments-trust.mjs",
     "test:juice": "node tests/juice-driver.mjs",
+    "test:qa-perf": "node tests/qa-perf-overlay.mjs",
     "test:analytics-events": "node scripts/check-analytics-events.mjs",
     "test:daily-streak": "node tests/daily-streak.mjs",
     "test:meta-achievements": "node tests/meta-achievements.mjs",
