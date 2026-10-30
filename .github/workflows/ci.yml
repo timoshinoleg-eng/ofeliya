@@ -158,6 +158,9 @@ jobs:
       - name: Juice driver contract
         run: npm run test:juice
 
+      - name: QA perf overlay contract
+        run: npm run test:qa-perf
+
       - name: Post-review fixes contract
         run: npm run test:post-review-fixes
 

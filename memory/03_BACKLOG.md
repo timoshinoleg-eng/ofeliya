@@ -1,3 +1,5 @@
+QA perf overlay: после мержа — прогон протокола на S20+ (QA-сборка VITE_QA_TOOLS=1, забег до лага, скриншот оверлея) и интерпретация по развилке в теле PR; фикс hot spot — отдельным решением, не в этом PR. ОТКРЫТО (за Mark): прогон протокола; решения по PR #169/#177/#208/#245; унификация путей выбора скинов.
+
 Juice port: exact-head CI на PR; после мержа — партия 3 ЗАКРЫТА (витрина + Stars + Juice в main). Дальше: партия 4 — фиксы №10–16 (audit-fixes, post-review, review2–review6); при порте post-review сверить booster→boosterUntilMs с уже wired бустером из задачи 1 (не дублировать). ОТКРЫТО (за Mark): унификация двух путей выбора скинов; деплой воркера + bot token + webhook.
 
 Stars port: exact-head CI на PR; после мержа — партия 3 задача 3 (Juice: @tweenjs/tween.js + Juice.ts, швы GameScene/UIScene; церемонию боссов не трогать). Дальше: фиксы №10–16. ОТКРЫТО (за Mark): унификация двух путей выбора скинов; деплой воркера + bot token + webhook (worker/README_DEPLOY.md).

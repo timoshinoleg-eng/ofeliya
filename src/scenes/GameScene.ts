@@ -53,6 +53,7 @@ import {
 import { IDENTITY } from '../game/identity';
 import { readControlMode, type ControlMode } from '../game/ControlMode';
 import { generateRunSeed, RunRng } from '../game/RunRng';
+import { QaPerfOverlay } from '../game/qaPerf';
 import { ImpactDirector } from '../game/ImpactDirector';
 import { Player } from '../game/Player';
 import { Enemy } from '../game/Enemy';
@@ -226,6 +227,14 @@ export class GameScene extends Phaser.Scene {
   private visualDensityRefreshAt = 0;
   private runtimeQuality!: RuntimeQualityGovernor;
   private runtimeQualityRegistryAt = 0;
+  /**
+   * QA perf overlay — measurement only, created ONLY under the QA gate in
+   * create() (dev or VITE_QA_TOOLS=1, same expression as main.ts). Null in
+   * production builds: every probe call site below is guarded by
+   * `if (this.qaPerf)`, so a null overlay costs one branch and zero clock
+   * calls in the hot path.
+   */
+  private qaPerf: QaPerfOverlay | null = null;
   private juice!: Juice;
   private keys: Record<string, Phaser.Input.Keyboard.Key> = {};
   private introHint: Phaser.GameObjects.Container | null = null;
@@ -622,6 +631,20 @@ export class GameScene extends Phaser.Scene {
     });
     this.scale.on('resize', this.onResize, this);
 
+    // QA perf overlay — measurement only, same QA gate as FeatureFlags.init
+    // in main.ts (dev or VITE_QA_TOOLS=1). Production builds without the flag
+    // never enter this branch: no overlay object, no probes, no hot-path
+    // cost. The overlay detaches itself on scene SHUTDOWN.
+    if (import.meta.env.DEV || import.meta.env.VITE_QA_TOOLS === '1') {
+      this.qaPerf = new QaPerfOverlay(this, () => ({
+        enemies: this.enemies.countActive(true),
+        bullets: this.bullets.countActive(true),
+        gems: this.gems.countActive(true),
+        density: this.visualEnemyDensity,
+        tier: this.runtimeQuality.profile.level,
+      }));
+    }
+
     // Mobile WebViews can discard a retained page without another animation frame.
     // Persist the latest safe checkpoint synchronously while the document is still alive.
     const flushLifecycleCheckpoint = (): void => {
@@ -697,6 +720,8 @@ export class GameScene extends Phaser.Scene {
       this.hitStopped = false;
       this.physics.world.resume();
     }
+    // QA probe: only active gameplay frames are timed (see qaPerf.ts header).
+    if (this.qaPerf) this.qaPerf.beginUpdate();
     const qualityChanged = this.runtimeQuality.recordFrame(delta, time);
     if (qualityChanged || time >= this.runtimeQualityRegistryAt) {
       this.runtimeQualityRegistryAt = time + 1_000;
@@ -773,9 +798,15 @@ export class GameScene extends Phaser.Scene {
       if (this.player.tintFill) this.player.clearTint();
     }
 
+    if (this.qaPerf) this.qaPerf.begin('tryFire');
     this.tryFire(time);
+    if (this.qaPerf) this.qaPerf.end('tryFire');
+    if (this.qaPerf) this.qaPerf.begin('syncBlades');
     this.syncBlades(time);
+    if (this.qaPerf) this.qaPerf.end('syncBlades');
+    if (this.qaPerf) this.qaPerf.begin('legendary');
     this.updateLegendarySystems(time, delta);
+    if (this.qaPerf) this.qaPerf.end('legendary');
 
     if (st.novaLevel > 0) {
       this.novaAcc += delta;
@@ -788,14 +819,25 @@ export class GameScene extends Phaser.Scene {
     if (st.regen > 0) st.hp = Math.min(st.maxHp, st.hp + (st.regen * delta) / 1000);
 
     // Keep the established frame order: firing resolves before timeline presentations and spawns.
-    this.handleStageEvents(this.stageDirector.update(st.timeMs));
+    if (this.qaPerf) this.qaPerf.begin('director');
+    const directorEvents = this.stageDirector.update(st.timeMs);
+    if (this.qaPerf) this.qaPerf.end('director');
+    this.handleStageEvents(directorEvents);
     this.updateAdaptiveAudio(delta);
     this.updateHeartbeatSignature(stage, st.timeMs);
+    if (this.qaPerf) this.qaPerf.begin('wave');
     this.wave.update(delta);
+    if (this.qaPerf) this.qaPerf.end('wave');
+    if (this.qaPerf) this.qaPerf.begin('enemyHealth');
     this.enemyHealth.update(time);
+    if (this.qaPerf) this.qaPerf.end('enemyHealth');
     this.updateCardiacLineHazard(time);
+    if (this.qaPerf) this.qaPerf.begin('hostCells');
     this.hostCells.update(time, delta, st.timeMs);
+    if (this.qaPerf) this.qaPerf.end('hostCells');
+    if (this.qaPerf) this.qaPerf.begin('atmosphere');
     this.atmosphere.update(time, delta, st.timeMs, stage.durationMs);
+    if (this.qaPerf) this.qaPerf.end('atmosphere');
 
     this.playerBar.clear();
     this.playerHalo.clear();
@@ -912,6 +954,7 @@ export class GameScene extends Phaser.Scene {
     if (this.checkpointAccMs >= 2500 && this.saveCheckpointNow()) {
       this.checkpointAccMs = 0;
     }
+    if (this.qaPerf) this.qaPerf.endUpdate();
   }
 
   spawnEnemy(kind: EnemyKind, x: number, y: number, elite: boolean): Enemy | null {
