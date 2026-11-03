@@ -9,8 +9,8 @@
  *   applies hiding via visibility only (no destroy, no active flags);
  * - gems are re-hidden every active frame (Gem.activate re-shows);
  * - atmosphere re-hides itself while its QA flag is set;
- * - the UI scene is hidden via the scene visibility flag (update keeps
- *   running), and the overlay Text lives in GameScene, not UI;
+ * - the UI group hides via setQaHudHidden (persistent HUD elements only;
+ *   the level-up modal stays visible — see the v2 contract test);
  * - no new performance.now() call sites in GameScene.
  * Compiles the TS modules with tsc like the other node-side contract tests.
  */
@@ -83,11 +83,11 @@ try {
   const rows = {};
   for (const key of QA_PERF_KEYS) rows[key] = { avg: 1.5, max: 9.5 };
   const counters = { enemies: 12, bullets: 5, gems: 77, density: 12, tier: 'low' };
-  const withHide = formatQaPerfLines(rows, 120, 25, counters, 42.1, null, 'gems,atmo').join('\n');
+  const withHide = formatQaPerfLines(rows, 120, counters, 42.1, null, 'gems,atmo').join('\n');
   assert(withHide.includes('hide: gems,atmo'), 'hide line shown when label passed');
-  const withoutHide = formatQaPerfLines(rows, 120, 25, counters, 42.1, null).join('\n');
+  const withoutHide = formatQaPerfLines(rows, 120, counters, 42.1, null).join('\n');
   assert(!withoutHide.includes('hide:'), 'no hide line without a label (existing behaviour preserved)');
-  const noneHide = formatQaPerfLines(rows, 120, 25, counters, 42.1, null, 'none').join('\n');
+  const noneHide = formatQaPerfLines(rows, 120, counters, 42.1, null, 'none').join('\n');
   assert(noneHide.includes('hide: none'), 'base runs label as hide: none');
 
   // --- source contract: qaHide.ts is gate-free ---
@@ -103,7 +103,8 @@ try {
   assert(parseIdx > gateIdx, 'qaHide parsing follows the gate expression');
   assert(gameScene.includes('parseQaHide(window.location.search)'), 'hide selection comes from the URL query');
   assert(gameScene.includes("this.qaHide?.has('gems')"), 'gems re-hide is guarded by the parsed selection');
-  assert(gameScene.includes("setVisible(false, 'UI')"), 'UI group hides via the scene visibility flag');
+  assert(gameScene.includes('setQaHudHidden(true)'), 'UI group hides via setQaHudHidden (HUD only, modal stays visible)');
+  assert(!gameScene.includes("setVisible(false, 'UI')"), 'UI group no longer hides the whole UI scene (modal freeze fixed)');
   assert(gameScene.includes('setQaHidden(true)'), 'atmo group hides via AtmosphereSystem');
   assert(gameScene.includes('this.vignette.setVisible(false)'), 'vignette hides with the atmo group');
   assert(!gameScene.includes('performance.now()'), 'GameScene has no direct performance.now() outside the overlay module');

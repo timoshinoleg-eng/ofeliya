@@ -1688,3 +1688,7 @@ Docs cleanup (Muse, 2026-10-29, шаг 4 плана релиза): README.md + A
 # QA render-split — 2026-11-03
 
 Факт: на main 4c7de51 добавлен QA-инструмент скрытия групп объектов для замера render avg по группам (ветка feat/qa-render-split). Синтаксис: `?qaHide=gems,atmo,ui`. Группы скрываются только видимостью: gems — пул гемов (per-frame re-hide из-за respawn visible), atmo — AtmosphereSystem + виньетка GameScene (re-hide в конце update из-за re-show через setStage/pulse/governor), ui — вся сцена UI через scene.setVisible(false, 'UI'). Текст оверлея живёт в GameScene и скрытием UI не затрагивается. Всё только под QA-гейтом (DEV || VITE_QA_TOOLS=1). Замер S20+ от 2026-11-03, который инструмент призван расколоть: render avg ~34/~26 мс при E 10/12, G 84/77, tier low.
+
+# QA render-split v2 — 2026-11-04
+
+Факт: на main 00f0468 добавлена доработка диагностики (ветка feat/qa-render-split-v2) по критике Mark: переключение групп В БОЮ кнопками GEMS/ATMO/UI в GameScene (только под qaTools-гейтом; ?qaHide= — начальное состояние), модалка мутаций вне ui-hide (UIScene.setQaHudHidden прячет только persistent HUD + флаг qaHudHidden, гардящий re-show combo/boss в update), fps убран из шапки оверлея (только мс), оверлей на y=103 ниже HUD-полосы + фон 0.7, строка other сокращена до (derived). Восстановления: gems — только active, vignette — vignetteNormalVisible, atmo — снапшот qaHiddenVisible на старте hide-эпизода. Продовая стоимость: null-check qaHide в кадр — negligible, not measured.

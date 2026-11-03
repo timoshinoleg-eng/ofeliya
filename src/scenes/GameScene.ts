@@ -54,7 +54,7 @@ import { IDENTITY } from '../game/identity';
 import { readControlMode, type ControlMode } from '../game/ControlMode';
 import { generateRunSeed, RunRng } from '../game/RunRng';
 import { QaPerfOverlay } from '../game/qaPerf';
-import { parseQaHide, qaHideLabel, type QaHideGroup } from '../game/qaHide';
+import { parseQaHide, qaHideLabel, toggleQaHide, type QaHideGroup } from '../game/qaHide';
 import { ImpactDirector } from '../game/ImpactDirector';
 import { Player } from '../game/Player';
 import { Enemy } from '../game/Enemy';
@@ -243,6 +243,15 @@ export class GameScene extends Phaser.Scene {
    * and zero clock calls in the hot path.
    */
   private qaHide: ReadonlySet<QaHideGroup> | null = null;
+  /**
+   * QA render-split v2 toggle buttons (GameScene-owned, so hiding the UI
+   * scene never hides them). Created ONLY inside the QA gate in create();
+   * empty in production builds. Reset in createQaToggleButtons because a
+   * restarted scene instance re-runs create() on the same object.
+   */
+  private qaToggleButtons: Phaser.GameObjects.Text[] = [];
+  /** Vignette visibility without postFX (recorded at creation, for atmo restore). */
+  private vignetteNormalVisible = true;
   private juice!: Juice;
   private keys: Record<string, Phaser.Input.Keyboard.Key> = {};
   private introHint: Phaser.GameObjects.Container | null = null;
@@ -486,6 +495,7 @@ export class GameScene extends Phaser.Scene {
       fx.addVignette(0.5, 0.5, POSTFX.vignette.radius, POSTFX.vignette.strength);
     }
     this.vignette.setVisible(!fxEnabled);
+    this.vignetteNormalVisible = !fxEnabled;
 
     this.player = new Player(this, W / 2, H / 2);
     // Scene instances can be restarted. Phaser tears down the previous display
@@ -641,16 +651,20 @@ export class GameScene extends Phaser.Scene {
 
     // QA perf overlay — measurement only, same QA gate as FeatureFlags.init
     // in main.ts (dev or VITE_QA_TOOLS=1). Production builds without the flag
-    // never enter this branch: no overlay object, no probes, no hot-path
-    // cost. The overlay detaches itself on scene SHUTDOWN.
+    // never enter this branch: no overlay object, no probes, no buttons.
+    // The only hot-path residue in production builds is one null-check per
+    // frame (qaHide) — negligible, not measured. The overlay detaches
+    // itself on scene SHUTDOWN.
     //
-    // QA render-split lives in the same branch: ?qaHide=gems,atmo,ui
-    // (comma-separated, unknown tokens ignored; see qaHide.ts). Hiding is
-    // visibility-only — nothing is destroyed, nothing stops updating — so
-    // the measurement isolates render cost, not logic cost. The overlay
-    // Text lives in THIS scene, so hiding the UI scene never hides the
-    // overlay. The hide label is shown in the overlay so every screenshot
-    // is self-documenting (base runs read `hide: none`).
+    // QA render-split lives in the same branch: ?qaHide=gems,atmo,ui sets
+    // the INITIAL selection (comma-separated, unknown tokens ignored; see
+    // qaHide.ts), and the toggle buttons below flip groups mid-fight
+    // without a reload. Hiding is visibility-only — nothing is destroyed,
+    // nothing stops updating — so the measurement isolates render cost,
+    // not logic cost. The overlay Text lives in THIS scene, so hiding the
+    // UI HUD never hides the overlay or the buttons. The hide label is
+    // shown in the overlay so every screenshot is self-documenting (base
+    // runs read `hide: none`).
     if (import.meta.env.DEV || import.meta.env.VITE_QA_TOOLS === '1') {
       const hide = parseQaHide(window.location.search);
       this.qaHide = hide;
@@ -662,6 +676,7 @@ export class GameScene extends Phaser.Scene {
         tier: this.runtimeQuality.profile.level,
       }), qaHideLabel(hide));
       if (hide.size > 0) this.applyQaHide(hide);
+      this.createQaToggleButtons();
     }
 
     // Mobile WebViews can discard a retained page without another animation frame.
@@ -726,17 +741,18 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * QA render-split, one-time hides (called only from the QA-gated block in
-   * create()). Visibility-only: nothing is destroyed, nothing stops
-   * updating — physics, enemy AI, gem magnet and UI logic all keep running,
-   * only their pixels disappear. Groups that re-show themselves are
-   * re-hidden by their own per-frame paths: gems in update() above,
-   * atmosphere inside AtmosphereSystem while its QA flag is set. The
+   * create() and from the toggle buttons). Visibility-only: nothing is
+   * destroyed, nothing stops updating — physics, enemy AI, gem magnet and
+   * UI logic all keep running, only their pixels disappear. Groups that
+   * re-show themselves are re-hidden by their own per-frame paths: gems in
+   * update() above, atmosphere inside AtmosphereSystem while its QA flag is
+   * set, HUD via the UI scene's qaHudHidden flag (see setQaHudHidden). The
    * vignette is GameScene-owned but grouped with 'atmo': it is full-screen
    * background dressing, and hiding it alone would be a meaningless split.
-   * Caveat for the 'ui' group: hiding the whole UI scene also hides the
-   * level-up modal visuals (the modal still pauses the game and waits for
-   * input). If a ui-hidden run freezes on an invisible modal, the overlay
-   * still shows the last measured values — screenshot them, then reload.
+   * The 'ui' group hides ONLY the persistent HUD elements: the level-up
+   * modal, result/transition/pause overlays, transient toasts and tutorial
+   * hints stay visible, so a ui-hidden run never freezes on an invisible
+   * mutation choice.
    */
   private applyQaHide(hide: ReadonlySet<QaHideGroup>): void {
     if (hide.has('gems')) {
@@ -747,10 +763,83 @@ export class GameScene extends Phaser.Scene {
       this.vignette.setVisible(false);
     }
     if (hide.has('ui')) {
-      // ScenePlugin.setVisible affects rendering only: the UI scene keeps
-      // updating (HUD logic, modal timers), only its pixels disappear.
-      this.scene.setVisible(false, 'UI');
+      this.getUiScene()?.setQaHudHidden(true);
     }
+  }
+
+  /**
+   * QA render-split v2 toggle buttons. GameScene-owned (depth 200, right
+   * edge below the overlay text) so hiding the UI HUD never hides them.
+   * Tap a button to flip its group mid-fight; ?qaHide= only sets the
+   * initial state. A tap also starts the floating joystick with a zero
+   * vector (scene-level pointerdown fires alongside the button handler) —
+   * harmless for a tap, so tap the buttons, don't drag from them.
+   */
+  private createQaToggleButtons(): void {
+    // A restarted scene instance re-runs create() on the same object; the
+    // previous run's buttons were destroyed with the old display list.
+    this.qaToggleButtons = [];
+    const groups: QaHideGroup[] = ['gems', 'atmo', 'ui'];
+    for (const group of groups) {
+      const btn = this.add
+        .text(0, 0, '', {
+          fontFamily: 'monospace',
+          fontSize: '12px',
+          color: '#7dffb0',
+          backgroundColor: 'rgba(0,0,0,0.55)',
+          padding: { x: 8, y: 6 },
+        })
+        .setOrigin(1, 0)
+        .setScrollFactor(0)
+        .setDepth(200)
+        .setInteractive({ useHandCursor: true });
+      btn.setData('qaGroup', group);
+      btn.on('pointerdown', () => this.toggleQaHideGroup(group));
+      this.qaToggleButtons.push(btn);
+    }
+    this.layoutQaToggleButtons();
+    this.updateQaToggleButtons();
+  }
+
+  /** Right edge, below the overlay text (which ends around y 250). */
+  private layoutQaToggleButtons(): void {
+    const W = this.scale.width;
+    this.qaToggleButtons.forEach((btn, i) => {
+      btn.setPosition(W - 8, 270 + i * 38);
+    });
+  }
+
+  /** Button labels follow the live selection: ON = group visible, OFF = hidden. */
+  private updateQaToggleButtons(): void {
+    for (const btn of this.qaToggleButtons) {
+      const group = btn.getData('qaGroup') as QaHideGroup;
+      const hidden = this.qaHide?.has(group) ?? false;
+      btn.setText(`${group.toUpperCase()} ${hidden ? 'OFF' : 'ON'}`);
+      btn.setBackgroundColor(hidden ? 'rgba(125,255,176,0.30)' : 'rgba(0,0,0,0.55)');
+    }
+  }
+
+  /** Flip one group mid-fight and refresh the overlay label + buttons. */
+  private toggleQaHideGroup(group: QaHideGroup): void {
+    if (!this.qaHide) return;
+    const next = toggleQaHide(this.qaHide, group);
+    const hidden = next.has(group);
+    this.qaHide = next;
+    if (group === 'gems') {
+      for (const gem of this.gems.getChildren() as Gem[]) {
+        // Inactive pooled gems stay invisible (disableBody hides them);
+        // only live gems come back.
+        if (hidden) gem.setVisible(false);
+        else if (gem.active) gem.setVisible(true);
+      }
+    } else if (group === 'atmo') {
+      this.atmosphere.setQaHidden(hidden);
+      this.vignette.setVisible(hidden ? false : this.vignetteNormalVisible);
+    } else if (group === 'ui') {
+      this.getUiScene()?.setQaHudHidden(hidden);
+    }
+    this.qaPerf?.setHideLabel(qaHideLabel(next));
+    this.updateQaToggleButtons();
   }
 
   update(time: number, delta: number): void {
@@ -775,6 +864,15 @@ export class GameScene extends Phaser.Scene {
     // Visibility-only: physics and magnet logic are untouched.
     if (this.qaHide?.has('gems')) {
       for (const gem of this.gems.getChildren() as Gem[]) gem.setVisible(false);
+    }
+    // QA render-split v2: the UI scene boots after GameScene.create, so
+    // the initial ui-hide may have found no UI instance yet. Apply it on
+    // the first active frame where the flag is still clear; afterwards the
+    // UI scene's own qaHudHidden flag keeps HUD hidden (its update guards
+    // re-showing combo/boss), so this stays a flag check, not a call.
+    if (this.qaHide?.has('ui')) {
+      const uiScene = this.getUiScene();
+      if (uiScene && !uiScene.qaHudHidden) uiScene.setQaHudHidden(true);
     }
     const qualityChanged = this.runtimeQuality.recordFrame(delta, time);
     if (qualityChanged || time >= this.runtimeQualityRegistryAt) {
@@ -3248,5 +3346,6 @@ export class GameScene extends Phaser.Scene {
     const H = this.scale.height;
     this.atmosphere.resize();
     this.vignette.setPosition(W / 2, H / 2).setDisplaySize(W * 1.25, H * 1.25);
+    if (this.qaToggleButtons.length > 0) this.layoutQaToggleButtons();
   }
 }

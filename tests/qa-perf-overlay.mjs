@@ -93,15 +93,16 @@ try {
   rows.frame = { avg: 16.7, max: 42.1 };
   const counters = { enemies: 203, bullets: 87, gems: 154, density: 203, tier: 'balanced' };
   const worst = { enemies: 210, bullets: 140, gems: 180, density: 210, tier: 'low' };
-  const lines = formatQaPerfLines(rows, 120, 60, counters, 42.1, worst);
+  const lines = formatQaPerfLines(rows, 120, counters, 42.1, worst);
   const text = lines.join('\n');
   assert(text.includes('frame 16.7/42.1'), 'frame row formatted');
   assert(text.includes('render 1.5/9.5 (measured)'), 'render labelled measured');
   assert(text.includes('physics 1.5/9.5 (measured)'), 'physics labelled measured');
-  assert(text.includes('other 1.5/9.5 (derived: frame-physics-update-render)'), 'other labelled derived with formula');
+  assert(text.includes('other 1.5/9.5 (derived)'), 'other labelled derived (short form fits narrow screens)');
+  assert(!text.includes('fps'), 'no fps figure in header (removed as misleading)');
   assert(text.includes('E 203 B 87 G 154 | density 203 | tier balanced'), 'counters row');
   assert(text.includes('worst 42.1ms @ E210 B140 G180'), 'worst-frame row with counters');
-  const noWorst = formatQaPerfLines(rows, 0, 0, counters, 0, null).join('\n');
+  const noWorst = formatQaPerfLines(rows, 0, counters, 0, null).join('\n');
   assert(!noWorst.includes('worst'), 'no worst line before any frame');
 
   // --- source contract: gate + guarded probes in GameScene.ts ---
@@ -122,7 +123,7 @@ try {
   // --- source contract: qaPerf.ts owns the gate-free, single-Text design ---
   const qaPerf = readFileSync(resolve('src/game/qaPerf.ts'), 'utf8');
   assert(!qaPerf.includes('import.meta.env'), 'qaPerf.ts never reads import.meta.env (gate lives in caller)');
-  eq((qaPerf.match(/\.text\(\s*8,\s*8/g) || []).length, 1, 'exactly one Text object is created');
+  eq((qaPerf.match(/\.text\(\s*8,\s*103/g) || []).length, 1, 'exactly one Text object is created, below the HUD band');
   assert(qaPerf.includes('>= 250'), 'text refresh throttled to ~4 Hz');
   assert(qaPerf.includes('setText'), 'single Text object is reused via setText');
   assert(qaPerf.includes("'prerender'") && qaPerf.includes("'postrender'"), 'render measured via game render events');

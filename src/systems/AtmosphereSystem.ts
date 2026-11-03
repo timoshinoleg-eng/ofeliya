@@ -25,6 +25,12 @@ interface AmbientCell {
   band?: number;
 }
 
+/** Structural visibility surface for the QA hide/restore snapshot. */
+type QaVisible = {
+  visible: boolean;
+  setVisible(value: boolean): unknown;
+};
+
 interface PlasmaParticle {
   image: Phaser.GameObjects.Image;
   x: number;
@@ -72,6 +78,13 @@ export class AtmosphereSystem {
    * is affected.
    */
   private qaHidden = false;
+  /**
+   * Visibility snapshot taken once when a hide episode starts (v2 toggles
+   * need a restore path). The per-frame re-hide in update() must NOT
+   * re-record: governor visibility passes may change visibility mid-episode,
+   * and restore must return to the hide-time state.
+   */
+  private qaHiddenVisible: Map<QaVisible, boolean> | null = null;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -286,12 +299,38 @@ export class AtmosphereSystem {
   /**
    * QA render-split: hide every atmosphere renderable now, and keep it
    * hidden (re-hidden at the end of update() while the flag is set).
-   * Called ONLY from the QA-gated render-split path in GameScene.create.
+   * Called ONLY from the QA-gated render-split path in GameScene (initial
+   * ?qaHide= state and the in-fight toggle buttons). Unhiding restores
+   * the visibility snapshot taken when the hide episode started, so
+   * governor-hidden objects stay hidden instead of all coming back.
    */
   setQaHidden(hidden: boolean): void {
     if (this.destroyed) return;
+    if (hidden && !this.qaHidden) {
+      this.qaHiddenVisible = new Map();
+      for (const obj of this.qaAtmosphereObjects()) {
+        this.qaHiddenVisible.set(obj, obj.visible);
+      }
+      this.hideAllAtmosphere();
+    } else if (!hidden && this.qaHidden) {
+      const saved = this.qaHiddenVisible;
+      if (saved) {
+        for (const [obj, visible] of saved) obj.setVisible(visible);
+      }
+      this.qaHiddenVisible = null;
+    }
     this.qaHidden = hidden;
-    if (hidden) this.hideAllAtmosphere();
+  }
+
+  private qaAtmosphereObjects(): QaVisible[] {
+    return [
+      this.plasma,
+      this.structure,
+      this.pulseOverlay,
+      ...this.erythrocytes.map((c) => c.image),
+      ...this.hostCells.map((c) => c.image),
+      ...this.particles.map((p) => p.image),
+    ];
   }
 
   private hideAllAtmosphere(): void {
