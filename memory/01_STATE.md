@@ -1684,3 +1684,7 @@ Fix #13 port (Muse, 2026-10-29, партия 4а задача 4): review3-фик
 
 
 Docs cleanup (Muse, 2026-10-29, шаг 4 плана релиза): README.md + AGENTS.md + .gitignore на main 94beda1, ветка docs/readme-agents-cleanup. Telegram-first повествование, production deploy — Render ofeliya-game + Supabase ofeliya-state, Cloud.ru/compose — архив, не живой путь (PR #163 не предрешён, не тронут). .gitignore: .env/.env.* + !.env.example (отслеживаемых реальных .env нет). House rules, Joystick.ts, check-profile-client.mjs:162 — не тронуты. Локально: tsc/build зелёные; browser NOT RUN — смотреть CI.
+
+# QA render-split — 2026-11-03
+
+Факт: на main 4c7de51 добавлен QA-инструмент скрытия групп объектов для замера render avg по группам (ветка feat/qa-render-split). Синтаксис: `?qaHide=gems,atmo,ui`. Группы скрываются только видимостью: gems — пул гемов (per-frame re-hide из-за respawn visible), atmo — AtmosphereSystem + виньетка GameScene (re-hide в конце update из-за re-show через setStage/pulse/governor), ui — вся сцена UI через scene.setVisible(false, 'UI'). Текст оверлея живёт в GameScene и скрытием UI не затрагивается. Всё только под QA-гейтом (DEV || VITE_QA_TOOLS=1). Замер S20+ от 2026-11-03, который инструмент призван расколоть: render avg ~34/~26 мс при E 10/12, G 84/77, tier low.

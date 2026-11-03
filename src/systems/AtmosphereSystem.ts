@@ -60,6 +60,18 @@ export class AtmosphereSystem {
   private secondBeatColor = COLORS.immune;
   private secondBeatStrength = 0;
   private destroyed = false;
+  /**
+   * QA render-split flag — set ONLY from the QA-gated path in
+   * GameScene.create. While set, every atmosphere renderable stays hidden
+   * (re-hidden at the end of update(), because setStage, pulse and the
+   * governor visibility pass re-show objects). Visibility-only: update()
+   * keeps running, so the measurement isolates render cost. Note the
+   * pre-existing behaviour this interacts with: update() skips movement
+   * for invisible cells (`if (!cell.image.visible) continue`), so hidden
+   * ambient cells also stop drifting — decorative only, no gameplay logic
+   * is affected.
+   */
+  private qaHidden = false;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -253,6 +265,10 @@ export class AtmosphereSystem {
         .setAlpha(p.alpha * (0.82 + Math.sin(time * 0.0013 + p.phase) * 0.18 + response * 0.18));
     }
 
+    // QA render-split: setStage/pulse/governor paths above re-show
+    // atmosphere objects; re-hide them so the hidden group stays hidden.
+    if (this.qaHidden) this.hideAllAtmosphere();
+
     this.phaseBoost *= Math.pow(0.2, Math.max(0, Number.isFinite(delta) ? delta : 0) / 1000);
   }
 
@@ -265,6 +281,26 @@ export class AtmosphereSystem {
 
   get debugRuntimeQualityScale(): number {
     return this.runtimeQualityScale;
+  }
+
+  /**
+   * QA render-split: hide every atmosphere renderable now, and keep it
+   * hidden (re-hidden at the end of update() while the flag is set).
+   * Called ONLY from the QA-gated render-split path in GameScene.create.
+   */
+  setQaHidden(hidden: boolean): void {
+    if (this.destroyed) return;
+    this.qaHidden = hidden;
+    if (hidden) this.hideAllAtmosphere();
+  }
+
+  private hideAllAtmosphere(): void {
+    this.plasma.setVisible(false);
+    this.structure.setVisible(false);
+    this.pulseOverlay.setVisible(false);
+    for (const c of this.erythrocytes) c.image.setVisible(false);
+    for (const c of this.hostCells) c.image.setVisible(false);
+    for (const p of this.particles) p.image.setVisible(false);
   }
 
   pulse(color = COLORS.immune, strength = 0.22): void {

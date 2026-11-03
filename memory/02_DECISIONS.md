@@ -1477,3 +1477,7 @@ Keep unrelated Cloud.ru workloads separate from OFELIYA retirement.
 4. Root owns browser/pixel adaptation in `scripts/biological-impact-smoke.cjs`; no edits by this worker. No commit until root review.
 
 Root validation: actual Canvas/WebGL echo matrix 16/16 passed at320/390/768/1080 with both motion preferences; world/HUD phase and live-preference checks4/4 passed. Adapted repo41 two-postrender/native-decoded screenshot pixel check without pngjs; strict3-cell impact passed, WebGL idle0/hit3982 white pixels. Negative control clearing tint fails as expected. Independent source review found no actionable P1/P2. Final-head full tests/build are tracked externally in12_INTEGRATION_PREP.
+
+# QA render-split — 2026-11-03
+
+Решение: группы скрытия — только видимостью (setVisible / scene visibility flag), без уничтожения и без остановки update/physics: измеряется именно render-стоимость, а не логика. Виньетка GameScene отнесена к группе atmo (полноэкранная фоновая декорация; отдельный сплит для неё бессмыслен). UI скрывается целиком сценой, а не пообъектно: во время обычного забега render UIScene — это HUD; оговорка про невидимую модалку мутаций зафиксирована в протоколе прогона (скриншот последних значений + reload). Оверлей в GameScene — перенос в рамках задачи не понадобился, это проверено, а не предположено.

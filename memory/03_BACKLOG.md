@@ -1593,3 +1593,7 @@ Density fixture now waits two actual Scene POST_UPDATE frames with cache>=target
 - [ ] Hosted exact-head CI and owner release/device acceptance remain separate gates; no merge/push/deploy authorized.
 
 Root validation: actual Canvas/WebGL echo matrix 16/16 passed at320/390/768/1080 with both motion preferences; world/HUD phase and live-preference checks4/4 passed. Adapted repo41 two-postrender/native-decoded screenshot pixel check without pngjs; strict3-cell impact passed, WebGL idle0/hit3982 white pixels. Negative control clearing tint fails as expected. Independent source review found no actionable P1/P2. Final-head full tests/build are tracked externally in12_INTEGRATION_PREP.
+
+# QA render-split — 2026-11-03
+
+После мержа: прогон на S20+ по протоколу из тела PR (база без скрытия, затем по забегу на gems/atmo/ui, скриншот оверлея каждый раз). Если render-split не даст падения ни на одной группе (стоимость базовая/stall) — следующие замеры из read-only исследования render: эксперимент с AA/буфером и трек render vs G за забег. Фикс render до результатов сплита не выбирать.
