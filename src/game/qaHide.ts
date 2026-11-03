@@ -52,3 +52,16 @@ export function qaHideLabel(hide: ReadonlySet<QaHideGroup>): string {
   if (hide.size === 0) return 'none';
   return QA_HIDE_GROUPS.filter((g) => hide.has(g)).join(',');
 }
+
+/**
+ * Toggle one group in the current selection (pure, node-testable). Used by
+ * the in-fight toggle buttons in GameScene: ?qaHide= only sets the initial
+ * state, buttons flip groups from there without a reload. Returns a new set;
+ * the input is never mutated.
+ */
+export function toggleQaHide(current: ReadonlySet<QaHideGroup>, group: QaHideGroup): ReadonlySet<QaHideGroup> {
+  const next = new Set(current);
+  if (next.has(group)) next.delete(group);
+  else next.add(group);
+  return next;
+}

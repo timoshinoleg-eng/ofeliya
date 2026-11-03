@@ -164,6 +164,9 @@ jobs:
       - name: QA render-split contract
         run: npm run test:qa-render-split
 
+      - name: QA render-split v2 contract
+        run: npm run test:qa-render-split-v2
+
       - name: Post-review fixes contract
         run: npm run test:post-review-fixes
 

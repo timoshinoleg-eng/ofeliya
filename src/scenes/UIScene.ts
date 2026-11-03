@@ -443,7 +443,7 @@ export class UIScene extends Phaser.Scene {
       this.killsText.setText(`УНИЧТОЖЕНО ${run.kills}`);
 
       const showCombo = run.combo >= COMBO.showFrom;
-      this.comboText.setVisible(showCombo);
+      this.comboText.setVisible(!this.qaHudHidden && showCombo);
       if (showCombo && run.combo !== this.lastCombo) {
         this.lastCombo = run.combo;
         this.comboText.setText(`×${compactHudNumber(run.combo)}`);
@@ -483,10 +483,10 @@ export class UIScene extends Phaser.Scene {
       }
 
       const boss = run.bossMax > 0;
-      this.bossBack.setVisible(boss);
-      this.bossFill.setVisible(boss);
-      this.bossFrame.setVisible(boss);
-      this.bossLabel.setVisible(boss);
+      this.bossBack.setVisible(boss && !this.qaHudHidden);
+      this.bossFill.setVisible(boss && !this.qaHudHidden);
+      this.bossFrame.setVisible(boss && !this.qaHudHidden);
+      this.bossLabel.setVisible(boss && !this.qaHudHidden);
       if (!boss) {
         this.bossPhaseLast = null;
         this.bossPhaseTransitionAt = -1;
@@ -1157,6 +1157,50 @@ export class UIScene extends Phaser.Scene {
       this.pauseText,
     ]) {
       obj?.setVisible(!hidden);
+    }
+  }
+
+  /**
+   * QA render-split v2: hide ONLY the persistent HUD elements (visibility).
+   * Unlike setHudHidden, this deliberately does NOT touch cinematic alpha
+   * (so it cannot fight real cinematic fades) and does NOT hide the
+   * level-up modal, result/transition/pause overlays, transient toasts or
+   * tutorial hints — a ui-hidden run still shows the mutation choice.
+   * Boss/combo visibility is re-derived every frame in update(), guarded
+   * by qaHudHidden, so restoring them here self-corrects on the next
+   * frame; hpWarn is cleared and redrawn per HP state, so its visibility
+   * needs no guard. Called only from the QA-gated path in GameScene.
+   * The flag persists on this UI instance; GameScene re-applies the hide
+   * on the first active frame if the UI scene booted after GameScene.
+   */
+  public qaHudHidden = false;
+
+  public setQaHudHidden(hidden: boolean): void {
+    this.qaHudHidden = hidden;
+    const list = [
+      this.hudBackdrop,
+      this.hudMembrane,
+      this.xpBack,
+      this.xpFill,
+      this.hpBack,
+      this.hpFill,
+      this.timerText,
+      this.levelText,
+      this.killsText,
+      this.hpText,
+      this.muteText,
+      this.pauseHit,
+      this.pauseText,
+      this.comboText,
+      this.bossBack,
+      this.bossFill,
+      this.bossFrame,
+      this.bossLabel,
+      this.hpWarn,
+    ];
+    for (const obj of list) {
+      // Defensive: GameScene may call this before UIScene.create finished.
+      if (obj) obj.setVisible(!hidden);
     }
   }
 

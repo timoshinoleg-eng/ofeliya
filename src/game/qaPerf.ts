@@ -146,7 +146,6 @@ export interface QaPerfRow {
 export interface QaPerfSnapshot {
   rows: Record<QaPerfKey, QaPerfRow>;
   frames: number;
-  fps: number;
   counters: QaPerfCounters;
   worstFrameMs: number;
   worstCounters: QaPerfCounters | null;
@@ -158,7 +157,6 @@ const fmt = (ms: number): string => ms.toFixed(1);
 export function formatQaPerfLines(
   rows: Record<QaPerfKey, QaPerfRow>,
   frames: number,
-  fps: number,
   counters: QaPerfCounters,
   worstFrameMs: number,
   worstCounters: QaPerfCounters | null,
@@ -166,12 +164,12 @@ export function formatQaPerfLines(
 ): string[] {
   const pair = (key: QaPerfKey): string => `${fmt(rows[key].avg)}/${fmt(rows[key].max)}`;
   const lines = [
-    `QA PERF avg/max ms (${frames}f) fps ${fps.toFixed(0)}`,
+    `QA PERF avg/max ms (${frames}f)`,
     `frame ${pair('frame')} | render ${pair('render')} (measured)`,
     `physics ${pair('physics')} (measured) | update ${pair('update')}`,
     `fire ${pair('tryFire')} | blades ${pair('syncBlades')} | leg ${pair('legendary')} | dir ${pair('director')}`,
     `wave ${pair('wave')} | hp ${pair('enemyHealth')} | cells ${pair('hostCells')} | atmo ${pair('atmosphere')}`,
-    `other ${pair('other')} (derived: frame-physics-update-render)`,
+    `other ${pair('other')} (derived)`,
     `E ${counters.enemies} B ${counters.bullets} G ${counters.gems} | density ${counters.density} | tier ${counters.tier}`,
   ];
   if (hideLabel !== undefined) {
@@ -195,7 +193,7 @@ export class QaPerfOverlay {
   private readonly starts = new Map<QaPerfKey, number>();
   private readonly scene: Phaser.Scene;
   private readonly readCounters: () => QaPerfCounters;
-  private readonly hideLabel: string | undefined;
+  private hideLabel: string | undefined;
   private text: Phaser.GameObjects.Text | null;
   private lastTextAt = 0;
   private frameStart = 0;
@@ -227,16 +225,29 @@ export class QaPerfOverlay {
     scene.events.once('shutdown', this.destroy, this);
 
     this.text = scene.add
-      .text(8, 8, 'QA PERF…', {
+      // Below the HUD band (plate top 5 + height 90, see hudTokens) so HUD
+      // numbers no longer bleed through the overlay text; the background
+      // keeps it readable over gameplay. Narrow-screen fit: the longest
+      // line is the shortened `other … (derived)` row.
+      .text(8, 103, 'QA PERF…', {
         fontFamily: 'monospace',
         fontSize: '11px',
         color: '#7dffb0',
-        backgroundColor: 'rgba(0,0,0,0.55)',
+        backgroundColor: 'rgba(0,0,0,0.7)',
         padding: { x: 6, y: 4 },
       })
       .setOrigin(0, 0)
       .setScrollFactor(0)
       .setDepth(100);
+    this.refreshText();
+  }
+
+  /**
+   * Live-update the hide label (in-fight toggle buttons): the overlay line
+   * follows the current selection, so every screenshot stays self-documenting.
+   */
+  setHideLabel(label: string): void {
+    this.hideLabel = label;
     this.refreshText();
   }
 
@@ -327,11 +338,9 @@ export class QaPerfOverlay {
       const s = this.stats.get(key)!;
       rows[key] = { avg: s.avg(), max: s.max() };
     }
-    const frameAvg = rows.frame.avg;
     return {
       rows,
       frames: this.stats.get('frame')!.frameCount,
-      fps: frameAvg > 0 ? 1000 / frameAvg : 0,
       counters: this.readCounters(),
       worstFrameMs: this.worstFrameMs,
       worstCounters: this.worstCounters,
@@ -341,7 +350,7 @@ export class QaPerfOverlay {
   private refreshText(): void {
     if (!this.text) return;
     const snap = this.snapshot();
-    this.text.setText(formatQaPerfLines(snap.rows, snap.frames, snap.fps, snap.counters, snap.worstFrameMs, snap.worstCounters, this.hideLabel));
+    this.text.setText(formatQaPerfLines(snap.rows, snap.frames, snap.counters, snap.worstFrameMs, snap.worstCounters, this.hideLabel));
   }
 
   /**
