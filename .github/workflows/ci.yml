@@ -161,6 +161,9 @@ jobs:
       - name: QA perf overlay contract
         run: npm run test:qa-perf
 
+      - name: QA render-split contract
+        run: npm run test:qa-render-split
+
       - name: Post-review fixes contract
         run: npm run test:post-review-fixes
 

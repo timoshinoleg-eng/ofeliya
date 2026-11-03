@@ -54,6 +54,7 @@ import { IDENTITY } from '../game/identity';
 import { readControlMode, type ControlMode } from '../game/ControlMode';
 import { generateRunSeed, RunRng } from '../game/RunRng';
 import { QaPerfOverlay } from '../game/qaPerf';
+import { parseQaHide, qaHideLabel, type QaHideGroup } from '../game/qaHide';
 import { ImpactDirector } from '../game/ImpactDirector';
 import { Player } from '../game/Player';
 import { Enemy } from '../game/Enemy';
@@ -235,6 +236,13 @@ export class GameScene extends Phaser.Scene {
    * calls in the hot path.
    */
   private qaPerf: QaPerfOverlay | null = null;
+  /**
+   * QA render-split selection — parsed ONLY inside the QA gate in create()
+   * (same gate as the overlay). Null in production builds: the update-path
+   * re-hide below is guarded by `?.has`, so a null set costs one branch
+   * and zero clock calls in the hot path.
+   */
+  private qaHide: ReadonlySet<QaHideGroup> | null = null;
   private juice!: Juice;
   private keys: Record<string, Phaser.Input.Keyboard.Key> = {};
   private introHint: Phaser.GameObjects.Container | null = null;
@@ -635,14 +643,25 @@ export class GameScene extends Phaser.Scene {
     // in main.ts (dev or VITE_QA_TOOLS=1). Production builds without the flag
     // never enter this branch: no overlay object, no probes, no hot-path
     // cost. The overlay detaches itself on scene SHUTDOWN.
+    //
+    // QA render-split lives in the same branch: ?qaHide=gems,atmo,ui
+    // (comma-separated, unknown tokens ignored; see qaHide.ts). Hiding is
+    // visibility-only — nothing is destroyed, nothing stops updating — so
+    // the measurement isolates render cost, not logic cost. The overlay
+    // Text lives in THIS scene, so hiding the UI scene never hides the
+    // overlay. The hide label is shown in the overlay so every screenshot
+    // is self-documenting (base runs read `hide: none`).
     if (import.meta.env.DEV || import.meta.env.VITE_QA_TOOLS === '1') {
+      const hide = parseQaHide(window.location.search);
+      this.qaHide = hide;
       this.qaPerf = new QaPerfOverlay(this, () => ({
         enemies: this.enemies.countActive(true),
         bullets: this.bullets.countActive(true),
         gems: this.gems.countActive(true),
         density: this.visualEnemyDensity,
         tier: this.runtimeQuality.profile.level,
-      }));
+      }), qaHideLabel(hide));
+      if (hide.size > 0) this.applyQaHide(hide);
     }
 
     // Mobile WebViews can discard a retained page without another animation frame.
@@ -705,6 +724,35 @@ export class GameScene extends Phaser.Scene {
     this.scene.start('Menu');
   }
 
+  /**
+   * QA render-split, one-time hides (called only from the QA-gated block in
+   * create()). Visibility-only: nothing is destroyed, nothing stops
+   * updating — physics, enemy AI, gem magnet and UI logic all keep running,
+   * only their pixels disappear. Groups that re-show themselves are
+   * re-hidden by their own per-frame paths: gems in update() above,
+   * atmosphere inside AtmosphereSystem while its QA flag is set. The
+   * vignette is GameScene-owned but grouped with 'atmo': it is full-screen
+   * background dressing, and hiding it alone would be a meaningless split.
+   * Caveat for the 'ui' group: hiding the whole UI scene also hides the
+   * level-up modal visuals (the modal still pauses the game and waits for
+   * input). If a ui-hidden run freezes on an invisible modal, the overlay
+   * still shows the last measured values — screenshot them, then reload.
+   */
+  private applyQaHide(hide: ReadonlySet<QaHideGroup>): void {
+    if (hide.has('gems')) {
+      for (const gem of this.gems.getChildren() as Gem[]) gem.setVisible(false);
+    }
+    if (hide.has('atmo')) {
+      this.atmosphere.setQaHidden(true);
+      this.vignette.setVisible(false);
+    }
+    if (hide.has('ui')) {
+      // ScenePlugin.setVisible affects rendering only: the UI scene keeps
+      // updating (HUD logic, modal timers), only its pixels disappear.
+      this.scene.setVisible(false, 'UI');
+    }
+  }
+
   update(time: number, delta: number): void {
     // Juice твины двигаются ДО любых early-return (включая хит-стоп фриз),
     // чтобы дип timeScale прогрессировал и во время фриза. На часах tween.js,
@@ -722,6 +770,12 @@ export class GameScene extends Phaser.Scene {
     }
     // QA probe: only active gameplay frames are timed (see qaPerf.ts header).
     if (this.qaPerf) this.qaPerf.beginUpdate();
+    // QA render-split: gems respawn visible (Gem.activate re-shows via
+    // enableBody), so the hidden group is re-hidden every active frame.
+    // Visibility-only: physics and magnet logic are untouched.
+    if (this.qaHide?.has('gems')) {
+      for (const gem of this.gems.getChildren() as Gem[]) gem.setVisible(false);
+    }
     const qualityChanged = this.runtimeQuality.recordFrame(delta, time);
     if (qualityChanged || time >= this.runtimeQualityRegistryAt) {
       this.runtimeQualityRegistryAt = time + 1_000;
