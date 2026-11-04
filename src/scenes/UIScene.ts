@@ -36,6 +36,7 @@ import {
   type EvolutionId,
   type UpgradeDef,
 } from '../game/UpgradeSystem';
+import { formatUpgradeEffectSuffix } from '../game/upgradeBeforeAfter';
 import {
   META_COPY,
   MUTATION_CARD_HEADERS,
@@ -1628,6 +1629,12 @@ export class UIScene extends Phaser.Scene {
         ? VISUAL.warning
         : def.rarity === 'rare' ? VISUAL.rare : VISUAL.host;
       const progress = getUpgradeProgress(gs.runState, def);
+      // C2: the effect plate gains the absolute «было → стало» values for one
+      // stack plus the synergy tag («→ ГИПЕРШИП» etc.) when the card carries
+      // an evolutionHint. Ceremony cards (evolution/legendary) and unknown
+      // ids get no suffix, so their plates render exactly as before.
+      const effectSuffix = formatUpgradeEffectSuffix(gs.runState, def);
+      const effectLabel = effectSuffix ? `${def.name} · ${effectSuffix}` : def.name;
       const special = evolution || legendary;
       const bg = this.add
         .rectangle(0, 0, cw, ch, VISUAL.panel, 0);
@@ -1746,7 +1753,7 @@ export class UIScene extends Phaser.Scene {
           .setResolution(2)
       );
 
-      const effectText = this.add.text(tx + 8, 0, def.name, {
+      const effectText = this.add.text(tx + 8, 0, effectLabel, {
         fontFamily: UI_FONT,
         fontSize: compact ? '11px' : '12px',
         fontStyle: '700',
@@ -1757,7 +1764,7 @@ export class UIScene extends Phaser.Scene {
         wordWrap: { width: Math.max(92, effectW - 16), useAdvancedWrap: true },
       });
       const effectNeedsThirdLine =
-        compact && legendary && ch === expandedCardHeight && effectText.getWrappedText(def.name).length > 2;
+        compact && legendary && ch === expandedCardHeight && effectText.getWrappedText(effectLabel).length > 2;
       effectText.setMaxLines(effectNeedsThirdLine ? 3 : 2);
       // Keep the third compact Legendary line inside its badge and above the per-card footer.
       const effectY = ch / 2 - (compact ? (effectNeedsThirdLine ? 41 : 37) : 44);

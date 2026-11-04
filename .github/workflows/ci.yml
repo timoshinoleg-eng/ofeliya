@@ -167,6 +167,9 @@ jobs:
       - name: QA render-split v2 contract
         run: npm run test:qa-render-split-v2
 
+      - name: Mutation before-after contract
+        run: npm run test:mutation-before-after
+
       - name: Post-review fixes contract
         run: npm run test:post-review-fixes
 
