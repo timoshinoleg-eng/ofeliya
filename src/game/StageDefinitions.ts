@@ -1,4 +1,4 @@
-import { COLORS, type EnemyKind } from './config';
+import { COLORS, SIGNAL, type EnemyKind } from './config';
 import type { WaveEventDefinition } from './WaveEvents';
 import type { MiniBossDefinition } from './AnomalyPrime';
 
@@ -91,7 +91,7 @@ export const BLOODSTREAM_STAGE: StageDefinition = {
     backgroundColor: COLORS.bg,
     plasmaTexture: 'blood-plasma',
     accentColor: COLORS.magenta,
-    dangerColor: COLORS.red,
+    dangerColor: SIGNAL.danger,
     particleTint: 0xffa2b6,
     ambientProfile: 'bloodstream',
     heartbeatMs: 0,
@@ -214,7 +214,7 @@ export const BLOODSTREAM_STAGE: StageDefinition = {
       atMs: 240_000,
       title: 'КРИТИЧЕСКАЯ ИММУННАЯ РЕАКЦИЯ',
       subtitle: 'ДО ИММУННОГО ПРАЙМА — 01:00',
-      color: COLORS.red,
+      color: SIGNAL.danger,
     },
   ],
 };

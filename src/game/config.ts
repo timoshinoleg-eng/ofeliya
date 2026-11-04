@@ -21,6 +21,25 @@ export const COLORS = {
   virus: 0xff4fb5,
 };
 
+/**
+ * Reserved signal colors (A1+A2 readability layer).
+ *
+ * - `danger` is the top-severity threat color: boss telegraphs, volatile blasts,
+ *   player-impact cues, boss aura, hp-warning and boss bars. It is never used for
+ *   decor or player-positive feedback. Value aliases COLORS.red so the reservation
+ *   is a single source of truth, not a second copy of the number.
+ * - `rna` is the RNA color: the exact baked rna-fragment stroke (#86ffaa in
+ *   StrainZeroTextures). It is used only for RNA feedback, never for decor.
+ * Per-attacker telegraph hues (cyan runner, orange brute, purple anomaly) are a
+ * deliberate exception: they are threat-only colors that encode WHO attacks, so
+ * they are kept, not unified into danger. Enemy projectiles do not exist in the
+ * game (no ranged enemy attacks found), so that clause of the brief is vacuous.
+ */
+export const SIGNAL = {
+  danger: COLORS.red,
+  rna: 0x86ffaa,
+} as const;
+
 export const FONT = "'Chakra Petch', Arial, sans-serif";
 
 export const UI_FONT = "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif";

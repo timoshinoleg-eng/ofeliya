@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS } from '../game/config';
+import { COLORS, SIGNAL } from '../game/config';
 import { combatParticleFrame } from '../game/StrainZeroTextures';
 import { PERFORMANCE } from './PerformanceProfile';
 import { VfxBudget } from './VfxBudget';
@@ -136,7 +136,7 @@ export class VfxSystem {
     if (importance !== 'normal') {
       const radius = Number.isFinite(victimRadius) ? Math.max(0, victimRadius) : 0;
       this.ring(
-        x, y, importance === 'boss' ? COLORS.red : COLORS.gold,
+        x, y, importance === 'boss' ? SIGNAL.danger : COLORS.gold,
         Math.max(importance === 'boss' ? 84 : 48, Math.min(110, radius * 1.8)),
         360, 0.22, 0, true
       );

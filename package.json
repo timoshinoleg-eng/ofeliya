@@ -67,6 +67,7 @@
     "test:qa-render-split": "node tests/qa-render-split.mjs",
     "test:qa-render-split-v2": "node tests/qa-render-split-v2.mjs",
     "test:mutation-before-after": "node tests/mutation-before-after.mjs",
+    "test:readability-signal": "node tests/readability-signal-contract.mjs",
     "test:analytics-events": "node scripts/check-analytics-events.mjs",
     "test:daily-streak": "node tests/daily-streak.mjs",
     "test:meta-achievements": "node tests/meta-achievements.mjs",

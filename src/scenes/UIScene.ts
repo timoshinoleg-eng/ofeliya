@@ -10,7 +10,7 @@ import {
   isDuelBeaten,
   type DuelChallengeSnapshot,
 } from '../game/Duel';
-import { COLORS, COMBO, FONT, JUICE, UI_FONT, UI_TEXT, fmtTime } from '../game/config';
+import { COLORS, COMBO, FONT, JUICE, SIGNAL, UI_FONT, UI_TEXT, fmtTime } from '../game/config';
 import { BORDER, BUTTON, ROLE, SCRIM } from '../ui/tokens';
 import { HUD } from '../ui/hudTokens';
 import { artScale, CORE_ART } from '../game/ArtMetrics';
@@ -255,7 +255,9 @@ export class UIScene extends Phaser.Scene {
       .setFontStyle('bold')
       .setStroke('#2a0a1e', 2)
       .setShadow(0, 1, '#02030a', 3, true, true);
-    this.rnaPickupText = text(0, 0, '', 11, '#baffd8', 0)
+    // A2: RNA feedback uses the reserved RNA signal color (SIGNAL.rna = 0x86ffaa,
+    // the baked rna-fragment stroke), not a nearby pale green.
+    this.rnaPickupText = text(0, 0, '', 11, '#86ffaa', 0)
       .setFontStyle('bold')
       .setShadow(0, 1, '#02030a', 3, true, true)
       .setVisible(false);
@@ -479,7 +481,7 @@ export class UIScene extends Phaser.Scene {
       this.hpWarn.clear();
       if (run.hp > 0 && hf <= JUICE.lowHpFraction) {
         const a = prefersReducedMotion() ? 0.22 : 0.22 + 0.22 * Math.sin(this.time.now / 120);
-        this.hpWarn.lineStyle(16, COLORS.red, a);
+        this.hpWarn.lineStyle(16, SIGNAL.danger, a);
         this.hpWarn.strokeRect(8, 8, W - 16, H - 16);
       }
 
@@ -501,7 +503,7 @@ export class UIScene extends Phaser.Scene {
         }
         if (bossDirty) {
           this.bossFill.clear();
-          this.bossFill.fillStyle(COLORS.red, 1);
+          this.bossFill.fillStyle(SIGNAL.danger, 1);
           this.bossFill.fillRoundedRect(
             m.bossX,
             HUD.row.bossBarY,
@@ -1122,7 +1124,7 @@ export class UIScene extends Phaser.Scene {
     const rightX = m.bossX - 1;
     const topY = HUD.row.bossBarY + 1;
     const bottomY = HUD.row.bossBarY + HUD.row.bossBarH - 1;
-    this.bossFrame.fillStyle(COLORS.red, 0.95);
+    this.bossFrame.fillStyle(SIGNAL.danger, 0.95);
     this.bossFrame.fillTriangle(tipX, midY, coreX, topY, rightX, midY);
     this.bossFrame.fillTriangle(tipX, midY, rightX, midY, coreX, bottomY);
     if (p > 0.01) {

@@ -14,6 +14,7 @@ import {
   PLAYER,
   POSTFX,
   PROGRESSION,
+  SIGNAL,
   SIMULATION,
   WEAPON,
   type EnemyKind,
@@ -1220,8 +1221,8 @@ export class GameScene extends Phaser.Scene {
     const x = enemy.x;
     const y = enemy.y;
     const blast = this.add
-      .circle(x, y, 16, COLORS.red, 0.12)
-      .setStrokeStyle(2.4, COLORS.red, 0.88)
+      .circle(x, y, 16, SIGNAL.danger, 0.12)
+      .setStrokeStyle(2.4, SIGNAL.danger, 0.88)
       .setDepth(24)
       .setBlendMode(Phaser.BlendModes.ADD);
     this.tweens.add({
@@ -1232,7 +1233,7 @@ export class GameScene extends Phaser.Scene {
       ease: 'Quad.Out',
       onComplete: () => blast.destroy(),
     });
-    this.atmosphere.pulse(COLORS.red, 0.1);
+    this.atmosphere.pulse(SIGNAL.danger, 0.1);
 
     const distance = Math.hypot(this.player.x - x, this.player.y - y);
     const now = this.time.now;
@@ -1509,14 +1510,14 @@ export class GameScene extends Phaser.Scene {
     const uy = dy / distance;
 
     cue.clear().setVisible(true).setAlpha(1).setScale(1).setPosition(this.player.x, this.player.y);
-    cue.lineStyle(3, COLORS.red, 0.92);
+    cue.lineStyle(3, SIGNAL.danger, 0.92);
     cue.strokeCircle(0, 0, 22);
     cue.lineStyle(5, COLORS.white, 0.7);
     cue.beginPath();
     cue.moveTo(ux * 24, uy * 24);
     cue.lineTo(ux * 43, uy * 43);
     cue.strokePath();
-    cue.fillStyle(COLORS.red, 0.9);
+    cue.fillStyle(SIGNAL.danger, 0.9);
     cue.fillCircle(ux * 47, uy * 47, 4);
 
     this.tweens.add({
@@ -1655,8 +1656,8 @@ export class GameScene extends Phaser.Scene {
     }
 
     const wave = this.add
-      .circle(boss.x, boss.y, 24, COLORS.red, 0.035)
-      .setStrokeStyle(boss.bossPhase === 2 ? 4 : 3, COLORS.red, 0.94)
+      .circle(boss.x, boss.y, 24, SIGNAL.danger, 0.035)
+      .setStrokeStyle(boss.bossPhase === 2 ? 4 : 3, SIGNAL.danger, 0.94)
       .setDepth(25)
       .setBlendMode(Phaser.BlendModes.ADD);
     this.tweens.add({
@@ -1667,7 +1668,7 @@ export class GameScene extends Phaser.Scene {
       ease: 'Quad.Out',
       onComplete: () => wave.destroy(),
     });
-    this.atmosphere.pulse(COLORS.red, boss.bossPhase === 2 ? 0.24 : 0.16);
+    this.atmosphere.pulse(SIGNAL.danger, boss.bossPhase === 2 ? 0.24 : 0.16);
     const now = this.time.now;
     const impactDecision = this.impact.request('boss_impact', now);
     if (impactDecision.allowCameraShake) {
@@ -3095,8 +3096,8 @@ export class GameScene extends Phaser.Scene {
     if (mark.hits >= 4) {
       mark.hits = 0;
       mark.windowUntil = now + 1_500;
-      this.vfx.legendary(target.x, target.y, COLORS.red);
-      this.atmosphere.pulse(COLORS.red, 0.08);
+      this.vfx.legendary(target.x, target.y, SIGNAL.danger);
+      this.atmosphere.pulse(SIGNAL.danger, 0.08);
     }
     this.coreMarks.set(target, mark);
     return baseDamage;

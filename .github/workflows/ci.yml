@@ -170,6 +170,9 @@ jobs:
       - name: Mutation before-after contract
         run: npm run test:mutation-before-after
 
+      - name: Readability signal contract
+        run: npm run test:readability-signal
+
       - name: Post-review fixes contract
         run: npm run test:post-review-fixes
 
