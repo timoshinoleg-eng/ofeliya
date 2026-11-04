@@ -13,6 +13,9 @@ export const SFX_ROLE_GAINS = {
   levelup: 0.50, hurt: 0.55, nova: 0.48, elite: 0.50,
   boss: 0.60, bossphase: 0.62, gameover: 0.58, victory: 0.58,
   infect: 0.42, lysis: 0.62,
+  // 'kill' is procedural-only (no sample ever loads), so this gain never
+  // scales a buffer; it exists only because SfxName must index completely.
+  kill: 0.16,
 } as const;
 
 export function normalizationTrimForPeak(peak: number): number {

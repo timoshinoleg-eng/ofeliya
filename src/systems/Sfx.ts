@@ -16,10 +16,11 @@ import {
 export type SfxName =
   | 'shoot' | 'hit' | 'pickup' | 'pickup2' | 'pickup3' | 'levelup' | 'hurt' | 'click'
   | 'nova' | 'elite' | 'boss' | 'bossphase' | 'gameover' | 'victory'
-  | 'infect' | 'lysis';
+  | 'infect' | 'lysis' | 'kill';
 
 const THROTTLE_MS: Partial<Record<SfxName, number>> = {
   shoot: 70, hit: 55, pickup: 45, pickup2: 45, pickup3: 45, infect: 140, lysis: 200,
+  kill: 70,
 };
 const BASE: string = import.meta.env.BASE_URL || './';
 
@@ -28,7 +29,14 @@ function audioAssetUrl(file: string): string {
   return `${BASE}${file}${separator}v=${encodeURIComponent(RELEASE_SHA)}`;
 }
 
-const MANIFEST: Record<SfxName, { file: string }> = {
+/**
+ * Sample manifest. Partial on purpose: 'kill' is procedural-only (see the
+ * fallback blip below) — no unverified sample enters the repository, and
+ * load() returns null for names without an entry instead of fetching.
+ * check-audio-assets only scans audio/... path references, so a
+ * procedural-only name does not disturb the manifest 1:1 contract.
+ */
+const MANIFEST: Partial<Record<SfxName, { file: string }>> = {
   shoot: { file: 'audio/sfx/shoot.ogg' },
   hit: { file: 'audio/sfx/hit.ogg' },
   pickup: { file: 'audio/sfx/pickup.ogg' },
@@ -451,7 +459,11 @@ class SfxImpl {
     if (this.loading[name]) return this.loading[name] as Promise<AudioBuffer | null>;
     const ctx = this.ensure();
     if (!ctx) return Promise.resolve(null);
-    const p = fetch(audioAssetUrl(MANIFEST[name].file))
+    // Procedural-only names (currently 'kill') have no sample: the fallback
+    // blip below plays and no fetch is attempted, so kills never spam 404s.
+    const entry = MANIFEST[name];
+    if (!entry) return Promise.resolve(null);
+    const p = fetch(audioAssetUrl(entry.file))
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('HTTP ' + r.status))))
       .then((ab) => ctx.decodeAudioData(ab))
       .then((buf) => {
@@ -486,6 +498,9 @@ class SfxImpl {
     switch (name) {
       case 'shoot': this.blip(760, 410, 0.055, 'triangle', 0.03); break;
       case 'hit': this.blip(230, 105, 0.05, 'triangle', 0.045); break;
+      // Kill blip: longer and higher-starting than 'hit' so the kill reads
+      // as its own event, not a doubled hit. Procedural-only, no sample.
+      case 'kill': this.blip(300, 90, 0.09, 'triangle', 0.05); break;
       case 'pickup': this.blip(620, 980, 0.075, 'sine', 0.05); break;
       case 'pickup2': this.blip(720, 1180, 0.07, 'sine', 0.05); break;
       case 'pickup3': this.blip(540, 880, 0.08, 'triangle', 0.05); break;

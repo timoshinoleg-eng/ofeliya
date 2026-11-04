@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS, SIGNAL } from '../game/config';
+import { COLORS, JUICE, SIGNAL } from '../game/config';
 import { combatParticleFrame } from '../game/StrainZeroTextures';
 import { PERFORMANCE } from './PerformanceProfile';
 import { VfxBudget } from './VfxBudget';
@@ -148,6 +148,29 @@ export class VfxSystem {
     this.frame(this.pickupEmitter, COLORS.green);
     this.emit(this.pickupEmitter, x, y, this.combatDensity >= 170 ? 1 : this.combatDensity >= 130 ? 2 : 3);
     if (this.combatDensity < 180) this.ring(x, y, COLORS.green, 24, 200, 0.1);
+  }
+
+  /**
+   * A3 kill flash + scale-pop: one pooled decoration, no new emitter.
+   * White on ADD blend is a luminance channel only — it carries no color
+   * signal, so the stack reads without hue. The circle starts small (0.55)
+   * and pops past its radius while fading, all inside JUICE.killFlashMs.
+   * Pool backpressure is the throttle: under decoration pressure
+   * acquireDecoration returns null and the flash is dropped, never queued.
+   */
+  killFlash(x: number, y: number, victimRadius = 0, important = false): void {
+    if (this.destroyed) return;
+    const entry = this.acquireDecoration(important);
+    if (!entry) return;
+    const radius = Math.max(16, Number.isFinite(victimRadius) ? victimRadius : 0);
+    this.resetCircle(entry, x, y, radius, COLORS.white, JUICE.killFlashAlpha, 0, 0);
+    entry.circle.setScale(0.55);
+    this.animate(entry, {
+      scale: JUICE.killFlashPop,
+      alpha: { from: JUICE.killFlashAlpha, to: 0 },
+      duration: JUICE.killFlashMs,
+      ease: 'Quad.Out',
+    });
   }
 
   setCombatDensity(density: number): void {
