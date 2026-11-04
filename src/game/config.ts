@@ -83,6 +83,12 @@ export const JUICE = {
   lowHpFraction: 0.3,
   shakeHurt: { duration: 190, intensity: 0.009 },
   shakeEliteKill: { duration: 150, intensity: 0.006 },
+  /** A3 kill-feedback flash: whole stack (flash + pop + particles + blip) fits ~150 ms. */
+  killFlashMs: 150,
+  /** Scale-pop peak of the kill flash (from 0.55 start scale). */
+  killFlashPop: 1.18,
+  /** Start alpha of the kill flash (ADD blend, white = luminance only, no color signal). */
+  killFlashAlpha: 0.55,
   trailEveryMs: 55,
   trailFadeMs: 260,
   trailPool: 8,

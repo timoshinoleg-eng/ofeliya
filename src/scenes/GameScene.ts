@@ -1175,6 +1175,7 @@ export class GameScene extends Phaser.Scene {
     this.vfx.kill(
       e.x, e.y, e.color, e.isBoss ? 'boss' : e.isElite ? 'elite' : 'normal', undefined, e.radius
     );
+    this.killFeedback(e);
     if (e.isElite && e.eliteModifier === 'volatile') this.triggerVolatileElite(e);
     if (e.isElite || e.isBoss) {
       const decision = this.impact.request(
@@ -1214,6 +1215,23 @@ export class GameScene extends Phaser.Scene {
       this.wave.anomaly = null;
       this.onAnomalyDefeated(e);
     }
+  }
+
+  /**
+   * A3 kill-feedback stack (feedback only, no gameplay change): brightness
+   * flash + scale-pop via one pooled VfxSystem decoration, particles already
+   * fired by vfx.kill above, procedural kill blip (throttled in Sfx).
+   * No hit-stop here — hit-stop stays elite/boss-only in the block above.
+   * No ImpactDirector request: like vfx.kill/vfx.hit, local channels are
+   * backpressured by their own budgets (decoration pool, Sfx throttle), so
+   * a normal-kill flood cannot deny elite/boss screen-level feedback.
+   * Reduced motion skips the flashing/popping element; particles + sound stay.
+   */
+  private killFeedback(e: Enemy): void {
+    if (!prefersReducedMotion()) {
+      this.vfx.killFlash(e.x, e.y, e.radius, e.isElite || e.isBoss);
+    }
+    Sfx.play('kill');
   }
 
   private triggerVolatileElite(enemy: Enemy): void {

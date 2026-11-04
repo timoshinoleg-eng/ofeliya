@@ -173,6 +173,9 @@ jobs:
       - name: Readability signal contract
         run: npm run test:readability-signal
 
+      - name: Kill feedback contract
+        run: npm run test:kill-feedback
+
       - name: Post-review fixes contract
         run: npm run test:post-review-fixes
 
