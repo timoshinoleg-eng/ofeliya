@@ -6,10 +6,13 @@ import type { StageDefinition } from '../game/StageDefinitions';
 import { PERFORMANCE } from './PerformanceProfile';
 import { decayAtmospherePulse, heartBeatEnvelope, visibleAtmosphereBands } from './atmosphereMath';
 
+// A1 value hierarchy: ambient layers sit ~25% below their pre-A1 alphas so the
+// background stays darker than the darkest enemy; enemies and the player keep
+// full brightness. No geometry, count or speed changes here.
 const RBC_BANDS = [
-  { depth: -26, scale: [0.55, 0.85], alpha: [0.16, 0.24], parallax: [0.025, 0.045] },
-  { depth: -14, scale: [0.95, 1.4], alpha: [0.23, 0.34], parallax: [0.07, 0.10] },
-  { depth: -8, scale: [1.6, 2.1], alpha: [0.08, 0.14], parallax: [0.14, 0.18] },
+  { depth: -26, scale: [0.55, 0.85], alpha: [0.12, 0.18], parallax: [0.025, 0.045] },
+  { depth: -14, scale: [0.95, 1.4], alpha: [0.17, 0.26], parallax: [0.07, 0.10] },
+  { depth: -8, scale: [1.6, 2.1], alpha: [0.06, 0.11], parallax: [0.14, 0.18] },
 ] as const;
 
 interface AmbientCell {
@@ -150,7 +153,7 @@ export class AtmosphereSystem {
     for (let i = 0; i < PERFORMANCE.ambientHostCells; i++) {
       const x = Phaser.Math.FloatBetween(-80, this.width + 80);
       const y = Phaser.Math.FloatBetween(-80, this.height + 80);
-      const alpha = Phaser.Math.FloatBetween(0.045, 0.105);
+      const alpha = Phaser.Math.FloatBetween(0.034, 0.079);
       const image = scene.add
         .image(x, y, 'host-cell-shadow')
         .setScrollFactor(0)
@@ -175,12 +178,15 @@ export class AtmosphereSystem {
     for (let i = 0; i < PERFORMANCE.ambientParticles; i++) {
       const x = Phaser.Math.FloatBetween(0, this.width);
       const y = Phaser.Math.FloatBetween(0, this.height);
-      const alpha = Phaser.Math.FloatBetween(0.025, 0.085);
+      const alpha = Phaser.Math.FloatBetween(0.019, 0.064);
       const image = scene.add
         .image(x, y, 'spark')
         .setScrollFactor(0)
         .setDepth(-18)
-        .setTint(i % 6 === 0 ? COLORS.green : 0xffa2b6)
+        // A2: no green in ambient decor — green is reserved for RNA feedback,
+        // so pre-stage particles share the stage particle tint. setStage
+        // overwrites this tint anyway; this only covers the pre-stage frame.
+        .setTint(0xffa2b6)
         .setScale(Phaser.Math.FloatBetween(0.12, 0.34))
         .setAlpha(alpha);
       this.particles.push({
@@ -208,7 +214,7 @@ export class AtmosphereSystem {
     this.stage = stage;
     this.plasma.setTexture(stage.theme.plasmaTexture).clearTint();
     const heart = stage.theme.ambientProfile === 'heart';
-    this.structure.setVisible(heart).setAlpha(heart ? 0.34 : 0);
+    this.structure.setVisible(heart).setAlpha(heart ? 0.27 : 0);
     if (heart && stage.theme.structureTexture) this.structure.setTexture(stage.theme.structureTexture);
     this.particles.forEach((particle, index) => {
       particle.image.setTint(index % 7 === 0 ? stage.theme.accentColor : stage.theme.particleTint);
@@ -238,10 +244,13 @@ export class AtmosphereSystem {
     const flow = (heart ? 0.72 : 1) + progress * (heart ? 0.42 : 0.65) + beat * 0.32;
     this.plasma.tilePositionX = cam.scrollX * 0.7 - time * (heart ? 0.004 : 0.007) * flow;
     this.plasma.tilePositionY = cam.scrollY * 0.7 + Math.sin(time * (heart ? 0.00034 : 0.00018)) * (heart ? 4 : 8);
-    this.plasma.setTint(heart ? 0xffc9a8 : progress > 0.72 ? 0xffd6df : 0xffffff);
+    this.plasma.setTint(heart ? 0xcca186 : progress > 0.72 ? 0xccabb2 : 0xcccccc);
     this.structure.tilePositionX = cam.scrollX * 0.52 + time * 0.003;
     this.structure.tilePositionY = cam.scrollY * 0.52 - time * 0.0015;
-    if (heart) this.structure.setAlpha(0.27 + beat * 0.2 + progress * 0.05);
+    // Beat coefficient stays 0.2: the valley-to-peak envelope separation
+    // (tests/atmosphere-presentation.mjs, > .09) depends on it; only the base
+    // and progress terms dim for A1.
+    if (heart) this.structure.setAlpha(0.22 + beat * 0.2 + progress * 0.04);
 
     for (const cell of this.erythrocytes) {
       if (!cell.image.visible) continue;

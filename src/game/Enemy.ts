@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { artScale, artSourceFactor } from './ArtMetrics';
 import { biologicalAtlasKey, biologicalFrameAt } from './BiologicalAnimation';
 import { biologicalHitAtlasKey, biologicalHitDirection, biologicalHitFrame } from './BiologicalImpact';
-import { COLORS, ELITE, ENEMY_DEFS, type EnemyKind } from './config';
+import { COLORS, ELITE, ENEMY_DEFS, SIGNAL, type EnemyKind } from './config';
 import type { GameScene } from '../scenes/GameScene';
 import type { Player } from './Player';
 import type { StageBossBehavior } from './StageDefinitions';
@@ -758,7 +758,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.bossTelegraph,
       radius,
       'critical',
-      COLORS.red,
+      SIGNAL.danger,
       this.bossPhase === 2 ? 0.1 : 0.075
     );
   }
@@ -1049,7 +1049,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       echo.end = 0;
       echo.radius = primeAttackPhasePacing(this.bossPhase).radius;
       echo.level = 'critical';
-      echo.color = COLORS.red;
+      echo.color = SIGNAL.danger;
       return echo;
     }
 
@@ -1202,7 +1202,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private eliteModifierColor(): number {
     if (this.eliteModifier === 'regenerator') return COLORS.green;
     if (this.eliteModifier === 'frenzied') return COLORS.orange;
-    if (this.eliteModifier === 'volatile') return COLORS.red;
+    if (this.eliteModifier === 'volatile') return SIGNAL.danger;
     return COLORS.gold;
   }
 

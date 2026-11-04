@@ -83,7 +83,8 @@ test('full and reduced pools have coherent depth, scale, opacity and parallax ba
     const f = fixture(reduced);
     assert.deepEqual(bands(f), reduced ? [4, 3, 1] : [8, 4, 2]);
     assert.equal(f.hosts.length, reduced ? 2 : 4); assert.equal(f.particles.length, reduced ? 12 : 24);
-    const ranges = [[.55, .85, .16, .24, .025, .045], [.95, 1.4, .23, .34, .07, .1], [1.6, 2.1, .08, .14, .14, .18]];
+    // A1+A2: RBC band alphas dimmed ~25% (AtmosphereSystem RBC_BANDS).
+    const ranges = [[.55, .85, .12, .18, .025, .045], [.95, 1.4, .17, .26, .07, .1], [1.6, 2.1, .06, .11, .14, .18]];
     const initialX = f.rbc.map(o => o.x);
     f.scene.cameras.main.scrollX = 100; f.atmosphere.update(0, 0, 0, 300000);
     for (const [i, o] of f.rbc.entries()) {

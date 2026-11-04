@@ -49,6 +49,8 @@ assert.match(updateMethod, /liveMode !== null && !prefersReducedMotion\(\)\s*\?\
   'ceremony pulse is gated on a live boss and disabled for reduced motion');
 
 const COLORS = { white: 0xffffff, gold: 0xffd56a, green: 0x7fffa1, red: 0xff3e5f };
+// A1+A2: drawBossIdentityFrame now reads the reserved threat color via SIGNAL.
+const SIGNAL = { danger: 0xff3e5f, rna: 0x86ffaa };
 const HUD = { row: { bossBarY: 68, bossBarH: 8 } };
 
 class Gfx {
@@ -65,7 +67,7 @@ class Gfx {
 const { outputText } = ts.transpileModule(`class Probe { ${frameMethod} }`, {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.None },
 });
-const Probe = new Function('COLORS', 'HUD', `${outputText}; return Probe;`)(COLORS, HUD);
+const Probe = new Function('COLORS', 'HUD', 'SIGNAL', `${outputText}; return Probe;`)(COLORS, HUD, SIGNAL);
 const m = { bossX: 40, bossW: 310 };
 
 const baseline = new Probe();
