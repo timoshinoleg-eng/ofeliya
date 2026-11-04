@@ -4,6 +4,14 @@
 // This module owns the single game AudioContext and every long-lived audio node. The adaptive
 // audio foundation (`AdaptiveAudioDirector`) is a decision layer only: it drives this module
 // through `SfxAdaptiveSink`, so mute, user-gesture unlock and node ownership stay in one place.
+//
+// Procedural fallback SFX (every SfxName when its sample is missing, and
+// always for 'kill') are synthesized with ZzFX (1.4.0, MIT) through
+// `ZzfxSynth`/`zzfxPresets`: only ZZFX.buildSamples is used, and the samples
+// play through this module's context and sfxGain, so mute, volume, throttle
+// and routing are unchanged. ZZFX.play/playSamples are never called — they
+// would bypass master gain via ZzFX's own module-level context, which stays
+// dormant (constructed at import, never started or connected).
 
 import { SaveSystem } from './SaveSystem';
 import { RELEASE_SHA } from '../release';
@@ -12,6 +20,8 @@ import {
   MASTER_GAIN, MUSIC_GAIN, MUSIC_BED_TRIMS, SFX_ROLE_GAINS,
   scanNormalizationTrim, musicGainForDuck, perceptualVolumeGain, nextVolumeStep,
 } from './audioMixMath';
+import { ZZFX_PRESETS } from './zzfxPresets';
+import { buildZzfxSamples, ZZFX_SAMPLE_RATE } from './ZzfxSynth';
 
 export type SfxName =
   | 'shoot' | 'hit' | 'pickup' | 'pickup2' | 'pickup3' | 'levelup' | 'hurt' | 'click'
@@ -31,7 +41,7 @@ function audioAssetUrl(file: string): string {
 
 /**
  * Sample manifest. Partial on purpose: 'kill' is procedural-only (see the
- * fallback blip below) — no unverified sample enters the repository, and
+ * fallback preset below) — no unverified sample enters the repository, and
  * load() returns null for names without an entry instead of fetching.
  * check-audio-assets only scans audio/... path references, so a
  * procedural-only name does not disturb the manifest 1:1 contract.
@@ -460,7 +470,7 @@ class SfxImpl {
     const ctx = this.ensure();
     if (!ctx) return Promise.resolve(null);
     // Procedural-only names (currently 'kill') have no sample: the fallback
-    // blip below plays and no fetch is attempted, so kills never spam 404s.
+    // preset below plays and no fetch is attempted, so kills never spam 404s.
     const entry = MANIFEST[name];
     if (!entry) return Promise.resolve(null);
     const p = fetch(audioAssetUrl(entry.file))
@@ -477,7 +487,7 @@ class SfxImpl {
     return p;
   }
 
-  private playBuf(buf: AudioBuffer, out: GainNode, vol: number): void {
+  private playBuf(buf: AudioBuffer, out: GainNode, vol: number, when = 0): void {
     const ctx = this.ctx; if (!ctx || this.muted || this.isSuspended() || ctx.state !== 'running') return;
     const src = ctx.createBufferSource();
     const gain = ctx.createGain();
@@ -490,45 +500,28 @@ class SfxImpl {
       try { gain.disconnect(); } catch { /* no-op */ }
       src.onended = null;
     };
-    src.start();
+    src.start(ctx.currentTime + when);
   }
 
+  /**
+   * Procedural fallback: every SfxName plays its ZzFX preset table. Presets
+   * carry the old blip parameters 1:1 (frequencies, durations, volumes,
+   * start delays); only the envelope curve differs (ZzFX ADSR vs exponential
+   * decay). Samples are generated with ZZFX.buildSamples and played through
+   * this module's context and sfxGain, so mute, volume, throttle and the
+   * suspended/running guards behave exactly as the oscillator path did.
+   * Multi-tone names schedule each tone at its preset delay on the shared
+   * clock — ZzFX's own `delay` parameter is an echo, never a start offset.
+   */
   private fallback(name: SfxName): void {
     const ctx = this.ensure(); if (!ctx || !this.sfxGain) return;
-    switch (name) {
-      case 'shoot': this.blip(760, 410, 0.055, 'triangle', 0.03); break;
-      case 'hit': this.blip(230, 105, 0.05, 'triangle', 0.045); break;
-      // Kill blip: longer and higher-starting than 'hit' so the kill reads
-      // as its own event, not a doubled hit. Procedural-only, no sample.
-      case 'kill': this.blip(300, 90, 0.09, 'triangle', 0.05); break;
-      case 'pickup': this.blip(620, 980, 0.075, 'sine', 0.05); break;
-      case 'pickup2': this.blip(720, 1180, 0.07, 'sine', 0.05); break;
-      case 'pickup3': this.blip(540, 880, 0.08, 'triangle', 0.05); break;
-      case 'hurt': this.blip(165, 62, 0.2, 'sawtooth', 0.11); break;
-      case 'levelup':
-        this.blip(420, 540, 0.09, 'sine', 0.055);
-        this.blip(610, 760, 0.11, 'sine', 0.055, 0.08);
-        this.blip(820, 1040, 0.14, 'sine', 0.06, 0.17); break;
-      case 'click': this.blip(480, 520, 0.035, 'sine', 0.04); break;
-      case 'nova': this.blip(290, 52, 0.28, 'sawtooth', 0.065); break;
-      case 'elite': this.blip(145, 82, 0.32, 'sawtooth', 0.08); break;
-      case 'boss':
-        this.blip(78, 45, 0.78, 'sawtooth', 0.13);
-        this.blip(108, 62, 0.72, 'sine', 0.055, 0.1); break;
-      case 'bossphase':
-        this.blip(64, 40, 0.5, 'sawtooth', 0.12);
-        this.blip(64, 40, 0.5, 'sawtooth', 0.12, 0.42);
-        this.blip(130, 260, 0.9, 'triangle', 0.05, 0.1); break;
-      case 'infect':
-        this.blip(300, 520, 0.28, 'sine', 0.045);
-        this.blip(520, 760, 0.3, 'sine', 0.035, 0.12); break;
-      case 'lysis':
-        this.blip(420, 60, 0.22, 'square', 0.07);
-        this.blip(180, 46, 0.34, 'sawtooth', 0.08, 0.04); break;
-      case 'gameover':
-        this.blip(380, 190, 0.32, 'triangle', 0.07);
-        this.blip(260, 110, 0.44, 'triangle', 0.07, 0.26); break;
-      case 'victory': [440, 554, 659, 880].forEach((f, i) => this.blip(f, f * 1.05, 0.14, 'sine', 0.065, i * 0.12)); break;
+    if (this.muted || this.isSuspended() || ctx.state !== 'running') return;
+    for (const tone of ZZFX_PRESETS[name]) {
+      const samples = buildZzfxSamples(tone);
+      const buf = ctx.createBuffer(1, samples.length, ZZFX_SAMPLE_RATE);
+      buf.getChannelData(0).set(samples);
+      // Samples already carry the preset volume; the bus gain stays at 1.
+      this.playBuf(buf, this.sfxGain, 1, tone.delay);
     }
   }
 
@@ -558,10 +551,6 @@ class SfxImpl {
     this.lastPickupFamilyAt = now;
     this.play(PICKUP_VARIANTS[this.pickupCursor % PICKUP_VARIANTS.length]);
     this.pickupCursor += 1;
-  }
-
-  private blip(f0: number, f1: number, dur: number, type: OscillatorType, vol: number, delay = 0): void {
-    this.tone(f0, f1, dur, type, vol, delay, this.sfxGain);
   }
 
   /**

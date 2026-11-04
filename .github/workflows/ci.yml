@@ -176,6 +176,12 @@ jobs:
       - name: Kill feedback contract
         run: npm run test:kill-feedback
 
+      - name: Palette contrast contract
+        run: npm run test:palette-contrast
+
+      - name: Donor synth contract
+        run: npm run test:donor-synth
+
       - name: Post-review fixes contract
         run: npm run test:post-review-fixes
 

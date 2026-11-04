@@ -15,6 +15,10 @@ function load(path, globals = {}, cache = new Map()) {
   const require = name => name === './SaveSystem'
     ? { SaveSystem: { get: () => ({ muted: false, musicVolume: 1, sfxVolume: 1 }), update() {} } }
     : name === '../release' ? { RELEASE_SHA: 'audio-test' }
+    // The ZzFX bridge imports the bare 'zzfx' package; the loader only
+    // resolves relative .ts files, so stub the sample builder (its output
+    // length is irrelevant here — playback is faked by the Context below).
+    : name === 'zzfx' ? { ZZFX: { buildSamples: () => new Float32Array(1024) } }
     : load(resolve(dirname(path), `${name}.ts`), globals, cache);
   new Function('require', 'module', 'exports', ...Object.keys(globals), code)
     (require, module, module.exports, ...Object.values(globals));
@@ -46,6 +50,8 @@ function fixture({ hidden = false, state = 'running', resumeBlocked = false, res
     createBiquadFilter() { return Object.assign(this.node('filter'), { frequency: param(350), Q: param(1) }); }
     createDynamicsCompressor() { return Object.assign(this.node('compressor'), Object.fromEntries(['threshold', 'knee', 'ratio', 'attack', 'release'].map(k => [k, param(0)]))); }
     createBufferSource() { return this.node('source'); }
+    createBuffer(channels, length, rate) { return { numberOfChannels: channels, length, sampleRate: rate,
+      getChannelData() { return new Float32Array(length); } }; }
     createOscillator() { return Object.assign(this.node('oscillator'), { frequency: param(440) }); }
     resume() { this.resumeCalls++; if (this.resumeBlocked) return Promise.reject(new Error('gesture required')); if (resumeDeferred) return resumeDeferred.promise.then(() => { this.state = 'running'; }); this.state = 'running'; return Promise.resolve(); }
     suspend() { this.suspendCalls++; this.state = 'suspended'; return Promise.resolve(); }
@@ -158,14 +164,22 @@ await test('decoded SFX scan once, cache normalization and replace legacy coeffi
 });
 await test('existing SFX throttles reject tight shoot hit pickup repeats', async () => {
   for (const name of ['shoot', 'hit', 'pickup']) {
-    const f = fixture(); f.Sfx.play(name); await flush(); f.advance(); f.Sfx.play(name); f.Sfx.play(name);
-    assert.equal(f.contexts[0].nodes.filter(n => n.kind === 'source').length, 1);
+    const f = fixture(); f.Sfx.play(name); await flush(); f.advance();
+    // The first play already sounded once through the ZzFX fallback source;
+    // count from there: one allowed play adds one source, a tight repeat none.
+    const sources = () => f.contexts[0].nodes.filter(n => n.kind === 'source').length;
+    const before = sources();
+    f.Sfx.play(name);
+    assert.equal(sources(), before + 1);
+    f.Sfx.play(name);
+    assert.equal(sources(), before + 1);
   }
 });
 await test('pickup round-robin keeps one family throttle: rapid variants do not stack', () => {
   const f = fixture();
-  // Without a decode flush every variant falls back to a transient oscillator; either
-  // node kind proves a blip actually sounded, unlike counting only decoded sources.
+  // Without a decode flush every variant falls back to a ZzFX buffer source;
+  // either node kind proves a sound actually played, unlike counting only
+  // decoded sources.
   const transients = () => f.contexts[0].nodes.filter(n => n.kind === 'oscillator' || n.kind === 'source').length;
   f.Sfx.playPickupVariant();
   assert.equal(transients(), 1);
@@ -173,9 +187,10 @@ await test('pickup round-robin keeps one family throttle: rapid variants do not 
   assert.equal(transients(), 1);
   f.advance(); f.Sfx.playPickupVariant();
   assert.equal(transients(), 2);
-  // Rejected plays must not advance the cursor: the second allowed call is pickup2 (f0 720).
-  const last = f.contexts[0].nodes.filter(n => n.kind === 'oscillator').at(-1);
-  assert.equal(last.frequency.value, 720);
+  // Rejected plays must not advance the cursor: the second allowed call adds
+  // exactly one more source (pickup2). The 720 Hz pin itself lives in the
+  // donor-synth preset contract — buffer sources carry no oscillator node.
+  assert.equal(f.contexts[0].nodes.filter(n => n.kind === 'source').length, 2);
 });
 await test('bio pulse rides the user music gain, not master', async () => {
   const f = fixture(); f.Sfx.startBed(2); await flush();

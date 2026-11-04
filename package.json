@@ -69,6 +69,8 @@
     "test:mutation-before-after": "node tests/mutation-before-after.mjs",
     "test:readability-signal": "node tests/readability-signal-contract.mjs",
     "test:kill-feedback": "node tests/kill-feedback-contract.mjs",
+    "test:palette-contrast": "node tests/palette-contrast.mjs",
+    "test:donor-synth": "node tests/donor-synth-contract.mjs",
     "test:analytics-events": "node scripts/check-analytics-events.mjs",
     "test:daily-streak": "node tests/daily-streak.mjs",
     "test:meta-achievements": "node tests/meta-achievements.mjs",
@@ -141,10 +143,12 @@
     "@dicebear/shapes": "^9.4.2",
     "@maxhub/max-bot-api": "^0.3.1",
     "@tweenjs/tween.js": "^25.0.0",
-    "phaser": "^3.90.0"
+    "phaser": "^3.90.0",
+    "zzfx": "^1.4.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
+    "chroma-js": "^3.2.0",
     "typescript": "^5.6.3",
     "vite": "^6.0.7"
   }
