@@ -5,13 +5,13 @@
  *    is compiled from src/game/config.ts (not copied literals) and must be
  *    > 0 and <= 150; the pop actually overshoots (killFlashPop > 1).
  * 2. The sound channel is procedural-only: 'kill' is a SfxName with a
- *    throttle and a fallback blip, but references no audio file — no
+ *    throttle and a fallback preset, but references no audio file — no
  *    unverified sample enters the repository, and load() must guard a
  *    missing MANIFEST entry instead of fetching (no 404 spam per kill).
  * 3. The visual channel is luminance-only: killFlash uses white on the
  *    pooled ADD-blend decoration, no new particle emitter.
  * 4. The seam is the single kill path: onEnemyDied calls killFeedback for
- *    every kill; the helper respects reduced motion, plays the blip, and
+ *    every kill; the helper respects reduced motion, plays the preset, and
  *    contains no hit-stop — hit-stop stays elite/boss-only (exactly one
  *    hitStop call inside onEnemyDied, after the elite/boss branch).
  */
@@ -64,10 +64,12 @@ try {
   const vfx = read('src/systems/VfxSystem.ts');
   const scene = read('src/scenes/GameScene.ts');
 
-  // 2. Procedural-only kill sound: name + throttle + fallback, no sample file.
+  // 2. Procedural-only kill sound: name + throttle + fallback preset, no sample file.
   assert(/'kill'/.test(sfx), "SfxName must include 'kill'");
   assert(/kill:\s*\d+/.test(sfx), 'THROTTLE_MS must throttle kill');
-  assert(/case 'kill':/.test(sfx), "fallback must define a 'kill' blip");
+  assert(sfx.includes("from './zzfxPresets'"), 'fallback must play the ZzFX preset table');
+  assert(sfx.includes('ZZFX_PRESETS[name]'), 'fallback must play ZZFX_PRESETS[name]');
+  assert(read('src/systems/zzfxPresets.ts').includes('kill:'), 'ZZFX_PRESETS must define kill');
   assert(!/kill\.(ogg|mp3|wav)/.test(sfx), 'kill must reference no audio sample file');
   assert(sfx.includes('if (!entry) return Promise.resolve(null);'),
     'load() must guard a missing MANIFEST entry instead of fetching');
@@ -92,7 +94,7 @@ try {
   const helper = slice(scene, 'private killFeedback', 'private triggerVolatileElite');
   assert(helper.includes('prefersReducedMotion()'), 'killFeedback must respect reduced motion');
   assert(helper.includes('killFlash'), 'killFeedback must fire the flash');
-  assert(helper.includes("Sfx.play('kill')"), 'killFeedback must play the kill blip');
+  assert(helper.includes("Sfx.play('kill')"), 'killFeedback must play the kill preset');
   assert(!helper.includes('hitStop'), 'killFeedback must not hit-stop (normal kills never freeze)');
 
   console.log('kill-feedback: contract OK');
