@@ -1738,11 +1738,11 @@ export class UIScene extends Phaser.Scene {
       card.add(effect);
       let nextY = effect.y + effect.height + 3;
       nextY = addCardText(def.shortName, nextY, compact ? 13 : 14, '#3e503b', '700');
-      nextY = addCardText(mutationCardHeader(def), nextY, compact ? 10 : 11, '#485740', '650');
+      nextY = addCardText(mutationCardHeader(def), nextY, compact ? 11 : 12, '#485740', '650');
       if (effectSuffix) {
-        nextY = addCardText(effectSuffix, nextY + 2, compact ? 11 : 12, '#345634', '700');
+        nextY = addCardText(effectSuffix, nextY + 1, compact ? 11 : 12, '#345634', '700');
       }
-      const descY = nextY + 2;
+      const descY = nextY + 1;
       const description = this.add.text(tx, descY, def.desc, {
         fontFamily: UI_FONT,
         fontSize: compact ? '11px' : '12px',
