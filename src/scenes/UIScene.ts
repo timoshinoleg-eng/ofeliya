@@ -1650,8 +1650,11 @@ export class UIScene extends Phaser.Scene {
       card.add(rail);
       const iconX = -cw / 2 + 39;
       const iconSize = compact ? 46 : 52;
+      const iconKey = evolution && def.evolutionId ? `mutation-${def.evolutionId}` : `up-${def.id}`;
+      const hasIcon = this.textures.exists(iconKey);
+      const pipY = legendary && !hasIcon ? ch / 2 - 13 : -ch / 2 + 15;
 
-      // Rarity must read before the name does: tier pips in the header band
+      // Preserve the rarity signal with tier pips
       // (1=common, 2=rare, 3=legendary/evolution) plus a frame whose strength
       // scales with the tier. Words alone (СТАНДАРТ/РЕДКИЙ in 11-12px) were
       // measured indistinguishable at a glance in the Phase A audit.
@@ -1659,7 +1662,7 @@ export class UIScene extends Phaser.Scene {
       for (let p = 0; p < tier; p++) {
         card.add(
           this.add
-            .circle(iconX - (tier - 1) * 6.5 + p * 13, -ch / 2 + 15, p === tier - 1 ? 4 : 3.2, accent, special ? 0.95 : 0.45 + tier * 0.12)
+            .circle(iconX - (tier - 1) * 6.5 + p * 13, pipY, p === tier - 1 ? 4 : 3.2, accent, special ? 0.95 : 0.45 + tier * 0.12)
             .setStrokeStyle(1, accent, special ? 0.6 : 0.3)
         );
       }
@@ -1680,8 +1683,6 @@ export class UIScene extends Phaser.Scene {
         );
       }
 
-      const iconKey = evolution && def.evolutionId ? `mutation-${def.evolutionId}` : `up-${def.id}`;
-      const hasIcon = this.textures.exists(iconKey);
       const reserveIconZone = hasIcon || !legendary;
       if (reserveIconZone) {
         const iconPlate = this.add
@@ -1726,9 +1727,9 @@ export class UIScene extends Phaser.Scene {
         return top + text.height;
       };
 
-      const effect = this.add.text(tx, -ch / 2 + 11, effectLabel, {
+      const effect = this.add.text(tx, -ch / 2 + (legendary ? 8 : 11), effectLabel, {
         fontFamily: UI_FONT,
-        fontSize: compact ? '14px' : '16px',
+        fontSize: compact ? (legendary ? '13px' : '14px') : '16px',
         fontStyle: '700',
         color: '#223c2a',
         lineSpacing: -1,
