@@ -11,6 +11,7 @@ import { fmtInt, joinSegments, toTitleCase } from '../game/UiFormat';
 import { IDENTITY } from '../game/identity';
 import { masteryTracks } from '../game/RunIdentity';
 import type { CodexEntryRef } from '../game/runCodexOpenings';
+import type { LastRunResult } from '../game/RunContracts';
 import { LEGENDARIES } from '../game/LegendarySystem';
 import { STAGES } from '../game/StageDefinitions';
 import { EVOLUTION_NAMES, type EvolutionId } from '../game/UpgradeSystem';
@@ -150,10 +151,19 @@ export class MenuScene extends Phaser.Scene {
     this.registry.set('challengeTarget', incomingChallenge);
     this.registry.set('duelChallenge', null);
 
+    // A finished run waits behind the Codex transition: its result can be
+    // re-shown without starting the Game scene. The return action takes the
+    // secondary band, which the resume action owns when a checkpoint exists;
+    // the two never coexist in practice (finish() clears the checkpoint),
+    // and the resume action wins the slot if they ever do.
+    const lastRunResult = this.registry.get('lastRunResult') as LastRunResult | null | undefined;
+    const showReturn = Boolean(lastRunResult) && !resumeCheckpoint;
+
     // The run configuration is known before anything is drawn, so the whole menu
     // geometry can be resolved up front by the layout module.
     const layout = computeMenuLayout(W, H, {
       hasCheckpoint: Boolean(resumeCheckpoint),
+      hasReturn: showReturn,
       hasRecord: recordText.length > 0,
       recordLines: recordText.length > 40 ? 2 : 1,
       hasChallenge: Boolean(incomingChallenge || incomingDuelId),
@@ -849,6 +859,38 @@ export class MenuScene extends Phaser.Scene {
       };
       newRunHit.on('pointerup', activateNewRun);
       keyboard.add(newRunHit, () => MENU_COPY.newRun, activateNewRun);
+    }
+
+    if (showReturn) {
+      // Back to the finished run's result, shown without starting the Game
+      // scene: the UI scene renders the saved snapshot on top of the menu.
+      // `launch` (not `start`) keeps the menu alive underneath, so the
+      // result's own "В МЕНЮ" button can bring the player back here.
+      const returnW = Math.min(layout.contentWidth, 220);
+      const returnHit = this.add
+        .rectangle(W / 2, layout.secondaryY, returnW, layout.secondaryHeight, VISUAL.panelRaised, 0.9)
+        .setStrokeStyle(1, COLORS.cyan, 0.45)
+        .setDepth(7)
+        .setName('ofeliya-menu-return-result')
+        .setInteractive({ useHandCursor: true });
+      this.add
+        .text(W / 2, layout.secondaryY, MENU_COPY.returnResult, {
+          fontFamily: FONT,
+          fontSize: layout.compact ? '11px' : '12px',
+          fontStyle: 'bold',
+          color: '#8fe8ff',
+          letterSpacing: 1,
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setDepth(8);
+      const activateReturn = () => {
+        Sfx.play('click');
+        PlatformBridge.haptic('medium');
+        this.scene.launch('UI');
+      };
+      returnHit.on('pointerup', activateReturn);
+      keyboard.add(returnHit, () => MENU_COPY.returnResult, activateReturn);
     }
     // ---- Navigation grid --------------------------------------------------
     // The six meta destinations are a 3x2 grid. A third row was measured first

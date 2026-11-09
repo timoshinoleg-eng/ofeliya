@@ -228,6 +228,7 @@ try {
   assert.equal(copy.MENU_COPY.start, 'НАЧАТЬ ЗАРАЖЕНИЕ', 'fresh start action');
   assert.equal(copy.MENU_COPY.resume, 'ПРОДОЛЖИТЬ ЗАБЕГ', 'resume action');
   assert.equal(copy.MENU_COPY.newRun, 'НОВЫЙ ЗАБЕГ', 'new run action');
+  assert.equal(copy.MENU_COPY.returnResult, '← К РЕЗУЛЬТАТУ', 'return to result action');
   assert.equal(
     copy.MENU_COPY.nextRunHint,
     'Для нового забега',

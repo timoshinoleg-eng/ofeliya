@@ -624,6 +624,9 @@ export class GameScene extends Phaser.Scene {
 
     this.registry.set('joy', { x: 0, y: 0 });
     this.registry.set('runResult', null);
+    // A fresh run retires the previous finished run: the menu must not
+    // offer a return to a result the player has already left behind.
+    this.registry.remove('lastRunResult');
     this.registry.set('run', this.snapshot());
     this.saveCheckpointNow();
     if (!resume) {

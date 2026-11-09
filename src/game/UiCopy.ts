@@ -106,6 +106,8 @@ export const MENU_COPY = {
   resume: 'ПРОДОЛЖИТЬ ЗАБЕГ',
   /** Secondary action when a checkpoint exists. */
   newRun: 'НОВЫЙ ЗАБЕГ',
+  /** Secondary action when a finished run waits in the registry: back to its result screen. */
+  returnResult: '← К РЕЗУЛЬТАТУ',
   /**
    * Says that the run-configuration cards belong to the next run.
    *

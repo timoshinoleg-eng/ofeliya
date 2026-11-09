@@ -31,7 +31,7 @@ import { DualMoveControls } from '../game/DualMoveControls';
 import { getLegendaryDefinition, type LegendaryId } from '../game/LegendarySystem';
 import { TwinStickControls } from '../game/TwinStickControls';
 import { readControlMode, type ControlMode } from '../game/ControlMode';
-import type { RunResult, RunSnapshot } from '../game/RunContracts';
+import type { LastRunResult, RunResult, RunSnapshot } from '../game/RunContracts';
 import {
   EVOLUTION_NAMES,
   UPGRADES,
@@ -62,7 +62,7 @@ import {
   type RunTokenGrant,
 } from '../systems/ScoreClient';
 import { createFixedSeedDuel, submitDuelAttempt, trackDuelEvent } from '../systems/DuelClient';
-import { clearDailyIntent, readDailyIntent, resolveDailyResultBranch } from '../game/DailyRunIntent';
+import { clearDailyIntent, readDailyIntent, resolveDailyResultBranch, type DailyResultBranch } from '../game/DailyRunIntent';
 import { OnboardingState, type OnboardingStepId } from '../systems/onboardingState';
 import { buildDailyShareSuffix, recordDailyResult } from '../systems/DailyHistory';
 import { trackProductEvent } from '../systems/AnalyticsClient';
@@ -550,6 +550,25 @@ export class UIScene extends Phaser.Scene {
       this.hideModal();
       this.hideStageTransition();
       this.showGameOver(res);
+    }
+
+    // Return from the Codex: the Game scene is stopped, so there is no
+    // runResult anymore — the snapshot saved at the opening tap is the only
+    // copy. It renders through the re-show path: no submit, no video, no
+    // re-run of finish. A fresh run clears the snapshot in GameScene.create().
+    if (!res && !this.overShown) {
+      const last = this.registry.get('lastRunResult') as LastRunResult | undefined | null;
+      if (last) {
+        this.overShown = true;
+        this.hideModal();
+        this.hideStageTransition();
+        this.renderGameOver(last.result, {
+          reshow: true,
+          dailyBranch: last.dailyBranch,
+          duelChallenge: last.duelChallenge,
+          challengeTarget: last.challengeTarget,
+        });
+      }
     }
   }
 
@@ -2314,22 +2333,39 @@ export class UIScene extends Phaser.Scene {
     }
   }
 
-  private renderGameOver(res: RunResult): void {
+  // A re-show renders a saved snapshot after the Codex transition: the Game
+  // scene is stopped, so the run must NOT be submitted again, the video
+  // interstitial must NOT play, and the daily intent/ticket are already gone
+  // (the first render cleared them). The caller passes the branch resolved
+  // at the first render, so a daily result cannot re-render as ranked.
+  // The duel challenge and the challenge target come from the snapshot too:
+  // the Menu's create() resets both when it starts after the transition.
+  private renderGameOver(
+    res: RunResult,
+    opts?: { reshow?: boolean; dailyBranch?: DailyResultBranch; duelChallenge?: DuelChallengeSnapshot | null; challengeTarget?: ChallengePayload | null }
+  ): void {
     this.uiBlocked = true;
-    const duelChallenge = this.registry.get('duelChallenge') as DuelChallengeSnapshot | null | undefined;
+    const duelChallenge = opts?.reshow
+      ? (opts.duelChallenge ?? null)
+      : (this.registry.get('duelChallenge') as DuelChallengeSnapshot | null | undefined);
     const dailyIntent = readDailyIntent(this.registry);
     const dailyTicket =
       (this.registry.get('dailyTicket') as DailyRunTicket | null | undefined) ?? null;
-    const dailyBranch = resolveDailyResultBranch({
+    const dailyBranch = opts?.dailyBranch ?? resolveDailyResultBranch({
       resumed: res.resumed,
       dailyIntent,
       ticket: dailyTicket,
       runSeed: res.runSeed,
       now: Date.now(),
     });
+    // A daily result (a valid ticket, or a blocked intent) is never a ranked
+    // standard one. The branch and the intent agree on the first render
+    // ('inactive' exactly when the intent is null, given a non-resumed run),
+    // so the re-show can read the branch instead of the cleared intent.
+    const isDailyResult = dailyBranch === 'daily' || dailyBranch === 'blocked';
     const standardFresh = res.difficultyId === 'standard' && !res.resumed;
     // A daily-launched run must never render global-ranking semantics.
-    const ranked = standardFresh && !duelChallenge && dailyIntent === null;
+    const ranked = standardFresh && !duelChallenge && dailyBranch === 'inactive';
     const duelCreatable = standardFresh && res.win;
     const W = this.scale.width;
     const H = this.scale.height;
@@ -2580,7 +2616,7 @@ export class UIScene extends Phaser.Scene {
           detailY,
           resultModeChip({
             resumed: res.resumed,
-            daily: dailyIntent !== null,
+            daily: isDailyResult,
             duel: duelChallenge !== null,
             difficultyId: res.difficultyId,
             platform: PlatformBridge.kind,
@@ -2610,7 +2646,13 @@ export class UIScene extends Phaser.Scene {
       .setResolution(2);
     c.add(scoreStatus);
 
-    if (dailyBranch === 'resumed') {
+    if (opts?.reshow) {
+      // The submit already happened once, before the video interstitial;
+      // its outcome (rank) is not part of RunResult, so the status row
+      // cannot be re-rendered truthfully. Hiding it is the honest option:
+      // the re-show submits nothing, clears nothing and records nothing.
+      scoreStatus.setVisible(false);
+    } else if (dailyBranch === 'resumed') {
       scoreStatus.setText(RESULT_COPY.resumed).setColor('#ffe066');
     } else if (dailyBranch === 'daily' && dailyTicket) {
       // Keep Daily identity through the interstitial so the result screen renders the
@@ -2709,7 +2751,9 @@ export class UIScene extends Phaser.Scene {
       );
     }
 
-    const challengeTarget = this.registry.get('challengeTarget') as ChallengePayload | null | undefined;
+    const challengeTarget = opts?.reshow
+      ? (opts.challengeTarget ?? null)
+      : (this.registry.get('challengeTarget') as ChallengePayload | null | undefined);
     if (challengeTarget) {
       detailY += compact ? 24 : 29;
       const target =
@@ -2837,6 +2881,18 @@ export class UIScene extends Phaser.Scene {
           }
         }
         if (!best) return;
+        // Keep the finished run alive across the Codex transition: the Game
+        // SHUTDOWN handler removes `runResult`, and the menu's "back to
+        // result" action needs a copy that survives it. The daily branch,
+        // the duel challenge and the challenge target are snapshotted with
+        // it — the first render clears the intent and the ticket, and the
+        // Menu's create() resets the challenge keys when it starts.
+        this.registry.set('lastRunResult', {
+          result: res,
+          dailyBranch,
+          duelChallenge: duelChallenge ?? null,
+          challengeTarget: challengeTarget ?? null,
+        } satisfies LastRunResult);
         this.registry.set('openCodexOnMenu', true);
         this.registry.set('openCodexEntry', codexEntryRef(best.entry));
         this.gs?.scene.stop();
@@ -2851,11 +2907,9 @@ export class UIScene extends Phaser.Scene {
         priorResult: res.win ? 'win' : 'death',
         timeMs: Math.round(res.timeMs),
       });
-      // Result Game is paused. Treat shutdown as a barrier: only start the fresh run after Phaser
-      // has fully completed the old Game teardown. UI stays alive until that point, so the
-      // SceneManager always has an active owner for the queued transition.
-      gameScene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      const startFreshRun = () => {
         this.registry.set('runResult', null);
+        this.registry.remove('lastRunResult');
         if (duelChallenge) {
           this.registry.set('duelChallenge', duelChallenge);
           this.registry.set('runSeedOverride', duelChallenge.runSeed);
@@ -2863,9 +2917,25 @@ export class UIScene extends Phaser.Scene {
           this.registry.set('controlMode', duelChallenge.controlMode);
           void trackDuelEvent(duelChallenge.challengeId, 'rematch', PlatformBridge);
         }
+        // On a re-show the menu is still alive underneath (the UI was
+        // launched over it); a fresh run starts from the run screen, not
+        // from the menu, so the menu goes away like in the normal flow.
+        if (this.scene.isActive('Menu')) this.scene.stop('Menu');
         this.scene.launch('Game');
         this.scene.restart();
-      });
+      };
+      // Result Game is paused. Treat shutdown as a barrier: only start the fresh run after Phaser
+      // has fully completed the old Game teardown. UI stays alive until that point, so the
+      // SceneManager always has an active owner for the queued transition.
+      // A re-shown result has no live Game scene: it was already stopped by
+      // the Codex transition, so its SHUTDOWN event will never fire again
+      // and waiting for it would leave the button dead. Start directly.
+      const gameAlive = this.scene.isActive('Game') || this.scene.isPaused('Game');
+      if (!gameAlive) {
+        startFreshRun();
+        return;
+      }
+      gameScene.events.once(Phaser.Scenes.Events.SHUTDOWN, startFreshRun);
       this.scene.stop('Game');
     }, 'ofeliya-result-retry');
     y += gap;
@@ -2886,7 +2956,7 @@ export class UIScene extends Phaser.Scene {
       // disclaimer or a same-seed promise.
       const legendaryName =
         res.legendaryIds.length > 0 ? getLegendaryDefinition(res.legendaryIds[0]).title : null;
-      const dailySuffix = dailyIntent ? buildDailyShareSuffix({ timeMs: res.timeMs }) : '';
+      const dailySuffix = isDailyResult ? buildDailyShareSuffix({ timeMs: res.timeMs }) : '';
       let shareText = buildShareText({
         win: res.win,
         time: mins,
@@ -2913,7 +2983,7 @@ export class UIScene extends Phaser.Scene {
           if (!ok) {
             this.toast(c, 'Нативный шаринг недоступен в этом клиенте');
           } else {
-            void trackProductEvent('share', PlatformBridge, { kind: 'challenge', runSeed: res.runSeed, daily: Boolean(dailyIntent) });
+            void trackProductEvent('share', PlatformBridge, { kind: 'challenge', runSeed: res.runSeed, daily: isDailyResult });
           }
           if (ok && !link && PlatformBridge.kind === 'max') {
             this.toast(c, 'Ссылка вызова не настроена');
@@ -2925,7 +2995,7 @@ export class UIScene extends Phaser.Scene {
       if (!duelCreatable) {
         void PlatformBridge.shareResult(shareText).then((ok) => {
           if (!ok) this.toast(c, 'Нативный шаринг недоступен в этом клиенте');
-          else void trackProductEvent('share', PlatformBridge, { kind: dailyIntent ? 'daily-result' : 'result', runSeed: res.runSeed, daily: Boolean(dailyIntent) });
+          else void trackProductEvent('share', PlatformBridge, { kind: isDailyResult ? 'daily-result' : 'result', runSeed: res.runSeed, daily: isDailyResult });
         });
         return;
       }
