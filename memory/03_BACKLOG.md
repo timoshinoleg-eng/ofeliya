@@ -1,6 +1,6 @@
 # Mutation screens B/C + boss trophy — 2026-11-09
 
-Ветка qa/mutation-screen-b-c-trophy. После мержа: физическая приёмка на Samsung S20+ (все QA-адреса: ?qaMutation=A|B|C, ?qaTrophy=fresh|one|used|rhythm при VITE_QA_TOOLS=1) — NOT_RUN, за владельцем; скриншоты/видео телефона приложить к PR. Дальше по экрану мутаций: финальная визуальная доводка B/C за владельцем после приёмки A.
+Ветка `qa/mutation-screen-b-c-trophy`, HEAD 68fea1b. Замечания Mark из ревью PR #278 закрыты: CI test:qa-perf (перестановка QA-блока, тест не менялся), копи 4 спец-карт до согласованного смысла, штатный переход прогнан новой пробой trophy-transition-probe.cjs (реальный путь без ?qaTrophy, артефакты transition-*.{png,webm}). Зелёное на финальном коде: tsc, build со штампом, mutation-states-data/copy/ui-copy/qa-perf, choice-integrity, mutation-states-probe (оба размера), legendary-layout-probe (88), trophy-transition-probe. Тело PR #278 обновлено. После мержа: физическая приёмка на Samsung S20+ (все QA-адреса: ?qaMutation=A|B|C, ?qaTrophy=fresh|one|used|rhythm при VITE_QA_TOOLS=1) — NOT_RUN, за владельцем; скриншоты/видео телефона приложить к PR. Дальше по экрану мутаций: финальная визуальная доводка B/C за владельцем после приёмки A.
 
 # Donor core part B — 2026-11-04
 
