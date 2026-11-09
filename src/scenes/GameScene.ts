@@ -56,6 +56,7 @@ import { readControlMode, type ControlMode } from '../game/ControlMode';
 import { generateRunSeed, RunRng } from '../game/RunRng';
 import { QaPerfOverlay } from '../game/qaPerf';
 import { parseQaHide, qaHideLabel, toggleQaHide, type QaHideGroup } from '../game/qaHide';
+import { applyQaMutationFixture, parseQaMutationState } from '../game/qaMutationStates';
 import { ImpactDirector } from '../game/ImpactDirector';
 import { Player } from '../game/Player';
 import { Enemy } from '../game/Enemy';
@@ -669,6 +670,16 @@ export class GameScene extends Phaser.Scene {
     if (import.meta.env.DEV || import.meta.env.VITE_QA_TOOLS === '1') {
       const hide = parseQaHide(window.location.search);
       this.qaHide = hide;
+      // QA fixed mutation-choice states: ?qaMutation=A|B|C opens the agreed
+      // fixed offer through the REAL choice path (pendingChoices +
+      // awaitingChoice -> UIScene level-up modal). Stacks go through the real
+      // card apply(); picking, pause and return to battle stay ordinary.
+      const qaMutation = parseQaMutationState(window.location.search);
+      if (qaMutation) {
+        applyQaMutationFixture(this.runState, qaMutation);
+        this.pendingChoices = [...qaMutation.choices];
+        this.awaitingChoice = true;
+      }
       this.qaPerf = new QaPerfOverlay(this, () => ({
         enemies: this.enemies.countActive(true),
         bullets: this.bullets.countActive(true),

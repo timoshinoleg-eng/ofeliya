@@ -256,8 +256,14 @@ async function tapCard(page, index, tag, label, { doubleTap = false } = {}) {
       report.sizes.push(sizeReport);
       const tag = `${size.width}x${size.height}`;
 
-      const bootFresh = async () => {
-        const ctx = await browser.newContext({ viewport: size, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
+      const bootFresh = async (query = '') => {
+        const ctx = await browser.newContext({
+          viewport: size,
+          deviceScaleFactor: 1,
+          hasTouch: true,
+          isMobile: true,
+          ...(size.width === 390 && query === '' ? { recordVideo: { dir: path.join(OUT_DIR, 'video-tmp') } } : {}),
+        });
         await ctx.route('https://st.max.ru/**', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: '' }));
         await ctx.addInitScript(() => {
           localStorage.setItem('ofeliya_save_v1', JSON.stringify({ muted: true, runs: 1 }));
@@ -272,7 +278,7 @@ async function tapCard(page, index, tag, label, { doubleTap = false } = {}) {
         const page = await ctx.newPage();
         const errors = [];
         page.on('pageerror', (error) => errors.push(String(error)));
-        await page.goto(BASE, { waitUntil: 'domcontentloaded' });
+        await page.goto(BASE + query, { waitUntil: 'domcontentloaded' });
         await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
         await page.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
         await page.waitForFunction(() => window.__game.scene.isActive('UI') &&
@@ -323,7 +329,87 @@ async function tapCard(page, index, tag, label, { doubleTap = false } = {}) {
         check(after.gamePaused === false && after.gameActive === true, `${tag} A: Game must resume after the pick`);
         check(errors.length === 0, `${tag} A: page errors ${JSON.stringify(errors)}`);
         sizeReport.states.A = { cards: modal.cardCount, clipped: modal.cards.flatMap((c) => c.clipped) };
+        const videoA = page.video();
         await ctx.close();
+        if (videoA) {
+          const p = await videoA.path().catch(() => null);
+          if (p && fs.existsSync(p)) fs.renameSync(p, path.join(OUT_DIR, `${tag}-A-tap-and-return-record.webm`));
+        }
+      }
+
+      /* ------------- A-trigger: insurance pick vs lethal rescue ------------- */
+      if (size.width === 390) {
+        const { ctx, page, errors } = await bootFresh();
+        await page.evaluate(async () => {
+          const modules = await window.__qaStates.defs();
+          window.__qaStates.openModal([
+            window.__qaStates.legendaryChoice(modules, 'last-carrier'),
+            window.__qaStates.upgradeChoice(modules, 'infect'),
+            window.__qaStates.upgradeChoice(modules, 'lysis'),
+          ]);
+        });
+        await page.waitForFunction(() => window.__game.scene.getScene('UI').modalOpen);
+        await page.waitForTimeout(700);
+        // 1) The PICK only reserves the insurance: HP and the battle are untouched.
+        await tapCard(page, 0, tag, 'A-insurance');
+        await page.waitForTimeout(2000); // legendary ceremony auto-dismiss
+        const reserved = await page.evaluate(() => {
+          const game = window.__game.scene.getScene('Game');
+          return {
+            hasCarrier: game.runState.hasLegendary('last-carrier'),
+            used: game.lastCarrierUsed,
+            hp: game.runState.stage.hp,
+          };
+        });
+        check(reserved.hasCarrier === true, `${tag} A-trigger: pick must own the insurance`);
+        check(reserved.used === false, `${tag} A-trigger: the pick itself must NOT fire the rescue`);
+        check(reserved.hp === 1_000_000, `${tag} A-trigger: the pick must not touch HP, got ${reserved.hp}`);
+        await page.screenshot({ path: path.join(OUT_DIR, `${tag}-A-insurance-picked.png`) });
+
+        // 2) Lethal damage fires the rescue through the real combat path.
+        await page.evaluate(() => {
+          const game = window.__game.scene.getScene('Game');
+          game.runState.stage.hp = 15;
+          game.runState.stage.xp = 44;
+        });
+        await page.waitForFunction(() => window.__game.scene.getScene('Game').lastCarrierUsed === true, null, { timeout: 30_000 });
+        const fired = await page.evaluate(() => {
+          const game = window.__game.scene.getScene('Game');
+          const player = game.player;
+          return {
+            hp: game.runState.stage.hp,
+            xp: game.runState.stage.xp,
+            enemiesLeft: game.enemies.getChildren().filter((e) => e.active && !e.isBoss).length,
+            form: { spike: player.spikeCrown.visible, capsid: player.capsidShell.visible, lysis: player.lysisCore.visible },
+          };
+        });
+        check(fired.hp === 1, `${tag} A-trigger: rescue leaves 1 HP, got ${fired.hp}`);
+        check(fired.xp === 33, `${tag} A-trigger: 25% of level progress lost (44 -> 33), got ${fired.xp}`);
+        check(fired.enemiesLeft === 0, `${tag} A-trigger: regular enemies cleared, ${fired.enemiesLeft} left`);
+        check(fired.form.spike && fired.form.capsid && fired.form.lysis,
+          `${tag} A-trigger: 8-second mutation form must be visible`);
+        await page.screenshot({ path: path.join(OUT_DIR, `${tag}-A-insurance-triggered.png`) });
+        // Keep the run alive to watch the form revert after 8 seconds.
+        await page.evaluate(() => {
+          const game = window.__game.scene.getScene('Game');
+          game.runState.stage.hp = 1_000_000;
+        });
+        await page.waitForTimeout(8600);
+        const reverted = await page.evaluate(() => {
+          const player = window.__game.scene.getScene('Game').player;
+          return { spike: player.spikeCrown.visible, capsid: player.capsidShell.visible, lysis: player.lysisCore.visible };
+        });
+        check(!reverted.spike && !reverted.capsid && !reverted.lysis,
+          `${tag} A-trigger: form must revert after 8 s (no owned evolution)`);
+        await page.screenshot({ path: path.join(OUT_DIR, `${tag}-A-insurance-form-reverted.png`) });
+        check(errors.length === 0, `${tag} A-trigger: page errors ${JSON.stringify(errors)}`);
+        sizeReport.states.Atrigger = { hp: fired.hp, xp: fired.xp, enemiesLeft: fired.enemiesLeft };
+        const videoT = page.video();
+        await ctx.close();
+        if (videoT) {
+          const p = await videoT.path().catch(() => null);
+          if (p && fs.existsSync(p)) fs.renameSync(p, path.join(OUT_DIR, `${tag}-A-insurance-trigger-record.webm`));
+        }
       }
 
       /* ------------------------------ B ------------------------------ */
@@ -372,7 +458,12 @@ async function tapCard(page, index, tag, label, { doubleTap = false } = {}) {
         await page.screenshot({ path: path.join(OUT_DIR, `${tag}-B-after-pick-offer.png`) });
         check(errors.length === 0, `${tag} B: page errors ${JSON.stringify(errors)}`);
         sizeReport.states.B = { cards: modal.cardCount, clipped: modal.cards.flatMap((c) => c.clipped) };
+        const videoB = page.video();
         await ctx.close();
+        if (videoB) {
+          const p = await videoB.path().catch(() => null);
+          if (p && fs.existsSync(p)) fs.renameSync(p, path.join(OUT_DIR, `${tag}-B-pick-and-offer-record.webm`));
+        }
       }
 
       /* ------------------------------ C ------------------------------ */
@@ -438,9 +529,49 @@ async function tapCard(page, index, tag, label, { doubleTap = false } = {}) {
         await page.waitForFunction(() => !window.__game.scene.getScene('UI').modalOpen && window.__game.scene.isActive('Game'), null, { timeout: 15_000 });
         const after = await page.evaluate(() => window.__qaStates.snapshot());
         check(after.evolutions.includes('singularity'), `${tag} C: singularity must be active after the ceremony`);
+        // The same pick changes the look AND opens the «Цепь лизиса» condition
+        // (legendary prerequisite evo:singularity).
+        const chain = await page.evaluate(async () => {
+          const leg = await import('/src/game/LegendarySystem.ts');
+          const game = window.__game.scene.getScene('Game');
+          return {
+            eligible: leg.eligibleLegendaries(game.runState).map((l) => l.id),
+            player: {
+              spike: game.player.spikeCrown.visible,
+              capsid: game.player.capsidShell.visible,
+              lysis: game.player.lysisCore.visible,
+            },
+          };
+        });
+        check(chain.eligible.includes('lysis-chain'), `${tag} C: singularity must open the lysis-chain condition, got ${chain.eligible}`);
+        check(chain.player.lysis === true, `${tag} C: singularity silhouette must show on the player in combat`);
         await page.waitForTimeout(400);
         await page.screenshot({ path: path.join(OUT_DIR, `${tag}-C-evolved-in-combat.png`) });
         check(errors.length === 0, `${tag} C: page errors ${JSON.stringify(errors)}`);
+        sizeReport.states.C.chainEligible = chain.eligible;
+        const videoC = page.video();
+        await ctx.close();
+        if (videoC) {
+          const p = await videoC.path().catch(() => null);
+          if (p && fs.existsSync(p)) fs.renameSync(p, path.join(OUT_DIR, `${tag}-C-evolution-pick-record.webm`));
+        }
+      }
+
+      /* ------------- QA parameter opens the state (phone path) ------------- */
+      {
+        const { ctx, page, errors } = await bootFresh('?qaMutation=B');
+        // The seam applies the fixture in Game create; the modal opens through
+        // the normal UIScene path — no page-side injection at all.
+        await page.waitForFunction(() => window.__game.scene.getScene('UI').modalOpen, null, { timeout: 8000 });
+        await page.waitForTimeout(700);
+        const snap = await page.evaluate(() => window.__qaStates.snapshot());
+        check(snap.choices.join(',') === 'magnet,infect,lysis', `${tag} QA-param B: order ${snap.choices}`);
+        const modal = await readModal(page, size);
+        check(modal.cards[0].texts.some((t) => t.includes('УРОВЕНЬ 2/4')), `${tag} QA-param B: magnet 1/2 progress missing`);
+        check(modal.cards[0].texts.some((t) => t.includes('121,5 → 164')), `${tag} QA-param B: magnet pair missing`);
+        await page.screenshot({ path: path.join(OUT_DIR, `${tag}-QA-param-B.png`) });
+        check(errors.length === 0, `${tag} QA-param B: page errors ${JSON.stringify(errors)}`);
+        sizeReport.states.qaParamB = { choices: snap.choices };
         await ctx.close();
       }
     }

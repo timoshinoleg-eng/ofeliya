@@ -36,7 +36,20 @@
             "displayH": 568,
             "scaleW": 320,
             "scaleH": 568
-          }
+          },
+          "chainEligible": [
+            "lysis-chain",
+            "zero-point",
+            "core-predator",
+            "last-carrier"
+          ]
+        },
+        "qaParamB": {
+          "choices": [
+            "magnet",
+            "infect",
+            "lysis"
+          ]
         }
       }
     },
@@ -47,6 +60,11 @@
         "A": {
           "cards": 3,
           "clipped": []
+        },
+        "Atrigger": {
+          "hp": 1,
+          "xp": 33,
+          "enemiesLeft": 0
         },
         "B": {
           "cards": 3,
@@ -67,7 +85,20 @@
             "displayH": 568,
             "scaleW": 320,
             "scaleH": 568
-          }
+          },
+          "chainEligible": [
+            "lysis-chain",
+            "zero-point",
+            "core-predator",
+            "last-carrier"
+          ]
+        },
+        "qaParamB": {
+          "choices": [
+            "magnet",
+            "infect",
+            "lysis"
+          ]
         }
       }
     }

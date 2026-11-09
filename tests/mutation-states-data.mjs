@@ -15,6 +15,11 @@
  *           offerable) but must NOT apply the evolution by itself.
  * State C — evolution offered: СИНГУЛЯРНОСТЬ already among the three choices,
  *           full effect + boss caveat, visually distinct kind.
+ *
+ * The same file covers the QA open path (src/game/qaMutationStates.ts):
+ * ?qaMutation=A|B|C must reproduce these exact states through the real
+ * choice pipeline, and every «было → стало» pair must be presentable with its
+ * characteristic name and unit (мс for infection time, ед. for radii/damage).
  */
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -39,6 +44,7 @@ try {
     [
       resolve('node_modules/typescript/bin/tsc'),
       'src/game/upgradeBeforeAfter.ts',
+      'src/game/qaMutationStates.ts',
       'src/game/RunState.ts',
       'src/game/UpgradeSystem.ts',
       'src/game/EvolutionSystem.ts',
@@ -68,14 +74,19 @@ try {
   // eslint-disable-next-line no-require-imports
   const { UPGRADES } = require(join(temp, 'game/UpgradeSystem.js'));
   // eslint-disable-next-line no-require-imports
-  const { formatUpgradeEffectSuffix } = require(join(temp, 'game/upgradeBeforeAfter.js'));
+  const { formatUpgradeEffectSuffix, getUpgradeBeforeAfter } = require(join(temp, 'game/upgradeBeforeAfter.js'));
   // eslint-disable-next-line no-require-imports
   const { EVOLUTIONS, getEvolutionDef, readyEvolutions, rollRunChoices } = require(join(
     temp,
     'game/EvolutionSystem.js'
   ));
   // eslint-disable-next-line no-require-imports
-  const { getLegendaryDefinition } = require(join(temp, 'game/LegendarySystem.js'));
+  const { getLegendaryDefinition, eligibleLegendaries } = require(join(temp, 'game/LegendarySystem.js'));
+  // eslint-disable-next-line no-require-imports
+  const {
+    parseQaMutationState,
+    applyQaMutationFixture,
+  } = require(join(temp, 'game/qaMutationStates.js'));
 
   const def = (id) => UPGRADES.find((u) => u.id === id);
   const applyTimes = (s, id, n) => {
@@ -85,6 +96,58 @@ try {
       s.bump(id);
     }
   };
+
+  /* ---------------- QA open path (?qaMutation=A|B|C) ---------------- */
+  // The phone-openable QA fixture must reproduce the same states through the
+  // real definitions — ids, order, kinds — and unknown values stay a no-op.
+  eq(parseQaMutationState('?qaMutation=A').choices.map((c) => c.id).join(','),
+    'legendary:last-carrier,infect,lysis', 'QA fixture A order');
+  eq(parseQaMutationState('?qaMutation=B').choices.map((c) => c.id).join(','),
+    'magnet,infect,lysis', 'QA fixture B order');
+  eq(parseQaMutationState('?qaMutation=C').choices.map((c) => c.id).join(','),
+    'evo:singularity,infect,lysis', 'QA fixture C order');
+  eq(parseQaMutationState('?qaMutation=nope'), null, 'QA fixture unknown is a no-op');
+  eq(parseQaMutationState(''), null, 'QA fixture absent is a no-op');
+
+  // The fixture stacks go through the real apply(): B lands on nova 3/3 +
+  // magnet 1/2, C on nova 3/3 + magnet 2/2 — identical to hand-applied states.
+  const qaB = new RunState({ id: 'bloodstream', order: 1 });
+  applyQaMutationFixture(qaB, parseQaMutationState('?qaMutation=B'));
+  eq(qaB.stackOf('nova'), 3, 'QA fixture B: nova 3/3');
+  eq(qaB.stackOf('magnet'), 1, 'QA fixture B: magnet 1/2');
+  const qaC = new RunState({ id: 'bloodstream', order: 1 });
+  applyQaMutationFixture(qaC, parseQaMutationState('?qaMutation=C'));
+  eq(qaC.stackOf('nova'), 3, 'QA fixture C: nova 3/3');
+  eq(qaC.stackOf('magnet'), 2, 'QA fixture C: magnet 2/2');
+
+  /* -------- Pair labels and units (what the player must read) -------- */
+  // Every «было → стало» pair is presentable with the characteristic name
+  // from the game data and a unit: мс for infection time, ед. of the game
+  // world for radii and damage.
+  const UNITS = { 'Время заражения': 'мс' };
+  const unit = (label) => UNITS[label] ?? 'ед.';
+  const displayPairs = (state, d) =>
+    getUpgradeBeforeAfter(state, d).map((l) => `${l.label}: ${l.before} → ${l.after} ${unit(l.label)}`);
+
+  const aFresh = new RunState({ id: 'bloodstream', order: 1 });
+  eq(
+    displayPairs(aFresh, def('infect')).join(' | '),
+    'Время заражения: 1250 → 1025 мс | Радиус заражения: 58 → 62,6 ед.',
+    'A: infect pairs with names and units'
+  );
+  eq(
+    displayPairs(aFresh, def('lysis')).join(' | '),
+    'Урон взрыва: 26 → 33,8 ед. | Радиус взрыва: 150 → 162 ед.',
+    'A: lysis pairs with names and units'
+  );
+  const bState = new RunState({ id: 'bloodstream', order: 1 });
+  applyTimes(bState, 'nova', 3);
+  applyTimes(bState, 'magnet', 1);
+  eq(
+    displayPairs(bState, def('magnet')).join(' | '),
+    'Радиус подбора РНК: 121,5 → 164 ед.',
+    'B: magnet pair with name and unit'
+  );
 
   /* ------------------------------ State A ------------------------------ */
   // Fresh run: the base values themselves are the «before» of the first stack.
@@ -175,6 +238,37 @@ try {
     'БЕЛКОВЫЕ ШИПЫ III + ПРОНИКНОВЕНИЕ II',
     'C: hyperшип recipe unchanged'
   );
+
+  // Applying the evolution through its real apply() must change the look in
+  // combat AND open the condition for the «Цепь лизиса» legendary
+  // (prerequisite evo:singularity). Both effects come from the same pick.
+  const cAfter = new RunState({ id: 'bloodstream', order: 1 });
+  applyTimes(cAfter, 'nova', 3);
+  applyTimes(cAfter, 'magnet', 2);
+  evoChoice.apply(cAfter);
+  assert(cAfter.hasEvolution('singularity'), 'C: pick applies the evolution');
+  assert(
+    eligibleLegendaries(cAfter).some((l) => l.id === 'lysis-chain'),
+    'C: singularity must open the lysis-chain legendary condition'
+  );
+  // The «урон и отброс» wording of PR #277 is NOT a new evolution effect:
+  // the base nova wave already knocks back (boss caveat lives in the source).
+  assert(singularity.effect.includes('отбрасывает'), 'C: source effect unchanged');
+
+  /* ------------- Carrier: insurance pick vs lethal trigger ------------- */
+  // The card reserves the insurance at pick time; the rescue itself fires
+  // only on lethal damage (GameScene.activateLastCarrier): 1 HP left, 25% of
+  // the current level progress lost, regular enemies cleared, 8-second form.
+  const carrierState = new RunState({ id: 'bloodstream', order: 1 });
+  const carrierChoice = {
+    id: 'legendary:last-carrier',
+    kind: 'legendary',
+    apply: (s) => s.addLegendary('last-carrier'),
+  };
+  carrierChoice.apply(carrierState);
+  assert(carrierState.hasLegendary('last-carrier'), 'carrier: pick reserves the insurance');
+  eq(carrierState.stage.hp, 100, 'carrier: the pick itself must not touch HP');
+  assert(!carrierState.run.legendaryIds.has('zero-point'), 'carrier: unrelated legendaries untouched');
 
   console.log('mutation-states-data: OK (A/B/C fixtures match game sources)');
 } finally {
