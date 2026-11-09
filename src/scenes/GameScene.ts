@@ -671,6 +671,19 @@ export class GameScene extends Phaser.Scene {
     if (import.meta.env.DEV || import.meta.env.VITE_QA_TOOLS === '1') {
       const hide = parseQaHide(window.location.search);
       this.qaHide = hide;
+      // QA instrumentation first: the perf overlay and the render-split toggle
+      // buttons must stay close to the gate (source-contract in
+      // tests/qa-perf-overlay.mjs), so the fixed-state fixtures below cannot
+      // push the construction out of the gated block.
+      this.qaPerf = new QaPerfOverlay(this, () => ({
+        enemies: this.enemies.countActive(true),
+        bullets: this.bullets.countActive(true),
+        gems: this.gems.countActive(true),
+        density: this.visualEnemyDensity,
+        tier: this.runtimeQuality.profile.level,
+      }), qaHideLabel(hide));
+      if (hide.size > 0) this.applyQaHide(hide);
+      this.createQaToggleButtons();
       // QA fixed mutation-choice states: ?qaMutation=A|B|C opens the agreed
       // fixed offer through the REAL choice path (pendingChoices +
       // awaitingChoice -> UIScene level-up modal). Stacks go through the real
@@ -696,15 +709,6 @@ export class GameScene extends Phaser.Scene {
         this.awaitingChoice = true;
         this.legendaryRewardPending = true;
       }
-      this.qaPerf = new QaPerfOverlay(this, () => ({
-        enemies: this.enemies.countActive(true),
-        bullets: this.bullets.countActive(true),
-        gems: this.gems.countActive(true),
-        density: this.visualEnemyDensity,
-        tier: this.runtimeQuality.profile.level,
-      }), qaHideLabel(hide));
-      if (hide.size > 0) this.applyQaHide(hide);
-      this.createQaToggleButtons();
     }
 
     // Mobile WebViews can discard a retained page without another animation frame.

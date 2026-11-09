@@ -588,7 +588,7 @@ async function tapCard(page, index, tag, label, { doubleTap = false } = {}) {
         check(evoCard.texts.includes('КРИТИЧЕСКАЯ МУТАЦИЯ'), `${tag} C: evolution header (distinct from legendary) missing`);
         check(evoCard.texts.includes('ЛЕГЕНДАРНАЯ МУТАЦИЯ') === false, `${tag} C: evolution card must not wear the legendary header`);
         check(evoCard.texts.some((t) => t.includes('СИНГУЛЯРНОСТЬ')), `${tag} C: singularity name missing`);
-        check(evoCard.texts.some((t) => t === 'Круговая волна: новый облик. Открывает «Цепь лизиса»'), `${tag} C: full effect missing`);
+        check(evoCard.texts.some((t) => t === 'Круговая волна: новый облик. «Цепь лизиса» может прийти отдельным предложением'), `${tag} C: full effect missing`);
         check(evoCard.texts.some((t) => t.includes('МЕМБРАННЫЙ ИМПУЛЬС III + РНК-АФФИНИТЕТ II')), `${tag} C: recipe missing`);
         // maxLines clipping audit — report what the player cannot see.
         sizeReport.states.C = { cards: modal.cardCount, clipped: modal.cards.flatMap((c) => c.clipped) };

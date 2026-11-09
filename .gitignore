@@ -31,6 +31,9 @@ skills
 .tyc-proxy-capability.json
 .tmp-browser-smoke/
 
+# сырая запись Playwright-проб до переименования артефактов
+docs/qa/*/video-tmp/
+
 # локальные env-файлы с секретами — никогда не коммитить (публичный шаблон — в .env.example)
 .env
 .env.*
