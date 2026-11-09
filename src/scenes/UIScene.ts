@@ -18,6 +18,9 @@ import { Juice } from '../game/Juice';
 import { VISUAL, VISUAL_TEXT } from '../ui/visualTokens';
 import { createSpecimenSurface, drawSpecimenSurface } from '../ui/specimenSurface';
 import { createResultReport } from '../ui/ResultReport';
+import { MIN_TOUCH } from '../ui/menuLayout';
+import { achievementSummary } from '../game/AchievementSystem';
+import { codexEntryRef, type NewCodexEntry } from '../game/runCodexOpenings';
 import { getEvolutionDef } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
 import { phaseTransitionPulse } from '../game/BossPhaseCeremony';
@@ -2459,6 +2462,89 @@ export class UIScene extends Phaser.Scene {
       );
       detailY += compact ? 23 : 27;
     }
+    // The entries this run opened in the Codex, named one by one, right after
+    // the run list: they are the newest information on the screen, so they
+    // sit above the archetype, the mode chip and the submit status — on a
+    // 320px viewport they are visible without scrolling. Each entry is two
+    // report rows (name + tab line) with one shared tap: the pair is a 44px
+    // target, and the tap opens the Codex on that entry's tab.
+    // The tap zones are fitted after createResultReport repositions the rows.
+    const openingRows: Array<{
+      name: Phaser.GameObjects.Text;
+      sub: Phaser.GameObjects.Text;
+      entry: NewCodexEntry;
+    }> = [];
+    if (res.newCodexEntries.length > 0) {
+      detailY += compact ? 24 : 29;
+      c.add(
+        this.add
+          .text(W / 2, detailY, 'ОТКРЫЛОСЬ В КОДЕКСЕ', {
+            fontFamily: FONT,
+            fontSize: compact ? '9px' : '10px',
+            fontStyle: 'bold',
+            color: '#ffe066',
+            align: 'center',
+            wordWrap: { width: W - 42 },
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+      );
+      for (const entry of res.newCodexEntries) {
+        detailY += compact ? 24 : 28;
+        const title =
+          entry.kind === 'evolution'
+            ? EVOLUTION_NAMES[entry.id]
+            : getLegendaryDefinition(entry.id).title;
+        const nameText = this.add
+          .text(W / 2, detailY, `◆ ${title}`, {
+            fontFamily: FONT,
+            fontSize: compact ? '9px' : '10px',
+            fontStyle: 'bold',
+            color: '#ffe066',
+            align: 'center',
+            wordWrap: { width: W - 42 },
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+          .setName(`ofeliya-result-opening-${entry.kind}-${entry.id}-name`);
+        c.add(nameText);
+        detailY += compact ? 24 : 28;
+        const tabLabel = entry.kind === 'evolution' ? 'Синергии' : 'Легендарные';
+        const subText = this.add
+          .text(W / 2, detailY, `Кодекс · ${tabLabel} ›`, {
+            fontFamily: FONT,
+            fontSize: compact ? '9px' : '10px',
+            color: '#8f9ab7',
+            align: 'center',
+            wordWrap: { width: W - 42 },
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+          .setName(`ofeliya-result-opening-${entry.kind}-${entry.id}-sub`);
+        c.add(subText);
+        openingRows.push({ name: nameText, sub: subText, entry });
+      }
+    }
+
+    // Achievements are a different system: they have no Codex entry, so they
+    // are named on their own line and never counted as openings.
+    if (res.newAchievements.length > 0) {
+      detailY += compact ? 24 : 29;
+      c.add(
+        this.add
+          .text(W / 2, detailY, `★ Достижение: ${achievementSummary(res.newAchievements)}`, {
+            fontFamily: FONT,
+            fontSize: compact ? '9px' : '10px',
+            fontStyle: 'bold',
+            color: '#b8f3ff',
+            align: 'center',
+            wordWrap: { width: W - 42 },
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+          .setName('ofeliya-result-achievement')
+      );
+    }
     // The archetype is a deterministic classification of the build that actually
     // emerged, so it can be named. The tags are only meaningful for a focused
     // build; a hybrid build has no single set of signals.
@@ -2623,31 +2709,6 @@ export class UIScene extends Phaser.Scene {
       );
     }
 
-    if (res.newAchievements.length > 0) {
-      detailY += compact ? 24 : 29;
-      // The records the run opened are named once, and the plate is a way into
-      // the codex: the player never has to guess where a new record went.
-      const codexPlate = this.add
-        .text(W / 2, detailY, `${META_COPY.codexEntries(res.newAchievements.length)} ›`, {
-          fontFamily: FONT,
-          fontSize: compact ? '9px' : '10px',
-          fontStyle: 'bold',
-          color: '#ffe066',
-          align: 'center',
-          wordWrap: { width: W - 42 },
-        })
-        .setOrigin(0.5)
-        .setResolution(2)
-        .setName('ofeliya-result-codex-entries');
-      codexPlate.setInteractive({ useHandCursor: true });
-      codexPlate.on('pointerup', () => {
-        this.registry.set('openCodexOnMenu', true);
-        this.gs?.scene.stop();
-        this.scene.start('Menu');
-      });
-      c.add(codexPlate);
-    }
-
     const challengeTarget = this.registry.get('challengeTarget') as ChallengePayload | null | undefined;
     if (challengeTarget) {
       detailY += compact ? 24 : 29;
@@ -2710,6 +2771,72 @@ export class UIScene extends Phaser.Scene {
     const reportTop = Math.max(statY + 36, statsBottom + 24);
     const reportRows = c.list.slice(reportStart).filter((child): child is Phaser.GameObjects.Text => child instanceof Phaser.GameObjects.Text);
     createResultReport(this, c, reportRows, W / 2, reportTop, W - 32, Math.max(50, y - 55 - reportTop), scoreStatus);
+    // The report repositioned the rows (origin 0.5, 0), so the tap zones are
+    // fitted now: each row of an opening covers 22px (4px above its text),
+    // the pair together 44px (MIN_TOUCH). A scroll drag must not navigate:
+    // the tap fires only for the same pointer with almost no movement.
+    for (const { name, sub, entry } of openingRows) {
+      const ref = codexEntryRef(entry);
+      const go = () => {
+        this.registry.set('openCodexOnMenu', true);
+        this.registry.set('openCodexEntry', ref);
+        this.gs?.scene.stop();
+        this.scene.start('Menu');
+      };
+      for (const row of [name, sub]) {
+        let armed: { id: number; x: number; y: number } | null = null;
+        row.setInteractive(
+          new Phaser.Geom.Rectangle(-(W - 32) / 2, -4, W - 32, MIN_TOUCH / 2),
+          Phaser.Geom.Rectangle.Contains
+        );
+        row.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+          armed = { id: pointer.id, x: pointer.x, y: pointer.y };
+        });
+        row.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+          if (!armed || armed.id !== pointer.id) return;
+          const moved = Math.abs(pointer.x - armed.x) + Math.abs(pointer.y - armed.y);
+          armed = null;
+          if (moved > 12) return;
+          go();
+        });
+      }
+    }
+    // When the report scrolls, its transparent hit rect sits above the rows
+    // and (the UI scene runs with topOnly) swallows their taps. Route a tap
+    // on an opening row through the hit rect itself: a tap with almost no
+    // movement on a row's band navigates, a drag still scrolls. When the
+    // report does not scroll the hit rect is not interactive and the rows'
+    // own handlers above do the job.
+    const reportHit = c.getByName('ofeliya-result-report-hit') as Phaser.GameObjects.Rectangle | null;
+    if (reportHit?.input?.enabled) {
+      let down: { id: number; x: number; y: number } | null = null;
+      reportHit.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        down = { id: pointer.id, x: pointer.x, y: pointer.y };
+      });
+      reportHit.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+        if (!down || down.id !== pointer.id) return;
+        const moved = Math.abs(pointer.x - down.x) + Math.abs(pointer.y - down.y);
+        down = null;
+        if (moved > 12) return;
+        for (const { name, sub, entry } of openingRows) {
+          for (const row of [name, sub]) {
+            const bounds = row.getBounds();
+            if (
+              pointer.x >= bounds.left &&
+              pointer.x <= bounds.right &&
+              pointer.y >= bounds.top - 4 &&
+              pointer.y <= bounds.bottom + 4
+            ) {
+              this.registry.set('openCodexOnMenu', true);
+              this.registry.set('openCodexEntry', codexEntryRef(entry));
+              this.gs?.scene.stop();
+              this.scene.start('Menu');
+              return;
+            }
+          }
+        }
+      });
+    }
     this.button(c, RESULT_COPY.newRun, W / 2, y, true, () => {
       const gameScene = this.gs;
       if (!gameScene) return;

@@ -10,6 +10,7 @@ import { CODEX_COPY, MENU_COPY, META_COPY, masteryModeLine, platformLabel } from
 import { fmtInt, joinSegments, toTitleCase } from '../game/UiFormat';
 import { IDENTITY } from '../game/identity';
 import { masteryTracks } from '../game/RunIdentity';
+import type { CodexEntryRef } from '../game/runCodexOpenings';
 import { LEGENDARIES } from '../game/LegendarySystem';
 import { STAGES } from '../game/StageDefinitions';
 import { EVOLUTION_NAMES, type EvolutionId } from '../game/UpgradeSystem';
@@ -1135,10 +1136,14 @@ export class MenuScene extends Phaser.Scene {
     });
 
     // The result screen can send the player into the codex: the flag is consumed
-    // by the menu that opens next.
+    // by the menu that opens next. The optional entry ref (set together with
+    // the flag by a tap on an opening row) picks the tab and the highlighted
+    // entry; without it the codex opens on its default tab, as before.
     if (this.registry.get('openCodexOnMenu') === true) {
       this.registry.remove('openCodexOnMenu');
-      this.showCodex();
+      const entry = this.registry.get('openCodexEntry') as CodexEntryRef | null | undefined;
+      this.registry.remove('openCodexEntry');
+      this.showCodex(entry ?? null);
     }
 
     // Phase 3 (port): daily reward — auto-show the daily modal when a
@@ -1261,7 +1266,12 @@ export class MenuScene extends Phaser.Scene {
     this.skinGallery = showSkinGallery(this, () => { this.skinGallery = null; });
   }
 
-  private showCodex(): void {
+  /**
+   * Opens the codex. With an entry ref (from a result-screen opening row),
+   * the codex starts on that entry's tab with the entry highlighted;
+   * without one it opens on the synergies tab, as before.
+   */
+  private showCodex(entry: CodexEntryRef | null = null): void {
     if (this.codexOverlay || this.socialHub || this.questBoard || this.collectionBoard) return;
 
     const W = this.scale.width;
@@ -1313,7 +1323,7 @@ export class MenuScene extends Phaser.Scene {
     overlay.add(body);
 
     type CodexPage = 'synergies' | 'legendary' | 'mastery';
-    let page: CodexPage = 'synergies';
+    let page: CodexPage = entry?.tab ?? 'synergies';
     const tabs: Array<{
       id: CodexPage;
       label: string;
@@ -1327,6 +1337,31 @@ export class MenuScene extends Phaser.Scene {
       ['legendary', 'ЛЕГЕНДАРНЫЕ', W / 2],
       ['mastery', 'МАСТЕРСТВО', W / 2 + 104],
     ];
+
+    // A newly opened entry gets a gold outline and a «НОВОЕ» badge so the
+    // player lands on the exact row the result screen named. The badge is
+    // named for the QA probe; it renders only on the entry's own tab.
+    const highlightEntry = (id: string, surfaceY: number, surfaceH: number, titleY: number): void => {
+      if (entry?.id !== id) return;
+      body.add(
+        this.add
+          .rectangle(W / 2, surfaceY, panelW - 34, surfaceH)
+          .setFillStyle(0x000000, 0)
+          .setStrokeStyle(2, VISUAL.warning, 1)
+      );
+      body.add(
+        this.add
+          .text(W / 2 + (panelW - 34) / 2 - 8, titleY, 'НОВОЕ', {
+            fontFamily: UI_FONT,
+            fontSize: `${compact ? 10 : 11}px`,
+            fontStyle: 'bold',
+            color: VISUAL_TEXT.warning,
+          })
+          .setOrigin(1, 0)
+          .setResolution(2)
+          .setName(`ofeliya-codex-new-badge-${id}`)
+      );
+    };
 
     const render = () => {
       body.removeAll(true);
@@ -1384,6 +1419,7 @@ export class MenuScene extends Phaser.Scene {
             { fill: VISUAL.panelRaised, accent: found ? VISUAL.warning : VISUAL.line, detail: 'quiet' },
           );
           body.add(row);
+          highlightEntry(id, y + (compact ? 24 : 28), compact ? 62 : 72, y);
           // A locked synergy names its own recipe: three identical "not open"
           // cards told the player nothing.
           addText(
@@ -1412,6 +1448,7 @@ export class MenuScene extends Phaser.Scene {
           body.add(createSpecimenSurface(this, W / 2, y + (compact ? 16 : 18), panelW - 34, compact ? 44 : 49, {
             fill: VISUAL.panelRaised, accent: found ? VISUAL.warning : VISUAL.line, detail: 'quiet',
           }));
+          highlightEntry(def.id, y + (compact ? 16 : 18), compact ? 44 : 49, y);
           addText(
             left + 28,
             y,

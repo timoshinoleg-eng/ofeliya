@@ -63,6 +63,7 @@ import { Bullet } from '../game/Bullet';
 import { Gem } from '../game/Gem';
 import { FeatureFlags } from '../game/FeatureFlags';
 import type { RunResult, RunSnapshot } from '../game/RunContracts';
+import { computeNewCodexEntries } from '../game/runCodexOpenings';
 import { RunMilestones } from '../game/RunMilestones';
 import { RunState } from '../game/RunState';
 import {
@@ -2693,6 +2694,16 @@ export class GameScene extends Phaser.Scene {
     const stage = this.runState.stage;
     const evolutions = [...run.evolutionsSeen];
     const boss1ClearMs = run.bossClearTimesMs['immune-prime'] ?? 0;
+    // The Codex diff is taken against the save as it was BEFORE this run's
+    // choices are merged into it; after recordRun the diff is empty.
+    // SaveSystem.get() returns a copy, so the snapshot is stable.
+    const preSave = SaveSystem.get();
+    const newCodexEntries = computeNewCodexEntries(
+      [...run.legendaryIds],
+      evolutions,
+      preSave.legendarySeen,
+      preSave.evolutionsSeen
+    );
     const records = SaveSystem.recordRun(
       win,
       run.timeMs,
@@ -2765,6 +2776,7 @@ export class GameScene extends Phaser.Scene {
       stacks: { ...stage.stacks },
       evolutions,
       legendaryIds: [...run.legendaryIds],
+      newCodexEntries,
       stageBuilds: Object.fromEntries(
         Object.entries(run.stageBuilds).map(([id, build]) => [
           id,

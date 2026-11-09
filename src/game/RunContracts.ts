@@ -5,6 +5,7 @@ import type { EvolutionId } from './UpgradeSystem';
 import type { DifficultyId } from './DifficultyProfile';
 import type { LegendaryId } from './LegendarySystem';
 import type { ControlMode } from './ControlMode';
+import type { NewCodexEntry } from './runCodexOpenings';
 
 export interface RunSnapshot {
   hp: number;
@@ -61,6 +62,14 @@ export interface RunResult {
   stacks: Record<string, number>;
   evolutions: EvolutionId[];
   legendaryIds: LegendaryId[];
+  /**
+   * Entries this run opened in the Codex for the first time. Snapshot taken
+   * in `GameScene.finish` before `SaveSystem.recordRun` merged the run's
+   * choices into the save; a re-show reuses this snapshot, never recomputes
+   * it (after the merge the diff would be empty). Achievements are not
+   * openings and are not part of this list.
+   */
+  newCodexEntries: NewCodexEntry[];
   stageBuilds: Partial<Record<StageId, StageBuildResult>>;
   newAchievements: AchievementId[];
   records: RunRecordFlags;
