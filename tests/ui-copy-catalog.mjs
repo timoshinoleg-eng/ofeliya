@@ -46,7 +46,7 @@ try {
   // 1. Rarity words — pinned literals, not read back from the module.
   assert.deepEqual(
     { ...copy.RARITY_LABELS },
-    { common: 'СТАНДАРТ', rare: 'РЕДКИЙ' },
+    { common: 'ОБЫЧНАЯ', rare: 'РЕДКАЯ' },
     'rarity labels'
   );
   assert.deepEqual(
@@ -58,17 +58,17 @@ try {
   // 2. Card header composition for every real family/rarity/kind combination.
   assert.equal(
     copy.mutationCardHeader({ family: 'weapon', rarity: 'common' }),
-    'АГРЕССИЯ · СТАНДАРТ',
+    'ОБЫЧНАЯ МУТАЦИЯ · АГРЕССИЯ',
     'weapon/common header'
   );
   assert.equal(
     copy.mutationCardHeader({ family: 'core', rarity: 'rare' }),
-    'РАСПРОСТРАНЕНИЕ · РЕДКИЙ',
+    'РЕДКАЯ МУТАЦИЯ · РАСПРОСТРАНЕНИЕ',
     'core/rare header'
   );
   assert.equal(
     copy.mutationCardHeader({ family: 'defense', rarity: 'common', kind: 'upgrade' }),
-    'ЗАЩИТА · СТАНДАРТ',
+    'ОБЫЧНАЯ МУТАЦИЯ · ЗАЩИТА',
     'explicit upgrade kind header'
   );
   assert.equal(
@@ -80,6 +80,48 @@ try {
     copy.mutationCardHeader({ family: 'utility', rarity: 'legendary', kind: 'legendary' }),
     'ЛЕГЕНДАРНАЯ МУТАЦИЯ',
     'legendary header ignores family/rarity'
+  );
+
+  // 2a. Copy of the redesigned level-up screen («Био-мембрана»).
+  assert.deepEqual(
+    { ...copy.LEVELUP_COPY },
+    { title: 'ВЫБЕРИ МУТАЦИЮ', hint: 'Нажми на карточку, чтобы выбрать' },
+    'level-up title and the single short hint'
+  );
+  assert.deepEqual(
+    { ...copy.LEGENDARY_CARD_DETAILS['last-carrier'] },
+    {
+      condition: 'Условие: один раз за забег при смертельном уроне',
+      effect: 'Эффект: останется 1 прочности, исчезают все враги, кроме боссов',
+      price: 'При срабатывании: \u221225% прогресса текущего уровня',
+      appearance: 'Облик штамма меняется на 8 с (только визуально)',
+    },
+    'the structured last-carrier form separates condition, effect, price and look'
+  );
+  assert.deepEqual(
+    { ...copy.MUTATION_STAT_UNITS },
+    {
+      'Время заражения': 'мс',
+      'Радиус заражения': 'ед.',
+      'Радиус взрыва': 'ед.',
+      'Радиус подбора РНК': 'ед.',
+    },
+    'only stats with real units carry one'
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(copy.MUTATION_STAT_UNITS, 'Урон взрыва'),
+    false,
+    'explosion damage ships without a unit'
+  );
+  assert.equal(
+    copy.formatMutationStatValue('Время заражения', '1250', '1025'),
+    '1250 → 1025\u00a0мс',
+    'the unit is glued to the number with a non-breaking space'
+  );
+  assert.equal(
+    copy.formatMutationStatValue('Урон взрыва', '26', '33,8'),
+    '26 → 33,8',
+    'a unitless stat renders bare values'
   );
 
   // Every upgrade that can reach a card must produce a non-empty header.
@@ -202,8 +244,16 @@ try {
   assert(ui.includes('MUTATION_CARD_HEADERS.legendary'), 'legendary reward must use the catalog header');
   assert(ui.includes('MUTATION_CARD_HEADERS.evolution'), 'evolution reward must use the catalog header');
   assert(ui.includes('formatBuildSummary(stacks)'), 'build summary must use the catalog formatter');
+  assert(ui.includes('LEVELUP_COPY.title'), 'the level-up title must come from the catalog');
+  assert(ui.includes('LEVELUP_COPY.hint'), 'the level-up hint must come from the catalog');
+  assert(ui.includes('LEGENDARY_CARD_DETAILS'), 'the structured legendary form must come from the catalog');
+  assert(ui.includes('formatMutationStatValue('), 'stat row values must use the catalog formatter');
   for (const drifted of [
-    "'РЕДКИЙ' : 'СТАНДАРТ'",
+    "'ВЫБЕРИ МУТАЦИЮ'",
+    "'Нажми на карточку, чтобы выбрать'",
+    "'При срабатывании: ",
+    "'Облик штамма меняется на 8 с",
+    "condition: 'Условие:",
     "'ЛЕГЕНДАРНАЯ МУТАЦИЯ'",
     "'КРИТИЧЕСКАЯ МУТАЦИЯ'",
     "regen: 'РЕГЕН.'",

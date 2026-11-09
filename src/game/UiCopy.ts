@@ -18,10 +18,15 @@ import { fmtInt } from './UiFormat';
  * Every value here must equal the literal it replaced. See tests/ui-copy-catalog.mjs.
  */
 
-/** Rarity words that appear in the `[СЕМЬЯ] · [РЕДКОСТЬ]` mutation card header. */
+/**
+ * Rarity words of the mutation card header. The approved «Био-мембрана»
+ * direction names the tier and the card type («ОБЫЧНАЯ МУТАЦИЯ»), so the old
+ * standalone tier words («СТАНДАРТ»/«РЕДКИЙ») are replaced by the full
+ * tier phrase assembled in `mutationCardHeader`.
+ */
 export const RARITY_LABELS: Record<'common' | 'rare', string> = {
-  common: 'СТАНДАРТ',
-  rare: 'РЕДКИЙ',
+  common: 'ОБЫЧНАЯ',
+  rare: 'РЕДКАЯ',
 };
 
 /**
@@ -40,14 +45,15 @@ export interface MutationCardHeaderSource {
 }
 
 /**
- * Header line of a mutation card. Legendary/evolution cards drop the
- * family/rarity line; every other card renders `[СЕМЬЯ] · [РЕДКОСТЬ]`.
+ * Header line of a mutation card. Legendary/evolution cards keep their own
+ * ceremony headers; every other card renders `[РЕДКАЯ] МУТАЦИЯ · [СЕМЬЯ]` —
+ * the tier phrase first (it decides the frame colour), the family after it.
  */
 export function mutationCardHeader(def: MutationCardHeaderSource): string {
   if (def.kind === 'legendary') return MUTATION_CARD_HEADERS.legendary;
   if (def.kind === 'evolution') return MUTATION_CARD_HEADERS.evolution;
-  return `${UPGRADE_FAMILY_LABELS[def.family]} · ${
-    RARITY_LABELS[def.rarity === 'rare' ? 'rare' : 'common']
+  return `${RARITY_LABELS[def.rarity === 'rare' ? 'rare' : 'common']} МУТАЦИЯ · ${
+    UPGRADE_FAMILY_LABELS[def.family]
   }`;
 }
 
@@ -539,4 +545,63 @@ export function buildShareText(input: ShareCopyInput): string {
 /** The share text of a created fixed-seed duel. */
 export function buildDuelShareText(targetTime: string): string {
   return `OFELIYA · ДУЭЛЬ: мой результат ${targetTime}. Сможешь пройти быстрее? ${SHARE_BOT_HANDLE}`;
+}
+/* ------------------------------------------------------------------------- *
+ * Экран выбора мутации — перенос утверждённого направления «Био-мембрана».
+ *
+ * Строки пинятся здесь литералами: тест tests/ui-copy-catalog.mjs сверяет их
+ * с эталоном, а scripts/check-mutation-copy.mjs проверяет внедрение в сцену.
+ * ------------------------------------------------------------------------- */
+
+/** Заголовок и подсказка экрана выбора (не-трофейный путь). */
+export const LEVELUP_COPY = {
+  /** Заголовок модала выбора мутации. */
+  title: 'ВЫБЕРИ МУТАЦИЮ',
+  /** Одна короткая подсказка под заголовком. */
+  hint: 'Нажми на карточку, чтобы выбрать',
+} as const;
+
+/**
+ * Структурные строки легендарной карты «Последний носитель».
+ *
+ * Форма карты разделяет выбор страховки и её срабатывание: условие и эффект
+ * описывают срабатывание при смертельном уроне, цена — отдельной плашкой,
+ * изменение облика — одной вторичной строкой без раскрываемой панели.
+ * Формулировка про «урон и отброс» сознательно отсутствует: это поведение
+ * базовой волны, а не эффект эволюции.
+ */
+export const LEGENDARY_CARD_DETAILS: Record<
+  string,
+  { condition: string; effect: string; price: string; appearance: string }
+> = {
+  'last-carrier': {
+    condition: 'Условие: один раз за забег при смертельном уроне',
+    effect: 'Эффект: останется 1 прочности, исчезают все враги, кроме боссов',
+    price: 'При срабатывании: \u221225% прогресса текущего уровня',
+    appearance: 'Облик штамма меняется на 8 с (только визуально)',
+  },
+};
+
+/**
+ * Единицы характеристик в строках «было → стало».
+ *
+ * Единица ставится только там, где она есть у характеристики: время заражения
+ * измеряется в миллисекундах, радиусы — в единицах поля. «Урон взрыва» и другие
+ * безъединичные величины в мапе отсутствуют — значение выводится без единицы.
+ */
+export const MUTATION_STAT_UNITS: Record<string, string> = {
+  'Время заражения': 'мс',
+  'Радиус заражения': 'ед.',
+  'Радиус взрыва': 'ед.',
+  'Радиус подбора РНК': 'ед.',
+};
+
+/**
+ * Значение строки характеристики: «было → стало» с единицей, привязанной
+ * неразрывным пробелом к числу, чтобы перенос строки никогда не отрывал
+ * единицу от значения.
+ */
+export function formatMutationStatValue(label: string, before: string, after: string): string {
+  const unit = MUTATION_STAT_UNITS[label];
+  return `${before} → ${after}${unit ? `\u00a0${unit}` : ''}`;
 }

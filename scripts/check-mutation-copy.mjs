@@ -30,7 +30,11 @@ for (const title of ['РНК-АФФИНИТЕТ', 'МЕМБРАННЫЙ ИМПУ
 }
 
 assert(evolutions.includes("recipe: 'МЕМБРАННЫЙ ИМПУЛЬС III + РНК-АФФИНИТЕТ II'"), 'singularity recipe copy must match its actual prerequisites');
-assert(ui.includes('.text(tx, descY, def.desc,'), 'level-up cards must render the player-facing description');
+assert(ui.includes('getUpgradeBeforeAfter(gs.runState, def)'), 'level-up cards must compute «было → стало» rows from the live run state');
+assert(ui.includes('formatMutationStatValue('), 'level-up stat rows must attach units through the catalog formatter');
+assert(ui.includes('LEGENDARY_CARD_DETAILS[def.legendaryId]'), 'the last-carrier card must render its structured condition/effect/price copy');
+assert(ui.includes('LEVELUP_COPY.title'), 'the level-up title must come from the copy catalog');
+assert(ui.includes('LEVELUP_COPY.hint'), 'the level-up hint must come from the copy catalog');
 assert(!ui.includes('if (!evolution && def.evolutionHint)'), 'level-up cards must prioritize immediate effects over evolution arrows');
 assert(ui.includes('`УРОВЕНЬ ${progress.next}/${progress.max}`'), 'level-up progress must use a clear level label');
 

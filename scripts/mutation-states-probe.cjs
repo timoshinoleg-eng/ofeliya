@@ -304,19 +304,57 @@ async function tapCard(page, index, tag, label, { doubleTap = false } = {}) {
         const snap = await page.evaluate(() => window.__qaStates.snapshot());
         check(modal.cardCount === 3, `${tag} A: expected 3 cards, got ${modal.cardCount}`);
         check(snap.choices.join(',') === 'legendary:last-carrier,infect,lysis', `${tag} A: card order ${snap.choices}`);
+        // Заголовок и одна короткая подсказка (не-трофейный путь).
+        const topTexts = await page.evaluate(() =>
+          window.__game.scene.getScene('UI').modal.list
+            .filter((o) => o.type === 'Text').map((o) => o.text));
+        check(topTexts.some((t) => t === 'ВЫБЕРИ МУТАЦИЮ'), `${tag} A: title «ВЫБЕРИ МУТАЦИЮ» missing: ${JSON.stringify(topTexts)}`);
+        check(topTexts.some((t) => t === 'Нажми на карточку, чтобы выбрать'), `${tag} A: hint missing: ${JSON.stringify(topTexts)}`);
         const [carrierCard, infectCard, lysisCard] = modal.cards;
         check(carrierCard.texts.includes('ЛЕГЕНДАРНАЯ МУТАЦИЯ'), `${tag} A: legendary header missing`);
         check(carrierCard.texts.some((t) => t.includes('ПОСЛЕДНИЙ НОСИТЕЛЬ')), `${tag} A: carrier name missing`);
-        check(carrierCard.texts.some((t) => t.includes('Один раз за забег')), `${tag} A: carrier effect missing`);
-        check(infectCard.texts.some((t) => t.includes('1250 → 1025')), `${tag} A: infect time pair missing`);
-        check(infectCard.texts.some((t) => t.includes('58 → 62,6')), `${tag} A: infect radius pair missing`);
-        check(lysisCard.texts.some((t) => t.includes('26 → 33,8')), `${tag} A: lysis damage pair missing`);
-        check(lysisCard.texts.some((t) => t.includes('150 → 162')), `${tag} A: lysis radius pair missing`);
+        check(carrierCard.texts.some((t) => t === 'Условие: один раз за забег при смертельном уроне'), `${tag} A: carrier condition missing`);
+        check(carrierCard.texts.some((t) => t === 'Эффект: останется 1 прочности, исчезают все враги, кроме боссов'), `${tag} A: carrier effect missing`);
+        check(carrierCard.texts.some((t) => t === 'При срабатывании: −25% прогресса текущего уровня'), `${tag} A: carrier price missing`);
+        check(carrierCard.texts.some((t) => t === 'Облик штамма меняется на 8 с (только визуально)'), `${tag} A: carrier appearance line missing`);
+        check(!carrierCard.texts.some((t) => t.includes('РНК уменьшается')), `${tag} A: stale «РНК −25%» card copy must be gone`);
+        check(infectCard.texts.some((t) => t === 'ОБЫЧНАЯ МУТАЦИЯ · РАСПРОСТРАНЕНИЕ'), `${tag} A: infect header missing`);
+        check(infectCard.texts.some((t) => t === 'Время заражения'), `${tag} A: infect time label missing`);
+        check(infectCard.texts.some((t) => t.includes('1250 → 1025') && t.includes('мс')), `${tag} A: infect time pair with unit missing`);
+        check(infectCard.texts.some((t) => t === 'Радиус заражения'), `${tag} A: infect radius label missing`);
+        check(infectCard.texts.some((t) => t.includes('58 → 62,6') && t.includes('ед.')), `${tag} A: infect radius pair with unit missing`);
+        check(lysisCard.texts.some((t) => t === 'РЕДКАЯ МУТАЦИЯ · АГРЕССИЯ'), `${tag} A: lysis header missing`);
+        check(lysisCard.texts.some((t) => t === 'Урон взрыва'), `${tag} A: lysis damage label missing`);
+        check(lysisCard.texts.some((t) => t === '26 → 33,8'), `${tag} A: lysis damage pair must be unitless`);
+        check(lysisCard.texts.some((t) => t === 'Радиус взрыва'), `${tag} A: lysis radius label missing`);
+        check(lysisCard.texts.some((t) => t.includes('150 → 162') && t.includes('ед.')), `${tag} A: lysis radius pair with unit missing`);
         check(modal.overflow.length === 0, `${tag} A: screen overflow ${JSON.stringify(modal.overflow)}`);
         for (const [name, card] of [['carrier', carrierCard], ['infect', infectCard], ['lysis', lysisCard]]) {
           check(card.overflow.length === 0, `${tag} A: ${name} card text out of bounds ${JSON.stringify(card.overflow)}`);
         }
         await page.screenshot({ path: path.join(OUT_DIR, `${tag}-A-choice.png`) });
+
+        // Press reaction: the card itself answers a press with a scale-down...
+        const pressTarget = await page.evaluate((i) => window.__qaStates.cardCenter(i), 1);
+        await page.mouse.move(pressTarget.x, pressTarget.y);
+        await page.mouse.down();
+        await page.waitForTimeout(120);
+        const pressed = await page.evaluate(() => {
+          const ui = window.__game.scene.getScene('UI');
+          const card = ui.modal.list.filter((o) => o.type === 'Container')[1];
+          return card ? card.scaleX : null;
+        });
+        check(pressed !== null && Math.abs(pressed - 0.97) < 0.001, `${tag} A: press reaction (scale 0.97), got ${pressed}`);
+        // ...and releasing OUTSIDE the card must not choose it.
+        await page.mouse.move(pressTarget.x, Math.max(4, pressTarget.y - 170));
+        await page.mouse.up();
+        await page.waitForTimeout(250);
+        const released = await page.evaluate(() => ({
+          awaiting: window.__game.scene.getScene('Game').awaitingChoice,
+          scale: window.__game.scene.getScene('UI').modal?.list.filter((o) => o.type === 'Container')[1]?.scaleX ?? null,
+        }));
+        check(released.awaiting === true, `${tag} A: release outside the card must not choose`);
+        check(released.scale !== null && Math.abs(released.scale - 1) < 0.001, `${tag} A: card settles back to scale 1, got ${released.scale}`);
 
         // Choice integrity: one real tap selects; a rapid second tap on the same
         // spot must not consume anything else.
@@ -435,8 +473,10 @@ async function tapCard(page, index, tag, label, { doubleTap = false } = {}) {
         check(!snap.choices.includes('evo:singularity'), `${tag} B: singularity must NOT be offered at 1/2`);
         const magnetCard = modal.cards[0];
         check(magnetCard.texts.some((t) => t.includes('УРОВЕНЬ 2/4')), `${tag} B: magnet progress 1/2 -> next 2/4 missing`);
-        check(magnetCard.texts.some((t) => t.includes('121,5 → 164')), `${tag} B: magnet pair missing`);
-        check(magnetCard.texts.some((t) => t.includes('СИНГУЛЯРНОСТЬ')), `${tag} B: singularity tag missing`);
+        check(magnetCard.texts.some((t) => t === 'Радиус подбора РНК'), `${tag} B: magnet stat label missing`);
+        check(magnetCard.texts.some((t) => t.includes('121,5 → 164') && t.includes('ед.')), `${tag} B: magnet pair with unit missing`);
+        check(magnetCard.texts.some((t) => t === 'Синергия'), `${tag} B: synergy row label missing`);
+        check(magnetCard.texts.some((t) => t.includes('→ СИНГУЛЯРНОСТЬ')), `${tag} B: singularity tag missing`);
         await page.screenshot({ path: path.join(OUT_DIR, `${tag}-B-choice.png`) });
 
         // Real tap on magnet: recipe completes, evolution must NOT apply itself.
@@ -568,7 +608,8 @@ async function tapCard(page, index, tag, label, { doubleTap = false } = {}) {
         check(snap.choices.join(',') === 'magnet,infect,lysis', `${tag} QA-param B: order ${snap.choices}`);
         const modal = await readModal(page, size);
         check(modal.cards[0].texts.some((t) => t.includes('УРОВЕНЬ 2/4')), `${tag} QA-param B: magnet 1/2 progress missing`);
-        check(modal.cards[0].texts.some((t) => t.includes('121,5 → 164')), `${tag} QA-param B: magnet pair missing`);
+        check(modal.cards[0].texts.some((t) => t === 'Радиус подбора РНК'), `${tag} QA-param B: magnet stat label missing`);
+        check(modal.cards[0].texts.some((t) => t.includes('121,5 → 164') && t.includes('ед.')), `${tag} QA-param B: magnet pair with unit missing`);
         await page.screenshot({ path: path.join(OUT_DIR, `${tag}-QA-param-B.png`) });
         check(errors.length === 0, `${tag} QA-param B: page errors ${JSON.stringify(errors)}`);
         sizeReport.states.qaParamB = { choices: snap.choices };

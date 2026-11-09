@@ -36,8 +36,10 @@ import {
   type EvolutionId,
   type UpgradeDef,
 } from '../game/UpgradeSystem';
-import { formatUpgradeEffectSuffix } from '../game/upgradeBeforeAfter';
+import { getUpgradeBeforeAfter } from '../game/upgradeBeforeAfter';
 import {
+  LEVELUP_COPY,
+  LEGENDARY_CARD_DETAILS,
   META_COPY,
   MUTATION_CARD_HEADERS,
   RESULT_COPY,
@@ -46,6 +48,7 @@ import {
   buildDuelShareText,
   buildShareText,
   formatBuildSummary,
+  formatMutationStatValue,
   mutationCardHeader,
 } from '../game/UiCopy';
 import { fmtInt } from '../game/UiFormat';
@@ -1559,7 +1562,7 @@ export class UIScene extends Phaser.Scene {
 
     const titleY = compact ? H * 0.09 : H * 0.115;
     const titleT = this.add
-      .text(W / 2, titleY, legendaryReward ? 'ЛЕГЕНДАРНЫЙ ТРОФЕЙ' : IDENTITY.levelUp, {
+      .text(W / 2, titleY, legendaryReward ? 'ЛЕГЕНДАРНЫЙ ТРОФЕЙ' : LEVELUP_COPY.title, {
         fontFamily: FONT,
         fontSize: compact ? '23px' : '27px',
         fontStyle: 'bold',
@@ -1584,7 +1587,7 @@ export class UIScene extends Phaser.Scene {
         titleY + titleT.height / 2 + subtitleGap,
         legendaryReward
           ? 'ИММУННЫЙ ПРАЙМ подавлен · выбери мутацию для СЕРДЦА'
-          : 'МУТАЦИЯ ' + gs.runState.stage.level + ' · выбери карту',
+          : LEVELUP_COPY.hint,
         {
           fontFamily: UI_FONT,
           fontSize: compact ? '13px' : '15px',
@@ -1604,251 +1607,430 @@ export class UIScene extends Phaser.Scene {
     const gap = compact ? 9 : 11;
     // Cards never collide with the header, even when the subtitle wraps to two lines.
     const minTop = subtitle.getBounds().bottom + gap;
-    let blockCenter = compact ? H * 0.59 : H * 0.57;
-    const expandedCardHeight = 136;
-    const expandedTotalH = cards.length * expandedCardHeight + (cards.length - 1) * gap;
-    const expandedTop = blockCenter - expandedTotalH / 2;
-    const expandedBottom = blockCenter + expandedTotalH / 2;
-    const expandedStackFits =
-      compact &&
-      legendaryReward &&
-      expandedTop >= minTop &&
-      expandedBottom <= H - gap;
-    const ch = compact ? (expandedStackFits ? expandedCardHeight : 124) : 148;
-    const totalH = cards.length * ch + (cards.length - 1) * gap;
-    if (blockCenter - totalH / 2 < minTop) blockCenter = minTop + totalH / 2;
-    // The push-down guarantees header clearance but can shove the last card past the
-    // bottom edge on short viewports; clamp the stack inside the screen (bottom wins —
-    // a cut-off footer is worse than a tight header gap in the impossible-fit corner).
-    if (blockCenter + totalH / 2 > H - gap) blockCenter = H - gap - totalH / 2;
-    let y = blockCenter - totalH / 2 + ch / 2;
 
-    cards.forEach((def: UpgradeDef, cardIndex: number) => {
-      const card = this.add.container(W / 2, y);
-      const evolution = def.kind === 'evolution';
-      const legendary = def.kind === 'legendary';
-      const accent = legendary || evolution
-        ? VISUAL.warning
-        : def.rarity === 'rare' ? VISUAL.rare : VISUAL.host;
-      const progress = getUpgradeProgress(gs.runState, def);
-      // C2: the effect plate gains the absolute «было → стало» values for one
-      // stack plus the synergy tag («→ ГИПЕРШИП» etc.) when the card carries
-      // an evolutionHint. Ceremony cards (evolution/legendary) and unknown
-      // ids get no suffix, so their plates render exactly as before.
-      const effectSuffix = formatUpgradeEffectSuffix(gs.runState, def);
-      const effectLabel = effectSuffix ? `${def.name} · ${effectSuffix}` : def.name;
-      const special = evolution || legendary;
-      const bg = this.add
-        .rectangle(0, 0, cw, ch, VISUAL.panel, 0);
-      const membrane = createSpecimenSurface(this, 0, 0, cw, ch, { accent });
-      card.add([bg, membrane]);
+    // «Био-мембрана»: the layout is measured, not fixed. Every card reports the
+    // height its real text needs and the stack centers in the area under the
+    // header. When a short viewport cannot take the natural heights, one
+    // compaction pass reclaims decor and air first (padding, gaps, icon size) —
+    // never the copy, the stat rows or the type floors.
+    const available = H - gap - minTop;
+    const naturalStack = (list: { height: number }[]) =>
+      list.reduce((sum, entry) => sum + entry.height, 0) + gap * (cards.length - 1);
+    let built = cards.map((def: UpgradeDef) => this.buildMutationCard(def, cw, compact, false, gs, c));
+    if (naturalStack(built) > available) {
+      built = cards.map((def: UpgradeDef) => this.buildMutationCard(def, cw, compact, true, gs, c));
+    }
+    const totalH = naturalStack(built);
+    let blockTop = Math.max(minTop, (H - totalH) / 2);
+    if (blockTop + totalH > H - gap) blockTop = Math.max(minTop, H - gap - totalH);
 
-      // Visual-impact pass: cards read as biological modules instead of neon-outlined tables.
-      // The accent rail carries rarity/family identity while the surface border stays quiet.
-      const rail = this.add
-        .rectangle(-cw / 2 + 5, 0, 3, ch - 26, accent, special ? 0.8 : 0.58)
-        .setOrigin(0.5);
-      card.add(rail);
-      const iconX = -cw / 2 + 39;
-      const iconSize = compact ? 46 : 52;
-
-      // Rarity must read before the name does: tier pips in the header band
-      // (1=common, 2=rare, 3=legendary/evolution) plus a frame whose strength
-      // scales with the tier. Words alone (СТАНДАРТ/РЕДКИЙ in 11-12px) were
-      // measured indistinguishable at a glance in the Phase A audit.
-      const tier = special ? 3 : def.rarity === 'rare' ? 2 : 1;
-      for (let p = 0; p < tier; p++) {
-        card.add(
-          this.add
-            .circle(cw / 2 - 18 - (tier - 1 - p) * 13, -ch / 2 + 13, p === tier - 1 ? 4 : 3.2, accent, special ? 0.95 : 0.45 + tier * 0.12)
-            .setStrokeStyle(1, accent, special ? 0.6 : 0.3)
-        );
-      }
-      if (special) {
-        card.add(
-          this.add
-            .rectangle(0, 0, cw - 2, ch - 2)
-            .setStrokeStyle(legendary ? 2.2 : 1.6, accent, legendary ? 0.9 : 0.6)
-        );
-        card.add(
-          this.add.rectangle(3, 0, cw - 20, ch - 8, VISUAL.warning, legendary ? 0.07 : 0.035)
-        );
-      } else if (def.rarity === 'rare') {
-        card.add(
-          this.add
-            .rectangle(0, 0, cw - 2, ch - 2)
-            .setStrokeStyle(1.2, accent, 0.5)
-        );
-      }
-
-      const iconKey = evolution && def.evolutionId ? `mutation-${def.evolutionId}` : `up-${def.id}`;
-      const hasIcon = this.textures.exists(iconKey);
-      const reserveIconZone = hasIcon || !legendary;
-      if (reserveIconZone) {
-        const iconPlate = this.add
-          .rectangle(iconX, -2, iconSize, iconSize, accent, special ? 0.18 : 0.1)
-          .setStrokeStyle(1, accent, special ? 0.56 : 0.38);
-        card.add(iconPlate);
-      }
-      if (hasIcon) {
-        card.add(
-          this.add
-            .image(iconX, -2, iconKey)
-            .setScale(compact ? 0.9 : 1.02)
-            .setTint(evolution ? COLORS.gold : def.rarity === 'rare' ? 0xe9dcff : 0xffffff)
-        );
-      } else if (!legendary) {
-        card.add(
-          this.add
-            .text(iconX, -2, evolution ? '◆' : '•', {
-              fontFamily: FONT,
-              fontSize: compact ? '22px' : '26px',
-              fontStyle: 'bold',
-              color: special ? VISUAL_TEXT.warning : def.rarity === 'rare' ? VISUAL_TEXT.rare : VISUAL_TEXT.immune,
-            })
-            .setOrigin(0.5)
-            .setResolution(2)
-        );
-      }
-
-      const tx = legendary && !hasIcon ? -cw / 2 + 18 : -cw / 2 + 73;
-      const right = cw / 2 - 14;
-      const family = mutationCardHeader(def);
-      card.add(
-        this.add
-          .text(tx, -ch / 2 + 8, family, {
-            fontFamily: FONT,
-            fontSize: compact ? '11px' : '12px',
-            fontStyle: 'bold',
-            color: legendary || evolution ? VISUAL_TEXT.warning : def.rarity === 'rare' ? VISUAL_TEXT.rare : VISUAL_TEXT.host,
-          })
-          .setResolution(2)
-      );
-
-      card.add(
-        this.add
-          .text(tx, -ch / 2 + (compact ? 22 : 24), def.shortName, {
-            fontFamily: FONT,
-            fontSize: legendary || evolution ? (compact ? '17px' : '20px') : compact ? '16px' : '19px',
-            fontStyle: 'bold',
-            color: VISUAL_TEXT.ivory,
-            lineSpacing: -2,
-            maxLines: 2,
-            wordWrap: { width: Math.max(112, right - tx - 4), useAdvancedWrap: true },
-          })
-          .setResolution(2)
-      );
-
-      const effectW = Math.max(108, right - tx);
-      const descY = -ch / 2 + (compact ? 46 : 50);
-      card.add(
-        this.add
-          .text(tx, descY, def.desc, {
-            fontFamily: UI_FONT,
-            fontSize: compact ? '11px' : '12px',
-            fontStyle: '500',
-            color: VISUAL_TEXT.muted,
-            lineSpacing: 1,
-            maxLines: 2,
-            wordWrap: { width: effectW, useAdvancedWrap: true },
-          })
-          .setResolution(2)
-      );
-
-      const effectText = this.add.text(tx + 8, 0, effectLabel, {
-        fontFamily: UI_FONT,
-        fontSize: compact ? '11px' : '12px',
-        fontStyle: '700',
-        color: legendary || evolution ? VISUAL_TEXT.warning : def.rarity === 'rare' ? VISUAL_TEXT.rare : VISUAL_TEXT.host,
-        align: 'left',
-        lineSpacing: -1,
-        maxLines: legendary && ch === expandedCardHeight ? 3 : 2,
-        wordWrap: { width: Math.max(92, effectW - 16), useAdvancedWrap: true },
+    built.forEach((entry, cardIndex) => {
+      entry.card.setPosition(W / 2, blockTop + entry.height / 2);
+      c.add(entry.card);
+      blockTop += entry.height + gap;
+      entry.card.setScale(0.94).setAlpha(0);
+      this.tweens.add({
+        targets: entry.card,
+        scale: 1,
+        alpha: 1,
+        duration: 170,
+        delay: cardIndex * 35,
+        ease: 'Back.Out',
       });
-      const effectNeedsThirdLine =
-        compact && legendary && ch === expandedCardHeight && effectText.getWrappedText(effectLabel).length > 2;
-      effectText.setMaxLines(effectNeedsThirdLine ? 3 : 2);
-      // Keep the third compact Legendary line inside its badge and above the per-card footer.
-      const effectY = ch / 2 - (compact ? (effectNeedsThirdLine ? 41 : 37) : 44);
-      const effectPlateHeight = compact ? (effectNeedsThirdLine ? 42 : 30) : 32;
-      const effectPlate = this.add
-        .rectangle(tx + effectW / 2, effectY, effectW, effectPlateHeight, VISUAL.panelRaised, 0.98)
-        .setStrokeStyle(1, accent, 0.3);
-      card.add(effectPlate);
-      card.add(effectText.setPosition(tx + 8, effectY).setOrigin(0, 0.5).setResolution(2));
+    });
+  }
+
+  /**
+   * One mutation card of the level-up modal, laid out top-down from the real
+   * measured text (never a fixed card height, so nothing is maxLines-clipped).
+   *
+   * Forms:
+   *  - structured legendary («Последний носитель»): условие, эффект, цена
+   *    отдельной плашкой и одна вторичная строка про облик;
+   *  - generic legendary/evolution: описание и полная плашка эффекта;
+   *  - обычная карта: описание и строки характеристик «было → стало» —
+   *    название слева, значение слева от правого края, единица привязана
+   *    к числу неразрывным пробелом.
+   *
+   * Выбор идёт штатным путём acceptChoiceClick → chooseUpgrade; нажатие даёт
+   * реакцию самой карточки, отпускание пальца за её пределами выбора не даёт.
+   */
+  private buildMutationCard(
+    def: UpgradeDef,
+    cw: number,
+    compact: boolean,
+    squash: boolean,
+    gs: GameScene,
+    root: Phaser.GameObjects.Container
+  ): { card: Phaser.GameObjects.Container; height: number } {
+    const card = this.add.container(0, 0);
+    const evolution = def.kind === 'evolution';
+    const legendary = def.kind === 'legendary';
+    const special = evolution || legendary;
+    const structured = Boolean(
+      legendary && def.legendaryId && LEGENDARY_CARD_DETAILS[def.legendaryId]
+    );
+    const accent = special ? VISUAL.warning : def.rarity === 'rare' ? VISUAL.rare : VISUAL.host;
+    const accentText = special
+      ? VISUAL_TEXT.warning
+      : def.rarity === 'rare'
+        ? VISUAL_TEXT.rare
+        : VISUAL_TEXT.host;
+
+    const padX = 14;
+    const padTop = squash ? 6 : compact ? 8 : 10;
+    const padBottom = squash ? 6 : compact ? 8 : 10;
+    const air = (n: number) => (squash ? Math.min(n, 2) : n);
+    const fullW = cw - padX * 2;
+    const headerSize = compact ? 11 : 12;
+    const nameSize = special ? (compact ? 17 : 20) : compact ? 16 : 19;
+    const bodySize = compact ? 11 : 12;
+    const secondarySize = compact ? 10 : 11;
+    const iconSize = squash ? 24 : 28;
+
+    const mk = (text: string, style: Phaser.Types.GameObjects.Text.TextStyle): Phaser.GameObjects.Text =>
+      this.make.text({ x: 0, y: 0, text, style }).setResolution(2);
+
+    let cursor = padTop;
+    let lastGap = 0;
+    const place = (obj: Phaser.GameObjects.Text, x: number): void => {
+      obj.setPosition(x, cursor);
+      card.add(obj);
+    };
+    const row = (height: number, gapAfter: number): void => {
+      cursor += height;
+      lastGap = air(gapAfter);
+      cursor += lastGap;
+    };
+
+    // Header band: tier/family line left, biological glyph plate right.
+    const headerText = mk(mutationCardHeader(def), {
+      fontFamily: FONT,
+      fontSize: `${headerSize}px`,
+      fontStyle: 'bold',
+      color: accentText,
+      lineSpacing: -1,
+      maxLines: 2,
+      wordWrap: { width: fullW - iconSize - 10, useAdvancedWrap: true },
+    }).setOrigin(0, 0);
+    place(headerText, -cw / 2 + padX);
+    const iconKey = evolution && def.evolutionId ? `mutation-${def.evolutionId}` : `up-${def.id}`;
+    const hasIcon = this.textures.exists(iconKey);
+    const iconCx = cw / 2 - padX - iconSize / 2;
+    const iconCy = cursor + Math.min(headerText.height, headerSize * 1.4) / 2;
+    card.add(
+      this.add
+        .rectangle(iconCx, iconCy, iconSize, iconSize, accent, special ? 0.18 : 0.1)
+        .setStrokeStyle(1, accent, special ? 0.56 : 0.38)
+    );
+    if (hasIcon) {
+      const iconFrame = this.textures.getFrame(iconKey);
+      const iconScale = Math.min(
+        (iconSize - 8) / Math.max(1, iconFrame.width),
+        (iconSize - 8) / Math.max(1, iconFrame.height)
+      );
+      card.add(
+        this.add
+          .image(iconCx, iconCy, iconKey)
+          .setScale(iconScale)
+          .setTint(evolution ? COLORS.gold : def.rarity === 'rare' ? 0xe9dcff : 0xffffff)
+      );
+    } else {
+      card.add(
+        this.add
+          .text(iconCx, iconCy, special ? '◆' : '•', {
+            fontFamily: FONT,
+            fontSize: `${iconSize - 10}px`,
+            fontStyle: 'bold',
+            color: special
+              ? VISUAL_TEXT.warning
+              : def.rarity === 'rare'
+                ? VISUAL_TEXT.rare
+                : VISUAL_TEXT.immune,
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+      );
+    }
+    row(headerText.height, 3);
+
+    // Card name.
+    const nameText = mk(def.shortName, {
+      fontFamily: FONT,
+      fontSize: `${nameSize}px`,
+      fontStyle: 'bold',
+      color: VISUAL_TEXT.ivory,
+      lineSpacing: -2,
+      maxLines: 2,
+      wordWrap: { width: fullW, useAdvancedWrap: true },
+    }).setOrigin(0, 0);
+    place(nameText, -cw / 2 + padX);
+    row(nameText.height, 4);
+
+    if (structured && def.legendaryId) {
+      const details = LEGENDARY_CARD_DETAILS[def.legendaryId];
+      // Условие и эффект — полным текстом, без обрезки maxLines.
+      for (const line of [details.condition, details.effect]) {
+        const lineText = mk(line, {
+          fontFamily: UI_FONT,
+          fontSize: `${bodySize}px`,
+          fontStyle: '650',
+          color: VISUAL_TEXT.ivory,
+          lineSpacing: 1,
+          wordWrap: { width: fullW, useAdvancedWrap: true },
+        }).setOrigin(0, 0);
+        place(lineText, -cw / 2 + padX);
+        row(lineText.height, 2);
+      }
+      // Цена — отдельной плашкой.
+      const priceText = mk(details.price, {
+        fontFamily: UI_FONT,
+        fontSize: `${bodySize}px`,
+        fontStyle: '700',
+        color: VISUAL_TEXT.warning,
+      }).setOrigin(0.5);
+      const pricePlateH = priceText.height + (squash ? 8 : 12);
+      card.add(
+        this.add
+          .rectangle(0, cursor + pricePlateH / 2, fullW, pricePlateH, VISUAL.panelRaised, 0.98)
+          .setStrokeStyle(1, VISUAL.warning, 0.38)
+      );
+      priceText.setPosition(0, cursor + pricePlateH / 2);
+      card.add(priceText);
+      row(pricePlateH, 3);
+      // Облик — одна вторичная строка; раскрываемая панель не нужна.
+      const lookText = mk(details.appearance, {
+        fontFamily: UI_FONT,
+        fontSize: `${secondarySize}px`,
+        fontStyle: '500',
+        color: VISUAL_TEXT.muted,
+        wordWrap: { width: fullW, useAdvancedWrap: true },
+      }).setOrigin(0, 0);
+      place(lookText, -cw / 2 + padX);
+      row(lookText.height, 4);
+    } else if (special) {
+      // Generic ceremony card: description (recipe included for evolutions) and
+      // the full effect plate — never maxLines-clipped.
+      const descText = mk(def.desc, {
+        fontFamily: UI_FONT,
+        fontSize: `${bodySize}px`,
+        fontStyle: '500',
+        color: VISUAL_TEXT.muted,
+        lineSpacing: 1,
+        wordWrap: { width: fullW, useAdvancedWrap: true },
+      }).setOrigin(0, 0);
+      place(descText, -cw / 2 + padX);
+      row(descText.height, 4);
+      const effectText = mk(def.name, {
+        fontFamily: UI_FONT,
+        fontSize: `${bodySize}px`,
+        fontStyle: '700',
+        color: accentText,
+        lineSpacing: -1,
+        wordWrap: { width: fullW - 16, useAdvancedWrap: true },
+      }).setOrigin(0, 0.5);
+      const effectPlateH = effectText.height + (squash ? 10 : 14);
+      card.add(
+        this.add
+          .rectangle(0, cursor + effectPlateH / 2, fullW, effectPlateH, VISUAL.panelRaised, 0.98)
+          .setStrokeStyle(1, accent, 0.3)
+      );
+      effectText.setPosition(-fullW / 2 + 8, cursor + effectPlateH / 2);
+      card.add(effectText);
+      row(effectPlateH, 4);
+    } else {
+      // Стандартная карта: описание + строки характеристик «было → стало».
+      const descText = mk(def.desc, {
+        fontFamily: UI_FONT,
+        fontSize: `${bodySize}px`,
+        fontStyle: '500',
+        color: VISUAL_TEXT.muted,
+        lineSpacing: 1,
+        maxLines: 2,
+        wordWrap: { width: fullW, useAdvancedWrap: true },
+      }).setOrigin(0, 0);
+      place(descText, -cw / 2 + padX);
+      row(descText.height, 4);
+
+      const stats = getUpgradeBeforeAfter(gs.runState, def);
+      if (stats && stats.length > 0) {
+        for (const statLine of stats) {
+          const value = formatMutationStatValue(statLine.label, statLine.before, statLine.after);
+          const labelText = mk(statLine.label, {
+            fontFamily: UI_FONT,
+            fontSize: `${bodySize}px`,
+            fontStyle: '650',
+            color: VISUAL_TEXT.ivory,
+          }).setOrigin(0, 0);
+          const valueText = mk(value, {
+            fontFamily: UI_FONT,
+            fontSize: `${bodySize}px`,
+            fontStyle: '700',
+            color: accentText,
+          }).setOrigin(1, 0);
+          if (labelText.width + valueText.width + 12 <= fullW) {
+            place(labelText, -cw / 2 + padX);
+            place(valueText, cw / 2 - padX);
+            row(Math.max(labelText.height, valueText.height), 2);
+          } else {
+            // Переполнение: значение уходит под название; единица остаётся
+            // привязанной к числу неразрывным пробелом.
+            place(labelText, -cw / 2 + padX);
+            row(labelText.height, 1);
+            place(valueText, cw / 2 - padX);
+            row(valueText.height, 2);
+          }
+        }
+      } else {
+        // Карты без считывателей характеристик сохраняют точную строку эффекта.
+        const effectText = mk(def.name, {
+          fontFamily: UI_FONT,
+          fontSize: `${bodySize}px`,
+          fontStyle: '700',
+          color: accentText,
+          lineSpacing: -1,
+          wordWrap: { width: fullW, useAdvancedWrap: true },
+        }).setOrigin(0, 0);
+        place(effectText, -cw / 2 + padX);
+        row(effectText.height, 2);
+      }
+
+      if (def.evolutionHint) {
+        const hintLabel = mk('Синергия', {
+          fontFamily: UI_FONT,
+          fontSize: `${secondarySize}px`,
+          fontStyle: '650',
+          color: VISUAL_TEXT.muted,
+        }).setOrigin(0, 0);
+        const hintValue = mk(`→ ${EVOLUTION_NAMES[def.evolutionHint]}`, {
+          fontFamily: UI_FONT,
+          fontSize: `${secondarySize}px`,
+          fontStyle: '700',
+          color: VISUAL_TEXT.warning,
+        }).setOrigin(1, 0);
+        place(hintLabel, -cw / 2 + padX);
+        place(hintValue, cw / 2 - padX);
+        row(Math.max(hintLabel.height, hintValue.height), 4);
+      }
 
       if (def.showProgress !== false && def.max <= 8) {
-        const pg = this.add.graphics();
-        const barX = tx;
-        const barY = ch / 2 - 16;
-        const available = Math.min(118, Math.max(72, right - tx - 64));
+        const progress = getUpgradeProgress(gs.runState, def);
+        const barW = Math.min(118, Math.max(72, fullW - 64));
         const segGap = 3;
-        const segW = (available - segGap * (def.max - 1)) / def.max;
+        const segW = (barW - segGap * (def.max - 1)) / def.max;
+        const pg = this.add.graphics();
         for (let i = 0; i < def.max; i++) {
-          const x = barX + i * (segW + segGap);
+          const x = -cw / 2 + padX + i * (segW + segGap);
           const completed = i < progress.current;
           const next = i === progress.current;
           pg.fillStyle(accent, completed ? 0.95 : next ? 0.42 : 0.1);
-          pg.fillRoundedRect(x, barY, segW, 8, 2);
+          pg.fillRoundedRect(x, cursor, segW, 8, 2);
         }
         card.add(pg);
-        card.add(
-          this.add
-            .text(right, barY - 5, `УРОВЕНЬ ${progress.next}/${progress.max}`, {
-              fontFamily: UI_FONT,
-              fontSize: compact ? '11px' : '13px',
-              fontStyle: '700',
-              color: '#d8d1e2',
-            })
-            .setOrigin(1, 0)
-            .setResolution(2)
-        );
+        const levelText = mk(`УРОВЕНЬ ${progress.next}/${progress.max}`, {
+          fontFamily: UI_FONT,
+          fontSize: `${bodySize}px`,
+          fontStyle: '700',
+          color: '#d8d1e2',
+        }).setOrigin(1, 0);
+        place(levelText, cw / 2 - padX);
+        cursor += 8;
+        lastGap = 0;
       } else {
-        card.add(
-          this.add
-            .text(
-              right,
-              ch / 2 - 19,
-              legendary
-                ? 'ИЗМЕНИТЬ ПРАВИЛА ЗАБЕГА'
-                : evolution
-                  ? 'ЗАКРЕПИТЬ МУТАЦИЮ'
-                  : 'РАЗОВАЯ АДАПТАЦИЯ',
-              {
-              fontFamily: UI_FONT,
-              fontSize: compact ? '11px' : '12px',
-              fontStyle: legendary || evolution ? '700' : '650',
-              color: legendary || evolution ? VISUAL_TEXT.warning : '#98ff8f',
-            })
-            .setOrigin(1, 0)
-            .setResolution(2)
-        );
+        const tagText = mk('РАЗОВАЯ АДАПТАЦИЯ', {
+          fontFamily: UI_FONT,
+          fontSize: `${bodySize}px`,
+          fontStyle: '650',
+          color: '#98ff8f',
+        }).setOrigin(1, 0);
+        place(tagText, cw / 2 - padX);
+        cursor += tagText.height;
+        lastGap = 0;
       }
+    }
 
-      const armedPointers = new Set<number>();
-      bg.setInteractive({ useHandCursor: true })
-        .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-          armedPointers.add(pointer.id);
-        })
-        .on('pointerup', (pointer: Phaser.Input.Pointer) => {
-          // A release may resolve only a card that this same pointer actually pressed.
-          // Fresh offers create fresh card instances with an empty armed-pointer set.
-          if (!armedPointers.delete(pointer.id) || !gs.acceptChoiceClick(def.id)) return;
-          Sfx.play('click');
+    if (special && !squash) {
+      // Служебный тег карты. В squeeze-проходе он убирается первым: это
+      // повторяющийся декор, а не контент (макет его вовсе не показывает).
+      const footerText = mk(legendary ? 'ИЗМЕНИТЬ ПРАВИЛА ЗАБЕГА' : 'ЗАКРЕПИТЬ МУТАЦИЮ', {
+        fontFamily: UI_FONT,
+        fontSize: `${bodySize}px`,
+        fontStyle: '700',
+        color: VISUAL_TEXT.warning,
+      }).setOrigin(1, 0);
+      place(footerText, cw / 2 - padX);
+      cursor += footerText.height;
+      lastGap = 0;
+    }
+
+    const height = Math.max(compact ? 96 : 112, Math.ceil(cursor - lastGap + padBottom));
+    for (const child of card.list) {
+      (child as unknown as { y: number }).y -= height / 2;
+    }
+
+    // Background plate and decor are centered on the final measured height.
+    const bg = this.add.rectangle(0, 0, cw, height, VISUAL.panel, 0);
+    const membrane = createSpecimenSurface(this, 0, 0, cw, height, { accent });
+    const rail = this.add
+      .rectangle(-cw / 2 + 5, 0, 3, height - 26, accent, special ? 0.8 : 0.58)
+      .setOrigin(0.5);
+    card.addAt(bg, 0);
+    card.addAt(membrane, 1);
+    card.addAt(rail, 2);
+    if (special) {
+      card.addAt(
+        this.add
+          .rectangle(0, 0, cw - 2, height - 2)
+          .setStrokeStyle(legendary ? 2.2 : 1.6, accent, legendary ? 0.9 : 0.6),
+        3
+      );
+      card.addAt(
+        this.add.rectangle(3, 0, cw - 20, height - 8, VISUAL.warning, legendary ? 0.07 : 0.035),
+        4
+      );
+    } else if (def.rarity === 'rare') {
+      card.addAt(
+        this.add.rectangle(0, 0, cw - 2, height - 2).setStrokeStyle(1.2, accent, 0.5),
+        3
+      );
+    }
+
+    // Выбор — штатный путь: тот же pointerdown→pointerup, тот же armedPointers,
+    // тот же acceptChoiceClick → chooseUpgrade, те же церемонии и очередь.
+    const armedPointers = new Set<number>();
+    const settlePress = (): void => {
+      this.tweens.killTweensOf(card);
+      card.setScale(1);
+    };
+    bg.setInteractive({ useHandCursor: true })
+      .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        armedPointers.add(pointer.id);
+        this.tweens.killTweensOf(card);
+        card.setScale(0.97);
+        drawSpecimenSurface(membrane, cw, height, { accent, fill: VISUAL.panelRaised });
+      })
+      .on('pointerup', (pointer: Phaser.Input.Pointer) => {
+        // A release may resolve only a card that this same pointer actually
+        // pressed; fresh offers create fresh cards with an empty armed set.
+        if (!armedPointers.delete(pointer.id)) return;
+        settlePress();
+        drawSpecimenSurface(membrane, cw, height, { accent });
+        if (!gs.acceptChoiceClick(def.id)) return;
+        Sfx.play('click');
         const more = gs.chooseUpgrade(def.id);
         const legendaryId = gs.consumeLegendaryCeremony();
         const evolutionId = gs.consumeEvolutionCeremony();
         if (legendaryId) {
-          c.destroy();
-          if (this.modal === c) this.modal = null;
+          root.destroy();
+          if (this.modal === root) this.modal = null;
           this.showLegendaryCeremony(legendaryId, more);
         } else if (evolutionId) {
-          c.destroy();
-          if (this.modal === c) this.modal = null;
+          root.destroy();
+          if (this.modal === root) this.modal = null;
           this.showEvolutionCeremony(evolutionId, more);
         } else if (more) {
-          c.destroy();
-          if (this.modal === c) this.modal = null;
+          root.destroy();
+          if (this.modal === root) this.modal = null;
           this.modalOpen = false;
           this.showLevelUp();
         } else {
@@ -1857,22 +2039,16 @@ export class UIScene extends Phaser.Scene {
           this.scene.resume('Game');
         }
       });
-      bg.on('pointerover', () => drawSpecimenSurface(membrane, cw, ch, { accent, fill: VISUAL.panelRaised }));
-      bg.on('pointerout', () => drawSpecimenSurface(membrane, cw, ch, { accent }));
-
-      c.add(card);
-      card.setScale(0.94).setAlpha(0);
-      this.tweens.add({
-        targets: card,
-        scale: 1,
-        alpha: 1,
-        duration: 170,
-        delay: cardIndex * 35,
-        ease: 'Back.Out',
-      });
-
-      y += ch + gap;
+    bg.on('pointerover', () =>
+      drawSpecimenSurface(membrane, cw, height, { accent, fill: VISUAL.panelRaised })
+    );
+    bg.on('pointerout', () => {
+      armedPointers.clear();
+      settlePress();
+      drawSpecimenSurface(membrane, cw, height, { accent });
     });
+
+    return { card, height };
   }
 
   private showLegendaryCeremony(id: LegendaryId, moreChoices: boolean): void {
