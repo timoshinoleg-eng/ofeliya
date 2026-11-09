@@ -14,6 +14,10 @@
  *  B — МЕМБРАННЫЙ ИМПУЛЬС 3/3, РНК-АФФИНИТЕТ 1/2; picking magnet must complete
  *      the singularity recipe (offered next) without applying the evolution.
  *  C — СИНГУЛЯРНОСТЬ already offered (evo:singularity) + infect + lysis.
+ *  B-mid — МЕМБРАННЫЙ ИМПУЛЬС 2/3, РНК-АФФИНИТЕТ 0/2: recipe block names the
+ *      remaining condition instead of marking the last one.
+ *  TROPHY — boss-reward screen (?qaTrophy=fresh|one|used|rhythm): title, reset
+ *      line, one-of-two rule, conditional slot footnote, heart hints on cards.
  *
  * Per state the probe captures 320×568 and 390×844 screenshots and asserts:
  * full effect text visible (incl. maxLines clipping detection), card geometry,
@@ -29,10 +33,14 @@ const { spawn } = require('node:child_process');
 const PORT = Number(process.env.OFELIYA_PORT || 5199);
 const BASE = `http://127.0.0.1:${PORT}/`;
 const OUT_DIR = path.join(__dirname, '..', 'docs', 'qa', 'mutation-states-2026-11-09');
-const SIZES = [
+const ALL_SIZES = [
   { width: 320, height: 568 },
   { width: 390, height: 844 },
 ];
+// OFELIYA_SIZES="320x568,390x844" runs a subset (long probes fit tool timeouts).
+const SIZES = process.env.OFELIYA_SIZES
+  ? ALL_SIZES.filter((s) => process.env.OFELIYA_SIZES.split(',').includes(`${s.width}x${s.height}`))
+  : ALL_SIZES;
 
 function browserDriver() {
   if (process.platform === 'win32') return { chromium: require('playwright').chromium, executablePath: undefined };
@@ -142,6 +150,15 @@ function installHelpers() {
       game.pendingChoices = choices;
       game.awaitingChoice = true;
     },
+    /** Trophy-screen variant: same real path, with the boss-reward flag and a
+     * pre-boss legendary state (0 or 1 slot taken, rescue spent or not). */
+    openTrophy(choices, { preLegendary = [], carrierSpent = false } = {}) {
+      const game = window.__game.scene.getScene('Game');
+      window.__qaStates.openModal(choices);
+      for (const id of preLegendary) game.runState.addLegendary(id);
+      game.lastCarrierUsed = carrierSpent;
+      game.legendaryRewardPending = true;
+    },
     cardCenter(index) {
       const ui = window.__game.scene.getScene('UI');
       const cards = ui.modal.list.filter((o) => o.type === 'Container');
@@ -245,6 +262,7 @@ async function tapCard(page, index, tag, label, { doubleTap = false } = {}) {
   const browser = await chromium.launch({ executablePath, headless: true, args: process.platform === 'win32' ? [] : ['--no-sandbox', '--disable-dev-shm-usage'] });
   const report = { base: 'main 2bd6320', url: BASE, sizes: [] };
   const failures = [];
+  const log = (...args) => console.log(new Date().toISOString().slice(11, 19), ...args);
   const check = (condition, message) => {
     if (!condition) failures.push(message);
   };
@@ -255,14 +273,15 @@ async function tapCard(page, index, tag, label, { doubleTap = false } = {}) {
       const sizeReport = { ...size, states: {} };
       report.sizes.push(sizeReport);
       const tag = `${size.width}x${size.height}`;
+      log('size', tag);
 
-      const bootFresh = async (query = '') => {
+      const bootFresh = async (query = '', { forceVideo = false } = {}) => {
         const ctx = await browser.newContext({
           viewport: size,
           deviceScaleFactor: 1,
           hasTouch: true,
           isMobile: true,
-          ...(size.width === 390 && query === '' ? { recordVideo: { dir: path.join(OUT_DIR, 'video-tmp') } } : {}),
+          ...(size.width === 390 && (query === '' || forceVideo) ? { recordVideo: { dir: path.join(OUT_DIR, 'video-tmp') } } : {}),
         });
         await ctx.route('https://st.max.ru/**', (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: '' }));
         await ctx.addInitScript(() => {
@@ -289,6 +308,7 @@ async function tapCard(page, index, tag, label, { doubleTap = false } = {}) {
 
       /* ------------------------------ A ------------------------------ */
       {
+        log('scenario A boot');
         const { ctx, page, errors } = await bootFresh();
         await page.evaluate(async () => {
           const modules = await window.__qaStates.defs();
@@ -452,6 +472,7 @@ async function tapCard(page, index, tag, label, { doubleTap = false } = {}) {
 
       /* ------------------------------ B ------------------------------ */
       {
+        log('scenario B boot');
         const { ctx, page, errors } = await bootFresh();
         await page.evaluate(async () => {
           const modules = await window.__qaStates.defs();
@@ -475,8 +496,13 @@ async function tapCard(page, index, tag, label, { doubleTap = false } = {}) {
         check(magnetCard.texts.some((t) => t.includes('УРОВЕНЬ 2/4')), `${tag} B: magnet progress 1/2 -> next 2/4 missing`);
         check(magnetCard.texts.some((t) => t === 'Радиус подбора РНК'), `${tag} B: magnet stat label missing`);
         check(magnetCard.texts.some((t) => t.includes('121,5 → 164') && t.includes('ед.')), `${tag} B: magnet pair with unit missing`);
-        check(magnetCard.texts.some((t) => t === 'Синергия'), `${tag} B: synergy row label missing`);
-        check(magnetCard.texts.some((t) => t.includes('→ СИНГУЛЯРНОСТЬ')), `${tag} B: singularity tag missing`);
+        // Рецепт на карточке: строка «Синергия» заменена блоком рецепта
+        // (recipeProgress): заголовок, строки шагов и пояснение внутри блока.
+        check(magnetCard.texts.some((t) => t === 'Рецепт «СИНГУЛЯРНОСТЬ» — последнее условие'), `${tag} B: recipe title (last condition) missing: ${JSON.stringify(magnetCard.texts)}`);
+        check(magnetCard.texts.some((t) => t === 'МЕМБРАННЫЙ ИМПУЛЬС — 3/3 ✓'), `${tag} B: completed recipe row missing`);
+        check(magnetCard.texts.some((t) => t === 'РНК-АФФИНИТЕТ — 1/2 → 2/2'), `${tag} B: advancing recipe row missing`);
+        check(magnetCard.texts.some((t) => t === 'После выбора рецепт будет готов. «СИНГУЛЯРНОСТЬ» выбирается отдельной картой.'), `${tag} B: recipe note missing`);
+        check(!magnetCard.texts.some((t) => t === 'Синергия'), `${tag} B: stale «Синергия» row must be gone`);
         await page.screenshot({ path: path.join(OUT_DIR, `${tag}-B-choice.png`) });
 
         // Real tap on magnet: recipe completes, evolution must NOT apply itself.
@@ -506,8 +532,40 @@ async function tapCard(page, index, tag, label, { doubleTap = false } = {}) {
         }
       }
 
+      /* ------------- B-mid: recipe block before the last condition ------------- */
+      {
+        log('scenario B-mid boot');
+        const { ctx, page, errors } = await bootFresh();
+        await page.evaluate(async () => {
+          const modules = await window.__qaStates.defs();
+          const game = window.__game.scene.getScene('Game');
+          window.__qaStates.applyStacks(modules, game.runState, 'nova', 2);
+          window.__qaStates.openModal([
+            window.__qaStates.upgradeChoice(modules, 'magnet'),
+            window.__qaStates.upgradeChoice(modules, 'infect'),
+            window.__qaStates.upgradeChoice(modules, 'lysis'),
+          ]);
+        });
+        await page.waitForFunction(() => window.__game.scene.getScene('UI').modalOpen);
+        await page.waitForTimeout(700);
+        const modal = await readModal(page, size);
+        const magnetCard = modal.cards[0];
+        check(magnetCard.texts.some((t) => t === 'Рецепт «СИНГУЛЯРНОСТЬ»'), `${tag} B-mid: plain recipe title missing: ${JSON.stringify(magnetCard.texts)}`);
+        check(!magnetCard.texts.some((t) => t.includes('последнее условие')), `${tag} B-mid: title must NOT mark the last condition`);
+        check(magnetCard.texts.some((t) => t === 'МЕМБРАННЫЙ ИМПУЛЬС — 2/3'), `${tag} B-mid: pending recipe row missing`);
+        check(magnetCard.texts.some((t) => t === 'РНК-АФФИНИТЕТ — 0/2 → 1/2'), `${tag} B-mid: advancing recipe row missing`);
+        check(magnetCard.texts.some((t) => t === 'Останется: мембранный импульс 2/3. «СИНГУЛЯРНОСТЬ» появится отдельной картой, когда рецепт будет готов.'), `${tag} B-mid: remaining-conditions note missing`);
+        await page.screenshot({ path: path.join(OUT_DIR, `${tag}-B-mid-choice.png`) });
+        check(modal.overflow.length === 0, `${tag} B-mid: screen overflow ${JSON.stringify(modal.overflow)}`);
+        check(magnetCard.overflow.length === 0, `${tag} B-mid: card text out of bounds ${JSON.stringify(magnetCard.overflow)}`);
+        check(errors.length === 0, `${tag} B-mid: page errors ${JSON.stringify(errors)}`);
+        sizeReport.states.Bmid = { clipped: modal.cards.flatMap((c) => c.clipped) };
+        await ctx.close();
+      }
+
       /* ------------------------------ C ------------------------------ */
       {
+        log('scenario C boot');
         const { ctx, page, errors } = await bootFresh();
         await page.evaluate(async () => {
           const modules = await window.__qaStates.defs();
@@ -530,7 +588,7 @@ async function tapCard(page, index, tag, label, { doubleTap = false } = {}) {
         check(evoCard.texts.includes('КРИТИЧЕСКАЯ МУТАЦИЯ'), `${tag} C: evolution header (distinct from legendary) missing`);
         check(evoCard.texts.includes('ЛЕГЕНДАРНАЯ МУТАЦИЯ') === false, `${tag} C: evolution card must not wear the legendary header`);
         check(evoCard.texts.some((t) => t.includes('СИНГУЛЯРНОСТЬ')), `${tag} C: singularity name missing`);
-        check(evoCard.texts.some((t) => t.includes('Круговой импульс наносит урон и отбрасывает врагов')), `${tag} C: full effect missing`);
+        check(evoCard.texts.some((t) => t === 'Круговая волна: новый облик. Открывает «Цепь лизиса»'), `${tag} C: full effect missing`);
         check(evoCard.texts.some((t) => t.includes('МЕМБРАННЫЙ ИМПУЛЬС III + РНК-АФФИНИТЕТ II')), `${tag} C: recipe missing`);
         // maxLines clipping audit — report what the player cannot see.
         sizeReport.states.C = { cards: modal.cardCount, clipped: modal.cards.flatMap((c) => c.clipped) };
@@ -599,6 +657,7 @@ async function tapCard(page, index, tag, label, { doubleTap = false } = {}) {
 
       /* ------------- QA parameter opens the state (phone path) ------------- */
       {
+        log('scenario QA-param-B boot');
         const { ctx, page, errors } = await bootFresh('?qaMutation=B');
         // The seam applies the fixture in Game create; the modal opens through
         // the normal UIScene path — no page-side injection at all.
@@ -610,10 +669,90 @@ async function tapCard(page, index, tag, label, { doubleTap = false } = {}) {
         check(modal.cards[0].texts.some((t) => t.includes('УРОВЕНЬ 2/4')), `${tag} QA-param B: magnet 1/2 progress missing`);
         check(modal.cards[0].texts.some((t) => t === 'Радиус подбора РНК'), `${tag} QA-param B: magnet stat label missing`);
         check(modal.cards[0].texts.some((t) => t.includes('121,5 → 164') && t.includes('ед.')), `${tag} QA-param B: magnet pair with unit missing`);
+        check(modal.cards[0].texts.some((t) => t === 'Рецепт «СИНГУЛЯРНОСТЬ» — последнее условие'), `${tag} QA-param B: recipe block missing`);
         await page.screenshot({ path: path.join(OUT_DIR, `${tag}-QA-param-B.png`) });
         check(errors.length === 0, `${tag} QA-param B: page errors ${JSON.stringify(errors)}`);
         sizeReport.states.qaParamB = { choices: snap.choices };
         await ctx.close();
+      }
+
+      /* ------------- Boss trophy screen (fresh / one / used / rhythm) ------------- */
+      {
+        const variants = [
+          {
+            id: 'fresh',
+            foot: 'второй можно найти дальше',
+            cardChecks: [[0, 'держи огонь на элитках и КАРДИАЛЬНОМ ТИТАНЕ']],
+          },
+          {
+            id: 'one',
+            foot: 'последняя легендарная этого забега',
+            cardChecks: [[0, 'держи огонь на элитках и КАРДИАЛЬНОМ ТИТАНЕ']],
+          },
+          {
+            id: 'used',
+            foot: 'последняя легендарная этого забега',
+            cardChecks: [[0, 'держи огонь на элитках и КАРДИАЛЬНОМ ТИТАНЕ']],
+          },
+          {
+            id: 'rhythm',
+            foot: 'второй можно найти дальше',
+            cardChecks: [[0, 'окно 850 мс'], [0, 'безопасной зоне']],
+          },
+        ];
+        for (const variant of variants) {
+          const withVideo = size.width === 390 && variant.id === 'fresh';
+          log('scenario TROPHY-' + variant.id, 'boot');
+          const { ctx, page, errors } = await bootFresh(`?qaTrophy=${variant.id}`, { forceVideo: withVideo });
+          // The seam applies the fixture in Game create; the trophy screen opens
+          // through the normal UIScene path — no page-side injection at all.
+          await page.waitForFunction(() => window.__game.scene.getScene('UI').modalOpen, null, { timeout: 8000 });
+          await page.waitForTimeout(700);
+          const modal = await readModal(page, size);
+          check(modal.cardCount === 2, `${tag} TROPHY-${variant.id}: expected 2 cards, got ${modal.cardCount}`);
+          const topTexts = await page.evaluate(() =>
+            window.__game.scene.getScene('UI').modal.list
+              .filter((o) => o.type === 'Text').map((o) => o.text));
+          check(topTexts.some((t) => t === 'ЛЕГЕНДАРНЫЙ ТРОФЕЙ'), `${tag} TROPHY-${variant.id}: trophy title missing: ${JSON.stringify(topTexts)}`);
+          check(topTexts.some((t) => t.includes('Трофей останется с тобой на весь забег')), `${tag} TROPHY-${variant.id}: subtitle missing`);
+          check(topTexts.some((t) => t.includes('уровень 1, прочность 100')), `${tag} TROPHY-${variant.id}: Heart reset line missing`);
+          check(topTexts.some((t) => t === 'Выбери одну из двух — вторая исчезнет.'), `${tag} TROPHY-${variant.id}: pick rule missing`);
+          check(topTexts.some((t) => t.includes(variant.foot)), `${tag} TROPHY-${variant.id}: slot footnote (${variant.foot}) missing`);
+          for (const [cardIndex, needle] of variant.cardChecks) {
+            check(modal.cards[cardIndex].texts.some((t) => t.includes(needle)),
+              `${tag} TROPHY-${variant.id}: card ${cardIndex} must mention «${needle}»`);
+          }
+          check(modal.overflow.length === 0, `${tag} TROPHY-${variant.id}: screen overflow ${JSON.stringify(modal.overflow)}`);
+          for (const card of modal.cards) {
+            check(card.overflow.length === 0, `${tag} TROPHY-${variant.id}: card text out of bounds ${JSON.stringify(card.overflow)}`);
+          }
+          await page.screenshot({ path: path.join(OUT_DIR, `${tag}-TROPHY-${variant.id}.png`) });
+
+          if (withVideo) {
+            // Real pick: ceremony, legendary applies, the run resumes.
+            await tapCard(page, 0, tag, 'TROPHY');
+            await page.waitForTimeout(400);
+            await page.screenshot({ path: path.join(OUT_DIR, `${tag}-TROPHY-picked-ceremony.png`) });
+            await page.waitForFunction(() => !window.__game.scene.getScene('UI').modalOpen && window.__game.scene.isActive('Game'), null, { timeout: 15_000 });
+            const after = await page.evaluate(() => {
+              const game = window.__game.scene.getScene('Game');
+              return {
+                legendaryRewardPending: game.legendaryRewardPending,
+                legendaries: [...game.runState.run.legendaryIds],
+              };
+            });
+            check(after.legendaryRewardPending === false, `${tag} TROPHY: reward flag must clear after the pick`);
+            check(after.legendaries.includes('core-predator'), `${tag} TROPHY: picked legendary must be owned, got ${after.legendaries}`);
+          }
+          check(errors.length === 0, `${tag} TROPHY-${variant.id}: page errors ${JSON.stringify(errors)}`);
+          sizeReport.states[`trophy-${variant.id}`] = { cards: modal.cardCount, clipped: modal.cards.flatMap((c) => c.clipped) };
+          const videoT = page.video();
+          await ctx.close();
+          if (videoT) {
+            const p = await videoT.path().catch(() => null);
+            if (p && fs.existsSync(p)) fs.renameSync(p, path.join(OUT_DIR, `${tag}-TROPHY-pick-record.webm`));
+          }
+        }
       }
     }
   } finally {
@@ -630,4 +769,7 @@ async function tapCard(page, index, tag, label, { doubleTap = false } = {}) {
     console.log('mutation-states probe: OK');
     console.log('screenshots + report.json ->', OUT_DIR);
   }
+  // Safety net: a hung browser.close() must not stall the runner once the
+  // report is written.
+  setTimeout(() => process.exit(process.exitCode ?? 0), 5000);
 })().catch((error) => { console.error(error.stack || error); process.exitCode = 1; });

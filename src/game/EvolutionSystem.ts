@@ -13,33 +13,57 @@ export interface EvolutionDef {
   effect: string;
   desc: string;
   recipe: string;
+  /**
+   * Структурные шаги рецепта — источник блока прогресса на карточке.
+   * `ids` — одна ветка или группа альтернатив (максимум стека из группы
+   * считается по любой из них); `label` — имя группы альтернатив.
+   */
+  steps: readonly EvolutionRecipeStep[];
   eligible: (s: RunState) => boolean;
+}
+
+export interface EvolutionRecipeStep {
+  readonly ids: readonly string[];
+  readonly target: number;
+  readonly label?: string;
 }
 
 export const EVOLUTIONS: EvolutionDef[] = [
   {
     id: 'prism',
     name: EVOLUTION_NAMES.prism,
-    effect: 'Шиповые белки удлиняются · пробивание +1',
-    desc: 'Вирусные частицы получают агрессивный светящийся след и глубже проходят через иммунные клетки.',
+    effect: 'Снаряды летят насквозь: пробивание +1',
+    desc: 'Каждый снаряд проходит на одного врага больше. Работает всегда, без условий. После выбора у вируса появляются шипы.',
     recipe: 'БЕЛКОВЫЕ ШИПЫ III + ПРОНИКНОВЕНИЕ II',
+    steps: [
+      { ids: ['dmg'], target: 3 },
+      { ids: ['pierce'], target: 2 },
+    ],
     eligible: (s) => s.stackOf('dmg') >= 3 && s.stackOf('pierce') >= 2,
   },
   {
     id: 'halo',
     name: EVOLUTION_NAMES.halo,
-    effect: 'Капсид формирует многослойную защитную оболочку',
-    desc: 'Орбитальные белковые фрагменты синхронизируются в заметный внешний слой штамма.',
+    effect: 'Спутники: золотое кольцо и увеличенные клинки',
+    desc: 'Меняет только облик: золотое кольцо вокруг вируса, клинки золотые и крупнее. Радиус орбиты, скорость вращения и защита прежние.',
     recipe: 'КАПСИДНЫЕ СПУТНИКИ III + ПОДВИЖНОСТЬ/РЕПЛИКАЦИЯ II',
+    steps: [
+      { ids: ['orbit'], target: 3 },
+      { ids: ['speed', 'rate'], target: 2, label: 'Подвижность или Репликация' },
+    ],
     eligible: (s) =>
       s.stackOf('orbit') >= 3 && (s.stackOf('speed') >= 2 || s.stackOf('rate') >= 2),
   },
   {
     id: 'singularity',
     name: EVOLUTION_NAMES.singularity,
-    effect: 'Круговой импульс наносит урон и отбрасывает врагов',
-    desc: 'Каждая круговая волна наносит урон и отбрасывает обычных врагов рядом. Боссы получают урон без перемещения.',
+    effect: 'Круговая волна: новый облик. Открывает «Цепь лизиса»',
+    desc: 'Урон, радиус и отброс волны уже даёт «Мембранный импульс» — числа не меняются. Меняет облик волны и делает «Цепь лизиса» доступной для предложения.',
     recipe: 'МЕМБРАННЫЙ ИМПУЛЬС III + РНК-АФФИНИТЕТ II',
+    steps: [
+      { ids: ['nova'], target: 3 },
+      { ids: ['magnet'], target: 2 },
+    ],
     eligible: (s) => s.stackOf('nova') >= 3 && s.stackOf('magnet') >= 2,
   },
 ];

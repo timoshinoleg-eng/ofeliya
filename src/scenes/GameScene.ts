@@ -57,6 +57,7 @@ import { generateRunSeed, RunRng } from '../game/RunRng';
 import { QaPerfOverlay } from '../game/qaPerf';
 import { parseQaHide, qaHideLabel, toggleQaHide, type QaHideGroup } from '../game/qaHide';
 import { applyQaMutationFixture, parseQaMutationState } from '../game/qaMutationStates';
+import { applyQaTrophyFixture, parseQaTrophyState } from '../game/qaTrophyStates';
 import { ImpactDirector } from '../game/ImpactDirector';
 import { Player } from '../game/Player';
 import { Enemy } from '../game/Enemy';
@@ -679,6 +680,21 @@ export class GameScene extends Phaser.Scene {
         applyQaMutationFixture(this.runState, qaMutation);
         this.pendingChoices = [...qaMutation.choices];
         this.awaitingChoice = true;
+      }
+      // QA fixed trophy states: ?qaTrophy=fresh|one|used|rhythm opens the
+      // boss-trophy screen through the REAL choice path with the legendary
+      // reward flag, so subtitle/rule/footnote/cards render exactly as after
+      // «ИММУННЫЙ ПРАЙМ». Choice, ceremony and return to battle stay ordinary.
+      const qaTrophy = parseQaTrophyState(window.location.search);
+      if (qaTrophy) {
+        applyQaTrophyFixture(this.runState, qaTrophy);
+        if (qaTrophy.stage === 'heart') {
+          this.runState.resetStageProgression({ id: 'heart', order: 2 });
+        }
+        if (qaTrophy.carrierSpent) this.lastCarrierUsed = true;
+        this.pendingChoices = [...qaTrophy.choices];
+        this.awaitingChoice = true;
+        this.legendaryRewardPending = true;
       }
       this.qaPerf = new QaPerfOverlay(this, () => ({
         enemies: this.enemies.countActive(true),

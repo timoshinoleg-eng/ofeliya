@@ -45,6 +45,8 @@ try {
       resolve('node_modules/typescript/bin/tsc'),
       'src/game/upgradeBeforeAfter.ts',
       'src/game/qaMutationStates.ts',
+      'src/game/qaTrophyStates.ts',
+      'src/game/recipeProgress.ts',
       'src/game/RunState.ts',
       'src/game/UpgradeSystem.ts',
       'src/game/EvolutionSystem.ts',
@@ -87,6 +89,18 @@ try {
     parseQaMutationState,
     applyQaMutationFixture,
   } = require(join(temp, 'game/qaMutationStates.js'));
+  // eslint-disable-next-line no-require-imports
+  const {
+    parseQaTrophyState,
+    applyQaTrophyFixture,
+  } = require(join(temp, 'game/qaTrophyStates.js'));
+  // eslint-disable-next-line no-require-imports
+  const {
+    getRecipeProgress,
+    formatRecipeRow,
+    formatRecipeTitle,
+    formatRecipeNote,
+  } = require(join(temp, 'game/recipeProgress.js'));
 
   const def = (id) => UPGRADES.find((u) => u.id === id);
   const applyTimes = (s, id, n) => {
@@ -173,7 +187,7 @@ try {
   assert(carrier.effect.includes('Один раз за забег'), 'A: carrier effect states one activation per run');
   assert(carrier.effect.includes('1 прочности'), 'A: carrier effect leaves 1 HP');
   assert(carrier.desc.includes('25%'), 'A: carrier desc names the 25% cost');
-  assert(carrier.desc.includes('8 секунд'), 'A: carrier desc names the 8-second form');
+  assert(carrier.desc.includes('8 с'), 'A: carrier desc names the 8-second form');
   eq(formatUpgradeEffectSuffix(a, { ...carrier, id: 'legendary:last-carrier', kind: 'legendary' }), null,
     'A: legendary card carries no before-after suffix');
   // Rarity of the three A cards per the agreed fixture.
@@ -223,7 +237,11 @@ try {
   );
   const singularity = getEvolutionDef('singularity');
   eq(singularity.recipe, 'МЕМБРАННЫЙ ИМПУЛЬС III + РНК-АФФИНИТЕТ II', 'C: recipe copy');
-  assert(singularity.desc.includes('Боссы получают урон без перемещения'), 'C: boss caveat present');
+  // Текстовый пакет Muse: эволюция честно называет себя обликом + воротами
+  // «Цепи лизиса»; урон/радиус/отброс волны обещает не она, а nova.
+  assert(singularity.effect.includes('Цепь лизиса'), 'C: singularity opens the lysis-chain gate');
+  assert(singularity.effect.includes('облик'), 'C: singularity effect names the new look');
+  assert(singularity.desc.includes('Мембранный импульс'), 'C: wave numbers credited to the nova card');
 
   // The choice object the UI receives (same mapping EvolutionSystem.toChoice uses).
   const cRolled = rollRunChoices(c, 3, () => 0.99);
@@ -251,12 +269,89 @@ try {
     eligibleLegendaries(cAfter).some((l) => l.id === 'lysis-chain'),
     'C: singularity must open the lysis-chain legendary condition'
   );
-  // The «урон и отброс» wording of PR #277 is NOT a new evolution effect:
-  // the base nova wave already knocks back (boss caveat lives in the source).
-  assert(singularity.effect.includes('отбрасывает'), 'C: source effect unchanged');
+  // Текстовый пакет Muse: короткая строка — польза, а не повторение пользы базовой волны.
+  assert(singularity.effect.includes('Цепь лизиса'), 'C: source effect names the lysis-chain gate');
+  assert(!singularity.effect.includes('отбрасывает'), 'C: wave knockback must not be advertised as the evolution effect');
 
-  /* ------------- Carrier: insurance pick vs lethal trigger ------------- */
-  // The card reserves the insurance at pick time; the rescue itself fires
+  /* ------------------- Recipe block (экран B, оба случая) ------------------- */
+  // Блок рецепта на карточке: шаги с фактическим прогрессом, подсветка ветки
+  // карточки и два случая пояснения — «закрывает последнее условие» и
+  // «приближает к рецепту». Числа — из живого состояния, не из текста теста.
+  const magnetDef = def('magnet');
+  const bComplete = new RunState({ id: 'bloodstream', order: 1 });
+  applyTimes(bComplete, 'nova', 3);
+  applyTimes(bComplete, 'magnet', 1);
+  const progressComplete = getRecipeProgress(bComplete, 'singularity', magnetDef);
+  eq(progressComplete.completes, true, 'recipe B: magnet at 1/2 completes the singularity recipe');
+  eq(
+    progressComplete.rows.map(formatRecipeRow).join(' | '),
+    'МЕМБРАННЫЙ ИМПУЛЬС — 3/3 ✓ | РНК-АФФИНИТЕТ — 1/2 → 2/2',
+    'recipe B: rows with checkmark and advance arrow'
+  );
+  eq(
+    formatRecipeTitle(progressComplete),
+    'Рецепт «СИНГУЛЯРНОСТЬ» — последнее условие',
+    'recipe B: last-condition title'
+  );
+  assert(
+    formatRecipeNote(progressComplete).includes('После выбора рецепт будет готов'),
+    'recipe B: note promises the ready recipe'
+  );
+  assert(
+    formatRecipeNote(progressComplete).includes('отдельной картой'),
+    'recipe B: note says singularity is a separate card'
+  );
+
+  const bMid = new RunState({ id: 'bloodstream', order: 1 });
+  applyTimes(bMid, 'nova', 2);
+  const progressMid = getRecipeProgress(bMid, 'singularity', magnetDef);
+  eq(progressMid.completes, false, 'recipe mid: magnet at 0/2 with nova 2/3 must NOT complete');
+  eq(
+    progressMid.rows.map(formatRecipeRow).join(' | '),
+    'МЕМБРАННЫЙ ИМПУЛЬС — 2/3 | РНК-АФФИНИТЕТ — 0/2 → 1/2',
+    'recipe mid: rows show the real remaining stacks'
+  );
+  eq(formatRecipeTitle(progressMid), 'Рецепт «СИНГУЛЯРНОСТЬ»', 'recipe mid: plain title');
+  assert(
+    formatRecipeNote(progressMid).includes('мембранный импульс 2/3'),
+    'recipe mid: note names what remains'
+  );
+
+  // Группа альтернатив (halo): прогресс считается по максимуму из группы.
+  const haloMid = new RunState({ id: 'bloodstream', order: 1 });
+  applyTimes(haloMid, 'orbit', 3);
+  applyTimes(haloMid, 'rate', 1);
+  const haloProgress = getRecipeProgress(haloMid, 'halo', def('rate'));
+  eq(haloProgress.completes, true, 'recipe halo: rate 1/2 + orbit 3/3 completes via the alternative group');
+  eq(
+    haloProgress.rows.map(formatRecipeRow).join(' | '),
+    'КАПСИДНЫЕ СПУТНИКИ — 3/3 ✓ | Подвижность или Репликация — 1/2 → 2/2',
+    'recipe halo: alternative group row'
+  );
+
+  /* ----------------------- QA trophy open path (?qaTrophy=) ----------------------- */
+  // Прямые входы на трофейный экран: закреплённые карты, состояние слота
+  // легендарных до выбора и потраченное спасение носителя.
+  eq(parseQaTrophyState('?qaTrophy=fresh').choices.map((c) => c.id).join(','),
+    'legendary:core-predator,legendary:zero-point', 'QA trophy fresh: pinned pair');
+  eq(parseQaTrophyState('?qaTrophy=one').preLegendary.join(','), 'last-carrier',
+    'QA trophy one: one legendary before the boss');
+  eq(parseQaTrophyState('?qaTrophy=used').carrierSpent, true,
+    'QA trophy used: carrier rescue spent');
+  eq(parseQaTrophyState('?qaTrophy=rhythm').choices.map((c) => c.id).join(','),
+    'legendary:myocardial-rhythm,legendary:core-predator', 'QA trophy rhythm: long-condition card leads');
+  eq(parseQaTrophyState('?qaTrophy=rhythm').stage, 'heart', 'QA trophy rhythm: heart stage');
+  eq(parseQaTrophyState('?qaTrophy=nope'), null, 'QA trophy unknown is a no-op');
+  eq(parseQaTrophyState(''), null, 'QA trophy absent is a no-op');
+
+  const trophyOne = new RunState({ id: 'bloodstream', order: 1 });
+  applyQaTrophyFixture(trophyOne, parseQaTrophyState('?qaTrophy=one'));
+  eq(trophyOne.run.legendaryIds.size, 1, 'QA trophy one: pre-boss legendary applied through addLegendary');
+  const trophyFresh = new RunState({ id: 'bloodstream', order: 1 });
+  applyQaTrophyFixture(trophyFresh, parseQaTrophyState('?qaTrophy=fresh'));
+  eq(trophyFresh.run.legendaryIds.size, 0, 'QA trophy fresh: no legendaries before the boss');
+
+  /* ------------- Carrier: insurance pick vs lethal trigger ------------- */  // The card reserves the insurance at pick time; the rescue itself fires
   // only on lethal damage (GameScene.activateLastCarrier): 1 HP left, 25% of
   // the current level progress lost, regular enemies cleared, 8-second form.
   const carrierState = new RunState({ id: 'bloodstream', order: 1 });
