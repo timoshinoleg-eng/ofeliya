@@ -2771,70 +2771,76 @@ export class UIScene extends Phaser.Scene {
     const reportTop = Math.max(statY + 36, statsBottom + 24);
     const reportRows = c.list.slice(reportStart).filter((child): child is Phaser.GameObjects.Text => child instanceof Phaser.GameObjects.Text);
     createResultReport(this, c, reportRows, W / 2, reportTop, W - 32, Math.max(50, y - 55 - reportTop), scoreStatus);
-    // The report repositioned the rows (origin 0.5, 0), so the tap zones are
-    // fitted now: each row of an opening covers 22px (4px above its text),
-    // the pair together 44px (MIN_TOUCH). A scroll drag must not navigate:
-    // the tap fires only for the same pointer with almost no movement.
-    for (const { name, sub, entry } of openingRows) {
-      const ref = codexEntryRef(entry);
-      const go = () => {
-        this.registry.set('openCodexOnMenu', true);
-        this.registry.set('openCodexEntry', ref);
-        this.gs?.scene.stop();
-        this.scene.start('Menu');
-      };
-      for (const row of [name, sub]) {
-        let armed: { id: number; x: number; y: number } | null = null;
-        row.setInteractive(
-          new Phaser.Geom.Rectangle(-(W - 32) / 2, -4, W - 32, MIN_TOUCH / 2),
-          Phaser.Geom.Rectangle.Contains
-        );
-        row.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-          armed = { id: pointer.id, x: pointer.x, y: pointer.y };
-        });
-        row.on('pointerup', (pointer: Phaser.Input.Pointer) => {
-          if (!armed || armed.id !== pointer.id) return;
-          const moved = Math.abs(pointer.x - armed.x) + Math.abs(pointer.y - armed.y);
-          armed = null;
-          if (moved > 12) return;
-          go();
-        });
+    // One tap zone per opening: the name and the tab subtitle share a
+    // single zone, at least MIN_TOUCH tall and the full row width. The
+    // zone is a plain rectangle in the report container, so it scrolls
+    // with the rows; its world bounds are read at tap time, so the same
+    // geometry works with and without scrolling. The zone height is a
+    // fixed minimum, never derived from the text: the old design had
+    // two 22px hit areas whose combined span depended on font metrics
+    // (44px on Linux, 43px on Windows Chrome), and whose hit rect was
+    // shifted by the text's displayOriginX, so the right edge of the
+    // row never opened the Codex (the scrim below swallowed the tap).
+    const report = c.getByName('ofeliya-result-report') as Phaser.GameObjects.Container | null;
+    const openingZones: Array<{ zone: Phaser.GameObjects.Rectangle; entry: NewCodexEntry }> = [];
+    if (report && openingRows.length > 0) {
+      for (const { name, sub, entry } of openingRows) {
+        const bandTop = name.y;
+        const bandBottom = sub.y + sub.height;
+        const bandCenter = (bandTop + bandBottom) / 2;
+        const zoneHeight = Math.max(MIN_TOUCH, bandBottom - bandTop);
+        const zone = this.add
+          .rectangle(0, bandCenter, W - 32, zoneHeight, 0xffffff, 0)
+          .setName(`ofeliya-result-opening-zone-${entry.kind}-${entry.id}`);
+        report.add(zone);
+        zone.setPosition(0, bandCenter);
+        openingZones.push({ zone, entry });
       }
     }
-    // When the report scrolls, its transparent hit rect sits above the rows
-    // and (the UI scene runs with topOnly) swallows their taps. Route a tap
-    // on an opening row through the hit rect itself: a tap with almost no
-    // movement on a row's band navigates, a drag still scrolls. When the
-    // report does not scroll the hit rect is not interactive and the rows'
-    // own handlers above do the job.
+    // The report's transparent hit rect covers the visible report area
+    // and sits above the rows (the UI scene runs with topOnly), so it
+    // routes every opening tap, with scrolling and without. A tap
+    // navigates only when it starts and ends inside one zone (same
+    // pointer, almost no movement): a swipe scrolls the report instead,
+    // and releasing outside the zone does nothing. The visible area is
+    // the hit rect itself, so a zone scrolled half out of view cannot
+    // catch a tap on its hidden part. When two zones overlap (a band
+    // shorter than MIN_TOUCH next to another entry), the nearest band
+    // centre wins.
     const reportHit = c.getByName('ofeliya-result-report-hit') as Phaser.GameObjects.Rectangle | null;
-    if (reportHit?.input?.enabled) {
-      let down: { id: number; x: number; y: number } | null = null;
+    if (reportHit && openingZones.length > 0) {
+      if (!reportHit.input) reportHit.setInteractive();
+      let tap: { id: number; x: number; y: number } | null = null;
       reportHit.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-        down = { id: pointer.id, x: pointer.x, y: pointer.y };
+        tap = { id: pointer.id, x: pointer.x, y: pointer.y };
       });
+      reportHit.on('pointerupoutside', () => { tap = null; });
       reportHit.on('pointerup', (pointer: Phaser.Input.Pointer) => {
-        if (!down || down.id !== pointer.id) return;
-        const moved = Math.abs(pointer.x - down.x) + Math.abs(pointer.y - down.y);
-        down = null;
+        if (!tap || tap.id !== pointer.id) return;
+        const moved = Math.abs(pointer.x - tap.x) + Math.abs(pointer.y - tap.y);
+        tap = null;
         if (moved > 12) return;
-        for (const { name, sub, entry } of openingRows) {
-          for (const row of [name, sub]) {
-            const bounds = row.getBounds();
-            if (
-              pointer.x >= bounds.left &&
-              pointer.x <= bounds.right &&
-              pointer.y >= bounds.top - 4 &&
-              pointer.y <= bounds.bottom + 4
-            ) {
-              this.registry.set('openCodexOnMenu', true);
-              this.registry.set('openCodexEntry', codexEntryRef(entry));
-              this.gs?.scene.stop();
-              this.scene.start('Menu');
-              return;
-            }
+        const hitBounds = reportHit.getBounds();
+        if (
+          pointer.x < hitBounds.left || pointer.x > hitBounds.right ||
+          pointer.y < hitBounds.top || pointer.y > hitBounds.bottom
+        ) return;
+        let best: { entry: NewCodexEntry; dist: number } | null = null;
+        for (const { zone, entry } of openingZones) {
+          const bounds = zone.getBounds();
+          if (
+            pointer.x >= bounds.left && pointer.x <= bounds.right &&
+            pointer.y >= bounds.top && pointer.y <= bounds.bottom
+          ) {
+            const dist = Math.abs(pointer.y - bounds.centerY);
+            if (!best || dist < best.dist) best = { entry, dist };
           }
         }
+        if (!best) return;
+        this.registry.set('openCodexOnMenu', true);
+        this.registry.set('openCodexEntry', codexEntryRef(best.entry));
+        this.gs?.scene.stop();
+        this.scene.start('Menu');
       });
     }
     this.button(c, RESULT_COPY.newRun, W / 2, y, true, () => {

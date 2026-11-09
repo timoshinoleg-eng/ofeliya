@@ -7,36 +7,75 @@
  * the save is seeded through localStorage, the run is finished directly
  * with `gs.finish(...)`, and the buttons are pressed with real touch.
  *
- * What it checks per state:
+ * What it checks per state (base runs):
  *  - the opening rows name exactly the entries the run opened for the
  *    first time (never the achievement count);
  *  - the old plate «★ Открыто в Кодексе: +N записей» is gone;
  *  - achievements are shown on their own line, by name, and are not
  *    presented as Codex entries;
  *  - a re-chosen known card stays in the run list;
- *  - each opening row's tap zone is 44px (two 22px hit areas);
+ *  - each opening has ONE tap zone (name + tab subtitle together):
+ *    at least 44px tall and the full row width (W - 32);
  *  - both result buttons are 46px tall.
  *
- * What it checks on the transition (states 2 and 4):
- *  - the Codex opens on the entry's tab with the entry highlighted
- *    (a «НОВОЕ» badge);
+ * What it checks on the tap runs (separate boots, one tap each):
+ *  - tap on the zone centre, left edge and right edge opens the Codex
+ *    on the entry's tab with the entry highlighted (a «НОВОЕ» badge);
+ *  - both two-openings transitions, in separate runs: «Сингулярность»
+ *    -> «Синергии», «Нулевая точка» -> «Легендарные»;
  *  - the save and the score outbox are unchanged (no re-recording);
- *  - no new /api/score request is made (no re-submission).
+ *  - the score submission happened exactly once: at least one
+ *    /api/score request before the tap, and none after it.
  *
- * The probe runs every scenario and prints a report; it exits non-zero
- * when any check fails, so the same script reproduces the defect on the
- * base and verifies the fix on the patched branch.
+ * What it checks on the swipe run (320x520, first trophy):
+ *  - a swipe through the row scrolls the report and does not open
+ *    the Codex;
+ *  - releasing outside the row (pointer down near the top edge, a
+ *    short move up, release outside the zone) does not open the Codex;
+ *  - after scrolling, a tap on the visible row still opens the Codex.
  *
- * Usage:
+ * The probe runs every check and prints a report; it exits non-zero
+ * when any check fails, so the same script reproduces the defect on
+ * the base and verifies the fix on the patched branch.
+ *
+ * Usage (from the repo root; the dev server must be running on 5173):
  *   node scripts/run-result-codex-probe.cjs [--video] [--shots-dir <dir>]
- * The dev server must be running (npm run dev, port 5173).
+ *
+ * Chrome resolution, in order:
+ *   1. $CHROME_PATH — an explicit Chrome/Chromium executable path.
+ *   2. System Chrome (Playwright channel "chrome").
+ *   3. The Playwright-bundled Chromium (this VM's cache path, if present).
+ *   4. Playwright's default bundled Chromium.
+ * Windows (PowerShell, system Chrome):
+ *   node scripts/run-result-codex-probe.cjs --video
+ * Windows (explicit path):
+ *   $env:CHROME_PATH = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
+ *   node scripts/run-result-codex-probe.cjs --video
  */
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright-core');
 
-const CHROME = '/home/hatch/.cache/ms-playwright/chromium-1187/chrome-linux/chrome';
-if (!fs.existsSync(CHROME)) throw new Error('Playwright chromium not found: ' + CHROME);
+const BUNDLED_CHROME = '/home/hatch/.cache/ms-playwright/chromium-1187/chrome-linux/chrome';
+
+async function launchBrowser() {
+  const opts = { headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] };
+  if (process.env.CHROME_PATH) {
+    return chromium.launch({ ...opts, executablePath: process.env.CHROME_PATH });
+  }
+  try {
+    return await chromium.launch({ ...opts, channel: 'chrome' });
+  } catch (channelError) {
+    if (fs.existsSync(BUNDLED_CHROME)) {
+      return chromium.launch({ ...opts, executablePath: BUNDLED_CHROME });
+    }
+    try {
+      return await chromium.launch(opts);
+    } catch {
+      throw channelError;
+    }
+  }
+}
 
 const argv = process.argv.slice(2);
 const VIDEO = argv.includes('--video');
@@ -53,6 +92,24 @@ async function touchAt(ctx, page, point) {
     touchPoints: [{ x: point.x, y: point.y, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
   });
   await sleep(45);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+}
+
+/** A touch drag: down at `from`, move through `points`, release at the last one. */
+async function touchDrag(ctx, page, from, points) {
+  const cdp = await ctx.newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: from.x, y: from.y, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
+  });
+  await sleep(45);
+  for (const p of points) {
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x: p.x, y: p.y, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
+    });
+    await sleep(30);
+  }
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
 }
 
@@ -80,11 +137,40 @@ async function sceneTexts(page, sceneName) {
           cy: b ? Math.round(b.centerY) : null,
           bw: b ? Math.round(b.width) : null,
           bh: b ? Math.round(b.height) : null,
-          hitArea: o.input?.hitArea
-            ? { width: o.input.hitArea.width, height: o.input.hitArea.height }
-            : null,
         };
       });
+  }, sceneName);
+}
+
+/** The opening tap zones: invisible rectangles named ofeliya-result-opening-zone-*. */
+async function sceneZones(page, sceneName) {
+  return page.evaluate((name) => {
+    const scene = window.__game.scene.getScene(name);
+    if (!scene) return [];
+    const flat = [];
+    const visit = (obj) => {
+      flat.push(obj);
+      if (Array.isArray(obj?.list)) obj.list.forEach(visit);
+    };
+    scene.children.list.forEach(visit);
+    return flat
+      .filter((o) => o && typeof o.name === 'string' && o.name.startsWith('ofeliya-result-opening-zone-'))
+      .map((o) => {
+        const b = typeof o.getBounds === 'function' ? o.getBounds() : null;
+        if (!b) return null;
+        return {
+          name: o.name,
+          left: Math.round(b.left),
+          right: Math.round(b.right),
+          top: Math.round(b.top),
+          bottom: Math.round(b.bottom),
+          cx: Math.round(b.centerX),
+          cy: Math.round(b.centerY),
+          width: Math.round(b.width),
+          height: Math.round(b.height),
+        };
+      })
+      .filter(Boolean);
   }, sceneName);
 }
 
@@ -211,7 +297,6 @@ const SCENARIOS = [
     // recordRun bumps runs 2 -> 3 before captureAchievements, so the
     // run also unlocks the third-run achievement (not a Codex opening).
     expectAchievements: ['restart-3'],
-    transition: true,
   },
   {
     id: 'repeat-legendary',
@@ -235,7 +320,6 @@ const SCENARIOS = [
       { kind: 'legendary', id: 'zero-point', tab: 'legendary' },
     ],
     expectAchievements: ['adaptation', 'restart-3'],
-    transition: true,
   },
   {
     id: 'no-openings',
@@ -254,7 +338,70 @@ const VIEWPORTS = [
   { width: 320, height: 520, label: '320x520' },
 ];
 
-async function runScenario(browser, scenario, viewport, checkTransition) {
+const scenarioById = (id) => SCENARIOS.find((s) => s.id === id);
+
+async function expectCodex(page, ctx, expected, beforeStorage, beforeScore, scoreCount, errors, fail) {
+  try {
+    await page.waitForFunction(
+      () => {
+        const g = window.__game;
+        return g.scene.isActive('Menu') && !g.scene.isActive('Game') && !g.scene.isActive('UI');
+      },
+      { timeout: 3000 }
+    );
+  } catch {
+    fail('Menu did not open after tapping the opening row');
+    return;
+  }
+  await sleep(300);
+  const menuTexts = await sceneTexts(page, 'Menu');
+  const menuVisible = menuTexts.filter((t) => t.visible);
+  const badge = menuVisible.find((t) => t.name === `ofeliya-codex-new-badge-${expected.id}`);
+  if (!badge) fail(`Codex badge missing for ${expected.id}`);
+  else if (badge.text !== 'НОВОЕ') fail(`Codex badge text is «${badge.text}», expected «НОВОЕ»`);
+  const tabLabel = expected.tab === 'legendary' ? 'ЛЕГЕНДАРНЫЕ' : 'СИНЕРГИИ';
+  const tab = menuVisible.find((t) => t.text === tabLabel);
+  if (!tab) fail(`Codex tab missing: ${tabLabel}`);
+  // The Codex active tab is VISUAL_TEXT.warning (#d9ba79); the other
+  // tabs are muted (#9cacac). (The result screen's gold is #ffe066 —
+  // a different gold; the tab must match the Codex palette, not the
+  // result screen's.)
+  else if (tab.color !== '#d9ba79') fail(`Codex tab ${tabLabel} not active (color ${tab.color})`);
+  for (const other of ['СИНЕРГИИ', 'ЛЕГЕНДАРНЫЕ', 'МАСТЕРСТВО']) {
+    if (other === tabLabel) continue;
+    const otherTab = menuVisible.find((t) => t.text === other);
+    if (otherTab && otherTab.color === '#d9ba79') fail(`Codex tab ${other} also active`);
+  }
+  const afterStorage = await storageSnapshot(page);
+  if (JSON.stringify(afterStorage) !== JSON.stringify(beforeStorage)) {
+    fail('storage changed on the Codex transition (re-recording?)');
+  }
+  // The submission must have happened exactly once: at least one request
+  // before the tap (the original submit), and none after it.
+  if (beforeScore < 1) fail(`no /api/score request before the tap (score=${beforeScore}); the original submission did not happen`);
+  if (scoreCount() !== beforeScore) fail(`new /api/score request on the Codex transition (before=${beforeScore}, after=${scoreCount()})`);
+  if (errors.length) fail(`page errors after transition: ${errors.join(' | ')}`);
+}
+
+async function expectStillResult(page, entry, fail) {
+  // Still on the result screen: the UI scene is active, the Menu is not,
+  // and the opening row is still visible. (The Game scene is PAUSED on
+  // the result screen, so isActive('Game') is false there — it must not
+  // be part of this check.)
+  const onResult = await page.evaluate((entryId) => {
+    const g = window.__game;
+    if (!g.scene.isActive('UI') || g.scene.isActive('Menu')) return false;
+    const ui = g.scene.getScene('UI');
+    const flat = [];
+    const visit = (obj) => { flat.push(obj); if (Array.isArray(obj?.list)) obj.list.forEach(visit); };
+    ui.children.list.forEach(visit);
+    return flat.some((o) => o.name === `ofeliya-result-opening-${entryId}-name` && o.visible !== false);
+  }, `${entry.kind}-${entry.id}`);
+  if (!onResult) fail('left the result screen (Menu opened?)');
+}
+
+/** Base checks: rows, old plate, achievements, run list, buttons, zone geometry. No tap. */
+async function runScenario(browser, scenario, viewport) {
   const failures = [];
   const fail = (msg) => failures.push(msg);
   const { ctx, page, errors, scoreCount } = await bootResult(
@@ -282,12 +429,23 @@ async function runScenario(browser, scenario, viewport, checkTransition) {
       if (!nameRow) { fail(`opening row missing: ${expected.kind}/${expected.id}`); continue; }
       const subRow = openingSubs.find((t) => t.name === `ofeliya-result-opening-${expected.kind}-${expected.id}-sub`);
       if (!subRow) { fail(`opening sub-row missing: ${expected.kind}/${expected.id}`); continue; }
-      const nameH = nameRow.hitArea?.height;
-      const subH = subRow.hitArea?.height;
-      if (nameH !== 22 || subH !== 22) fail(`tap zone for ${expected.id}: name ${nameH}px, sub ${subH}px (expected 22+22=44)`);
-      if (subRow.cy !== null && nameRow.cy !== null && subRow.cy - nameRow.cy < 22) {
-        fail(`opening rows too close for ${expected.id}: ${subRow.cy - nameRow.cy}px apart (pair span ${subRow.cy - nameRow.cy + 22}px < 44)`);
-      }
+    }
+
+    // One tap zone per opening: at least 44px tall, full row width.
+    // (The old design had two 22px hit areas whose combined span depended
+    // on font metrics: 44px on Linux, 43px on Windows Chrome.)
+    // The row width is the game's scale width minus 32, read live so the
+    // check does not assume the viewport equals the layout width.
+    const scaleWidth = await page.evaluate(() => window.__game.scale.width);
+    const zones = await sceneZones(page, 'UI');
+    for (const expected of scenario.expectOpenings) {
+      const zone = zones.find((z) => z.name === `ofeliya-result-opening-zone-${expected.kind}-${expected.id}`);
+      if (!zone) { fail(`tap zone missing for ${expected.id} (no ofeliya-result-opening-zone object)`); continue; }
+      if (zone.height < 44) fail(`tap zone for ${expected.id} is ${zone.height}px tall (< 44)`);
+      if (zone.width !== scaleWidth - 32) fail(`tap zone for ${expected.id} is ${zone.width}px wide (expected ${scaleWidth - 32}, full row width)`);
+    }
+    if (zones.length !== scenario.expectOpenings.length) {
+      fail(`tap zones: expected ${scenario.expectOpenings.length}, got ${zones.length}`);
     }
 
     // Achievements are a separate line, by name.
@@ -324,69 +482,142 @@ async function runScenario(browser, scenario, viewport, checkTransition) {
     }
 
     if (errors.length) fail(`page errors: ${errors.join(' | ')}`);
+  } finally {
+    await ctx.close();
+  }
+  return failures;
+}
 
-    // The transition: tap the first opening row -> the Codex on its tab,
-    // with the entry highlighted; the save and the submission are untouched.
-    if (checkTransition && scenario.expectOpenings.length > 0) {
-      const first = scenario.expectOpenings[0];
-      const nameRow = openingNames.find((t) => t.name === `ofeliya-result-opening-${first.kind}-${first.id}-name`);
-      if (!nameRow || nameRow.cx === null) {
-        fail(`cannot tap opening row ${first.id}: no bounds`);
-      } else {
-        const beforeStorage = await storageSnapshot(page);
-        const beforeScore = scoreCount();
-        if (VIDEO && scenario.id === 'first-trophy' && viewport.label === '390x844') {
-          for (let i = 0; i < 6; i += 1) {
-            await page.screenshot({ path: path.join(SHOTS, `video-${String(i).padStart(2, '0')}.png`) });
-            await sleep(120);
-          }
-        }
-        await touchAt(ctx, page, { x: nameRow.cx, y: nameRow.cy });
-        try {
-          await page.waitForFunction(
-            () => {
-              const g = window.__game;
-              return g.scene.isActive('Menu') && !g.scene.isActive('Game') && !g.scene.isActive('UI');
-            },
-            { timeout: 3000 }
-          );
-        } catch {
-          fail('Menu did not open after tapping the opening row');
-        }
-        if (VIDEO && scenario.id === 'first-trophy' && viewport.label === '390x844') {
-          for (let i = 6; i < 12; i += 1) {
-            await page.screenshot({ path: path.join(SHOTS, `video-${String(i).padStart(2, '0')}.png`) });
-            await sleep(120);
-          }
-        }
-        await sleep(300);
-        await shot('codex');
-        const menuTexts = await sceneTexts(page, 'Menu');
-        const menuVisible = menuTexts.filter((t) => t.visible);
-        const badge = menuVisible.find((t) => t.name === `ofeliya-codex-new-badge-${first.id}`);
-        if (!badge) fail(`Codex badge missing for ${first.id}`);
-        else if (badge.text !== 'НОВОЕ') fail(`Codex badge text is «${badge.text}», expected «НОВОЕ»`);
-        const tabLabel = first.tab === 'legendary' ? 'ЛЕГЕНДАРНЫЕ' : 'СИНЕРГИИ';
-        const tab = menuVisible.find((t) => t.text === tabLabel);
-        if (!tab) fail(`Codex tab missing: ${tabLabel}`);
-        // The Codex active tab is VISUAL_TEXT.warning (#d9ba79); the other
-        // tabs are muted (#9cacac). (The result screen's gold is #ffe066 —
-        // a different gold; the tab must match the Codex palette, not the
-        // result screen's.)
-        else if (tab.color !== '#d9ba79') fail(`Codex tab ${tabLabel} not active (color ${tab.color})`);
-        for (const other of ['СИНЕРГИИ', 'ЛЕГЕНДАРНЫЕ', 'МАСТЕРСТВО']) {
-          if (other === tabLabel) continue;
-          const otherTab = menuVisible.find((t) => t.text === other);
-          if (otherTab && otherTab.color === '#d9ba79') fail(`Codex tab ${other} also active`);
-        }
-        const afterStorage = await storageSnapshot(page);
-        if (JSON.stringify(afterStorage) !== JSON.stringify(beforeStorage)) {
-          fail('storage changed on the Codex transition (re-recording?)');
-        }
-        if (scoreCount() !== beforeScore) fail('new /api/score request on the Codex transition (re-submission?)');
-        if (errors.length) fail(`page errors after transition: ${errors.join(' | ')}`);
+/** One tap on one entry's zone, at a chosen point. Verifies the Codex transition. */
+async function runTap(browser, scenario, viewport, entry, pointName, videoPrefix) {
+  const failures = [];
+  const fail = (msg) => failures.push(msg);
+  const { ctx, page, errors, scoreCount } = await bootResult(
+    browser, viewport, scenario.save, scenario.run, scenario.win
+  );
+  try {
+    // The tap target: the zone object when it exists; otherwise the
+    // row-width band around the name/sub texts (the old code has no
+    // zone object, so the edge taps reproduce its failure this way).
+    const zones = await sceneZones(page, 'UI');
+    const zone = zones.find((z) => z.name === `ofeliya-result-opening-zone-${entry.kind}-${entry.id}`);
+    let target;
+    if (zone) {
+      target = zone;
+    } else {
+      const texts = await sceneTexts(page, 'UI');
+      const visible = texts.filter((t) => t.visible);
+      const nameRow = visible.find((t) => t.name === `ofeliya-result-opening-${entry.kind}-${entry.id}-name`);
+      const subRow = visible.find((t) => t.name === `ofeliya-result-opening-${entry.kind}-${entry.id}-sub`);
+      if (!nameRow || !subRow) { fail(`opening rows missing for ${entry.id}`); return failures; }
+      target = {
+        left: 16, right: viewport.width - 16,
+        top: nameRow.cy - Math.round(nameRow.bh / 2) - 4,
+        bottom: subRow.cy + Math.round(subRow.bh / 2) + 4,
+        cx: viewport.width / 2, cy: nameRow.cy,
+      };
+    }
+    const point =
+      pointName === 'center' ? { x: target.cx, y: target.cy } :
+      pointName === 'left' ? { x: target.left + 6, y: target.cy } :
+      { x: target.right - 6, y: target.cy };
+    const beforeStorage = await storageSnapshot(page);
+    const beforeScore = scoreCount();
+    if (VIDEO && videoPrefix) {
+      for (let i = 0; i < 6; i += 1) {
+        await page.screenshot({ path: path.join(SHOTS, `${videoPrefix}-${String(i).padStart(2, '0')}.png`) });
+        await sleep(120);
       }
     }
+    await touchAt(ctx, page, point);
+    if (VIDEO && videoPrefix) {
+      for (let i = 6; i < 12; i += 1) {
+        await page.screenshot({ path: path.join(SHOTS, `${videoPrefix}-${String(i).padStart(2, '0')}.png`) });
+        await sleep(120);
+      }
+    }
+    await page.screenshot({ path: path.join(SHOTS, `${scenario.id}-${viewport.label}-tap-${pointName}-${entry.id}-codex.png`) });
+    await expectCodex(page, ctx, entry, beforeStorage, beforeScore, scoreCount, errors, fail);
+  } finally {
+    await ctx.close();
+  }
+  return failures;
+}
+
+/** Swipe run: release outside the row, swipe through it, then tap the visible row. */
+async function runSwipe(browser, scenario, viewport) {
+  const failures = [];
+  const fail = (msg) => failures.push(msg);
+  const { ctx, page, errors, scoreCount } = await bootResult(
+    browser, viewport, scenario.save, scenario.run, scenario.win
+  );
+  try {
+    const entry = scenario.expectOpenings[0];
+    const readZone = async () => {
+      const zones = await sceneZones(page, 'UI');
+      const zone = zones.find((z) => z.name === `ofeliya-result-opening-zone-${entry.kind}-${entry.id}`);
+      if (zone) return zone;
+      const texts = await sceneTexts(page, 'UI');
+      const visible = texts.filter((t) => t.visible);
+      const nameRow = visible.find((t) => t.name === `ofeliya-result-opening-${entry.kind}-${entry.id}-name`);
+      const subRow = visible.find((t) => t.name === `ofeliya-result-opening-${entry.kind}-${entry.id}-sub`);
+      if (!nameRow || !subRow) return null;
+      return {
+        left: 16, right: viewport.width - 16,
+        top: nameRow.cy - Math.round(nameRow.bh / 2) - 4,
+        bottom: subRow.cy + Math.round(subRow.bh / 2) + 4,
+        cx: viewport.width / 2, cy: nameRow.cy,
+      };
+    };
+    let zone = await readZone();
+    if (!zone) { fail(`tap zone missing for ${entry.id}`); return failures; }
+    const beforeStorage = await storageSnapshot(page);
+    const beforeScore = scoreCount();
+
+    // 1) Release outside the row: down near the bottom edge, a short
+    // move down (the report is at its top limit, offset 0, so the zone
+    // does not move), release outside the zone. Movement is 10px
+    // (under the 12px swipe guard), so only the release-position
+    // check can stop the navigation.
+    const downPoint = { x: zone.cx, y: zone.bottom - 4 };
+    const upPoint = { x: zone.cx, y: zone.bottom + 6 };
+    await touchDrag(ctx, page, downPoint, [upPoint]);
+    await sleep(300);
+    await expectStillResult(page, entry, fail);
+
+    // 2) Swipe through the row (up 80px): the report scrolls, no Codex.
+    if (VIDEO) {
+      for (let i = 0; i < 2; i += 1) {
+        await page.screenshot({ path: path.join(SHOTS, `video-swipe-${String(i).padStart(2, '0')}.png`) });
+        await sleep(120);
+      }
+    }
+    const cyBefore = zone.cy;
+    const swipePoints = [];
+    for (let step = 1; step <= 8; step += 1) swipePoints.push({ x: zone.cx, y: zone.cy - step * 10 });
+    await touchDrag(ctx, page, { x: zone.cx, y: zone.cy }, swipePoints);
+    await sleep(300);
+    await expectStillResult(page, entry, fail);
+    zone = await readZone();
+    if (!zone) { fail('tap zone gone after the swipe'); return failures; }
+    if (zone.cy === cyBefore) fail('swipe did not scroll the report (zone did not move)');
+    if (VIDEO) {
+      for (let i = 2; i < 5; i += 1) {
+        await page.screenshot({ path: path.join(SHOTS, `video-swipe-${String(i).padStart(2, '0')}.png`) });
+        await sleep(120);
+      }
+    }
+
+    // 3) After scrolling, a tap on the visible row still opens the Codex.
+    if (VIDEO) {
+      for (let i = 5; i < 8; i += 1) {
+        await page.screenshot({ path: path.join(SHOTS, `video-swipe-${String(i).padStart(2, '0')}.png`) });
+        await sleep(120);
+      }
+    }
+    await touchAt(ctx, page, { x: zone.cx, y: zone.cy });
+    await page.screenshot({ path: path.join(SHOTS, `${scenario.id}-${viewport.label}-swipe-codex.png`) });
+    await expectCodex(page, ctx, entry, beforeStorage, beforeScore, scoreCount, errors, fail);
   } finally {
     await ctx.close();
   }
@@ -394,31 +625,56 @@ async function runScenario(browser, scenario, viewport, checkTransition) {
 }
 
 (async () => {
-  const browser = await chromium.launch({
-    executablePath: CHROME,
-    headless: true,
-    args: ['--no-sandbox', '--disable-dev-shm-usage'],
-  });
+  const browser = await launchBrowser();
   const report = [];
+  const run = async (key, fn) => {
+    let failures;
+    try {
+      failures = await fn();
+    } catch (error) {
+      failures = [`probe error: ${error.message}`];
+    }
+    report.push({ key, failures });
+    console.log(`${failures.length === 0 ? 'PASS' : 'FAIL'}  ${key}${failures.length ? '\n      ' + failures.join('\n      ') : ''}`);
+  };
+
+  const firstTrophy = scenarioById('first-trophy');
+  const twoOpenings = scenarioById('two-openings');
+
+  // Base checks: every scenario at 390x844; first-trophy also at 320x520.
   for (const scenario of SCENARIOS) {
-    // Every scenario at 390x844; the first-trophy path also at 320x520.
     const viewports = scenario.id === 'first-trophy' ? VIEWPORTS : [VIEWPORTS[0]];
     for (const viewport of viewports) {
-      const checkTransition = scenario.transition === true;
-      let failures;
-      try {
-        failures = await runScenario(browser, scenario, viewport, checkTransition);
-      } catch (error) {
-        failures = [`probe error: ${error.message}`];
-      }
-      const key = `${scenario.id} @ ${viewport.label}`;
-      report.push({ key, failures });
-      console.log(`${failures.length === 0 ? 'PASS' : 'FAIL'}  ${key}${failures.length ? '\n      ' + failures.join('\n      ') : ''}`);
+      await run(`${scenario.id} @ ${viewport.label}`, () => runScenario(browser, scenario, viewport));
     }
   }
+
+  // Tap matrix: centre and both edges, on both viewports.
+  for (const viewport of VIEWPORTS) {
+    for (const pointName of ['center', 'left', 'right']) {
+      const videoPrefix = VIDEO && viewport.label === '320x520' && pointName === 'left'
+        ? 'video-edge' : null;
+      await run(
+        `tap-${pointName} first-trophy @ ${viewport.label}`,
+        () => runTap(browser, firstTrophy, viewport, firstTrophy.expectOpenings[0], pointName, videoPrefix)
+      );
+    }
+  }
+
+  // Both two-openings transitions, in separate runs.
+  for (const entry of twoOpenings.expectOpenings) {
+    await run(
+      `tap-${entry.id} two-openings @ 390x844`,
+      () => runTap(browser, twoOpenings, VIEWPORTS[0], entry, 'center', null)
+    );
+  }
+
+  // Swipe behaviour on the tight viewport.
+  await run('swipe first-trophy @ 320x520', () => runSwipe(browser, firstTrophy, VIEWPORTS[1]));
+
   await browser.close();
   const failed = report.filter((r) => r.failures.length > 0);
-  console.log(`\nrun-result-codex-probe: ${report.length - failed.length}/${report.length} scenarios passed`);
+  console.log(`\nrun-result-codex-probe: ${report.length - failed.length}/${report.length} checks passed`);
   if (failed.length) process.exit(1);
   console.log('run-result-codex-probe: ok');
 })().catch((error) => {
