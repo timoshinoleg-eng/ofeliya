@@ -357,6 +357,20 @@ async function tapCard(page, index, label) {
     check(ceremonyTexts.some((t) => t.includes('НАЖМИ, ЧТОБЫ ПРОДОЛЖИТЬ')),
       `${TAG}: legendary ceremony prompt missing: ${JSON.stringify(ceremonyTexts)}`);
     await page.screenshot({ path: path.join(OUT_DIR, `${TAG}-ceremony.png`) });
+    // Build-reset facts are committed with the stage transition (before the
+    // trophy screen), and the ceremony keeps the game paused — read them here,
+    // before the confirm tap resumes the fight. Reading after the resume is
+    // racy: a heart enemy can land a contact hit in the evaluate window and
+    // break the exact hp 100/100 expectation.
+    const reset = await page.evaluate(() => window.__qaTransition.facts());
+    check(reset.rewardPending === false, `${TAG}: legendaryRewardPending must clear after the pick`);
+    check(reset.legendaryIds.includes(pickedId.replace('legendary:', '')),
+      `${TAG}: picked ${pickedId} must be in run.legendaryIds, got ${reset.legendaryIds.join(',')}`);
+    check(reset.stageId === 'heart', `${TAG}: post-pick stage must be heart, got ${reset.stageId}`);
+    check(reset.level === 1, `${TAG}: build reset must restore level 1, got ${reset.level}`);
+    check(reset.hp === 100 && reset.maxHp === 100, `${TAG}: build reset must restore hp 100/100, got ${reset.hp}/${reset.maxHp}`);
+    check(Object.keys(reset.stacks).length === 0, `${TAG}: build reset must clear stacks: ${JSON.stringify(reset.stacks)}`);
+    check(reset.evolutions.length === 0, `${TAG}: build reset must clear evolutions: ${reset.evolutions.join(',')}`);
     await page.touchscreen.tap(SIZE.width / 2, SIZE.height / 2);
     await page.waitForFunction(() => {
       const f = window.__qaTransition.facts();
@@ -368,14 +382,7 @@ async function tapCard(page, index, label) {
       window.__qaTransition.game().runState.stage.xpNext = Number.MAX_SAFE_INTEGER;
     });
     const after = await page.evaluate(() => window.__qaTransition.facts());
-    check(after.rewardPending === false, `${TAG}: legendaryRewardPending must clear after the pick`);
-    check(after.legendaryIds.includes(pickedId.replace('legendary:', '')),
-      `${TAG}: picked ${pickedId} must be in run.legendaryIds, got ${after.legendaryIds.join(',')}`);
-    check(after.stageId === 'heart', `${TAG}: post-pick stage must be heart, got ${after.stageId}`);
-    check(after.level === 1, `${TAG}: build reset must restore level 1, got ${after.level}`);
-    check(after.hp === 100 && after.maxHp === 100, `${TAG}: build reset must restore hp 100/100, got ${after.hp}/${after.maxHp}`);
-    check(Object.keys(after.stacks).length === 0, `${TAG}: build reset must clear stacks: ${JSON.stringify(after.stacks)}`);
-    check(after.evolutions.length === 0, `${TAG}: build reset must clear evolutions: ${after.evolutions.join(',')}`);
+    check(after.stageId === 'heart', `${TAG}: resumed stage must be heart, got ${after.stageId}`);
 
     // Controlled fight in «Сердце»: synthetic joystick input moves the player.
     // Stray level-up modals (if any) are dismissed by the poll.

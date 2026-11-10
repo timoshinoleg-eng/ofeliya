@@ -1596,12 +1596,12 @@ export class UIScene extends Phaser.Scene {
         legendaryReward ? TROPHY_COPY.subtitle : LEVELUP_COPY.hint,
         {
           fontFamily: UI_FONT,
-          fontSize: compact ? '13px' : '15px',
+          fontSize: compact ? '12px' : '15px',
           fontStyle: '650',
           color: UI_TEXT.primary,
           align: 'center',
           wordWrap: { width: W - 44, useAdvancedWrap: true },
-          lineSpacing: 2,
+          lineSpacing: 1,
         }
       )
       .setOrigin(0.5, 0)
@@ -1616,7 +1616,7 @@ export class UIScene extends Phaser.Scene {
       ruleText = this.add
         .text(W / 2, 0, TROPHY_COPY.rule(cards.length), {
           fontFamily: UI_FONT,
-          fontSize: compact ? '12px' : '13px',
+          fontSize: compact ? '11px' : '13px',
           fontStyle: '700',
           color: VISUAL_TEXT.warning,
           align: 'center',
@@ -1629,7 +1629,7 @@ export class UIScene extends Phaser.Scene {
     if (ruleText) ruleText.setPosition(W / 2, subtitle.getBounds().bottom + (compact ? 5 : 7));
     const headerBottom = ruleText ? ruleText.getBounds().bottom : subtitle.getBounds().bottom;
     const cw = Math.min(W - 16, 374);
-    const gap = compact ? 9 : 11;
+    const gap = compact ? 7 : 11;
     // Cards never collide with the header, even when the subtitle wraps.
     const minTop = headerBottom + gap;
 
@@ -1749,12 +1749,16 @@ export class UIScene extends Phaser.Scene {
         : VISUAL_TEXT.host;
 
     const padX = 14;
-    const padTop = squash ? 6 : compact ? 8 : 10;
-    const padBottom = squash ? 6 : compact ? 8 : 10;
-    const air = (n: number) => (squash ? Math.min(n, 2) : n);
+    // Обычные карты с прогресс-баром заканчиваются строкой «УРОВЕНЬ N/M»,
+    // чей низ уходит ниже курсора на высоту строки — им нужен squash-отступ 6,
+    // иначе строка вылезает за фон. Special-карты посажены по measured-контуру
+    // (row() двигает курсор на полную высоту текста), им хватает 4.
+    const padTop = squash ? (special ? 4 : 6) : compact ? 8 : 10;
+    const padBottom = squash ? (special ? 4 : 6) : compact ? 8 : 10;
+    const air = (n: number) => (squash ? Math.min(n, 1) : n);
     const fullW = cw - padX * 2;
     const headerSize = compact ? 11 : 12;
-    const nameSize = special ? (compact ? 17 : 20) : compact ? 16 : 19;
+    const nameSize = special ? (compact ? (squash ? 16 : 17) : 20) : compact ? 16 : 19;
     const bodySize = compact ? 11 : 12;
     const secondarySize = compact ? 10 : 11;
     const iconSize = squash ? 24 : 28;
@@ -1847,20 +1851,24 @@ export class UIScene extends Phaser.Scene {
           fontSize: `${bodySize}px`,
           fontStyle: '650',
           color: VISUAL_TEXT.ivory,
-          lineSpacing: 1,
+          lineSpacing: squash ? 0 : 1,
           wordWrap: { width: fullW, useAdvancedWrap: true },
         }).setOrigin(0, 0);
         place(lineText, -cw / 2 + padX);
         row(lineText.height, 2);
       }
-      // Цена — отдельной плашкой.
+      // Цена — отдельной плашкой. Строка без переносов: на метриках FreeType
+      // (Linux/CI) глифы Chakra Petch шире DirectWrite, поэтому гарантируем
+      // посадку в плашку масштабом, а не переносом (высоту не меняем).
       const priceText = mk(details.price, {
         fontFamily: UI_FONT,
         fontSize: `${bodySize}px`,
         fontStyle: '700',
         color: VISUAL_TEXT.warning,
       }).setOrigin(0.5);
-      const pricePlateH = priceText.height + (squash ? 8 : 12);
+      const priceMaxW = fullW - 16;
+      if (priceText.width > priceMaxW) priceText.setScale(priceMaxW / priceText.width);
+      const pricePlateH = priceText.height + (squash ? 6 : 12);
       card.add(
         this.add
           .rectangle(0, cursor + pricePlateH / 2, fullW, pricePlateH, VISUAL.panelRaised, 0.98)
@@ -1887,7 +1895,7 @@ export class UIScene extends Phaser.Scene {
         fontSize: `${bodySize}px`,
         fontStyle: '500',
         color: VISUAL_TEXT.muted,
-        lineSpacing: 1,
+        lineSpacing: squash ? 0 : 1,
         wordWrap: { width: fullW, useAdvancedWrap: true },
       }).setOrigin(0, 0);
       place(descText, -cw / 2 + padX);
@@ -1900,7 +1908,7 @@ export class UIScene extends Phaser.Scene {
         lineSpacing: -1,
         wordWrap: { width: fullW - 16, useAdvancedWrap: true },
       }).setOrigin(0, 0.5);
-      const effectPlateH = effectText.height + (squash ? 10 : 14);
+      const effectPlateH = effectText.height + (squash ? 6 : 14);
       card.add(
         this.add
           .rectangle(0, cursor + effectPlateH / 2, fullW, effectPlateH, VISUAL.panelRaised, 0.98)
@@ -1919,7 +1927,7 @@ export class UIScene extends Phaser.Scene {
             fontSize: `${secondarySize}px`,
             fontStyle: '500',
             color: VISUAL_TEXT.ivory,
-            lineSpacing: 1,
+            lineSpacing: squash ? 0 : 1,
             wordWrap: { width: fullW, useAdvancedWrap: true },
           }).setOrigin(0, 0);
           place(hintText, -cw / 2 + padX);

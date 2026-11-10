@@ -398,6 +398,14 @@ async function tapCard(page, index, tag, label, { doubleTap = false } = {}) {
       /* ------------- A-trigger: insurance pick vs lethal rescue ------------- */
       if (size.width === 390) {
         const { ctx, page, errors } = await bootFresh();
+        // Детерминизм: пока открыта церемония, игрок не должен убивать врагов —
+        // случайное убийство в окне ~1 с после её закрытия даёт уровень, и второй
+        // модалкой повесит Game на паузу, а ожидание смертельного удара дедлокнется.
+        // Стрельба выключена, контактный урон врагов сохраняется — это и будит
+        // страховку носителя.
+        await page.evaluate(() => {
+          window.__game.scene.getScene('Game').nextFireAt = Number.MAX_SAFE_INTEGER;
+        });
         await page.evaluate(async () => {
           const modules = await window.__qaStates.defs();
           window.__qaStates.openModal([
@@ -427,6 +435,10 @@ async function tapCard(page, index, tag, label, { doubleTap = false } = {}) {
         // 2) Lethal damage fires the rescue through the real combat path.
         await page.evaluate(() => {
           const game = window.__game.scene.getScene('Game');
+          // xpNext глушим, иначе фикстура xp=44 сама вызывает левел-ап раньше
+          // летального удара: модалка повесит Game на паузу и ожидание спасения
+          // дедлокнется. 25%-потеря прогресса при этом проверяется как раньше.
+          game.runState.stage.xpNext = Number.MAX_SAFE_INTEGER;
           game.runState.stage.hp = 15;
           game.runState.stage.xp = 44;
         });
@@ -452,7 +464,11 @@ async function tapCard(page, index, tag, label, { doubleTap = false } = {}) {
           const game = window.__game.scene.getScene('Game');
           game.runState.stage.hp = 1_000_000;
         });
-        await page.waitForTimeout(8600);
+        // Таймер возврата формы — игровой (GameScene.time): на медленном
+        // рендере (headless + запись видео) 8 с игры могут идти дольше
+        // 8,6 с стены. 12 с стены покрывают заметное замедление, при этом
+        // форма, не вернувшаяся и через это окно, — реальный дефект.
+        await page.waitForTimeout(12000);
         const reverted = await page.evaluate(() => {
           const player = window.__game.scene.getScene('Game').player;
           return { spike: player.spikeCrown.visible, capsid: player.capsidShell.visible, lysis: player.lysisCore.visible };

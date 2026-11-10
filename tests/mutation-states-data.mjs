@@ -367,5 +367,7 @@ try {
 
   console.log('mutation-states-data: OK (A/B/C fixtures match game sources)');
 } finally {
-  rmSync(temp, { recursive: true, force: true });
+  // maxRetries/retryDelay: на Windows свежесобранные .js в папке загрузок
+  // коротко держит антивирус/индексатор — cleanup ретраится, а не падает.
+  rmSync(temp, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
 }
