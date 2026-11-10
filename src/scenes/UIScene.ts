@@ -2881,24 +2881,35 @@ export class UIScene extends Phaser.Scene {
     // routes every opening tap, with scrolling and without. A tap
     // navigates only when it starts and ends inside one zone (same
     // pointer, almost no movement): a swipe scrolls the report instead,
-    // and releasing outside the zone does nothing. The visible area is
-    // the hit rect itself, so a zone scrolled half out of view cannot
+    // and releasing outside the zone does nothing. The armed tap is
+    // cancelled the moment the pointer strays beyond the movement limit,
+    // wherever the gesture ends — checking only the release point lets
+    // an out-and-back swipe (38 px out, back to the start) open an entry,
+    // because its end is within the limit of its start. The visible area
+    // is the hit rect itself, so a zone scrolled half out of view cannot
     // catch a tap on its hidden part. When two zones overlap (a band
     // shorter than MIN_TOUCH next to another entry), the nearest band
     // centre wins.
     const reportHit = c.getByName('ofeliya-result-report-hit') as Phaser.GameObjects.Rectangle | null;
     if (reportHit && openingZones.length > 0) {
       if (!reportHit.input) reportHit.setInteractive();
+      // Manhattan tap tolerance, in px: a gesture that moves further than
+      // this at any moment is a swipe, not a tap.
+      const TAP_MOVE_LIMIT = 12;
       let tap: { id: number; x: number; y: number } | null = null;
       reportHit.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
         tap = { id: pointer.id, x: pointer.x, y: pointer.y };
+      });
+      reportHit.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+        if (!tap || tap.id !== pointer.id) return;
+        if (Math.abs(pointer.x - tap.x) + Math.abs(pointer.y - tap.y) > TAP_MOVE_LIMIT) tap = null;
       });
       reportHit.on('pointerupoutside', () => { tap = null; });
       reportHit.on('pointerup', (pointer: Phaser.Input.Pointer) => {
         if (!tap || tap.id !== pointer.id) return;
         const moved = Math.abs(pointer.x - tap.x) + Math.abs(pointer.y - tap.y);
         tap = null;
-        if (moved > 12) return;
+        if (moved > TAP_MOVE_LIMIT) return;
         const hitBounds = reportHit.getBounds();
         if (
           pointer.x < hitBounds.left || pointer.x > hitBounds.right ||
