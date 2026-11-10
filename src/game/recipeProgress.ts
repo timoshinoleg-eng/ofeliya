@@ -18,8 +18,10 @@ import { UPGRADES, type EvolutionId, type UpgradeDef } from './UpgradeSystem';
 export interface RecipeRow {
   /** Имя ветки — shortName карточки ветки или имя группы альтернатив. */
   label: string;
-  /** Фактический стек (максимум по группе альтернатив). */
+  /** Фактический стек ДО выбора (максимум по группе альтернатив). */
   current: number;
+  /** Стек ПОСЛЕ выбора — из симулированного apply()+bump(), тот же максимум. */
+  after: number;
   /** Требуемый стек. */
   target: number;
   /** Эту ветку продвигает предложенная карточка. */
@@ -58,7 +60,8 @@ function stepLabel(step: EvolutionDef['steps'][number]): string {
 
 /**
  * Прогресс рецепта эволюции `evoId` с точки зрения предложенной карточки
- * `card`. Возвращает null, если эволюция неизвестна.
+ * `card`. Возвращает null, если эволюция неизвестна или УЖЕ ПОЛУЧЕНА —
+ * блок рецепта на карточке компонента не должен обещать повторную выдачу.
  */
 export function getRecipeProgress(
   s: RunState,
@@ -71,34 +74,44 @@ export function getRecipeProgress(
   } catch {
     return null;
   }
-  const rows: RecipeRow[] = evolution.steps.map((step) => {
-    const current = Math.max(0, ...step.ids.map((id) => s.stackOf(id)));
-    return {
-      label: stepLabel(step),
-      current,
-      target: step.target,
-      advances: step.ids.includes(card.id),
-      done: current >= step.target,
-    };
-  });
+  if (s.hasEvolution(evoId)) return null;
+  // Симулируем выбор заранее: прогноз «было → станет» обязан идти из
+  // исходного и симулированного состояния, а не из current+1 — у группы
+  // альтернатив стек берётся по максимуму, и +1 к одной ветке может не
+  // поднять максимум (Спутники III + Репликация I + первая Подвижность
+  // оставляют шаг «Подвижность или Репликация» на 1/2).
   const after = cloneState(s);
   // Выбор в игре — это apply() + bump() (счётчик стека); без bump прогресс
   // рецепта не сдвинется, и «закроет ли карточка рецепт» всегда было бы ложно.
   card.apply(after);
   after.bump(card.id);
+  const rows: RecipeRow[] = evolution.steps.map((step) => {
+    const current = Math.max(0, ...step.ids.map((id) => s.stackOf(id)));
+    const afterMax = Math.max(0, ...step.ids.map((id) => after.stackOf(id)));
+    return {
+      label: stepLabel(step),
+      current,
+      after: afterMax,
+      target: step.target,
+      advances: step.ids.includes(card.id),
+      done: current >= step.target,
+    };
+  });
   const completes = readyEvolutions(after).some((e) => e.id === evoId);
   return { evolution, rows, completes };
 }
 
 /**
  * Одна строка шага рецепта: «Мембранный импульс — 3/3 ✓» для выполненного,
- * «РНК-аффинитет — 1/2 → 2/2» для ветки, которую продвигает карточка,
- * «Подвижность или Репликация — 1/2» в остальных случаях.
+ * «РНК-аффинитет — 1/2 → 2/2» для ветки, которую карточка реально продвигает,
+ * «Подвижность или Репликация — 1/2» в остальных случаях — и когда карточка
+ * входит в группу альтернатив, но не поднимает её максимум (тогда стрелки
+ * нет: обещание без изменения было бы ложным).
  */
 export function formatRecipeRow(row: RecipeRow): string {
   const base = `${row.label} — ${row.current}/${row.target}`;
   if (row.done) return `${base} ✓`;
-  if (row.advances) return `${base} → ${row.current + 1}/${row.target}`;
+  if (row.advances && row.after > row.current) return `${base} → ${row.after}/${row.target}`;
   return base;
 }
 

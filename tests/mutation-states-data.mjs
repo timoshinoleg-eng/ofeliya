@@ -329,6 +329,32 @@ try {
     'recipe halo: alternative group row'
   );
 
+  // Регрессия P2 (прогноз альтернативы): Спутники III + Репликация I, первая
+  // «Подвижность» поднимает speed 0→1, но максимум группы max(1, 1) остаётся
+  // 1/2 — строка не должна обещать 2/2.
+  const haloAlt = new RunState({ id: 'bloodstream', order: 1 });
+  applyTimes(haloAlt, 'orbit', 3);
+  applyTimes(haloAlt, 'rate', 1);
+  const haloAltProgress = getRecipeProgress(haloAlt, 'halo', def('speed'));
+  eq(haloAltProgress.completes, false, 'recipe halo alt: speed I does NOT complete while the group max is 1/2');
+  eq(
+    haloAltProgress.rows.map(formatRecipeRow).join(' | '),
+    'КАПСИДНЫЕ СПУТНИКИ — 3/3 ✓ | Подвижность или Репликация — 1/2',
+    'recipe halo alt: first speed leaves the alternative step at 1/2, no false arrow'
+  );
+
+  // Регрессия P2 (повторная выдача): после получения «Гипершипа» блок рецепта
+  // на карточке его компонента скрыт — getRecipeProgress возвращает null.
+  const prismOwned = new RunState({ id: 'bloodstream', order: 1 });
+  applyTimes(prismOwned, 'dmg', 3);
+  applyTimes(prismOwned, 'pierce', 2);
+  prismOwned.addEvolution('prism');
+  eq(
+    getRecipeProgress(prismOwned, 'prism', def('dmg')),
+    null,
+    'recipe owned: prism component card no longer shows the recipe block'
+  );
+
   /* ----------------------- QA trophy open path (?qaTrophy=) ----------------------- */
   // Прямые входы на трофейный экран: закреплённые карты, состояние слота
   // легендарных до выбора и потраченное спасение носителя.
