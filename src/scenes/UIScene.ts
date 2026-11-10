@@ -31,7 +31,8 @@ import { DualMoveControls } from '../game/DualMoveControls';
 import { getLegendaryDefinition, type LegendaryId } from '../game/LegendarySystem';
 import { TwinStickControls } from '../game/TwinStickControls';
 import { readControlMode, type ControlMode } from '../game/ControlMode';
-import type { LastRunResult, RunResult, RunSnapshot } from '../game/RunContracts';
+import type { RunResult, RunSnapshot } from '../game/RunContracts';
+import type { LastRunResult } from '../game/LastRunResult';
 import {
   EVOLUTION_NAMES,
   UPGRADES,

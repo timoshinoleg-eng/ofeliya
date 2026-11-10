@@ -11,7 +11,7 @@ import { fmtInt, joinSegments, toTitleCase } from '../game/UiFormat';
 import { IDENTITY } from '../game/identity';
 import { masteryTracks } from '../game/RunIdentity';
 import type { CodexEntryRef } from '../game/runCodexOpenings';
-import type { LastRunResult } from '../game/RunContracts';
+import type { LastRunResult } from '../game/LastRunResult';
 import { LEGENDARIES } from '../game/LegendarySystem';
 import { STAGES } from '../game/StageDefinitions';
 import { EVOLUTION_NAMES, type EvolutionId } from '../game/UpgradeSystem';
