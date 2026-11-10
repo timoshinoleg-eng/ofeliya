@@ -1,3 +1,7 @@
+# Mutation screens B/C + boss trophy — 2026-11-10 (2)
+
+Ветка qa/mutation-screen-b-c-trophy, HEAD 4627af2: оба P2 ревью закрыты (честный прогноз альтернативного рецепта из симулированного состояния; блок рецепта скрыт для полученной эволюции), регрессионные проверки в tests/mutation-states-data.mjs. CI на 4627af2 полностью зелёный. PR #278 открыт для ревью с базой qa/mutation-screen-states. Открытое без изменений: ревью/мердж — за родителем; приёмка Samsung S20+ — за владельцем.
+
 # Mutation screens B/C + boss trophy — 2026-11-10
 
 Ветка `qa/mutation-screen-b-c-trophy`, HEAD b0e0027 (memory-коммит поверх 344ea89 — CI на нём перезапущен автоматически). PR #278: **Draft снят по запросу владельца (2026-11-10), Ready for review**; CI на 344ea89 был полностью зелёный (build, production-contract, browser-smoke). Развязка: legendary-layout на FreeType-метриках (af2cff3, scale-to-fit цены + squash-ужатие, пороги пробы без изменений) и ui-readability-smoke, красный уже на базе (344ea89, типографские полы 11/12px + «УРОВЕНЬ» 13px + фон ≥124/148). Открытое: ревью и мердж — за родителем; физическая приёмка на Samsung S20+ по QA-адресам из RUNBOOK (?qaMutation=A|B|C, ?qaTrophy=fresh|one|used|rhythm при VITE_QA_TOOLS=1) — NOT_RUN, за владельцем; после приёмки — финальная визуальная доводка B/C.
