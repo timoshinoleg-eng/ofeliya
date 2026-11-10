@@ -159,7 +159,7 @@ try {
       rotation: ['hoarder_2', 'ghost', 'mutant_1'],
       save: { runs: 12, totalKills: 5400, seenEvo: ['prism'], seenLeg: [], counters: { kills: 5400, runs: 12, mutations: 9, hostCells: 31, elites: 9, combo: 57, noDamageMs: 96000, rnaCollected: 6100, wins: 0, losses: 12, survivalMs: 3600000, visitDays: 8, visitStreak: 6 } },
       run: { win: false, timeMs: 402000, kills: 520, hostCells: 11, level: 11, comboBest: 57, rna: 1150, elites: 4, noDamageMs: 41000, evolutions: ['singularity'], legendaryIds: ['zero-point'], questProgress: { hoarder_2: 1150, ghost: 41, mutant_1: 3 } },
-      expect: { category: 'quest-run', id: 'ghost', title: 'Невидимка', line1: 'Следующий забег: Продержись 60 секунд подряд без урона', line2: 'В этом забеге: 00:41 / 01:00' },
+      expect: { category: 'quest-run', id: 'ghost', title: 'Невидимка', line1: 'Следующий забег: Продержись 60 секунд подряд без урона', line2: 'Лучшее сегодня: 00:41 / 01:00' },
     },
     'achievement-only': {
       rotation: ['slayer_1', 'slayer_2', 'mutant_1'],
@@ -191,6 +191,22 @@ try {
       { category: 'milestone', id: 'runs_3', title: 'РЕЦИДИВ', line1: `РЕЦИДИВ — 2 / 3, осталось 1`, line2: 'Завершить 3 забега' },
       'distinguishing case: milestone, not the out-of-rotation marathon'
     );
+  }
+
+  // --- ghost: the day's best, not this run's streak ---
+  // `q_nodmg` is day-scoped: the snapshot progress is the best no-damage
+  // streak of the day, across every run of that day. Run 1 holds 40 s
+  // without damage; run 2 only 10 s. After run 2 the screen must still
+  // show the day's best (00:40) and say so — «В этом забеге» would claim
+  // the 40 s belong to the second run.
+  {
+    const rotation = ['ghost', 'slayer_1', 'mutant_1'];
+    const save = { runs: 3, totalKills: 500, seenEvo: [], seenLeg: [], counters: { kills: 500, runs: 3, mutations: 4, hostCells: 9, elites: 1, combo: 30, noDamageMs: 40000, rnaCollected: 900, wins: 0, losses: 3, survivalMs: 600000, visitDays: 2, visitStreak: 2 } };
+    const run1 = { win: false, timeMs: 90000, kills: 120, hostCells: 5, level: 4, comboBest: 30, rna: 200, elites: 1, noDamageMs: 40000, evolutions: [], legendaryIds: [], questProgress: { ghost: 40, slayer_1: 50, mutant_1: 1 } };
+    const run2 = { win: false, timeMs: 60000, kills: 80, hostCells: 4, level: 3, comboBest: 25, rna: 120, elites: 0, noDamageMs: 10000, evolutions: [], legendaryIds: [], questProgress: { ghost: 40, slayer_1: 30, mutant_1: 1 } };
+    const expectGhost = { category: 'quest-run', id: 'ghost', title: 'Невидимка', line1: 'Следующий забег: Продержись 60 секунд подряд без урона', line2: 'Лучшее сегодня: 00:40 / 01:00' };
+    eq(goalOf(save, run1, rotation), expectGhost, 'ghost run 1: the day best is this run’s 40 s');
+    eq(goalOf(save, run2, rotation), expectGhost, 'ghost run 2: the day best survives a weaker second run');
   }
 
   // --- marathon tie: the milestone wins the tie (checked first, strict >) ---

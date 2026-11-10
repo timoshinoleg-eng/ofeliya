@@ -207,6 +207,7 @@ try {
   for (const drifted of [
     "'Следующий забег: '",
     "'В этом забеге: '",
+    "'Лучшее сегодня: '",
     "'Ближайшая цель: '",
     "'осталось '",
   ]) {
@@ -261,6 +262,7 @@ try {
   assert.equal(copy.RESULT_COPY.dailyRank(5), '★ МЕСТО #5 В РЕЙТИНГЕ ДНЯ', 'the daily place');
   assert.equal(copy.GOAL_COPY.nextRunPrefix, 'Следующий забег: ', 'goal: next-run prefix');
   assert.equal(copy.GOAL_COPY.thisRunPrefix, 'В этом забеге: ', 'goal: this-run prefix');
+  assert.equal(copy.GOAL_COPY.bestTodayPrefix, 'Лучшее сегодня: ', 'goal: day-best prefix');
   assert.equal(copy.GOAL_COPY.closestPrefix, 'Ближайшая цель: ', 'goal: closest prefix');
   assert.equal(copy.GOAL_COPY.doneToday, 'сегодня всё выполнено', 'goal: neutral head');
   assert.equal(

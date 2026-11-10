@@ -222,6 +222,13 @@ export const GOAL_COPY = {
   nextRunPrefix: 'Следующий забег: ',
   /** Prefix of the run's own progress: «В этом забеге: <p> / <t>». */
   thisRunPrefix: 'В этом забеге: ',
+  /**
+   * Prefix of a day-scoped quest's progress: «Лучшее сегодня: <p> / <t>».
+   * Only `q_nodmg` is day-scoped: its value is the day's best across every
+   * run of the day, so «В этом забеге» would lie about the number after a
+   * weaker second run.
+   */
+  bestTodayPrefix: 'Лучшее сегодня: ',
   /** Prefix of a mastery goal and of the neutral line: «Ближайшая цель: …». */
   closestPrefix: 'Ближайшая цель: ',
   /** The neutral line's head: the day's goals are done. */

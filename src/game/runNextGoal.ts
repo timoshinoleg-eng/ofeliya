@@ -11,8 +11,12 @@
  * Categories, strictly in this order:
  *  1. Rotation quests that are not lifetime-scoped and not complete: the
  *     closest to completion (max progress/target; tie — rotation order).
- *     Shown as «Следующий забег: <desc>» + «В этом забеге: <p> / <t>».
- *     No «осталось»: the progress does not carry over to the next run.
+ *     Shown as «Следующий забег: <desc>» + the progress line: «В этом
+ *     забеге: <p> / <t>» for run-scoped quests, «Лучшее сегодня: <p> / <t>»
+ *     for day-scoped ones (`q_nodmg` counts the day's best across every
+ *     run of the day, so the run label would lie after a weaker second
+ *     run). No «осталось»: the progress does not carry over to the next run
+ *     (for a day-scoped quest it carries over within the day, not the run).
  *  2. Cumulative goals — milestones first (catalog order), then cumulative
  *     quests, but only the ones in today's rotation: max progress/threshold;
  *     tie — catalog order. «Осталось N» is honest here: the progress carries
@@ -105,12 +109,19 @@ export function computeNextGoal(input: NextGoalInput): NearestGoal {
   }
   if (bestRun) {
     const { definition, progress } = bestRun;
+    // A day-scoped quest counts the day's best across every run of the day,
+    // so the label says whose best the number is; a run-scoped quest counts
+    // this run only.
+    const progressPrefix =
+      QUEST_METRIC_SCOPES[definition.metric] === 'day'
+        ? GOAL_COPY.bestTodayPrefix
+        : GOAL_COPY.thisRunPrefix;
     return {
       category: 'quest-run',
       id: definition.id,
       title: definition.title,
       line1: `${GOAL_COPY.nextRunPrefix}${definition.desc}`,
-      line2: `${GOAL_COPY.thisRunPrefix}${formatQuestValue(definition.metric, progress)} / ${formatQuestValue(definition.metric, definition.target)}`,
+      line2: `${progressPrefix}${formatQuestValue(definition.metric, progress)} / ${formatQuestValue(definition.metric, definition.target)}`,
     };
   }
 
