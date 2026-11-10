@@ -1,3 +1,7 @@
+# Mutation screens B/C + boss trophy — 2026-11-10 (4)
+
+Ветка qa/mutation-screen-b-c-trophy, HEAD b798156: финальный пакет ревью и приёмки двух P2 сдан. Отчёт docs/qa/p2-recipe-acceptance-2026-11-10/ACCEPTANCE.md (SHA, чеки, способ открыть на телефоне, сценарии D/E, кадры 320×520 основные + 390×844). Браузерная проверка 320×520 ALL PASS (p2-verify.cjs, 18 проверок). Физическая приёмка Samsung S20+ — NOT_RUN, за владельцем. PR #278 Ready for review; новый круг правок — по замечаниям ревью/телефона.
+
 # Mutation screens B/C + boss trophy — 2026-11-10 (3)
 
 Ветка qa/mutation-screen-b-c-trophy, HEAD 5ac0103: телефонные QA-входы для приёмки обоих P2 — ?qaMutation=D (Спутники III + Репликация I + первая Подвижность: альтернативный шаг 1/2 без ложной стрелки) и ?qaMutation=E (Гипершип получен: блок рецепта скрыт на карточке БЕЛКОВЫЕ ШИПЫ). Кадры и короткий чек-лист Samsung: docs/qa/p2-recipe-acceptance-2026-11-10/ (ACCEPTANCE.md + qaMutation-{D,E}-390x844.png). Фикстура QaMutationFixture обросла optional evolutionIds (s.addEvolution до стеков). CI на 5ac0103 зелёный. PR #278 открыт; новый круг правок — по замечаниям ревью/телефона.
