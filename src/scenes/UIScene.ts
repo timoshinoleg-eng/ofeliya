@@ -1760,7 +1760,11 @@ export class UIScene extends Phaser.Scene {
     const headerSize = compact ? 11 : 12;
     const nameSize = special ? (compact ? (squash ? 16 : 17) : 20) : compact ? 16 : 19;
     const bodySize = compact ? 11 : 12;
-    const secondarySize = compact ? 10 : 11;
+    // Типографские полы контракта читаемости (scripts/ui-readability-smoke.cjs):
+    // ни один текст карточки не мельче 11px на компактном портрете и 12px на
+    // обычном. Вторичные строки (облик, рецепт, подсказка «Сердца») раньше
+    // уходили на 10/11px и ломали контракт.
+    const secondarySize = compact ? 11 : 12;
     const iconSize = squash ? 24 : 28;
 
     const mk = (text: string, style: Phaser.Types.GameObjects.Text.TextStyle): Phaser.GameObjects.Text =>
@@ -2064,7 +2068,9 @@ export class UIScene extends Phaser.Scene {
         card.add(pg);
         const levelText = mk(`УРОВЕНЬ ${progress.next}/${progress.max}`, {
           fontFamily: UI_FONT,
-          fontSize: `${bodySize}px`,
+          // Контракт читаемости: строка прогресса не мельче 13px на обычном
+          // портрете (compact — 11px, как у остального тела).
+          fontSize: compact ? `${bodySize}px` : '13px',
           fontStyle: '700',
           color: '#d8d1e2',
         }).setOrigin(1, 0);
@@ -2098,7 +2104,11 @@ export class UIScene extends Phaser.Scene {
       lastGap = 0;
     }
 
-    const height = Math.max(compact ? 96 : 112, Math.ceil(cursor - lastGap + padBottom));
+    // Контракт читаемости (scripts/ui-readability-smoke.cjs): фон карточки не
+    // ниже 124px на компактном портрете и 148px на обычном. Пол действует и в
+    // squash-пропуске: естественные высоты коротких карточек растут редко, а
+    // гарантия посадки стека всё равно остаётся на итоговом fitScale.
+    const height = Math.max(compact ? 124 : 148, Math.ceil(cursor - lastGap + padBottom));
     for (const child of card.list) {
       (child as unknown as { y: number }).y -= height / 2;
     }
