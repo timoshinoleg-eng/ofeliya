@@ -111,7 +111,7 @@ try {
     }
   };
 
-  /* ---------------- QA open path (?qaMutation=A|B|C) ---------------- */
+  /* ---------------- QA open path (?qaMutation=A|B|C|D|E) ---------------- */
   // The phone-openable QA fixture must reproduce the same states through the
   // real definitions — ids, order, kinds — and unknown values stay a no-op.
   eq(parseQaMutationState('?qaMutation=A').choices.map((c) => c.id).join(','),
@@ -120,6 +120,10 @@ try {
     'magnet,infect,lysis', 'QA fixture B order');
   eq(parseQaMutationState('?qaMutation=C').choices.map((c) => c.id).join(','),
     'evo:singularity,infect,lysis', 'QA fixture C order');
+  eq(parseQaMutationState('?qaMutation=D').choices.map((c) => c.id).join(','),
+    'speed,infect,lysis', 'QA fixture D order (P2 alternative recipe)');
+  eq(parseQaMutationState('?qaMutation=E').choices.map((c) => c.id).join(','),
+    'dmg,infect,lysis', 'QA fixture E order (P2 owned evolution)');
   eq(parseQaMutationState('?qaMutation=nope'), null, 'QA fixture unknown is a no-op');
   eq(parseQaMutationState(''), null, 'QA fixture absent is a no-op');
 
@@ -133,6 +137,28 @@ try {
   applyQaMutationFixture(qaC, parseQaMutationState('?qaMutation=C'));
   eq(qaC.stackOf('nova'), 3, 'QA fixture C: nova 3/3');
   eq(qaC.stackOf('magnet'), 2, 'QA fixture C: magnet 2/2');
+  // D/E reproduce the P2 regression states through the same fixture path the
+  // phone QA entry uses: D — Спутники III + Репликация I + первая Подвижность;
+  // E — рецепт Гипершипа выполнен и эволюция УЖЕ получена.
+  const qaD = new RunState({ id: 'bloodstream', order: 1 });
+  applyQaMutationFixture(qaD, parseQaMutationState('?qaMutation=D'));
+  eq(qaD.stackOf('orbit'), 3, 'QA fixture D: orbit 3/3');
+  eq(qaD.stackOf('rate'), 1, 'QA fixture D: rate 1/2');
+  const qaDProgress = getRecipeProgress(qaD, 'halo', def('speed'));
+  eq(
+    qaDProgress.rows.map(formatRecipeRow).join(' | '),
+    'КАПСИДНЫЕ СПУТНИКИ — 3/3 ✓ | Подвижность или Репликация — 1/2',
+    'QA fixture D: alternative step stays 1/2, no false arrow'
+  );
+  const qaE = new RunState({ id: 'bloodstream', order: 1 });
+  applyQaMutationFixture(qaE, parseQaMutationState('?qaMutation=E'));
+  assert(qaE.hasEvolution('prism'), 'QA fixture E: prism already owned');
+  eq(qaE.stackOf('dmg'), 3, 'QA fixture E: dmg 3/3');
+  eq(
+    getRecipeProgress(qaE, 'prism', def('dmg')),
+    null,
+    'QA fixture E: no recipe block on the component card of an owned evolution'
+  );
 
   /* -------- Pair labels and units (what the player must read) -------- */
   // Every «было → стало» pair is presentable with the characteristic name
