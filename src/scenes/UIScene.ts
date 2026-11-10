@@ -38,13 +38,21 @@ import {
 } from '../game/UpgradeSystem';
 import { getUpgradeBeforeAfter } from '../game/upgradeBeforeAfter';
 import {
+  formatRecipeNote,
+  formatRecipeRow,
+  formatRecipeTitle,
+  getRecipeProgress,
+} from '../game/recipeProgress';
+import {
   LEVELUP_COPY,
   LEGENDARY_CARD_DETAILS,
   META_COPY,
   MUTATION_CARD_HEADERS,
   RESULT_COPY,
+  TROPHY_COPY,
   resultModeChip,
   shareModeSuffix,
+  trophySlotNote,
   buildDuelShareText,
   buildShareText,
   formatBuildSummary,
@@ -1585,49 +1593,90 @@ export class UIScene extends Phaser.Scene {
       .text(
         W / 2,
         titleY + titleT.height / 2 + subtitleGap,
-        legendaryReward
-          ? 'ИММУННЫЙ ПРАЙМ подавлен · выбери мутацию для СЕРДЦА'
-          : LEVELUP_COPY.hint,
+        legendaryReward ? TROPHY_COPY.subtitle : LEVELUP_COPY.hint,
         {
           fontFamily: UI_FONT,
-          fontSize: compact ? '13px' : '15px',
+          fontSize: compact ? '12px' : '15px',
           fontStyle: '650',
           color: UI_TEXT.primary,
           align: 'center',
           wordWrap: { width: W - 44, useAdvancedWrap: true },
-          lineSpacing: 2,
+          lineSpacing: 1,
         }
       )
       .setOrigin(0.5, 0)
       .setResolution(2);
     c.add(subtitle);
 
+    // Трофей: правило «только одна» показывается до тапа; число вариантов
+    // берётся из фактического предложения, а не захардкожено.
     const cards = gs.pendingChoices;
+    let ruleText: Phaser.GameObjects.Text | null = null;
+    if (legendaryReward) {
+      ruleText = this.add
+        .text(W / 2, 0, TROPHY_COPY.rule(cards.length), {
+          fontFamily: UI_FONT,
+          fontSize: compact ? '11px' : '13px',
+          fontStyle: '700',
+          color: VISUAL_TEXT.warning,
+          align: 'center',
+          wordWrap: { width: W - 44, useAdvancedWrap: true },
+        })
+        .setOrigin(0.5, 0)
+        .setResolution(2);
+      c.add(ruleText);
+    }
+    if (ruleText) ruleText.setPosition(W / 2, subtitle.getBounds().bottom + (compact ? 5 : 7));
+    const headerBottom = ruleText ? ruleText.getBounds().bottom : subtitle.getBounds().bottom;
     const cw = Math.min(W - 16, 374);
-    const gap = compact ? 9 : 11;
-    // Cards never collide with the header, even when the subtitle wraps to two lines.
-    const minTop = subtitle.getBounds().bottom + gap;
+    const gap = compact ? 7 : 11;
+    // Cards never collide with the header, even when the subtitle wraps.
+    const minTop = headerBottom + gap;
+
+    // Трофей: условная сноска про лимит легендарных (зависит от того, что уже
+    // взято до босса). Создаётся до расчёта высоты, чтобы стек карточек
+    // центрировался с учётом её места.
+    const footnote = legendaryReward
+      ? this.add
+          .text(W / 2, 0, trophySlotNote(gs.runState.run.legendaryIds.size), {
+            fontFamily: UI_FONT,
+            fontSize: compact ? '10px' : '11px',
+            fontStyle: '500',
+            color: VISUAL_TEXT.muted,
+            align: 'center',
+            wordWrap: { width: W - 44, useAdvancedWrap: true },
+            lineSpacing: 1,
+          })
+          .setOrigin(0.5, 0)
+          .setResolution(2)
+      : null;
+    const footnoteH = footnote ? footnote.height + gap : 0;
 
     // «Био-мембрана»: the layout is measured, not fixed. Every card reports the
     // height its real text needs and the stack centers in the area under the
     // header. When a short viewport cannot take the natural heights, one
     // compaction pass reclaims decor and air first (padding, gaps, icon size) —
     // never the copy, the stat rows or the type floors.
-    const available = H - gap - minTop;
+    const available = H - gap - minTop - footnoteH;
     const naturalStack = (list: { height: number }[]) =>
       list.reduce((sum, entry) => sum + entry.height, 0) + gap * (cards.length - 1);
     let built = cards.map((def: UpgradeDef) => this.buildMutationCard(def, cw, compact, false, gs, c));
+    let squashed = false;
     if (naturalStack(built) > available) {
       built = cards.map((def: UpgradeDef) => this.buildMutationCard(def, cw, compact, true, gs, c));
+      squashed = true;
     }
     const totalH = naturalStack(built);
-    let blockTop = Math.max(minTop, (H - totalH) / 2);
-    if (blockTop + totalH > H - gap) blockTop = Math.max(minTop, H - gap - totalH);
+    let blockTop = Math.max(minTop, (H - footnoteH - totalH) / 2);
+    if (blockTop + totalH > H - gap - footnoteH) blockTop = Math.max(minTop, H - gap - footnoteH - totalH);
 
     built.forEach((entry, cardIndex) => {
       entry.card.setPosition(W / 2, blockTop + entry.height / 2);
       c.add(entry.card);
-      blockTop += entry.height + gap;
+      // Хвостовой отступ не добавляем: после последней карточки сноска идёт
+      // со своим собственным малым отступом (иначе на коротком портрете
+      // двухстрочная сноска трофея уходит за низ экрана).
+      blockTop += entry.height + (cardIndex < built.length - 1 ? gap : 0);
       entry.card.setScale(0.94).setAlpha(0);
       this.tweens.add({
         targets: entry.card,
@@ -1638,6 +1687,28 @@ export class UIScene extends Phaser.Scene {
         ease: 'Back.Out',
       });
     });
+
+    // Сноска — под стеком, после последней карточки.
+    if (footnote) {
+      footnote.setPosition(W / 2, blockTop + (compact ? 6 : 8));
+      c.add(footnote);
+    }
+
+    // Гарантия посадки: если стек со сноской всё равно не влезает (очень
+    // длинные условия на коротком портрете), контент модалки ужимается
+    // равномерно — копия не обрезается. Предел 0.75 — крайний синтетический
+    // случай (три легендарные карты на 320×520; штатный путь предлагает не
+    // больше двух, и трофейный экран ужимается до ~0.94).
+    const contentBottom = footnote ? footnote.getBounds().bottom : blockTop;
+    const fitMargin = 8;
+    let fitScale = 1;
+    if (contentBottom > H - fitMargin) {
+      fitScale = Math.max(0.75, (H - fitMargin) / contentBottom);
+      c.setScale(fitScale).setPosition((W - W * fitScale) / 2, 0);
+    }
+    // Факты раскладки для QA-проб: squash-проход и итоговый ужим.
+    c.setData('squash', squashed);
+    c.setData('fitScale', fitScale);
   }
 
   /**
@@ -1678,14 +1749,22 @@ export class UIScene extends Phaser.Scene {
         : VISUAL_TEXT.host;
 
     const padX = 14;
-    const padTop = squash ? 6 : compact ? 8 : 10;
-    const padBottom = squash ? 6 : compact ? 8 : 10;
-    const air = (n: number) => (squash ? Math.min(n, 2) : n);
+    // Обычные карты с прогресс-баром заканчиваются строкой «УРОВЕНЬ N/M»,
+    // чей низ уходит ниже курсора на высоту строки — им нужен squash-отступ 6,
+    // иначе строка вылезает за фон. Special-карты посажены по measured-контуру
+    // (row() двигает курсор на полную высоту текста), им хватает 4.
+    const padTop = squash ? (special ? 4 : 6) : compact ? 8 : 10;
+    const padBottom = squash ? (special ? 4 : 6) : compact ? 8 : 10;
+    const air = (n: number) => (squash ? Math.min(n, 1) : n);
     const fullW = cw - padX * 2;
     const headerSize = compact ? 11 : 12;
-    const nameSize = special ? (compact ? 17 : 20) : compact ? 16 : 19;
+    const nameSize = special ? (compact ? (squash ? 16 : 17) : 20) : compact ? 16 : 19;
     const bodySize = compact ? 11 : 12;
-    const secondarySize = compact ? 10 : 11;
+    // Типографские полы контракта читаемости (scripts/ui-readability-smoke.cjs):
+    // ни один текст карточки не мельче 11px на компактном портрете и 12px на
+    // обычном. Вторичные строки (облик, рецепт, подсказка «Сердца») раньше
+    // уходили на 10/11px и ломали контракт.
+    const secondarySize = compact ? 11 : 12;
     const iconSize = squash ? 24 : 28;
 
     const mk = (text: string, style: Phaser.Types.GameObjects.Text.TextStyle): Phaser.GameObjects.Text =>
@@ -1776,20 +1855,24 @@ export class UIScene extends Phaser.Scene {
           fontSize: `${bodySize}px`,
           fontStyle: '650',
           color: VISUAL_TEXT.ivory,
-          lineSpacing: 1,
+          lineSpacing: squash ? 0 : 1,
           wordWrap: { width: fullW, useAdvancedWrap: true },
         }).setOrigin(0, 0);
         place(lineText, -cw / 2 + padX);
         row(lineText.height, 2);
       }
-      // Цена — отдельной плашкой.
+      // Цена — отдельной плашкой. Строка без переносов: на метриках FreeType
+      // (Linux/CI) глифы Chakra Petch шире DirectWrite, поэтому гарантируем
+      // посадку в плашку масштабом, а не переносом (высоту не меняем).
       const priceText = mk(details.price, {
         fontFamily: UI_FONT,
         fontSize: `${bodySize}px`,
         fontStyle: '700',
         color: VISUAL_TEXT.warning,
       }).setOrigin(0.5);
-      const pricePlateH = priceText.height + (squash ? 8 : 12);
+      const priceMaxW = fullW - 16;
+      if (priceText.width > priceMaxW) priceText.setScale(priceMaxW / priceText.width);
+      const pricePlateH = priceText.height + (squash ? 6 : 12);
       card.add(
         this.add
           .rectangle(0, cursor + pricePlateH / 2, fullW, pricePlateH, VISUAL.panelRaised, 0.98)
@@ -1816,7 +1899,7 @@ export class UIScene extends Phaser.Scene {
         fontSize: `${bodySize}px`,
         fontStyle: '500',
         color: VISUAL_TEXT.muted,
-        lineSpacing: 1,
+        lineSpacing: squash ? 0 : 1,
         wordWrap: { width: fullW, useAdvancedWrap: true },
       }).setOrigin(0, 0);
       place(descText, -cw / 2 + padX);
@@ -1829,7 +1912,7 @@ export class UIScene extends Phaser.Scene {
         lineSpacing: -1,
         wordWrap: { width: fullW - 16, useAdvancedWrap: true },
       }).setOrigin(0, 0.5);
-      const effectPlateH = effectText.height + (squash ? 10 : 14);
+      const effectPlateH = effectText.height + (squash ? 6 : 14);
       card.add(
         this.add
           .rectangle(0, cursor + effectPlateH / 2, fullW, effectPlateH, VISUAL.panelRaised, 0.98)
@@ -1838,6 +1921,23 @@ export class UIScene extends Phaser.Scene {
       effectText.setPosition(-fullW / 2 + 8, cursor + effectPlateH / 2);
       card.add(effectText);
       row(effectPlateH, 4);
+      // Трофей первого босса: как пользоваться картой в «Сердце». Механика
+      // уже названа выше; эта строка отвечает на «где это пригодится».
+      if (gs.legendaryRewardPending && legendary && def.legendaryId) {
+        const heartHint = getLegendaryDefinition(def.legendaryId).heartHint;
+        if (heartHint) {
+          const hintText = mk(heartHint, {
+            fontFamily: UI_FONT,
+            fontSize: `${secondarySize}px`,
+            fontStyle: '500',
+            color: VISUAL_TEXT.ivory,
+            lineSpacing: squash ? 0 : 1,
+            wordWrap: { width: fullW, useAdvancedWrap: true },
+          }).setOrigin(0, 0);
+          place(hintText, -cw / 2 + padX);
+          row(hintText.height, 4);
+        }
+      }
     } else {
       // Стандартная карта: описание + строки характеристик «было → стало».
       const descText = mk(def.desc, {
@@ -1896,21 +1996,60 @@ export class UIScene extends Phaser.Scene {
       }
 
       if (def.evolutionHint) {
-        const hintLabel = mk('Синергия', {
-          fontFamily: UI_FONT,
-          fontSize: `${secondarySize}px`,
-          fontStyle: '650',
-          color: VISUAL_TEXT.muted,
-        }).setOrigin(0, 0);
-        const hintValue = mk(`→ ${EVOLUTION_NAMES[def.evolutionHint]}`, {
-          fontFamily: UI_FONT,
-          fontSize: `${secondarySize}px`,
-          fontStyle: '700',
-          color: VISUAL_TEXT.warning,
-        }).setOrigin(1, 0);
-        place(hintLabel, -cw / 2 + padX);
-        place(hintValue, cw / 2 - padX);
-        row(Math.max(hintLabel.height, hintValue.height), 4);
+        // Блок рецепта: прогресс по шагам и пояснение внутри плашки.
+        // Фиолетовый (редкий) акцент — только здесь; категория карточки
+        // остаётся обычной. Служебной плашки «справка» нет.
+        const progress = getRecipeProgress(gs.runState, def.evolutionHint, def);
+        if (progress) {
+          const recipeAccent = VISUAL.rare;
+          const recipeAccentText = VISUAL_TEXT.rare;
+          const recipePadX = 8;
+          const recipePadY = squash ? 5 : 8;
+          const itemGap = air(2);
+          const title = mk(formatRecipeTitle(progress), {
+            fontFamily: UI_FONT,
+            fontSize: `${bodySize}px`,
+            fontStyle: '700',
+            color: recipeAccentText,
+            wordWrap: { width: fullW - recipePadX * 2, useAdvancedWrap: true },
+          }).setOrigin(0, 0);
+          const recipeRows = progress.rows.map((recipeRow) =>
+            mk(formatRecipeRow(recipeRow), {
+              fontFamily: UI_FONT,
+              fontSize: `${bodySize}px`,
+              fontStyle: '650',
+              color: recipeRow.advances
+                ? recipeAccentText
+                : recipeRow.done
+                  ? VISUAL_TEXT.muted
+                  : VISUAL_TEXT.ivory,
+              wordWrap: { width: fullW - recipePadX * 2, useAdvancedWrap: true },
+            }).setOrigin(0, 0)
+          );
+          const note = mk(formatRecipeNote(progress), {
+            fontFamily: UI_FONT,
+            fontSize: `${secondarySize}px`,
+            fontStyle: '500',
+            color: VISUAL_TEXT.muted,
+            lineSpacing: 1,
+            wordWrap: { width: fullW - recipePadX * 2, useAdvancedWrap: true },
+          }).setOrigin(0, 0);
+          const items = [title, ...recipeRows, note];
+          const contentH = items.reduce((sum, item) => sum + item.height, 0) + itemGap * (items.length - 1);
+          const plateH = contentH + recipePadY * 2;
+          card.add(
+            this.add
+              .rectangle(0, cursor + plateH / 2, fullW, plateH, VISUAL.panelRaised, 0.98)
+              .setStrokeStyle(1, recipeAccent, 0.32)
+          );
+          let itemY = cursor + recipePadY;
+          for (const item of items) {
+            item.setPosition(-fullW / 2 + recipePadX, itemY);
+            card.add(item);
+            itemY += item.height + itemGap;
+          }
+          row(plateH, 4);
+        }
       }
 
       if (def.showProgress !== false && def.max <= 8) {
@@ -1929,7 +2068,9 @@ export class UIScene extends Phaser.Scene {
         card.add(pg);
         const levelText = mk(`УРОВЕНЬ ${progress.next}/${progress.max}`, {
           fontFamily: UI_FONT,
-          fontSize: `${bodySize}px`,
+          // Контракт читаемости: строка прогресса не мельче 13px на обычном
+          // портрете (compact — 11px, как у остального тела).
+          fontSize: compact ? `${bodySize}px` : '13px',
           fontStyle: '700',
           color: '#d8d1e2',
         }).setOrigin(1, 0);
@@ -1963,7 +2104,11 @@ export class UIScene extends Phaser.Scene {
       lastGap = 0;
     }
 
-    const height = Math.max(compact ? 96 : 112, Math.ceil(cursor - lastGap + padBottom));
+    // Контракт читаемости (scripts/ui-readability-smoke.cjs): фон карточки не
+    // ниже 124px на компактном портрете и 148px на обычном. Пол действует и в
+    // squash-пропуске: естественные высоты коротких карточек растут редко, а
+    // гарантия посадки стека всё равно остаётся на итоговом fitScale.
+    const height = Math.max(compact ? 124 : 148, Math.ceil(cursor - lastGap + padBottom));
     for (const child of card.list) {
       (child as unknown as { y: number }).y -= height / 2;
     }

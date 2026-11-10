@@ -57,6 +57,7 @@ import { generateRunSeed, RunRng } from '../game/RunRng';
 import { QaPerfOverlay } from '../game/qaPerf';
 import { parseQaHide, qaHideLabel, toggleQaHide, type QaHideGroup } from '../game/qaHide';
 import { applyQaMutationFixture, parseQaMutationState } from '../game/qaMutationStates';
+import { applyQaTrophyFixture, parseQaTrophyState } from '../game/qaTrophyStates';
 import { ImpactDirector } from '../game/ImpactDirector';
 import { Player } from '../game/Player';
 import { Enemy } from '../game/Enemy';
@@ -670,6 +671,19 @@ export class GameScene extends Phaser.Scene {
     if (import.meta.env.DEV || import.meta.env.VITE_QA_TOOLS === '1') {
       const hide = parseQaHide(window.location.search);
       this.qaHide = hide;
+      // QA instrumentation first: the perf overlay and the render-split toggle
+      // buttons must stay close to the gate (source-contract in
+      // tests/qa-perf-overlay.mjs), so the fixed-state fixtures below cannot
+      // push the construction out of the gated block.
+      this.qaPerf = new QaPerfOverlay(this, () => ({
+        enemies: this.enemies.countActive(true),
+        bullets: this.bullets.countActive(true),
+        gems: this.gems.countActive(true),
+        density: this.visualEnemyDensity,
+        tier: this.runtimeQuality.profile.level,
+      }), qaHideLabel(hide));
+      if (hide.size > 0) this.applyQaHide(hide);
+      this.createQaToggleButtons();
       // QA fixed mutation-choice states: ?qaMutation=A|B|C opens the agreed
       // fixed offer through the REAL choice path (pendingChoices +
       // awaitingChoice -> UIScene level-up modal). Stacks go through the real
@@ -680,15 +694,21 @@ export class GameScene extends Phaser.Scene {
         this.pendingChoices = [...qaMutation.choices];
         this.awaitingChoice = true;
       }
-      this.qaPerf = new QaPerfOverlay(this, () => ({
-        enemies: this.enemies.countActive(true),
-        bullets: this.bullets.countActive(true),
-        gems: this.gems.countActive(true),
-        density: this.visualEnemyDensity,
-        tier: this.runtimeQuality.profile.level,
-      }), qaHideLabel(hide));
-      if (hide.size > 0) this.applyQaHide(hide);
-      this.createQaToggleButtons();
+      // QA fixed trophy states: ?qaTrophy=fresh|one|used|rhythm opens the
+      // boss-trophy screen through the REAL choice path with the legendary
+      // reward flag, so subtitle/rule/footnote/cards render exactly as after
+      // «ИММУННЫЙ ПРАЙМ». Choice, ceremony and return to battle stay ordinary.
+      const qaTrophy = parseQaTrophyState(window.location.search);
+      if (qaTrophy) {
+        applyQaTrophyFixture(this.runState, qaTrophy);
+        if (qaTrophy.stage === 'heart') {
+          this.runState.resetStageProgression({ id: 'heart', order: 2 });
+        }
+        if (qaTrophy.carrierSpent) this.lastCarrierUsed = true;
+        this.pendingChoices = [...qaTrophy.choices];
+        this.awaitingChoice = true;
+        this.legendaryRewardPending = true;
+      }
     }
 
     // Mobile WebViews can discard a retained page without another animation frame.

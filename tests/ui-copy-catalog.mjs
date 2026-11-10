@@ -124,6 +124,39 @@ try {
     'a unitless stat renders bare values'
   );
 
+  // 2b. Trophy screen copy (после «ИММУННОГО ПРАЙМА»): переход, правило, сноска.
+  assert.equal(
+    copy.TROPHY_COPY.subtitle,
+    'ИММУННЫЙ ПРАЙМ подавлен. Кровоток пройден: в Сердце штамм начнёт заново — ' +
+      'уровень 1, прочность 100, мутации заново. Трофей останется с тобой на весь забег.',
+    'the trophy subtitle explains the reset and what persists'
+  );
+  assert.equal(
+    copy.TROPHY_COPY.rule(2),
+    'Выбери одну из двух — вторая исчезнет.',
+    'the one-pick rule names the actual pair'
+  );
+  assert.equal(
+    copy.TROPHY_COPY.rule(1),
+    'Выбери её — другого варианта не будет.',
+    'a single offer keeps the rule honest'
+  );
+  assert.equal(
+    copy.trophySlotNote(0),
+    'Легендарных за забег — не больше двух. Трофей займёт один слот, второй можно найти дальше.',
+    'free slot: the second legendary stays findable'
+  );
+  assert.equal(
+    copy.trophySlotNote(1),
+    'Легендарных за забег — не больше двух. Трофей займёт второй слот — это последняя легендарная этого забега.',
+    'taken slot: the trophy is the last legendary of the run'
+  );
+  assert.equal(
+    copy.trophySlotNote(5),
+    copy.trophySlotNote(1),
+    'any non-zero count means the last slot'
+  );
+
   // Every upgrade that can reach a card must produce a non-empty header.
   for (const def of UPGRADES) {
     const header = copy.mutationCardHeader(def);
@@ -248,6 +281,13 @@ try {
   assert(ui.includes('LEVELUP_COPY.hint'), 'the level-up hint must come from the catalog');
   assert(ui.includes('LEGENDARY_CARD_DETAILS'), 'the structured legendary form must come from the catalog');
   assert(ui.includes('formatMutationStatValue('), 'stat row values must use the catalog formatter');
+  assert(ui.includes('TROPHY_COPY.subtitle'), 'the trophy transition line must come from the catalog');
+  assert(ui.includes('TROPHY_COPY.rule('), 'the one-pick rule must come from the catalog');
+  assert(ui.includes('trophySlotNote('), 'the conditional trophy footnote must come from the catalog');
+  assert(ui.includes('getRecipeProgress('), 'recipe blocks must be computed from the live run state');
+  assert(ui.includes('formatRecipeRow('), 'recipe rows must use the recipe formatter');
+  assert(ui.includes('formatRecipeNote('), 'the recipe note must use the recipe formatter');
+  assert(ui.includes('.heartHint'), 'the trophy heart hints must render from the legendary definition');
   for (const drifted of [
     "'ВЫБЕРИ МУТАЦИЮ'",
     "'Нажми на карточку, чтобы выбрать'",
@@ -257,6 +297,9 @@ try {
     "'ЛЕГЕНДАРНАЯ МУТАЦИЯ'",
     "'КРИТИЧЕСКАЯ МУТАЦИЯ'",
     "regen: 'РЕГЕН.'",
+    "'Синергия'",
+    "'ИММУННЫЙ ПРАЙМ подавлен · выбери мутацию для СЕРДЦА'",
+    "'Выбери одну из двух — вторая исчезнет.'",
   ]) {
     assert(!ui.includes(drifted), `UIScene still inlines the drift candidate: ${drifted}`);
   }

@@ -3,43 +3,6 @@
   "url": "http://127.0.0.1:5199/",
   "sizes": [
     {
-      "width": 320,
-      "height": 568,
-      "states": {
-        "A": {
-          "cards": 3,
-          "clipped": []
-        },
-        "B": {
-          "cards": 3,
-          "clipped": []
-        },
-        "C": {
-          "cards": 3,
-          "clipped": [],
-          "resizeObservation": {
-            "displayW": 320,
-            "displayH": 568,
-            "scaleW": 320,
-            "scaleH": 568
-          },
-          "chainEligible": [
-            "lysis-chain",
-            "zero-point",
-            "core-predator",
-            "last-carrier"
-          ]
-        },
-        "qaParamB": {
-          "choices": [
-            "magnet",
-            "infect",
-            "lysis"
-          ]
-        }
-      }
-    },
-    {
       "width": 390,
       "height": 844,
       "states": {
@@ -56,6 +19,9 @@
           "cards": 3,
           "clipped": []
         },
+        "Bmid": {
+          "clipped": []
+        },
         "C": {
           "cards": 3,
           "clipped": [],
@@ -78,6 +44,22 @@
             "infect",
             "lysis"
           ]
+        },
+        "trophy-fresh": {
+          "cards": 2,
+          "clipped": []
+        },
+        "trophy-one": {
+          "cards": 2,
+          "clipped": []
+        },
+        "trophy-used": {
+          "cards": 2,
+          "clipped": []
+        },
+        "trophy-rhythm": {
+          "cards": 2,
+          "clipped": []
         }
       }
     }
