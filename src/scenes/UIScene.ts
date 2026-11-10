@@ -2609,6 +2609,40 @@ export class UIScene extends Phaser.Scene {
     );
 
     detailY += compact ? 22 : 25;
+    // The nearest goal is always shown, right after the archetype and before
+    // the mode chip (the takeaway sketch): it names what the next run is for.
+    // The two lines come from `res.nearestGoal` as computed in finish(); the
+    // renderer never composes them. The goal is not a button — a tap on it
+    // does nothing.
+    c.add(
+      this.add
+        .text(W / 2, detailY, res.nearestGoal.line1, {
+          fontFamily: FONT,
+          fontSize: compact ? '10px' : '11px',
+          fontStyle: 'bold',
+          color: '#b8f3ff',
+          align: 'center',
+          wordWrap: { width: W - 42 },
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setName('ofeliya-result-goal-line1')
+    );
+    detailY += compact ? 20 : 23;
+    c.add(
+      this.add
+        .text(W / 2, detailY, res.nearestGoal.line2, {
+          fontFamily: FONT,
+          fontSize: compact ? '9px' : '10px',
+          color: '#8f9ab7',
+          align: 'center',
+          wordWrap: { width: W - 42 },
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setName('ofeliya-result-goal-line2')
+    );
+    detailY += compact ? 20 : 23;
     c.add(
       this.add
         .text(

@@ -6,6 +6,7 @@ import type { DifficultyId } from './DifficultyProfile';
 import type { LegendaryId } from './LegendarySystem';
 import type { ControlMode } from './ControlMode';
 import type { NewCodexEntry } from './runCodexOpenings';
+import type { NearestGoal } from './runNextGoal';
 import type { DailyResultBranch } from './DailyRunIntent';
 import type { DuelChallengeSnapshot } from './Duel';
 import type { ChallengePayload } from './Challenge';
@@ -76,6 +77,12 @@ export interface RunResult {
   stageBuilds: Partial<Record<StageId, StageBuildResult>>;
   newAchievements: AchievementId[];
   records: RunRecordFlags;
+  /**
+   * The nearest goal, computed once in `GameScene.finish` from the post-run
+   * state (quest snapshot, lifetime stats, mastery tracks) and re-shown
+   * verbatim: the result screen never recomputes it.
+   */
+  nearestGoal: NearestGoal;
 }
 
 /**

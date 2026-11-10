@@ -202,6 +202,16 @@ try {
   assert(ui.includes('MUTATION_CARD_HEADERS.legendary'), 'legendary reward must use the catalog header');
   assert(ui.includes('MUTATION_CARD_HEADERS.evolution'), 'evolution reward must use the catalog header');
   assert(ui.includes('formatBuildSummary(stacks)'), 'build summary must use the catalog formatter');
+  assert(ui.includes('res.nearestGoal.line1'), 'the result must render the stored goal lines');
+  assert(ui.includes('res.nearestGoal.line2'), 'the result must render the stored goal lines');
+  for (const drifted of [
+    "'Следующий забег: '",
+    "'В этом забеге: '",
+    "'Ближайшая цель: '",
+    "'осталось '",
+  ]) {
+    assert(!ui.includes(drifted), `UIScene still inlines the goal fragment: ${drifted}`);
+  }
   for (const drifted of [
     "'РЕДКИЙ' : 'СТАНДАРТ'",
     "'ЛЕГЕНДАРНАЯ МУТАЦИЯ'",
@@ -249,6 +259,21 @@ try {
   assert.equal(copy.RESULT_COPY.legendary, 'ЛЕГЕНДАРНАЯ МУТАЦИЯ', 'the legendary line');
   assert.equal(copy.RESULT_COPY.resumed, 'Тренировка (продолженный забег)', 'the practice chip');
   assert.equal(copy.RESULT_COPY.dailyRank(5), '★ МЕСТО #5 В РЕЙТИНГЕ ДНЯ', 'the daily place');
+  assert.equal(copy.GOAL_COPY.nextRunPrefix, 'Следующий забег: ', 'goal: next-run prefix');
+  assert.equal(copy.GOAL_COPY.thisRunPrefix, 'В этом забеге: ', 'goal: this-run prefix');
+  assert.equal(copy.GOAL_COPY.closestPrefix, 'Ближайшая цель: ', 'goal: closest prefix');
+  assert.equal(copy.GOAL_COPY.doneToday, 'сегодня всё выполнено', 'goal: neutral head');
+  assert.equal(
+    copy.GOAL_COPY.noGoalDetail,
+    'Новые задания появятся завтра — или просто начни новый забег.',
+    'goal: neutral detail'
+  );
+  assert.equal(copy.GOAL_COPY.remainingPrefix, 'осталось ', 'goal: remainder prefix');
+  assert.equal(
+    copy.GOAL_COPY.masteryLine('Снарядный штамм', 1, 'ГИПЕРШИП + ГЕОМЕТРИЯ РАСКОЛА'),
+    'Ветка «Снарядный штамм»: 1 / 2 · ГИПЕРШИП + ГЕОМЕТРИЯ РАСКОЛА',
+    'goal: mastery detail line'
+  );
   assert.deepEqual(
     [...copy.CODEX_COPY.synergyRecipes],
     evolutionRecipes,
