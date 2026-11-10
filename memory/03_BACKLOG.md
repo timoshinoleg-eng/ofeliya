@@ -1,3 +1,7 @@
+# Mutation screens B/C + boss trophy — 2026-11-11 (5)
+
+Ветка qa/mutation-screen-b-c-trophy, HEAD d847366: пакет приёмки двух P2 завершён. В репозитории scripts/p2-recipe-verify.cjs (воспроизводимая проба: D/E × 320×520/390×844 + gate-off режим); ACCEPTANCE.md финальный (SHA разделены, команды, границы, чек-лист Samsung). Повторено на 43b27ce: 50/50 + 4/4 PASS. Тело PR #278 обновлено. Открытое: физическая приёмка Samsung S20+ (NOT_RUN) — за владельцем; CI на финальном HEAD — ждать зелёного перед сдачей.
+
 # Mutation screens B/C + boss trophy — 2026-11-10 (4)
 
 Ветка qa/mutation-screen-b-c-trophy, HEAD b798156: финальный пакет ревью и приёмки двух P2 сдан. Отчёт docs/qa/p2-recipe-acceptance-2026-11-10/ACCEPTANCE.md (SHA, чеки, способ открыть на телефоне, сценарии D/E, кадры 320×520 основные + 390×844). Браузерная проверка 320×520 ALL PASS (p2-verify.cjs, 18 проверок). Физическая приёмка Samsung S20+ — NOT_RUN, за владельцем. PR #278 Ready for review; новый круг правок — по замечаниям ревью/телефона.
