@@ -2379,8 +2379,12 @@ export class UIScene extends Phaser.Scene {
     this.resultViewport = { width: W, height: H };
 
     c.add(
+      // Fully opaque: the scene beneath is the paused Game on the first
+      // show and the live Menu on a re-show after a Codex return, and a
+      // translucent scrim lets the Menu's bright primary button bleed
+      // through over the opening rows.
       this.add
-        .rectangle(W / 2, H / 2, W, H, VISUAL.ink, 0.95)
+        .rectangle(W / 2, H / 2, W, H, VISUAL.ink, 1)
         .setName('ofeliya-result-scrim')
         .setInteractive()
     );
