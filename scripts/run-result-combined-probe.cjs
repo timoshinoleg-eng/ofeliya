@@ -156,6 +156,26 @@ async function swipeOutAndBack(ctx, page, point) {
   await at(point.x + 2, 'touchEnd');
 }
 
+/**
+ * Out-and-back past the report's left edge: down on the row, out to x=4
+ * (the report starts at x=16), back to the start, release. The gesture
+ * leaves the hit rect mid-swipe, so only a scene-wide move listener can
+ * see the excursion and cancel the tap.
+ */
+async function swipeOutLeftAndBack(ctx, page, point) {
+  const cdp = await ctx.newCDPSession(page);
+  const at = (x, type) => cdp.send('Input.dispatchTouchEvent', {
+    type,
+    touchPoints: [{ x, y: point.y, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
+  });
+  const out = point.x - 4;
+  await at(point.x, 'touchStart');
+  await sleep(30);
+  for (let i = 1; i <= 4; i += 1) { await at(point.x - Math.round((out * i) / 4), 'touchMove'); await sleep(25); }
+  for (let i = 3; i >= 0; i -= 1) { await at(point.x - Math.round((out * i) / 4), 'touchMove'); await sleep(25); }
+  await at(point.x, 'touchEnd');
+}
+
 /** A vertical swipe inside the report, to scroll its rows down (content up). */
 async function swipeUp(ctx, page, x, y, dy) {
   const cdp = await ctx.newCDPSession(page);
@@ -202,6 +222,26 @@ async function objectBounds(page, name) {
 async function objectCenter(page, name) {
   const b = await objectBounds(page, name);
   return b ? { x: b.cx, y: b.cy } : null;
+}
+
+/** Centre of a visible text in the Menu scene, matched by exact content. */
+async function menuTextCenter(page, text) {
+  return page.evaluate((wanted) => {
+    const menu = window.__game.scene.getScene('Menu');
+    if (!menu) return null;
+    const flat = [];
+    const visit = (o) => { flat.push(o); if (Array.isArray(o?.list)) o.list.forEach(visit); };
+    menu.children.list.forEach(visit);
+    const t = flat.find((o) => o && typeof o.text === 'string' && o.text === wanted && o.visible !== false && typeof o.getBounds === 'function');
+    if (!t) return null;
+    const b = t.getBounds();
+    return { x: Math.round(b.centerX), y: Math.round(b.centerY) };
+  }, text);
+}
+
+/** Whether a visible text with this exact content exists in the Menu scene. */
+async function menuHasText(page, text) {
+  return (await menuTextCenter(page, text)) !== null;
 }
 
 async function sceneState(page) {
@@ -422,7 +462,13 @@ async function boot(browser, viewport, opts) {
     const menu = window.__game.scene.getScene('Menu');
     if (m === 'daily') {
       const now = Date.now();
-      const ticket = { runId: 'daily-test-1', runSeed: 'daily-seed-1', dateKey: new Date().toISOString().slice(0, 10), issuedAt: now - 60000, expiresAt: now + 6 * 3600 * 1000, difficultyId: 'standard', rulesetVersion: 3, campaignVersion: 2 };
+      // The server issues tickets for the LOCAL day (localDayKey), so the
+      // daily history lands on today and the reward becomes claimable.
+      // A UTC dateKey would record the run under the wrong day whenever
+      // the two differ.
+      const d = new Date();
+      const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const ticket = { runId: 'daily-test-1', runSeed: 'daily-seed-1', dateKey, issuedAt: now - 60000, expiresAt: now + 6 * 3600 * 1000, difficultyId: 'standard', rulesetVersion: 3, campaignVersion: 2 };
       menu.registry.set('dailyTicket', ticket);
       menu.registry.set('dailyIntent', { runId: ticket.runId });
       menu.registry.set('runSeedOverride', ticket.runSeed);
@@ -790,6 +836,15 @@ async function combinedCycle(browser, viewport, id, shots) {
         checkSafe('swipe-320: 38 px out-and-back swipe does not open the Codex',
           st1.ui.active && !st1.menu.active && st1.runResult === 'present' && env.score() === scoreBefore,
           JSON.stringify(st1));
+        // Out past the report's left edge and back: the gesture leaves the
+        // hit rect mid-swipe, so the tap must be cancelled by the
+        // scene-wide move listener, not by the release-point check.
+        await swipeOutLeftAndBack(ctx, page, row);
+        await sleep(400);
+        const st1b = await sceneState(page);
+        checkSafe('swipe-320: out past the left edge and back does not open the Codex',
+          st1b.ui.active && !st1b.menu.active && st1b.runResult === 'present' && env.score() === scoreBefore,
+          JSON.stringify(st1b));
         await tapNamed(ctx, page, 'ofeliya-result-opening-evolution-singularity-name');
         await page.waitForFunction(() => window.__game.scene.isActive('Menu') && !!window.__game.scene.getScene('Menu')?.codexOverlay, { timeout: 3000 });
         await sleep(400);
@@ -818,6 +873,83 @@ async function combinedCycle(browser, viewport, id, shots) {
           st3.menu.active && st3.menu.codexOpen && !!badge2 && env.score() === scoreBefore,
           `badge=${!!badge2} score=${env.score()} (was ${scoreBefore})`);
         checkSafe('swipe-320: no page errors', env.errors.length === 0, env.errors.join(' | '));
+      } finally {
+        await env.ctx.close();
+      }
+    }
+
+    // 7. Daily with a claimable reward: the reward modal must not cover
+    // the return button on a Codex entry, and the reward must survive.
+    console.log('\n--- daily-reward-390 ---');
+    {
+      const env = await boot(browser, { width: 390, height: 844 }, { mode: 'daily', save: COMBINED_SAVE, meta: COMBINED_META });
+      const { ctx, page } = env;
+      try {
+        await finishRun(page, COMBINED_QUEST, COMBINED_RUN, true);
+        const fp1 = await resultFingerprint(page);
+        const st1 = await sceneState(page);
+        checkSafe('daily-reward-390: daily mode shown, score once, run recorded once',
+          fp1.some((r) => r.text.includes('ЗАБЕГ ДНЯ')) && env.score() === 1 && st1.saveRuns === 121,
+          `score=${env.score()} runs=${st1.saveRuns}`);
+        // The finish recorded today's daily run, so the reward is
+        // claimable (playedToday, not claimed).
+        const canClaim = await page.evaluate(() => {
+          const claims = JSON.parse(localStorage.getItem('ofeliya.daily.v1') || '{}');
+          const d = new Date();
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          const history = JSON.parse(localStorage.getItem('ofeliya_daily_history_v1') || '{}');
+          return { playedToday: Boolean(history[key]), claimedToday: claims[key] !== undefined };
+        });
+        checkSafe('daily-reward-390: the reward is claimable after the daily run',
+          canClaim.playedToday && !canClaim.claimedToday, JSON.stringify(canClaim));
+        // Open the Codex and sit in it past the modal's 900 ms timer: on
+        // a Codex entry the modal must not auto-show at all.
+        await tapNamed(ctx, page, 'ofeliya-result-opening-evolution-singularity-name');
+        await page.waitForFunction(() => window.__game.scene.isActive('Menu') && !!window.__game.scene.getScene('Menu')?.codexOverlay, { timeout: 3000 });
+        await sleep(1300);
+        checkSafe('daily-reward-390: no reward modal on the Codex entry',
+          (await sceneState(page)).menu.codexOpen && !(await menuHasText(page, 'ЕЖЕДНЕВНАЯ НАГРАДА')),
+          'the daily modal appeared over the Codex');
+        await tapNamed(ctx, page, 'ofeliya-modal-close-hit');
+        await page.waitForFunction(() => !window.__game.scene.getScene('Menu')?.codexOverlay, { timeout: 3000 });
+        await sleep(300);
+        const returnBtn = await objectCenter(page, 'ofeliya-menu-return-result');
+        checkSafe('daily-reward-390: the return button is present after closing the Codex',
+          !!returnBtn, 'no return button');
+        await tapNamed(ctx, page, 'ofeliya-menu-return-result');
+        await waitResult(page);
+        await sleep(400);
+        const fp2 = await resultFingerprint(page);
+        const diff = fingerprintDiff(fp1, fp2);
+        checkSafe('daily-reward-390: the return opens the same result with the reward available',
+          diff === null && fp2.some((r) => r.text.includes('ЗАБЕГ ДНЯ')) && env.score() === 1,
+          diff || `score=${env.score()}`);
+        // The reward is not lost: on the next direct menu entry it shows.
+        await tapNamed(ctx, page, 'ofeliya-result-menu-bg');
+        await page.waitForFunction(() => !window.__game.scene.isActive('UI'), { timeout: 3000 });
+        await page.waitForFunction(() => {
+          const menu = window.__game.scene.getScene('Menu');
+          if (!menu) return false;
+          const flat = [];
+          const visit = (o) => { flat.push(o); if (Array.isArray(o?.list)) o.list.forEach(visit); };
+          menu.children.list.forEach(visit);
+          return flat.some((o) => o && typeof o.text === 'string' && o.text === 'ЕЖЕДНЕВНАЯ НАГРАДА' && o.visible !== false);
+        }, { timeout: 4000 });
+        checkSafe('daily-reward-390: the reward modal shows on the next direct menu entry',
+          await menuHasText(page, 'ЕЖЕДНЕВНАЯ НАГРАДА'),
+          'no daily modal on the direct entry');
+        const claimBtn = await menuTextCenter(page, 'ЗАБРАТЬ');
+        checkSafe('daily-reward-390: the claim button is present', !!claimBtn, 'no ЗАБРАТЬ button');
+        await touchAt(ctx, page, claimBtn);
+        await sleep(500);
+        const claimed = await page.evaluate(() => {
+          const claims = JSON.parse(localStorage.getItem('ofeliya.daily.v1') || '{}');
+          const d = new Date();
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          return claims[key] !== undefined;
+        });
+        checkSafe('daily-reward-390: the reward is claimed', claimed, 'no claim recorded');
+        checkSafe('daily-reward-390: no page errors', env.errors.length === 0, env.errors.join(' | '));
       } finally {
         await env.ctx.close();
       }
