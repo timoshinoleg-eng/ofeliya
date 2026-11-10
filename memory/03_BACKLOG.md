@@ -1,6 +1,6 @@
 # Mutation screens B/C + boss trophy — 2026-11-10
 
-Ветка `qa/mutation-screen-b-c-trophy`, HEAD 344ea89. CI в PR #278 полностью зелёный (build, production-contract, browser-smoke). Развязка: legendary-layout на FreeType-метриках (af2cff3, scale-to-fit цены + squash-ужатие, пороги пробы без изменений) и ui-readability-smoke, красный уже на базе (344ea89, типографские полы 11/12px + «УРОВЕНЬ» 13px + фон ≥124/148). Тело PR обновлено. Открытое: снятие Draft и мердж — за родителем; физическая приёмка на Samsung S20+ по QA-адресам из RUNBOOK (?qaMutation=A|B|C, ?qaTrophy=fresh|one|used|rhythm при VITE_QA_TOOLS=1) — NOT_RUN, за владельцем; после приёмки — финальная визуальная доводка B/C.
+Ветка `qa/mutation-screen-b-c-trophy`, HEAD b0e0027 (memory-коммит поверх 344ea89 — CI на нём перезапущен автоматически). PR #278: **Draft снят по запросу владельца (2026-11-10), Ready for review**; CI на 344ea89 был полностью зелёный (build, production-contract, browser-smoke). Развязка: legendary-layout на FreeType-метриках (af2cff3, scale-to-fit цены + squash-ужатие, пороги пробы без изменений) и ui-readability-smoke, красный уже на базе (344ea89, типографские полы 11/12px + «УРОВЕНЬ» 13px + фон ≥124/148). Открытое: ревью и мердж — за родителем; физическая приёмка на Samsung S20+ по QA-адресам из RUNBOOK (?qaMutation=A|B|C, ?qaTrophy=fresh|one|used|rhythm при VITE_QA_TOOLS=1) — NOT_RUN, за владельцем; после приёмки — финальная визуальная доводка B/C.
 
 # Mutation screens B/C + boss trophy — 2026-11-09
 
