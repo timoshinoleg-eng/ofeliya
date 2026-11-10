@@ -609,6 +609,30 @@ async function runSwipe(browser, scenario, viewport) {
     }
 
     // 3) After scrolling, a tap on the visible row still opens the Codex.
+    // The 80 px swipe can carry the row's centre above the report's top
+    // edge on a tall screen (the goal block adds scroll room), so bring
+    // the row back into the visible area first: the tap must land on a
+    // row the player can actually see, not on its masked-out centre.
+    let hit = null;
+    for (let i = 0; i < 5; i += 1) {
+      hit = await page.evaluate(() => {
+        const ui = window.__game.scene.getScene('UI');
+        const flat = [];
+        const visit = (o) => { flat.push(o); if (Array.isArray(o?.list)) o.list.forEach(visit); };
+        ui.children.list.forEach(visit);
+        const rect = flat.find((o) => o?.name === 'ofeliya-result-report-hit');
+        const b = rect?.getBounds?.();
+        return b ? { top: Math.round(b.top), bottom: Math.round(b.bottom), cx: Math.round(b.centerX), cy: Math.round(b.centerY) } : null;
+      });
+      if (!hit || !zone) break;
+      if (zone.cy >= hit.top + 4 && zone.cy <= hit.bottom - 4) break;
+      const dir = zone.cy < hit.top + 4 ? 1 : -1;
+      await touchDrag(ctx, page, { x: hit.cx, y: hit.cy }, [{ x: hit.cx, y: hit.cy + dir * 40 }]);
+      await sleep(300);
+      zone = await readZone();
+      if (!zone) { fail('tap zone gone while scrolling it back into view'); return failures; }
+    }
+    if (hit && (zone.cy < hit.top + 4 || zone.cy > hit.bottom - 4)) fail(`row centre still outside the visible report area after scrolling (cy=${zone.cy}, report ${hit.top}..${hit.bottom})`);
     if (VIDEO) {
       for (let i = 5; i < 8; i += 1) {
         await page.screenshot({ path: path.join(SHOTS, `video-swipe-${String(i).padStart(2, '0')}.png`) });
