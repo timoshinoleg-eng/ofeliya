@@ -2904,9 +2904,19 @@ export class UIScene extends Phaser.Scene {
       reportHit.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
         tap = { id: pointer.id, x: pointer.x, y: pointer.y };
       });
-      reportHit.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      // The disarm listens on the scene, not on the hit rect: a swipe can
+      // leave the report area mid-gesture (out the left edge and back), and
+      // an object only receives pointermove while the pointer is over it —
+      // a reportHit handler would never see the excursion, so the
+      // out-and-back release would still pass the release-point check.
+      // Removed with the result overlay, so a re-show arms a fresh one.
+      const onTapMove = (pointer: Phaser.Input.Pointer): void => {
         if (!tap || tap.id !== pointer.id) return;
         if (Math.abs(pointer.x - tap.x) + Math.abs(pointer.y - tap.y) > TAP_MOVE_LIMIT) tap = null;
+      };
+      this.input.on('pointermove', onTapMove);
+      c.once(Phaser.GameObjects.Events.DESTROY, () => {
+        this.input.off('pointermove', onTapMove);
       });
       reportHit.on('pointerupoutside', () => { tap = null; });
       reportHit.on('pointerup', (pointer: Phaser.Input.Pointer) => {
