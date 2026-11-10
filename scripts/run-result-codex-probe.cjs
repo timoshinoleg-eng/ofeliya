@@ -263,7 +263,14 @@ async function bootResult(browser, viewport, saveSeed, runSetup, win) {
     gs.finish(isWin);
     game.scene.getScene('UI').update();
   }, { setup: runSetup, isWin: win });
+  // The score submission clears the outbox asynchronously, and under load
+  // the main thread is busy enough that the clear lands ~2 s after the
+  // finish (measured), not inside a fixed sleep. The storage baseline
+  // below is only meaningful once the submission has settled, so wait
+  // for the outbox to empty instead of guessing a duration. A timeout
+  // leaves the old behaviour (the storage check then fails honestly).
   await sleep(400);
+  await page.waitForFunction(() => !localStorage.getItem('ofeliya_score_outbox_v1'), { timeout: 8000 }).catch(() => {});
 
   const scoreCount = () => scoreRequests;
   return { ctx, page, errors, scoreCount };
