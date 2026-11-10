@@ -552,6 +552,15 @@ const COMBINED_RUN = { timeMs: 300000, kills: 1000, hostCells: 5, level: 10, com
 const GOAL_LINE1 = 'Ближайшая цель: Цепь лизиса';
 const GOAL_LINE2 = 'Ветка «Инфекция / Лизис»: 1 / 2 · СИНГУЛЯРНОСТЬ + ЦЕПЬ ЛИЗИСА';
 
+async function checkPinnedGoal(page, id) {
+  const goal = await objectBounds(page, 'ofeliya-result-goal-line1');
+  const hint = await objectBounds(page, 'ofeliya-result-scroll-hint');
+  const retry = await objectBounds(page, 'ofeliya-result-retry-bg');
+  check(`${id}: short goal stays between report hint and New Run`,
+    !!goal && !!hint && !!retry && goal.y >= hint.y + hint.h - 1 && goal.y + goal.h <= retry.y,
+    JSON.stringify({ goal, hint, retry }));
+}
+
 /** Bounds: every result text fits the width; buttons and zones inside the viewport. */
 async function checkBounds(ctx, page, id, viewport) {
   const rows = await resultTexts(page);
@@ -575,7 +584,10 @@ async function checkBounds(ctx, page, id, viewport) {
   // The check is against the report clip, not the page: a masked row is
   // inside the page viewport but not actually readable.
   const hit = await objectBounds(page, 'ofeliya-result-report-hit');
-  for (const name of ['ofeliya-result-goal-line1', 'ofeliya-result-goal-line2', 'ofeliya-result-opening-evolution-singularity-name', 'ofeliya-result-opening-legendary-zero-point-name']) {
+  const reportRows = ['ofeliya-result-goal-line2', 'ofeliya-result-opening-evolution-singularity-name', 'ofeliya-result-opening-legendary-zero-point-name'];
+  if (viewport.height < 650) await checkPinnedGoal(page, id);
+  else reportRows.unshift('ofeliya-result-goal-line1');
+  for (const name of reportRows) {
     const b = await ensureVisible(ctx, page, name, viewport);
     check(`${id}: ${name} reachable and inside the report area`,
       !!b && !!hit && b.cy >= hit.y && b.cy <= hit.y + hit.h,
@@ -639,9 +651,10 @@ async function combinedCycle(browser, viewport, id, shots) {
     // The first frame is the unscrolled state (what the player sees first).
     if (shots) await page.screenshot({ path: path.join(SHOTS, `${id}-first.png`) });
     await checkBounds(ctx, page, id, viewport);
-    // The goal sits below the fold on a short screen: scroll to it and
+    // Goal details can sit below the fold on a short screen: scroll to them and
     // keep that frame too, so the tightest state is shown in full.
     await ensureVisible(ctx, page, 'ofeliya-result-goal-line2', viewport);
+    if (viewport.height < 650) await checkPinnedGoal(page, id + ' after scroll');
     await sleep(300);
     if (shots) await page.screenshot({ path: path.join(SHOTS, `${id}-goal.png`) });
 
@@ -649,6 +662,7 @@ async function combinedCycle(browser, viewport, id, shots) {
     const fp2 = await resultFingerprint(page);
     const diff1 = fingerprintDiff(fp1, fp2);
     check(`${id}: return 1 re-shows the same result (only the hidden score status differs)`, diff1 === null, diff1 || '');
+    if (viewport.height < 650) await checkPinnedGoal(page, id + ' after return');
     const goal2 = await goalLines(page);
     check(`${id}: return 1 keeps the goal`, goal2.line1?.text === GOAL_LINE1 && goal2.line2?.text === GOAL_LINE2, JSON.stringify(goal2));
     check(`${id}: return 1 sends no score, plays no video, storage unchanged`,

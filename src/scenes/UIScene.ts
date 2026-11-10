@@ -2614,25 +2614,20 @@ export class UIScene extends Phaser.Scene {
     );
 
     detailY += compact ? 22 : 25;
-    // The nearest goal is always shown, right after the archetype and before
-    // the mode chip (the takeaway sketch): it names what the next run is for.
-    // The two lines come from `res.nearestGoal` as computed in finish(); the
-    // renderer never composes them. The goal is not a button — a tap on it
-    // does nothing.
-    c.add(
-      this.add
-        .text(W / 2, detailY, res.nearestGoal.line1, {
-          fontFamily: FONT,
-          fontSize: compact ? '10px' : '11px',
-          fontStyle: 'bold',
-          color: '#b8f3ff',
-          align: 'center',
-          wordWrap: { width: W - 42 },
-        })
-        .setOrigin(0.5)
-        .setResolution(2)
-        .setName('ofeliya-result-goal-line1')
-    );
+    // Keep the goal visible above the actions on compact screens.
+    const goalLine = this.add
+      .text(W / 2, detailY, res.nearestGoal.line1, {
+        fontFamily: FONT,
+        fontSize: '11px',
+        fontStyle: 'bold',
+        color: '#b8f3ff',
+        align: 'center',
+        wordWrap: { width: W - 42 },
+      })
+      .setOrigin(0.5)
+      .setResolution(2)
+      .setName('ofeliya-result-goal-line1');
+    c.add(goalLine);
     detailY += compact ? 20 : 23;
     c.add(
       this.add
@@ -2852,8 +2847,13 @@ export class UIScene extends Phaser.Scene {
     summarySurface.setPosition(W / 2, (summaryTop + statsBottom + 14) / 2);
     drawSpecimenSurface(summarySurface, W - 28, statsBottom + 14 - summaryTop, {accent: res.win ? VISUAL.host : VISUAL.player, alpha:0.72});
     const reportTop = Math.max(statY + 36, statsBottom + 24);
-    const reportRows = c.list.slice(reportStart).filter((child): child is Phaser.GameObjects.Text => child instanceof Phaser.GameObjects.Text);
-    createResultReport(this, c, reportRows, W / 2, reportTop, W - 32, Math.max(50, y - 55 - reportTop), scoreStatus);
+    if (compact) goalLine.setOrigin(0.5, 1).setPosition(W / 2, y - 30);
+    const goalSpace = compact ? goalLine.height + 8 : 0;
+    const reportRows = c.list.slice(reportStart).filter((child): child is Phaser.GameObjects.Text =>
+      child instanceof Phaser.GameObjects.Text && (!compact || child !== goalLine)
+    );
+    const reportHeight = Math.max(50, y - 55 - reportTop - goalSpace);
+    createResultReport(this, c, reportRows, W / 2, reportTop, W - 32, reportHeight, scoreStatus);
     // One tap zone per opening: the name and the tab subtitle share a
     // single zone, at least MIN_TOUCH tall and the full row width. The
     // zone is a plain rectangle in the report container, so it scrolls
