@@ -1181,7 +1181,11 @@ export class MenuScene extends Phaser.Scene {
     // by the menu that opens next. The optional entry ref (set together with
     // the flag by a tap on an opening row) picks the tab and the highlighted
     // entry; without it the codex opens on its default tab, as before.
-    if (this.registry.get('openCodexOnMenu') === true) {
+    // A codex-transition entry is a pass-through, not a menu visit: the
+    // player came to view an entry and go back to the result, so the daily
+    // reward modal must not auto-show on this entry (see below).
+    const openedCodex = this.registry.get('openCodexOnMenu') === true;
+    if (openedCodex) {
       this.registry.remove('openCodexOnMenu');
       const entry = this.registry.get('openCodexEntry') as CodexEntryRef | null | undefined;
       this.registry.remove('openCodexEntry');
@@ -1192,7 +1196,12 @@ export class MenuScene extends Phaser.Scene {
     // server-anchored daily run was played today and the reward is unclaimed.
     // The modal re-appears on the next menu entry until claimed; closing it
     // with ✕ only dismisses it for this entry.
-    if (FeatureFlags.get('retention.quests') && getDailyStatus().canClaim) {
+    // Not on a codex-transition entry: the modal (depth 61, full-screen dim)
+    // sits above the Codex (depth 40) and above the «← К РЕЗУЛЬТАТУ» button,
+    // so it would cover the return action the player came back for. The
+    // reward is not lost — canClaim stays true and the modal shows on the
+    // next direct menu entry.
+    if (FeatureFlags.get('retention.quests') && getDailyStatus().canClaim && !openedCodex) {
       this.time.delayedCall(900, () => {
         if (!this.scene.isActive()) return;
         showDailyModal(
