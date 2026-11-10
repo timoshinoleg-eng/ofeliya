@@ -38,3 +38,6 @@ docs/qa/*/video-tmp/
 .env
 .env.*
 !.env.example
+
+# P2 recipe verify probe (gate-off production bundle)
+.tmp-p2-*/
