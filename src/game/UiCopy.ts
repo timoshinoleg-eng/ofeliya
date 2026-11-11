@@ -5,7 +5,7 @@ import {
   type UpgradeFamily,
   type UpgradeRarity,
 } from './UpgradeSystem';
-import { fmtInt } from './UiFormat';
+import { fmtInt, fmtProgress } from './UiFormat';
 
 /**
  * Player-visible RU copy catalog for interface surfaces that previously carried
@@ -18,10 +18,15 @@ import { fmtInt } from './UiFormat';
  * Every value here must equal the literal it replaced. See tests/ui-copy-catalog.mjs.
  */
 
-/** Rarity words that appear in the `[СЕМЬЯ] · [РЕДКОСТЬ]` mutation card header. */
+/**
+ * Rarity words of the mutation card header. The approved «Био-мембрана»
+ * direction names the tier and the card type («ОБЫЧНАЯ МУТАЦИЯ»), so the old
+ * standalone tier words («СТАНДАРТ»/«РЕДКИЙ») are replaced by the full
+ * tier phrase assembled in `mutationCardHeader`.
+ */
 export const RARITY_LABELS: Record<'common' | 'rare', string> = {
-  common: 'СТАНДАРТ',
-  rare: 'РЕДКИЙ',
+  common: 'ОБЫЧНАЯ',
+  rare: 'РЕДКАЯ',
 };
 
 /**
@@ -40,14 +45,15 @@ export interface MutationCardHeaderSource {
 }
 
 /**
- * Header line of a mutation card. Legendary/evolution cards drop the
- * family/rarity line; every other card renders `[СЕМЬЯ] · [РЕДКОСТЬ]`.
+ * Header line of a mutation card. Legendary/evolution cards keep their own
+ * ceremony headers; every other card renders `[РЕДКАЯ] МУТАЦИЯ · [СЕМЬЯ]` —
+ * the tier phrase first (it decides the frame colour), the family after it.
  */
 export function mutationCardHeader(def: MutationCardHeaderSource): string {
   if (def.kind === 'legendary') return MUTATION_CARD_HEADERS.legendary;
   if (def.kind === 'evolution') return MUTATION_CARD_HEADERS.evolution;
-  return `${UPGRADE_FAMILY_LABELS[def.family]} · ${
-    RARITY_LABELS[def.rarity === 'rare' ? 'rare' : 'common']
+  return `${RARITY_LABELS[def.rarity === 'rare' ? 'rare' : 'common']} МУТАЦИЯ · ${
+    UPGRADE_FAMILY_LABELS[def.family]
   }`;
 }
 
@@ -106,6 +112,8 @@ export const MENU_COPY = {
   resume: 'ПРОДОЛЖИТЬ ЗАБЕГ',
   /** Secondary action when a checkpoint exists. */
   newRun: 'НОВЫЙ ЗАБЕГ',
+  /** Secondary action when a finished run waits in the registry: back to its result screen. */
+  returnResult: '← К РЕЗУЛЬТАТУ',
   /**
    * Says that the run-configuration cards belong to the next run.
    *
@@ -201,6 +209,43 @@ export const RESULT_COPY = {
    */
   submitting: 'Отправляю результат…',
   duelSubmitting: 'Отправляю дуэль…',
+} as const;
+
+/**
+ * The nearest-goal lines of the result screen (`RunResult.nearestGoal`).
+ *
+ * The goal is always shown: it names what the next run is for. The fragments
+ * are composed by `computeNextGoal`, never by the renderer — the two lines
+ * are stored in the result and re-shown verbatim.
+ *
+ * The wording follows the next-goal contract: a single-run quest names the
+ * next run and this run's progress («В этом забеге: p / t», never «осталось» —
+ * the progress does not carry over), while a cumulative goal names the honest
+ * remainder («осталось N»).
+ */
+export const GOAL_COPY = {
+  /** Prefix of a single-run quest goal: «Следующий забег: <описание>». */
+  nextRunPrefix: 'Следующий забег: ',
+  /** Prefix of the run's own progress: «В этом забеге: <p> / <t>». */
+  thisRunPrefix: 'В этом забеге: ',
+  /**
+   * Prefix of a day-scoped quest's progress: «Лучшее сегодня: <p> / <t>».
+   * Only `q_nodmg` is day-scoped: its value is the day's best across every
+   * run of the day, so «В этом забеге» would lie about the number after a
+   * weaker second run.
+   */
+  bestTodayPrefix: 'Лучшее сегодня: ',
+  /** Prefix of a mastery goal and of the neutral line: «Ближайшая цель: …». */
+  closestPrefix: 'Ближайшая цель: ',
+  /** The neutral line's head: the day's goals are done. */
+  doneToday: 'сегодня всё выполнено',
+  /** The neutral line's detail: new goals come tomorrow. */
+  noGoalDetail: 'Новые задания появятся завтра — или просто начни новый забег.',
+  /** Prefix of an honest remainder: «осталось <N>». */
+  remainingPrefix: 'осталось ',
+  /** The mastery goal's detail: «Ветка «<ветка>»: <p> / 2 · <цель>». */
+  masteryLine: (label: string, progress: number, objective: string): string =>
+    `Ветка «${label}»: ${fmtProgress(progress, 2)} · ${objective}`,
 } as const;
 
 /**
@@ -539,4 +584,97 @@ export function buildShareText(input: ShareCopyInput): string {
 /** The share text of a created fixed-seed duel. */
 export function buildDuelShareText(targetTime: string): string {
   return `OFELIYA · ДУЭЛЬ: мой результат ${targetTime}. Сможешь пройти быстрее? ${SHARE_BOT_HANDLE}`;
+}
+/* ------------------------------------------------------------------------- *
+ * Экран выбора мутации — перенос утверждённого направления «Био-мембрана».
+ *
+ * Строки пинятся здесь литералами: тест tests/ui-copy-catalog.mjs сверяет их
+ * с эталоном, а scripts/check-mutation-copy.mjs проверяет внедрение в сцену.
+ * ------------------------------------------------------------------------- */
+
+/** Заголовок и подсказка экрана выбора (не-трофейный путь). */
+export const LEVELUP_COPY = {
+  /** Заголовок модала выбора мутации. */
+  title: 'ВЫБЕРИ МУТАЦИЮ',
+  /** Одна короткая подсказка под заголовком. */
+  hint: 'Нажми на карточку, чтобы выбрать',
+} as const;
+
+/**
+ * Копир трофейного экрана (награда за «ИММУННЫЙ ПРАЙМ»).
+ *
+ * Экран обязан ответить до тапа на три вопроса: что сбросится при входе в
+ * «Сердце», что сохранится на забег и сколько карт можно взять. Сноска про
+ * второй слот легендарных — условная: её текст зависит от того, взял ли игрок
+ * случайную легендарную до босса (0 или 1 из 2 слотов).
+ */
+export const TROPHY_COPY = {
+  /**
+   * Строка перехода: сброс уровня, прочности и мутаций в «Сердце» и
+   * сохранение уже взятых легендарных (включая трофей) на весь забег.
+   */
+  subtitle:
+    'ИММУННЫЙ ПРАЙМ подавлен. Кровоток пройден: в Сердце штамм начнёт заново — уровень 1, прочность 100, мутации заново. Трофей останется с тобой на весь забег.',
+  /** Правило «только одна»: число вариантов берётся из фактического предложения. */
+  rule: (choiceCount: number): string =>
+    choiceCount >= 2 ? 'Выбери одну из двух — вторая исчезнет.' : 'Выбери её — другого варианта не будет.',
+  /** Сноска при свободном слоте легендарных (до босса не брали ни одной). */
+  slotFree:
+    'Легендарных за забег — не больше двух. Трофей займёт один слот, второй можно найти дальше.',
+  /** Сноска при занятом слоте (одна случайная легендарная уже взята). */
+  slotLast:
+    'Легендарных за забег — не больше двух. Трофей займёт второй слот — это последняя легендарная этого забега.',
+} as const;
+
+/**
+ * Условная сноска трофея про лимит легендарных.
+ * `legendariesOwned` — сколько легендарных уже взято до трофея (0 или 1).
+ */
+export function trophySlotNote(legendariesOwned: number): string {
+  return legendariesOwned >= 1 ? TROPHY_COPY.slotLast : TROPHY_COPY.slotFree;
+}
+
+/**
+ * Структурные строки легендарной карты «Последний носитель».
+ *
+ * Форма карты разделяет выбор страховки и её срабатывание: условие и эффект
+ * описывают срабатывание при смертельном уроне, цена — отдельной плашкой,
+ * изменение облика — одной вторичной строкой без раскрываемой панели.
+ * Формулировка про «урон и отброс» сознательно отсутствует: это поведение
+ * базовой волны, а не эффект эволюции.
+ */
+export const LEGENDARY_CARD_DETAILS: Record<
+  string,
+  { condition: string; effect: string; price: string; appearance: string }
+> = {
+  'last-carrier': {
+    condition: 'Условие: один раз за забег при смертельном уроне',
+    effect: 'Эффект: останется 1 прочности, исчезают все враги, кроме боссов',
+    price: 'При срабатывании: \u221225% прогресса текущего уровня',
+    appearance: 'Облик штамма меняется на 8 с (только визуально)',
+  },
+};
+
+/**
+ * Единицы характеристик в строках «было → стало».
+ *
+ * Единица ставится только там, где она есть у характеристики: время заражения
+ * измеряется в миллисекундах, радиусы — в единицах поля. «Урон взрыва» и другие
+ * безъединичные величины в мапе отсутствуют — значение выводится без единицы.
+ */
+export const MUTATION_STAT_UNITS: Record<string, string> = {
+  'Время заражения': 'мс',
+  'Радиус заражения': 'ед.',
+  'Радиус взрыва': 'ед.',
+  'Радиус подбора РНК': 'ед.',
+};
+
+/**
+ * Значение строки характеристики: «было → стало» с единицей, привязанной
+ * неразрывным пробелом к числу, чтобы перенос строки никогда не отрывал
+ * единицу от значения.
+ */
+export function formatMutationStatValue(label: string, before: string, after: string): string {
+  const unit = MUTATION_STAT_UNITS[label];
+  return `${before} → ${after}${unit ? `\u00a0${unit}` : ''}`;
 }

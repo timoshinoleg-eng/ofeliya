@@ -297,6 +297,8 @@ try {
         legendaryIds: [],
         stageBuilds: {},
         newAchievements: [],
+        newCodexEntries: [],
+        nearestGoal: { line1: 'Следующий забег: Переживи 5 минут', line2: 'В этом забеге: 00:42 / 05:00' },
         records: { timeRecord: false, killsRecord: false, levelRecord: false },
       });
       const overlay = ui.resultOverlay;
@@ -410,6 +412,8 @@ try {
         legendaryIds: [],
         stageBuilds: {},
         newAchievements: [],
+        newCodexEntries: [],
+        nearestGoal: { line1: 'Следующий забег: Переживи 5 минут', line2: 'В этом забеге: 00:42 / 05:00' },
         records: { timeRecord: false, killsRecord: false, levelRecord: false },
       });
       const overlay = ui.resultOverlay;

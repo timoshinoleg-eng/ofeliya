@@ -26,7 +26,7 @@ try {
     await page.evaluate(() => {
       const game = window.__game, gs = game.scene.getScene('Game'), ui = game.scene.getScene('UI');
       ui.dismissProgressionForStageBoundary(); gs.scene.pause();
-      window.__completionRes={win:true,reason:'campaign-clear',difficultyId:'standard',runSeed:'visual-report',controlMode:'one-hand',resumed:false,timeMs:999999,kills:99999,hostCellsInfected:999,level:99,highestLevel:99,comboBest:999,stageId:'heart',stageOrder:2,bossesDefeated:2,boss1ClearMs:120000,stacks:{multi:3,pierce:3,dmg:3},evolutions:['prism','halo','singularity'],legendaryIds:['split-geometry','core-predator'],stageBuilds:{},newAchievements:['first-contact'],records:{timeRecord:true,killsRecord:true,levelRecord:true}}; ui.renderGameOver(window.__completionRes);
+      window.__completionRes={win:true,reason:'campaign-clear',difficultyId:'standard',runSeed:'visual-report',controlMode:'one-hand',resumed:false,timeMs:999999,kills:99999,hostCellsInfected:999,level:99,highestLevel:99,comboBest:999,stageId:'heart',stageOrder:2,bossesDefeated:2,boss1ClearMs:120000,stacks:{multi:3,pierce:3,dmg:3},evolutions:['prism','halo','singularity'],legendaryIds:['split-geometry','core-predator'],stageBuilds:{},newAchievements:['first-contact'],newCodexEntries:[{kind:'evolution',id:'singularity'},{kind:'legendary',id:'core-predator'}],nearestGoal:{line1:'Ближайшая цель: Цепь лизиса',line2:'Ветка: 1 / 2'},records:{timeRecord:true,killsRecord:true,levelRecord:true}}; ui.renderGameOver(window.__completionRes);
     });
     console.log('completion fixture result rendered',width);
     if (out) await page.screenshot({path:resolve(out,`${width}-rich-result.png`)});

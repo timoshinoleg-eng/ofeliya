@@ -18,6 +18,9 @@ import { Juice } from '../game/Juice';
 import { VISUAL, VISUAL_TEXT } from '../ui/visualTokens';
 import { createSpecimenSurface, drawSpecimenSurface } from '../ui/specimenSurface';
 import { createResultReport } from '../ui/ResultReport';
+import { MIN_TOUCH } from '../ui/menuLayout';
+import { achievementSummary } from '../game/AchievementSystem';
+import { codexEntryRef, type NewCodexEntry } from '../game/runCodexOpenings';
 import { getEvolutionDef } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
 import { phaseTransitionPulse } from '../game/BossPhaseCeremony';
@@ -29,6 +32,7 @@ import { getLegendaryDefinition, type LegendaryId } from '../game/LegendarySyste
 import { TwinStickControls } from '../game/TwinStickControls';
 import { readControlMode, type ControlMode } from '../game/ControlMode';
 import type { RunResult, RunSnapshot } from '../game/RunContracts';
+import type { LastRunResult } from '../game/LastRunResult';
 import {
   EVOLUTION_NAMES,
   UPGRADES,
@@ -36,16 +40,27 @@ import {
   type EvolutionId,
   type UpgradeDef,
 } from '../game/UpgradeSystem';
-import { formatUpgradeEffectSuffix } from '../game/upgradeBeforeAfter';
+import { getUpgradeBeforeAfter } from '../game/upgradeBeforeAfter';
 import {
+  formatRecipeNote,
+  formatRecipeRow,
+  formatRecipeTitle,
+  getRecipeProgress,
+} from '../game/recipeProgress';
+import {
+  LEVELUP_COPY,
+  LEGENDARY_CARD_DETAILS,
   META_COPY,
   MUTATION_CARD_HEADERS,
   RESULT_COPY,
+  TROPHY_COPY,
   resultModeChip,
   shareModeSuffix,
+  trophySlotNote,
   buildDuelShareText,
   buildShareText,
   formatBuildSummary,
+  formatMutationStatValue,
   mutationCardHeader,
 } from '../game/UiCopy';
 import { fmtInt } from '../game/UiFormat';
@@ -59,7 +74,7 @@ import {
   type RunTokenGrant,
 } from '../systems/ScoreClient';
 import { createFixedSeedDuel, submitDuelAttempt, trackDuelEvent } from '../systems/DuelClient';
-import { clearDailyIntent, readDailyIntent, resolveDailyResultBranch } from '../game/DailyRunIntent';
+import { clearDailyIntent, readDailyIntent, resolveDailyResultBranch, type DailyResultBranch } from '../game/DailyRunIntent';
 import { OnboardingState, type OnboardingStepId } from '../systems/onboardingState';
 import { buildDailyShareSuffix, recordDailyResult } from '../systems/DailyHistory';
 import { trackProductEvent } from '../systems/AnalyticsClient';
@@ -547,6 +562,25 @@ export class UIScene extends Phaser.Scene {
       this.hideModal();
       this.hideStageTransition();
       this.showGameOver(res);
+    }
+
+    // Return from the Codex: the Game scene is stopped, so there is no
+    // runResult anymore — the snapshot saved at the opening tap is the only
+    // copy. It renders through the re-show path: no submit, no video, no
+    // re-run of finish. A fresh run clears the snapshot in GameScene.create().
+    if (!res && !this.overShown) {
+      const last = this.registry.get('lastRunResult') as LastRunResult | undefined | null;
+      if (last) {
+        this.overShown = true;
+        this.hideModal();
+        this.hideStageTransition();
+        this.renderGameOver(last.result, {
+          reshow: true,
+          dailyBranch: last.dailyBranch,
+          duelChallenge: last.duelChallenge,
+          challengeTarget: last.challengeTarget,
+        });
+      }
     }
   }
 
@@ -1559,7 +1593,7 @@ export class UIScene extends Phaser.Scene {
 
     const titleY = compact ? H * 0.09 : H * 0.115;
     const titleT = this.add
-      .text(W / 2, titleY, legendaryReward ? 'ЛЕГЕНДАРНЫЙ ТРОФЕЙ' : IDENTITY.levelUp, {
+      .text(W / 2, titleY, legendaryReward ? 'ЛЕГЕНДАРНЫЙ ТРОФЕЙ' : LEVELUP_COPY.title, {
         fontFamily: FONT,
         fontSize: compact ? '23px' : '27px',
         fontStyle: 'bold',
@@ -1582,273 +1616,589 @@ export class UIScene extends Phaser.Scene {
       .text(
         W / 2,
         titleY + titleT.height / 2 + subtitleGap,
-        legendaryReward
-          ? 'ИММУННЫЙ ПРАЙМ подавлен · выбери мутацию для СЕРДЦА'
-          : 'МУТАЦИЯ ' + gs.runState.stage.level + ' · выбери карту',
+        legendaryReward ? TROPHY_COPY.subtitle : LEVELUP_COPY.hint,
         {
           fontFamily: UI_FONT,
-          fontSize: compact ? '13px' : '15px',
+          fontSize: compact ? '12px' : '15px',
           fontStyle: '650',
           color: UI_TEXT.primary,
           align: 'center',
           wordWrap: { width: W - 44, useAdvancedWrap: true },
-          lineSpacing: 2,
+          lineSpacing: 1,
         }
       )
       .setOrigin(0.5, 0)
       .setResolution(2);
     c.add(subtitle);
 
+    // Трофей: правило «только одна» показывается до тапа; число вариантов
+    // берётся из фактического предложения, а не захардкожено.
     const cards = gs.pendingChoices;
+    let ruleText: Phaser.GameObjects.Text | null = null;
+    if (legendaryReward) {
+      ruleText = this.add
+        .text(W / 2, 0, TROPHY_COPY.rule(cards.length), {
+          fontFamily: UI_FONT,
+          fontSize: compact ? '11px' : '13px',
+          fontStyle: '700',
+          color: VISUAL_TEXT.warning,
+          align: 'center',
+          wordWrap: { width: W - 44, useAdvancedWrap: true },
+        })
+        .setOrigin(0.5, 0)
+        .setResolution(2);
+      c.add(ruleText);
+    }
+    if (ruleText) ruleText.setPosition(W / 2, subtitle.getBounds().bottom + (compact ? 5 : 7));
+    const headerBottom = ruleText ? ruleText.getBounds().bottom : subtitle.getBounds().bottom;
     const cw = Math.min(W - 16, 374);
-    const gap = compact ? 9 : 11;
-    // Cards never collide with the header, even when the subtitle wraps to two lines.
-    const minTop = subtitle.getBounds().bottom + gap;
-    let blockCenter = compact ? H * 0.59 : H * 0.57;
-    const expandedCardHeight = 136;
-    const expandedTotalH = cards.length * expandedCardHeight + (cards.length - 1) * gap;
-    const expandedTop = blockCenter - expandedTotalH / 2;
-    const expandedBottom = blockCenter + expandedTotalH / 2;
-    const expandedStackFits =
-      compact &&
-      legendaryReward &&
-      expandedTop >= minTop &&
-      expandedBottom <= H - gap;
-    const ch = compact ? (expandedStackFits ? expandedCardHeight : 124) : 148;
-    const totalH = cards.length * ch + (cards.length - 1) * gap;
-    if (blockCenter - totalH / 2 < minTop) blockCenter = minTop + totalH / 2;
-    // The push-down guarantees header clearance but can shove the last card past the
-    // bottom edge on short viewports; clamp the stack inside the screen (bottom wins —
-    // a cut-off footer is worse than a tight header gap in the impossible-fit corner).
-    if (blockCenter + totalH / 2 > H - gap) blockCenter = H - gap - totalH / 2;
-    let y = blockCenter - totalH / 2 + ch / 2;
+    const gap = compact ? 7 : 11;
+    // Cards never collide with the header, even when the subtitle wraps.
+    const minTop = headerBottom + gap;
 
-    cards.forEach((def: UpgradeDef, cardIndex: number) => {
-      const card = this.add.container(W / 2, y);
-      const evolution = def.kind === 'evolution';
-      const legendary = def.kind === 'legendary';
-      const accent = legendary || evolution
-        ? VISUAL.warning
-        : def.rarity === 'rare' ? VISUAL.rare : VISUAL.host;
-      const progress = getUpgradeProgress(gs.runState, def);
-      // C2: the effect plate gains the absolute «было → стало» values for one
-      // stack plus the synergy tag («→ ГИПЕРШИП» etc.) when the card carries
-      // an evolutionHint. Ceremony cards (evolution/legendary) and unknown
-      // ids get no suffix, so their plates render exactly as before.
-      const effectSuffix = formatUpgradeEffectSuffix(gs.runState, def);
-      const effectLabel = effectSuffix ? `${def.name} · ${effectSuffix}` : def.name;
-      const special = evolution || legendary;
-      const bg = this.add
-        .rectangle(0, 0, cw, ch, VISUAL.panel, 0);
-      const membrane = createSpecimenSurface(this, 0, 0, cw, ch, { accent });
-      card.add([bg, membrane]);
-
-      // Visual-impact pass: cards read as biological modules instead of neon-outlined tables.
-      // The accent rail carries rarity/family identity while the surface border stays quiet.
-      const rail = this.add
-        .rectangle(-cw / 2 + 5, 0, 3, ch - 26, accent, special ? 0.8 : 0.58)
-        .setOrigin(0.5);
-      card.add(rail);
-      const iconX = -cw / 2 + 39;
-      const iconSize = compact ? 46 : 52;
-
-      // Rarity must read before the name does: tier pips in the header band
-      // (1=common, 2=rare, 3=legendary/evolution) plus a frame whose strength
-      // scales with the tier. Words alone (СТАНДАРТ/РЕДКИЙ in 11-12px) were
-      // measured indistinguishable at a glance in the Phase A audit.
-      const tier = special ? 3 : def.rarity === 'rare' ? 2 : 1;
-      for (let p = 0; p < tier; p++) {
-        card.add(
-          this.add
-            .circle(cw / 2 - 18 - (tier - 1 - p) * 13, -ch / 2 + 13, p === tier - 1 ? 4 : 3.2, accent, special ? 0.95 : 0.45 + tier * 0.12)
-            .setStrokeStyle(1, accent, special ? 0.6 : 0.3)
-        );
-      }
-      if (special) {
-        card.add(
-          this.add
-            .rectangle(0, 0, cw - 2, ch - 2)
-            .setStrokeStyle(legendary ? 2.2 : 1.6, accent, legendary ? 0.9 : 0.6)
-        );
-        card.add(
-          this.add.rectangle(3, 0, cw - 20, ch - 8, VISUAL.warning, legendary ? 0.07 : 0.035)
-        );
-      } else if (def.rarity === 'rare') {
-        card.add(
-          this.add
-            .rectangle(0, 0, cw - 2, ch - 2)
-            .setStrokeStyle(1.2, accent, 0.5)
-        );
-      }
-
-      const iconKey = evolution && def.evolutionId ? `mutation-${def.evolutionId}` : `up-${def.id}`;
-      const hasIcon = this.textures.exists(iconKey);
-      const reserveIconZone = hasIcon || !legendary;
-      if (reserveIconZone) {
-        const iconPlate = this.add
-          .rectangle(iconX, -2, iconSize, iconSize, accent, special ? 0.18 : 0.1)
-          .setStrokeStyle(1, accent, special ? 0.56 : 0.38);
-        card.add(iconPlate);
-      }
-      if (hasIcon) {
-        card.add(
-          this.add
-            .image(iconX, -2, iconKey)
-            .setScale(compact ? 0.9 : 1.02)
-            .setTint(evolution ? COLORS.gold : def.rarity === 'rare' ? 0xe9dcff : 0xffffff)
-        );
-      } else if (!legendary) {
-        card.add(
-          this.add
-            .text(iconX, -2, evolution ? '◆' : '•', {
-              fontFamily: FONT,
-              fontSize: compact ? '22px' : '26px',
-              fontStyle: 'bold',
-              color: special ? VISUAL_TEXT.warning : def.rarity === 'rare' ? VISUAL_TEXT.rare : VISUAL_TEXT.immune,
-            })
-            .setOrigin(0.5)
-            .setResolution(2)
-        );
-      }
-
-      const tx = legendary && !hasIcon ? -cw / 2 + 18 : -cw / 2 + 73;
-      const right = cw / 2 - 14;
-      const family = mutationCardHeader(def);
-      card.add(
-        this.add
-          .text(tx, -ch / 2 + 8, family, {
-            fontFamily: FONT,
-            fontSize: compact ? '11px' : '12px',
-            fontStyle: 'bold',
-            color: legendary || evolution ? VISUAL_TEXT.warning : def.rarity === 'rare' ? VISUAL_TEXT.rare : VISUAL_TEXT.host,
-          })
-          .setResolution(2)
-      );
-
-      card.add(
-        this.add
-          .text(tx, -ch / 2 + (compact ? 22 : 24), def.shortName, {
-            fontFamily: FONT,
-            fontSize: legendary || evolution ? (compact ? '17px' : '20px') : compact ? '16px' : '19px',
-            fontStyle: 'bold',
-            color: VISUAL_TEXT.ivory,
-            lineSpacing: -2,
-            maxLines: 2,
-            wordWrap: { width: Math.max(112, right - tx - 4), useAdvancedWrap: true },
-          })
-          .setResolution(2)
-      );
-
-      const effectW = Math.max(108, right - tx);
-      const descY = -ch / 2 + (compact ? 46 : 50);
-      card.add(
-        this.add
-          .text(tx, descY, def.desc, {
+    // Трофей: условная сноска про лимит легендарных (зависит от того, что уже
+    // взято до босса). Создаётся до расчёта высоты, чтобы стек карточек
+    // центрировался с учётом её места.
+    const footnote = legendaryReward
+      ? this.add
+          .text(W / 2, 0, trophySlotNote(gs.runState.run.legendaryIds.size), {
             fontFamily: UI_FONT,
-            fontSize: compact ? '11px' : '12px',
+            fontSize: compact ? '10px' : '11px',
+            fontStyle: '500',
+            color: VISUAL_TEXT.muted,
+            align: 'center',
+            wordWrap: { width: W - 44, useAdvancedWrap: true },
+            lineSpacing: 1,
+          })
+          .setOrigin(0.5, 0)
+          .setResolution(2)
+      : null;
+    const footnoteH = footnote ? footnote.height + gap : 0;
+
+    // «Био-мембрана»: the layout is measured, not fixed. Every card reports the
+    // height its real text needs and the stack centers in the area under the
+    // header. When a short viewport cannot take the natural heights, one
+    // compaction pass reclaims decor and air first (padding, gaps, icon size) —
+    // never the copy, the stat rows or the type floors.
+    const available = H - gap - minTop - footnoteH;
+    const naturalStack = (list: { height: number }[]) =>
+      list.reduce((sum, entry) => sum + entry.height, 0) + gap * (cards.length - 1);
+    let built = cards.map((def: UpgradeDef) => this.buildMutationCard(def, cw, compact, false, gs, c));
+    let squashed = false;
+    if (naturalStack(built) > available) {
+      built = cards.map((def: UpgradeDef) => this.buildMutationCard(def, cw, compact, true, gs, c));
+      squashed = true;
+    }
+    const totalH = naturalStack(built);
+    let blockTop = Math.max(minTop, (H - footnoteH - totalH) / 2);
+    if (blockTop + totalH > H - gap - footnoteH) blockTop = Math.max(minTop, H - gap - footnoteH - totalH);
+
+    built.forEach((entry, cardIndex) => {
+      entry.card.setPosition(W / 2, blockTop + entry.height / 2);
+      c.add(entry.card);
+      // Хвостовой отступ не добавляем: после последней карточки сноска идёт
+      // со своим собственным малым отступом (иначе на коротком портрете
+      // двухстрочная сноска трофея уходит за низ экрана).
+      blockTop += entry.height + (cardIndex < built.length - 1 ? gap : 0);
+      entry.card.setScale(0.94).setAlpha(0);
+      this.tweens.add({
+        targets: entry.card,
+        scale: 1,
+        alpha: 1,
+        duration: 170,
+        delay: cardIndex * 35,
+        ease: 'Back.Out',
+      });
+    });
+
+    // Сноска — под стеком, после последней карточки.
+    if (footnote) {
+      footnote.setPosition(W / 2, blockTop + (compact ? 6 : 8));
+      c.add(footnote);
+    }
+
+    // Гарантия посадки: если стек со сноской всё равно не влезает (очень
+    // длинные условия на коротком портрете), контент модалки ужимается
+    // равномерно — копия не обрезается. Предел 0.75 — крайний синтетический
+    // случай (три легендарные карты на 320×520; штатный путь предлагает не
+    // больше двух, и трофейный экран ужимается до ~0.94).
+    const contentBottom = footnote ? footnote.getBounds().bottom : blockTop;
+    const fitMargin = 8;
+    let fitScale = 1;
+    if (contentBottom > H - fitMargin) {
+      fitScale = Math.max(0.75, (H - fitMargin) / contentBottom);
+      c.setScale(fitScale).setPosition((W - W * fitScale) / 2, 0);
+    }
+    // Факты раскладки для QA-проб: squash-проход и итоговый ужим.
+    c.setData('squash', squashed);
+    c.setData('fitScale', fitScale);
+  }
+
+  /**
+   * One mutation card of the level-up modal, laid out top-down from the real
+   * measured text (never a fixed card height, so nothing is maxLines-clipped).
+   *
+   * Forms:
+   *  - structured legendary («Последний носитель»): условие, эффект, цена
+   *    отдельной плашкой и одна вторичная строка про облик;
+   *  - generic legendary/evolution: описание и полная плашка эффекта;
+   *  - обычная карта: описание и строки характеристик «было → стало» —
+   *    название слева, значение слева от правого края, единица привязана
+   *    к числу неразрывным пробелом.
+   *
+   * Выбор идёт штатным путём acceptChoiceClick → chooseUpgrade; нажатие даёт
+   * реакцию самой карточки, отпускание пальца за её пределами выбора не даёт.
+   */
+  private buildMutationCard(
+    def: UpgradeDef,
+    cw: number,
+    compact: boolean,
+    squash: boolean,
+    gs: GameScene,
+    root: Phaser.GameObjects.Container
+  ): { card: Phaser.GameObjects.Container; height: number } {
+    const card = this.add.container(0, 0);
+    const evolution = def.kind === 'evolution';
+    const legendary = def.kind === 'legendary';
+    const special = evolution || legendary;
+    const structured = Boolean(
+      legendary && def.legendaryId && LEGENDARY_CARD_DETAILS[def.legendaryId]
+    );
+    const accent = special ? VISUAL.warning : def.rarity === 'rare' ? VISUAL.rare : VISUAL.host;
+    const accentText = special
+      ? VISUAL_TEXT.warning
+      : def.rarity === 'rare'
+        ? VISUAL_TEXT.rare
+        : VISUAL_TEXT.host;
+
+    const padX = 14;
+    // Обычные карты с прогресс-баром заканчиваются строкой «УРОВЕНЬ N/M»,
+    // чей низ уходит ниже курсора на высоту строки — им нужен squash-отступ 6,
+    // иначе строка вылезает за фон. Special-карты посажены по measured-контуру
+    // (row() двигает курсор на полную высоту текста), им хватает 4.
+    const padTop = squash ? (special ? 4 : 6) : compact ? 8 : 10;
+    const padBottom = squash ? (special ? 4 : 6) : compact ? 8 : 10;
+    const air = (n: number) => (squash ? Math.min(n, 1) : n);
+    const fullW = cw - padX * 2;
+    const headerSize = compact ? 11 : 12;
+    const nameSize = special ? (compact ? (squash ? 16 : 17) : 20) : compact ? 16 : 19;
+    const bodySize = compact ? 11 : 12;
+    // Типографские полы контракта читаемости (scripts/ui-readability-smoke.cjs):
+    // ни один текст карточки не мельче 11px на компактном портрете и 12px на
+    // обычном. Вторичные строки (облик, рецепт, подсказка «Сердца») раньше
+    // уходили на 10/11px и ломали контракт.
+    const secondarySize = compact ? 11 : 12;
+    const iconSize = squash ? 24 : 28;
+
+    const mk = (text: string, style: Phaser.Types.GameObjects.Text.TextStyle): Phaser.GameObjects.Text =>
+      this.make.text({ x: 0, y: 0, text, style }).setResolution(2);
+
+    let cursor = padTop;
+    let lastGap = 0;
+    const place = (obj: Phaser.GameObjects.Text, x: number): void => {
+      obj.setPosition(x, cursor);
+      card.add(obj);
+    };
+    const row = (height: number, gapAfter: number): void => {
+      cursor += height;
+      lastGap = air(gapAfter);
+      cursor += lastGap;
+    };
+
+    // Header band: tier/family line left, biological glyph plate right.
+    const headerText = mk(mutationCardHeader(def), {
+      fontFamily: FONT,
+      fontSize: `${headerSize}px`,
+      fontStyle: 'bold',
+      color: accentText,
+      lineSpacing: -1,
+      maxLines: 2,
+      wordWrap: { width: fullW - iconSize - 10, useAdvancedWrap: true },
+    }).setOrigin(0, 0);
+    place(headerText, -cw / 2 + padX);
+    const iconKey = evolution && def.evolutionId ? `mutation-${def.evolutionId}` : `up-${def.id}`;
+    const hasIcon = this.textures.exists(iconKey);
+    const iconCx = cw / 2 - padX - iconSize / 2;
+    const iconCy = cursor + Math.min(headerText.height, headerSize * 1.4) / 2;
+    card.add(
+      this.add
+        .rectangle(iconCx, iconCy, iconSize, iconSize, accent, special ? 0.18 : 0.1)
+        .setStrokeStyle(1, accent, special ? 0.56 : 0.38)
+    );
+    if (hasIcon) {
+      const iconFrame = this.textures.getFrame(iconKey);
+      const iconScale = Math.min(
+        (iconSize - 8) / Math.max(1, iconFrame.width),
+        (iconSize - 8) / Math.max(1, iconFrame.height)
+      );
+      card.add(
+        this.add
+          .image(iconCx, iconCy, iconKey)
+          .setScale(iconScale)
+          .setTint(evolution ? COLORS.gold : def.rarity === 'rare' ? 0xe9dcff : 0xffffff)
+      );
+    } else {
+      card.add(
+        this.add
+          .text(iconCx, iconCy, special ? '◆' : '•', {
+            fontFamily: FONT,
+            fontSize: `${iconSize - 10}px`,
+            fontStyle: 'bold',
+            color: special
+              ? VISUAL_TEXT.warning
+              : def.rarity === 'rare'
+                ? VISUAL_TEXT.rare
+                : VISUAL_TEXT.immune,
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+      );
+    }
+    row(headerText.height, 3);
+
+    // Card name.
+    const nameText = mk(def.shortName, {
+      fontFamily: FONT,
+      fontSize: `${nameSize}px`,
+      fontStyle: 'bold',
+      color: VISUAL_TEXT.ivory,
+      lineSpacing: -2,
+      maxLines: 2,
+      wordWrap: { width: fullW, useAdvancedWrap: true },
+    }).setOrigin(0, 0);
+    place(nameText, -cw / 2 + padX);
+    row(nameText.height, 4);
+
+    if (structured && def.legendaryId) {
+      const details = LEGENDARY_CARD_DETAILS[def.legendaryId];
+      // Условие и эффект — полным текстом, без обрезки maxLines.
+      for (const line of [details.condition, details.effect]) {
+        const lineText = mk(line, {
+          fontFamily: UI_FONT,
+          fontSize: `${bodySize}px`,
+          fontStyle: '650',
+          color: VISUAL_TEXT.ivory,
+          lineSpacing: squash ? 0 : 1,
+          wordWrap: { width: fullW, useAdvancedWrap: true },
+        }).setOrigin(0, 0);
+        place(lineText, -cw / 2 + padX);
+        row(lineText.height, 2);
+      }
+      // Цена — отдельной плашкой. Строка без переносов: на метриках FreeType
+      // (Linux/CI) глифы Chakra Petch шире DirectWrite, поэтому гарантируем
+      // посадку в плашку масштабом, а не переносом (высоту не меняем).
+      const priceText = mk(details.price, {
+        fontFamily: UI_FONT,
+        fontSize: `${bodySize}px`,
+        fontStyle: '700',
+        color: VISUAL_TEXT.warning,
+      }).setOrigin(0.5);
+      const priceMaxW = fullW - 16;
+      if (priceText.width > priceMaxW) priceText.setScale(priceMaxW / priceText.width);
+      const pricePlateH = priceText.height + (squash ? 6 : 12);
+      card.add(
+        this.add
+          .rectangle(0, cursor + pricePlateH / 2, fullW, pricePlateH, VISUAL.panelRaised, 0.98)
+          .setStrokeStyle(1, VISUAL.warning, 0.38)
+      );
+      priceText.setPosition(0, cursor + pricePlateH / 2);
+      card.add(priceText);
+      row(pricePlateH, 3);
+      // Облик — одна вторичная строка; раскрываемая панель не нужна.
+      const lookText = mk(details.appearance, {
+        fontFamily: UI_FONT,
+        fontSize: `${secondarySize}px`,
+        fontStyle: '500',
+        color: VISUAL_TEXT.muted,
+        wordWrap: { width: fullW, useAdvancedWrap: true },
+      }).setOrigin(0, 0);
+      place(lookText, -cw / 2 + padX);
+      row(lookText.height, 4);
+    } else if (special) {
+      // Generic ceremony card: description (recipe included for evolutions) and
+      // the full effect plate — never maxLines-clipped.
+      const descText = mk(def.desc, {
+        fontFamily: UI_FONT,
+        fontSize: `${bodySize}px`,
+        fontStyle: '500',
+        color: VISUAL_TEXT.muted,
+        lineSpacing: squash ? 0 : 1,
+        wordWrap: { width: fullW, useAdvancedWrap: true },
+      }).setOrigin(0, 0);
+      place(descText, -cw / 2 + padX);
+      row(descText.height, 4);
+      const effectText = mk(def.name, {
+        fontFamily: UI_FONT,
+        fontSize: `${bodySize}px`,
+        fontStyle: '700',
+        color: accentText,
+        lineSpacing: -1,
+        wordWrap: { width: fullW - 16, useAdvancedWrap: true },
+      }).setOrigin(0, 0.5);
+      const effectPlateH = effectText.height + (squash ? 6 : 14);
+      card.add(
+        this.add
+          .rectangle(0, cursor + effectPlateH / 2, fullW, effectPlateH, VISUAL.panelRaised, 0.98)
+          .setStrokeStyle(1, accent, 0.3)
+      );
+      effectText.setPosition(-fullW / 2 + 8, cursor + effectPlateH / 2);
+      card.add(effectText);
+      row(effectPlateH, 4);
+      // Трофей первого босса: как пользоваться картой в «Сердце». Механика
+      // уже названа выше; эта строка отвечает на «где это пригодится».
+      if (gs.legendaryRewardPending && legendary && def.legendaryId) {
+        const heartHint = getLegendaryDefinition(def.legendaryId).heartHint;
+        if (heartHint) {
+          const hintText = mk(heartHint, {
+            fontFamily: UI_FONT,
+            fontSize: `${secondarySize}px`,
+            fontStyle: '500',
+            color: VISUAL_TEXT.ivory,
+            lineSpacing: squash ? 0 : 1,
+            wordWrap: { width: fullW, useAdvancedWrap: true },
+          }).setOrigin(0, 0);
+          place(hintText, -cw / 2 + padX);
+          row(hintText.height, 4);
+        }
+      }
+    } else {
+      // Стандартная карта: описание + строки характеристик «было → стало».
+      const descText = mk(def.desc, {
+        fontFamily: UI_FONT,
+        fontSize: `${bodySize}px`,
+        fontStyle: '500',
+        color: VISUAL_TEXT.muted,
+        lineSpacing: 1,
+        maxLines: 2,
+        wordWrap: { width: fullW, useAdvancedWrap: true },
+      }).setOrigin(0, 0);
+      place(descText, -cw / 2 + padX);
+      row(descText.height, 4);
+
+      const stats = getUpgradeBeforeAfter(gs.runState, def);
+      if (stats && stats.length > 0) {
+        for (const statLine of stats) {
+          const value = formatMutationStatValue(statLine.label, statLine.before, statLine.after);
+          const labelText = mk(statLine.label, {
+            fontFamily: UI_FONT,
+            fontSize: `${bodySize}px`,
+            fontStyle: '650',
+            color: VISUAL_TEXT.ivory,
+          }).setOrigin(0, 0);
+          const valueText = mk(value, {
+            fontFamily: UI_FONT,
+            fontSize: `${bodySize}px`,
+            fontStyle: '700',
+            color: accentText,
+          }).setOrigin(1, 0);
+          if (labelText.width + valueText.width + 12 <= fullW) {
+            place(labelText, -cw / 2 + padX);
+            place(valueText, cw / 2 - padX);
+            row(Math.max(labelText.height, valueText.height), 2);
+          } else {
+            // Переполнение: значение уходит под название; единица остаётся
+            // привязанной к числу неразрывным пробелом.
+            place(labelText, -cw / 2 + padX);
+            row(labelText.height, 1);
+            place(valueText, cw / 2 - padX);
+            row(valueText.height, 2);
+          }
+        }
+      } else {
+        // Карты без считывателей характеристик сохраняют точную строку эффекта.
+        const effectText = mk(def.name, {
+          fontFamily: UI_FONT,
+          fontSize: `${bodySize}px`,
+          fontStyle: '700',
+          color: accentText,
+          lineSpacing: -1,
+          wordWrap: { width: fullW, useAdvancedWrap: true },
+        }).setOrigin(0, 0);
+        place(effectText, -cw / 2 + padX);
+        row(effectText.height, 2);
+      }
+
+      if (def.evolutionHint) {
+        // Блок рецепта: прогресс по шагам и пояснение внутри плашки.
+        // Фиолетовый (редкий) акцент — только здесь; категория карточки
+        // остаётся обычной. Служебной плашки «справка» нет.
+        const progress = getRecipeProgress(gs.runState, def.evolutionHint, def);
+        if (progress) {
+          const recipeAccent = VISUAL.rare;
+          const recipeAccentText = VISUAL_TEXT.rare;
+          const recipePadX = 8;
+          const recipePadY = squash ? 5 : 8;
+          const itemGap = air(2);
+          const title = mk(formatRecipeTitle(progress), {
+            fontFamily: UI_FONT,
+            fontSize: `${bodySize}px`,
+            fontStyle: '700',
+            color: recipeAccentText,
+            wordWrap: { width: fullW - recipePadX * 2, useAdvancedWrap: true },
+          }).setOrigin(0, 0);
+          const recipeRows = progress.rows.map((recipeRow) =>
+            mk(formatRecipeRow(recipeRow), {
+              fontFamily: UI_FONT,
+              fontSize: `${bodySize}px`,
+              fontStyle: '650',
+              color: recipeRow.advances
+                ? recipeAccentText
+                : recipeRow.done
+                  ? VISUAL_TEXT.muted
+                  : VISUAL_TEXT.ivory,
+              wordWrap: { width: fullW - recipePadX * 2, useAdvancedWrap: true },
+            }).setOrigin(0, 0)
+          );
+          const note = mk(formatRecipeNote(progress), {
+            fontFamily: UI_FONT,
+            fontSize: `${secondarySize}px`,
             fontStyle: '500',
             color: VISUAL_TEXT.muted,
             lineSpacing: 1,
-            maxLines: 2,
-            wordWrap: { width: effectW, useAdvancedWrap: true },
-          })
-          .setResolution(2)
-      );
-
-      const effectText = this.add.text(tx + 8, 0, effectLabel, {
-        fontFamily: UI_FONT,
-        fontSize: compact ? '11px' : '12px',
-        fontStyle: '700',
-        color: legendary || evolution ? VISUAL_TEXT.warning : def.rarity === 'rare' ? VISUAL_TEXT.rare : VISUAL_TEXT.host,
-        align: 'left',
-        lineSpacing: -1,
-        maxLines: legendary && ch === expandedCardHeight ? 3 : 2,
-        wordWrap: { width: Math.max(92, effectW - 16), useAdvancedWrap: true },
-      });
-      const effectNeedsThirdLine =
-        compact && legendary && ch === expandedCardHeight && effectText.getWrappedText(effectLabel).length > 2;
-      effectText.setMaxLines(effectNeedsThirdLine ? 3 : 2);
-      // Keep the third compact Legendary line inside its badge and above the per-card footer.
-      const effectY = ch / 2 - (compact ? (effectNeedsThirdLine ? 41 : 37) : 44);
-      const effectPlateHeight = compact ? (effectNeedsThirdLine ? 42 : 30) : 32;
-      const effectPlate = this.add
-        .rectangle(tx + effectW / 2, effectY, effectW, effectPlateHeight, VISUAL.panelRaised, 0.98)
-        .setStrokeStyle(1, accent, 0.3);
-      card.add(effectPlate);
-      card.add(effectText.setPosition(tx + 8, effectY).setOrigin(0, 0.5).setResolution(2));
+            wordWrap: { width: fullW - recipePadX * 2, useAdvancedWrap: true },
+          }).setOrigin(0, 0);
+          const items = [title, ...recipeRows, note];
+          const contentH = items.reduce((sum, item) => sum + item.height, 0) + itemGap * (items.length - 1);
+          const plateH = contentH + recipePadY * 2;
+          card.add(
+            this.add
+              .rectangle(0, cursor + plateH / 2, fullW, plateH, VISUAL.panelRaised, 0.98)
+              .setStrokeStyle(1, recipeAccent, 0.32)
+          );
+          let itemY = cursor + recipePadY;
+          for (const item of items) {
+            item.setPosition(-fullW / 2 + recipePadX, itemY);
+            card.add(item);
+            itemY += item.height + itemGap;
+          }
+          row(plateH, 4);
+        }
+      }
 
       if (def.showProgress !== false && def.max <= 8) {
-        const pg = this.add.graphics();
-        const barX = tx;
-        const barY = ch / 2 - 16;
-        const available = Math.min(118, Math.max(72, right - tx - 64));
+        const progress = getUpgradeProgress(gs.runState, def);
+        const barW = Math.min(118, Math.max(72, fullW - 64));
         const segGap = 3;
-        const segW = (available - segGap * (def.max - 1)) / def.max;
+        const segW = (barW - segGap * (def.max - 1)) / def.max;
+        const pg = this.add.graphics();
         for (let i = 0; i < def.max; i++) {
-          const x = barX + i * (segW + segGap);
+          const x = -cw / 2 + padX + i * (segW + segGap);
           const completed = i < progress.current;
           const next = i === progress.current;
           pg.fillStyle(accent, completed ? 0.95 : next ? 0.42 : 0.1);
-          pg.fillRoundedRect(x, barY, segW, 8, 2);
+          pg.fillRoundedRect(x, cursor, segW, 8, 2);
         }
         card.add(pg);
-        card.add(
-          this.add
-            .text(right, barY - 5, `УРОВЕНЬ ${progress.next}/${progress.max}`, {
-              fontFamily: UI_FONT,
-              fontSize: compact ? '11px' : '13px',
-              fontStyle: '700',
-              color: '#d8d1e2',
-            })
-            .setOrigin(1, 0)
-            .setResolution(2)
-        );
+        const levelText = mk(`УРОВЕНЬ ${progress.next}/${progress.max}`, {
+          fontFamily: UI_FONT,
+          // Контракт читаемости: строка прогресса не мельче 13px на обычном
+          // портрете (compact — 11px, как у остального тела).
+          fontSize: compact ? `${bodySize}px` : '13px',
+          fontStyle: '700',
+          color: '#d8d1e2',
+        }).setOrigin(1, 0);
+        place(levelText, cw / 2 - padX);
+        cursor += 8;
+        lastGap = 0;
       } else {
-        card.add(
-          this.add
-            .text(
-              right,
-              ch / 2 - 19,
-              legendary
-                ? 'ИЗМЕНИТЬ ПРАВИЛА ЗАБЕГА'
-                : evolution
-                  ? 'ЗАКРЕПИТЬ МУТАЦИЮ'
-                  : 'РАЗОВАЯ АДАПТАЦИЯ',
-              {
-              fontFamily: UI_FONT,
-              fontSize: compact ? '11px' : '12px',
-              fontStyle: legendary || evolution ? '700' : '650',
-              color: legendary || evolution ? VISUAL_TEXT.warning : '#98ff8f',
-            })
-            .setOrigin(1, 0)
-            .setResolution(2)
-        );
+        const tagText = mk('РАЗОВАЯ АДАПТАЦИЯ', {
+          fontFamily: UI_FONT,
+          fontSize: `${bodySize}px`,
+          fontStyle: '650',
+          color: '#98ff8f',
+        }).setOrigin(1, 0);
+        place(tagText, cw / 2 - padX);
+        cursor += tagText.height;
+        lastGap = 0;
       }
+    }
 
-      const armedPointers = new Set<number>();
-      bg.setInteractive({ useHandCursor: true })
-        .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-          armedPointers.add(pointer.id);
-        })
-        .on('pointerup', (pointer: Phaser.Input.Pointer) => {
-          // A release may resolve only a card that this same pointer actually pressed.
-          // Fresh offers create fresh card instances with an empty armed-pointer set.
-          if (!armedPointers.delete(pointer.id) || !gs.acceptChoiceClick(def.id)) return;
-          Sfx.play('click');
+    if (special && !squash) {
+      // Служебный тег карты. В squeeze-проходе он убирается первым: это
+      // повторяющийся декор, а не контент (макет его вовсе не показывает).
+      const footerText = mk(legendary ? 'ИЗМЕНИТЬ ПРАВИЛА ЗАБЕГА' : 'ЗАКРЕПИТЬ МУТАЦИЮ', {
+        fontFamily: UI_FONT,
+        fontSize: `${bodySize}px`,
+        fontStyle: '700',
+        color: VISUAL_TEXT.warning,
+      }).setOrigin(1, 0);
+      place(footerText, cw / 2 - padX);
+      cursor += footerText.height;
+      lastGap = 0;
+    }
+
+    // Контракт читаемости (scripts/ui-readability-smoke.cjs): фон карточки не
+    // ниже 124px на компактном портрете и 148px на обычном. Пол действует и в
+    // squash-пропуске: естественные высоты коротких карточек растут редко, а
+    // гарантия посадки стека всё равно остаётся на итоговом fitScale.
+    const height = Math.max(compact ? 124 : 148, Math.ceil(cursor - lastGap + padBottom));
+    for (const child of card.list) {
+      (child as unknown as { y: number }).y -= height / 2;
+    }
+
+    // Background plate and decor are centered on the final measured height.
+    const bg = this.add.rectangle(0, 0, cw, height, VISUAL.panel, 0);
+    const membrane = createSpecimenSurface(this, 0, 0, cw, height, { accent });
+    const rail = this.add
+      .rectangle(-cw / 2 + 5, 0, 3, height - 26, accent, special ? 0.8 : 0.58)
+      .setOrigin(0.5);
+    card.addAt(bg, 0);
+    card.addAt(membrane, 1);
+    card.addAt(rail, 2);
+    if (special) {
+      card.addAt(
+        this.add
+          .rectangle(0, 0, cw - 2, height - 2)
+          .setStrokeStyle(legendary ? 2.2 : 1.6, accent, legendary ? 0.9 : 0.6),
+        3
+      );
+      card.addAt(
+        this.add.rectangle(3, 0, cw - 20, height - 8, VISUAL.warning, legendary ? 0.07 : 0.035),
+        4
+      );
+    } else if (def.rarity === 'rare') {
+      card.addAt(
+        this.add.rectangle(0, 0, cw - 2, height - 2).setStrokeStyle(1.2, accent, 0.5),
+        3
+      );
+    }
+
+    // Выбор — штатный путь: тот же pointerdown→pointerup, тот же armedPointers,
+    // тот же acceptChoiceClick → chooseUpgrade, те же церемонии и очередь.
+    const armedPointers = new Set<number>();
+    const settlePress = (): void => {
+      this.tweens.killTweensOf(card);
+      card.setScale(1);
+    };
+    bg.setInteractive({ useHandCursor: true })
+      .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        armedPointers.add(pointer.id);
+        this.tweens.killTweensOf(card);
+        card.setScale(0.97);
+        drawSpecimenSurface(membrane, cw, height, { accent, fill: VISUAL.panelRaised });
+      })
+      .on('pointerup', (pointer: Phaser.Input.Pointer) => {
+        // A release may resolve only a card that this same pointer actually
+        // pressed; fresh offers create fresh cards with an empty armed set.
+        if (!armedPointers.delete(pointer.id)) return;
+        settlePress();
+        drawSpecimenSurface(membrane, cw, height, { accent });
+        if (!gs.acceptChoiceClick(def.id)) return;
+        Sfx.play('click');
         const more = gs.chooseUpgrade(def.id);
         const legendaryId = gs.consumeLegendaryCeremony();
         const evolutionId = gs.consumeEvolutionCeremony();
         if (legendaryId) {
-          c.destroy();
-          if (this.modal === c) this.modal = null;
+          root.destroy();
+          if (this.modal === root) this.modal = null;
           this.showLegendaryCeremony(legendaryId, more);
         } else if (evolutionId) {
-          c.destroy();
-          if (this.modal === c) this.modal = null;
+          root.destroy();
+          if (this.modal === root) this.modal = null;
           this.showEvolutionCeremony(evolutionId, more);
         } else if (more) {
-          c.destroy();
-          if (this.modal === c) this.modal = null;
+          root.destroy();
+          if (this.modal === root) this.modal = null;
           this.modalOpen = false;
           this.showLevelUp();
         } else {
@@ -1857,22 +2207,16 @@ export class UIScene extends Phaser.Scene {
           this.scene.resume('Game');
         }
       });
-      bg.on('pointerover', () => drawSpecimenSurface(membrane, cw, ch, { accent, fill: VISUAL.panelRaised }));
-      bg.on('pointerout', () => drawSpecimenSurface(membrane, cw, ch, { accent }));
-
-      c.add(card);
-      card.setScale(0.94).setAlpha(0);
-      this.tweens.add({
-        targets: card,
-        scale: 1,
-        alpha: 1,
-        duration: 170,
-        delay: cardIndex * 35,
-        ease: 'Back.Out',
-      });
-
-      y += ch + gap;
+    bg.on('pointerover', () =>
+      drawSpecimenSurface(membrane, cw, height, { accent, fill: VISUAL.panelRaised })
+    );
+    bg.on('pointerout', () => {
+      armedPointers.clear();
+      settlePress();
+      drawSpecimenSurface(membrane, cw, height, { accent });
     });
+
+    return { card, height };
   }
 
   private showLegendaryCeremony(id: LegendaryId, moreChoices: boolean): void {
@@ -2311,22 +2655,39 @@ export class UIScene extends Phaser.Scene {
     }
   }
 
-  private renderGameOver(res: RunResult): void {
+  // A re-show renders a saved snapshot after the Codex transition: the Game
+  // scene is stopped, so the run must NOT be submitted again, the video
+  // interstitial must NOT play, and the daily intent/ticket are already gone
+  // (the first render cleared them). The caller passes the branch resolved
+  // at the first render, so a daily result cannot re-render as ranked.
+  // The duel challenge and the challenge target come from the snapshot too:
+  // the Menu's create() resets both when it starts after the transition.
+  private renderGameOver(
+    res: RunResult,
+    opts?: { reshow?: boolean; dailyBranch?: DailyResultBranch; duelChallenge?: DuelChallengeSnapshot | null; challengeTarget?: ChallengePayload | null }
+  ): void {
     this.uiBlocked = true;
-    const duelChallenge = this.registry.get('duelChallenge') as DuelChallengeSnapshot | null | undefined;
+    const duelChallenge = opts?.reshow
+      ? (opts.duelChallenge ?? null)
+      : (this.registry.get('duelChallenge') as DuelChallengeSnapshot | null | undefined);
     const dailyIntent = readDailyIntent(this.registry);
     const dailyTicket =
       (this.registry.get('dailyTicket') as DailyRunTicket | null | undefined) ?? null;
-    const dailyBranch = resolveDailyResultBranch({
+    const dailyBranch = opts?.dailyBranch ?? resolveDailyResultBranch({
       resumed: res.resumed,
       dailyIntent,
       ticket: dailyTicket,
       runSeed: res.runSeed,
       now: Date.now(),
     });
+    // A daily result (a valid ticket, or a blocked intent) is never a ranked
+    // standard one. The branch and the intent agree on the first render
+    // ('inactive' exactly when the intent is null, given a non-resumed run),
+    // so the re-show can read the branch instead of the cleared intent.
+    const isDailyResult = dailyBranch === 'daily' || dailyBranch === 'blocked';
     const standardFresh = res.difficultyId === 'standard' && !res.resumed;
     // A daily-launched run must never render global-ranking semantics.
-    const ranked = standardFresh && !duelChallenge && dailyIntent === null;
+    const ranked = standardFresh && !duelChallenge && dailyBranch === 'inactive';
     const duelCreatable = standardFresh && res.win;
     const W = this.scale.width;
     const H = this.scale.height;
@@ -2339,8 +2700,12 @@ export class UIScene extends Phaser.Scene {
     this.resultViewport = { width: W, height: H };
 
     c.add(
+      // Fully opaque: the scene beneath is the paused Game on the first
+      // show and the live Menu on a re-show after a Codex return, and a
+      // translucent scrim lets the Menu's bright primary button bleed
+      // through over the opening rows.
       this.add
-        .rectangle(W / 2, H / 2, W, H, VISUAL.ink, 0.95)
+        .rectangle(W / 2, H / 2, W, H, VISUAL.ink, 1)
         .setName('ofeliya-result-scrim')
         .setInteractive()
     );
@@ -2459,6 +2824,89 @@ export class UIScene extends Phaser.Scene {
       );
       detailY += compact ? 23 : 27;
     }
+    // The entries this run opened in the Codex, named one by one, right after
+    // the run list: they are the newest information on the screen, so they
+    // sit above the archetype, the mode chip and the submit status — on a
+    // 320px viewport they are visible without scrolling. Each entry is two
+    // report rows (name + tab line) with one shared tap: the pair is a 44px
+    // target, and the tap opens the Codex on that entry's tab.
+    // The tap zones are fitted after createResultReport repositions the rows.
+    const openingRows: Array<{
+      name: Phaser.GameObjects.Text;
+      sub: Phaser.GameObjects.Text;
+      entry: NewCodexEntry;
+    }> = [];
+    if (res.newCodexEntries.length > 0) {
+      detailY += compact ? 24 : 29;
+      c.add(
+        this.add
+          .text(W / 2, detailY, 'ОТКРЫЛОСЬ В КОДЕКСЕ', {
+            fontFamily: FONT,
+            fontSize: compact ? '9px' : '10px',
+            fontStyle: 'bold',
+            color: '#ffe066',
+            align: 'center',
+            wordWrap: { width: W - 42 },
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+      );
+      for (const entry of res.newCodexEntries) {
+        detailY += compact ? 24 : 28;
+        const title =
+          entry.kind === 'evolution'
+            ? EVOLUTION_NAMES[entry.id]
+            : getLegendaryDefinition(entry.id).title;
+        const nameText = this.add
+          .text(W / 2, detailY, `◆ ${title}`, {
+            fontFamily: FONT,
+            fontSize: compact ? '9px' : '10px',
+            fontStyle: 'bold',
+            color: '#ffe066',
+            align: 'center',
+            wordWrap: { width: W - 42 },
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+          .setName(`ofeliya-result-opening-${entry.kind}-${entry.id}-name`);
+        c.add(nameText);
+        detailY += compact ? 24 : 28;
+        const tabLabel = entry.kind === 'evolution' ? 'Синергии' : 'Легендарные';
+        const subText = this.add
+          .text(W / 2, detailY, `Кодекс · ${tabLabel} ›`, {
+            fontFamily: FONT,
+            fontSize: compact ? '9px' : '10px',
+            color: '#8f9ab7',
+            align: 'center',
+            wordWrap: { width: W - 42 },
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+          .setName(`ofeliya-result-opening-${entry.kind}-${entry.id}-sub`);
+        c.add(subText);
+        openingRows.push({ name: nameText, sub: subText, entry });
+      }
+    }
+
+    // Achievements are a different system: they have no Codex entry, so they
+    // are named on their own line and never counted as openings.
+    if (res.newAchievements.length > 0) {
+      detailY += compact ? 24 : 29;
+      c.add(
+        this.add
+          .text(W / 2, detailY, `★ Достижение: ${achievementSummary(res.newAchievements)}`, {
+            fontFamily: FONT,
+            fontSize: compact ? '9px' : '10px',
+            fontStyle: 'bold',
+            color: '#b8f3ff',
+            align: 'center',
+            wordWrap: { width: W - 42 },
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+          .setName('ofeliya-result-achievement')
+      );
+    }
     // The archetype is a deterministic classification of the build that actually
     // emerged, so it can be named. The tags are only meaningful for a focused
     // build; a hybrid build has no single set of signals.
@@ -2487,6 +2935,35 @@ export class UIScene extends Phaser.Scene {
     );
 
     detailY += compact ? 22 : 25;
+    // Keep the goal visible above the actions on compact screens.
+    const goalLine = this.add
+      .text(W / 2, detailY, res.nearestGoal.line1, {
+        fontFamily: FONT,
+        fontSize: compact ? '10px' : '11px',
+        fontStyle: 'bold',
+        color: '#b8f3ff',
+        align: 'center',
+        wordWrap: { width: W - 42 },
+      })
+      .setOrigin(0.5)
+      .setResolution(2)
+      .setName('ofeliya-result-goal-line1');
+    c.add(goalLine);
+    detailY += compact ? 20 : 23;
+    c.add(
+      this.add
+        .text(W / 2, detailY, res.nearestGoal.line2, {
+          fontFamily: FONT,
+          fontSize: compact ? '9px' : '10px',
+          color: '#8f9ab7',
+          align: 'center',
+          wordWrap: { width: W - 42 },
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setName('ofeliya-result-goal-line2')
+    );
+    detailY += compact ? 20 : 23;
     c.add(
       this.add
         .text(
@@ -2494,7 +2971,7 @@ export class UIScene extends Phaser.Scene {
           detailY,
           resultModeChip({
             resumed: res.resumed,
-            daily: dailyIntent !== null,
+            daily: isDailyResult,
             duel: duelChallenge !== null,
             difficultyId: res.difficultyId,
             platform: PlatformBridge.kind,
@@ -2524,7 +3001,13 @@ export class UIScene extends Phaser.Scene {
       .setResolution(2);
     c.add(scoreStatus);
 
-    if (dailyBranch === 'resumed') {
+    if (opts?.reshow) {
+      // The submit already happened once, before the video interstitial;
+      // its outcome (rank) is not part of RunResult, so the status row
+      // cannot be re-rendered truthfully. Hiding it is the honest option:
+      // the re-show submits nothing, clears nothing and records nothing.
+      scoreStatus.setVisible(false);
+    } else if (dailyBranch === 'resumed') {
       scoreStatus.setText(RESULT_COPY.resumed).setColor('#ffe066');
     } else if (dailyBranch === 'daily' && dailyTicket) {
       // Keep Daily identity through the interstitial so the result screen renders the
@@ -2623,32 +3106,9 @@ export class UIScene extends Phaser.Scene {
       );
     }
 
-    if (res.newAchievements.length > 0) {
-      detailY += compact ? 24 : 29;
-      // The records the run opened are named once, and the plate is a way into
-      // the codex: the player never has to guess where a new record went.
-      const codexPlate = this.add
-        .text(W / 2, detailY, `${META_COPY.codexEntries(res.newAchievements.length)} ›`, {
-          fontFamily: FONT,
-          fontSize: compact ? '9px' : '10px',
-          fontStyle: 'bold',
-          color: '#ffe066',
-          align: 'center',
-          wordWrap: { width: W - 42 },
-        })
-        .setOrigin(0.5)
-        .setResolution(2)
-        .setName('ofeliya-result-codex-entries');
-      codexPlate.setInteractive({ useHandCursor: true });
-      codexPlate.on('pointerup', () => {
-        this.registry.set('openCodexOnMenu', true);
-        this.gs?.scene.stop();
-        this.scene.start('Menu');
-      });
-      c.add(codexPlate);
-    }
-
-    const challengeTarget = this.registry.get('challengeTarget') as ChallengePayload | null | undefined;
+    const challengeTarget = opts?.reshow
+      ? (opts.challengeTarget ?? null)
+      : (this.registry.get('challengeTarget') as ChallengePayload | null | undefined);
     if (challengeTarget) {
       detailY += compact ? 24 : 29;
       const target =
@@ -2708,8 +3168,118 @@ export class UIScene extends Phaser.Scene {
     summarySurface.setPosition(W / 2, (summaryTop + statsBottom + 14) / 2);
     drawSpecimenSurface(summarySurface, W - 28, statsBottom + 14 - summaryTop, {accent: res.win ? VISUAL.host : VISUAL.player, alpha:0.72});
     const reportTop = Math.max(statY + 36, statsBottom + 24);
-    const reportRows = c.list.slice(reportStart).filter((child): child is Phaser.GameObjects.Text => child instanceof Phaser.GameObjects.Text);
-    createResultReport(this, c, reportRows, W / 2, reportTop, W - 32, Math.max(50, y - 55 - reportTop), scoreStatus);
+    if (compact) goalLine.setOrigin(0.5, 1).setPosition(W / 2, y - 30);
+    const goalSpace = compact ? goalLine.height + 4 : 0;
+    const reportRows = c.list.slice(reportStart).filter((child): child is Phaser.GameObjects.Text =>
+      child instanceof Phaser.GameObjects.Text && (!compact || child !== goalLine)
+    );
+    const reportHeight = Math.max(50, y - 55 - reportTop - goalSpace);
+    createResultReport(this, c, reportRows, W / 2, reportTop, W - 32, reportHeight, scoreStatus);
+    // One tap zone per opening: the name and the tab subtitle share a
+    // single zone, at least MIN_TOUCH tall and the full row width. The
+    // zone is a plain rectangle in the report container, so it scrolls
+    // with the rows; its world bounds are read at tap time, so the same
+    // geometry works with and without scrolling. The zone height is a
+    // fixed minimum, never derived from the text: the old design had
+    // two 22px hit areas whose combined span depended on font metrics
+    // (44px on Linux, 43px on Windows Chrome), and whose hit rect was
+    // shifted by the text's displayOriginX, so the right edge of the
+    // row never opened the Codex (the scrim below swallowed the tap).
+    const report = c.getByName('ofeliya-result-report') as Phaser.GameObjects.Container | null;
+    const openingZones: Array<{ zone: Phaser.GameObjects.Rectangle; entry: NewCodexEntry }> = [];
+    if (report && openingRows.length > 0) {
+      for (const { name, sub, entry } of openingRows) {
+        const bandTop = name.y;
+        const bandBottom = sub.y + sub.height;
+        const bandCenter = (bandTop + bandBottom) / 2;
+        const zoneHeight = Math.max(MIN_TOUCH, bandBottom - bandTop);
+        const zone = this.add
+          .rectangle(0, bandCenter, W - 32, zoneHeight, 0xffffff, 0)
+          .setName(`ofeliya-result-opening-zone-${entry.kind}-${entry.id}`);
+        report.add(zone);
+        zone.setPosition(0, bandCenter);
+        openingZones.push({ zone, entry });
+      }
+    }
+    // The report's transparent hit rect covers the visible report area
+    // and sits above the rows (the UI scene runs with topOnly), so it
+    // routes every opening tap, with scrolling and without. A tap
+    // navigates only when it starts and ends inside one zone (same
+    // pointer, almost no movement): a swipe scrolls the report instead,
+    // and releasing outside the zone does nothing. The armed tap is
+    // cancelled the moment the pointer strays beyond the movement limit,
+    // wherever the gesture ends — checking only the release point lets
+    // an out-and-back swipe (38 px out, back to the start) open an entry,
+    // because its end is within the limit of its start. The visible area
+    // is the hit rect itself, so a zone scrolled half out of view cannot
+    // catch a tap on its hidden part. When two zones overlap (a band
+    // shorter than MIN_TOUCH next to another entry), the nearest band
+    // centre wins.
+    const reportHit = c.getByName('ofeliya-result-report-hit') as Phaser.GameObjects.Rectangle | null;
+    if (reportHit && openingZones.length > 0) {
+      if (!reportHit.input) reportHit.setInteractive();
+      // Manhattan tap tolerance, in px: a gesture that moves further than
+      // this at any moment is a swipe, not a tap.
+      const TAP_MOVE_LIMIT = 12;
+      let tap: { id: number; x: number; y: number } | null = null;
+      reportHit.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        tap = { id: pointer.id, x: pointer.x, y: pointer.y };
+      });
+      // The disarm listens on the scene, not on the hit rect: a swipe can
+      // leave the report area mid-gesture (out the left edge and back), and
+      // an object only receives pointermove while the pointer is over it —
+      // a reportHit handler would never see the excursion, so the
+      // out-and-back release would still pass the release-point check.
+      // Removed with the result overlay, so a re-show arms a fresh one.
+      const onTapMove = (pointer: Phaser.Input.Pointer): void => {
+        if (!tap || tap.id !== pointer.id) return;
+        if (Math.abs(pointer.x - tap.x) + Math.abs(pointer.y - tap.y) > TAP_MOVE_LIMIT) tap = null;
+      };
+      this.input.on('pointermove', onTapMove);
+      c.once(Phaser.GameObjects.Events.DESTROY, () => {
+        this.input.off('pointermove', onTapMove);
+      });
+      reportHit.on('pointerupoutside', () => { tap = null; });
+      reportHit.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+        if (!tap || tap.id !== pointer.id) return;
+        const moved = Math.abs(pointer.x - tap.x) + Math.abs(pointer.y - tap.y);
+        tap = null;
+        if (moved > TAP_MOVE_LIMIT) return;
+        const hitBounds = reportHit.getBounds();
+        if (
+          pointer.x < hitBounds.left || pointer.x > hitBounds.right ||
+          pointer.y < hitBounds.top || pointer.y > hitBounds.bottom
+        ) return;
+        let best: { entry: NewCodexEntry; dist: number } | null = null;
+        for (const { zone, entry } of openingZones) {
+          const bounds = zone.getBounds();
+          if (
+            pointer.x >= bounds.left && pointer.x <= bounds.right &&
+            pointer.y >= bounds.top && pointer.y <= bounds.bottom
+          ) {
+            const dist = Math.abs(pointer.y - bounds.centerY);
+            if (!best || dist < best.dist) best = { entry, dist };
+          }
+        }
+        if (!best) return;
+        // Keep the finished run alive across the Codex transition: the Game
+        // SHUTDOWN handler removes `runResult`, and the menu's "back to
+        // result" action needs a copy that survives it. The daily branch,
+        // the duel challenge and the challenge target are snapshotted with
+        // it — the first render clears the intent and the ticket, and the
+        // Menu's create() resets the challenge keys when it starts.
+        this.registry.set('lastRunResult', {
+          result: res,
+          dailyBranch,
+          duelChallenge: duelChallenge ?? null,
+          challengeTarget: challengeTarget ?? null,
+        } satisfies LastRunResult);
+        this.registry.set('openCodexOnMenu', true);
+        this.registry.set('openCodexEntry', codexEntryRef(best.entry));
+        this.gs?.scene.stop();
+        this.scene.start('Menu');
+      });
+    }
     this.button(c, RESULT_COPY.newRun, W / 2, y, true, () => {
       const gameScene = this.gs;
       if (!gameScene) return;
@@ -2718,11 +3288,9 @@ export class UIScene extends Phaser.Scene {
         priorResult: res.win ? 'win' : 'death',
         timeMs: Math.round(res.timeMs),
       });
-      // Result Game is paused. Treat shutdown as a barrier: only start the fresh run after Phaser
-      // has fully completed the old Game teardown. UI stays alive until that point, so the
-      // SceneManager always has an active owner for the queued transition.
-      gameScene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      const startFreshRun = () => {
         this.registry.set('runResult', null);
+        this.registry.remove('lastRunResult');
         if (duelChallenge) {
           this.registry.set('duelChallenge', duelChallenge);
           this.registry.set('runSeedOverride', duelChallenge.runSeed);
@@ -2730,9 +3298,25 @@ export class UIScene extends Phaser.Scene {
           this.registry.set('controlMode', duelChallenge.controlMode);
           void trackDuelEvent(duelChallenge.challengeId, 'rematch', PlatformBridge);
         }
+        // On a re-show the menu is still alive underneath (the UI was
+        // launched over it); a fresh run starts from the run screen, not
+        // from the menu, so the menu goes away like in the normal flow.
+        if (this.scene.isActive('Menu')) this.scene.stop('Menu');
         this.scene.launch('Game');
         this.scene.restart();
-      });
+      };
+      // Result Game is paused. Treat shutdown as a barrier: only start the fresh run after Phaser
+      // has fully completed the old Game teardown. UI stays alive until that point, so the
+      // SceneManager always has an active owner for the queued transition.
+      // A re-shown result has no live Game scene: it was already stopped by
+      // the Codex transition, so its SHUTDOWN event will never fire again
+      // and waiting for it would leave the button dead. Start directly.
+      const gameAlive = this.scene.isActive('Game') || this.scene.isPaused('Game');
+      if (!gameAlive) {
+        startFreshRun();
+        return;
+      }
+      gameScene.events.once(Phaser.Scenes.Events.SHUTDOWN, startFreshRun);
       this.scene.stop('Game');
     }, 'ofeliya-result-retry');
     y += gap;
@@ -2753,7 +3337,7 @@ export class UIScene extends Phaser.Scene {
       // disclaimer or a same-seed promise.
       const legendaryName =
         res.legendaryIds.length > 0 ? getLegendaryDefinition(res.legendaryIds[0]).title : null;
-      const dailySuffix = dailyIntent ? buildDailyShareSuffix({ timeMs: res.timeMs }) : '';
+      const dailySuffix = isDailyResult ? buildDailyShareSuffix({ timeMs: res.timeMs }) : '';
       let shareText = buildShareText({
         win: res.win,
         time: mins,
@@ -2780,7 +3364,7 @@ export class UIScene extends Phaser.Scene {
           if (!ok) {
             this.toast(c, 'Нативный шаринг недоступен в этом клиенте');
           } else {
-            void trackProductEvent('share', PlatformBridge, { kind: 'challenge', runSeed: res.runSeed, daily: Boolean(dailyIntent) });
+            void trackProductEvent('share', PlatformBridge, { kind: 'challenge', runSeed: res.runSeed, daily: isDailyResult });
           }
           if (ok && !link && PlatformBridge.kind === 'max') {
             this.toast(c, 'Ссылка вызова не настроена');
@@ -2792,7 +3376,7 @@ export class UIScene extends Phaser.Scene {
       if (!duelCreatable) {
         void PlatformBridge.shareResult(shareText).then((ok) => {
           if (!ok) this.toast(c, 'Нативный шаринг недоступен в этом клиенте');
-          else void trackProductEvent('share', PlatformBridge, { kind: dailyIntent ? 'daily-result' : 'result', runSeed: res.runSeed, daily: Boolean(dailyIntent) });
+          else void trackProductEvent('share', PlatformBridge, { kind: isDailyResult ? 'daily-result' : 'result', runSeed: res.runSeed, daily: isDailyResult });
         });
         return;
       }

@@ -60,37 +60,45 @@ export interface LifetimeStats {
 
 interface Def extends MetaAchievementDef {
   check: (s: LifetimeStats) => boolean;
+  /**
+   * The counter the nearest goal reads, and the value that completes the
+   * milestone. Every check is `value(stats, metric) >= threshold` — the two
+   * spellings must agree (see tests/meta-achievements.mjs); the check stays
+   * the authority for unlocking, the fields are the authority for progress.
+   */
+  metric: keyof LifetimeStats;
+  threshold: number;
 }
 
 const D: Def[] = [
-  { id: 'killer_500', title: 'ЧИСТИЛЬЩИК', desc: '500 убийств суммарно', reward: { kind: 'rna', amount: 50 }, check: (s) => s.totalKills >= 500 },
-  { id: 'killer_1k', title: 'ТЫСЯЧНИК', desc: '1 000 убийств суммарно', reward: { kind: 'rna', amount: 100 }, check: (s) => s.totalKills >= 1000 },
-  { id: 'killer_10k', title: 'ДЕСЯТИТЫСЯЧНИК', desc: '10 000 убийств суммарно', reward: { kind: 'rna', amount: 300 }, check: (s) => s.totalKills >= 10000 },
-  { id: 'killer_100k', title: 'ПАНДЕМИЯ', desc: '100 000 убийств суммарно', reward: { kind: 'rna', amount: 1000 }, check: (s) => s.totalKills >= 100000 },
-  { id: 'runs_3', title: 'РЕЦИДИВ', desc: 'Завершить 3 забега', reward: { kind: 'rna', amount: 50 }, check: (s) => s.runs >= 3 },
-  { id: 'runs_10', title: 'ЗАВСЕГДАТАЙ', desc: 'Завершить 10 забегов', reward: { kind: 'rna', amount: 100 }, check: (s) => s.runs >= 10 },
-  { id: 'runs_50', title: 'ХРОНИК', desc: 'Завершить 50 забегов', reward: { kind: 'rna', amount: 250 }, check: (s) => s.runs >= 50 },
-  { id: 'runs_100', title: 'ЛЕГЕНДА ШТАММА', desc: 'Завершить 100 забегов', reward: { kind: 'rna', amount: 600 }, check: (s) => s.runs >= 100 },
-  { id: 'evo_3', title: 'КОЛЛЕКЦИОНЕР МУТАЦИЙ', desc: 'Открыть все 3 критические мутации', reward: { kind: 'rna', amount: 200 }, check: (s) => s.evolutionsSeen >= 3 },
-  { id: 'daily_first', title: 'ВОЗВРАЩЕНИЕ', desc: 'Забрать первую ежедневную награду', reward: { kind: 'rna', amount: 50 }, check: (s) => s.maxStreak >= 1 },
-  { id: 'streak_3', title: 'РЕГУЛЯРНОСТЬ', desc: 'Стрик входа 3 дня', reward: { kind: 'rna', amount: 100 }, check: (s) => s.maxStreak >= 3 },
-  { id: 'streak_7', title: 'НЕДЕЛЯ ЗАРАЖЕНИЯ', desc: 'Стрик входа 7 дней', reward: { kind: 'rna', amount: 300 }, check: (s) => s.maxStreak >= 7 },
-  { id: 'streak_30', title: 'МЕСЯЦ ПАНДЕМИИ', desc: 'Стрик входа 30 дней', reward: { kind: 'rna', amount: 1000 }, check: (s) => s.maxStreak >= 30 },
-  { id: 'quests_10', title: 'ИСПОЛНИТЕЛЬ', desc: 'Выполнить 10 квестов', reward: { kind: 'rna', amount: 150 }, check: (s) => s.questsCompleted >= 10 },
-  { id: 'quests_50', title: 'МАШИНА ЗАДАНИЙ', desc: 'Выполнить 50 квестов', reward: { kind: 'rna', amount: 400 }, check: (s) => s.questsCompleted >= 50 },
-  { id: 'stars_1', title: 'ПЕРВЫЙ ВКЛАД', desc: 'Потратить первую звезду', reward: { kind: 'rna', amount: 50 }, check: (s) => s.starsSpent >= 1 },
+  { id: 'killer_500', title: 'ЧИСТИЛЬЩИК', desc: '500 убийств суммарно', reward: { kind: 'rna', amount: 50 }, metric: 'totalKills', threshold: 500, check: (s) => s.totalKills >= 500 },
+  { id: 'killer_1k', title: 'ТЫСЯЧНИК', desc: '1 000 убийств суммарно', reward: { kind: 'rna', amount: 100 }, metric: 'totalKills', threshold: 1000, check: (s) => s.totalKills >= 1000 },
+  { id: 'killer_10k', title: 'ДЕСЯТИТЫСЯЧНИК', desc: '10 000 убийств суммарно', reward: { kind: 'rna', amount: 300 }, metric: 'totalKills', threshold: 10000, check: (s) => s.totalKills >= 10000 },
+  { id: 'killer_100k', title: 'ПАНДЕМИЯ', desc: '100 000 убийств суммарно', reward: { kind: 'rna', amount: 1000 }, metric: 'totalKills', threshold: 100000, check: (s) => s.totalKills >= 100000 },
+  { id: 'runs_3', title: 'РЕЦИДИВ', desc: 'Завершить 3 забега', reward: { kind: 'rna', amount: 50 }, metric: 'runs', threshold: 3, check: (s) => s.runs >= 3 },
+  { id: 'runs_10', title: 'ЗАВСЕГДАТАЙ', desc: 'Завершить 10 забегов', reward: { kind: 'rna', amount: 100 }, metric: 'runs', threshold: 10, check: (s) => s.runs >= 10 },
+  { id: 'runs_50', title: 'ХРОНИК', desc: 'Завершить 50 забегов', reward: { kind: 'rna', amount: 250 }, metric: 'runs', threshold: 50, check: (s) => s.runs >= 50 },
+  { id: 'runs_100', title: 'ЛЕГЕНДА ШТАММА', desc: 'Завершить 100 забегов', reward: { kind: 'rna', amount: 600 }, metric: 'runs', threshold: 100, check: (s) => s.runs >= 100 },
+  { id: 'evo_3', title: 'КОЛЛЕКЦИОНЕР МУТАЦИЙ', desc: 'Открыть все 3 критические мутации', reward: { kind: 'rna', amount: 200 }, metric: 'evolutionsSeen', threshold: 3, check: (s) => s.evolutionsSeen >= 3 },
+  { id: 'daily_first', title: 'ВОЗВРАЩЕНИЕ', desc: 'Забрать первую ежедневную награду', reward: { kind: 'rna', amount: 50 }, metric: 'maxStreak', threshold: 1, check: (s) => s.maxStreak >= 1 },
+  { id: 'streak_3', title: 'РЕГУЛЯРНОСТЬ', desc: 'Стрик входа 3 дня', reward: { kind: 'rna', amount: 100 }, metric: 'maxStreak', threshold: 3, check: (s) => s.maxStreak >= 3 },
+  { id: 'streak_7', title: 'НЕДЕЛЯ ЗАРАЖЕНИЯ', desc: 'Стрик входа 7 дней', reward: { kind: 'rna', amount: 300 }, metric: 'maxStreak', threshold: 7, check: (s) => s.maxStreak >= 7 },
+  { id: 'streak_30', title: 'МЕСЯЦ ПАНДЕМИИ', desc: 'Стрик входа 30 дней', reward: { kind: 'rna', amount: 1000 }, metric: 'maxStreak', threshold: 30, check: (s) => s.maxStreak >= 30 },
+  { id: 'quests_10', title: 'ИСПОЛНИТЕЛЬ', desc: 'Выполнить 10 квестов', reward: { kind: 'rna', amount: 150 }, metric: 'questsCompleted', threshold: 10, check: (s) => s.questsCompleted >= 10 },
+  { id: 'quests_50', title: 'МАШИНА ЗАДАНИЙ', desc: 'Выполнить 50 квестов', reward: { kind: 'rna', amount: 400 }, metric: 'questsCompleted', threshold: 50, check: (s) => s.questsCompleted >= 50 },
+  { id: 'stars_1', title: 'ПЕРВЫЙ ВКЛАД', desc: 'Потратить первую звезду', reward: { kind: 'rna', amount: 50 }, metric: 'starsSpent', threshold: 1, check: (s) => s.starsSpent >= 1 },
   // Связка «достижение → скин» (роадмап): выдача скина — Фаза 5, здесь только грант.
-  { id: 'stars_500', title: 'ИНВЕСТОР', desc: 'Потратить 500 звёзд', reward: { kind: 'skin', skinId: 'skin.gilded-prime' }, check: (s) => s.starsSpent >= 500 },
-  { id: 'deaths_100', title: 'БЕССМЕРТНЫЙ', desc: 'Погибнуть 100 раз', reward: { kind: 'rna', amount: 200 }, check: (s) => s.deaths >= 100 },
-  { id: 'rna_1k', title: 'НАКОПИТЕЛЬ', desc: 'Заработать 1 000 РНК (мета)', reward: { kind: 'rna', amount: 75 }, check: (s) => s.rnaEarned >= 1000 },
-  { id: 'rna_10k', title: 'МАГНАТ РНК', desc: 'Заработать 10 000 РНК (мета)', reward: { kind: 'rna', amount: 250 }, check: (s) => s.rnaEarned >= 10000 },
-  { id: 'combo_50', title: 'РЕЗНЯ', desc: 'Комбо ×50 за один забег', reward: { kind: 'rna', amount: 200 }, check: (s) => s.comboBest >= 50 },
-  { id: 'ghost_120', title: 'ПРИЗРАК', desc: '120 секунд без урона за забег', reward: { kind: 'rna', amount: 250 }, check: (s) => s.maxNoDamageMs >= 120000 },
-  { id: 'winner', title: 'ИДЕАЛЬНЫЙ ЦИКЛ', desc: 'Победить в забеге', reward: { kind: 'rna', amount: 500 }, check: (s) => s.won },
-  { id: 'time_10h', title: 'ДОЛГОЖИТЕЛЬ', desc: '10 часов суммарного выживания', reward: { kind: 'rna', amount: 300 }, check: (s) => s.timeSecTotal >= 36000 },
+  { id: 'stars_500', title: 'ИНВЕСТОР', desc: 'Потратить 500 звёзд', reward: { kind: 'skin', skinId: 'skin.gilded-prime' }, metric: 'starsSpent', threshold: 500, check: (s) => s.starsSpent >= 500 },
+  { id: 'deaths_100', title: 'БЕССМЕРТНЫЙ', desc: 'Погибнуть 100 раз', reward: { kind: 'rna', amount: 200 }, metric: 'deaths', threshold: 100, check: (s) => s.deaths >= 100 },
+  { id: 'rna_1k', title: 'НАКОПИТЕЛЬ', desc: 'Заработать 1 000 РНК (мета)', reward: { kind: 'rna', amount: 75 }, metric: 'rnaEarned', threshold: 1000, check: (s) => s.rnaEarned >= 1000 },
+  { id: 'rna_10k', title: 'МАГНАТ РНК', desc: 'Заработать 10 000 РНК (мета)', reward: { kind: 'rna', amount: 250 }, metric: 'rnaEarned', threshold: 10000, check: (s) => s.rnaEarned >= 10000 },
+  { id: 'combo_50', title: 'РЕЗНЯ', desc: 'Комбо ×50 за один забег', reward: { kind: 'rna', amount: 200 }, metric: 'comboBest', threshold: 50, check: (s) => s.comboBest >= 50 },
+  { id: 'ghost_120', title: 'ПРИЗРАК', desc: '120 секунд без урона за забег', reward: { kind: 'rna', amount: 250 }, metric: 'maxNoDamageMs', threshold: 120000, check: (s) => s.maxNoDamageMs >= 120000 },
+  { id: 'winner', title: 'ИДЕАЛЬНЫЙ ЦИКЛ', desc: 'Победить в забеге', reward: { kind: 'rna', amount: 500 }, metric: 'won', threshold: 1, check: (s) => s.won },
+  { id: 'time_10h', title: 'ДОЛГОЖИТЕЛЬ', desc: '10 часов суммарного выживания', reward: { kind: 'rna', amount: 300 }, metric: 'timeSecTotal', threshold: 36000, check: (s) => s.timeSecTotal >= 36000 },
 ];
 
-export const META_ACHIEVEMENTS: MetaAchievementDef[] = D.map(({ check: _c, ...def }) => def);
+export const META_ACHIEVEMENTS: MetaAchievementDef[] = D.map(({ check: _c, metric: _m, threshold: _t, ...def }) => def);
 
 const BY_ID = new Map<MetaAchievementId, Def>(D.map((d) => [d.id, d]));
 
@@ -123,6 +131,37 @@ function saveUnlocked(ids: Set<string>): void {
 /** Чистая функция: какие достижения выполнены (без персистентности). */
 export function checkMetaAchievements(stats: LifetimeStats): MetaAchievementId[] {
   return D.filter((d) => d.check(stats)).map((d) => d.id);
+}
+
+/** Progress of one milestone towards its threshold (capped). */
+export interface MetaMilestoneProgress {
+  id: MetaAchievementId;
+  title: string;
+  desc: string;
+  /** Current value, capped at `threshold`: a completed milestone reads `threshold`. */
+  progress: number;
+  threshold: number;
+}
+
+/**
+ * Progress of every milestone, in catalog order, for the nearest goal.
+ *
+ * The goal reads the same numbers the unlock check reads: `progress` is the
+ * counter named by `metric` (a won run counts as 1), capped at `threshold`,
+ * so a completed milestone never wins the goal by ratio.
+ */
+export function metaMilestoneProgress(stats: LifetimeStats): MetaMilestoneProgress[] {
+  return D.map((def) => {
+    const raw = stats[def.metric];
+    const value = typeof raw === 'boolean' ? (raw ? 1 : 0) : raw;
+    return {
+      id: def.id,
+      title: def.title,
+      desc: def.desc,
+      progress: Math.min(value, def.threshold),
+      threshold: def.threshold,
+    };
+  });
 }
 
 /** Собрать снимок статистики из SaveSystem + MetaWallet + per-run. */

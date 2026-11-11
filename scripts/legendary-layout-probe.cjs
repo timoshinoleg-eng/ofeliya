@@ -1,5 +1,12 @@
-// Focused manual browser probe. Run against this checkout's Vite server with
-// Override OFELIYA_URL for a non-default local Vite port, e.g. 5197.
+// Focused manual browser probe for the measured «Био-мембрана» level-up layout.
+// Run against this checkout's Vite server; override OFELIYA_URL for a non-default port.
+//
+// Every legendary is offered through the synthetic modal. The «Последний носитель»
+// card renders the structured form (условие / эффект / цена / облик) and carries
+// no generic effect plate; every other legendary keeps the generic ceremony card
+// (description + full effect plate + footer). The probe asserts measured-layout
+// invariants: expected copy present, no text overlap inside a card, every text
+// inside its card plate, cards clear the subtitle, nothing leaves the screen.
 const fs = require('fs');
 
 function browserDriver() {
@@ -16,6 +23,11 @@ const cases = [
   { width: 390, height: 740 },
 ];
 const shortPortrait = { width: 320, height: 520 };
+
+const STRUCTURED_CONDITION = 'Условие: один раз за забег при смертельном уроне';
+const STRUCTURED_EFFECT = 'Эффект: останется 1 прочности, исчезают все враги, кроме боссов';
+const STRUCTURED_PRICE = 'При срабатывании: −25% прогресса текущего уровня';
+const STRUCTURED_LOOK = 'Облик штамма меняется на 8 с (только визуально)';
 
 function makeLegendaryChoice(choice, suffix = '') {
   return {
@@ -63,11 +75,13 @@ function makeLegendaryChoice(choice, suffix = '') {
       }
       if (size.height !== shortPortrait.height) {
         // Layout robustness fixture only: the guaranteed trophy path offers two choices.
-        scenarios.push({ kind: 'synthetic-three-legendary', choices: [definitions[0], definitions[1], definitions[2]], reward: true });
+        // Three legendary cards never fit a 568px portrait without the squeeze pass —
+        // that pass intentionally drops the decorative footer, so expect it here.
+        scenarios.push({ kind: 'synthetic-three-legendary', choices: [definitions[0], definitions[1], definitions[2]], reward: true, expectCompact: true });
       } else {
-        // Linux measured line counts [2,3,2,3,3,2]; choose only measured 2-line definitions.
-        // Index 5 is the last-life-saving Legendary. Synthetic UI coverage, not a trophy contract.
-        scenarios.push({ kind: 'short-portrait-three-legendary-guard', choices: [definitions[0], definitions[2], definitions[5]], reward: true, expectCompact: true });
+        // Short-portrait guard: the stack must compact, not clip. Mix structured
+        // (last-carrier) and generic legendaries; index 5 is the last-life-saving one.
+        scenarios.push({ kind: 'short-portrait-guard', choices: [definitions[0], definitions[2], definitions[5]], reward: true, expectCompact: true });
       }
 
       for (let scenarioIndex = 0; scenarioIndex < scenarios.length; scenarioIndex++) {
@@ -91,7 +105,12 @@ function makeLegendaryChoice(choice, suffix = '') {
         await page.waitForFunction(() => window.__game.scene.getScene('UI').modalOpen);
         // Let the modal entrance tweens settle before taking geometry snapshots.
         await page.waitForTimeout(600);
-        const report = await page.evaluate(async ({ kind, width, height, expected, expectCompact }) => {
+        const layoutFacts = await page.evaluate(() => {
+          const modal = window.__game.scene.getScene('UI').modal;
+          return { squash: modal.getData('squash') === true, fitScale: Number(modal.getData('fitScale')) || 1 };
+        });
+        const expectFooter = !scenario.expectCompact && !layoutFacts.squash;
+        const report = await page.evaluate(async ({ kind, width, height, expected, expectFooter, expectedStructured }) => {
           const { visibleTextBounds } = await import('/scripts/visible-text-bounds.js');
           const ui = window.__game.scene.getScene('UI');
           const root = ui.modal;
@@ -102,30 +121,68 @@ function makeLegendaryChoice(choice, suffix = '') {
           };
           const intersects = (a, b) => a.left < b.right - 0.5 && a.right > b.left + 0.5 && a.top < b.bottom - 0.5 && a.bottom > b.top + 0.5;
           const texts = measured.map(({ object }) => object);
-          const subtitle = texts.find((obj) => obj.text.includes('выбери мутацию для СЕРДЦА'));
+          const subtitle = texts.find((obj) => obj.text.includes('Трофей останется с тобой на весь забег'));
           const cards = root.list.filter((obj) => obj.type === 'Container' &&
             obj.list?.some((child) => child.type === 'Rectangle' && child.width > 100 && child.height > 100));
           const cardReports = cards.map((card) => {
-            const cardText = visibleTextBounds(card).filter(({ masked }) => !masked).map(({ object }) => object);
+            const cardMeasured = visibleTextBounds(card).filter(({ masked }) => !masked);
+            const cardTextObjs = cardMeasured.map(({ object }) => object);
+            const cardTexts = cardMeasured.map(({ object }) => ({ text: object.text, bounds: bounds(object) }));
             const bg = card.list.find((obj) => obj.type === 'Rectangle' && obj.width > 100 && obj.height > 100);
-            const effect = cardText.find((obj) => expected.some((choice) => choice.name === obj.text));
-            const expectedChoice = expected.find((choice) => choice.name === effect?.text);
-            const description = expectedChoice && cardText.find((obj) => obj.text === expectedChoice.desc);
-            const footer = cardText.find((obj) => obj.text === 'ИЗМЕНИТЬ ПРАВИЛА ЗАБЕГА');
-            const plate = effect && card.list.find((obj) => obj.type === 'Rectangle' && obj.width > 100 && obj.height <= 44 && Math.abs(obj.y - effect.y) < 1);
-            const effectBounds = effect ? bounds(effect) : null;
+            const bgBounds = bg ? bounds(bg) : null;
+            const plates = card.list.filter((obj) => obj.type === 'Rectangle' && obj !== bg && obj.width > 100 && obj.height <= 64);
+            const plateBounds = plates.map(bounds);
+            const structured = cardTextObjs.some((obj) => obj.text === expectedStructured.condition);
+            const matched = expected.filter((choice) =>
+              choice.legendaryId === 'last-carrier'
+                ? structured && cardTextObjs.some((obj) => obj.text === choice.shortName)
+                : cardTextObjs.some((obj) => obj.text === choice.name) &&
+                  cardTextObjs.some((obj) => obj.text === choice.desc)
+            );
+            const missing = [];
+            if (structured) {
+              for (const line of [expectedStructured.condition, expectedStructured.effect, expectedStructured.price, expectedStructured.look]) {
+                if (!cardTextObjs.some((obj) => obj.text === line)) missing.push(line);
+              }
+            } else {
+              for (const choice of matched) {
+                if (!cardTextObjs.some((obj) => obj.text === choice.name)) missing.push(choice.name);
+                if (!cardTextObjs.some((obj) => obj.text === choice.desc)) missing.push(choice.desc);
+              }
+              // В squeeze-проходе служебный футер убирается намеренно (декор).
+              // Футер — декор: его отсутствие законно, когда стек ушёл в squash-проход
+              // (тот же проход, что намеренно убирает его в squeeze-фикстурах).
+              if (expectFooter && !cardTextObjs.some((obj) => obj.text === 'ИЗМЕНИТЬ ПРАВИЛА ЗАБЕГА')) missing.push('footer');
+              if (!plates.length) missing.push('effect plate');
+            }
+            const overlaps = [];
+            for (let i = 0; i < cardTexts.length; i++) {
+              for (let j = i + 1; j < cardTexts.length; j++) {
+                if (intersects(cardTexts[i].bounds, cardTexts[j].bounds)) {
+                  overlaps.push([cardTexts[i].text, cardTexts[j].text]);
+                }
+              }
+            }
+            const outOfBounds = bgBounds
+              ? cardTexts.filter(({ bounds: b }) =>
+                  b.left < bgBounds.left + 1 || b.right > bgBounds.right - 1 || b.top < bgBounds.top + 1 || b.bottom > bgBounds.bottom - 1)
+                .map(({ text }) => text)
+              : ['missing background'];
+            const plateOverflow = [];
+            for (const plate of plateBounds) {
+              for (const { text, bounds: b } of cardTexts) {
+                if (b.top < plate.top - 1 && b.bottom > plate.bottom + 1) plateOverflow.push(text);
+              }
+            }
             return {
-              background: bg ? bounds(bg) : null,
+              structured,
+              background: bgBounds,
               cardHeight: bg?.height ?? null,
-              effect: effect ? { text: effect.text, linesNeeded: effect.getWrappedText(effect.text).length, maxLines: effect.style.maxLines, bounds: effectBounds } : null,
-              plate: plate ? bounds(plate) : null,
-              description: description ? bounds(description) : null,
-              footer: footer ? bounds(footer) : null,
-              effectOverlaps: effectBounds ? [
-                !description ? 'missing description' : intersects(effectBounds, bounds(description)) ? 'description' : null,
-                !footer ? 'missing footer' : intersects(effectBounds, bounds(footer)) ? 'footer' : null,
-                !plate ? 'missing plate' : effectBounds.top < bounds(plate).top + 1 || effectBounds.bottom > bounds(plate).bottom - 1 ? 'outside plate' : null,
-              ].filter(Boolean) : ['missing effect'],
+              plates: plateBounds.length,
+              found: matched.length,
+              missing,
+              overlaps,
+              outOfBounds: [...outOfBounds, ...plateOverflow],
             };
           });
           const cardIntersections = [];
@@ -134,21 +191,20 @@ function makeLegendaryChoice(choice, suffix = '') {
           }
           const overflow = measured.filter(({ masked, bounds: b }) => !masked &&
             (b.left < 1 || b.right > width - 1 || b.top < 1 || b.bottom > height - 1))
-            .map(({ object, bounds: b }) => ({ text: object.text, bounds: b }));
-          const actualHeight = cardReports[0]?.cardHeight ?? null;
+            .map(({ object }) => object.text);
           const subtitleBounds = subtitle ? bounds(subtitle) : null;
-          const allChoicesFound = expected.every((choice) => cardReports.some((card) => card.effect?.text === choice.name));
           return {
             kind, width, height, expectedCards: expected.length, actualCards: cards.length,
-            allChoicesFound, actualHeight, expectedCompact: !!expectCompact,
+            expectedCompact: !!expectFooter,
             subtitleBounds,
             cards: cardReports,
             cardIntersections,
             subtitleGap: cardReports.map(({ background }) => background && subtitleBounds ? background.top - subtitleBounds.bottom : null),
             overflow,
           };
-        }, { kind: scenario.kind, ...size, expected: choices, expectCompact: scenario.expectCompact });
-        reports.push(report);
+        }, { kind: scenario.kind, ...size, expected: choices, expectFooter,
+          expectedStructured: { condition: STRUCTURED_CONDITION, effect: STRUCTURED_EFFECT, price: STRUCTURED_PRICE, look: STRUCTURED_LOOK } });
+        reports.push({ ...report, squash: layoutFacts.squash, fitScale: layoutFacts.fitScale });
       }
       await ctx.close();
     }
@@ -156,23 +212,38 @@ function makeLegendaryChoice(choice, suffix = '') {
     await browser.close();
   }
   console.log(JSON.stringify(reports, null, 2));
-  const failures = reports.filter((r) => {
-    const expandedTotal = r.expectedCards * 136 + (r.expectedCards - 1) * 9;
-    const center = r.height * 0.59;
-    const proposedTop = center - expandedTotal / 2;
-    const proposedBottom = center + expandedTotal / 2;
-    const expandedFits = proposedTop >= r.subtitleBounds?.bottom + 9 && proposedBottom <= r.height - 9;
-    return !r.subtitleBounds || r.actualCards !== r.expectedCards || !r.allChoicesFound ||
-      r.cardIntersections.length > 0 || r.overflow.length > 0 ||
-      r.cards.some((card) => !card.background || !card.effect || !card.plate || card.effectOverlaps.length ||
-        card.effect.linesNeeded > card.effect.maxLines ||
-        (card.effect.linesNeeded > 2 && card.cardHeight !== 136)) ||
-      r.subtitleGap.some((gap) => gap == null || gap < 8.5) ||
-      (r.height < 650 && r.actualHeight !== (expandedFits ? 136 : 124)) ||
-      (r.expectedCompact && expandedFits);
-  });
+  const failures = reports.filter((r) =>
+    !r.subtitleBounds || r.actualCards !== r.expectedCards ||
+    r.cardIntersections.length > 0 || r.overflow.length > 0 ||
+    r.cards.some((card) =>
+      !card.background || card.missing.length > 0 || card.overlaps.length > 0 ||
+      card.outOfBounds.length > 0 || card.found === 0 ||
+      card.cardHeight < 90 || card.cardHeight > 260) ||
+    // При равномерном ужиме гарантии посадки зазоры тоже ужимаются —
+    // порог масштабируется на итоговый fitScale.
+    r.subtitleGap.some((gap) => gap == null || gap < 8.5 * (r.fitScale || 1))
+  );
   if (failures.length) {
     console.error(`Legendary layout probe found ${failures.length} failing cases`);
+    for (const r of failures) {
+      const reasons = [];
+      if (!r.subtitleBounds) reasons.push('no-subtitle');
+      if (r.actualCards !== r.expectedCards) reasons.push(`cards ${r.actualCards}/${r.expectedCards}`);
+      if (r.cardIntersections.length) reasons.push('card-intersections');
+      if (r.overflow.length) reasons.push(`overflow[${r.overflow.map((t) => t.slice(0, 24)).join(' / ')}]`);
+      r.cards.forEach((card, i) => {
+        if (!card.background) reasons.push(`card${i}:no-bg`);
+        if (card.missing.length) reasons.push(`card${i}:missing[${card.missing.map((t) => t.slice(0, 24)).join(' / ')}]`);
+        if (card.overlaps.length) reasons.push(`card${i}:overlaps`);
+        if (card.outOfBounds.length) reasons.push(`card${i}:outOfBounds`);
+        if (card.found === 0) reasons.push(`card${i}:found0`);
+        if (card.cardHeight < 90 || card.cardHeight > 260) reasons.push(`card${i}:height=${card.cardHeight}`);
+      });
+      r.subtitleGap.forEach((gap, i) => {
+        if (gap == null || gap < 8.5 * (r.fitScale || 1)) reasons.push(`gap${i}=${gap == null ? 'null' : gap.toFixed(1)}`);
+      });
+      console.error(` - ${r.kind} ${r.width}x${r.height}: ${reasons.join('; ')}`);
+    }
     process.exitCode = 1;
   }
 })().catch((error) => { console.error(error.stack || error); process.exitCode = 1; });

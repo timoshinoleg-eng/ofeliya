@@ -10,6 +10,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 
@@ -97,7 +98,7 @@ const layoutModule = await (async () => {
     outfile: bundle,
     logLevel: 'warning',
   });
-  return import(bundle);
+  return import(pathToFileURL(bundle).href);
 })();
 
 /**
@@ -554,6 +555,8 @@ try {
       legendaryIds: [],
       stageBuilds: {},
       newAchievements: [],
+      newCodexEntries: [],
+      nearestGoal: { line1: 'Следующий забег: Переживи 5 минут', line2: 'В этом забеге: 00:42 / 05:00' },
       records: { timeRecord: true, killsRecord: true, levelRecord: true },
     };
 
@@ -635,9 +638,9 @@ try {
 
     // The records the run opened are named once, and the plate is a way into
     // the codex.
-    const withEntries = await renderResult({ ...baseResult, newAchievements: ['first-contact'] });
+    const withEntries = await renderResult({ ...baseResult, newAchievements: ['first-contact'], newCodexEntries: [{ kind: 'legendary', id: 'zero-point' }] });
     assert.ok(
-      withEntries.overlayTexts.some((t) => t.startsWith('★ Открыто в Кодексе: +1 запись')),
+      withEntries.overlayTexts.includes('ОТКРЫЛОСЬ В КОДЕКСЕ') && withEntries.overlayTexts.some((t) => t.includes('НУЛЕВАЯ ТОЧКА')),
       `the codex plate is wrong: ${withEntries.overlayTexts.join(' | ')}`
     );
     assert.ok(

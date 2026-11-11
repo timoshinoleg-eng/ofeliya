@@ -20,6 +20,13 @@ export const MIN_TOUCH = 44;
 export interface MenuLayoutFlags {
   /** A checkpoint exists: the primary action becomes "resume" and gains a secondary. */
   hasCheckpoint: boolean;
+  /**
+   * A finished run waits in the registry (`lastRunResult`): the menu gains
+   * a secondary "back to result" action. Never together with a checkpoint
+   * in practice — `finish()` clears the checkpoint — but the layout treats
+   * the band as one slot shared by both.
+   */
+  hasReturn: boolean;
   /** The player record strip has content. */
   hasRecord: boolean;
   /** How many lines the record strip needs. */
@@ -123,7 +130,7 @@ export function computeMenuLayout(
   const recordHeight = flags.hasRecord
     ? Math.ceil(recordFont * 1.35 * Math.max(1, flags.recordLines))
     : 0;
-  const secondary = flags.hasCheckpoint ? secondaryHeight : 0;
+  const secondary = flags.hasCheckpoint || flags.hasReturn ? secondaryHeight : 0;
   // The challenge band is its own band: the record line and the challenge must
   // never share a slot, or they overlap on a compact viewport. On a compact
   // viewport the card is tighter, so the hero keeps more of its room in the

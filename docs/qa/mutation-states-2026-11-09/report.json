@@ -1,0 +1,67 @@
+{
+  "base": "main 2bd6320",
+  "url": "http://127.0.0.1:5199/",
+  "sizes": [
+    {
+      "width": 390,
+      "height": 844,
+      "states": {
+        "A": {
+          "cards": 3,
+          "clipped": []
+        },
+        "Atrigger": {
+          "hp": 1,
+          "xp": 33,
+          "enemiesLeft": 0
+        },
+        "B": {
+          "cards": 3,
+          "clipped": []
+        },
+        "Bmid": {
+          "clipped": []
+        },
+        "C": {
+          "cards": 3,
+          "clipped": [],
+          "resizeObservation": {
+            "displayW": 320,
+            "displayH": 568,
+            "scaleW": 320,
+            "scaleH": 568
+          },
+          "chainEligible": [
+            "lysis-chain",
+            "zero-point",
+            "core-predator",
+            "last-carrier"
+          ]
+        },
+        "qaParamB": {
+          "choices": [
+            "magnet",
+            "infect",
+            "lysis"
+          ]
+        },
+        "trophy-fresh": {
+          "cards": 2,
+          "clipped": []
+        },
+        "trophy-one": {
+          "cards": 2,
+          "clipped": []
+        },
+        "trophy-used": {
+          "cards": 2,
+          "clipped": []
+        },
+        "trophy-rhythm": {
+          "cards": 2,
+          "clipped": []
+        }
+      }
+    }
+  ]
+}

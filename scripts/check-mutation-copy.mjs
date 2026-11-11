@@ -30,8 +30,21 @@ for (const title of ['РНК-АФФИНИТЕТ', 'МЕМБРАННЫЙ ИМПУ
 }
 
 assert(evolutions.includes("recipe: 'МЕМБРАННЫЙ ИМПУЛЬС III + РНК-АФФИНИТЕТ II'"), 'singularity recipe copy must match its actual prerequisites');
-assert(ui.includes('.text(tx, descY, def.desc,'), 'level-up cards must render the player-facing description');
+assert(evolutions.includes("ids: ['nova'], target: 3"), 'singularity recipe steps must name the nova branch');
+assert(evolutions.includes("ids: ['magnet'], target: 2"), 'singularity recipe steps must name the magnet branch');
+assert(evolutions.includes("ids: ['speed', 'rate'], target: 2"), 'halo alternative branch (speed or rate) must be a recipe step');
+assert(ui.includes('getUpgradeBeforeAfter(gs.runState, def)'), 'level-up cards must compute «было → стало» rows from the live run state');
+assert(ui.includes('formatMutationStatValue('), 'level-up stat rows must attach units through the catalog formatter');
+assert(ui.includes('LEGENDARY_CARD_DETAILS[def.legendaryId]'), 'the last-carrier card must render its structured condition/effect/price copy');
+assert(ui.includes('LEVELUP_COPY.title'), 'the level-up title must come from the copy catalog');
+assert(ui.includes('LEVELUP_COPY.hint'), 'the level-up hint must come from the copy catalog');
 assert(!ui.includes('if (!evolution && def.evolutionHint)'), 'level-up cards must prioritize immediate effects over evolution arrows');
 assert(ui.includes('`УРОВЕНЬ ${progress.next}/${progress.max}`'), 'level-up progress must use a clear level label');
+assert(ui.includes('getRecipeProgress(gs.runState, def.evolutionHint, def)'), 'recipe blocks must be computed from the live run state');
+assert(ui.includes('TROPHY_COPY.subtitle'), 'the trophy transition line must come from the copy catalog');
+assert(ui.includes('TROPHY_COPY.rule(cards.length)'), 'the one-pick rule must reflect the actual offer count');
+assert(ui.includes('trophySlotNote(gs.runState.run.legendaryIds.size)'), 'the trophy footnote must depend on the run state');
+assert(!ui.includes('Синергия'), 'the synergy arrow row is replaced by the full recipe block');
+assert(!ui.includes('выбери мутацию для СЕРДЦА'), 'the old trophy subtitle must be replaced by the transition line');
 
 console.log('mutation clarity copy contract: ok');

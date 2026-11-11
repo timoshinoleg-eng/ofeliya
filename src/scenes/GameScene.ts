@@ -56,6 +56,8 @@ import { readControlMode, type ControlMode } from '../game/ControlMode';
 import { generateRunSeed, RunRng } from '../game/RunRng';
 import { QaPerfOverlay } from '../game/qaPerf';
 import { parseQaHide, qaHideLabel, toggleQaHide, type QaHideGroup } from '../game/qaHide';
+import { applyQaMutationFixture, parseQaMutationState } from '../game/qaMutationStates';
+import { applyQaTrophyFixture, parseQaTrophyState } from '../game/qaTrophyStates';
 import { ImpactDirector } from '../game/ImpactDirector';
 import { Player } from '../game/Player';
 import { Enemy } from '../game/Enemy';
@@ -63,6 +65,7 @@ import { Bullet } from '../game/Bullet';
 import { Gem } from '../game/Gem';
 import { FeatureFlags } from '../game/FeatureFlags';
 import type { RunResult, RunSnapshot } from '../game/RunContracts';
+import { computeNewCodexEntries } from '../game/runCodexOpenings';
 import { RunMilestones } from '../game/RunMilestones';
 import { RunState } from '../game/RunState';
 import {
@@ -124,8 +127,11 @@ import {
   collectLifetimeStats,
   getMetaAchievementDef,
   grantAchievementSkin,
+  metaMilestoneProgress,
   unlockMetaAchievements,
 } from '../game/achievements/MetaAchievements';
+import { assessRunIdentity, masteryTracks } from '../game/RunIdentity';
+import { computeNextGoal } from '../game/runNextGoal';
 import { isBoosterActive, recordQuestCompleted, recordRunEnd, recordStreak } from '../game/meta/MetaWallet';
 import { grantMetaRna, loadLabState } from '../game/lab/LabState';
 import { applyLabRunModifiers } from '../game/lab/LabModifiers';
@@ -623,6 +629,9 @@ export class GameScene extends Phaser.Scene {
 
     this.registry.set('joy', { x: 0, y: 0 });
     this.registry.set('runResult', null);
+    // A fresh run retires the previous finished run: the menu must not
+    // offer a return to a result the player has already left behind.
+    this.registry.remove('lastRunResult');
     this.registry.set('run', this.snapshot());
     this.saveCheckpointNow();
     if (!resume) {
@@ -669,6 +678,10 @@ export class GameScene extends Phaser.Scene {
     if (import.meta.env.DEV || import.meta.env.VITE_QA_TOOLS === '1') {
       const hide = parseQaHide(window.location.search);
       this.qaHide = hide;
+      // QA instrumentation first: the perf overlay and the render-split toggle
+      // buttons must stay close to the gate (source-contract in
+      // tests/qa-perf-overlay.mjs), so the fixed-state fixtures below cannot
+      // push the construction out of the gated block.
       this.qaPerf = new QaPerfOverlay(this, () => ({
         enemies: this.enemies.countActive(true),
         bullets: this.bullets.countActive(true),
@@ -678,6 +691,31 @@ export class GameScene extends Phaser.Scene {
       }), qaHideLabel(hide));
       if (hide.size > 0) this.applyQaHide(hide);
       this.createQaToggleButtons();
+      // QA fixed mutation-choice states: ?qaMutation=A|B|C opens the agreed
+      // fixed offer through the REAL choice path (pendingChoices +
+      // awaitingChoice -> UIScene level-up modal). Stacks go through the real
+      // card apply(); picking, pause and return to battle stay ordinary.
+      const qaMutation = parseQaMutationState(window.location.search);
+      if (qaMutation) {
+        applyQaMutationFixture(this.runState, qaMutation);
+        this.pendingChoices = [...qaMutation.choices];
+        this.awaitingChoice = true;
+      }
+      // QA fixed trophy states: ?qaTrophy=fresh|one|used|rhythm opens the
+      // boss-trophy screen through the REAL choice path with the legendary
+      // reward flag, so subtitle/rule/footnote/cards render exactly as after
+      // «ИММУННЫЙ ПРАЙМ». Choice, ceremony and return to battle stay ordinary.
+      const qaTrophy = parseQaTrophyState(window.location.search);
+      if (qaTrophy) {
+        applyQaTrophyFixture(this.runState, qaTrophy);
+        if (qaTrophy.stage === 'heart') {
+          this.runState.resetStageProgression({ id: 'heart', order: 2 });
+        }
+        if (qaTrophy.carrierSpent) this.lastCarrierUsed = true;
+        this.pendingChoices = [...qaTrophy.choices];
+        this.awaitingChoice = true;
+        this.legendaryRewardPending = true;
+      }
     }
 
     // Mobile WebViews can discard a retained page without another animation frame.
@@ -2693,6 +2731,16 @@ export class GameScene extends Phaser.Scene {
     const stage = this.runState.stage;
     const evolutions = [...run.evolutionsSeen];
     const boss1ClearMs = run.bossClearTimesMs['immune-prime'] ?? 0;
+    // The Codex diff is taken against the save as it was BEFORE this run's
+    // choices are merged into it; after recordRun the diff is empty.
+    // SaveSystem.get() returns a copy, so the snapshot is stable.
+    const preSave = SaveSystem.get();
+    const newCodexEntries = computeNewCodexEntries(
+      [...run.legendaryIds],
+      evolutions,
+      preSave.legendarySeen,
+      preSave.evolutionsSeen
+    );
     const records = SaveSystem.recordRun(
       win,
       run.timeMs,
@@ -2745,6 +2793,32 @@ export class GameScene extends Phaser.Scene {
     }
     this.milestones.reset();
     this.registry.set('run', this.snapshot());
+    // The nearest goal is computed once, from the post-run state, and stored
+    // in the result: the quest snapshot after tick/end (the same numbers the
+    // QuestBoard shows), the lifetime stats after every accrual (recordRun,
+    // recordRunEnd, recordStreak, recordQuestCompleted — metaStats above),
+    // and the mastery tracks from the post-run seen sets. A re-show reuses
+    // it; nothing recomputes it. The identity input is the same object the
+    // result screen's archetype is computed from.
+    const runIdentity = assessRunIdentity({
+      stacks: { ...stage.stacks },
+      stageBuilds: run.stageBuilds,
+      evolutions,
+      legendaryIds: [...run.legendaryIds],
+      hostCellsInfected: run.hostCellsInfected,
+    });
+    const saveAfterRun = SaveSystem.get();
+    const nearestGoal = computeNextGoal({
+      questProgress: this.quests.snapshot().progress,
+      milestones: metaMilestoneProgress(metaStats),
+      mastery: {
+        identityId: runIdentity.id,
+        tracks: masteryTracks({
+          evolutionsSeen: saveAfterRun.evolutionsSeen,
+          legendarySeen: saveAfterRun.legendarySeen,
+        }),
+      },
+    });
     const result: RunResult = {
       win,
       reason,
@@ -2765,6 +2839,7 @@ export class GameScene extends Phaser.Scene {
       stacks: { ...stage.stacks },
       evolutions,
       legendaryIds: [...run.legendaryIds],
+      newCodexEntries,
       stageBuilds: Object.fromEntries(
         Object.entries(run.stageBuilds).map(([id, build]) => [
           id,
@@ -2779,6 +2854,7 @@ export class GameScene extends Phaser.Scene {
       ),
       newAchievements: [...this.newAchievements],
       records,
+      nearestGoal,
     };
     this.registry.set('runResult', result);
     void trackProductEvent(win ? 'win' : 'death', PlatformBridge, {

@@ -46,7 +46,7 @@ try {
   // 1. Rarity words — pinned literals, not read back from the module.
   assert.deepEqual(
     { ...copy.RARITY_LABELS },
-    { common: 'СТАНДАРТ', rare: 'РЕДКИЙ' },
+    { common: 'ОБЫЧНАЯ', rare: 'РЕДКАЯ' },
     'rarity labels'
   );
   assert.deepEqual(
@@ -58,17 +58,17 @@ try {
   // 2. Card header composition for every real family/rarity/kind combination.
   assert.equal(
     copy.mutationCardHeader({ family: 'weapon', rarity: 'common' }),
-    'АГРЕССИЯ · СТАНДАРТ',
+    'ОБЫЧНАЯ МУТАЦИЯ · АГРЕССИЯ',
     'weapon/common header'
   );
   assert.equal(
     copy.mutationCardHeader({ family: 'core', rarity: 'rare' }),
-    'РАСПРОСТРАНЕНИЕ · РЕДКИЙ',
+    'РЕДКАЯ МУТАЦИЯ · РАСПРОСТРАНЕНИЕ',
     'core/rare header'
   );
   assert.equal(
     copy.mutationCardHeader({ family: 'defense', rarity: 'common', kind: 'upgrade' }),
-    'ЗАЩИТА · СТАНДАРТ',
+    'ОБЫЧНАЯ МУТАЦИЯ · ЗАЩИТА',
     'explicit upgrade kind header'
   );
   assert.equal(
@@ -80,6 +80,81 @@ try {
     copy.mutationCardHeader({ family: 'utility', rarity: 'legendary', kind: 'legendary' }),
     'ЛЕГЕНДАРНАЯ МУТАЦИЯ',
     'legendary header ignores family/rarity'
+  );
+
+  // 2a. Copy of the redesigned level-up screen («Био-мембрана»).
+  assert.deepEqual(
+    { ...copy.LEVELUP_COPY },
+    { title: 'ВЫБЕРИ МУТАЦИЮ', hint: 'Нажми на карточку, чтобы выбрать' },
+    'level-up title and the single short hint'
+  );
+  assert.deepEqual(
+    { ...copy.LEGENDARY_CARD_DETAILS['last-carrier'] },
+    {
+      condition: 'Условие: один раз за забег при смертельном уроне',
+      effect: 'Эффект: останется 1 прочности, исчезают все враги, кроме боссов',
+      price: 'При срабатывании: \u221225% прогресса текущего уровня',
+      appearance: 'Облик штамма меняется на 8 с (только визуально)',
+    },
+    'the structured last-carrier form separates condition, effect, price and look'
+  );
+  assert.deepEqual(
+    { ...copy.MUTATION_STAT_UNITS },
+    {
+      'Время заражения': 'мс',
+      'Радиус заражения': 'ед.',
+      'Радиус взрыва': 'ед.',
+      'Радиус подбора РНК': 'ед.',
+    },
+    'only stats with real units carry one'
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(copy.MUTATION_STAT_UNITS, 'Урон взрыва'),
+    false,
+    'explosion damage ships without a unit'
+  );
+  assert.equal(
+    copy.formatMutationStatValue('Время заражения', '1250', '1025'),
+    '1250 → 1025\u00a0мс',
+    'the unit is glued to the number with a non-breaking space'
+  );
+  assert.equal(
+    copy.formatMutationStatValue('Урон взрыва', '26', '33,8'),
+    '26 → 33,8',
+    'a unitless stat renders bare values'
+  );
+
+  // 2b. Trophy screen copy (после «ИММУННОГО ПРАЙМА»): переход, правило, сноска.
+  assert.equal(
+    copy.TROPHY_COPY.subtitle,
+    'ИММУННЫЙ ПРАЙМ подавлен. Кровоток пройден: в Сердце штамм начнёт заново — ' +
+      'уровень 1, прочность 100, мутации заново. Трофей останется с тобой на весь забег.',
+    'the trophy subtitle explains the reset and what persists'
+  );
+  assert.equal(
+    copy.TROPHY_COPY.rule(2),
+    'Выбери одну из двух — вторая исчезнет.',
+    'the one-pick rule names the actual pair'
+  );
+  assert.equal(
+    copy.TROPHY_COPY.rule(1),
+    'Выбери её — другого варианта не будет.',
+    'a single offer keeps the rule honest'
+  );
+  assert.equal(
+    copy.trophySlotNote(0),
+    'Легендарных за забег — не больше двух. Трофей займёт один слот, второй можно найти дальше.',
+    'free slot: the second legendary stays findable'
+  );
+  assert.equal(
+    copy.trophySlotNote(1),
+    'Легендарных за забег — не больше двух. Трофей займёт второй слот — это последняя легендарная этого забега.',
+    'taken slot: the trophy is the last legendary of the run'
+  );
+  assert.equal(
+    copy.trophySlotNote(5),
+    copy.trophySlotNote(1),
+    'any non-zero count means the last slot'
   );
 
   // Every upgrade that can reach a card must produce a non-empty header.
@@ -202,11 +277,40 @@ try {
   assert(ui.includes('MUTATION_CARD_HEADERS.legendary'), 'legendary reward must use the catalog header');
   assert(ui.includes('MUTATION_CARD_HEADERS.evolution'), 'evolution reward must use the catalog header');
   assert(ui.includes('formatBuildSummary(stacks)'), 'build summary must use the catalog formatter');
+  assert(ui.includes('LEVELUP_COPY.title'), 'the level-up title must come from the catalog');
+  assert(ui.includes('LEVELUP_COPY.hint'), 'the level-up hint must come from the catalog');
+  assert(ui.includes('LEGENDARY_CARD_DETAILS'), 'the structured legendary form must come from the catalog');
+  assert(ui.includes('formatMutationStatValue('), 'stat row values must use the catalog formatter');
+  assert(ui.includes('TROPHY_COPY.subtitle'), 'the trophy transition line must come from the catalog');
+  assert(ui.includes('TROPHY_COPY.rule('), 'the one-pick rule must come from the catalog');
+  assert(ui.includes('trophySlotNote('), 'the conditional trophy footnote must come from the catalog');
+  assert(ui.includes('getRecipeProgress('), 'recipe blocks must be computed from the live run state');
+  assert(ui.includes('formatRecipeRow('), 'recipe rows must use the recipe formatter');
+  assert(ui.includes('formatRecipeNote('), 'the recipe note must use the recipe formatter');
+  assert(ui.includes('.heartHint'), 'the trophy heart hints must render from the legendary definition');
+  assert(ui.includes('res.nearestGoal.line1'), 'the result must render the stored goal lines');
+  assert(ui.includes('res.nearestGoal.line2'), 'the result must render the stored goal lines');
   for (const drifted of [
-    "'РЕДКИЙ' : 'СТАНДАРТ'",
+    "'Следующий забег: '",
+    "'В этом забеге: '",
+    "'Лучшее сегодня: '",
+    "'Ближайшая цель: '",
+    "'осталось '",
+  ]) {
+    assert(!ui.includes(drifted), `UIScene still inlines the goal fragment: ${drifted}`);
+  }
+  for (const drifted of [
+    "'ВЫБЕРИ МУТАЦИЮ'",
+    "'Нажми на карточку, чтобы выбрать'",
+    "'При срабатывании: ",
+    "'Облик штамма меняется на 8 с",
+    "condition: 'Условие:",
     "'ЛЕГЕНДАРНАЯ МУТАЦИЯ'",
     "'КРИТИЧЕСКАЯ МУТАЦИЯ'",
     "regen: 'РЕГЕН.'",
+    "'Синергия'",
+    "'ИММУННЫЙ ПРАЙМ подавлен · выбери мутацию для СЕРДЦА'",
+    "'Выбери одну из двух — вторая исчезнет.'",
   ]) {
     assert(!ui.includes(drifted), `UIScene still inlines the drift candidate: ${drifted}`);
   }
@@ -228,6 +332,7 @@ try {
   assert.equal(copy.MENU_COPY.start, 'НАЧАТЬ ЗАРАЖЕНИЕ', 'fresh start action');
   assert.equal(copy.MENU_COPY.resume, 'ПРОДОЛЖИТЬ ЗАБЕГ', 'resume action');
   assert.equal(copy.MENU_COPY.newRun, 'НОВЫЙ ЗАБЕГ', 'new run action');
+  assert.equal(copy.MENU_COPY.returnResult, '← К РЕЗУЛЬТАТУ', 'return to result action');
   assert.equal(
     copy.MENU_COPY.nextRunHint,
     'Для нового забега',
@@ -248,6 +353,22 @@ try {
   assert.equal(copy.RESULT_COPY.legendary, 'ЛЕГЕНДАРНАЯ МУТАЦИЯ', 'the legendary line');
   assert.equal(copy.RESULT_COPY.resumed, 'Тренировка (продолженный забег)', 'the practice chip');
   assert.equal(copy.RESULT_COPY.dailyRank(5), '★ МЕСТО #5 В РЕЙТИНГЕ ДНЯ', 'the daily place');
+  assert.equal(copy.GOAL_COPY.nextRunPrefix, 'Следующий забег: ', 'goal: next-run prefix');
+  assert.equal(copy.GOAL_COPY.thisRunPrefix, 'В этом забеге: ', 'goal: this-run prefix');
+  assert.equal(copy.GOAL_COPY.bestTodayPrefix, 'Лучшее сегодня: ', 'goal: day-best prefix');
+  assert.equal(copy.GOAL_COPY.closestPrefix, 'Ближайшая цель: ', 'goal: closest prefix');
+  assert.equal(copy.GOAL_COPY.doneToday, 'сегодня всё выполнено', 'goal: neutral head');
+  assert.equal(
+    copy.GOAL_COPY.noGoalDetail,
+    'Новые задания появятся завтра — или просто начни новый забег.',
+    'goal: neutral detail'
+  );
+  assert.equal(copy.GOAL_COPY.remainingPrefix, 'осталось ', 'goal: remainder prefix');
+  assert.equal(
+    copy.GOAL_COPY.masteryLine('Снарядный штамм', 1, 'ГИПЕРШИП + ГЕОМЕТРИЯ РАСКОЛА'),
+    'Ветка «Снарядный штамм»: 1 / 2 · ГИПЕРШИП + ГЕОМЕТРИЯ РАСКОЛА',
+    'goal: mastery detail line'
+  );
   assert.deepEqual(
     [...copy.CODEX_COPY.synergyRecipes],
     evolutionRecipes,

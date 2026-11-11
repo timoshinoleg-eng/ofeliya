@@ -1,3 +1,27 @@
+# Mutation screens B/C + boss trophy — 2026-11-11 (5)
+
+Ветка qa/mutation-screen-b-c-trophy, HEAD d847366: пакет приёмки двух P2 завершён. В репозитории scripts/p2-recipe-verify.cjs (воспроизводимая проба: D/E × 320×520/390×844 + gate-off режим); ACCEPTANCE.md финальный (SHA разделены, команды, границы, чек-лист Samsung). Повторено на 43b27ce: 50/50 + 4/4 PASS. Тело PR #278 обновлено. Открытое: физическая приёмка Samsung S20+ (NOT_RUN) — за владельцем; CI на финальном HEAD — ждать зелёного перед сдачей.
+
+# Mutation screens B/C + boss trophy — 2026-11-10 (4)
+
+Ветка qa/mutation-screen-b-c-trophy, HEAD b798156: финальный пакет ревью и приёмки двух P2 сдан. Отчёт docs/qa/p2-recipe-acceptance-2026-11-10/ACCEPTANCE.md (SHA, чеки, способ открыть на телефоне, сценарии D/E, кадры 320×520 основные + 390×844). Браузерная проверка 320×520 ALL PASS (p2-verify.cjs, 18 проверок). Физическая приёмка Samsung S20+ — NOT_RUN, за владельцем. PR #278 Ready for review; новый круг правок — по замечаниям ревью/телефона.
+
+# Mutation screens B/C + boss trophy — 2026-11-10 (3)
+
+Ветка qa/mutation-screen-b-c-trophy, HEAD 5ac0103: телефонные QA-входы для приёмки обоих P2 — ?qaMutation=D (Спутники III + Репликация I + первая Подвижность: альтернативный шаг 1/2 без ложной стрелки) и ?qaMutation=E (Гипершип получен: блок рецепта скрыт на карточке БЕЛКОВЫЕ ШИПЫ). Кадры и короткий чек-лист Samsung: docs/qa/p2-recipe-acceptance-2026-11-10/ (ACCEPTANCE.md + qaMutation-{D,E}-390x844.png). Фикстура QaMutationFixture обросла optional evolutionIds (s.addEvolution до стеков). CI на 5ac0103 зелёный. PR #278 открыт; новый круг правок — по замечаниям ревью/телефона.
+
+# Mutation screens B/C + boss trophy — 2026-11-10 (2)
+
+Ветка qa/mutation-screen-b-c-trophy, HEAD 4627af2: оба P2 ревью закрыты (честный прогноз альтернативного рецепта из симулированного состояния; блок рецепта скрыт для полученной эволюции), регрессионные проверки в tests/mutation-states-data.mjs. CI на 4627af2 полностью зелёный. PR #278 открыт для ревью с базой qa/mutation-screen-states. Открытое без изменений: ревью/мердж — за родителем; приёмка Samsung S20+ — за владельцем.
+
+# Mutation screens B/C + boss trophy — 2026-11-10
+
+Ветка `qa/mutation-screen-b-c-trophy`, HEAD b0e0027 (memory-коммит поверх 344ea89 — CI на нём перезапущен автоматически). PR #278: **Draft снят по запросу владельца (2026-11-10), Ready for review**; CI на 344ea89 был полностью зелёный (build, production-contract, browser-smoke). Развязка: legendary-layout на FreeType-метриках (af2cff3, scale-to-fit цены + squash-ужатие, пороги пробы без изменений) и ui-readability-smoke, красный уже на базе (344ea89, типографские полы 11/12px + «УРОВЕНЬ» 13px + фон ≥124/148). Открытое: ревью и мердж — за родителем; физическая приёмка на Samsung S20+ по QA-адресам из RUNBOOK (?qaMutation=A|B|C, ?qaTrophy=fresh|one|used|rhythm при VITE_QA_TOOLS=1) — NOT_RUN, за владельцем; после приёмки — финальная визуальная доводка B/C.
+
+# Mutation screens B/C + boss trophy — 2026-11-09
+
+Ветка `qa/mutation-screen-b-c-trophy`, HEAD 68fea1b. Замечания Mark из ревью PR #278 закрыты: CI test:qa-perf (перестановка QA-блока, тест не менялся), копи 4 спец-карт до согласованного смысла, штатный переход прогнан новой пробой trophy-transition-probe.cjs (реальный путь без ?qaTrophy, артефакты transition-*.{png,webm}). Зелёное на финальном коде: tsc, build со штампом, mutation-states-data/copy/ui-copy/qa-perf, choice-integrity, mutation-states-probe (оба размера), legendary-layout-probe (88), trophy-transition-probe. Тело PR #278 обновлено. После мержа: физическая приёмка на Samsung S20+ (все QA-адреса: ?qaMutation=A|B|C, ?qaTrophy=fresh|one|used|rhythm при VITE_QA_TOOLS=1) — NOT_RUN, за владельцем; скриншоты/видео телефона приложить к PR. Дальше по экрану мутаций: финальная визуальная доводка B/C за владельцем после приёмки A.
+
 # Donor core part B — 2026-11-04
 
 После мержа: прослушивание на устройстве (тембр ZzFX vs старые blip, особенно спам kill на плотности; throttle 70 мс сохранён). Дальше по части B (не начаты): simplex-noise (дыхание мембран, bake), rough.js (атласный UI, bake-time). ОТКРЫТО (за Mark): прогон протокола #272 на S20+ до состояния лага; решения по PR #169/#177/#208/#245; унификация путей выбора скинов.
