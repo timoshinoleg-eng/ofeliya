@@ -10,6 +10,8 @@ import { CODEX_COPY, MENU_COPY, META_COPY, masteryModeLine, platformLabel } from
 import { fmtInt, joinSegments, toTitleCase } from '../game/UiFormat';
 import { IDENTITY } from '../game/identity';
 import { masteryTracks } from '../game/RunIdentity';
+import type { CodexEntryRef } from '../game/runCodexOpenings';
+import type { LastRunResult } from '../game/LastRunResult';
 import { LEGENDARIES } from '../game/LegendarySystem';
 import { STAGES } from '../game/StageDefinitions';
 import { EVOLUTION_NAMES, type EvolutionId } from '../game/UpgradeSystem';
@@ -149,10 +151,19 @@ export class MenuScene extends Phaser.Scene {
     this.registry.set('challengeTarget', incomingChallenge);
     this.registry.set('duelChallenge', null);
 
+    // A finished run waits behind the Codex transition: its result can be
+    // re-shown without starting the Game scene. The return action takes the
+    // secondary band, which the resume action owns when a checkpoint exists;
+    // the two never coexist in practice (finish() clears the checkpoint),
+    // and the resume action wins the slot if they ever do.
+    const lastRunResult = this.registry.get('lastRunResult') as LastRunResult | null | undefined;
+    const showReturn = Boolean(lastRunResult) && !resumeCheckpoint;
+
     // The run configuration is known before anything is drawn, so the whole menu
     // geometry can be resolved up front by the layout module.
     const layout = computeMenuLayout(W, H, {
       hasCheckpoint: Boolean(resumeCheckpoint),
+      hasReturn: showReturn,
       hasRecord: recordText.length > 0,
       recordLines: recordText.length > 40 ? 2 : 1,
       hasChallenge: Boolean(incomingChallenge || incomingDuelId),
@@ -849,6 +860,38 @@ export class MenuScene extends Phaser.Scene {
       newRunHit.on('pointerup', activateNewRun);
       keyboard.add(newRunHit, () => MENU_COPY.newRun, activateNewRun);
     }
+
+    if (showReturn) {
+      // Back to the finished run's result, shown without starting the Game
+      // scene: the UI scene renders the saved snapshot on top of the menu.
+      // `launch` (not `start`) keeps the menu alive underneath, so the
+      // result's own "В МЕНЮ" button can bring the player back here.
+      const returnW = Math.min(layout.contentWidth, 220);
+      const returnHit = this.add
+        .rectangle(W / 2, layout.secondaryY, returnW, layout.secondaryHeight, VISUAL.panelRaised, 0.9)
+        .setStrokeStyle(1, COLORS.cyan, 0.45)
+        .setDepth(7)
+        .setName('ofeliya-menu-return-result')
+        .setInteractive({ useHandCursor: true });
+      this.add
+        .text(W / 2, layout.secondaryY, MENU_COPY.returnResult, {
+          fontFamily: FONT,
+          fontSize: layout.compact ? '11px' : '12px',
+          fontStyle: 'bold',
+          color: '#8fe8ff',
+          letterSpacing: 1,
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setDepth(8);
+      const activateReturn = () => {
+        Sfx.play('click');
+        PlatformBridge.haptic('medium');
+        this.scene.launch('UI');
+      };
+      returnHit.on('pointerup', activateReturn);
+      keyboard.add(returnHit, () => MENU_COPY.returnResult, activateReturn);
+    }
     // ---- Navigation grid --------------------------------------------------
     // The six meta destinations are a 3x2 grid. A third row was measured first
     // and rejected: it costs 48px the compact menu does not have (resume+record
@@ -1135,17 +1178,30 @@ export class MenuScene extends Phaser.Scene {
     });
 
     // The result screen can send the player into the codex: the flag is consumed
-    // by the menu that opens next.
-    if (this.registry.get('openCodexOnMenu') === true) {
+    // by the menu that opens next. The optional entry ref (set together with
+    // the flag by a tap on an opening row) picks the tab and the highlighted
+    // entry; without it the codex opens on its default tab, as before.
+    // A codex-transition entry is a pass-through, not a menu visit: the
+    // player came to view an entry and go back to the result, so the daily
+    // reward modal must not auto-show on this entry (see below).
+    const openedCodex = this.registry.get('openCodexOnMenu') === true;
+    if (openedCodex) {
       this.registry.remove('openCodexOnMenu');
-      this.showCodex();
+      const entry = this.registry.get('openCodexEntry') as CodexEntryRef | null | undefined;
+      this.registry.remove('openCodexEntry');
+      this.showCodex(entry ?? null);
     }
 
     // Phase 3 (port): daily reward — auto-show the daily modal when a
     // server-anchored daily run was played today and the reward is unclaimed.
     // The modal re-appears on the next menu entry until claimed; closing it
     // with ✕ only dismisses it for this entry.
-    if (FeatureFlags.get('retention.quests') && getDailyStatus().canClaim) {
+    // Not on a codex-transition entry: the modal (depth 61, full-screen dim)
+    // sits above the Codex (depth 40) and above the «← К РЕЗУЛЬТАТУ» button,
+    // so it would cover the return action the player came back for. The
+    // reward is not lost — canClaim stays true and the modal shows on the
+    // next direct menu entry.
+    if (FeatureFlags.get('retention.quests') && getDailyStatus().canClaim && !openedCodex) {
       this.time.delayedCall(900, () => {
         if (!this.scene.isActive()) return;
         showDailyModal(
@@ -1261,7 +1317,12 @@ export class MenuScene extends Phaser.Scene {
     this.skinGallery = showSkinGallery(this, () => { this.skinGallery = null; });
   }
 
-  private showCodex(): void {
+  /**
+   * Opens the codex. With an entry ref (from a result-screen opening row),
+   * the codex starts on that entry's tab with the entry highlighted;
+   * without one it opens on the synergies tab, as before.
+   */
+  private showCodex(entry: CodexEntryRef | null = null): void {
     if (this.codexOverlay || this.socialHub || this.questBoard || this.collectionBoard) return;
 
     const W = this.scale.width;
@@ -1313,7 +1374,7 @@ export class MenuScene extends Phaser.Scene {
     overlay.add(body);
 
     type CodexPage = 'synergies' | 'legendary' | 'mastery';
-    let page: CodexPage = 'synergies';
+    let page: CodexPage = entry?.tab ?? 'synergies';
     const tabs: Array<{
       id: CodexPage;
       label: string;
@@ -1327,6 +1388,31 @@ export class MenuScene extends Phaser.Scene {
       ['legendary', 'ЛЕГЕНДАРНЫЕ', W / 2],
       ['mastery', 'МАСТЕРСТВО', W / 2 + 104],
     ];
+
+    // A newly opened entry gets a gold outline and a «НОВОЕ» badge so the
+    // player lands on the exact row the result screen named. The badge is
+    // named for the QA probe; it renders only on the entry's own tab.
+    const highlightEntry = (id: string, surfaceY: number, surfaceH: number, titleY: number): void => {
+      if (entry?.id !== id) return;
+      body.add(
+        this.add
+          .rectangle(W / 2, surfaceY, panelW - 34, surfaceH)
+          .setFillStyle(0x000000, 0)
+          .setStrokeStyle(2, VISUAL.warning, 1)
+      );
+      body.add(
+        this.add
+          .text(W / 2 + (panelW - 34) / 2 - 8, titleY, 'НОВОЕ', {
+            fontFamily: UI_FONT,
+            fontSize: `${compact ? 10 : 11}px`,
+            fontStyle: 'bold',
+            color: VISUAL_TEXT.warning,
+          })
+          .setOrigin(1, 0)
+          .setResolution(2)
+          .setName(`ofeliya-codex-new-badge-${id}`)
+      );
+    };
 
     const render = () => {
       body.removeAll(true);
@@ -1384,6 +1470,7 @@ export class MenuScene extends Phaser.Scene {
             { fill: VISUAL.panelRaised, accent: found ? VISUAL.warning : VISUAL.line, detail: 'quiet' },
           );
           body.add(row);
+          highlightEntry(id, y + (compact ? 24 : 28), compact ? 62 : 72, y);
           // A locked synergy names its own recipe: three identical "not open"
           // cards told the player nothing.
           addText(
@@ -1412,6 +1499,7 @@ export class MenuScene extends Phaser.Scene {
           body.add(createSpecimenSurface(this, W / 2, y + (compact ? 16 : 18), panelW - 34, compact ? 44 : 49, {
             fill: VISUAL.panelRaised, accent: found ? VISUAL.warning : VISUAL.line, detail: 'quiet',
           }));
+          highlightEntry(def.id, y + (compact ? 16 : 18), compact ? 44 : 49, y);
           addText(
             left + 28,
             y,

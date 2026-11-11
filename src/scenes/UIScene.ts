@@ -18,6 +18,9 @@ import { Juice } from '../game/Juice';
 import { VISUAL, VISUAL_TEXT } from '../ui/visualTokens';
 import { createSpecimenSurface, drawSpecimenSurface } from '../ui/specimenSurface';
 import { createResultReport } from '../ui/ResultReport';
+import { MIN_TOUCH } from '../ui/menuLayout';
+import { achievementSummary } from '../game/AchievementSystem';
+import { codexEntryRef, type NewCodexEntry } from '../game/runCodexOpenings';
 import { getEvolutionDef } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
 import { phaseTransitionPulse } from '../game/BossPhaseCeremony';
@@ -29,6 +32,7 @@ import { getLegendaryDefinition, type LegendaryId } from '../game/LegendarySyste
 import { TwinStickControls } from '../game/TwinStickControls';
 import { readControlMode, type ControlMode } from '../game/ControlMode';
 import type { RunResult, RunSnapshot } from '../game/RunContracts';
+import type { LastRunResult } from '../game/LastRunResult';
 import {
   EVOLUTION_NAMES,
   UPGRADES,
@@ -70,7 +74,7 @@ import {
   type RunTokenGrant,
 } from '../systems/ScoreClient';
 import { createFixedSeedDuel, submitDuelAttempt, trackDuelEvent } from '../systems/DuelClient';
-import { clearDailyIntent, readDailyIntent, resolveDailyResultBranch } from '../game/DailyRunIntent';
+import { clearDailyIntent, readDailyIntent, resolveDailyResultBranch, type DailyResultBranch } from '../game/DailyRunIntent';
 import { OnboardingState, type OnboardingStepId } from '../systems/onboardingState';
 import { buildDailyShareSuffix, recordDailyResult } from '../systems/DailyHistory';
 import { trackProductEvent } from '../systems/AnalyticsClient';
@@ -558,6 +562,25 @@ export class UIScene extends Phaser.Scene {
       this.hideModal();
       this.hideStageTransition();
       this.showGameOver(res);
+    }
+
+    // Return from the Codex: the Game scene is stopped, so there is no
+    // runResult anymore — the snapshot saved at the opening tap is the only
+    // copy. It renders through the re-show path: no submit, no video, no
+    // re-run of finish. A fresh run clears the snapshot in GameScene.create().
+    if (!res && !this.overShown) {
+      const last = this.registry.get('lastRunResult') as LastRunResult | undefined | null;
+      if (last) {
+        this.overShown = true;
+        this.hideModal();
+        this.hideStageTransition();
+        this.renderGameOver(last.result, {
+          reshow: true,
+          dailyBranch: last.dailyBranch,
+          duelChallenge: last.duelChallenge,
+          challengeTarget: last.challengeTarget,
+        });
+      }
     }
   }
 
@@ -2632,22 +2655,39 @@ export class UIScene extends Phaser.Scene {
     }
   }
 
-  private renderGameOver(res: RunResult): void {
+  // A re-show renders a saved snapshot after the Codex transition: the Game
+  // scene is stopped, so the run must NOT be submitted again, the video
+  // interstitial must NOT play, and the daily intent/ticket are already gone
+  // (the first render cleared them). The caller passes the branch resolved
+  // at the first render, so a daily result cannot re-render as ranked.
+  // The duel challenge and the challenge target come from the snapshot too:
+  // the Menu's create() resets both when it starts after the transition.
+  private renderGameOver(
+    res: RunResult,
+    opts?: { reshow?: boolean; dailyBranch?: DailyResultBranch; duelChallenge?: DuelChallengeSnapshot | null; challengeTarget?: ChallengePayload | null }
+  ): void {
     this.uiBlocked = true;
-    const duelChallenge = this.registry.get('duelChallenge') as DuelChallengeSnapshot | null | undefined;
+    const duelChallenge = opts?.reshow
+      ? (opts.duelChallenge ?? null)
+      : (this.registry.get('duelChallenge') as DuelChallengeSnapshot | null | undefined);
     const dailyIntent = readDailyIntent(this.registry);
     const dailyTicket =
       (this.registry.get('dailyTicket') as DailyRunTicket | null | undefined) ?? null;
-    const dailyBranch = resolveDailyResultBranch({
+    const dailyBranch = opts?.dailyBranch ?? resolveDailyResultBranch({
       resumed: res.resumed,
       dailyIntent,
       ticket: dailyTicket,
       runSeed: res.runSeed,
       now: Date.now(),
     });
+    // A daily result (a valid ticket, or a blocked intent) is never a ranked
+    // standard one. The branch and the intent agree on the first render
+    // ('inactive' exactly when the intent is null, given a non-resumed run),
+    // so the re-show can read the branch instead of the cleared intent.
+    const isDailyResult = dailyBranch === 'daily' || dailyBranch === 'blocked';
     const standardFresh = res.difficultyId === 'standard' && !res.resumed;
     // A daily-launched run must never render global-ranking semantics.
-    const ranked = standardFresh && !duelChallenge && dailyIntent === null;
+    const ranked = standardFresh && !duelChallenge && dailyBranch === 'inactive';
     const duelCreatable = standardFresh && res.win;
     const W = this.scale.width;
     const H = this.scale.height;
@@ -2660,8 +2700,12 @@ export class UIScene extends Phaser.Scene {
     this.resultViewport = { width: W, height: H };
 
     c.add(
+      // Fully opaque: the scene beneath is the paused Game on the first
+      // show and the live Menu on a re-show after a Codex return, and a
+      // translucent scrim lets the Menu's bright primary button bleed
+      // through over the opening rows.
       this.add
-        .rectangle(W / 2, H / 2, W, H, VISUAL.ink, 0.95)
+        .rectangle(W / 2, H / 2, W, H, VISUAL.ink, 1)
         .setName('ofeliya-result-scrim')
         .setInteractive()
     );
@@ -2780,6 +2824,89 @@ export class UIScene extends Phaser.Scene {
       );
       detailY += compact ? 23 : 27;
     }
+    // The entries this run opened in the Codex, named one by one, right after
+    // the run list: they are the newest information on the screen, so they
+    // sit above the archetype, the mode chip and the submit status — on a
+    // 320px viewport they are visible without scrolling. Each entry is two
+    // report rows (name + tab line) with one shared tap: the pair is a 44px
+    // target, and the tap opens the Codex on that entry's tab.
+    // The tap zones are fitted after createResultReport repositions the rows.
+    const openingRows: Array<{
+      name: Phaser.GameObjects.Text;
+      sub: Phaser.GameObjects.Text;
+      entry: NewCodexEntry;
+    }> = [];
+    if (res.newCodexEntries.length > 0) {
+      detailY += compact ? 24 : 29;
+      c.add(
+        this.add
+          .text(W / 2, detailY, 'ОТКРЫЛОСЬ В КОДЕКСЕ', {
+            fontFamily: FONT,
+            fontSize: compact ? '9px' : '10px',
+            fontStyle: 'bold',
+            color: '#ffe066',
+            align: 'center',
+            wordWrap: { width: W - 42 },
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+      );
+      for (const entry of res.newCodexEntries) {
+        detailY += compact ? 24 : 28;
+        const title =
+          entry.kind === 'evolution'
+            ? EVOLUTION_NAMES[entry.id]
+            : getLegendaryDefinition(entry.id).title;
+        const nameText = this.add
+          .text(W / 2, detailY, `◆ ${title}`, {
+            fontFamily: FONT,
+            fontSize: compact ? '9px' : '10px',
+            fontStyle: 'bold',
+            color: '#ffe066',
+            align: 'center',
+            wordWrap: { width: W - 42 },
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+          .setName(`ofeliya-result-opening-${entry.kind}-${entry.id}-name`);
+        c.add(nameText);
+        detailY += compact ? 24 : 28;
+        const tabLabel = entry.kind === 'evolution' ? 'Синергии' : 'Легендарные';
+        const subText = this.add
+          .text(W / 2, detailY, `Кодекс · ${tabLabel} ›`, {
+            fontFamily: FONT,
+            fontSize: compact ? '9px' : '10px',
+            color: '#8f9ab7',
+            align: 'center',
+            wordWrap: { width: W - 42 },
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+          .setName(`ofeliya-result-opening-${entry.kind}-${entry.id}-sub`);
+        c.add(subText);
+        openingRows.push({ name: nameText, sub: subText, entry });
+      }
+    }
+
+    // Achievements are a different system: they have no Codex entry, so they
+    // are named on their own line and never counted as openings.
+    if (res.newAchievements.length > 0) {
+      detailY += compact ? 24 : 29;
+      c.add(
+        this.add
+          .text(W / 2, detailY, `★ Достижение: ${achievementSummary(res.newAchievements)}`, {
+            fontFamily: FONT,
+            fontSize: compact ? '9px' : '10px',
+            fontStyle: 'bold',
+            color: '#b8f3ff',
+            align: 'center',
+            wordWrap: { width: W - 42 },
+          })
+          .setOrigin(0.5)
+          .setResolution(2)
+          .setName('ofeliya-result-achievement')
+      );
+    }
     // The archetype is a deterministic classification of the build that actually
     // emerged, so it can be named. The tags are only meaningful for a focused
     // build; a hybrid build has no single set of signals.
@@ -2808,6 +2935,35 @@ export class UIScene extends Phaser.Scene {
     );
 
     detailY += compact ? 22 : 25;
+    // Keep the goal visible above the actions on compact screens.
+    const goalLine = this.add
+      .text(W / 2, detailY, res.nearestGoal.line1, {
+        fontFamily: FONT,
+        fontSize: '11px',
+        fontStyle: 'bold',
+        color: '#b8f3ff',
+        align: 'center',
+        wordWrap: { width: W - 42 },
+      })
+      .setOrigin(0.5)
+      .setResolution(2)
+      .setName('ofeliya-result-goal-line1');
+    c.add(goalLine);
+    detailY += compact ? 20 : 23;
+    c.add(
+      this.add
+        .text(W / 2, detailY, res.nearestGoal.line2, {
+          fontFamily: FONT,
+          fontSize: compact ? '9px' : '10px',
+          color: '#8f9ab7',
+          align: 'center',
+          wordWrap: { width: W - 42 },
+        })
+        .setOrigin(0.5)
+        .setResolution(2)
+        .setName('ofeliya-result-goal-line2')
+    );
+    detailY += compact ? 20 : 23;
     c.add(
       this.add
         .text(
@@ -2815,7 +2971,7 @@ export class UIScene extends Phaser.Scene {
           detailY,
           resultModeChip({
             resumed: res.resumed,
-            daily: dailyIntent !== null,
+            daily: isDailyResult,
             duel: duelChallenge !== null,
             difficultyId: res.difficultyId,
             platform: PlatformBridge.kind,
@@ -2845,7 +3001,13 @@ export class UIScene extends Phaser.Scene {
       .setResolution(2);
     c.add(scoreStatus);
 
-    if (dailyBranch === 'resumed') {
+    if (opts?.reshow) {
+      // The submit already happened once, before the video interstitial;
+      // its outcome (rank) is not part of RunResult, so the status row
+      // cannot be re-rendered truthfully. Hiding it is the honest option:
+      // the re-show submits nothing, clears nothing and records nothing.
+      scoreStatus.setVisible(false);
+    } else if (dailyBranch === 'resumed') {
       scoreStatus.setText(RESULT_COPY.resumed).setColor('#ffe066');
     } else if (dailyBranch === 'daily' && dailyTicket) {
       // Keep Daily identity through the interstitial so the result screen renders the
@@ -2944,32 +3106,9 @@ export class UIScene extends Phaser.Scene {
       );
     }
 
-    if (res.newAchievements.length > 0) {
-      detailY += compact ? 24 : 29;
-      // The records the run opened are named once, and the plate is a way into
-      // the codex: the player never has to guess where a new record went.
-      const codexPlate = this.add
-        .text(W / 2, detailY, `${META_COPY.codexEntries(res.newAchievements.length)} ›`, {
-          fontFamily: FONT,
-          fontSize: compact ? '9px' : '10px',
-          fontStyle: 'bold',
-          color: '#ffe066',
-          align: 'center',
-          wordWrap: { width: W - 42 },
-        })
-        .setOrigin(0.5)
-        .setResolution(2)
-        .setName('ofeliya-result-codex-entries');
-      codexPlate.setInteractive({ useHandCursor: true });
-      codexPlate.on('pointerup', () => {
-        this.registry.set('openCodexOnMenu', true);
-        this.gs?.scene.stop();
-        this.scene.start('Menu');
-      });
-      c.add(codexPlate);
-    }
-
-    const challengeTarget = this.registry.get('challengeTarget') as ChallengePayload | null | undefined;
+    const challengeTarget = opts?.reshow
+      ? (opts.challengeTarget ?? null)
+      : (this.registry.get('challengeTarget') as ChallengePayload | null | undefined);
     if (challengeTarget) {
       detailY += compact ? 24 : 29;
       const target =
@@ -3029,8 +3168,118 @@ export class UIScene extends Phaser.Scene {
     summarySurface.setPosition(W / 2, (summaryTop + statsBottom + 14) / 2);
     drawSpecimenSurface(summarySurface, W - 28, statsBottom + 14 - summaryTop, {accent: res.win ? VISUAL.host : VISUAL.player, alpha:0.72});
     const reportTop = Math.max(statY + 36, statsBottom + 24);
-    const reportRows = c.list.slice(reportStart).filter((child): child is Phaser.GameObjects.Text => child instanceof Phaser.GameObjects.Text);
-    createResultReport(this, c, reportRows, W / 2, reportTop, W - 32, Math.max(50, y - 55 - reportTop), scoreStatus);
+    if (compact) goalLine.setOrigin(0.5, 1).setPosition(W / 2, y - 30);
+    const goalSpace = compact ? goalLine.height + 8 : 0;
+    const reportRows = c.list.slice(reportStart).filter((child): child is Phaser.GameObjects.Text =>
+      child instanceof Phaser.GameObjects.Text && (!compact || child !== goalLine)
+    );
+    const reportHeight = Math.max(50, y - 55 - reportTop - goalSpace);
+    createResultReport(this, c, reportRows, W / 2, reportTop, W - 32, reportHeight, scoreStatus);
+    // One tap zone per opening: the name and the tab subtitle share a
+    // single zone, at least MIN_TOUCH tall and the full row width. The
+    // zone is a plain rectangle in the report container, so it scrolls
+    // with the rows; its world bounds are read at tap time, so the same
+    // geometry works with and without scrolling. The zone height is a
+    // fixed minimum, never derived from the text: the old design had
+    // two 22px hit areas whose combined span depended on font metrics
+    // (44px on Linux, 43px on Windows Chrome), and whose hit rect was
+    // shifted by the text's displayOriginX, so the right edge of the
+    // row never opened the Codex (the scrim below swallowed the tap).
+    const report = c.getByName('ofeliya-result-report') as Phaser.GameObjects.Container | null;
+    const openingZones: Array<{ zone: Phaser.GameObjects.Rectangle; entry: NewCodexEntry }> = [];
+    if (report && openingRows.length > 0) {
+      for (const { name, sub, entry } of openingRows) {
+        const bandTop = name.y;
+        const bandBottom = sub.y + sub.height;
+        const bandCenter = (bandTop + bandBottom) / 2;
+        const zoneHeight = Math.max(MIN_TOUCH, bandBottom - bandTop);
+        const zone = this.add
+          .rectangle(0, bandCenter, W - 32, zoneHeight, 0xffffff, 0)
+          .setName(`ofeliya-result-opening-zone-${entry.kind}-${entry.id}`);
+        report.add(zone);
+        zone.setPosition(0, bandCenter);
+        openingZones.push({ zone, entry });
+      }
+    }
+    // The report's transparent hit rect covers the visible report area
+    // and sits above the rows (the UI scene runs with topOnly), so it
+    // routes every opening tap, with scrolling and without. A tap
+    // navigates only when it starts and ends inside one zone (same
+    // pointer, almost no movement): a swipe scrolls the report instead,
+    // and releasing outside the zone does nothing. The armed tap is
+    // cancelled the moment the pointer strays beyond the movement limit,
+    // wherever the gesture ends — checking only the release point lets
+    // an out-and-back swipe (38 px out, back to the start) open an entry,
+    // because its end is within the limit of its start. The visible area
+    // is the hit rect itself, so a zone scrolled half out of view cannot
+    // catch a tap on its hidden part. When two zones overlap (a band
+    // shorter than MIN_TOUCH next to another entry), the nearest band
+    // centre wins.
+    const reportHit = c.getByName('ofeliya-result-report-hit') as Phaser.GameObjects.Rectangle | null;
+    if (reportHit && openingZones.length > 0) {
+      if (!reportHit.input) reportHit.setInteractive();
+      // Manhattan tap tolerance, in px: a gesture that moves further than
+      // this at any moment is a swipe, not a tap.
+      const TAP_MOVE_LIMIT = 12;
+      let tap: { id: number; x: number; y: number } | null = null;
+      reportHit.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        tap = { id: pointer.id, x: pointer.x, y: pointer.y };
+      });
+      // The disarm listens on the scene, not on the hit rect: a swipe can
+      // leave the report area mid-gesture (out the left edge and back), and
+      // an object only receives pointermove while the pointer is over it —
+      // a reportHit handler would never see the excursion, so the
+      // out-and-back release would still pass the release-point check.
+      // Removed with the result overlay, so a re-show arms a fresh one.
+      const onTapMove = (pointer: Phaser.Input.Pointer): void => {
+        if (!tap || tap.id !== pointer.id) return;
+        if (Math.abs(pointer.x - tap.x) + Math.abs(pointer.y - tap.y) > TAP_MOVE_LIMIT) tap = null;
+      };
+      this.input.on('pointermove', onTapMove);
+      c.once(Phaser.GameObjects.Events.DESTROY, () => {
+        this.input.off('pointermove', onTapMove);
+      });
+      reportHit.on('pointerupoutside', () => { tap = null; });
+      reportHit.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+        if (!tap || tap.id !== pointer.id) return;
+        const moved = Math.abs(pointer.x - tap.x) + Math.abs(pointer.y - tap.y);
+        tap = null;
+        if (moved > TAP_MOVE_LIMIT) return;
+        const hitBounds = reportHit.getBounds();
+        if (
+          pointer.x < hitBounds.left || pointer.x > hitBounds.right ||
+          pointer.y < hitBounds.top || pointer.y > hitBounds.bottom
+        ) return;
+        let best: { entry: NewCodexEntry; dist: number } | null = null;
+        for (const { zone, entry } of openingZones) {
+          const bounds = zone.getBounds();
+          if (
+            pointer.x >= bounds.left && pointer.x <= bounds.right &&
+            pointer.y >= bounds.top && pointer.y <= bounds.bottom
+          ) {
+            const dist = Math.abs(pointer.y - bounds.centerY);
+            if (!best || dist < best.dist) best = { entry, dist };
+          }
+        }
+        if (!best) return;
+        // Keep the finished run alive across the Codex transition: the Game
+        // SHUTDOWN handler removes `runResult`, and the menu's "back to
+        // result" action needs a copy that survives it. The daily branch,
+        // the duel challenge and the challenge target are snapshotted with
+        // it — the first render clears the intent and the ticket, and the
+        // Menu's create() resets the challenge keys when it starts.
+        this.registry.set('lastRunResult', {
+          result: res,
+          dailyBranch,
+          duelChallenge: duelChallenge ?? null,
+          challengeTarget: challengeTarget ?? null,
+        } satisfies LastRunResult);
+        this.registry.set('openCodexOnMenu', true);
+        this.registry.set('openCodexEntry', codexEntryRef(best.entry));
+        this.gs?.scene.stop();
+        this.scene.start('Menu');
+      });
+    }
     this.button(c, RESULT_COPY.newRun, W / 2, y, true, () => {
       const gameScene = this.gs;
       if (!gameScene) return;
@@ -3039,11 +3288,9 @@ export class UIScene extends Phaser.Scene {
         priorResult: res.win ? 'win' : 'death',
         timeMs: Math.round(res.timeMs),
       });
-      // Result Game is paused. Treat shutdown as a barrier: only start the fresh run after Phaser
-      // has fully completed the old Game teardown. UI stays alive until that point, so the
-      // SceneManager always has an active owner for the queued transition.
-      gameScene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      const startFreshRun = () => {
         this.registry.set('runResult', null);
+        this.registry.remove('lastRunResult');
         if (duelChallenge) {
           this.registry.set('duelChallenge', duelChallenge);
           this.registry.set('runSeedOverride', duelChallenge.runSeed);
@@ -3051,9 +3298,25 @@ export class UIScene extends Phaser.Scene {
           this.registry.set('controlMode', duelChallenge.controlMode);
           void trackDuelEvent(duelChallenge.challengeId, 'rematch', PlatformBridge);
         }
+        // On a re-show the menu is still alive underneath (the UI was
+        // launched over it); a fresh run starts from the run screen, not
+        // from the menu, so the menu goes away like in the normal flow.
+        if (this.scene.isActive('Menu')) this.scene.stop('Menu');
         this.scene.launch('Game');
         this.scene.restart();
-      });
+      };
+      // Result Game is paused. Treat shutdown as a barrier: only start the fresh run after Phaser
+      // has fully completed the old Game teardown. UI stays alive until that point, so the
+      // SceneManager always has an active owner for the queued transition.
+      // A re-shown result has no live Game scene: it was already stopped by
+      // the Codex transition, so its SHUTDOWN event will never fire again
+      // and waiting for it would leave the button dead. Start directly.
+      const gameAlive = this.scene.isActive('Game') || this.scene.isPaused('Game');
+      if (!gameAlive) {
+        startFreshRun();
+        return;
+      }
+      gameScene.events.once(Phaser.Scenes.Events.SHUTDOWN, startFreshRun);
       this.scene.stop('Game');
     }, 'ofeliya-result-retry');
     y += gap;
@@ -3074,7 +3337,7 @@ export class UIScene extends Phaser.Scene {
       // disclaimer or a same-seed promise.
       const legendaryName =
         res.legendaryIds.length > 0 ? getLegendaryDefinition(res.legendaryIds[0]).title : null;
-      const dailySuffix = dailyIntent ? buildDailyShareSuffix({ timeMs: res.timeMs }) : '';
+      const dailySuffix = isDailyResult ? buildDailyShareSuffix({ timeMs: res.timeMs }) : '';
       let shareText = buildShareText({
         win: res.win,
         time: mins,
@@ -3101,7 +3364,7 @@ export class UIScene extends Phaser.Scene {
           if (!ok) {
             this.toast(c, 'Нативный шаринг недоступен в этом клиенте');
           } else {
-            void trackProductEvent('share', PlatformBridge, { kind: 'challenge', runSeed: res.runSeed, daily: Boolean(dailyIntent) });
+            void trackProductEvent('share', PlatformBridge, { kind: 'challenge', runSeed: res.runSeed, daily: isDailyResult });
           }
           if (ok && !link && PlatformBridge.kind === 'max') {
             this.toast(c, 'Ссылка вызова не настроена');
@@ -3113,7 +3376,7 @@ export class UIScene extends Phaser.Scene {
       if (!duelCreatable) {
         void PlatformBridge.shareResult(shareText).then((ok) => {
           if (!ok) this.toast(c, 'Нативный шаринг недоступен в этом клиенте');
-          else void trackProductEvent('share', PlatformBridge, { kind: dailyIntent ? 'daily-result' : 'result', runSeed: res.runSeed, daily: Boolean(dailyIntent) });
+          else void trackProductEvent('share', PlatformBridge, { kind: isDailyResult ? 'daily-result' : 'result', runSeed: res.runSeed, daily: isDailyResult });
         });
         return;
       }

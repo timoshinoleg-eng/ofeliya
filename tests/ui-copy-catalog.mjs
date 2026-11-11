@@ -288,6 +288,17 @@ try {
   assert(ui.includes('formatRecipeRow('), 'recipe rows must use the recipe formatter');
   assert(ui.includes('formatRecipeNote('), 'the recipe note must use the recipe formatter');
   assert(ui.includes('.heartHint'), 'the trophy heart hints must render from the legendary definition');
+  assert(ui.includes('res.nearestGoal.line1'), 'the result must render the stored goal lines');
+  assert(ui.includes('res.nearestGoal.line2'), 'the result must render the stored goal lines');
+  for (const drifted of [
+    "'Следующий забег: '",
+    "'В этом забеге: '",
+    "'Лучшее сегодня: '",
+    "'Ближайшая цель: '",
+    "'осталось '",
+  ]) {
+    assert(!ui.includes(drifted), `UIScene still inlines the goal fragment: ${drifted}`);
+  }
   for (const drifted of [
     "'ВЫБЕРИ МУТАЦИЮ'",
     "'Нажми на карточку, чтобы выбрать'",
@@ -321,6 +332,7 @@ try {
   assert.equal(copy.MENU_COPY.start, 'НАЧАТЬ ЗАРАЖЕНИЕ', 'fresh start action');
   assert.equal(copy.MENU_COPY.resume, 'ПРОДОЛЖИТЬ ЗАБЕГ', 'resume action');
   assert.equal(copy.MENU_COPY.newRun, 'НОВЫЙ ЗАБЕГ', 'new run action');
+  assert.equal(copy.MENU_COPY.returnResult, '← К РЕЗУЛЬТАТУ', 'return to result action');
   assert.equal(
     copy.MENU_COPY.nextRunHint,
     'Для нового забега',
@@ -341,6 +353,22 @@ try {
   assert.equal(copy.RESULT_COPY.legendary, 'ЛЕГЕНДАРНАЯ МУТАЦИЯ', 'the legendary line');
   assert.equal(copy.RESULT_COPY.resumed, 'Тренировка (продолженный забег)', 'the practice chip');
   assert.equal(copy.RESULT_COPY.dailyRank(5), '★ МЕСТО #5 В РЕЙТИНГЕ ДНЯ', 'the daily place');
+  assert.equal(copy.GOAL_COPY.nextRunPrefix, 'Следующий забег: ', 'goal: next-run prefix');
+  assert.equal(copy.GOAL_COPY.thisRunPrefix, 'В этом забеге: ', 'goal: this-run prefix');
+  assert.equal(copy.GOAL_COPY.bestTodayPrefix, 'Лучшее сегодня: ', 'goal: day-best prefix');
+  assert.equal(copy.GOAL_COPY.closestPrefix, 'Ближайшая цель: ', 'goal: closest prefix');
+  assert.equal(copy.GOAL_COPY.doneToday, 'сегодня всё выполнено', 'goal: neutral head');
+  assert.equal(
+    copy.GOAL_COPY.noGoalDetail,
+    'Новые задания появятся завтра — или просто начни новый забег.',
+    'goal: neutral detail'
+  );
+  assert.equal(copy.GOAL_COPY.remainingPrefix, 'осталось ', 'goal: remainder prefix');
+  assert.equal(
+    copy.GOAL_COPY.masteryLine('Снарядный штамм', 1, 'ГИПЕРШИП + ГЕОМЕТРИЯ РАСКОЛА'),
+    'Ветка «Снарядный штамм»: 1 / 2 · ГИПЕРШИП + ГЕОМЕТРИЯ РАСКОЛА',
+    'goal: mastery detail line'
+  );
   assert.deepEqual(
     [...copy.CODEX_COPY.synergyRecipes],
     evolutionRecipes,

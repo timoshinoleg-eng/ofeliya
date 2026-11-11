@@ -5,7 +5,7 @@ import {
   type UpgradeFamily,
   type UpgradeRarity,
 } from './UpgradeSystem';
-import { fmtInt } from './UiFormat';
+import { fmtInt, fmtProgress } from './UiFormat';
 
 /**
  * Player-visible RU copy catalog for interface surfaces that previously carried
@@ -112,6 +112,8 @@ export const MENU_COPY = {
   resume: 'ПРОДОЛЖИТЬ ЗАБЕГ',
   /** Secondary action when a checkpoint exists. */
   newRun: 'НОВЫЙ ЗАБЕГ',
+  /** Secondary action when a finished run waits in the registry: back to its result screen. */
+  returnResult: '← К РЕЗУЛЬТАТУ',
   /**
    * Says that the run-configuration cards belong to the next run.
    *
@@ -207,6 +209,43 @@ export const RESULT_COPY = {
    */
   submitting: 'Отправляю результат…',
   duelSubmitting: 'Отправляю дуэль…',
+} as const;
+
+/**
+ * The nearest-goal lines of the result screen (`RunResult.nearestGoal`).
+ *
+ * The goal is always shown: it names what the next run is for. The fragments
+ * are composed by `computeNextGoal`, never by the renderer — the two lines
+ * are stored in the result and re-shown verbatim.
+ *
+ * The wording follows the next-goal contract: a single-run quest names the
+ * next run and this run's progress («В этом забеге: p / t», never «осталось» —
+ * the progress does not carry over), while a cumulative goal names the honest
+ * remainder («осталось N»).
+ */
+export const GOAL_COPY = {
+  /** Prefix of a single-run quest goal: «Следующий забег: <описание>». */
+  nextRunPrefix: 'Следующий забег: ',
+  /** Prefix of the run's own progress: «В этом забеге: <p> / <t>». */
+  thisRunPrefix: 'В этом забеге: ',
+  /**
+   * Prefix of a day-scoped quest's progress: «Лучшее сегодня: <p> / <t>».
+   * Only `q_nodmg` is day-scoped: its value is the day's best across every
+   * run of the day, so «В этом забеге» would lie about the number after a
+   * weaker second run.
+   */
+  bestTodayPrefix: 'Лучшее сегодня: ',
+  /** Prefix of a mastery goal and of the neutral line: «Ближайшая цель: …». */
+  closestPrefix: 'Ближайшая цель: ',
+  /** The neutral line's head: the day's goals are done. */
+  doneToday: 'сегодня всё выполнено',
+  /** The neutral line's detail: new goals come tomorrow. */
+  noGoalDetail: 'Новые задания появятся завтра — или просто начни новый забег.',
+  /** Prefix of an honest remainder: «осталось <N>». */
+  remainingPrefix: 'осталось ',
+  /** The mastery goal's detail: «Ветка «<ветка>»: <p> / 2 · <цель>». */
+  masteryLine: (label: string, progress: number, objective: string): string =>
+    `Ветка «${label}»: ${fmtProgress(progress, 2)} · ${objective}`,
 } as const;
 
 /**

@@ -117,6 +117,63 @@ try {
   assert(!got.includes('winner'), 'no winner on defeat');
   assert(got.includes('combo_50'), 'combo_50 still unlocks on defeat');
 
+  // --- progress fields agree with the trigger closures ---
+  // `metaMilestoneProgress` is the nearest goal's read of the same defs: for
+  // every milestone, the counter named by `metric` at threshold - 1 must
+  // leave the milestone locked with progress below the threshold, and at the
+  // threshold it must unlock with progress exactly at the threshold. The
+  // table below is the review surface: if a check changes, it changes here.
+  const PROGRESS_SPEC = [
+    { id: 'killer_500', metric: 'totalKills', threshold: 500 },
+    { id: 'killer_1k', metric: 'totalKills', threshold: 1000 },
+    { id: 'killer_10k', metric: 'totalKills', threshold: 10000 },
+    { id: 'killer_100k', metric: 'totalKills', threshold: 100000 },
+    { id: 'runs_3', metric: 'runs', threshold: 3 },
+    { id: 'runs_10', metric: 'runs', threshold: 10 },
+    { id: 'runs_50', metric: 'runs', threshold: 50 },
+    { id: 'runs_100', metric: 'runs', threshold: 100 },
+    { id: 'evo_3', metric: 'evolutionsSeen', threshold: 3 },
+    { id: 'daily_first', metric: 'maxStreak', threshold: 1 },
+    { id: 'streak_3', metric: 'maxStreak', threshold: 3 },
+    { id: 'streak_7', metric: 'maxStreak', threshold: 7 },
+    { id: 'streak_30', metric: 'maxStreak', threshold: 30 },
+    { id: 'quests_10', metric: 'questsCompleted', threshold: 10 },
+    { id: 'quests_50', metric: 'questsCompleted', threshold: 50 },
+    { id: 'stars_1', metric: 'starsSpent', threshold: 1 },
+    { id: 'stars_500', metric: 'starsSpent', threshold: 500 },
+    { id: 'deaths_100', metric: 'deaths', threshold: 100 },
+    { id: 'rna_1k', metric: 'rnaEarned', threshold: 1000 },
+    { id: 'rna_10k', metric: 'rnaEarned', threshold: 10000 },
+    { id: 'combo_50', metric: 'comboBest', threshold: 50 },
+    { id: 'ghost_120', metric: 'maxNoDamageMs', threshold: 120000 },
+    { id: 'winner', metric: 'won', threshold: 1 },
+    { id: 'time_10h', metric: 'timeSecTotal', threshold: 36000 },
+  ];
+  for (const spec of PROGRESS_SPEC) {
+    const below =
+      spec.metric === 'won'
+        ? { ...ZERO_STATS, won: false }
+        : { ...ZERO_STATS, [spec.metric]: spec.threshold - 1 };
+    const at =
+      spec.metric === 'won'
+        ? { ...ZERO_STATS, won: true }
+        : { ...ZERO_STATS, [spec.metric]: spec.threshold };
+    const progressBelow = ma.metaMilestoneProgress(below).find((m) => m.id === spec.id);
+    const progressAt = ma.metaMilestoneProgress(at).find((m) => m.id === spec.id);
+    assert(progressBelow && progressBelow.progress === spec.threshold - 1, `${spec.id} progress below threshold`);
+    assert(progressAt && progressAt.progress === spec.threshold, `${spec.id} progress at threshold`);
+    assert(!ma.checkMetaAchievements(below).includes(spec.id), `${spec.id} locked below threshold`);
+    assert(ma.checkMetaAchievements(at).includes(spec.id), `${spec.id} unlocked at threshold`);
+  }
+  eq(ma.metaMilestoneProgress(ZERO_STATS).length, 24, 'progress list covers the catalog');
+  assert(
+    ma.metaMilestoneProgress(ZERO_STATS).every((m) => m.progress === 0),
+    'zero progress at zero stats'
+  );
+  for (const d of ma.META_ACHIEVEMENTS) {
+    assert(!('metric' in d) && !('threshold' in d), `${d.id} public def has no progress fields`);
+  }
+
   // --- unknown id throws ---
   let threw = false;
   try {
