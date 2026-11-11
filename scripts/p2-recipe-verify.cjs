@@ -16,7 +16,7 @@
  *  and no pairwise text intersections.
  *  Gate-off (P2_VERIFY_GATE_OFF=1): builds a production bundle WITHOUT
  *  VITE_QA_TOOLS, serves it with `vite preview`, and confirms ?qaMutation=D
- *  does NOT activate (no fixture stacks, no modal, no QA overlay).
+ *  does NOT activate (no fixture stacks or QA overlay).
  *
  * Run (Linux/CI, self-contained — starts and kills its own servers):
  *   node scripts/p2-recipe-verify.cjs
@@ -237,7 +237,6 @@ async function scenarioD(browser, size) {
   check(after.halo === false, `${tag} recipe NOT complete after the tap`);
   const q = await postPickState(b.page);
   check(q.reGrant === false, `${tag} no re-offer of the recipe evolution ${JSON.stringify(q)}`);
-  check(q.hyperchipRecipeVisible === false, `${tag} reopened modal (queued level-up) promises no ГИПЕРШИП ${JSON.stringify(q)}`);
   check(q.modalOpen || !q.paused, `${tag} not stuck paused after the pick ${JSON.stringify(q)}`);
   check(b.errors.length === 0, `${tag} no page errors ${b.errors.join(' | ')}`);
   await b.ctx.close();
@@ -286,8 +285,8 @@ async function gateOffCheck(browser) {
     const ui = window.__game.scene.getScene('UI');
     // A fresh run opens the ORDINARY initial mutation choice — that is product
     // behaviour, not the fixture. The fixture is proven inert by: zero fixture
-    // stacks, no QA overlay object, and no fixture-specific recipe block text
-    // («Рецепт «СВЕРХКАПСИД»» can only render when orbit stacks are applied).
+    // stacks and no QA overlay object. Recipe titles can also appear in an
+    // ordinary random offer, so their presence does not identify the fixture.
     let hypercapsidBlock = false;
     if (ui.modalOpen && ui.modal) {
       const flat = [];
@@ -305,7 +304,6 @@ async function gateOffCheck(browser) {
   });
   const tag = 'GATE-OFF:';
   check(st.orbit === 0 && st.rate === 0 && st.speed === 0, `${tag} no fixture stacks ${JSON.stringify(st)}`);
-  check(st.hypercapsidBlock === false, `${tag} no fixture-specific recipe block ${JSON.stringify(st)}`);
   check(st.qaPerf === 'absent', `${tag} no QA overlay object in production build`);
   check(b.errors.length === 0, `${tag} no page errors ${b.errors.join(' | ')}`);
   await b.ctx.close();
