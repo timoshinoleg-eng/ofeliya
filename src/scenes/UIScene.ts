@@ -2939,7 +2939,7 @@ export class UIScene extends Phaser.Scene {
     const goalLine = this.add
       .text(W / 2, detailY, res.nearestGoal.line1, {
         fontFamily: FONT,
-        fontSize: '11px',
+        fontSize: compact ? '10px' : '11px',
         fontStyle: 'bold',
         color: '#b8f3ff',
         align: 'center',
@@ -3169,7 +3169,7 @@ export class UIScene extends Phaser.Scene {
     drawSpecimenSurface(summarySurface, W - 28, statsBottom + 14 - summaryTop, {accent: res.win ? VISUAL.host : VISUAL.player, alpha:0.72});
     const reportTop = Math.max(statY + 36, statsBottom + 24);
     if (compact) goalLine.setOrigin(0.5, 1).setPosition(W / 2, y - 30);
-    const goalSpace = compact ? goalLine.height + 8 : 0;
+    const goalSpace = compact ? goalLine.height + 4 : 0;
     const reportRows = c.list.slice(reportStart).filter((child): child is Phaser.GameObjects.Text =>
       child instanceof Phaser.GameObjects.Text && (!compact || child !== goalLine)
     );
