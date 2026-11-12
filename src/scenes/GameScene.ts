@@ -55,6 +55,13 @@ import { IDENTITY } from '../game/identity';
 import { readControlMode, type ControlMode } from '../game/ControlMode';
 import { generateRunSeed, RunRng } from '../game/RunRng';
 import { QaPerfOverlay } from '../game/qaPerf';
+import { isQaExperimentMode } from '../game/qaExperimentMode';
+import {
+  qaApplyCarryStack,
+  qaCarryStack,
+  resetQaCarryStackRun,
+  setQaCarryStackMutation,
+} from '../game/qaCarryStack';
 import { parseQaHide, qaHideLabel, toggleQaHide, type QaHideGroup } from '../game/qaHide';
 import { applyQaMutationFixture, parseQaMutationState } from '../game/qaMutationStates';
 import { applyQaTrophyFixture, parseQaTrophyState } from '../game/qaTrophyStates';
@@ -412,7 +419,7 @@ export class GameScene extends Phaser.Scene {
     // the capability here, after seed/control are final but before meaningful play.
     // Gameplay never waits for the network: failure degrades to an unranked result.
     this.registry.remove('runTokenGrant');
-    if (!this.resumed && !this.dailyRun && this.difficulty.id === 'standard') {
+    if (!isQaExperimentMode() && !this.resumed && !this.dailyRun && this.difficulty.id === 'standard') {
       const grantSeed = this.runSeed;
       const grantControlMode = this.controlMode;
       void beginRunCapability(PlatformBridge, {
@@ -641,6 +648,16 @@ export class GameScene extends Phaser.Scene {
     // offer a return to a result the player has already left behind.
     this.registry.remove('lastRunResult');
     this.registry.set('run', this.snapshot());
+    // Opt-in full-run comparison. Pair fixtures may still override these
+    // switches after create; every new run starts from its own URL settings.
+    const experimentQa = import.meta.env.VITE_QA_TOOLS === '1';
+    const experimentParams = new URLSearchParams(window.location.search);
+    const useGeometry = experimentQa && experimentParams.get('qaGeometry') === '1';
+    this.qaNoCopyKnockback = useGeometry;
+    this.qaSingleGeneration = useGeometry;
+    this.qaSkipSource = useGeometry;
+    setQaCarryStackMutation(experimentQa && experimentParams.get('qaCarry') === 'multi' ? 'multi' : null);
+    resetQaCarryStackRun();
     this.saveCheckpointNow();
     if (!resume) {
       this.trackComprehensionOnce('run_start', {
@@ -1612,6 +1629,30 @@ export class GameScene extends Phaser.Scene {
     return this.awaitingChoice && this.pendingChoices.some((choice) => choice.id === id);
   }
 
+  /**
+   * QA — задать переносимую мутацию для перехода «Кровоток» -> «Сердце».
+   * Доступно только в dev/QA-сборках (тот же гейт, что у `qaPerf`).
+   */
+  setQaCarryStack(mutationId: string | null): void {
+    if (!(import.meta.env.DEV || import.meta.env.VITE_QA_TOOLS === '1')) return;
+    setQaCarryStackMutation(mutationId);
+  }
+
+  /** QA — снимок состояния переноса (для пробника и телефонного модуля). */
+  qaCarryStackState(): Record<string, unknown> {
+    const q = qaCarryStack();
+    return {
+      enabled: q.enabled,
+      mutationId: q.mutationId,
+      requireSource: q.requireSource,
+      sourceStacks: q.sourceStacks,
+      applied: q.applied,
+      appliedStacks: q.appliedStacks,
+      appliedEffects: q.appliedEffects,
+      appliedId: q.appliedId,
+    };
+  }
+
   chooseUpgrade(id: string): boolean {
     const def = this.pendingChoices.find((c) => c.id === id);
     // Stale or fabricated ids must be a pure no-op: do not burn queued levels, pity,
@@ -2206,6 +2247,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.runState.resetStageProgression(nextStage);
+    // QA — перенос одного стака мутации в новую стадию («Кровоток» -> «Сердце»).
+    // Штатный сброс уже выполнен: уровень, XP, прочность, временные эффекты и
+    // стадийные эволюции обнулены. Переносится ровно один стак той мутации,
+    // которую игрок действительно взял в «Кровотоке». Трофей перехода собирается
+    // ПОСЛЕ этого вызова, и его состав не меняется (условия легендарных читают
+    // `stage.evolutions`, а он остаётся пустым).
+    qaApplyCarryStack(this.runState);
     this.queuedLevels = 0;
     this.awaitingChoice = false;
     this.pendingChoices = [];

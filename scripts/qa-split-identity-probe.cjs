@@ -48,6 +48,7 @@ function browserDriver() {
     }
   }
   candidates.unshift('C:/Program Files/Google/Chrome/Application/chrome.exe');
+  candidates.push('/usr/bin/chromium', '/usr/bin/google-chrome');
   const executablePath = candidates.find((c) => c && fs.existsSync(c));
   if (!executablePath) throw new Error('Chromium not found');
   return { chromium, executablePath };

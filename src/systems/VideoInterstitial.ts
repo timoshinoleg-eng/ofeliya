@@ -29,6 +29,21 @@ const VIDEO_ASSETS: Record<VideoInterstitialId, VideoAsset> = {
   cardiacTitanIntro: { file: '08_cardiac_titan_intro_v2.mp4', durationMs: 3917 },
 };
 
+// Opt-in previews are available only in dedicated QA builds. The original
+// assets remain the default, including in production.
+function selectedVideoAsset(id: VideoInterstitialId): VideoAsset {
+  if (import.meta.env.VITE_QA_TOOLS === '1' && typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('qaVideos') === 'h3') {
+    const previews: Partial<Record<VideoInterstitialId, VideoAsset>> = {
+      bloodstreamToHeart: { file: 'qa-h3-heart.mp4', durationMs: 4459 },
+      immunePrimeIntro: { file: 'qa-h3-prime.mp4', durationMs: 4459 },
+      cardiacTitanIntro: { file: 'qa-h3-titan.mp4', durationMs: 4459 },
+    };
+    return previews[id] ?? VIDEO_ASSETS[id];
+  }
+  return VIDEO_ASSETS[id];
+}
+
 const DEFAULT_START_WATCHDOG_MS = 1800;
 const STALL_WATCHDOG_MS = 2200;
 const MIN_VISIBLE_PROGRESS_SEC = 0.05;
@@ -45,7 +60,7 @@ function assetUrl(id: VideoInterstitialId): string {
   const base = import.meta.env.BASE_URL.endsWith('/')
     ? import.meta.env.BASE_URL
     : `${import.meta.env.BASE_URL}/`;
-  return `${base}video/${VIDEO_ASSETS[id].file}`;
+  return `${base}video/${selectedVideoAsset(id).file}`;
 }
 
 function makeVideo(id: VideoInterstitialId, preload: 'metadata' | 'auto'): HTMLVideoElement {
@@ -200,7 +215,7 @@ export class VideoInterstitial {
       stallTimer = 0;
     };
 
-    const fallbackHardLimit = VIDEO_ASSETS[id].durationMs + STALL_WATCHDOG_MS + 800;
+    const fallbackHardLimit = selectedVideoAsset(id).durationMs + STALL_WATCHDOG_MS + 800;
     const requestedHardLimit = options.maxDurationMs;
     const hardLimit =
       typeof requestedHardLimit === 'number' &&

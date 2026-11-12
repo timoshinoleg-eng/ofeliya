@@ -407,10 +407,10 @@ async function boot(signal: AbortSignal): Promise<void> {
     window.__renderSnapshot = () => renderSnapshot(game, host);
   }
 
-  // QA-режим для телефона: «КАРДИАЛЬНЫЙ ТИТАН» — пара без карты / кандидат.
-  // Включается только по ?qa=titan-candidate и только в QA-сборке (VITE_QA_TOOLS=1).
+  // Phone comparison modules only execute inside the QA build.
   if (import.meta.env.VITE_QA_TOOLS === '1') {
     void import('./game/qaTitanCandidate').then((m) => m.startTitanCandidateQA(game));
+    void import('./game/qaCarryStackPair').then((m) => m.startCarryPairQA(game));
   }
 
   if (

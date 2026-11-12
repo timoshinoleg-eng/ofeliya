@@ -67,6 +67,7 @@ import { fmtInt } from '../game/UiFormat';
 import { PlatformBridge } from '../platform';
 import { Sfx } from '../systems/Sfx';
 import { VideoInterstitial, type VideoInterstitialId } from '../systems/VideoInterstitial';
+import { isQaExperimentMode } from '../game/qaExperimentMode';
 import {
   submitDailyRunScoreDetailed,
   submitRunScore,
@@ -1616,7 +1617,9 @@ export class UIScene extends Phaser.Scene {
       .text(
         W / 2,
         titleY + titleT.height / 2 + subtitleGap,
-        legendaryReward ? TROPHY_COPY.subtitle : LEVELUP_COPY.hint,
+        legendaryReward
+          ? (gs.qaCarryStackState().applied ? TROPHY_COPY.carrySubtitle : TROPHY_COPY.subtitle)
+          : LEVELUP_COPY.hint,
         {
           fontFamily: UI_FONT,
           fontSize: compact ? '12px' : '15px',
@@ -2597,7 +2600,11 @@ export class UIScene extends Phaser.Scene {
     const duelChallenge = this.registry.get('duelChallenge') as DuelChallengeSnapshot | null | undefined;
     const runGrant =
       (this.registry.get('runTokenGrant') as RunTokenGrant | null | undefined) ?? null;
-    if (dailyBranch === 'daily' && dailyTicket) {
+    if (isQaExperimentMode()) {
+      this.preVideoDailyScore = null;
+      this.preVideoDuelAttempt = null;
+      this.preVideoScore = null;
+    } else if (dailyBranch === 'daily' && dailyTicket) {
       this.preVideoDailyScore = submitDailyRunScoreDetailed(res, PlatformBridge, dailyTicket);
     } else if (dailyBranch === 'inactive' && duelChallenge) {
       this.preVideoDuelAttempt = submitDuelAttempt(duelChallenge.challengeId, res, PlatformBridge);
@@ -2687,8 +2694,8 @@ export class UIScene extends Phaser.Scene {
     const isDailyResult = dailyBranch === 'daily' || dailyBranch === 'blocked';
     const standardFresh = res.difficultyId === 'standard' && !res.resumed;
     // A daily-launched run must never render global-ranking semantics.
-    const ranked = standardFresh && !duelChallenge && dailyBranch === 'inactive';
-    const duelCreatable = standardFresh && res.win;
+    const ranked = standardFresh && !duelChallenge && dailyBranch === 'inactive' && !isQaExperimentMode();
+    const duelCreatable = standardFresh && res.win && !isQaExperimentMode();
     const W = this.scale.width;
     const H = this.scale.height;
     const compact = H < 650;
@@ -3007,6 +3014,9 @@ export class UIScene extends Phaser.Scene {
       // cannot be re-rendered truthfully. Hiding it is the honest option:
       // the re-show submits nothing, clears nothing and records nothing.
       scoreStatus.setVisible(false);
+    } else if (isQaExperimentMode()) {
+      clearDailyIntent(this.registry);
+      scoreStatus.setText('ТЕСТОВЫЙ РЕЗУЛЬТАТ').setColor('#ffe066');
     } else if (dailyBranch === 'resumed') {
       scoreStatus.setText(RESULT_COPY.resumed).setColor('#ffe066');
     } else if (dailyBranch === 'daily' && dailyTicket) {
