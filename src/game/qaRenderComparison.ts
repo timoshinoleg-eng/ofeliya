@@ -98,6 +98,11 @@ export interface QaRenderCompareStorage {
   setItem(key: string, value: string): void;
 }
 
+/** Serialize a render-comparison snapshot for clipboard export and issue reports. */
+export function formatQaRenderComparisonReport(snapshot: QaRenderCompareSnapshot): string {
+  return JSON.stringify(snapshot, null, 2);
+}
+
 interface PhasePlan {
   group: QaHideGroup;
   condition: QaRenderCompareCondition;

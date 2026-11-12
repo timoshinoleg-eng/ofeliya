@@ -60,6 +60,7 @@ try {
   const {
     QaRenderComparison,
     QA_RENDER_COMPARE_STORAGE_KEY,
+    formatQaRenderComparisonReport,
     shouldStartQaRenderComparison,
   } = require(join(temp, 'qaRenderComparison.js'));
   const { formatQaPerfLines, QA_PERF_KEYS } = require(join(temp, 'qaPerf.js'));
@@ -108,6 +109,9 @@ try {
   const saved = JSON.parse(storage.getItem(QA_RENDER_COMPARE_STORAGE_KEY));
   eq(saved.status, 'complete', 'completed result survives in localStorage');
   eq(saved.comparisons.length, 3, 'stored result has three group comparisons');
+  const report = formatQaRenderComparisonReport(complete);
+  eq(JSON.parse(report).status, 'complete', 'clipboard report is valid snapshot JSON');
+  assert(report.includes('"renderDeltaMs": -7'), 'clipboard report includes the A/B render delta');
   assert(labels.some((label) => label.includes('complete 9/9 saved')), 'overlay label announces completion and persistence');
 
   // Death: retain both finished windows and the in-progress partial window before restoring.
@@ -160,6 +164,10 @@ try {
   const gateIdx = gameScene.indexOf(gate);
   const compareIdx = gameScene.indexOf('shouldStartQaRenderComparison(window.location.search)');
   assert(gateIdx >= 0 && compareIdx > gateIdx, 'comparison query is read only after the existing QA gate');
+  assert(gameScene.includes('this.createQaRenderReportButton();'), 'copy-report button is created only for an opted-in comparison');
+  assert(gameScene.includes('formatQaRenderComparisonReport(snapshot)'), 'button copies the live comparison snapshot');
+  assert(gameScene.includes('if (navigator.clipboard?.writeText)'), 'clipboard API is attempted first');
+  assert(gameScene.includes("document.execCommand('copy')"), 'embedded-WebView clipboard fallback is available');
   assert(gameScene.includes('new QaRenderComparison(hide'), 'controller snapshots the original hide selection');
   assert(gameScene.includes('(sample) => this.qaComparison?.record(sample)'), 'measured render samples feed the controller');
   assert(gameScene.includes('compareRequested ? (sample) => this.qaComparison?.record(sample) : undefined'), 'extra per-frame sampling is opt-in');
@@ -170,7 +178,7 @@ try {
   assert(qaPerf.includes('this.onFrameSample?.({ frameMs, renderMs, counters })'), 'overlay forwards measured frame and render durations');
   assert(!qaPerf.includes('import.meta.env'), 'comparison module remains gate-free; caller owns the QA gate');
 
-  console.log('qa-render-comparison: OK (A/B/A, counters, restore, death persistence, manual stop, QA gate)');
+  console.log('qa-render-comparison: OK (A/B/A, counters, restore, death persistence, manual stop, report copy, QA gate)');
 } finally {
   rmSync(temp, { recursive: true, force: true });
 }

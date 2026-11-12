@@ -55,7 +55,11 @@ import { IDENTITY } from '../game/identity';
 import { readControlMode, type ControlMode } from '../game/ControlMode';
 import { generateRunSeed, RunRng } from '../game/RunRng';
 import { QaPerfOverlay } from '../game/qaPerf';
-import { QaRenderComparison, shouldStartQaRenderComparison } from '../game/qaRenderComparison';
+import {
+  formatQaRenderComparisonReport,
+  QaRenderComparison,
+  shouldStartQaRenderComparison,
+} from '../game/qaRenderComparison';
 import { isQaExperimentMode } from '../game/qaExperimentMode';
 import {
   qaApplyCarryStack,
@@ -253,6 +257,8 @@ export class GameScene extends Phaser.Scene {
   private qaPerf: QaPerfOverlay | null = null;
   /** Automated QA-only A/B/A comparison; null unless ?qaCompare=render is gated on. */
   private qaComparison: QaRenderComparison | null = null;
+  /** QA-only clipboard action; created only for the render-comparison URL. */
+  private qaRenderReportButton: Phaser.GameObjects.Text | null = null;
   /** QA-эксперимент: копии «ГЕОМЕТРИИ РАСКОЛА» не отбрасывают цель. Выключен по умолчанию. */
   private qaNoCopyKnockback = false;
   /** QA-эксперимент: копии не делятся повторно (только одно поколение копий). */
@@ -708,6 +714,7 @@ export class GameScene extends Phaser.Scene {
     // and restores the initial selection on completion, death or manual stop.
     this.qaPerf = null;
     this.qaComparison = null;
+    this.qaRenderReportButton = null;
     if (import.meta.env.DEV || import.meta.env.VITE_QA_TOOLS === '1') {
       const hide = parseQaHide(window.location.search);
       const compareRequested = shouldStartQaRenderComparison(window.location.search);
@@ -742,6 +749,7 @@ export class GameScene extends Phaser.Scene {
           applyHidden: (selection) => this.applyQaHideSelection(selection),
           onLabel: (label) => this.qaPerf?.setComparisonLabel(label),
         });
+        this.createQaRenderReportButton();
       }
       // QA fixed mutation-choice states: ?qaMutation=A|B|C opens the agreed
       // fixed offer through the REAL choice path (pendingChoices +
@@ -810,6 +818,7 @@ export class GameScene extends Phaser.Scene {
       this.registry.remove('joy');
       this.registry.remove('aimJoy');
       this.registry.remove('runtimeQuality');
+      this.qaRenderReportButton = null;
     });
   }
 
@@ -907,6 +916,75 @@ export class GameScene extends Phaser.Scene {
     }
     this.layoutQaToggleButtons();
     this.updateQaToggleButtons();
+  }
+
+  /** The report control exists only alongside the QA-gated ?qaCompare=render run. */
+  private createQaRenderReportButton(): void {
+    const button = this.add
+      .text(0, 0, 'Скопировать отчёт', {
+        fontFamily: 'monospace',
+        fontSize: '11px',
+        color: '#7dffb0',
+        backgroundColor: 'rgba(0,0,0,0.55)',
+        padding: { x: 8, y: 6 },
+      })
+      .setOrigin(1, 0)
+      .setScrollFactor(0)
+      .setDepth(200)
+      .setInteractive({ useHandCursor: true });
+    button.on('pointerup', () => void this.copyQaRenderComparisonReport(button));
+    this.qaRenderReportButton = button;
+    this.layoutQaRenderReportButton();
+  }
+
+  private layoutQaRenderReportButton(): void {
+    this.qaRenderReportButton?.setPosition(this.scale.width - 8, 384);
+  }
+
+  private async copyQaRenderComparisonReport(button: Phaser.GameObjects.Text): Promise<void> {
+    const snapshot = this.qaComparison?.snapshot();
+    if (!snapshot) {
+      this.setQaReportCopyFeedback(button, 'Отчёт недоступен');
+      return;
+    }
+    const report = formatQaRenderComparisonReport(snapshot);
+    try {
+      let copied = false;
+      if (navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(report);
+          copied = true;
+        } catch {
+          // Some embedded WebViews expose Clipboard API but reject writes.
+        }
+      }
+      if (!copied) {
+        const textarea = document.createElement('textarea');
+        textarea.value = report;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        textarea.style.pointerEvents = 'none';
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+          copied = document.execCommand('copy');
+        } finally {
+          textarea.remove();
+        }
+      }
+      if (!copied) throw new Error('Clipboard copy was rejected');
+      this.setQaReportCopyFeedback(button, 'Отчёт скопирован');
+    } catch {
+      this.setQaReportCopyFeedback(button, 'Не удалось скопировать');
+    }
+  }
+
+  private setQaReportCopyFeedback(button: Phaser.GameObjects.Text, message: string): void {
+    button.setText(message);
+    this.time.delayedCall(1800, () => {
+      if (button.active) button.setText('Скопировать отчёт');
+    });
   }
 
   /** Right edge, below the overlay text (which ends around y 250). */
@@ -3598,5 +3676,6 @@ export class GameScene extends Phaser.Scene {
     this.atmosphere.resize();
     this.vignette.setPosition(W / 2, H / 2).setDisplaySize(W * 1.25, H * 1.25);
     if (this.qaToggleButtons.length > 0) this.layoutQaToggleButtons();
+    this.layoutQaRenderReportButton();
   }
 }
