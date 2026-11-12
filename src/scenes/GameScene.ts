@@ -243,6 +243,14 @@ export class GameScene extends Phaser.Scene {
    * calls in the hot path.
    */
   private qaPerf: QaPerfOverlay | null = null;
+  /** QA-эксперимент: копии «ГЕОМЕТРИИ РАСКОЛА» не отбрасывают цель. Выключен по умолчанию. */
+  private qaNoCopyKnockback = false;
+  /** QA-эксперимент: копии не делятся повторно (только одно поколение копий). */
+  private qaSingleGeneration = false;
+  /** QA-эксперимент: копия пропускает ТОЛЬКО своё появление исходного врага. */
+  private qaSkipSource = false;
+  /** QA-счётчик: сколько столкновений копии со своим исходным появлением было пропущено. */
+  qaSkippedCopyCollisions = 0;
   /**
    * QA render-split selection — parsed ONLY inside the QA gate in create()
    * (same gate as the overlay). Null in production builds: the update-path
@@ -3043,6 +3051,21 @@ export class GameScene extends Phaser.Scene {
     const b = obj1 as Bullet;
     const e = obj2 as Enemy;
     if (!b.active || !e.active) return;
+    // Копия пропускает ТОЛЬКО своё появление исходного врага: тот же ОБЪЕКТ и тот же
+    // серийный номер появления. Сравнивать только spawnSerial нельзя: счётчик
+    // инстансный, и у двух разных врагов при первом появлении он одинаков (1) —
+    // так можно было бы пропустить совершенно чужого врага.
+    // Столкновение при пропуске не тратит копию, не наносит урон и не запускает
+    // эффекты попадания.
+    if (
+      this.qaSkipSource &&
+      b.qaSourceEnemy !== null &&
+      b.qaSourceEnemy === e &&
+      e.spawnSerial === b.qaSourceSpawnSerial
+    ) {
+      this.qaSkippedCopyCollisions += 1;
+      return;
+    }
     if (b.lastHit === e && this.time.now - b.lastHitAt < 220) return;
     b.lastHit = e;
     b.lastHitAt = this.time.now;
@@ -3060,10 +3083,11 @@ export class GameScene extends Phaser.Scene {
     this.vfx.hit(
       e.x, e.y, b.prism ? COLORS.gold : e.color, { x: bv.x / vm, y: bv.y / vm }, e.radius
     );
-    const dealtDamage = e.takeDamage(damage, (bv.x / vm) * 130, (bv.y / vm) * 130);
+    const knock = this.bulletKnockback(b);
+    const dealtDamage = e.takeDamage(damage, (bv.x / vm) * knock, (bv.y / vm) * knock);
     Sfx.play('hit');
     this.showDamage(e.x, e.y, dealtDamage);
-    this.trySplitProjectile(b, bv);
+    this.trySplitProjectile(b, bv, e);
     if (rhythmBurst) this.triggerRhythmBurst(e, dealtDamage);
     if (b.pierceLeft > 0) b.pierceLeft -= 1;
     else b.disableBody(true, true);
@@ -3147,11 +3171,58 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private trySplitProjectile(source: Bullet, velocity: { x: number; y: number }): void {
+  /**
+   * Импульс отбрасывания от попадания снаряда.
+   *
+   * В штатной игре попадание добавляет 130 к СКОРОСТИ отбрасывания цели
+   * (Enemy.knockX/knockY), которая затухает множителем 0.82 за кадр.
+   *
+   * QA-эксперимент: копии «ГЕОМЕТРИИ РАСКОЛА» (generation > 0) отбрасывания не дают.
+   * Оригинальные снаряды — включая «ГИПЕРШИП» (тоже generation 0, но с prism-флагом) —
+   * отбрасывают как раньше.
+   */
+  private bulletKnockback(b: Bullet): number {
+    if (b.generation > 0 && this.qaNoCopyKnockback) return 0;
+    return 130;
+  }
+
+  /**
+   * QA-эксперимент: копии не делятся повторно.
+   *
+   * Штатно копия первого поколения делится ещё раз (generation < 2), и потолок урона
+   * равен 1 + 2×0,45 + 4×0,2025 = ×2,71. С флагом деление обрывается на первом
+   * поколении: оригинал + две копии, потолок ×1,9.
+   */
+  private splitGenerationLimit(): number {
+    return this.qaSingleGeneration ? 1 : 2;
+  }
+
+  /** Включение экспериментов. Только в DEV/QA-сборке. */
+  setQaNoCopyKnockback(value: boolean): void {
+    if (!import.meta.env.DEV && import.meta.env.VITE_QA_TOOLS !== '1') return;
+    this.qaNoCopyKnockback = value;
+  }
+
+  setQaSingleGeneration(value: boolean): void {
+    if (!import.meta.env.DEV && import.meta.env.VITE_QA_TOOLS !== '1') return;
+    this.qaSingleGeneration = value;
+  }
+
+  /** Копия пропускает своё появление исходного врага. Только в DEV/QA-сборке. */
+  setQaSkipSource(value: boolean): void {
+    if (!import.meta.env.DEV && import.meta.env.VITE_QA_TOOLS !== '1') return;
+    this.qaSkipSource = value;
+  }
+
+  private trySplitProjectile(
+    source: Bullet,
+    velocity: { x: number; y: number },
+    hitEnemy?: Enemy
+  ): void {
     if (
       !this.runState.hasLegendary('split-geometry') ||
       source.splitUsed ||
-      source.generation >= 2
+      source.generation >= this.splitGenerationLimit()
     ) {
       return;
     }
@@ -3169,6 +3240,11 @@ export class GameScene extends Phaser.Scene {
         true,
         source.generation + 1
       );
+      // Источник копии записывается ВСЕГДА (даже когда пропуск выключен) — чтобы
+      // пробник мог отдельно считать попадания в исходную цель и в чужих врагов.
+      // Идентификация — пара (объект + номер появления).
+      child.qaSourceEnemy = hitEnemy ?? null;
+      child.qaSourceSpawnSerial = hitEnemy ? hitEnemy.spawnSerial : -1;
     }
   }
 
