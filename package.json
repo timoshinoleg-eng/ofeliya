@@ -67,6 +67,7 @@
     "test:qa-perf": "node tests/qa-perf-overlay.mjs",
     "test:qa-render-split": "node tests/qa-render-split.mjs",
     "test:qa-render-split-v2": "node tests/qa-render-split-v2.mjs",
+    "test:qa-render-comparison": "node tests/qa-render-comparison.mjs",
     "test:mutation-before-after": "node tests/mutation-before-after.mjs",
     "test:mutation-states": "node tests/mutation-states-data.mjs",
     "test:readability-signal": "node tests/readability-signal-contract.mjs",

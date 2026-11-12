@@ -103,7 +103,7 @@ try {
   assert(!uiScene.includes('qaToggleButtons'), 'buttons do not live in UIScene (ui-hide cannot hide them)');
   assert(!uiScene.includes('toggleQaHideGroup'), 'toggle logic does not live in UIScene');
   assert(qaPerf.includes('setHideLabel(label: string)'), 'overlay exposes setHideLabel for live label updates');
-  assert(gameScene.includes('setHideLabel(qaHideLabel(next))'), 'toggle refreshes the overlay label');
+  assert(gameScene.includes('this.qaPerf?.setHideLabel(qaHideLabel(this.qaHide))'), 'applied selection refreshes the overlay label');
   assert(qaPerf.includes('.text(8, 103,'), 'overlay moved below the HUD band (plate top 5 + height 90 + margin)');
 
   // --- source contract: modal-safe UI hiding ---

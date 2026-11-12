@@ -55,6 +55,7 @@
  */
 
 import type Phaser from 'phaser';
+import type { QaRenderCompareSample } from './qaRenderComparison';
 
 export type QaPerfKey =
   | 'frame'
@@ -161,6 +162,7 @@ export function formatQaPerfLines(
   worstFrameMs: number,
   worstCounters: QaPerfCounters | null,
   hideLabel?: string,
+  comparisonLabel?: string,
 ): string[] {
   const pair = (key: QaPerfKey): string => `${fmt(rows[key].avg)}/${fmt(rows[key].max)}`;
   const lines = [
@@ -174,6 +176,9 @@ export function formatQaPerfLines(
   ];
   if (hideLabel !== undefined) {
     lines.push(`hide: ${hideLabel}`);
+  }
+  if (comparisonLabel !== undefined) {
+    lines.push(`compare: ${comparisonLabel}`);
   }
   if (worstCounters) {
     lines.push(
@@ -193,7 +198,9 @@ export class QaPerfOverlay {
   private readonly starts = new Map<QaPerfKey, number>();
   private readonly scene: Phaser.Scene;
   private readonly readCounters: () => QaPerfCounters;
+  private readonly onFrameSample?: (sample: QaRenderCompareSample) => void;
   private hideLabel: string | undefined;
+  private comparisonLabel: string | undefined;
   private text: Phaser.GameObjects.Text | null;
   private lastTextAt = 0;
   private frameStart = 0;
@@ -204,10 +211,16 @@ export class QaPerfOverlay {
   private worstCounters: QaPerfCounters | null = null;
   private destroyed = false;
 
-  constructor(scene: Phaser.Scene, readCounters: () => QaPerfCounters, hideLabel?: string) {
+  constructor(
+    scene: Phaser.Scene,
+    readCounters: () => QaPerfCounters,
+    hideLabel?: string,
+    onFrameSample?: (sample: QaRenderCompareSample) => void,
+  ) {
     this.scene = scene;
     this.readCounters = readCounters;
     this.hideLabel = hideLabel;
+    this.onFrameSample = onFrameSample;
     for (const key of QA_PERF_KEYS) this.stats.set(key, new QaPerfStats(120));
 
     // Listener order is the measurement (see header): ArcadePhysics and
@@ -248,6 +261,11 @@ export class QaPerfOverlay {
    */
   setHideLabel(label: string): void {
     this.hideLabel = label;
+    this.refreshText();
+  }
+
+  setComparisonLabel(label: string | undefined): void {
+    this.comparisonLabel = label;
     this.refreshText();
   }
 
@@ -311,10 +329,12 @@ export class QaPerfOverlay {
     this.stats.get('frame')?.record(frameMs);
     // Derived residual from THIS frame's own component samples (see header).
     this.stats.get('other')?.record(this.lastOtherMs(frameMs));
+    const counters = this.onFrameSample ? this.readCounters() : null;
     if (frameMs > this.worstFrameMs) {
       this.worstFrameMs = frameMs;
-      this.worstCounters = this.readCounters();
+      this.worstCounters = counters ?? this.readCounters();
     }
+    if (counters) this.onFrameSample?.({ frameMs, renderMs, counters });
     if (now - this.lastTextAt >= 250) {
       this.lastTextAt = now;
       this.refreshText();
@@ -350,7 +370,17 @@ export class QaPerfOverlay {
   private refreshText(): void {
     if (!this.text) return;
     const snap = this.snapshot();
-    this.text.setText(formatQaPerfLines(snap.rows, snap.frames, snap.counters, snap.worstFrameMs, snap.worstCounters, this.hideLabel));
+    this.text.setText(
+      formatQaPerfLines(
+        snap.rows,
+        snap.frames,
+        snap.counters,
+        snap.worstFrameMs,
+        snap.worstCounters,
+        this.hideLabel,
+        this.comparisonLabel,
+      ),
+    );
   }
 
   /**

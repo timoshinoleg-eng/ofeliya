@@ -55,6 +55,7 @@ import { IDENTITY } from '../game/identity';
 import { readControlMode, type ControlMode } from '../game/ControlMode';
 import { generateRunSeed, RunRng } from '../game/RunRng';
 import { QaPerfOverlay } from '../game/qaPerf';
+import { QaRenderComparison, shouldStartQaRenderComparison } from '../game/qaRenderComparison';
 import { isQaExperimentMode } from '../game/qaExperimentMode';
 import {
   qaApplyCarryStack,
@@ -250,6 +251,8 @@ export class GameScene extends Phaser.Scene {
    * calls in the hot path.
    */
   private qaPerf: QaPerfOverlay | null = null;
+  /** Automated QA-only A/B/A comparison; null unless ?qaCompare=render is gated on. */
+  private qaComparison: QaRenderComparison | null = null;
   /** QA-эксперимент: копии «ГЕОМЕТРИИ РАСКОЛА» не отбрасывают цель. Выключен по умолчанию. */
   private qaNoCopyKnockback = false;
   /** QA-эксперимент: копии не делятся повторно (только одно поколение копий). */
@@ -700,22 +703,46 @@ export class GameScene extends Phaser.Scene {
     // UI HUD never hides the overlay or the buttons. The hide label is
     // shown in the overlay so every screenshot is self-documenting (base
     // runs read `hide: none`).
+    // ?qaCompare=render adds an automatic 120-frame A/B/A window for each
+    // group, stores completed/partial samples under the QA localStorage key,
+    // and restores the initial selection on completion, death or manual stop.
+    this.qaPerf = null;
+    this.qaComparison = null;
     if (import.meta.env.DEV || import.meta.env.VITE_QA_TOOLS === '1') {
       const hide = parseQaHide(window.location.search);
+      const compareRequested = shouldStartQaRenderComparison(window.location.search);
       this.qaHide = hide;
       // QA instrumentation first: the perf overlay and the render-split toggle
       // buttons must stay close to the gate (source-contract in
       // tests/qa-perf-overlay.mjs), so the fixed-state fixtures below cannot
       // push the construction out of the gated block.
-      this.qaPerf = new QaPerfOverlay(this, () => ({
-        enemies: this.enemies.countActive(true),
-        bullets: this.bullets.countActive(true),
-        gems: this.gems.countActive(true),
-        density: this.visualEnemyDensity,
-        tier: this.runtimeQuality.profile.level,
-      }), qaHideLabel(hide));
+      this.qaPerf = new QaPerfOverlay(
+        this,
+        () => ({
+          enemies: this.enemies.countActive(true),
+          bullets: this.bullets.countActive(true),
+          gems: this.gems.countActive(true),
+          density: this.visualEnemyDensity,
+          tier: this.runtimeQuality.profile.level,
+        }),
+        qaHideLabel(hide),
+        compareRequested ? (sample) => this.qaComparison?.record(sample) : undefined,
+      );
       if (hide.size > 0) this.applyQaHide(hide);
       this.createQaToggleButtons();
+      if (compareRequested) {
+        let storage: Storage | null = null;
+        try {
+          storage = window.localStorage;
+        } catch {
+          // Comparison remains usable in restricted WebViews; persistence is reported as unavailable.
+        }
+        this.qaComparison = new QaRenderComparison(hide, {
+          storage,
+          applyHidden: (selection) => this.applyQaHideSelection(selection),
+          onLabel: (label) => this.qaPerf?.setComparisonLabel(label),
+        });
+      }
       // QA fixed mutation-choice states: ?qaMutation=A|B|C opens the agreed
       // fixed offer through the REAL choice path (pendingChoices +
       // awaitingChoice -> UIScene level-up modal). Stacks go through the real
@@ -794,6 +821,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private exitToMenu(): void {
+    this.qaComparison?.finish('run-ended');
     this.saveCheckpointNow();
     this.cancelStageTransition();
     this.audio.stop();
@@ -829,6 +857,22 @@ export class GameScene extends Phaser.Scene {
     if (hide.has('ui')) {
       this.getUiScene()?.setQaHudHidden(true);
     }
+  }
+
+  /** Apply every QA visibility group, including restoring its current baseline. */
+  private applyQaHideSelection(hide: ReadonlySet<QaHideGroup>): void {
+    this.qaHide = new Set(hide);
+    const gemsHidden = this.qaHide.has('gems');
+    for (const gem of this.gems.getChildren() as Gem[]) {
+      if (gemsHidden) gem.setVisible(false);
+      else if (gem.active) gem.setVisible(true);
+    }
+    const atmoHidden = this.qaHide.has('atmo');
+    this.atmosphere.setQaHidden(atmoHidden);
+    this.vignette.setVisible(atmoHidden ? false : this.vignetteNormalVisible);
+    this.getUiScene()?.setQaHudHidden(this.qaHide.has('ui'));
+    this.qaPerf?.setHideLabel(qaHideLabel(this.qaHide));
+    this.updateQaToggleButtons();
   }
 
   /**
@@ -886,24 +930,11 @@ export class GameScene extends Phaser.Scene {
   /** Flip one group mid-fight and refresh the overlay label + buttons. */
   private toggleQaHideGroup(group: QaHideGroup): void {
     if (!this.qaHide) return;
+    // A manual tap is an explicit stop: preserve partial data and restore the
+    // captured selection before applying the user's requested toggle.
+    this.qaComparison?.finish('manual-stop');
     const next = toggleQaHide(this.qaHide, group);
-    const hidden = next.has(group);
-    this.qaHide = next;
-    if (group === 'gems') {
-      for (const gem of this.gems.getChildren() as Gem[]) {
-        // Inactive pooled gems stay invisible (disableBody hides them);
-        // only live gems come back.
-        if (hidden) gem.setVisible(false);
-        else if (gem.active) gem.setVisible(true);
-      }
-    } else if (group === 'atmo') {
-      this.atmosphere.setQaHidden(hidden);
-      this.vignette.setVisible(hidden ? false : this.vignetteNormalVisible);
-    } else if (group === 'ui') {
-      this.getUiScene()?.setQaHudHidden(hidden);
-    }
-    this.qaPerf?.setHideLabel(qaHideLabel(next));
-    this.updateQaToggleButtons();
+    this.applyQaHideSelection(next);
   }
 
   update(time: number, delta: number): void {
@@ -2776,6 +2807,7 @@ export class GameScene extends Phaser.Scene {
 
   finish(win: boolean, reason: RunEndReason = win ? 'campaign-complete' : 'defeat'): void {
     if (this.registry.get('runResult')) return;
+    this.qaComparison?.finish(!win && this.runState.stage.hp <= 0 ? 'player-death' : 'run-ended');
     this.notificationRegion.destroy();
     if (this.stageDirector.phase !== 'RUN_ENDED') this.stageDirector.endRun(reason);
     this.resetCardiacLineHazard();
