@@ -58,7 +58,7 @@ import { QaPerfOverlay } from '../game/qaPerf';
 import {
   formatQaRenderComparisonReport,
   QaRenderComparison,
-  shouldStartQaRenderComparison,
+  isQaRenderComparisonEnabled,
 } from '../game/qaRenderComparison';
 import { isQaExperimentMode } from '../game/qaExperimentMode';
 import {
@@ -255,10 +255,11 @@ export class GameScene extends Phaser.Scene {
    * calls in the hot path.
    */
   private qaPerf: QaPerfOverlay | null = null;
-  /** Automated QA-only A/B/A comparison; null unless ?qaCompare=render is gated on. */
+  /** Manual QA-only A/B/A comparison; null until started from its QA control. */
   private qaComparison: QaRenderComparison | null = null;
-  /** QA-only clipboard action; created only for the render-comparison URL. */
+  /** QA-only report control; created only for the render-comparison URL. */
   private qaRenderReportButton: Phaser.GameObjects.Text | null = null;
+  private qaRenderStartButton: Phaser.GameObjects.Text | null = null;
   /** QA-эксперимент: копии «ГЕОМЕТРИИ РАСКОЛА» не отбрасывают цель. Выключен по умолчанию. */
   private qaNoCopyKnockback = false;
   /** QA-эксперимент: копии не делятся повторно (только одно поколение копий). */
@@ -709,15 +710,17 @@ export class GameScene extends Phaser.Scene {
     // UI HUD never hides the overlay or the buttons. The hide label is
     // shown in the overlay so every screenshot is self-documenting (base
     // runs read `hide: none`).
-    // ?qaCompare=render adds an automatic 120-frame A/B/A window for each
-    // group, stores completed/partial samples under the QA localStorage key,
-    // and restores the initial selection on completion, death or manual stop.
+    // ?qaCompare=render enables manual A/B/A controls. The player can start a
+    // 120-frame-per-phase comparison at a chosen battle moment; each run
+    // snapshots the current visibility selection and restores it on completion,
+    // death or manual stop.
     this.qaPerf = null;
     this.qaComparison = null;
     this.qaRenderReportButton = null;
+    this.qaRenderStartButton = null;
     if (import.meta.env.DEV || import.meta.env.VITE_QA_TOOLS === '1') {
       const hide = parseQaHide(window.location.search);
-      const compareRequested = shouldStartQaRenderComparison(window.location.search);
+      const compareEnabled = isQaRenderComparisonEnabled(window.location.search);
       this.qaHide = hide;
       // QA instrumentation first: the perf overlay and the render-split toggle
       // buttons must stay close to the gate (source-contract in
@@ -733,24 +736,11 @@ export class GameScene extends Phaser.Scene {
           tier: this.runtimeQuality.profile.level,
         }),
         qaHideLabel(hide),
-        compareRequested ? (sample) => this.qaComparison?.record(sample) : undefined,
+        compareEnabled ? (sample) => this.qaComparison?.record(sample) : undefined,
       );
       if (hide.size > 0) this.applyQaHide(hide);
       this.createQaToggleButtons();
-      if (compareRequested) {
-        let storage: Storage | null = null;
-        try {
-          storage = window.localStorage;
-        } catch {
-          // Comparison remains usable in restricted WebViews; persistence is reported as unavailable.
-        }
-        this.qaComparison = new QaRenderComparison(hide, {
-          storage,
-          applyHidden: (selection) => this.applyQaHideSelection(selection),
-          onLabel: (label) => this.qaPerf?.setComparisonLabel(label),
-        });
-        this.createQaRenderReportButton();
-      }
+      if (compareEnabled) this.createQaRenderComparisonControls();
       // QA fixed mutation-choice states: ?qaMutation=A|B|C opens the agreed
       // fixed offer through the REAL choice path (pendingChoices +
       // awaitingChoice -> UIScene level-up modal). Stacks go through the real
@@ -917,11 +907,15 @@ export class GameScene extends Phaser.Scene {
     this.layoutQaToggleButtons();
     this.updateQaToggleButtons();
   }
+  /** Comparison controls exist only alongside the QA-gated ?qaCompare=render option. */
+  private createQaRenderComparisonControls(): void {
+    this.createQaRenderStartButton();
+    this.createQaRenderReportButton();
+  }
 
-  /** The report control exists only alongside the QA-gated ?qaCompare=render run. */
-  private createQaRenderReportButton(): void {
+  private createQaRenderStartButton(): void {
     const button = this.add
-      .text(0, 0, 'Скопировать отчёт', {
+      .text(0, 0, 'Начать A/B-замер', {
         fontFamily: 'monospace',
         fontSize: '11px',
         color: '#7dffb0',
@@ -932,13 +926,68 @@ export class GameScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(200)
       .setInteractive({ useHandCursor: true });
+    button.on('pointerup', () => this.startQaRenderComparison());
+    this.qaRenderStartButton = button;
+    this.layoutQaRenderStartButton();
+  }
+
+  private layoutQaRenderStartButton(): void {
+    this.qaRenderStartButton?.setPosition(this.scale.width - 8, 384);
+  }
+
+  private startQaRenderComparison(): void {
+    if (!this.qaHide || this.qaComparison?.active) return;
+    let storage: Storage | null = null;
+    try {
+      storage = window.localStorage;
+    } catch {
+      // Comparison remains usable in restricted WebViews; persistence is reported as unavailable.
+    }
+    this.qaComparison = new QaRenderComparison(new Set(this.qaHide), {
+      storage,
+      applyHidden: (selection) => this.applyQaHideSelection(selection),
+      onLabel: (label) => {
+        this.qaPerf?.setComparisonLabel(label);
+        this.updateQaRenderStartButton();
+      },
+    });
+    if (this.qaRenderReportButton && !this.qaRenderReportButton.input) {
+      this.qaRenderReportButton
+        .setColor('#7dffb0')
+        .setInteractive({ useHandCursor: true });
+    }
+    this.updateQaRenderStartButton();
+  }
+
+  private updateQaRenderStartButton(): void {
+    const button = this.qaRenderStartButton;
+    if (!button) return;
+    const active = this.qaComparison?.active ?? false;
+    button
+      .setText(active ? 'A/B-замер идёт...' : this.qaComparison ? 'Повторить A/B-замер' : 'Начать A/B-замер')
+      .setAlpha(active ? 0.7 : 1);
+  }
+
+  /** The report control exists only alongside the QA-gated ?qaCompare=render option. */
+  private createQaRenderReportButton(): void {
+    const button = this.add
+      .text(0, 0, 'Скопировать отчёт', {
+        fontFamily: 'monospace',
+        fontSize: '11px',
+        color: '#777777',
+        backgroundColor: 'rgba(0,0,0,0.55)',
+        padding: { x: 8, y: 6 },
+      })
+      .setOrigin(1, 0)
+      .setScrollFactor(0)
+      .setDepth(200);
     button.on('pointerup', () => void this.copyQaRenderComparisonReport(button));
     this.qaRenderReportButton = button;
     this.layoutQaRenderReportButton();
   }
 
   private layoutQaRenderReportButton(): void {
-    this.qaRenderReportButton?.setPosition(this.scale.width - 8, 384);
+    this.qaRenderReportButton?.setPosition(this.scale.width - 8, 422);
   }
 
   private async copyQaRenderComparisonReport(button: Phaser.GameObjects.Text): Promise<void> {
@@ -3676,6 +3725,7 @@ export class GameScene extends Phaser.Scene {
     this.atmosphere.resize();
     this.vignette.setPosition(W / 2, H / 2).setDisplaySize(W * 1.25, H * 1.25);
     if (this.qaToggleButtons.length > 0) this.layoutQaToggleButtons();
+    this.layoutQaRenderStartButton();
     this.layoutQaRenderReportButton();
   }
 }

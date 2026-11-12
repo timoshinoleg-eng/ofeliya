@@ -20,7 +20,7 @@ export const QA_RENDER_COMPARE_VALUE = 'render';
 export const QA_RENDER_COMPARE_STORAGE_KEY = 'ofeliya_qa_render_comparison_v1';
 export const QA_RENDER_COMPARE_PHASE_FRAMES = 120;
 
-export function shouldStartQaRenderComparison(search: string): boolean {
+export function isQaRenderComparisonEnabled(search: string): boolean {
   return new URLSearchParams(search).get(QA_RENDER_COMPARE_PARAM) === QA_RENDER_COMPARE_VALUE;
 }
 

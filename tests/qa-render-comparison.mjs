@@ -1,5 +1,5 @@
 /**
- * Contract test for automatic QA-only A/B/A comparison of GEMS / ATMO / UI.
+ * Contract test for manually started QA-only A/B/A comparison of GEMS / ATMO / UI.
  * Compiles the pure controller and perf formatter, then checks completed pairs,
  * partial persistence on player death, original-state restoration and GameScene wiring.
  */
@@ -61,13 +61,13 @@ try {
     QaRenderComparison,
     QA_RENDER_COMPARE_STORAGE_KEY,
     formatQaRenderComparisonReport,
-    shouldStartQaRenderComparison,
+    isQaRenderComparisonEnabled,
   } = require(join(temp, 'qaRenderComparison.js'));
   const { formatQaPerfLines, QA_PERF_KEYS } = require(join(temp, 'qaPerf.js'));
 
-  eq(shouldStartQaRenderComparison('?qaCompare=render'), true, 'QA query enables automatic comparison');
-  eq(shouldStartQaRenderComparison('?qaCompare=1'), false, 'other query values do not enable comparison');
-  eq(shouldStartQaRenderComparison('?qaHide=gems'), false, 'manual hide query remains independent');
+  eq(isQaRenderComparisonEnabled('?qaCompare=render'), true, 'QA query enables manual comparison controls');
+  eq(isQaRenderComparisonEnabled('?qaCompare=1'), false, 'other query values do not enable comparison');
+  eq(isQaRenderComparisonEnabled('?qaHide=gems'), false, 'manual hide query remains independent');
 
   // Full run: nine 1-frame phases, A/B/A for each group; only one group flips at a time.
   const storage = new MemoryStorage();
@@ -155,22 +155,28 @@ try {
   const rows = {};
   for (const key of QA_PERF_KEYS) rows[key] = { avg: 1, max: 2 };
   const lines = formatQaPerfLines(rows, 120, { enemies: 1, bullets: 0, gems: 0, density: 1, tier: 'low' }, 2, null, 'none', '3/9 atmo flip 30/120 saved');
-  assert(lines.some((line) => line.includes('compare: 3/9 atmo flip')), 'overlay exposes automatic comparison progress');
+  assert(lines.some((line) => line.includes('compare: 3/9 atmo flip')), 'overlay exposes comparison progress');
 
-  // Source wiring: only QA-gated opt-in; samples from real render frames; death/manual stop persist and restore.
+  // Source wiring: the URL only exposes controls; a tap starts the run using the live hide selection.
+  // Samples still come from real rendered frames; death/manual stop persist and restore settings.
   const gameScene = readFileSync(resolve('src/scenes/GameScene.ts'), 'utf8');
   const qaPerf = readFileSync(resolve('src/game/qaPerf.ts'), 'utf8');
   const gate = "if (import.meta.env.DEV || import.meta.env.VITE_QA_TOOLS === '1')";
   const gateIdx = gameScene.indexOf(gate);
-  const compareIdx = gameScene.indexOf('shouldStartQaRenderComparison(window.location.search)');
+  const compareIdx = gameScene.indexOf('isQaRenderComparisonEnabled(window.location.search)');
   assert(gateIdx >= 0 && compareIdx > gateIdx, 'comparison query is read only after the existing QA gate');
-  assert(gameScene.includes('this.createQaRenderReportButton();'), 'copy-report button is created only for an opted-in comparison');
+  assert(gameScene.includes('this.createQaRenderComparisonControls();'), 'manual comparison and report controls are created for an opted-in QA session');
+  const startupEndIdx = gameScene.indexOf('// QA fixed mutation-choice states', compareIdx);
+  assert(startupEndIdx > compareIdx, 'comparison setup precedes fixed QA fixtures');
+  assert(!gameScene.slice(compareIdx, startupEndIdx).includes('new QaRenderComparison('), 'QA query does not auto-start the comparison');
+  assert(gameScene.includes("button.on('pointerup', () => this.startQaRenderComparison());"), 'explicit button tap starts the comparison');
+  assert(gameScene.includes('new QaRenderComparison(new Set(this.qaHide)'), 'manual start snapshots the current visibility selection');
+  assert(gameScene.includes('this.createQaRenderReportButton();'), 'copy-report control remains available alongside manual start');
   assert(gameScene.includes('formatQaRenderComparisonReport(snapshot)'), 'button copies the live comparison snapshot');
   assert(gameScene.includes('if (navigator.clipboard?.writeText)'), 'clipboard API is attempted first');
   assert(gameScene.includes("document.execCommand('copy')"), 'embedded-WebView clipboard fallback is available');
-  assert(gameScene.includes('new QaRenderComparison(hide'), 'controller snapshots the original hide selection');
   assert(gameScene.includes('(sample) => this.qaComparison?.record(sample)'), 'measured render samples feed the controller');
-  assert(gameScene.includes('compareRequested ? (sample) => this.qaComparison?.record(sample) : undefined'), 'extra per-frame sampling is opt-in');
+  assert(gameScene.includes('compareEnabled ? (sample) => this.qaComparison?.record(sample) : undefined'), 'extra per-frame sampling is opt-in');
   assert(gameScene.includes('this.qaComparison?.finish(!win && this.runState.stage.hp <= 0 ? \'player-death\' : \'run-ended\')'), 'run finish saves partial data before the result is built');
   assert(gameScene.includes("this.qaComparison?.finish('manual-stop')"), 'manual group toggles stop and restore the comparison');
   assert(gameScene.includes("this.qaComparison?.finish('run-ended');\n    this.saveCheckpointNow();"), 'leaving to menu saves partial data and restores settings');
