@@ -423,7 +423,8 @@ function renderResult(r: TitanEpisodeResult): string {
 export function startTitanCandidateQA(game: Phaser.Game): void {
   const params = new URLSearchParams(location.search);
   if (params.get('qa') !== QA_PARAM) return;
-  const seed = params.get('seed') || 'titan-candidate-1';
+  const rawSeed = params.get('seed') ?? '';
+  const seed = /^[a-zA-Z0-9_-]{1,64}$/.test(rawSeed) ? rawSeed : 'titan-candidate-1';
   const fast = params.get('fast') === '1';
   const overlay = makeOverlay();
   const results: TitanEpisodeResult[] = [];

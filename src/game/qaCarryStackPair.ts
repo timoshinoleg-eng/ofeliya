@@ -434,7 +434,8 @@ function renderResult(r: EpisodeResult): string {
 export function startCarryPairQA(game: Phaser.Game): void {
   const params = new URLSearchParams(location.search);
   if (params.get('qa') !== QA_PARAM) return;
-  const seed = params.get('seed') || 'phone-carry-1';
+  const rawSeed = params.get('seed') ?? '';
+  const seed = /^[a-zA-Z0-9_-]{1,64}$/.test(rawSeed) ? rawSeed : 'phone-carry-1';
   const mutationId = params.get('mut') || 'multi';
   const fast = params.get('fast') === '1';
   const overlay = makeOverlay();
