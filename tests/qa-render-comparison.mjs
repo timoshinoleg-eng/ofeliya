@@ -59,7 +59,10 @@ try {
 
   const {
     QaRenderComparison,
+    QA_RENDER_COMPARE_PHASE_FRAMES,
+    QA_RENDER_COMPARE_REPEATS,
     QA_RENDER_COMPARE_STORAGE_KEY,
+    QA_RENDER_COMPARE_WARMUP_FRAMES,
     formatQaRenderComparisonReport,
     isQaRenderComparisonEnabled,
   } = require(join(temp, 'qaRenderComparison.js'));
@@ -74,8 +77,16 @@ try {
   const applied = [];
   const labels = [];
   const original = new Set(['ui']);
+  const defaultSetup = new QaRenderComparison(new Set(), { applyHidden() {} }).snapshot();
+  eq(defaultSetup.phaseFrames, QA_RENDER_COMPARE_PHASE_FRAMES, 'default measured window size is recorded');
+  eq(defaultSetup.repeats, QA_RENDER_COMPARE_REPEATS, 'default repeat count is recorded');
+  eq(defaultSetup.warmupFrames, QA_RENDER_COMPARE_WARMUP_FRAMES, 'default discarded warmup is recorded');
+  eq(defaultSetup.plannedPhases, 27, 'default setup plans three A/B/A repeats per visibility group');
+
   const comparison = new QaRenderComparison(original, {
     phaseFrames: 1,
+    repeats: 1,
+    warmupFrames: 0,
     storage,
     applyHidden: (selection) => applied.push([...selection].sort().join(',')),
     onLabel: (label) => labels.push(label),
@@ -90,6 +101,7 @@ try {
   }
   const complete = comparison.snapshot();
   eq(complete.status, 'complete', 'all planned phases complete automatically');
+  eq(complete.schemaVersion, 2, 'expanded comparison report has a new schema version');
   eq(complete.stopReason, 'completed', 'completed run records its reason');
   eq(complete.phases.length, 9, 'all nine A/B/A windows are recorded');
   assert(complete.phases.every((phase) => phase.complete && phase.frames === 1), 'each completed phase has its expected sample');
@@ -101,9 +113,17 @@ try {
   eq(complete.phases[7].hiddenGroups.join(','), '', 'UI phase flips only UI');
   const gemsPair = complete.comparisons.find((pair) => pair.group === 'gems');
   assert(gemsPair, 'complete GEMS pair is present');
+  eq(gemsPair.repeatCount, 1, 'pair reports its configured number of repeats');
+  eq(gemsPair.baselineWindows, 2, 'pair combines before and after baseline windows');
+  eq(gemsPair.oppositeWindows, 1, 'pair records the flipped window count');
   near(gemsPair.baselineRenderAvgMs, 12, 'GEMS baseline averages before/after control windows');
   near(gemsPair.oppositeRenderAvgMs, 5, 'GEMS opposite render average is recorded');
   near(gemsPair.renderDeltaMs, -7, 'GEMS render delta is computed, not presented as FPS');
+  near(gemsPair.baselineFrameMaxMs, 18, 'GEMS baseline frame maximum combines both control windows');
+  near(gemsPair.oppositeFrameP95Ms, 9, 'single-sample opposite p95 is recorded');
+  near(gemsPair.frameP95DeltaMs, -9, 'paired p95 frame delta is computed');
+  near(complete.phases[0].frameMaxMs, 14, 'per-window frame maximum is recorded');
+  near(complete.phases[0].frameP95Ms, 14, 'per-window frame p95 is recorded');
   eq(complete.phases[0].counters.enemiesAvg, 10, 'per-window object counts are retained');
   eq(complete.phases[0].counters.densityMax, 10, 'density maximum is retained');
   const saved = JSON.parse(storage.getItem(QA_RENDER_COMPARE_STORAGE_KEY));
@@ -112,13 +132,60 @@ try {
   const report = formatQaRenderComparisonReport(complete);
   eq(JSON.parse(report).status, 'complete', 'clipboard report is valid snapshot JSON');
   assert(report.includes('"renderDeltaMs": -7'), 'clipboard report includes the A/B render delta');
+  assert(report.includes('"frameP95DeltaMs": -9'), 'clipboard report includes the p95 frame delta');
   assert(labels.some((label) => label.includes('complete 9/9 saved')), 'overlay label announces completion and persistence');
+
+  // Two repeats per group; discard two deliberately slow warmup samples per window.
+  const repeated = new QaRenderComparison(new Set(), {
+    phaseFrames: 20,
+    repeats: 2,
+    warmupFrames: 2,
+    applyHidden() {},
+  });
+  for (let phaseIndex = 0; phaseIndex < 18; phaseIndex += 1) {
+    for (let warmupIndex = 0; warmupIndex < 2; warmupIndex += 1) {
+      repeated.record({
+        frameMs: 9000 + warmupIndex,
+        renderMs: 8000 + warmupIndex,
+        counters: { enemies: 999, bullets: 999, gems: 999, density: 999, tier: 'warmup' },
+      });
+    }
+    for (let frame = 1; frame <= 20; frame += 1) {
+      repeated.record({
+        frameMs: phaseIndex * 100 + frame,
+        renderMs: phaseIndex * 10 + frame,
+        counters: { enemies: 20, bullets: 4, gems: 2, density: 20, tier: 'measured' },
+      });
+    }
+  }
+  const repeatedResult = repeated.snapshot();
+  eq(repeatedResult.status, 'complete', 'all repeated windows complete');
+  eq(repeatedResult.phases.length, 18, 'two repeats create six windows for each of three groups');
+  assert(repeatedResult.phases.every((phase) => phase.complete && phase.frames === 20 && phase.warmupFrames === 2), 'each window separately records discarded warmup and measured frames');
+  eq(repeatedResult.phases[0].repeatIndex, 1, 'first window identifies the first repeat');
+  eq(repeatedResult.phases[3].repeatIndex, 2, 'second A/B/A sequence identifies the second repeat');
+  near(repeatedResult.phases[0].frameP95Ms, 19, 'phase p95 uses nearest-rank percentile of measured samples');
+  near(repeatedResult.phases[0].frameMaxMs, 20, 'phase maximum excludes slow warmup samples');
+  near(repeatedResult.phases[0].counters.enemiesAvg, 20, 'warmup counters do not enter measured summaries');
+  const repeatedGems = repeatedResult.comparisons.find((pair) => pair.group === 'gems');
+  assert(repeatedGems, 'repeated GEMS pair is present');
+  eq(repeatedGems.baselineWindows, 4, 'repeated pair combines all four control windows');
+  eq(repeatedGems.oppositeWindows, 2, 'repeated pair combines both flipped windows');
+  eq(repeatedGems.baselineFrames, 80, 'baseline sample count excludes all warmup frames');
+  eq(repeatedGems.oppositeFrames, 40, 'opposite sample count excludes all warmup frames');
+  near(repeatedGems.baselineFrameMaxMs, 520, 'aggregated baseline maximum uses every repeated window');
+  near(repeatedGems.oppositeFrameMaxMs, 420, 'aggregated opposite maximum uses every repeated window');
+  near(repeatedGems.baselineFrameP95Ms, 516, 'aggregated baseline p95 uses all raw measured samples');
+  near(repeatedGems.oppositeFrameP95Ms, 418, 'aggregated opposite p95 uses all raw measured samples');
+  near(repeatedGems.frameP95DeltaMs, -98, 'repeated p95 difference is opposite minus baseline');
 
   // Death: retain both finished windows and the in-progress partial window before restoring.
   const deathStorage = new MemoryStorage();
   const deathApplied = [];
   const interrupted = new QaRenderComparison(new Set(['atmo']), {
     phaseFrames: 3,
+    repeats: 1,
+    warmupFrames: 0,
     storage: deathStorage,
     applyHidden: (selection) => deathApplied.push([...selection].sort().join(',')),
   });
@@ -143,6 +210,8 @@ try {
   // A manual toggle also stops safely; a broken storage environment never crashes the game.
   const unavailable = new QaRenderComparison(new Set(), {
     phaseFrames: 2,
+    repeats: 1,
+    warmupFrames: 0,
     storage: { setItem() { throw new Error('storage disabled'); } },
     applyHidden() {},
   });
@@ -150,7 +219,22 @@ try {
   unavailable.record({ frameMs: 20, renderMs: 4, counters: { enemies: 1, bullets: 0, gems: 0, density: 1, tier: 'low' } });
   unavailable.finish('manual-stop');
   eq(unavailable.snapshot().stopReason, 'manual-stop', 'manual cancellation keeps its reason');
-  assert(unavailable.snapshot().phases[0].frames === 1, 'manual stop keeps the partial window in memory');
+  assert(unavailable.snapshot().phases[0].frames === 1, 'manual stop keeps the partial phase in memory');
+
+  const warmupStop = new QaRenderComparison(new Set(), {
+    phaseFrames: 2,
+    repeats: 1,
+    warmupFrames: 3,
+    applyHidden() {},
+  });
+  for (const frameMs of [500, 600]) {
+    warmupStop.record({ frameMs, renderMs: frameMs / 2, counters: { enemies: 1, bullets: 0, gems: 0, density: 1, tier: 'warmup' } });
+  }
+  warmupStop.finish('manual-stop');
+  const warmupPartial = warmupStop.snapshot().phases[0];
+  eq(warmupPartial.warmupFrames, 2, 'interrupted warmup reports discarded samples');
+  eq(warmupPartial.frames, 0, 'warmup samples are not counted as measured frames');
+  eq(warmupPartial.frameAvgMs, null, 'warmup-only windows have no measured average');
 
   const rows = {};
   for (const key of QA_PERF_KEYS) rows[key] = { avg: 1, max: 2 };
