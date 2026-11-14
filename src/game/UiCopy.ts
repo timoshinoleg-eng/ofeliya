@@ -656,6 +656,14 @@ export const LEGENDARY_CARD_DETAILS: Record<
   },
 };
 
+/** QA carry result must describe the mutation actually applied at transition. */
+export function carryTrophySubtitle(appliedId: unknown): string {
+  const upgrade = UPGRADES.find((item) => item.id === appliedId);
+  return upgrade
+    ? TROPHY_COPY.carrySubtitle.replace('МНОЖЕСТВЕННЫЙ ЗАЛП', upgrade.shortName)
+    : 'ПРАЙМ подавлен. В Сердце: уровень 1, прочность 100; сохранён один стак мутации. Трофей останется на весь забег.';
+}
+
 /**
  * Единицы характеристик в строках «было → стало».
  *

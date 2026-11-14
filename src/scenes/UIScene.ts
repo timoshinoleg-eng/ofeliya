@@ -54,6 +54,7 @@ import {
   MUTATION_CARD_HEADERS,
   RESULT_COPY,
   TROPHY_COPY,
+  carryTrophySubtitle,
   resultModeChip,
   shareModeSuffix,
   trophySlotNote,
@@ -1618,7 +1619,7 @@ export class UIScene extends Phaser.Scene {
         W / 2,
         titleY + titleT.height / 2 + subtitleGap,
         legendaryReward
-          ? (gs.qaCarryStackState().applied ? TROPHY_COPY.carrySubtitle : TROPHY_COPY.subtitle)
+          ? (gs.qaCarryStackState().applied ? carryTrophySubtitle(gs.qaCarryStackState().appliedId) : TROPHY_COPY.subtitle)
           : LEVELUP_COPY.hint,
         {
           fontFamily: UI_FONT,

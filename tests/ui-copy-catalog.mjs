@@ -125,6 +125,10 @@ try {
   );
 
   // 2b. Trophy screen copy (после «ИММУННОГО ПРАЙМА»): переход, правило, сноска.
+  assert.match(copy.carryTrophySubtitle('multi'), /«МНОЖЕСТВЕННЫЙ ЗАЛП»/);
+  assert.match(copy.carryTrophySubtitle('pierce'), /«ПРОНИКНОВЕНИЕ»/);
+  assert.doesNotMatch(copy.carryTrophySubtitle('pierce'), /«МНОЖЕСТВЕННЫЙ ЗАЛП»/);
+  assert.doesNotMatch(copy.carryTrophySubtitle('not-in-catalog'), /«МНОЖЕСТВЕННЫЙ ЗАЛП»/);
   assert.equal(
     copy.TROPHY_COPY.subtitle,
     'ИММУННЫЙ ПРАЙМ подавлен. Кровоток пройден: в Сердце штамм начнёт заново — ' +
