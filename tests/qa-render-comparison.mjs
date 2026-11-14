@@ -243,7 +243,7 @@ try {
 
   // Source wiring: the URL only exposes controls; a tap starts the run using the live hide selection.
   // Samples still come from real rendered frames; death/manual stop persist and restore settings.
-  const gameScene = readFileSync(resolve('src/scenes/GameScene.ts'), 'utf8');
+  const gameScene = readFileSync(resolve('src/scenes/GameScene.ts'), 'utf8').replace(/\r\n/g, '\n');
   const qaPerf = readFileSync(resolve('src/game/qaPerf.ts'), 'utf8');
   const gate = "if (import.meta.env.DEV || import.meta.env.VITE_QA_TOOLS === '1')";
   const gateIdx = gameScene.indexOf(gate);
