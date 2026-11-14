@@ -1782,6 +1782,25 @@ export class UIScene extends Phaser.Scene {
       cursor += lastGap;
     };
 
+    // Вариант A «эффект первым» (утверждённое отклонение от прежнего §5
+    // языковой библии, решение владельца 2026-11-05): после шапки игрок читает,
+    // ЧТО ДЕЛАЕТ выбор (описание/статы/эффект), а имя — ниже эффекта, перед
+    // метой (пипсы/уровень/служебный футер). Кегль имени сохраняется
+    // (16–20 px): полы читаемости ui-readability-smoke.cjs не тронуты.
+    const emitCardName = (): void => {
+      const nameText = mk(def.shortName, {
+        fontFamily: FONT,
+        fontSize: `${nameSize}px`,
+        fontStyle: 'bold',
+        color: VISUAL_TEXT.ivory,
+        lineSpacing: -2,
+        maxLines: 2,
+        wordWrap: { width: fullW, useAdvancedWrap: true },
+      }).setOrigin(0, 0);
+      place(nameText, -cw / 2 + padX);
+      row(nameText.height, 4);
+    };
+
     // Header band: tier/family line left, biological glyph plate right.
     const headerText = mk(mutationCardHeader(def), {
       fontFamily: FONT,
@@ -1832,19 +1851,6 @@ export class UIScene extends Phaser.Scene {
       );
     }
     row(headerText.height, 3);
-
-    // Card name.
-    const nameText = mk(def.shortName, {
-      fontFamily: FONT,
-      fontSize: `${nameSize}px`,
-      fontStyle: 'bold',
-      color: VISUAL_TEXT.ivory,
-      lineSpacing: -2,
-      maxLines: 2,
-      wordWrap: { width: fullW, useAdvancedWrap: true },
-    }).setOrigin(0, 0);
-    place(nameText, -cw / 2 + padX);
-    row(nameText.height, 4);
 
     if (structured && def.legendaryId) {
       const details = LEGENDARY_CARD_DETAILS[def.legendaryId];
@@ -2052,6 +2058,9 @@ export class UIScene extends Phaser.Scene {
         }
       }
 
+      // Вариант A: имя — после эффекта и блока рецепта, перед метой.
+      emitCardName();
+
       if (def.showProgress !== false && def.max <= 8) {
         const progress = getUpgradeProgress(gs.runState, def);
         const barW = Math.min(118, Math.max(72, fullW - 64));
@@ -2089,6 +2098,10 @@ export class UIScene extends Phaser.Scene {
         lastGap = 0;
       }
     }
+
+    // Вариант A: имя special-карты — после контента (условие/эффект/цена/облик
+    // либо описание/плашка/подсказка «Сердца»), перед служебным футером.
+    if (special) emitCardName();
 
     if (special && !squash) {
       // Служебный тег карты. В squeeze-проходе он убирается первым: это
@@ -2135,7 +2148,9 @@ export class UIScene extends Phaser.Scene {
       );
     } else if (def.rarity === 'rare') {
       card.addAt(
-        this.add.rectangle(0, 0, cw - 2, height - 2).setStrokeStyle(1.2, accent, 0.5),
+        this.add
+          .rectangle(0, 0, cw - 2, height - 2)
+          .setStrokeStyle(1.2, accent, 0.5),
         3
       );
     }
@@ -2835,7 +2850,7 @@ export class UIScene extends Phaser.Scene {
     detailY += compact ? 20 : 23;
     const scoreStatus = this.add
       .text(W / 2, detailY, duelChallenge ? RESULT_COPY.duelSubmitting : RESULT_COPY.submitting, {
-        fontFamily: FONT,
+        fontFamily: UI_FONT,
         fontSize: compact ? '9px' : '10px',
         fontStyle: 'bold',
         color: '#8f9ab7',
@@ -2950,7 +2965,7 @@ export class UIScene extends Phaser.Scene {
       // the codex: the player never has to guess where a new record went.
       const codexPlate = this.add
         .text(W / 2, detailY, `${META_COPY.codexEntries(res.newAchievements.length)} ›`, {
-          fontFamily: FONT,
+          fontFamily: UI_FONT,
           fontSize: compact ? '9px' : '10px',
           fontStyle: 'bold',
           color: '#ffe066',
