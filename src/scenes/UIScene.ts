@@ -2148,9 +2148,7 @@ export class UIScene extends Phaser.Scene {
       );
     } else if (def.rarity === 'rare') {
       card.addAt(
-        this.add
-          .rectangle(0, 0, cw - 2, height - 2)
-          .setStrokeStyle(1.2, accent, 0.5),
+        this.add.rectangle(0, 0, cw - 2, height - 2).setStrokeStyle(1.2, accent, 0.5),
         3
       );
     }
@@ -2850,7 +2848,7 @@ export class UIScene extends Phaser.Scene {
     detailY += compact ? 20 : 23;
     const scoreStatus = this.add
       .text(W / 2, detailY, duelChallenge ? RESULT_COPY.duelSubmitting : RESULT_COPY.submitting, {
-        fontFamily: UI_FONT,
+        fontFamily: FONT,
         fontSize: compact ? '9px' : '10px',
         fontStyle: 'bold',
         color: '#8f9ab7',
@@ -2965,7 +2963,7 @@ export class UIScene extends Phaser.Scene {
       // the codex: the player never has to guess where a new record went.
       const codexPlate = this.add
         .text(W / 2, detailY, `${META_COPY.codexEntries(res.newAchievements.length)} ›`, {
-          fontFamily: UI_FONT,
+          fontFamily: FONT,
           fontSize: compact ? '9px' : '10px',
           fontStyle: 'bold',
           color: '#ffe066',
