@@ -8,14 +8,11 @@
  *            render as a residual (total - update - physics). The game emits
  *            PRE_RENDER/POST_RENDER around the actual render, so render is
  *            measured directly and the residual becomes `other` below.
- * - physics: Arcade world step, scene PRE_UPDATE -> UPDATE span (MEASURED,
- *            modulo event-emit overhead). ArcadePhysics registers World.update
- *            on the scene UPDATE event at scene boot; the overlay registers its
- *            own UPDATE listener later (in GameScene.create), so the overlay's
- *            UPDATE callback runs after World.update has finished. The
- *            overlay's PRE_UPDATE callback runs after GameObject preUpdate
- *            (UpdateList also registered at boot), so the PRE_UPDATE -> UPDATE
- *            span is exactly the world step, not preUpdate.
+ * - pre+phys: scene PRE_UPDATE -> UPDATE span (MEASURED, including event
+ *            overhead). Phaser 3.90 runs active GameObject.preUpdate through
+ *            UpdateList.sceneUpdate on UPDATE, before Arcade World.update.
+ *            Both execute before this overlay's later UPDATE listener; the
+ *            span is not a pure physics-world timing.
  * - update:  GameScene.update body for active gameplay frames (MEASURED).
  *            Frozen frames (RUN_ENDED / STAGE_TRANSITION / BOSS_DEFEATED /
  *            hitStop) return before beginUpdate and are NOT recorded.
@@ -25,11 +22,10 @@
  *   audio, cardiac hazard, danger-echo rendering and player bars also live
  *   inside update but have no individual row.
  * - other:   DERIVED residual: frame - physics - update - render, clamped
- *            at >= 0. This absorbs GameObject preUpdate (enemy sprite
- *            preUpdate lives HERE, not in `update`), POST_UPDATE, the UI
- *            scene step, input/sound/scene-manager overhead, and any
- *            measurement slack. If `other` dominates, the next step is
- *            isolating preUpdate — not another blind optimisation.
+ *            at >= 0. This absorbs POST_UPDATE, the UI scene step,
+ *            input/sound/scene-manager overhead, and any
+ *            measurement slack. GameObject preUpdate is in pre+phys, not
+ *            reliably separable from physics with these event boundaries.
  * - Paused frames are excluded: when the Game scene is paused (e.g. the
  *   mutation modal pauses it), its scene events stop firing, so the
  *   POST_RENDER handler skips the frame instead of recording a render-only
@@ -55,6 +51,7 @@
  */
 
 import type Phaser from 'phaser';
+import type { QaRenderCompareSample } from './qaRenderComparison';
 
 export type QaPerfKey =
   | 'frame'
@@ -161,12 +158,13 @@ export function formatQaPerfLines(
   worstFrameMs: number,
   worstCounters: QaPerfCounters | null,
   hideLabel?: string,
+  comparisonLabel?: string,
 ): string[] {
   const pair = (key: QaPerfKey): string => `${fmt(rows[key].avg)}/${fmt(rows[key].max)}`;
   const lines = [
     `QA PERF avg/max ms (${frames}f)`,
     `frame ${pair('frame')} | render ${pair('render')} (measured)`,
-    `physics ${pair('physics')} (measured) | update ${pair('update')}`,
+    `pre+phys ${pair('physics')} (measured) | update ${pair('update')}`,
     `fire ${pair('tryFire')} | blades ${pair('syncBlades')} | leg ${pair('legendary')} | dir ${pair('director')}`,
     `wave ${pair('wave')} | hp ${pair('enemyHealth')} | cells ${pair('hostCells')} | atmo ${pair('atmosphere')}`,
     `other ${pair('other')} (derived)`,
@@ -174,6 +172,9 @@ export function formatQaPerfLines(
   ];
   if (hideLabel !== undefined) {
     lines.push(`hide: ${hideLabel}`);
+  }
+  if (comparisonLabel !== undefined) {
+    lines.push(`compare: ${comparisonLabel}`);
   }
   if (worstCounters) {
     lines.push(
@@ -193,7 +194,9 @@ export class QaPerfOverlay {
   private readonly starts = new Map<QaPerfKey, number>();
   private readonly scene: Phaser.Scene;
   private readonly readCounters: () => QaPerfCounters;
+  private readonly onFrameSample?: (sample: QaRenderCompareSample) => void;
   private hideLabel: string | undefined;
+  private comparisonLabel: string | undefined;
   private text: Phaser.GameObjects.Text | null;
   private lastTextAt = 0;
   private frameStart = 0;
@@ -204,16 +207,22 @@ export class QaPerfOverlay {
   private worstCounters: QaPerfCounters | null = null;
   private destroyed = false;
 
-  constructor(scene: Phaser.Scene, readCounters: () => QaPerfCounters, hideLabel?: string) {
+  constructor(
+    scene: Phaser.Scene,
+    readCounters: () => QaPerfCounters,
+    hideLabel?: string,
+    onFrameSample?: (sample: QaRenderCompareSample) => void,
+  ) {
     this.scene = scene;
     this.readCounters = readCounters;
     this.hideLabel = hideLabel;
+    this.onFrameSample = onFrameSample;
     for (const key of QA_PERF_KEYS) this.stats.set(key, new QaPerfStats(120));
 
     // Listener order is the measurement (see header): ArcadePhysics and
     // UpdateList registered at scene boot, before create() runs, so:
-    // - onPreUpdate runs AFTER GameObject preUpdate -> marks physics start;
-    // - onUpdate runs AFTER World.update -> marks physics end.
+    // - onPreUpdate marks the interval start;
+    // - onUpdate runs AFTER UpdateList.sceneUpdate and World.update.
     // Event names are Phaser's literal strings (phaser/src/scene/events/*,
     // phaser/src/core/events/*); the module keeps Phaser as a type-only
     // import so the pure parts stay node-testable without loading Phaser.
@@ -248,6 +257,11 @@ export class QaPerfOverlay {
    */
   setHideLabel(label: string): void {
     this.hideLabel = label;
+    this.refreshText();
+  }
+
+  setComparisonLabel(label: string | undefined): void {
+    this.comparisonLabel = label;
     this.refreshText();
   }
 
@@ -311,10 +325,12 @@ export class QaPerfOverlay {
     this.stats.get('frame')?.record(frameMs);
     // Derived residual from THIS frame's own component samples (see header).
     this.stats.get('other')?.record(this.lastOtherMs(frameMs));
+    const counters = this.onFrameSample ? this.readCounters() : null;
     if (frameMs > this.worstFrameMs) {
       this.worstFrameMs = frameMs;
-      this.worstCounters = this.readCounters();
+      this.worstCounters = counters ?? this.readCounters();
     }
+    if (counters) this.onFrameSample?.({ frameMs, renderMs, counters });
     if (now - this.lastTextAt >= 250) {
       this.lastTextAt = now;
       this.refreshText();
@@ -350,7 +366,17 @@ export class QaPerfOverlay {
   private refreshText(): void {
     if (!this.text) return;
     const snap = this.snapshot();
-    this.text.setText(formatQaPerfLines(snap.rows, snap.frames, snap.counters, snap.worstFrameMs, snap.worstCounters, this.hideLabel));
+    this.text.setText(
+      formatQaPerfLines(
+        snap.rows,
+        snap.frames,
+        snap.counters,
+        snap.worstFrameMs,
+        snap.worstCounters,
+        this.hideLabel,
+        this.comparisonLabel,
+      ),
+    );
   }
 
   /**

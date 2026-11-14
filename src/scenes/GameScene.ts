@@ -55,6 +55,20 @@ import { IDENTITY } from '../game/identity';
 import { readControlMode, type ControlMode } from '../game/ControlMode';
 import { generateRunSeed, RunRng } from '../game/RunRng';
 import { QaPerfOverlay } from '../game/qaPerf';
+import {
+  formatQaRenderComparisonReport,
+  QaRenderComparison,
+  isQaRenderComparisonEnabled,
+  readSavedQaRenderComparison,
+  QA_RENDER_COMPARE_PREVIOUS_KEY,
+} from '../game/qaRenderComparison';
+import { isQaExperimentMode } from '../game/qaExperimentMode';
+import {
+  qaApplyCarryStack,
+  qaCarryStack,
+  resetQaCarryStackRun,
+  setQaCarryStackMutation,
+} from '../game/qaCarryStack';
 import { parseQaHide, qaHideLabel, toggleQaHide, type QaHideGroup } from '../game/qaHide';
 import { applyQaMutationFixture, parseQaMutationState } from '../game/qaMutationStates';
 import { applyQaTrophyFixture, parseQaTrophyState } from '../game/qaTrophyStates';
@@ -243,6 +257,19 @@ export class GameScene extends Phaser.Scene {
    * calls in the hot path.
    */
   private qaPerf: QaPerfOverlay | null = null;
+  /** Manual QA-only A/B/A comparison; null until started from its QA control. */
+  private qaComparison: QaRenderComparison | null = null;
+  /** QA-only report control; created only for the render-comparison URL. */
+  private qaRenderReportButton: Phaser.GameObjects.Text | null = null;
+  private qaRenderStartButton: Phaser.GameObjects.Text | null = null;
+  /** QA-эксперимент: копии «ГЕОМЕТРИИ РАСКОЛА» не отбрасывают цель. Выключен по умолчанию. */
+  private qaNoCopyKnockback = false;
+  /** QA-эксперимент: копии не делятся повторно (только одно поколение копий). */
+  private qaSingleGeneration = false;
+  /** QA-эксперимент: копия пропускает ТОЛЬКО своё появление исходного врага. */
+  private qaSkipSource = false;
+  /** QA-счётчик: сколько столкновений копии со своим исходным появлением было пропущено. */
+  qaSkippedCopyCollisions = 0;
   /**
    * QA render-split selection — parsed ONLY inside the QA gate in create()
    * (same gate as the overlay). Null in production builds: the update-path
@@ -404,7 +431,7 @@ export class GameScene extends Phaser.Scene {
     // the capability here, after seed/control are final but before meaningful play.
     // Gameplay never waits for the network: failure degrades to an unranked result.
     this.registry.remove('runTokenGrant');
-    if (!this.resumed && !this.dailyRun && this.difficulty.id === 'standard') {
+    if (!isQaExperimentMode() && !this.resumed && !this.dailyRun && this.difficulty.id === 'standard') {
       const grantSeed = this.runSeed;
       const grantControlMode = this.controlMode;
       void beginRunCapability(PlatformBridge, {
@@ -633,6 +660,16 @@ export class GameScene extends Phaser.Scene {
     // offer a return to a result the player has already left behind.
     this.registry.remove('lastRunResult');
     this.registry.set('run', this.snapshot());
+    // Opt-in full-run comparison. Pair fixtures may still override these
+    // switches after create; every new run starts from its own URL settings.
+    const experimentQa = import.meta.env.VITE_QA_TOOLS === '1';
+    const experimentParams = new URLSearchParams(window.location.search);
+    const useGeometry = experimentQa && experimentParams.get('qaGeometry') === '1';
+    this.qaNoCopyKnockback = useGeometry;
+    this.qaSingleGeneration = useGeometry;
+    this.qaSkipSource = useGeometry;
+    setQaCarryStackMutation(experimentQa && experimentParams.get('qaCarry') === 'multi' ? 'multi' : null);
+    resetQaCarryStackRun();
     this.saveCheckpointNow();
     if (!resume) {
       this.trackComprehensionOnce('run_start', {
@@ -675,22 +712,42 @@ export class GameScene extends Phaser.Scene {
     // UI HUD never hides the overlay or the buttons. The hide label is
     // shown in the overlay so every screenshot is self-documenting (base
     // runs read `hide: none`).
+    // ?qaCompare=render enables manual A/B/A controls. The player can start a
+    // 120-frame-per-phase comparison at a chosen battle moment; each run
+    // snapshots the current visibility selection and restores it on completion,
+    // death or manual stop.
+    this.qaPerf = null;
+    this.qaComparison = null;
+    this.qaRenderReportButton = null;
+    this.qaRenderStartButton = null;
     if (import.meta.env.DEV || import.meta.env.VITE_QA_TOOLS === '1') {
       const hide = parseQaHide(window.location.search);
+      const compareEnabled = isQaRenderComparisonEnabled(window.location.search);
       this.qaHide = hide;
       // QA instrumentation first: the perf overlay and the render-split toggle
       // buttons must stay close to the gate (source-contract in
       // tests/qa-perf-overlay.mjs), so the fixed-state fixtures below cannot
       // push the construction out of the gated block.
-      this.qaPerf = new QaPerfOverlay(this, () => ({
-        enemies: this.enemies.countActive(true),
-        bullets: this.bullets.countActive(true),
-        gems: this.gems.countActive(true),
-        density: this.visualEnemyDensity,
-        tier: this.runtimeQuality.profile.level,
-      }), qaHideLabel(hide));
+      this.qaPerf = new QaPerfOverlay(
+        this,
+        () => ({
+          enemies: this.enemies.countActive(true),
+          bullets: this.bullets.countActive(true),
+          gems: this.gems.countActive(true),
+          density: this.visualEnemyDensity,
+          tier: this.runtimeQuality.profile.level,
+        }),
+        qaHideLabel(hide),
+        compareEnabled ? (sample) => this.qaComparison?.record({ ...sample, visibilityState: document.visibilityState }) : undefined,
+      );
       if (hide.size > 0) this.applyQaHide(hide);
       this.createQaToggleButtons();
+      if (compareEnabled) {
+        this.createQaRenderComparisonControls();
+        const noteVisibility = () => this.qaComparison?.noteVisibility(document.visibilityState);
+        document.addEventListener('visibilitychange', noteVisibility);
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => document.removeEventListener('visibilitychange', noteVisibility));
+      }
       // QA fixed mutation-choice states: ?qaMutation=A|B|C opens the agreed
       // fixed offer through the REAL choice path (pendingChoices +
       // awaitingChoice -> UIScene level-up modal). Stacks go through the real
@@ -758,6 +815,7 @@ export class GameScene extends Phaser.Scene {
       this.registry.remove('joy');
       this.registry.remove('aimJoy');
       this.registry.remove('runtimeQuality');
+      this.qaRenderReportButton = null;
     });
   }
 
@@ -769,6 +827,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private exitToMenu(): void {
+    this.qaComparison?.finish('run-ended');
     this.saveCheckpointNow();
     this.cancelStageTransition();
     this.audio.stop();
@@ -806,6 +865,22 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** Apply every QA visibility group, including restoring its current baseline. */
+  private applyQaHideSelection(hide: ReadonlySet<QaHideGroup>): void {
+    this.qaHide = new Set(hide);
+    const gemsHidden = this.qaHide.has('gems');
+    for (const gem of this.gems.getChildren() as Gem[]) {
+      if (gemsHidden) gem.setVisible(false);
+      else if (gem.active) gem.setVisible(true);
+    }
+    const atmoHidden = this.qaHide.has('atmo');
+    this.atmosphere.setQaHidden(atmoHidden);
+    this.vignette.setVisible(atmoHidden ? false : this.vignetteNormalVisible);
+    this.getUiScene()?.setQaHudHidden(this.qaHide.has('ui'));
+    this.qaPerf?.setHideLabel(qaHideLabel(this.qaHide));
+    this.updateQaToggleButtons();
+  }
+
   /**
    * QA render-split v2 toggle buttons. GameScene-owned (depth 200, right
    * edge below the overlay text) so hiding the UI HUD never hides them.
@@ -839,6 +914,182 @@ export class GameScene extends Phaser.Scene {
     this.layoutQaToggleButtons();
     this.updateQaToggleButtons();
   }
+  /** Comparison controls exist only alongside the QA-gated ?qaCompare=render option. */
+  private createQaRenderComparisonControls(): void {
+    this.createQaRenderStartButton();
+    this.createQaRenderReportButton();
+  }
+
+  private createQaRenderStartButton(): void {
+    const button = this.add
+      .text(0, 0, 'Начать A/B-замер', {
+        fontFamily: 'monospace',
+        fontSize: '11px',
+        color: '#7dffb0',
+        backgroundColor: 'rgba(0,0,0,0.55)',
+        padding: { x: 8, y: 6 },
+      })
+      .setOrigin(1, 0)
+      .setScrollFactor(0)
+      .setDepth(200)
+      .setInteractive({ useHandCursor: true });
+    button.on('pointerup', () => this.startQaRenderComparison());
+    this.qaRenderStartButton = button;
+    this.layoutQaRenderStartButton();
+  }
+
+  private layoutQaRenderStartButton(): void {
+    this.qaRenderStartButton?.setPosition(this.scale.width - 8, 384);
+  }
+
+  private startQaRenderComparison(): void {
+    if (!this.qaHide || this.qaComparison?.active) return;
+    let storage: Storage | null = null;
+    try {
+      storage = window.localStorage;
+    } catch {
+      // Comparison remains usable in restricted WebViews; persistence is reported as unavailable.
+    }
+    this.qaComparison = new QaRenderComparison(new Set(this.qaHide), {
+      storage,
+      visibilityState: document.visibilityState,
+      metadata: {
+        renderer: this.game.renderer.type === Phaser.WEBGL ? 'webgl' : 'canvas',
+        dpr: window.devicePixelRatio,
+        canvas: { width: this.game.canvas.width, height: this.game.canvas.height },
+      },
+      applyHidden: (selection) => this.applyQaHideSelection(selection),
+      onLabel: (label) => {
+        this.qaPerf?.setComparisonLabel(label);
+        this.updateQaRenderStartButton();
+      },
+    });
+    if (this.qaRenderReportButton && !this.qaRenderReportButton.input) {
+      this.qaRenderReportButton
+        .setColor('#7dffb0')
+        .setInteractive({ useHandCursor: true });
+    }
+    this.updateQaRenderStartButton();
+  }
+
+  private updateQaRenderStartButton(): void {
+    const button = this.qaRenderStartButton;
+    if (!button) return;
+    const active = this.qaComparison?.active ?? false;
+    button
+      .setText(active ? 'A/B-замер идёт...' : this.qaComparison ? 'Повторить A/B-замер' : 'Начать A/B-замер')
+      .setAlpha(active ? 0.7 : 1);
+  }
+
+  /** The report control exists only alongside the QA-gated ?qaCompare=render option. */
+  private createQaRenderReportButton(): void {
+    const button = this.add
+      .text(0, 0, 'Скопировать отчёт', {
+        fontFamily: 'monospace',
+        fontSize: '11px',
+        color: '#777777',
+        backgroundColor: 'rgba(0,0,0,0.55)',
+        padding: { x: 8, y: 6 },
+      })
+      .setOrigin(1, 0)
+      .setScrollFactor(0)
+      .setDepth(200);
+    button.on('pointerup', () => void this.copyQaRenderComparisonReport(button));
+    try {
+      if (readSavedQaRenderComparison(window.localStorage)) button.setColor('#7dffb0').setInteractive({ useHandCursor: true });
+    } catch { /* Storage may be disabled. */ }
+    this.qaRenderReportButton = button;
+    this.layoutQaRenderReportButton();
+  }
+
+  private layoutQaRenderReportButton(): void {
+    this.qaRenderReportButton?.setPosition(this.scale.width - 8, 422);
+  }
+
+  private async copyQaRenderComparisonReport(button: Phaser.GameObjects.Text): Promise<void> {
+    let storage: Storage | null = null;
+    try { storage = window.localStorage; } catch { /* Storage may be disabled. */ }
+    const snapshot = this.qaComparison?.snapshot() ?? readSavedQaRenderComparison(storage);
+    if (!snapshot) {
+      this.setQaReportCopyFeedback(button, 'Отчёт недоступен');
+      return;
+    }
+    const report = formatQaRenderComparisonReport(snapshot);
+    this.showQaRenderReport(report, storage);
+    try {
+      let copied = false;
+      if (navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(report);
+          copied = true;
+        } catch {
+          // Some embedded WebViews expose Clipboard API but reject writes.
+        }
+      }
+      if (!copied) {
+        const textarea = document.createElement('textarea');
+        textarea.value = report;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        textarea.style.pointerEvents = 'none';
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+          copied = document.execCommand('copy');
+        } finally {
+          textarea.remove();
+        }
+      }
+      if (!copied) throw new Error('Clipboard copy was rejected');
+      this.setQaReportCopyFeedback(button, 'Отчёт скопирован');
+    } catch {
+      this.setQaReportCopyFeedback(button, 'Не удалось скопировать');
+    }
+  }
+
+  /** Visible selectable fallback also works when WebView clipboard access fails. */
+  private showQaRenderReport(report: string, storage: Storage | null): void {
+    document.querySelector('[data-qa-render-report]')?.remove();
+    const root = document.createElement('div');
+    root.dataset.qaRenderReport = 'true';
+    root.style.cssText = 'position:fixed;inset:0;z-index:100000;background:#10161d;color:white;padding:12px;display:flex;flex-direction:column;gap:8px';
+    const heading = document.createElement('strong');
+    heading.textContent = 'QA: отчёт замера';
+    const area = document.createElement('textarea');
+    area.readOnly = true;
+    area.value = report;
+    area.setAttribute('aria-label', 'QA отчёт');
+    area.style.cssText = 'width:100%;flex:1;min-height:0;background:#fff;color:#000;user-select:text';
+    const close = document.createElement('button');
+    close.textContent = 'Закрыть';
+    close.onclick = () => root.remove();
+    const copy = document.createElement('button');
+    copy.textContent = 'Скопировать показанный отчёт';
+    copy.onclick = () => {
+      void (async () => {
+        try {
+          if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(area.value);
+          else { area.select(); if (!document.execCommand('copy')) throw new Error('copy unavailable'); }
+          copy.textContent = 'Скопировано';
+        } catch { area.select(); copy.textContent = 'Выделите текст и скопируйте'; }
+      })();
+    };
+    const previous = document.createElement('button');
+    previous.textContent = 'Показать предыдущий отчёт';
+    previous.onclick = () => {
+      try { area.value = storage?.getItem(QA_RENDER_COMPARE_PREVIOUS_KEY) ?? report; } catch { area.value = report; }
+    };
+    root.append(heading, area, previous, copy, close);
+    document.body.appendChild(root);
+  }
+
+  private setQaReportCopyFeedback(button: Phaser.GameObjects.Text, message: string): void {
+    button.setText(message);
+    this.time.delayedCall(1800, () => {
+      if (button.active) button.setText('Скопировать отчёт');
+    });
+  }
 
   /** Right edge, below the overlay text (which ends around y 250). */
   private layoutQaToggleButtons(): void {
@@ -861,24 +1112,11 @@ export class GameScene extends Phaser.Scene {
   /** Flip one group mid-fight and refresh the overlay label + buttons. */
   private toggleQaHideGroup(group: QaHideGroup): void {
     if (!this.qaHide) return;
+    // A manual tap is an explicit stop: preserve partial data and restore the
+    // captured selection before applying the user's requested toggle.
+    this.qaComparison?.finish('manual-stop');
     const next = toggleQaHide(this.qaHide, group);
-    const hidden = next.has(group);
-    this.qaHide = next;
-    if (group === 'gems') {
-      for (const gem of this.gems.getChildren() as Gem[]) {
-        // Inactive pooled gems stay invisible (disableBody hides them);
-        // only live gems come back.
-        if (hidden) gem.setVisible(false);
-        else if (gem.active) gem.setVisible(true);
-      }
-    } else if (group === 'atmo') {
-      this.atmosphere.setQaHidden(hidden);
-      this.vignette.setVisible(hidden ? false : this.vignetteNormalVisible);
-    } else if (group === 'ui') {
-      this.getUiScene()?.setQaHudHidden(hidden);
-    }
-    this.qaPerf?.setHideLabel(qaHideLabel(next));
-    this.updateQaToggleButtons();
+    this.applyQaHideSelection(next);
   }
 
   update(time: number, delta: number): void {
@@ -1604,6 +1842,30 @@ export class GameScene extends Phaser.Scene {
     return this.awaitingChoice && this.pendingChoices.some((choice) => choice.id === id);
   }
 
+  /**
+   * QA — задать переносимую мутацию для перехода «Кровоток» -> «Сердце».
+   * Доступно только в dev/QA-сборках (тот же гейт, что у `qaPerf`).
+   */
+  setQaCarryStack(mutationId: string | null): void {
+    if (!(import.meta.env.DEV || import.meta.env.VITE_QA_TOOLS === '1')) return;
+    setQaCarryStackMutation(mutationId);
+  }
+
+  /** QA — снимок состояния переноса (для пробника и телефонного модуля). */
+  qaCarryStackState(): Record<string, unknown> {
+    const q = qaCarryStack();
+    return {
+      enabled: q.enabled,
+      mutationId: q.mutationId,
+      requireSource: q.requireSource,
+      sourceStacks: q.sourceStacks,
+      applied: q.applied,
+      appliedStacks: q.appliedStacks,
+      appliedEffects: q.appliedEffects,
+      appliedId: q.appliedId,
+    };
+  }
+
   chooseUpgrade(id: string): boolean {
     const def = this.pendingChoices.find((c) => c.id === id);
     // Stale or fabricated ids must be a pure no-op: do not burn queued levels, pity,
@@ -2198,6 +2460,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.runState.resetStageProgression(nextStage);
+    // QA — перенос одного стака мутации в новую стадию («Кровоток» -> «Сердце»).
+    // Штатный сброс уже выполнен: уровень, XP, прочность, временные эффекты и
+    // стадийные эволюции обнулены. Переносится ровно один стак той мутации,
+    // которую игрок действительно взял в «Кровотоке». Трофей перехода собирается
+    // ПОСЛЕ этого вызова, и его состав не меняется (условия легендарных читают
+    // `stage.evolutions`, а он остаётся пустым).
+    qaApplyCarryStack(this.runState);
     this.queuedLevels = 0;
     this.awaitingChoice = false;
     this.pendingChoices = [];
@@ -2720,6 +2989,7 @@ export class GameScene extends Phaser.Scene {
 
   finish(win: boolean, reason: RunEndReason = win ? 'campaign-complete' : 'defeat'): void {
     if (this.registry.get('runResult')) return;
+    this.qaComparison?.finish(!win && this.runState.stage.hp <= 0 ? 'player-death' : 'run-ended');
     this.notificationRegion.destroy();
     if (this.stageDirector.phase !== 'RUN_ENDED') this.stageDirector.endRun(reason);
     this.resetCardiacLineHazard();
@@ -3043,6 +3313,21 @@ export class GameScene extends Phaser.Scene {
     const b = obj1 as Bullet;
     const e = obj2 as Enemy;
     if (!b.active || !e.active) return;
+    // Копия пропускает ТОЛЬКО своё появление исходного врага: тот же ОБЪЕКТ и тот же
+    // серийный номер появления. Сравнивать только spawnSerial нельзя: счётчик
+    // инстансный, и у двух разных врагов при первом появлении он одинаков (1) —
+    // так можно было бы пропустить совершенно чужого врага.
+    // Столкновение при пропуске не тратит копию, не наносит урон и не запускает
+    // эффекты попадания.
+    if (
+      this.qaSkipSource &&
+      b.qaSourceEnemy !== null &&
+      b.qaSourceEnemy === e &&
+      e.spawnSerial === b.qaSourceSpawnSerial
+    ) {
+      this.qaSkippedCopyCollisions += 1;
+      return;
+    }
     if (b.lastHit === e && this.time.now - b.lastHitAt < 220) return;
     b.lastHit = e;
     b.lastHitAt = this.time.now;
@@ -3060,10 +3345,11 @@ export class GameScene extends Phaser.Scene {
     this.vfx.hit(
       e.x, e.y, b.prism ? COLORS.gold : e.color, { x: bv.x / vm, y: bv.y / vm }, e.radius
     );
-    const dealtDamage = e.takeDamage(damage, (bv.x / vm) * 130, (bv.y / vm) * 130);
+    const knock = this.bulletKnockback(b);
+    const dealtDamage = e.takeDamage(damage, (bv.x / vm) * knock, (bv.y / vm) * knock);
     Sfx.play('hit');
     this.showDamage(e.x, e.y, dealtDamage);
-    this.trySplitProjectile(b, bv);
+    this.trySplitProjectile(b, bv, e);
     if (rhythmBurst) this.triggerRhythmBurst(e, dealtDamage);
     if (b.pierceLeft > 0) b.pierceLeft -= 1;
     else b.disableBody(true, true);
@@ -3147,11 +3433,58 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private trySplitProjectile(source: Bullet, velocity: { x: number; y: number }): void {
+  /**
+   * Импульс отбрасывания от попадания снаряда.
+   *
+   * В штатной игре попадание добавляет 130 к СКОРОСТИ отбрасывания цели
+   * (Enemy.knockX/knockY), которая затухает множителем 0.82 за кадр.
+   *
+   * QA-эксперимент: копии «ГЕОМЕТРИИ РАСКОЛА» (generation > 0) отбрасывания не дают.
+   * Оригинальные снаряды — включая «ГИПЕРШИП» (тоже generation 0, но с prism-флагом) —
+   * отбрасывают как раньше.
+   */
+  private bulletKnockback(b: Bullet): number {
+    if (b.generation > 0 && this.qaNoCopyKnockback) return 0;
+    return 130;
+  }
+
+  /**
+   * QA-эксперимент: копии не делятся повторно.
+   *
+   * Штатно копия первого поколения делится ещё раз (generation < 2), и потолок урона
+   * равен 1 + 2×0,45 + 4×0,2025 = ×2,71. С флагом деление обрывается на первом
+   * поколении: оригинал + две копии, потолок ×1,9.
+   */
+  private splitGenerationLimit(): number {
+    return this.qaSingleGeneration ? 1 : 2;
+  }
+
+  /** Включение экспериментов. Только в DEV/QA-сборке. */
+  setQaNoCopyKnockback(value: boolean): void {
+    if (!import.meta.env.DEV && import.meta.env.VITE_QA_TOOLS !== '1') return;
+    this.qaNoCopyKnockback = value;
+  }
+
+  setQaSingleGeneration(value: boolean): void {
+    if (!import.meta.env.DEV && import.meta.env.VITE_QA_TOOLS !== '1') return;
+    this.qaSingleGeneration = value;
+  }
+
+  /** Копия пропускает своё появление исходного врага. Только в DEV/QA-сборке. */
+  setQaSkipSource(value: boolean): void {
+    if (!import.meta.env.DEV && import.meta.env.VITE_QA_TOOLS !== '1') return;
+    this.qaSkipSource = value;
+  }
+
+  private trySplitProjectile(
+    source: Bullet,
+    velocity: { x: number; y: number },
+    hitEnemy?: Enemy
+  ): void {
     if (
       !this.runState.hasLegendary('split-geometry') ||
       source.splitUsed ||
-      source.generation >= 2
+      source.generation >= this.splitGenerationLimit()
     ) {
       return;
     }
@@ -3169,6 +3502,11 @@ export class GameScene extends Phaser.Scene {
         true,
         source.generation + 1
       );
+      // Источник копии записывается ВСЕГДА (даже когда пропуск выключен) — чтобы
+      // пробник мог отдельно считать попадания в исходную цель и в чужих врагов.
+      // Идентификация — пара (объект + номер появления).
+      child.qaSourceEnemy = hitEnemy ?? null;
+      child.qaSourceSpawnSerial = hitEnemy ? hitEnemy.spawnSerial : -1;
     }
   }
 
@@ -3442,5 +3780,7 @@ export class GameScene extends Phaser.Scene {
     this.atmosphere.resize();
     this.vignette.setPosition(W / 2, H / 2).setDisplaySize(W * 1.25, H * 1.25);
     if (this.qaToggleButtons.length > 0) this.layoutQaToggleButtons();
+    this.layoutQaRenderStartButton();
+    this.layoutQaRenderReportButton();
   }
 }

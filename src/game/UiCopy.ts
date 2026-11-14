@@ -615,6 +615,7 @@ export const TROPHY_COPY = {
    */
   subtitle:
     'ИММУННЫЙ ПРАЙМ подавлен. Кровоток пройден: в Сердце штамм начнёт заново — уровень 1, прочность 100, мутации заново. Трофей останется с тобой на весь забег.',
+  carrySubtitle: 'ПРАЙМ подавлен. В Сердце: уровень 1, прочность 100; сохранён один стак «МНОЖЕСТВЕННЫЙ ЗАЛП». Трофей останется на весь забег.',
   /** Правило «только одна»: число вариантов берётся из фактического предложения. */
   rule: (choiceCount: number): string =>
     choiceCount >= 2 ? 'Выбери одну из двух — вторая исчезнет.' : 'Выбери её — другого варианта не будет.',
@@ -654,6 +655,14 @@ export const LEGENDARY_CARD_DETAILS: Record<
     appearance: 'Облик штамма меняется на 8 с (только визуально)',
   },
 };
+
+/** QA carry result must describe the mutation actually applied at transition. */
+export function carryTrophySubtitle(appliedId: unknown): string {
+  const upgrade = UPGRADES.find((item) => item.id === appliedId);
+  return upgrade
+    ? TROPHY_COPY.carrySubtitle.replace('МНОЖЕСТВЕННЫЙ ЗАЛП', upgrade.shortName)
+    : 'ПРАЙМ подавлен. В Сердце: уровень 1, прочность 100; сохранён один стак мутации. Трофей останется на весь забег.';
+}
 
 /**
  * Единицы характеристик в строках «было → стало».

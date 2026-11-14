@@ -407,6 +407,12 @@ async function boot(signal: AbortSignal): Promise<void> {
     window.__renderSnapshot = () => renderSnapshot(game, host);
   }
 
+  // Phone comparison modules only execute inside the QA build.
+  if (import.meta.env.VITE_QA_TOOLS === '1') {
+    void import('./game/qaTitanCandidate').then((m) => m.startTitanCandidateQA(game));
+    void import('./game/qaCarryStackPair').then((m) => m.startCarryPairQA(game));
+  }
+
   if (
     'serviceWorker' in navigator &&
     import.meta.env.PROD &&

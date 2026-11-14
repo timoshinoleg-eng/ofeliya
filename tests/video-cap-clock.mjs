@@ -15,7 +15,7 @@ function exercise({lateCap=false}={}){
  }
  const host=new Element();let media;
  const document={getElementById:id=>id==='game'?host:null,createElement:tag=>{const e=new Element();if(tag==='video')media=e;return e;}};
- const exports={};const source=readFileSync('src/systems/VideoInterstitial.ts','utf8').replaceAll('import.meta.env.BASE_URL',JSON.stringify('/'));
+ const exports={};const source=readFileSync('src/systems/VideoInterstitial.ts','utf8').replaceAll('import.meta.env.BASE_URL',JSON.stringify('/')).replaceAll('import.meta.env.VITE_QA_TOOLS',JSON.stringify('0'));
  const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
  vm.runInNewContext(js,{exports,module:{exports},window:{...clock,location:{search:'?video=1'}},document,navigator:{webdriver:true},URLSearchParams});
  const api=exports.VideoInterstitial;

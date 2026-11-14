@@ -11,6 +11,19 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
   prism = false;
   generation = 0;
   splitUsed = false;
+  /**
+   * QA-эксперимент: враг, попадание в которое породило эту копию.
+   *
+   * Идентификация — ПАРОЙ (объект + серийный номер появления):
+   * `spawnSerial` — инстансный счётчик объекта, поэтому у ДВУХ РАЗНЫХ врагов
+   * при первом появлении он одинаков (1). Одного номера мало: так можно
+   * пропустить совершенно чужого врага.
+   *
+   * null / -1 = источник не записан. Поля сбрасываются в fire() и
+   * deactivateForStageReset(), то есть при переиспользовании снаряда из пула.
+   */
+  qaSourceEnemy: Enemy | null = null;
+  qaSourceSpawnSerial = -1;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'viral-particle');
@@ -26,6 +39,8 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     this.prism = prism;
     this.generation = generation;
     this.splitUsed = false;
+    this.qaSourceEnemy = null;
+    this.qaSourceSpawnSerial = -1;
     this.dieAt = now + WEAPON.bulletLifetimeMs;
     this.lastHit = null;
     this.lastHitAt = 0;
@@ -45,6 +60,8 @@ export class Bullet extends Phaser.Physics.Arcade.Sprite {
     this.prism = false;
     this.generation = 0;
     this.splitUsed = false;
+    this.qaSourceEnemy = null;
+    this.qaSourceSpawnSerial = -1;
     this.dieAt = 0;
     this.clearTint().setAlpha(1).setScale(1);
     this.disableBody(true, true);

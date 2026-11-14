@@ -123,7 +123,8 @@ try {
   // --- source contract: overlay Text still lives in GameScene, not UI ---
   const qaPerf = readFileSync(resolve('src/game/qaPerf.ts'), 'utf8');
   assert(qaPerf.includes('hideLabel'), 'overlay carries the hide label');
-  assert(gameScene.includes('new QaPerfOverlay(this,'), 'overlay is constructed on the Game scene');
+  const overlayCtor = gameScene.indexOf('this.qaPerf = new QaPerfOverlay(');
+  assert(overlayCtor >= 0 && gameScene.slice(overlayCtor, overlayCtor + 100).includes('\n        this,'), 'overlay is constructed on the Game scene');
 
   console.log('qa-render-split: OK (parsing, label, formatter, gated visibility-only wiring)');
 } finally {
