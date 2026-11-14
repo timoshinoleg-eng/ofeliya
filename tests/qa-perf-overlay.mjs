@@ -97,7 +97,7 @@ try {
   const text = lines.join('\n');
   assert(text.includes('frame 16.7/42.1'), 'frame row formatted');
   assert(text.includes('render 1.5/9.5 (measured)'), 'render labelled measured');
-  assert(text.includes('physics 1.5/9.5 (measured)'), 'physics labelled measured');
+  assert(text.includes('pre+phys 1.5/9.5 (measured)'), 'combined preUpdate and physics timing is labelled accurately');
   assert(text.includes('other 1.5/9.5 (derived)'), 'other labelled derived (short form fits narrow screens)');
   assert(!text.includes('fps'), 'no fps figure in header (removed as misleading)');
   assert(text.includes('E 203 B 87 G 154 | density 203 | tier balanced'), 'counters row');

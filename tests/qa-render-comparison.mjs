@@ -85,6 +85,7 @@ try {
 
   const comparison = new QaRenderComparison(original, {
     phaseFrames: 1,
+    initialWarmupFrames: 0,
     repeats: 1,
     warmupFrames: 0,
     storage,
@@ -96,7 +97,7 @@ try {
     comparison.record({
       frameMs: renderMs[i] + 4,
       renderMs: renderMs[i],
-      counters: { enemies: 10 + i, bullets: 2 + i, gems: 3, density: 10 + i, tier: 'balanced' },
+      counters: { enemies: 10 + i, bullets: 2 + i, gems: 3, density: 10, tier: 'balanced' },
     });
   }
   const complete = comparison.snapshot();
@@ -138,6 +139,7 @@ try {
   // Two repeats per group; discard two deliberately slow warmup samples per window.
   const repeated = new QaRenderComparison(new Set(), {
     phaseFrames: 20,
+    initialWarmupFrames: 0,
     repeats: 2,
     warmupFrames: 2,
     applyHidden() {},
@@ -163,7 +165,7 @@ try {
   eq(repeatedResult.phases.length, 18, 'two repeats create six windows for each of three groups');
   assert(repeatedResult.phases.every((phase) => phase.complete && phase.frames === 20 && phase.warmupFrames === 2), 'each window separately records discarded warmup and measured frames');
   eq(repeatedResult.phases[0].repeatIndex, 1, 'first window identifies the first repeat');
-  eq(repeatedResult.phases[3].repeatIndex, 2, 'second A/B/A sequence identifies the second repeat');
+  eq(repeatedResult.phases[9].repeatIndex, 2, 'second round identifies the second repeat');
   near(repeatedResult.phases[0].frameP95Ms, 19, 'phase p95 uses nearest-rank percentile of measured samples');
   near(repeatedResult.phases[0].frameMaxMs, 20, 'phase maximum excludes slow warmup samples');
   near(repeatedResult.phases[0].counters.enemiesAvg, 20, 'warmup counters do not enter measured summaries');
@@ -173,10 +175,10 @@ try {
   eq(repeatedGems.oppositeWindows, 2, 'repeated pair combines both flipped windows');
   eq(repeatedGems.baselineFrames, 80, 'baseline sample count excludes all warmup frames');
   eq(repeatedGems.oppositeFrames, 40, 'opposite sample count excludes all warmup frames');
-  near(repeatedGems.baselineFrameMaxMs, 520, 'aggregated baseline maximum uses every repeated window');
-  near(repeatedGems.oppositeFrameMaxMs, 420, 'aggregated opposite maximum uses every repeated window');
-  near(repeatedGems.baselineFrameP95Ms, 516, 'aggregated baseline p95 uses all raw measured samples');
-  near(repeatedGems.oppositeFrameP95Ms, 418, 'aggregated opposite p95 uses all raw measured samples');
+  near(repeatedGems.baselineFrameMaxMs, 1120, 'aggregated baseline maximum uses every repeated window');
+  near(repeatedGems.oppositeFrameMaxMs, 1020, 'aggregated opposite maximum uses every repeated window');
+  near(repeatedGems.baselineFrameP95Ms, 1116, 'aggregated baseline p95 uses all raw measured samples');
+  near(repeatedGems.oppositeFrameP95Ms, 1018, 'aggregated opposite p95 uses all raw measured samples');
   near(repeatedGems.frameP95DeltaMs, -98, 'repeated p95 difference is opposite minus baseline');
 
   // Death: retain both finished windows and the in-progress partial window before restoring.
@@ -184,6 +186,7 @@ try {
   const deathApplied = [];
   const interrupted = new QaRenderComparison(new Set(['atmo']), {
     phaseFrames: 3,
+    initialWarmupFrames: 0,
     repeats: 1,
     warmupFrames: 0,
     storage: deathStorage,
@@ -210,6 +213,7 @@ try {
   // A manual toggle also stops safely; a broken storage environment never crashes the game.
   const unavailable = new QaRenderComparison(new Set(), {
     phaseFrames: 2,
+    initialWarmupFrames: 0,
     repeats: 1,
     warmupFrames: 0,
     storage: { setItem() { throw new Error('storage disabled'); } },
@@ -223,6 +227,7 @@ try {
 
   const warmupStop = new QaRenderComparison(new Set(), {
     phaseFrames: 2,
+    initialWarmupFrames: 0,
     repeats: 1,
     warmupFrames: 3,
     applyHidden() {},
@@ -259,8 +264,8 @@ try {
   assert(gameScene.includes('formatQaRenderComparisonReport(snapshot)'), 'button copies the live comparison snapshot');
   assert(gameScene.includes('if (navigator.clipboard?.writeText)'), 'clipboard API is attempted first');
   assert(gameScene.includes("document.execCommand('copy')"), 'embedded-WebView clipboard fallback is available');
-  assert(gameScene.includes('(sample) => this.qaComparison?.record(sample)'), 'measured render samples feed the controller');
-  assert(gameScene.includes('compareEnabled ? (sample) => this.qaComparison?.record(sample) : undefined'), 'extra per-frame sampling is opt-in');
+  assert(gameScene.includes('this.qaComparison?.record({ ...sample, visibilityState: document.visibilityState })'), 'measured samples and visibility feed the controller');
+  assert(gameScene.includes('compareEnabled ? (sample) =>'), 'extra per-frame sampling is opt-in');
   assert(gameScene.includes('this.qaComparison?.finish(!win && this.runState.stage.hp <= 0 ? \'player-death\' : \'run-ended\')'), 'run finish saves partial data before the result is built');
   assert(gameScene.includes("this.qaComparison?.finish('manual-stop')"), 'manual group toggles stop and restore the comparison');
   assert(gameScene.includes("this.qaComparison?.finish('run-ended');\n    this.saveCheckpointNow();"), 'leaving to menu saves partial data and restores settings');

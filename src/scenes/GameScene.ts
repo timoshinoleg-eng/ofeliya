@@ -59,6 +59,8 @@ import {
   formatQaRenderComparisonReport,
   QaRenderComparison,
   isQaRenderComparisonEnabled,
+  readSavedQaRenderComparison,
+  QA_RENDER_COMPARE_PREVIOUS_KEY,
 } from '../game/qaRenderComparison';
 import { isQaExperimentMode } from '../game/qaExperimentMode';
 import {
@@ -736,11 +738,16 @@ export class GameScene extends Phaser.Scene {
           tier: this.runtimeQuality.profile.level,
         }),
         qaHideLabel(hide),
-        compareEnabled ? (sample) => this.qaComparison?.record(sample) : undefined,
+        compareEnabled ? (sample) => this.qaComparison?.record({ ...sample, visibilityState: document.visibilityState }) : undefined,
       );
       if (hide.size > 0) this.applyQaHide(hide);
       this.createQaToggleButtons();
-      if (compareEnabled) this.createQaRenderComparisonControls();
+      if (compareEnabled) {
+        this.createQaRenderComparisonControls();
+        const noteVisibility = () => this.qaComparison?.noteVisibility(document.visibilityState);
+        document.addEventListener('visibilitychange', noteVisibility);
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => document.removeEventListener('visibilitychange', noteVisibility));
+      }
       // QA fixed mutation-choice states: ?qaMutation=A|B|C opens the agreed
       // fixed offer through the REAL choice path (pendingChoices +
       // awaitingChoice -> UIScene level-up modal). Stacks go through the real
@@ -945,6 +952,12 @@ export class GameScene extends Phaser.Scene {
     }
     this.qaComparison = new QaRenderComparison(new Set(this.qaHide), {
       storage,
+      visibilityState: document.visibilityState,
+      metadata: {
+        renderer: this.game.renderer.type === Phaser.WEBGL ? 'webgl' : 'canvas',
+        dpr: window.devicePixelRatio,
+        canvas: { width: this.game.canvas.width, height: this.game.canvas.height },
+      },
       applyHidden: (selection) => this.applyQaHideSelection(selection),
       onLabel: (label) => {
         this.qaPerf?.setComparisonLabel(label);
@@ -982,6 +995,9 @@ export class GameScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(200);
     button.on('pointerup', () => void this.copyQaRenderComparisonReport(button));
+    try {
+      if (readSavedQaRenderComparison(window.localStorage)) button.setColor('#7dffb0').setInteractive({ useHandCursor: true });
+    } catch { /* Storage may be disabled. */ }
     this.qaRenderReportButton = button;
     this.layoutQaRenderReportButton();
   }
@@ -991,12 +1007,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   private async copyQaRenderComparisonReport(button: Phaser.GameObjects.Text): Promise<void> {
-    const snapshot = this.qaComparison?.snapshot();
+    let storage: Storage | null = null;
+    try { storage = window.localStorage; } catch { /* Storage may be disabled. */ }
+    const snapshot = this.qaComparison?.snapshot() ?? readSavedQaRenderComparison(storage);
     if (!snapshot) {
       this.setQaReportCopyFeedback(button, 'Отчёт недоступен');
       return;
     }
     const report = formatQaRenderComparisonReport(snapshot);
+    this.showQaRenderReport(report, storage);
     try {
       let copied = false;
       if (navigator.clipboard?.writeText) {
@@ -1027,6 +1046,42 @@ export class GameScene extends Phaser.Scene {
     } catch {
       this.setQaReportCopyFeedback(button, 'Не удалось скопировать');
     }
+  }
+
+  /** Visible selectable fallback also works when WebView clipboard access fails. */
+  private showQaRenderReport(report: string, storage: Storage | null): void {
+    document.querySelector('[data-qa-render-report]')?.remove();
+    const root = document.createElement('div');
+    root.dataset.qaRenderReport = 'true';
+    root.style.cssText = 'position:fixed;inset:0;z-index:100000;background:#10161d;color:white;padding:12px;display:flex;flex-direction:column;gap:8px';
+    const heading = document.createElement('strong');
+    heading.textContent = 'QA: отчёт замера';
+    const area = document.createElement('textarea');
+    area.readOnly = true;
+    area.value = report;
+    area.setAttribute('aria-label', 'QA отчёт');
+    area.style.cssText = 'width:100%;flex:1;min-height:0;background:#fff;color:#000;user-select:text';
+    const close = document.createElement('button');
+    close.textContent = 'Закрыть';
+    close.onclick = () => root.remove();
+    const copy = document.createElement('button');
+    copy.textContent = 'Скопировать показанный отчёт';
+    copy.onclick = () => {
+      void (async () => {
+        try {
+          if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(area.value);
+          else { area.select(); if (!document.execCommand('copy')) throw new Error('copy unavailable'); }
+          copy.textContent = 'Скопировано';
+        } catch { area.select(); copy.textContent = 'Выделите текст и скопируйте'; }
+      })();
+    };
+    const previous = document.createElement('button');
+    previous.textContent = 'Показать предыдущий отчёт';
+    previous.onclick = () => {
+      try { area.value = storage?.getItem(QA_RENDER_COMPARE_PREVIOUS_KEY) ?? report; } catch { area.value = report; }
+    };
+    root.append(heading, area, previous, copy, close);
+    document.body.appendChild(root);
   }
 
   private setQaReportCopyFeedback(button: Phaser.GameObjects.Text, message: string): void {
