@@ -19,6 +19,7 @@
  * целиком, поэтому RNG, стадия, трофей и стартовое поле совпадают побайтово.
  */
 import type Phaser from 'phaser';
+import { UPGRADES } from './UpgradeSystem';
 
 const QA_PARAM = 'carry-pair';
 const STORE_KEY = 'ofeliya_qa_carry_pair_v1';
@@ -436,7 +437,10 @@ export function startCarryPairQA(game: Phaser.Game): void {
   if (params.get('qa') !== QA_PARAM) return;
   const rawSeed = params.get('seed') ?? '';
   const seed = /^[a-zA-Z0-9_-]{1,64}$/.test(rawSeed) ? rawSeed : 'phone-carry-1';
-  const mutationId = params.get('mut') || 'multi';
+  const rawMutation = (params.get('mut') ?? '').trim();
+  const allowedMutation = /^[a-zA-Z0-9_-]{1,64}$/.test(rawMutation) &&
+    UPGRADES.some((upgrade) => upgrade.id === rawMutation && upgrade.kind !== 'evolution' && upgrade.kind !== 'legendary');
+  const mutationId = allowedMutation ? rawMutation : 'multi';
   const fast = params.get('fast') === '1';
   const overlay = makeOverlay();
 
