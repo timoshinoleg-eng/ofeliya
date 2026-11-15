@@ -78,7 +78,14 @@ try {
   eq(ROLE.faction.player, 0xff4fb5, 'ROLE.faction.player');
   eq(ROLE.faction.reward, 0x7fffa1, 'ROLE.faction.reward');
   eq(ROLE.rarity.legendary, 0xffd56a, 'ROLE.rarity.legendary');
-  eq(ROLE.state.bad, 0xff5a5a, 'ROLE.state.bad');
+  eq(ROLE.state.bad, 0xff3e5f, 'ROLE.state.bad');
+  // NV-04 cross-lock: ROLE.state.bad must stay equal to COLORS.red (SIGNAL.danger).
+  // tokens.ts cannot import gameplay modules, so the single-source guarantee is
+  // enforced here as a source-level equality check.
+  const configSrc = readFileSync('src/game/config.ts', 'utf8');
+  const redMatch = configSrc.match(/red:\s*(0x[0-9a-fA-F]+)/);
+  assert(redMatch, 'COLORS.red literal must exist in src/game/config.ts');
+  eq(ROLE.state.bad, parseInt(redMatch[1], 16), 'ROLE.state.bad === COLORS.red (SIGNAL.danger)');
 
   // 2. Module hygiene: data only
   const src = readFileSync('src/ui/tokens.ts', 'utf8');

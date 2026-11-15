@@ -129,6 +129,7 @@ export class UIScene extends Phaser.Scene {
   private bossPhaseTransitionAt = -1;
   private timerText!: Phaser.GameObjects.Text;
   private levelText!: Phaser.GameObjects.Text;
+  private rnaGoalText!: Phaser.GameObjects.Text;
   private rnaPickupText!: Phaser.GameObjects.Text;
   private rnaPickupTotal = 0;
   private rnaPickupTimer: Phaser.Time.TimerEvent | null = null;
@@ -151,6 +152,11 @@ export class UIScene extends Phaser.Scene {
   private twinStick: TwinStickControls | null = null;
   private dualMove: DualMoveControls | null = null;
   private hpWarn!: Phaser.GameObjects.Graphics;
+  // NV-01/NV-02 caches: label mode and warning-frame geometry resolve only when
+  // their inputs change (plus a 1s self-heal), not every frame.
+  private rnaLabelKey = '';
+  private rnaLabelResolvedAt = -1000;
+  private hpWarnKey = '';
   private fanfare!: Phaser.GameObjects.Particles.ParticleEmitter;
   private comboText!: Phaser.GameObjects.Text;
   private lastCombo = 0;
@@ -183,6 +189,9 @@ export class UIScene extends Phaser.Scene {
 
   create(): void {
     this.hudBarState = null;
+    this.rnaLabelKey = '';
+    this.rnaLabelResolvedAt = -1000;
+    this.hpWarnKey = '';
     this.gs = this.scene.get('Game') as GameScene;
     // Juice для модалок/наград (tween.js). UI-сцена без governor — интенсивность 1.
     this.juice = new Juice(this);
@@ -252,6 +261,15 @@ export class UIScene extends Phaser.Scene {
       .setFontStyle('bold')
       .setShadow(0, 1, '#02030a', 4, true, true);
     this.levelText = text(16, HUD.row.levelY, 'МУТАЦИЯ 1', HUD.type.level, VISUAL_TEXT.player, 0)
+      .setFontStyle('bold')
+      .setStroke('#2a0a1e', 2)
+      .setShadow(0, 1, '#02030a', 3, true, true);
+    // NV-01: the causal meaning ("РНК ведёт к мутации") lives in a dedicated
+    // label anchored right of the timer — the space left of the timer only fits
+    // `РНК x/y` (measured: full string is ~40px wider than the available strip on
+    // every portrait width). Position is re-derived from the live timer width in
+    // update(); before the first update it sits offscreen-right, harmlessly.
+    this.rnaGoalText = text(W, HUD.row.levelY, '→ МУТАЦИЯ', HUD.type.level, VISUAL_TEXT.player, 0)
       .setFontStyle('bold')
       .setStroke('#2a0a1e', 2)
       .setShadow(0, 1, '#02030a', 3, true, true);
@@ -430,16 +448,31 @@ export class UIScene extends Phaser.Scene {
       }
 
       this.timerText.setText(fmtTime(run.timeMs));
-      const causalLabel = `РНК ${run.xp}/${run.xpNext} → МУТАЦИЯ`;
-      this.levelText.setText(causalLabel);
-      const availableLabelWidth =
-        this.timerText.x - this.timerText.width / 2 - this.levelText.x - 8;
-      if (this.levelText.width > availableLabelWidth) {
+      // NV-01: the label used to be re-set every frame (full → short → compact
+      // cascade), so it was rewritten and re-measured at least twice per frame
+      // forever. Resolve it only when an input changes (width, xp/xpNext, timer
+      // text — the timer width bounds the available space). Phaser `setText`
+      // no-ops on an unchanged string, so the steady state costs zero text
+      // rebuilds. The 1s self-heal re-resolves silent drift (async font swap,
+      // scale changes) at ~2 rebuilds/sec — far below the per-frame budget.
+      // The causal suffix lives in rnaGoalText (right of the timer), not here.
+      const rnaLabelKey = `${W}|${run.xp}|${run.xpNext}|${this.timerText.text}`;
+      if (rnaLabelKey !== this.rnaLabelKey || this.time.now - this.rnaLabelResolvedAt > 1000) {
+        this.rnaLabelKey = rnaLabelKey;
+        this.rnaLabelResolvedAt = this.time.now;
+        const availableLabelWidth =
+          this.timerText.x - this.timerText.width / 2 - this.levelText.x - 8;
         this.levelText.setText(`РНК ${run.xp}/${run.xpNext}`);
-      }
-      if (this.levelText.width > availableLabelWidth) {
-        this.levelText.setText(
-          `РНК ${compactHudNumber(run.xp)}/${compactHudNumber(run.xpNext)}`
+        if (this.levelText.width > availableLabelWidth) {
+          this.levelText.setText(
+            `РНК ${compactHudNumber(run.xp)}/${compactHudNumber(run.xpNext)}`
+          );
+        }
+        // Anchor the causal label to the timer's right edge, measured live; hide
+        // it rather than let it cross the plate edge on the narrowest screens.
+        this.rnaGoalText.x = this.timerText.x + this.timerText.width / 2 + 8;
+        this.rnaGoalText.setVisible(
+          this.rnaGoalText.x + this.rnaGoalText.width <= W - HUD.plate.padX && !this.qaHudHidden
         );
       }
       this.layoutRnaPickupFeedback();
@@ -478,12 +511,24 @@ export class UIScene extends Phaser.Scene {
       }
       this.hpText.setText(`${Math.ceil(Math.max(0, run.hp))} / ${run.maxHp}`);
 
-      this.hpWarn.clear();
-      if (run.hp > 0 && hf <= JUICE.lowHpFraction) {
-        const a = prefersReducedMotion() ? 0.22 : 0.22 + 0.22 * Math.sin(this.time.now / 120);
-        this.hpWarn.lineStyle(16, SIGNAL.danger, a);
-        this.hpWarn.strokeRect(8, 8, W - 16, H - 16);
+      // NV-02: rebuild the warning frame only when its recipe changes (enter or
+      // exit low HP, resize, reduced-motion toggle). The pulse rides on object
+      // alpha, so a steady low-HP state costs zero graphics rebuilds per frame
+      // (previously: unconditional clear() every frame plus a full-screen
+      // strokeRect redraw exactly in the most expensive game state).
+      const lowHpActive = run.hp > 0 && hf <= JUICE.lowHpFraction;
+      const hpWarnKey = `${lowHpActive}|${W}|${H}|${prefersReducedMotion()}`;
+      if (hpWarnKey !== this.hpWarnKey) {
+        this.hpWarnKey = hpWarnKey;
+        this.hpWarn.clear();
+        if (lowHpActive) {
+          this.hpWarn.lineStyle(16, SIGNAL.danger, 1);
+          this.hpWarn.strokeRect(8, 8, W - 16, H - 16);
+        }
       }
+      this.hpWarn.setVisible(lowHpActive && !this.qaHudHidden);
+      const a = prefersReducedMotion() ? 0.22 : 0.22 + 0.22 * Math.sin(this.time.now / 120);
+      this.hpWarn.setAlpha(lowHpActive ? a : 1);
 
       const boss = run.bossMax > 0;
       this.bossBack.setVisible(boss && !this.qaHudHidden);
@@ -1153,6 +1198,7 @@ export class UIScene extends Phaser.Scene {
       this.hpFill,
       this.timerText,
       this.levelText,
+      this.rnaGoalText,
       this.killsText,
       this.hpText,
       this.muteText,
@@ -1171,8 +1217,9 @@ export class UIScene extends Phaser.Scene {
    * tutorial hints — a ui-hidden run still shows the mutation choice.
    * Boss/combo visibility is re-derived every frame in update(), guarded
    * by qaHudHidden, so restoring them here self-corrects on the next
-   * frame; hpWarn is cleared and redrawn per HP state, so its visibility
-   * needs no guard. Called only from the QA-gated path in GameScene.
+   * frame; hpWarn visibility is likewise re-derived (only in the low-HP
+   * state) and rnaGoalText re-derives with its timer anchor — both carry the
+   * qaHudHidden guard in update(). Called only from the QA-gated path in GameScene.
    * The flag persists on this UI instance; GameScene re-applies the hide
    * on the first active frame if the UI scene booted after GameScene.
    */
@@ -1200,6 +1247,7 @@ export class UIScene extends Phaser.Scene {
       this.bossFrame,
       this.bossLabel,
       this.hpWarn,
+      this.rnaGoalText,
     ];
     for (const obj of list) {
       // Defensive: GameScene may call this before UIScene.create finished.

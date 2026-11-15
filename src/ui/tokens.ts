@@ -66,5 +66,9 @@ export const ROLE = {
   surface: { screen: 0x12070d, sheet: 0x100d16, panel: 0x1d0d18, panelHover: 0x2a1222, stroke: 0x583044, barBack: 0x1a2136 },
   faction: { player: 0xff4fb5, hostile: 0xe8faff, immune: 0x8fe8ff, reward: 0x7fffa1, danger: 0xff3e5f, neutral: 0xfff4ec },
   rarity: { common: 0x8fe8ff, rare: 0x9b6dff, critical: 0xffd56a, legendary: 0xffd56a },
-  state: { ok: 0x7fffa1, warn: 0xffd56a, bad: 0xff5a5a },
+  // `bad` MUST equal SIGNAL.danger (COLORS.red in src/game/config.ts): one
+  // semantic "danger" across threat telegraphs, HP vignette, boss bars and the
+  // low-HP HUD bar. tokens.ts may not import gameplay modules, so the equality
+  // is locked by tests/tokens-contract.mjs (source cross-check), not by an alias.
+  state: { ok: 0x7fffa1, warn: 0xffd56a, bad: 0xff3e5f },
 } as const;

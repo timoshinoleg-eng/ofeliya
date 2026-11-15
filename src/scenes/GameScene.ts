@@ -1084,7 +1084,7 @@ export class GameScene extends Phaser.Scene {
       const f = Phaser.Math.Clamp(st.hp / st.maxHp, 0, 1);
       this.playerBar.fillStyle(0x1a2136, 0.9);
       this.playerBar.fillRect(x, y, w, 5);
-      this.playerBar.fillStyle(f > 0.35 ? COLORS.green : 0xff5a5a, 1);
+      this.playerBar.fillStyle(f > 0.35 ? COLORS.green : SIGNAL.danger, 1);
       this.playerBar.fillRect(x, y, w * f, 5);
     }
 
