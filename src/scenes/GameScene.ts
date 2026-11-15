@@ -623,7 +623,7 @@ export class GameScene extends Phaser.Scene {
 
     this.registry.set('joy', { x: 0, y: 0 });
     this.registry.set('runResult', null);
-    this.registry.set('run', this.snapshot());
+    this.publishRunSnapshot(true);
     this.saveCheckpointNow();
     if (!resume) {
       this.trackComprehensionOnce('run_start', {
@@ -1088,7 +1088,7 @@ export class GameScene extends Phaser.Scene {
       this.playerBar.fillRect(x, y, w * f, 5);
     }
 
-    this.registry.set('run', this.snapshot());
+    this.publishRunSnapshot(false);
 
     if (this.queuedLevels > 0 && !this.awaitingChoice) {
       // Progression supersedes onboarding; never render tutorial copy beneath a mutation modal.
@@ -1557,7 +1557,7 @@ export class GameScene extends Phaser.Scene {
     // RNA pickup feedback is dispatched directly to the UI scene, while the main HUD reads the
     // registry snapshot. Keep both views of progression atomic so a skipped/paused Game update
     // cannot show "+RNA" feedback beside a stale RNA counter.
-    this.registry.set('run', this.snapshot());
+    this.publishRunSnapshot(true);
     this.getUiScene()?.notifyRnaPickup(value);
     this.trackComprehensionOnce('first_rna_pickup', { value });
   }
@@ -2137,7 +2137,7 @@ export class GameScene extends Phaser.Scene {
     this.handleStageEvents(stageStartEvents);
     this.physics.world.resume();
     PlatformBridge.haptic('medium');
-    this.registry.set('run', this.snapshot());
+    this.publishRunSnapshot(true);
   }
 
   private resetStageWorld(nextStage: StageDefinition): void {
@@ -2744,7 +2744,7 @@ export class GameScene extends Phaser.Scene {
       else showSkinGrantToast(this, def.reward.skinId);
     }
     this.milestones.reset();
-    this.registry.set('run', this.snapshot());
+    this.publishRunSnapshot(true);
     const result: RunResult = {
       win,
       reason,
@@ -3358,6 +3358,54 @@ export class GameScene extends Phaser.Scene {
       stageName: stage.name,
       phase: this.stageDirector.phase,
     };
+  }
+
+  // PERF-3/P-04: the HUD snapshot used to be published every frame — an 18-field
+  // allocation plus registry traffic at 60 Hz for data that changes on hits,
+  // pickups and second ticks. Publish only when a displayable field changed,
+  // when the displayed second rolled over (timer text), or when an event site
+  // forces it. Vital state (hp/level/xp/boss) publishes immediately — it is
+  // event-driven and hits must read instantly; high-frequency counters
+  // (kills/infections/combo in dense combat) are capped at 4 Hz — a 250ms delay
+  // on a counter is invisible, while the old 60Hz churn cost GC every frame.
+  // timeMs/stageTimeMs advance every frame and are excluded from change
+  // detection: no consumer reads stageTimeMs from the registry, and timeMs is
+  // covered by the second-roll rule (the only consumer is the HUD timer).
+  private lastPublishedRun: RunSnapshot | null = null;
+  private runCounterCooldownUntil = 0;
+
+  private publishRunSnapshot(force: boolean): void {
+    const snap = this.snapshot();
+    const prev = this.lastPublishedRun;
+    if (!force) {
+      const secondChanged =
+        !prev || Math.floor(snap.timeMs / 1000) !== Math.floor(prev.timeMs / 1000);
+      const vitalChanged =
+        !prev ||
+        snap.hp !== prev.hp ||
+        snap.maxHp !== prev.maxHp ||
+        snap.level !== prev.level ||
+        snap.xp !== prev.xp ||
+        snap.xpNext !== prev.xpNext ||
+        snap.bossHp !== prev.bossHp ||
+        snap.bossMax !== prev.bossMax ||
+        snap.bossName !== prev.bossName ||
+        snap.stageId !== prev.stageId ||
+        snap.stageOrder !== prev.stageOrder ||
+        snap.stageName !== prev.stageName ||
+        snap.phase !== prev.phase;
+      if (!secondChanged && !vitalChanged) {
+        const countersChanged =
+          snap.kills !== prev.kills ||
+          snap.hostCellsInfected !== prev.hostCellsInfected ||
+          snap.combo !== prev.combo;
+        if (!countersChanged) return;
+        if (this.time.now < this.runCounterCooldownUntil) return;
+        this.runCounterCooldownUntil = this.time.now + 250;
+      }
+    }
+    this.lastPublishedRun = snap;
+    this.registry.set('run', snap);
   }
 
   private onResize(): void {
