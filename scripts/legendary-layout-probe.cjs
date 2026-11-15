@@ -157,11 +157,13 @@ function makeLegendaryChoice(choice, suffix = '') {
   }
   console.log(JSON.stringify(reports, null, 2));
   const failures = reports.filter((r) => {
-    const expandedTotal = r.expectedCards * 136 + (r.expectedCards - 1) * 9;
+    // P-09: the layout contract's subtitle→cards / card-to-card gap is 12px
+    // (raised from 9/11 on 2026-11-16). The 8.5px floor below stays a failure.
+    const expandedTotal = r.expectedCards * 136 + (r.expectedCards - 1) * 12;
     const center = r.height * 0.59;
     const proposedTop = center - expandedTotal / 2;
     const proposedBottom = center + expandedTotal / 2;
-    const expandedFits = proposedTop >= r.subtitleBounds?.bottom + 9 && proposedBottom <= r.height - 9;
+    const expandedFits = proposedTop >= r.subtitleBounds?.bottom + 12 && proposedBottom <= r.height - 12;
     return !r.subtitleBounds || r.actualCards !== r.expectedCards || !r.allChoicesFound ||
       r.cardIntersections.length > 0 || r.overflow.length > 0 ||
       r.cards.some((card) => !card.background || !card.effect || !card.plate || card.effectOverlaps.length ||
