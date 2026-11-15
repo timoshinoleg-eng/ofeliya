@@ -132,6 +132,7 @@ export class UIScene extends Phaser.Scene {
   private rnaPickupText!: Phaser.GameObjects.Text;
   private rnaPickupTotal = 0;
   private rnaPickupTimer: Phaser.Time.TimerEvent | null = null;
+  private rnaPickupLayoutKey = '';
   private contextHintContainer: Phaser.GameObjects.Container | null = null;
   private contextHintPanel: Phaser.GameObjects.Rectangle | null = null;
   private contextHintText: Phaser.GameObjects.Text | null = null;
@@ -201,6 +202,7 @@ export class UIScene extends Phaser.Scene {
     this.manualPaused = false;
     this.rnaPickupTotal = 0;
     this.rnaPickupTimer = null;
+    this.rnaPickupLayoutKey = '';
     this.contextHintContainer = null;
     this.contextHintPanel = null;
     this.contextHintText = null;
@@ -697,11 +699,19 @@ export class UIScene extends Phaser.Scene {
 
   private layoutRnaPickupFeedback(): void {
     if (!this.levelText || !this.rnaPickupText) return;
-    const timerLeft = this.timerText.x - this.timerText.width / 2;
-    const maxRight = timerLeft - 4;
-    this.rnaPickupText
-      .setFontSize(11)
-      .setPosition(this.levelText.x + this.levelText.width + 6, HUD.row.levelY);
+    // P-06/NV-03: this used to run every frame even while the feedback text was
+    // invisible, flipping the font size 11→10 (a text rebuild) each frame for
+    // nothing. Layout only when the feedback is on screen AND its geometry
+    // inputs changed. notifyRnaPickup sets visible(true) and calls this directly,
+    // so a shown feedback still lays out on its first frame.
+    if (!this.rnaPickupText.visible) return;
+    const x = this.levelText.x + this.levelText.width + 6;
+    const maxRight = this.timerText.x - this.timerText.width / 2 - 4;
+    const key = `${x}|${maxRight}`;
+    if (key === this.rnaPickupLayoutKey) return;
+    this.rnaPickupLayoutKey = key;
+    this.rnaPickupText.setPosition(x, HUD.row.levelY);
+    this.rnaPickupText.setFontSize(11);
     if (this.rnaPickupText.x + this.rnaPickupText.width > maxRight) {
       this.rnaPickupText.setFontSize(10);
     }
@@ -1601,7 +1611,11 @@ export class UIScene extends Phaser.Scene {
 
     const cards = gs.pendingChoices;
     const cw = Math.min(W - 16, 374);
-    const gap = compact ? 9 : 11;
+    // P-09/V3 P2: subtitle→cards gap had a 9px compact floor; the legendary probe
+    // measured exactly 9.0px in the short-portrait guard case. 12px everywhere is
+    // the guaranteed minimum (кегль тела не тронут — отступ съедается раскладкой;
+    // в тупом углу по-прежнему выигрывает нижний край, см. clamp ниже).
+    const gap = 12;
     // Cards never collide with the header, even when the subtitle wraps to two lines.
     const minTop = subtitle.getBounds().bottom + gap;
     let blockCenter = compact ? H * 0.59 : H * 0.57;
@@ -1621,6 +1635,15 @@ export class UIScene extends Phaser.Scene {
     // bottom edge on short viewports; clamp the stack inside the screen (bottom wins —
     // a cut-off footer is worse than a tight header gap in the impossible-fit corner).
     if (blockCenter + totalH / 2 > H - gap) blockCenter = H - gap - totalH / 2;
+    // P-09: in the impossible-fit corner the bottom clamp pays for the fit by
+    // compressing the subtitle→cards gap below the guaranteed floor. Lift the
+    // header band (title + subtitle move together) by the deficit instead — the
+    // gap stays ≥12 and no card geometry or body size changes.
+    const headerDeficit = gap - (blockCenter - totalH / 2 - subtitle.getBounds().bottom);
+    if (headerDeficit > 0) {
+      titleT.y -= headerDeficit;
+      subtitle.y -= headerDeficit;
+    }
     let y = blockCenter - totalH / 2 + ch / 2;
 
     cards.forEach((def: UpgradeDef, cardIndex: number) => {
