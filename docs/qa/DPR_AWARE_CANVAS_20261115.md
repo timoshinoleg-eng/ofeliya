@@ -56,9 +56,10 @@ re-installs from a `scale.on('resize')` listener registered after the renderer's
 - `src/platform/dprCanvas.ts` — new module (all of the above, ~230 lines).
 - `src/main.ts` — import + install + destroy wiring; the `?renderDensity=2` auto-install
   gate now also requires `dprCanvas.scale === 1`: on DPR ≥ 2 devices the production path
-  already renders 2x, stacking the QA experiment would patch twice (4x). This makes the
-  pre-fix experiment harness (`scripts/render-density-*.cjs`, `.github/workflows/render-density-qa.yml`)
-  in need of adaptation on this branch — left for Mark's decision, out of scope here.
+  already renders 2x, stacking the QA experiment would patch twice (4x). The pre-fix
+  experiment harness is adapted in this PR (follow-up commit, see §6): `renderer-smoke`
+  expects the new `CSS × min(DPR, 2)` contract and `render-density-paired-proof` verifies
+  density against dprCanvas itself instead of stacking the experiment on it.
 - `scripts/dpr-capture.cjs`, `scripts/dpr-render-ms.cjs`, `scripts/dpr-tap-probe.cjs` —
   evidence tooling (uncommitted QA drivers, same family as existing `scripts/*-smoke.cjs`).
 
@@ -186,6 +187,22 @@ here; results above were produced against the local dev server on 127.0.0.1.
   phone remain for Codex/Mark (qaCompare tooling lives on QA branch #280 and must not be
   merged from).
 - The pre-fix render-density QA harness (`render-density-qa.yml` / `render-density-*.cjs`)
-  assumes it owns the density switch; on this branch the production path owns it at
+  assumed it owns the density switch; on this branch the production path owns it at
   DPR ≥ 2. The `?renderDensity=2` auto-install is guarded off (double-patch would give
-  4x); adapting/retiring that workflow is a follow-up decision for Mark.
+  4x). **Adapted in this PR (follow-up commit):** `scripts/renderer-smoke.cjs` now
+  asserts backing/drawingBuffer/viewport = CSS × min(DPR, 2) — the DPR 3 case is the
+  cap check (2x, never 3x) — while logical sizes, CSS bounds and input scale stay
+  exactly CSS. `scripts/render-density-paired-proof.cjs` no longer installs the
+  experiment on top of dprCanvas (in Canvas the two call-through resize wrappers
+  fought: dprCanvas is innermost and wins, so the experiment's quality fallback
+  could not drop the buffer to 1x; in WebGL the double-wrapped viewport/scissor
+  would scale GL calls 4x). It now pairs a DSF=1 context (dprCanvas passthrough,
+  1x) against a DSF=2 context (dprCanvas 2x): logical geometry must match, backing
+  must differ by exactly 2x, input/resize are verified at 2x, and quality changes
+  must NOT change the backing store (density is DPR-driven only — the new
+  contract; the old quality-fallback-to-1x and 4M-cap assertions belonged to the
+  experiment and are retired with it). One finding from the rework: the browser
+  measures every text line ~1px taller/shorter at DSF=2 than at DSF=1 (verified
+  on clean main 2bd6320, without dprCanvas — a font-metrics artifact, not a
+  layout change), so the geometry comparison tolerates 2.5px per line in height
+  and half that in y, while x/width, line count, camera and scale stay exact.
