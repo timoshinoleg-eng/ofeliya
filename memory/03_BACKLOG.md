@@ -1,3 +1,7 @@
+# Mutation screens B/C + boss trophy — 2026-11-15 (6)
+
+Ветка qa/mutation-screen-b-c-trophy, HEAD e046aed: независимая проверка Muse (2026-11-15) подтвердила пакет — 54/54 PASS воспроизведены на свежем worktree @ f0a43da; расхождение одно, документное (D=26/E=24), исправлено в e046aed. Открытое без изменений: Samsung S20+ NOT_RUN (за владельцем), мердж за родителем, цепочка в main ждёт PR экрана A.
+
 # Mutation screens B/C + boss trophy — 2026-11-11 (5)
 
 Ветка qa/mutation-screen-b-c-trophy, HEAD d847366: пакет приёмки двух P2 завершён. В репозитории scripts/p2-recipe-verify.cjs (воспроизводимая проба: D/E × 320×520/390×844 + gate-off режим); ACCEPTANCE.md финальный (SHA разделены, команды, границы, чек-лист Samsung). Повторено на 43b27ce: 50/50 + 4/4 PASS. Тело PR #278 обновлено. Открытое: физическая приёмка Samsung S20+ (NOT_RUN) — за владельцем; CI на финальном HEAD — ждать зелёного перед сдачей.
