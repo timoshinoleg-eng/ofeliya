@@ -105,7 +105,12 @@ function makeLegendaryChoice(choice, suffix = '') {
         await page.waitForFunction(() => window.__game.scene.getScene('UI').modalOpen);
         // Let the modal entrance tweens settle before taking geometry snapshots.
         await page.waitForTimeout(600);
-        const report = await page.evaluate(async ({ kind, width, height, expected, expectCompact, expectedStructured }) => {
+        const layoutFacts = await page.evaluate(() => {
+          const modal = window.__game.scene.getScene('UI').modal;
+          return { squash: modal.getData('squash') === true, fitScale: Number(modal.getData('fitScale')) || 1 };
+        });
+        const expectFooter = !scenario.expectCompact && !layoutFacts.squash;
+        const report = await page.evaluate(async ({ kind, width, height, expected, expectFooter, expectedStructured }) => {
           const { visibleTextBounds } = await import('/scripts/visible-text-bounds.js');
           const ui = window.__game.scene.getScene('UI');
           const root = ui.modal;
@@ -116,7 +121,7 @@ function makeLegendaryChoice(choice, suffix = '') {
           };
           const intersects = (a, b) => a.left < b.right - 0.5 && a.right > b.left + 0.5 && a.top < b.bottom - 0.5 && a.bottom > b.top + 0.5;
           const texts = measured.map(({ object }) => object);
-          const subtitle = texts.find((obj) => obj.text.includes('выбери мутацию для СЕРДЦА'));
+          const subtitle = texts.find((obj) => obj.text.includes('Трофей останется с тобой на весь забег'));
           const cards = root.list.filter((obj) => obj.type === 'Container' &&
             obj.list?.some((child) => child.type === 'Rectangle' && child.width > 100 && child.height > 100));
           const cardReports = cards.map((card) => {
@@ -145,7 +150,9 @@ function makeLegendaryChoice(choice, suffix = '') {
                 if (!cardTextObjs.some((obj) => obj.text === choice.desc)) missing.push(choice.desc);
               }
               // В squeeze-проходе служебный футер убирается намеренно (декор).
-              if (!expectCompact && !cardTextObjs.some((obj) => obj.text === 'ИЗМЕНИТЬ ПРАВИЛА ЗАБЕГА')) missing.push('footer');
+              // Футер — декор: его отсутствие законно, когда стек ушёл в squash-проход
+              // (тот же проход, что намеренно убирает его в squeeze-фикстурах).
+              if (expectFooter && !cardTextObjs.some((obj) => obj.text === 'ИЗМЕНИТЬ ПРАВИЛА ЗАБЕГА')) missing.push('footer');
               if (!plates.length) missing.push('effect plate');
             }
             const overlaps = [];
@@ -188,16 +195,16 @@ function makeLegendaryChoice(choice, suffix = '') {
           const subtitleBounds = subtitle ? bounds(subtitle) : null;
           return {
             kind, width, height, expectedCards: expected.length, actualCards: cards.length,
-            expectedCompact: !!expectCompact,
+            expectedCompact: !!expectFooter,
             subtitleBounds,
             cards: cardReports,
             cardIntersections,
             subtitleGap: cardReports.map(({ background }) => background && subtitleBounds ? background.top - subtitleBounds.bottom : null),
             overflow,
           };
-        }, { kind: scenario.kind, ...size, expected: choices, expectCompact: scenario.expectCompact,
+        }, { kind: scenario.kind, ...size, expected: choices, expectFooter,
           expectedStructured: { condition: STRUCTURED_CONDITION, effect: STRUCTURED_EFFECT, price: STRUCTURED_PRICE, look: STRUCTURED_LOOK } });
-        reports.push(report);
+        reports.push({ ...report, squash: layoutFacts.squash, fitScale: layoutFacts.fitScale });
       }
       await ctx.close();
     }
@@ -212,10 +219,31 @@ function makeLegendaryChoice(choice, suffix = '') {
       !card.background || card.missing.length > 0 || card.overlaps.length > 0 ||
       card.outOfBounds.length > 0 || card.found === 0 ||
       card.cardHeight < 90 || card.cardHeight > 260) ||
-    r.subtitleGap.some((gap) => gap == null || gap < 8.5)
+    // При равномерном ужиме гарантии посадки зазоры тоже ужимаются —
+    // порог масштабируется на итоговый fitScale.
+    r.subtitleGap.some((gap) => gap == null || gap < 8.5 * (r.fitScale || 1))
   );
   if (failures.length) {
     console.error(`Legendary layout probe found ${failures.length} failing cases`);
+    for (const r of failures) {
+      const reasons = [];
+      if (!r.subtitleBounds) reasons.push('no-subtitle');
+      if (r.actualCards !== r.expectedCards) reasons.push(`cards ${r.actualCards}/${r.expectedCards}`);
+      if (r.cardIntersections.length) reasons.push('card-intersections');
+      if (r.overflow.length) reasons.push(`overflow[${r.overflow.map((t) => t.slice(0, 24)).join(' / ')}]`);
+      r.cards.forEach((card, i) => {
+        if (!card.background) reasons.push(`card${i}:no-bg`);
+        if (card.missing.length) reasons.push(`card${i}:missing[${card.missing.map((t) => t.slice(0, 24)).join(' / ')}]`);
+        if (card.overlaps.length) reasons.push(`card${i}:overlaps`);
+        if (card.outOfBounds.length) reasons.push(`card${i}:outOfBounds`);
+        if (card.found === 0) reasons.push(`card${i}:found0`);
+        if (card.cardHeight < 90 || card.cardHeight > 260) reasons.push(`card${i}:height=${card.cardHeight}`);
+      });
+      r.subtitleGap.forEach((gap, i) => {
+        if (gap == null || gap < 8.5 * (r.fitScale || 1)) reasons.push(`gap${i}=${gap == null ? 'null' : gap.toFixed(1)}`);
+      });
+      console.error(` - ${r.kind} ${r.width}x${r.height}: ${reasons.join('; ')}`);
+    }
     process.exitCode = 1;
   }
 })().catch((error) => { console.error(error.stack || error); process.exitCode = 1; });

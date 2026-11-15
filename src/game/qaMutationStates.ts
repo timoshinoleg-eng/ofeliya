@@ -1,4 +1,4 @@
-import { UPGRADES, type UpgradeDef } from './UpgradeSystem';
+import { UPGRADES, type EvolutionId, type UpgradeDef } from './UpgradeSystem';
 import { getEvolutionDef } from './EvolutionSystem';
 import { getLegendaryDefinition, type LegendaryId } from './LegendarySystem';
 import type { RunState } from './RunState';
@@ -12,6 +12,12 @@ import type { RunState } from './RunState';
  *   ?qaMutation=A   last-carrier + infect + lysis, fresh run
  *   ?qaMutation=B   magnet + infect + lysis, stacks nova 3/3 + magnet 1/2
  *   ?qaMutation=C   evo:singularity + infect + lysis, stacks nova 3/3 + magnet 2/2
+ *   ?qaMutation=D   speed + infect + lysis, stacks orbit 3/3 + rate 1/2
+ *                   (альтернативный шаг рецепта «СВЕРХКАПСИД» честно
+ *                   остаётся 1/2 без ложной стрелки «→ 2/2»)
+ *   ?qaMutation=E   dmg + infect + lysis, stacks dmg 3/3 + pierce 2/2,
+ *                   эволюция «ГИПЕРШИП» УЖЕ получена — блок рецепта на
+ *                   карточке компонента скрыт (нет обещания повторной выдачи)
  *
  * The GameScene seam applies the fixed stacks through the real card apply()
  * and exposes the fixed choices through the normal pendingChoices/awaitingChoice
@@ -22,12 +28,14 @@ import type { RunState } from './RunState';
  * this module changes nothing. Pure and node-testable.
  */
 
-export type QaMutationStateId = 'A' | 'B' | 'C';
+export type QaMutationStateId = 'A' | 'B' | 'C' | 'D' | 'E';
 
 export interface QaMutationFixture {
   id: QaMutationStateId;
   /** Card ids applied as stacks through the real apply() before the offer. */
   stacks: readonly string[];
+  /** Эволюции, уже полученные к моменту предложения. */
+  evolutionIds?: readonly EvolutionId[];
   /** The three offered choices, built from the game's own definitions. */
   choices: readonly UpgradeDef[];
 }
@@ -94,12 +102,29 @@ const FIXTURES: Record<QaMutationStateId, QaMutationFixture> = {
     stacks: ['nova', 'nova', 'nova', 'magnet', 'magnet'],
     choices: [evolutionChoice('singularity'), upgradeDef('infect'), upgradeDef('lysis')],
   },
+  // P2-регрессия: первая «Подвижность» при Спутниках III + Репликации I
+  // оставляет альтернативный шаг рецепта на 1/2 — карточка не обещает 2/2.
+  D: {
+    id: 'D',
+    stacks: ['orbit', 'orbit', 'orbit', 'rate'],
+    choices: [upgradeDef('speed'), upgradeDef('infect'), upgradeDef('lysis')],
+  },
+  // P2-регрессия: «Гипершип» уже получен — блок рецепта на карточке его
+  // компонента скрыт, повторной выдачи карточка не обещает.
+  E: {
+    id: 'E',
+    stacks: ['dmg', 'dmg', 'dmg', 'pierce', 'pierce'],
+    evolutionIds: ['prism'],
+    choices: [upgradeDef('dmg'), upgradeDef('infect'), upgradeDef('lysis')],
+  },
 };
 
 /** Parse the ?qaMutation= parameter. Unknown/absent -> null (no-op). */
 export function parseQaMutationState(search: string): QaMutationFixture | null {
   const raw = new URLSearchParams(search.replace(/^\?/, '')).get('qaMutation');
-  if (raw === 'A' || raw === 'B' || raw === 'C') return FIXTURES[raw];
+  if (raw === 'A' || raw === 'B' || raw === 'C' || raw === 'D' || raw === 'E') {
+    return FIXTURES[raw];
+  }
   return null;
 }
 
@@ -109,6 +134,9 @@ export function parseQaMutationState(search: string): QaMutationFixture | null {
  * reach the offer with the same numbers a real run would have.
  */
 export function applyQaMutationFixture(s: RunState, fixture: QaMutationFixture): void {
+  for (const id of fixture.evolutionIds ?? []) {
+    s.addEvolution(id);
+  }
   for (const id of fixture.stacks) {
     const def = upgradeDef(id);
     def.apply(s);
