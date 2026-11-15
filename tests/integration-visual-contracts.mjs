@@ -59,7 +59,7 @@ test('all six menu ambient tween definitions respect reduced motion while keepin
   }
 });
 test('low HP warning stays visible and static for reduce, animated otherwise', () => {
-  const expression=ui.match(/const a = ([^;]+);\s*this.hpWarn.lineStyle/)[1];
+  const expression=ui.match(/const a = ([^;]+);\s*this\.hpWarn\.setAlpha\(lowHpActive \? a : 1\)/)[1];
   const alpha=(reduced,now)=>new Function('prefersReducedMotion',`return ${expression}`).call({time:{now}},()=>reduced);
   const reduced=[0,100,300,700].map(t=>alpha(true,t));
   assert.ok(reduced[0]>0);
