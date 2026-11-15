@@ -11,6 +11,7 @@ import { UIScene } from './scenes/UIScene';
 import { StorefrontScene } from './scenes/StorefrontScene';
 import { installMobileLayoutGuard } from './ui/MobileLayoutGuard';
 import { PlatformBridge } from './platform';
+import { installDprAwareCanvas } from './platform/dprCanvas';
 import { StartupTrace } from './systems/StartupTrace';
 import { runStartupBoundary } from './systems/StartupBoundary';
 import { ensureTelegramBridge } from './platform/TelegramBridgeLoader';
@@ -362,6 +363,10 @@ async function boot(signal: AbortSignal): Promise<void> {
   game.events.once(Phaser.Core.Events.DESTROY, () => viewport.destroy());
   installWebGLRecovery(game);
   installMobileLayoutGuard(game);
+  // DPR-aware backing store (cap 2x): logical coordinates and CSS size stay
+  // untouched; the fix re-installs itself after every ScaleManager resize.
+  const dprCanvas = installDprAwareCanvas(game);
+  game.events.once(Phaser.Core.Events.DESTROY, () => dprCanvas.destroy());
   viewport.attachGame(game);
   StartupTrace.mark('viewport.second.start');
   await Promise.all([
@@ -398,7 +403,9 @@ async function boot(signal: AbortSignal): Promise<void> {
   if (import.meta.env.DEV || releaseMatrixQa) {
     // Explicit QA probe only. Ordinary production tree-shakes this adapter/query out.
     // Phones and offscreen/context paths remain acceptance gates; no automatic rollout.
-    if (new URLSearchParams(location.search).get('renderDensity') === '2' && window.devicePixelRatio >= 2) {
+    // Skipped when the DPR-aware canvas already renders at >1x: on DPR >= 2 devices the
+    // production path IS the 2x render, and stacking the experiment would patch twice.
+    if (new URLSearchParams(location.search).get('renderDensity') === '2' && window.devicePixelRatio >= 2 && dprCanvas.scale === 1) {
       const experiment = installRenderDensityExperiment(game, 2);
       game.events.once(Phaser.Core.Events.DESTROY, () => experiment.destroy());
     }

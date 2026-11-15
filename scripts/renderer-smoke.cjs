@@ -56,9 +56,13 @@ async function openRenderer(browser, renderer, dpr) {
     });
     assert.equal(snapshot.dpr, dpr);
     const { width, height } = snapshot.host;
-    // Pins Phaser 3.90 RESIZE's current intrinsic=CSS baseline, not real HiDPI.
-    // A future framebuffer-density design must deliberately revise this expectation.
-    assert.deepEqual(snapshot.canvas.intrinsic, { width, height });
+    // DPR-aware canvas (PR #282): the backing store is CSS x min(DPR, 2).
+    // DPR 1 stays 1x (passthrough); DPR 2 renders 2x; DPR 3 is CAPPED at 2x
+    // (never 3x) — the DPR 3 case below is the cap check, not a 3x expectation.
+    // Logical sizes, CSS bounds and input scale stay exactly CSS at every DPR.
+    const density = Math.min(dpr, 2);
+    const physical = { width: width * density, height: height * density };
+    assert.deepEqual(snapshot.canvas.intrinsic, physical);
     assert.equal(snapshot.canvas.bounds.width, width);
     assert.equal(snapshot.canvas.bounds.height, height);
     for (const size of [snapshot.renderer.size, snapshot.scale.gameSize, snapshot.scale.baseSize, snapshot.scale.displaySize]) {
@@ -66,8 +70,8 @@ async function openRenderer(browser, renderer, dpr) {
     }
     assert.deepEqual(snapshot.scale.displayScale, { x: 1, y: 1 });
     if (renderer === 'webgl') {
-      assert.deepEqual(snapshot.renderer.gl.drawingBuffer, { width, height });
-      assert.deepEqual(snapshot.renderer.gl.viewport, [0, 0, width, height]);
+      assert.deepEqual(snapshot.renderer.gl.drawingBuffer, physical);
+      assert.deepEqual(snapshot.renderer.gl.viewport, [0, 0, physical.width, physical.height]);
     } else assert.equal(snapshot.renderer.gl, null);
     for (const scene of snapshot.scenes.filter((s) => s.active)) {
       assert.equal(scene.camera.width, width);
