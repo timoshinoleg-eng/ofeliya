@@ -1741,8 +1741,7 @@ export class UIScene extends Phaser.Scene {
 
       const effectW = Math.max(108, right - tx);
       const descY = -ch / 2 + (compact ? 46 : 50);
-      card.add(
-        this.add
+      const descText = this.add
           .text(tx, descY, def.desc, {
             fontFamily: UI_FONT,
             fontSize: compact ? '11px' : '12px',
@@ -1752,8 +1751,30 @@ export class UIScene extends Phaser.Scene {
             maxLines: 2,
             wordWrap: { width: effectW, useAdvancedWrap: true },
           })
-          .setResolution(2)
-      );
+          .setResolution(2);
+      // P-08: on the shortest portrait screens a recipe that wraps to two
+      // lines evicts the card's own description from the two-line budget —
+      // the player saw only the (already met) prerequisites, never what the
+      // evolution actually does. Collapse a wrapping recipe to one truncated
+      // line there so the effect copy stays readable. The full recipe remains
+      // one tap away: selecting the card runs the evolution ceremony, and
+      // H >= 620 keeps the untruncated layout. Only evolution cards carry a
+      // recipe line (desc = recipe + '\n' + body, see EvolutionSystem.toChoice).
+      const shortPortrait = H < 620;
+      if (shortPortrait && evolution) {
+        const newlineIndex = def.desc.indexOf('\n');
+        if (newlineIndex > 0) {
+          const recipeLine = def.desc.slice(0, newlineIndex);
+          if (descText.getWrappedText(recipeLine).length > 1) {
+            let oneLine = recipeLine;
+            while (oneLine.length > 1 && descText.getWrappedText(`${oneLine}…`).length > 1) {
+              oneLine = oneLine.slice(0, -1);
+            }
+            descText.setText(`${oneLine.trimEnd()}…\n${def.desc.slice(newlineIndex + 1)}`);
+          }
+        }
+      }
+      card.add(descText);
 
       const effectText = this.add.text(tx + 8, 0, effectLabel, {
         fontFamily: UI_FONT,
