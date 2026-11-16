@@ -10,6 +10,11 @@ export type ProductEvent =
   | 'run_10min'
   | 'boss1'
   | 'heart'
+  /**
+   * Конец забега: отдельного события run_end НЕТ — run_end ≡ death | win.
+   * Имена кода — истина, аспирантное имя run_end из плана монетизации
+   * не вводится, чтобы не дублировать воронку.
+   */
   | 'death'
   | 'win'
   | 'replay'
@@ -37,6 +42,12 @@ export type ProductEvent =
   | 'skin_granted'
   | 'skin_equipped'
   | 'store_viewed'
+  /**
+   * Монетизация v3: просмотр карточки товара в магазине (один раз на товар
+   * за одно открытие магазина — дедупликация в StorefrontScene).
+   * Параметр: productId.
+   */
+  | 'product_view'
   | 'purchase_started'
   | 'purchase_completed'
   | 'purchase_failed'

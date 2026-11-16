@@ -105,6 +105,13 @@ export class StorefrontScene extends Phaser.Scene {
   private lastBought: Product | null = null;
   /** Патч №16 (A3): покупка с неподтверждённым синком (баннер + «Повторить»). */
   private syncPending: SyncPendingInfo | null = null;
+  /**
+   * Монетизация v3: товары, за которые уже отправлен product_view в этой
+   * сессии магазина. Карточки перерисовываются при каждом renderContent —
+   * без дедупликации воронка считала бы просмотры на каждый ре-рендер.
+   * Сбрасывается в create() (одно открытие магазина = одна сессия).
+   */
+  private viewedProducts = new Set<string>();
 
   private root: Phaser.GameObjects.Container | null = null;
   private listContainer: Phaser.GameObjects.Container | null = null;
@@ -121,6 +128,8 @@ export class StorefrontScene extends Phaser.Scene {
   create(): void {
     this.cameras.main.setBackgroundColor(COLORS.bg);
     this.variant = FeatureFlags.get('storefront.variant');
+    // Монетизация v3: новое открытие магазина — новая сессия просмотров.
+    this.viewedProducts.clear();
 
     // Fail-closed: без видимого варианта витрины тут делать нечего.
     // apiBaseUrl читаем здесь (import.meta.env безопасен только в браузере;
@@ -480,6 +489,11 @@ export class StorefrontScene extends Phaser.Scene {
     width: number,
     height: number
   ): void {
+    // Монетизация v3: product_view — один раз на товар за сессию магазина.
+    if (!this.viewedProducts.has(product.id)) {
+      this.viewedProducts.add(product.id);
+      void trackProductEvent('product_view', PlatformBridge, { productId: product.id });
+    }
     const card = this.add.container(cx, cy);
     const bg = this.add
       .rectangle(0, 0, width, height, ROLE.surface.panel, PANEL.card)
