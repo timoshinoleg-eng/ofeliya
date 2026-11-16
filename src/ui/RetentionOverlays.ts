@@ -45,7 +45,8 @@ import {
   grantAchievementSkin,
   unlockMetaAchievements,
 } from '../game/achievements/MetaAchievements';
-import { showSkinGrantToast } from './SkinGallery';
+// P-07: showSkinGrantToast динамически импортируется в точке выдачи —
+// SkinGallery (галерея скинов) не должна входить в первый экран.
 
 function dimBackground(scene: Phaser.Scene, depth: number): Phaser.GameObjects.Rectangle {
   const W = scene.scale.width;
@@ -258,8 +259,15 @@ export function showDailyModal(
         else grantAchievementSkin(def.reward.skinId);
         void trackProductEvent('achievement_unlocked', PlatformBridge, { achievementId: id });
         // Фаза 5: скин — тост с превью штамма и анимацией выдачи.
+        // P-07: SkinGallery — ленивый чанк; skinId захвачен до async-границы
+        // (сужение типов через замыкание динамического импорта не живёт).
         if (def.reward.kind === 'rna') showMetaToast(scene, def.title, `+${grantedRna} РНК`);
-        else showSkinGrantToast(scene, def.reward.skinId);
+        else {
+          const skinId = def.reward.skinId;
+          void import('./SkinGallery')
+            .then(({ showSkinGrantToast }) => showSkinGrantToast(scene, skinId))
+            .catch(() => undefined);
+        }
       }
     });
   } else if (!status.claimedToday) {

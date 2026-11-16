@@ -8,7 +8,6 @@ import { BootScene } from './scenes/BootScene';
 import { MenuScene } from './scenes/MenuScene';
 import { GameScene } from './scenes/GameScene';
 import { UIScene } from './scenes/UIScene';
-import { StorefrontScene } from './scenes/StorefrontScene';
 import { installMobileLayoutGuard } from './ui/MobileLayoutGuard';
 import { PlatformBridge } from './platform';
 import { StartupTrace } from './systems/StartupTrace';
@@ -346,7 +345,10 @@ async function boot(signal: AbortSignal): Promise<void> {
       input: {
         activePointers: 3,
       },
-      scene: [BootScene, MenuScene, GameScene, UIScene, StorefrontScene],
+      // P-07: StorefrontScene is lazy — MenuScene dynamic-imports it on the
+      // shop entry tap and registers it via scene.add(). Keeping it out of the
+      // boot scene list keeps the whole payment chain out of the first screen.
+      scene: [BootScene, MenuScene, GameScene, UIScene],
     });
     StartupTrace.mark('phaser.construct.end');
     StartupTrace.setMeta('rendererActual', game.renderer.type === Phaser.WEBGL ? 'webgl' : 'canvas');
@@ -380,16 +382,21 @@ async function boot(signal: AbortSignal): Promise<void> {
   // неподтверждённые встают в pending-sync очередь. Только Telegram +
   // сконфигурированный бэкенд (isAvailable); fire-and-forget — старт игры
   // не блокируется, restore() никогда не бросает.
-  try {
+  // P-07: провайдер грузится динамически — платёжная цепочка не входит
+  // в первый экран; фоновая догрузка после menu.ready на старт не влияет.
+  {
     const apiBaseUrl = (import.meta.env.VITE_PAYMENTS_API_URL as string | undefined) ?? '';
     if (apiBaseUrl.trim() !== '') {
-      const starsProvider = new TelegramStarsPaymentProvider({ apiBaseUrl });
-      if (starsProvider.isAvailable()) {
-        void starsProvider.restore().catch(() => undefined);
-      }
+      void import('./game/shop/TelegramStarsPaymentProvider')
+        .then(({ TelegramStarsPaymentProvider }) => {
+          const starsProvider = new TelegramStarsPaymentProvider({ apiBaseUrl });
+          if (starsProvider.isAvailable()) {
+            return starsProvider.restore().catch(() => undefined);
+          }
+          return undefined;
+        })
+        .catch(() => undefined);
     }
-  } catch {
-    /* платёжный контур не ломает старт игры */
   }
 
   // Production builds stay opaque. The release visual-matrix workflow enables this hook

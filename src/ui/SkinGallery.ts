@@ -34,7 +34,8 @@ import {
 import { ensureSkinTexture } from '../game/skins/SkinArt';
 import { equipSkin, getEquippedSkinId, isSkinOwned } from '../game/skins/SkinOwnership';
 import { FeatureFlags } from '../game/FeatureFlags';
-import { isStorefrontVisible } from '../game/shop/Storefront';
+import { isStorefrontVisible } from '../game/shop/storefrontVisibility';
+import { startStorefrontLazy } from '../scenes/lazyStorefront';
 
 const RARITY_COLOR: Record<string, string> = {
   common: '#9fb4c8',
@@ -297,7 +298,9 @@ export function showSkinGallery(
           if (shopVisible) {
             const btn = cardButton(scene, 0, 80, cardW - 24, 26, 'КУПИТЬ', 0, ROLE.faction.reward, () => {
               doClose();
-              scene.scene.start('Storefront');
+              // P-07: витрина — ленивая сцена; прямой scene.start('Storefront')
+              // без регистрации больше не работает (сцена вне boot-списка).
+              startStorefrontLazy(scene);
             });
             card.add(btn);
           } else {

@@ -24,15 +24,27 @@ import { MaxBridgePaymentProvider } from './MaxBridgePaymentProvider';
 import { MockPaymentProvider, readMockShopConfig } from './MockPaymentProvider';
 import {
   TelegramStarsPaymentProvider,
-  isTelegramWebApp,
   type TelegramStarsOptions,
 } from './TelegramStarsPaymentProvider';
+import {
+  STOREFRONT_HIDDEN,
+  STOREFRONT_MAX,
+  STOREFRONT_MOCK,
+  STOREFRONT_TELEGRAM,
+  isStorefrontVisible,
+  isTelegramWebApp,
+} from './storefrontVisibility';
 
-/** Значения флага storefront.variant, которые понимает витрина. */
-export const STOREFRONT_HIDDEN = 'hidden';
-export const STOREFRONT_MOCK = 'mock';
-export const STOREFRONT_MAX = 'max';
-export const STOREFRONT_TELEGRAM = 'telegram';
+// P-07: константы и проверка видимости переехали в лёгкий модуль
+// storefrontVisibility (first-load без платёжной цепочки); ре-экспорты
+// сохраняют импорты существующих потребителей и Node-тестов.
+export {
+  STOREFRONT_HIDDEN,
+  STOREFRONT_MOCK,
+  STOREFRONT_MAX,
+  STOREFRONT_TELEGRAM,
+  isStorefrontVisible,
+} from './storefrontVisibility';
 
 /** Опции резолва (бэкенд-URL приходит из сцены: import.meta.env там безопасен). */
 export interface ResolveOptions extends TelegramStarsOptions {
@@ -75,23 +87,4 @@ export function resolveProvider(
     return new TelegramStarsPaymentProvider({ apiBaseUrl: opts.apiBaseUrl });
   }
   return null;
-}
-
-/** Видна ли точка входа в витрину (кнопка в меню). */
-export function isStorefrontVisible(variant: string, opts: ResolveOptions = {}): boolean {
-  if (
-    variant === STOREFRONT_MOCK ||
-    variant === STOREFRONT_MAX ||
-    variant === STOREFRONT_TELEGRAM
-  ) {
-    return true;
-  }
-  if (
-    variant === STOREFRONT_HIDDEN &&
-    (opts.apiBaseUrl ?? '') !== '' &&
-    isTelegramWebApp()
-  ) {
-    return true;
-  }
-  return false;
 }

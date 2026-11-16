@@ -116,7 +116,8 @@ import {
 import { trackProductEvent, type ProductEvent, type ProductEventProps } from '../systems/AnalyticsClient';
 import { dailyStreakSummary } from '../systems/DailyHistory';
 import { showMetaToast } from '../ui/RetentionOverlays';
-import { showSkinGrantToast } from '../ui/SkinGallery';
+// P-07: SkinGallery is a lazy chunk (menu gallery + grant toast); the toast is
+// a rare ceremony side-effect, so it is dynamic-imported on demand.
 import { DEFAULT_SKIN_ID, getSkinDef, skinTextureKey } from '../game/skins/SkinCatalog';
 import { getEquippedSkinId } from '../game/skins/SkinOwnership';
 import { ensureSkinTexture } from '../game/skins/SkinArt';
@@ -2741,7 +2742,16 @@ export class GameScene extends Phaser.Scene {
       void trackProductEvent('achievement_unlocked', PlatformBridge, { achievementId: id });
       // Фаза 5: скин — тост с превью штамма и анимацией выдачи.
       if (def.reward.kind === 'rna') showMetaToast(this, def.title, `+${grantedRna} РНК`);
-      else showSkinGrantToast(this, def.reward.skinId);
+      else {
+        // Capture before the async boundary: narrowing does not survive the
+        // dynamic-import closure.
+        const skinId = def.reward.skinId;
+        // Lazy: the gallery chunk arrives a beat after the milestone; the toast
+        // still fires on the same frame semantics (fire-and-forget, never throws).
+        void import('../ui/SkinGallery')
+          .then(({ showSkinGrantToast }) => showSkinGrantToast(this, skinId))
+          .catch(() => undefined);
+      }
     }
     this.milestones.reset();
     this.registry.set('run', this.snapshot());

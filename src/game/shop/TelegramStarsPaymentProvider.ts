@@ -154,42 +154,14 @@ export interface TelegramStarsOptions {
   apiBaseUrl?: string;
 }
 
-/**
- * Минимальный structural тип Telegram WebApp для витрины.
- * Локальный (не глобальный augmentation): в игре уже есть полное объявление
- * в src/platform/TelegramPlatform.ts, а shop-модули компилируются Node-тестами
- * отдельно — глобальный тип там недоступен. Совместим с обоими.
- */
-interface TelegramWebAppLike {
-  openInvoice?: (url: string, callback?: (status: string) => void) => void;
-  initData?: string;
-}
-
-/** Node-safe доступ к Telegram WebApp (null вне Telegram/Node). */
-function telegramWebApp(): TelegramWebAppLike | null {
-  try {
-    if (typeof window === 'undefined') return null;
-    const w = window as unknown as { Telegram?: { WebApp?: TelegramWebAppLike } };
-    return w.Telegram?.WebApp ?? null;
-  } catch {
-    return null;
-  }
-}
-
-/** Чистая функция: есть ли Telegram WebApp с openInvoice. Node-safe. */
-export function isTelegramWebApp(): boolean {
-  return typeof telegramWebApp()?.openInvoice === 'function';
-}
-
-/** Сырая initData-строка для бэкенда. Пусто = нет (не бросает). */
-export function readTelegramInitData(): string {
-  try {
-    const d = telegramWebApp()?.initData;
-    return typeof d === 'string' ? d : '';
-  } catch {
-    return '';
-  }
-}
+// P-07: платформенные пробы переехали в лёгкий first-load модуль
+// storefrontVisibility; ре-экспорты сохраняют существующие импорты.
+import {
+  isTelegramWebApp,
+  readTelegramInitData,
+  telegramWebApp,
+} from './storefrontVisibility';
+export { isTelegramWebApp, readTelegramInitData } from './storefrontVisibility';
 
 /**
  * Результат маппинга статуса инвойса (без receipt — его добавляет purchase).
