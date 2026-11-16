@@ -482,11 +482,39 @@ async function openCase(browser, spec) {
   }
 
   const visualMetrics = assertVisualParity(results);
+
+  // GameScene.update is frozen in matrix mode (only sprite pose sampling runs), so every row's
+  // runtimeQuality snapshot is the RuntimeQualityGovernor *start* state, not a measurement:
+  // samples are pre-filled with 16.67 ms, level starts at 'full'. Enforce that this still holds
+  // so the artifact can never silently claim measured numbers it does not have.
+  const QUALITY_GOVERNOR_START = Object.freeze({ p50FrameMs: 16.67, p90FrameMs: 16.67, level: 'full' });
+  for (const result of results) {
+    for (const row of result.rows) {
+      const quality = row.visualInputs.quality;
+      const matchesStartState =
+        quality &&
+        quality.p50FrameMs === QUALITY_GOVERNOR_START.p50FrameMs &&
+        quality.p90FrameMs === QUALITY_GOVERNOR_START.p90FrameMs &&
+        Math.abs(quality.estimatedFps - 1000 / QUALITY_GOVERNOR_START.p50FrameMs) < 0.01 &&
+        quality.level === QUALITY_GOVERNOR_START.level;
+      if (!matchesStartState) {
+        throw new Error(
+          `matrix quality is no longer governor start defaults for ${result.renderer}/${result.tier} @ ${row.density}; re-check the update freeze or update qualityMode: ${JSON.stringify(quality)}`
+        );
+      }
+    }
+  }
+
   fs.writeFileSync(
     path.join(CAPTURE_DIR, 'matrix.json'),
     JSON.stringify({
       generatedAt: new Date().toISOString(),
       viewport: { width: MATRIX_WIDTH, height: MATRIX_HEIGHT },
+      qualityMode: {
+        isDefaults: true,
+        note:
+          'GameScene.update is frozen in matrix mode, so row quality snapshots are the RuntimeQualityGovernor start defaults (p50FrameMs/p90FrameMs = 16.67 ms, estimatedFps ≈ 59.99, level = "full"), not a runtime measurement. tier=reduced rows therefore still report level "full".',
+      },
       results,
       visualMetrics,
     }, null, 2)
