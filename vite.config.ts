@@ -10,6 +10,16 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (/[/\\]node_modules[/\\]phaser[/\\]/.test(id)) return 'vendor-phaser';
+          // P-07: payment domain chunk. Loaded on demand (storefront entry,
+          // boot-time pending-purchase drain). storefrontVisibility stays in
+          // the entry chunk — MenuScene needs it synchronously to decide
+          // whether the shop chip exists at all.
+          if (
+            /[/\\]src[/\\]game[/\\]shop[/\\]/.test(id) &&
+            !/[/\\]storefrontVisibility\.ts$/.test(id)
+          ) {
+            return 'shop';
+          }
           return undefined;
         },
       },

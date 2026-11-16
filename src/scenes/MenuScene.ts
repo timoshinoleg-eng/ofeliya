@@ -1,6 +1,6 @@
 import { CollectionBoard } from '../ui/CollectionBoard';
 import { clientCollection, clientFlags } from '../systems/ClientExperience';
-import { QuestBoard } from '../ui/QuestBoard';
+import type { QuestBoard } from '../ui/QuestBoard';
 import Phaser from 'phaser';
 import { artScale } from '../game/ArtMetrics';
 import { parseChallengePayload } from '../game/Challenge';
@@ -34,13 +34,12 @@ import { ensureStrainZeroTextures } from '../game/StrainZeroTextures';
 import { ensureCinematicTextures } from '../game/CinematicTextures';
 import { clearDailyIntent, launchDailyRun } from '../game/DailyRunIntent';
 import { FeatureFlags } from '../game/FeatureFlags';
-import { isStorefrontVisible } from '../game/shop/Storefront';
+import { isStorefrontVisible } from '../game/shop/storefrontVisibility';
+import { loadStorefrontScene, startStorefrontLazy } from './lazyStorefront';
 import { getDailyStatus } from '../game/daily/DailyCalendar';
 import { showDailyModal, showMetaToast } from '../ui/RetentionOverlays';
-import { showLabPanel } from '../ui/LabOverlays';
-import { showSkinGallery } from '../ui/SkinGallery';
 import { showLegalOverlay } from '../legal/LegalOverlay';
-import { SocialHub } from '../ui/SocialHub';
+import type { SocialHub } from '../ui/SocialHub';
 import { MenuKeyboard } from '../ui/MenuKeyboard';
 import { BORDER, PANEL, ROLE } from '../ui/tokens';
 import { CTA } from '../ui/cta';
@@ -79,6 +78,11 @@ export class MenuScene extends Phaser.Scene {
   private socialHub: SocialHub | null = null;
   private labPanel: { close: () => void } | null = null;
   private skinGallery: { close: () => void } | null = null;
+  private storefrontLoading = false;
+  private socialHubLoading = false;
+  private questBoardLoading = false;
+  private labPanelLoading = false;
+  private skinGalleryLoading = false;
   private founderBadge: Phaser.GameObjects.Container | null = null;
   private profileLoadGeneration = 0;
 
@@ -1110,10 +1114,25 @@ export class MenuScene extends Phaser.Scene {
         .setDepth(8);
       shopBg.on('pointerdown', () => shopBg.setAlpha(0.6));
       shopBg.on('pointerup', () => {
-        shopBg.setAlpha(1);
+        if (this.storefrontLoading) return;
         Sfx.play('click');
         PlatformBridge.haptic('light');
-        this.scene.start('Storefront');
+        // P-07: the Storefront scene and the whole payment chain load on
+        // demand; the chip stays dimmed until the chunk arrives (R-02 guard
+        // against rapid re-tap races while the import is in flight).
+        this.storefrontLoading = true;
+        shopBg.setAlpha(0.45);
+        loadStorefrontScene()
+          .then(() => {
+            if (!this.scene.isActive()) return;
+            startStorefrontLazy(this);
+          })
+          .catch(() => {
+            if (shopBg.scene) shopBg.setAlpha(1);
+          })
+          .finally(() => {
+            this.storefrontLoading = false;
+          });
       });
     }
 
@@ -1171,26 +1190,38 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private showSocialHub(): void {
-    if (this.socialHub || this.codexOverlay || this.questBoard || this.collectionBoard) return;
-    this.socialHub = new SocialHub(
-      this,
-      PlatformBridge,
-      async () => {
-        const status = await launchDailyRun({
-          registry: this.registry,
-          platform: PlatformBridge,
-        });
-        if (status === 'ok') {
-          void trackProductEvent('daily', PlatformBridge, { action: 'launch' });
-          this.socialHub?.destroy();
-          this.scene.start('Game');
-        }
-        return status;
-      },
-      () => {
-        this.socialHub = null;
-      }
-    );
+    if (this.socialHub || this.socialHubLoading || this.codexOverlay || this.questBoard || this.collectionBoard) return;
+    // P-07: lazy chunk + in-flight guard (R-02) — a fast second tap is a no-op
+    // until the module resolves; if the player left the menu meanwhile, the
+    // overlay is not constructed at all.
+    this.socialHubLoading = true;
+    void import('../ui/SocialHub')
+      .then(({ SocialHub }) => {
+        if (!this.scene.isActive()) return;
+        this.socialHub = new SocialHub(
+          this,
+          PlatformBridge,
+          async () => {
+            const status = await launchDailyRun({
+              registry: this.registry,
+              platform: PlatformBridge,
+            });
+            if (status === 'ok') {
+              void trackProductEvent('daily', PlatformBridge, { action: 'launch' });
+              this.socialHub?.destroy();
+              this.scene.start('Game');
+            }
+            return status;
+          },
+          () => {
+            this.socialHub = null;
+          }
+        );
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        this.socialHubLoading = false;
+      });
   }
 
   /**
@@ -1221,12 +1252,21 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private showQuestBoard(): void {
-    if (this.questBoard || this.codexOverlay || this.socialHub || this.collectionBoard) return;
-    this.questBoard = new QuestBoard(
-      this,
-      () => { this.questBoard = null; },
-      (target) => this.openMetaSurface(target)
-    );
+    if (this.questBoard || this.questBoardLoading || this.codexOverlay || this.socialHub || this.collectionBoard) return;
+    this.questBoardLoading = true;
+    void import('../ui/QuestBoard')
+      .then(({ QuestBoard }) => {
+        if (!this.scene.isActive()) return;
+        this.questBoard = new QuestBoard(
+          this,
+          () => { this.questBoard = null; },
+          (target) => this.openMetaSurface(target)
+        );
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        this.questBoardLoading = false;
+      });
   }
 
   private showCollectionBoard(): void {
@@ -1245,9 +1285,18 @@ export class MenuScene extends Phaser.Scene {
    * visible cell whose tap does nothing.
    */
   private showLab(): void {
-    if (this.labPanel || this.codexOverlay || this.socialHub || this.questBoard || this.collectionBoard || this.skinGallery) return;
+    if (this.labPanel || this.labPanelLoading || this.codexOverlay || this.socialHub || this.questBoard || this.collectionBoard || this.skinGallery) return;
     if (!FeatureFlags.get('economy.lab')) return;
-    this.labPanel = showLabPanel(this, () => { this.labPanel = null; });
+    this.labPanelLoading = true;
+    void import('../ui/LabOverlays')
+      .then(({ showLabPanel }) => {
+        if (!this.scene.isActive()) return;
+        this.labPanel = showLabPanel(this, () => { this.labPanel = null; });
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        this.labPanelLoading = false;
+      });
   }
 
   /**
@@ -1256,9 +1305,18 @@ export class MenuScene extends Phaser.Scene {
    * untouched. Gated by skins.gallery like the lab is gated by economy.lab.
    */
   private showSkins(): void {
-    if (this.skinGallery || this.codexOverlay || this.socialHub || this.questBoard || this.collectionBoard || this.labPanel) return;
+    if (this.skinGallery || this.skinGalleryLoading || this.codexOverlay || this.socialHub || this.questBoard || this.collectionBoard || this.labPanel) return;
     if (!FeatureFlags.get('skins.gallery')) return;
-    this.skinGallery = showSkinGallery(this, () => { this.skinGallery = null; });
+    this.skinGalleryLoading = true;
+    void import('../ui/SkinGallery')
+      .then(({ showSkinGallery }) => {
+        if (!this.scene.isActive()) return;
+        this.skinGallery = showSkinGallery(this, () => { this.skinGallery = null; });
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        this.skinGalleryLoading = false;
+      });
   }
 
   private showCodex(): void {
