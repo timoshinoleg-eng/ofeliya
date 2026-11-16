@@ -19,6 +19,18 @@
  *    - neither signal equals a decor color, and each sits deltaE > 30 away
  *      from the nearest decor color (reservation, not decoration);
  *    - primary UI text meets WCAG AA (contrast >= 4.5) on bg and panel.
+ * 4. HUD composite over gameplay scenes (I-08): the in-run HUD is a stack
+ *    scene -> plate (VISUAL.ink @ HUD.plateAlpha) -> bar backs (@ 0.9) -> bar
+ *    fills. The plate over a bright scene is the worst case the old review
+ *    flagged (F-08/F-09). Hard gates: HUD text that already meets WCAG AA on
+ *    the composite plate must stay >= 4.5 on BOTH a bright (#ffffff kill-flash
+ *    worst case) and the dark scene; bar fills (graphics) must stay >= 3:1
+ *    against their bar back. Every pair is also printed as a measured
+ *    baseline so future token changes diff against reality, not memory.
+ *    Known sub-AA pairs (measured 2026-11-16 on main @ 2bd6320, bright scene):
+ *    levelText player 3.98, bossLabel 3.44 — fixing them means either
+ *    plateAlpha 0.8 -> 0.9 (V3 contract) or re-branding those text colors,
+ *    both owner decisions; they are deliberately NOT hard-gated yet.
  */
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -53,6 +65,9 @@ try {
     [
       resolve('node_modules/typescript/bin/tsc'),
       'src/game/config.ts',
+      'src/ui/tokens.ts',
+      'src/ui/visualTokens.ts',
+      'src/ui/hudTokens.ts',
       '--target', 'ES2020',
       '--module', 'commonjs',
       '--moduleResolution', 'node',
@@ -63,6 +78,9 @@ try {
     { stdio: 'inherit' }
   );
   const { COLORS, SIGNAL, UI_TEXT } = require(join(temp, 'game', 'config.js'));
+  const { VISUAL, VISUAL_TEXT } = require(join(temp, 'ui', 'visualTokens.js'));
+  const { ROLE } = require(join(temp, 'ui', 'tokens.js'));
+  const { HUD } = require(join(temp, 'ui', 'hudTokens.js'));
 
   const lum = (n) => chroma(hex(n)).luminance();
   const lumBg = lum(COLORS.bg);
@@ -86,6 +104,36 @@ try {
     assert(ratio >= 4.5, `primary text contrast on ${hex(surface)} is ${ratio}, below WCAG AA 4.5`);
   }
 
+  // 4. HUD composite: scene -> plate -> bar backs -> fills. Blending happens in
+  //    sRGB per channel, exactly what the canvas does for alpha compositing.
+  const asColor = (c) => (typeof c === 'number' ? hex(c) : c);
+  const mix = (fg, bg, a) => chroma.mix(asColor(bg), asColor(fg), a, 'rgb');
+  const scenes = { bright: '#ffffff', dark: hex(COLORS.bg) };
+  const hudBaseline = [];
+  const hudGate = (label, fg, bg, min) => {
+    const ratio = chroma.contrast(hex(fg), bg);
+    hudBaseline.push(`${label}=${ratio.toFixed(2)}`);
+    assert(ratio >= min, `HUD composite ${label}: ${ratio.toFixed(2)} < ${min} (${bg.hex()})`);
+  };
+  for (const [sceneName, scene] of Object.entries(scenes)) {
+    const plate = mix(VISUAL.ink, scene, HUD.plateAlpha);
+    const barBackMain = mix(VISUAL.panelRaised, plate, 0.9); // xpBack/hpBack
+    const barBackBoss = mix(HUD.barBack, plate, 0.9);        // bossBack
+    // Text on the plate (AA 4.5). ivory/muted are hard-gated; player/bossLabel
+    // are measured only (known sub-AA, owner decision to fix — see header).
+    hudGate(`${sceneName} text ivory`, 0xf0eadb, plate, 4.5);
+    hudGate(`${sceneName} text muted`, 0x9cacac, plate, 4.5);
+    hudBaseline.push(
+      `${sceneName} text player=${chroma.contrast(VISUAL_TEXT.player, plate).toFixed(2)}`,
+      `${sceneName} text bossLabel=${chroma.contrast('#ff5472', plate).toFixed(2)}`
+    );
+    // Bar fills are graphics: WCAG 3:1 against their bar back.
+    hudGate(`${sceneName} fill xp`, VISUAL.player, barBackMain, 3);
+    hudGate(`${sceneName} fill hp`, VISUAL.host, barBackMain, 3);
+    hudGate(`${sceneName} fill hpLow`, HUD.lowHp, barBackMain, 3);
+    hudGate(`${sceneName} fill boss`, SIGNAL.danger, barBackBoss, 3);
+  }
+
   console.log(
     'palette-contrast: OK ' +
     `(lum bg=${lumBg.toFixed(4)} danger=${lumDanger.toFixed(4)} rna=${lumRna.toFixed(4)}, ` +
@@ -93,6 +141,7 @@ try {
     `contrast primary/bg=${chroma.contrast(UI_TEXT.primary, hex(COLORS.bg)).toFixed(2)}, ` +
     `chroma-js ${pkg.version} ${pkg.license})`
   );
+  console.log(`palette-contrast: HUD composite baseline ${hudBaseline.join(', ')}`);
 } finally {
   rmSync(temp, { recursive: true, force: true });
 }
