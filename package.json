@@ -70,6 +70,7 @@
     "test:readability-signal": "node tests/readability-signal-contract.mjs",
     "test:kill-feedback": "node tests/kill-feedback-contract.mjs",
     "test:palette-contrast": "node tests/palette-contrast.mjs",
+    "test:silhouette-metrics": "node tests/silhouette-metrics.mjs",
     "test:donor-synth": "node tests/donor-synth-contract.mjs",
     "test:analytics-events": "node scripts/check-analytics-events.mjs",
     "test:daily-streak": "node tests/daily-streak.mjs",

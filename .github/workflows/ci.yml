@@ -381,6 +381,9 @@ jobs:
       - name: HUD hierarchy contract
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/hud-hierarchy-smoke.cjs
 
+      - name: Silhouette readability probe (200-enemy localization proxy)
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/silhouette-probe.cjs
+
       - name: HUD retained graphics and invalidation
         run: npm run test:hud-retained-graphics
 
