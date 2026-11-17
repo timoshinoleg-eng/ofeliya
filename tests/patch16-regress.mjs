@@ -249,9 +249,9 @@ function makeD1() {
 
   function execSelect(sql, params) {
     const q = norm(sql);
-    if (q === 'SELECT user_id, product_id, status, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id FROM orders WHERE nonce=?') {
+    if (q === 'SELECT user_id, product_id, status, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days FROM orders WHERE nonce=?') {
       const row = orders.get(params[0]);
-      return row ? [{ user_id: row.user_id, product_id: row.product_id, status: row.status, amount_stars: row.amount_stars, sku_version: row.sku_version, grant_rna: row.grant_rna ?? null, grant_booster_days: row.grant_booster_days ?? null, grant_skin_id: row.grant_skin_id ?? null }] : [];
+      return row ? [{ user_id: row.user_id, product_id: row.product_id, status: row.status, amount_stars: row.amount_stars, sku_version: row.sku_version, grant_rna: row.grant_rna ?? null, grant_booster_days: row.grant_booster_days ?? null, grant_skin_id: row.grant_skin_id ?? null, grant_season_pass_days: row.grant_season_pass_days ?? null }] : [];
     }
     if (q === 'SELECT charge_id FROM payments WHERE nonce=?') {
       for (const row of payments.values()) if (row.nonce === params[0]) return [{ charge_id: row.charge_id }];

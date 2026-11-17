@@ -69,11 +69,24 @@ export const SQL_INSERT_LEDGER_GRANT =
 /** Создание заказа (B2): цена, версия каталога и СНАПШОТ ГРАНТА фиксируются
  *  в заказе (иммутабельно, P1-2). Параметры:
  *  (nonce, user_id, product_id, amount_stars, sku_version,
- *   grant_rna, grant_booster_days, grant_skin_id, created_at). */
+ *   grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days,
+ *   created_at). Монетизация v3: + grant_season_pass_days. */
 export const SQL_INSERT_ORDER =
   'INSERT INTO orders (nonce, user_id, product_id, amount_stars, sku_version, ' +
-  "grant_rna, grant_booster_days, grant_skin_id, status, created_at) " +
-  "VALUES (?,?,?,?,?,?,?,?, 'pending',?)";
+  'grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, status, created_at) ' +
+  "VALUES (?,?,?,?,?,?,?,?,?, 'pending',?)";
+
+/**
+ * Аудит-строка BotSubscriptionUpdated (монетизация v3): состояние подписки
+ * по апдейту Telegram. Параметры: (user_id, nonce, charge_id, state,
+ * created_at). nonce — invoice_payload апдейта (им же резолвится заказ);
+ * charge_id резолвится из payments по nonce (NULL, если платёж ещё не
+ * записан). Доступ НЕ гейтится этой таблицей — только датой
+ * wallets.season_pass_until_ms; таблица — аудит + админ-видимость.
+ */
+export const SQL_INSERT_SUBSCRIPTION_EVENT =
+  'INSERT INTO subscription_events (user_id, nonce, charge_id, state, created_at) ' +
+  'VALUES (?,?,?,?,?)';
 
 /** Журнал возвратов: новая операция (mark/execute). operation_id — PK. */
 export const SQL_INSERT_REFUND_OP =

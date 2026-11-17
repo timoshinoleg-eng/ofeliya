@@ -50,15 +50,17 @@ try {
   // tsc preserves structure from the common root (src/): outputs land in
   // game/shop/, game/meta/, systems/, ... — not in shop/ directly.
   const { SHOP_CATALOG } = require(join(temp, 'game', 'shop', 'products.js'));
-  const { purchaseGrants, applyPurchaseGrants, BOOSTER_DURATION_MS } = require(
+  const { purchaseGrants, applyPurchaseGrants, BOOSTER_DURATION_MS, SEASON_PASS_DURATION_MS } = require(
     join(temp, 'game', 'shop', 'grantPurchase.js')
   );
-  const { loadMeta, setBoosterUntilMs, isBoosterActive } = require(
+  const { loadMeta, setBoosterUntilMs, isBoosterActive, setSeasonPassUntilMs, isSeasonPassActive } = require(
     join(temp, 'game', 'meta', 'MetaWallet.js')
   );
 
   // --- booster duration is 7 days (from the product title) ---
   eq(BOOSTER_DURATION_MS, 7 * 24 * 3600 * 1000, 'booster lasts 7 days');
+  // --- season pass duration is 30 days (монетизация v3) ---
+  eq(SEASON_PASS_DURATION_MS, 30 * 24 * 3600 * 1000, 'season pass lasts 30 days');
 
   // --- every catalog product maps to exactly one grant ---
   for (const product of SHOP_CATALOG) {
@@ -84,6 +86,14 @@ try {
   eq(purchaseGrants(booster)[0].type, 'booster', 'booster grants a booster');
   eq(purchaseGrants(booster)[0].durationMs, BOOSTER_DURATION_MS, 'booster duration matches');
 
+  // --- season pass maps to a 30-day window (монетизация v3) ---
+  const pass = SHOP_CATALOG.find((p) => p.id === 'season-pass.basic-30d');
+  assert(pass, 'season pass is in catalog');
+  eq(pass.kind, 'season_pass', 'season pass kind');
+  eq(pass.stars, 250, 'season pass costs 250 stars');
+  eq(purchaseGrants(pass)[0].type, 'season_pass', 'season pass grants a season pass');
+  eq(purchaseGrants(pass)[0].durationMs, SEASON_PASS_DURATION_MS, 'season pass duration matches');
+
   // --- unknown products grant nothing (fail-closed) ---
   eq(purchaseGrants({ id: 'nope', kind: 'currency' }).length, 0, 'unknown currency grants nothing');
   eq(purchaseGrants({ id: 'nope', kind: 'spaceship' }).length, 0, 'unknown kind grants nothing');
@@ -97,6 +107,26 @@ try {
   setBoosterUntilMs(0);
   eq(isBoosterActive(Date.now()), false, 'booster cleared');
   eq(loadMeta().boosterUntilMs, 0, 'booster state is zero after clear');
+
+  // --- season pass state round-trips through MetaWallet (монетизация v3) ---
+  eq(isSeasonPassActive(Date.now()), false, 'no season pass initially');
+  const passApplied = applyPurchaseGrants(pass);
+  eq(passApplied.length, 1, 'season pass apply returns one grant');
+  assert(isSeasonPassActive(Date.now()), 'season pass active right after grant');
+  assert(
+    !isSeasonPassActive(Date.now() + SEASON_PASS_DURATION_MS + 1000),
+    'season pass expires after 30 days'
+  );
+  // повторная покупка продлевает от текущего срока (как бустер, патч №11)
+  const firstUntil = loadMeta().seasonPassUntilMs;
+  applyPurchaseGrants(pass);
+  assert(
+    loadMeta().seasonPassUntilMs >= firstUntil + SEASON_PASS_DURATION_MS - 1000,
+    'season pass renewal extends from current term'
+  );
+  setSeasonPassUntilMs(0);
+  eq(isSeasonPassActive(Date.now()), false, 'season pass cleared');
+  eq(loadMeta().seasonPassUntilMs, 0, 'season pass state is zero after clear');
 
   console.log('shop-grants: ok');
 } finally {

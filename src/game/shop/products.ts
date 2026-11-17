@@ -70,9 +70,23 @@ export const SHOP_CATALOG: readonly Product[] = [
     art: { seed: 'rna-pack-m', palette: 'cyan' },
     tag: '-13%',
   },
+  {
+    // Монетизация v3: сезонный пропуск v1 (только базовый). Подписка
+    // Telegram Stars: 250 ★, 30 дней, продление автоматическое.
+    // Цена RUB — витринная (как у скина за 250 ★); серверный грант —
+    // в worker/src/grants.ts (должен совпадать по id/stars/гранту).
+    id: 'season-pass.basic-30d',
+    kind: 'season_pass',
+    title: 'Сезонный пропуск — 30 дней',
+    description: 'Доступ к платному треку сезонных миссий: косметика, РНК и бустеры.',
+    price: { amount: 299, currency: 'RUB' },
+    stars: 250,  // Telegram Stars (XTR)
+    art: { seed: 'season-pass-basic', palette: 'green' },
+    tag: 'NEW',
+  },
 ];
 
-const VALID_KINDS: readonly ProductKind[] = ['skin', 'booster', 'currency'];
+const VALID_KINDS: readonly ProductKind[] = ['skin', 'booster', 'currency', 'season_pass'];
 
 /**
  * Чистая функция: проверяет каталог. Возвращает список ошибок (пусто = ок).

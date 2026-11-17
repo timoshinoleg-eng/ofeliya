@@ -152,6 +152,9 @@ jobs:
       - name: Worker entitlements contract
         run: npm run test:worker-entitlements
 
+      - name: Worker season pass contract
+        run: npm run test:worker-season-pass
+
       - name: Payments trust contract
         run: npm run test:payments-trust
 

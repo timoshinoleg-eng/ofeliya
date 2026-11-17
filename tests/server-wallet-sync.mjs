@@ -9,6 +9,8 @@
  * - инкрементальный синк: применяются только события seq > last_seq;
  * - скины — union авторитетного server.skins (повторный синк не дублирует);
  * - бустер — max(local, server);
+ * - сезонный пропуск — max(local, server) (монетизация v3); события
+ *   season_pass в журнале санитизируются и не неттятся по РНК;
  * - refund на сервере (reversal-событие) — только учёт, локальное значение
  *   НЕ отзывается (задокументировано);
  * - детерминизм: свежий синк == инкрементальное применение тех же событий;
@@ -87,6 +89,7 @@ try {
   let ledger = [];
   let serverSkins = [];
   let serverBooster = 0;
+  let serverPass = 0; // монетизация v3: season_pass_until_ms
   let serverId = 'test-server';
   let failWith = 0;
   let v1Mode = false; // эмуляция старого воркера (без schema_version/ledger)
@@ -107,7 +110,8 @@ try {
       status: 200,
       json: async () => ({
         ok: true, user_id: USER_ID, server_id: serverId, schema_version: 2,
-        purchased_rna: 0, booster_until_ms: serverBooster, skins: [...serverSkins],
+        purchased_rna: 0, booster_until_ms: serverBooster, season_pass_until_ms: serverPass,
+        skins: [...serverSkins],
         ledger: ledger.filter((r) => r.seq > since), tip_seq: tip, ledger_tip: null,
       }),
     };
@@ -123,7 +127,7 @@ try {
   const reset = () => {
     store.clear();
     debugResetWalletSync();
-    ledger = []; serverSkins = []; serverBooster = 0; serverId = 'test-server'; failWith = 0; v1Mode = false;
+    ledger = []; serverSkins = []; serverBooster = 0; serverPass = 0; serverId = 'test-server'; failWith = 0; v1Mode = false;
   };
 
   eq(parseTelegramUserId(initData), USER_ID, 'parseTelegramUserId');
@@ -175,6 +179,27 @@ try {
   const r7 = await sync();
   eq(r7.applied.boosterUntilMs, now + 5_000_000, 'booster: server wins when greater');
   eq(meta.loadMeta().boosterUntilMs, now + 5_000_000, 'server booster applied');
+
+  // --- 4b. Сезонный пропуск — max(local, server) (монетизация v3) ---
+  reset();
+  const nowP = Date.now();
+  meta.setSeasonPassUntilMs(nowP + 2_000_000); // локальный больше серверного
+  serverPass = nowP + 100_000;
+  const rp1 = await sync();
+  eq(rp1.applied.seasonPassUntilMs, nowP + 2_000_000, 'pass: local wins when greater');
+  eq(meta.loadMeta().seasonPassUntilMs, nowP + 2_000_000, 'local pass kept');
+  serverPass = nowP + 6_000_000; // серверный больше
+  const rp2 = await sync();
+  eq(rp2.applied.seasonPassUntilMs, nowP + 6_000_000, 'pass: server wins when greater');
+  eq(meta.loadMeta().seasonPassUntilMs, nowP + 6_000_000, 'server pass applied');
+  // Событие season_pass в журнале санитизируется и не влияет на РНК.
+  reset();
+  ledger = [{ seq: 1, charge_id: 'cp1', kind: 'grant', grant_type: 'season_pass', amount: 2592000000, skin_id: null, created_at: 1 }];
+  serverPass = nowP + 6_000_000;
+  const rp3 = await sync();
+  eq(rp3.ok, true, 'season_pass event sync ok');
+  eq(rp3.applied.rna, 0, 'season_pass event does not net RNA');
+  eq(rp3.applied.seasonPassUntilMs, nowP + 6_000_000, 'pass applied from wallet state');
 
   // --- 5. Refund: reversal — только учёт, локальное не отзывается ---
   reset();

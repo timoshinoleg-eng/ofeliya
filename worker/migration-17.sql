@@ -1,0 +1,161 @@
+-- ============================================================================
+-- Миграция D1: v16 → v17 (монетизация v3, сезонный пропуск). Применять,
+-- ТОЛЬКО если база уже создана со схемой v16; свежий деплой — просто
+-- worker/schema.sql (D1 в проде ЕЩЁ НЕТ — этот файл нужен для пути
+-- апгрейда, если v16 успеет попасть в прод до v17).
+--
+-- Применение:
+--   wrangler d1 execute ofeliya-payments --file=worker/migration-17.sql
+--   (добавить --remote для продакшн-базы)
+--
+-- КЛЮЧЕВЫЕ ШАГИ (порядок важен):
+--   1. Снапшот: wrangler d1 export ofeliya-payments --output=backup-v16.sql
+--      (или --remote). Без снапшота миграцию не запускать.
+--   2. Pre-check (запросы ниже — должны вернуть 0 строк):
+--        SELECT version FROM schema_migrations WHERE version='v17';
+--      Ненулевой результат → миграция уже применена, НЕ запускать повторно
+--      (ALTER TABLE ADD COLUMN без IF NOT EXISTS упадёт на повторном
+--      прогоне — это нормально и безопасно, см. ниже).
+--   3. Применить файл целиком (все операторы идут последовательно).
+--   4. Проверки после (должны выполняться):
+--        SELECT version FROM schema_migrations;  -- содержит 'v17'
+--        -- триггер пересоздан (проверить тело — есть season_pass):
+--        SELECT sql FROM sqlite_master WHERE type='trigger' AND name='trg_wallet_ledger_apply';
+--        -- снапшот гранта у старых заказов полный (0 — backfill сработал):
+--        SELECT COUNT(*) FROM orders WHERE grant_season_pass_days IS NULL;
+--        -- кошельки не изменились (миграция только добавляет колонку):
+--        SELECT user_id, purchased_rna, booster_until_ms, season_pass_until_ms FROM wallets;
+--        -- smoke: прогнать worker/scripts/sql-smoke.test.mjs локально
+--        -- (триггер season_pass grant/reversal).
+--   5. Задеплоить воркер v17 (wrangler deploy) — СТАРЫЙ код воркера (v16)
+--      НЕ пишет grant_season_pass_days (NULL), но новый код толерантен:
+--      NULL при полном v16-снапшоте трактуется как 0 (см.
+--      grantFromOrderSnapshot в worker/src/index.ts). Обратное окно
+--      (новый воркер, старая схема) НЕДОПУСТИМО: INSERT заказа упадёт
+--      на несуществующей колонке → 502 order-store-failed. Порядок:
+--      сначала миграция, потом деплой воркера.
+--
+-- ROLLBACK: D1 не умеет транзакционный DDL-откат между скриптами.
+--   Вариант 1 (чистый): восстановить базу из снапшота шага 1.
+--   Вариант 2 (вперёд): v17 аддитивна (новая колонка, новая таблица,
+--   новые ветки триггера) — откат воркера на v16 безопасен БЕЗ отката
+--   схемы: v16-код новые колонки не читает и не пишет, триггер с
+--   season_pass-ветками на старых grant_type ведёт себя как v16.
+--   После ЛЮБОГО отката воркера: вернуть деплой v16.
+--
+-- ВАЖНО ПРО ТРИГГЕР: DROP + CREATE TRIGGER ниже — внутри BEGIN...END есть
+-- точки с запятой. Если `wrangler d1 execute --file` режет файл наивно
+-- по ';' и падает на кусках триггера — это ограничение инструмента:
+-- примените ВЕСЬ CREATE TRIGGER (от CREATE до END;) отдельно одним
+-- --command либо в SQL-консоли дашборда D1. Остальная часть файла
+-- применяется --file как обычно. После применения проверьте:
+--   SELECT name FROM sqlite_master WHERE type='trigger';
+-- должен вернуть trg_wallet_ledger_apply.
+--
+-- ИДЕМПОТЕНТНОСТЬ: все CREATE — IF NOT EXISTS; backfill-UPDATE — с
+-- WHERE IS NULL (повторный прогон меняет 0 строк); INSERT — OR IGNORE.
+-- Исключение: два ALTER TABLE ADD COLUMN (у SQLite нет IF NOT EXISTS
+-- для ADD COLUMN) — при повторном прогоне упадут с «duplicate column
+-- name». Это НОРМАЛЬНО и безопасно: сначала проверь SELECT version FROM
+-- schema_migrations — если там уже 'v17', миграцию НЕ запускать.
+--
+-- Что меняется (v16 → v17):
+--   - orders: + grant_season_pass_days INTEGER (снапшот дней пропуска,
+--     4-е поле гранта; backfill 0 для старых заказов);
+--   - wallets: + season_pass_until_ms INTEGER NOT NULL DEFAULT 0
+--     (абсолютный срок пропуска, как booster_until_ms);
+--   - subscription_events: новая таблица (аудит BotSubscriptionUpdated);
+--   - триггер trg_wallet_ledger_apply пересоздаётся с ветками season_pass
+--     (grant: max(текущий, created_at) + amount; reversal: max(created_at,
+--     текущий + amount) — политика «время вспять не отматываем»).
+--     Пересоздание триггера НЕ меняет wallets (триггер срабатывает только
+--     на новые вставки в wallet_ledger).
+-- ============================================================================
+
+-- 0. Guard-таблица миграций (идемпотентно).
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  version    TEXT PRIMARY KEY,
+  applied_at INTEGER NOT NULL
+);
+
+-- 1. Снапшот гранта: 4-е поле (ALTER без IF NOT EXISTS — см. шапку).
+ALTER TABLE orders ADD COLUMN grant_season_pass_days INTEGER;
+ALTER TABLE wallets ADD COLUMN season_pass_until_ms INTEGER NOT NULL DEFAULT 0;
+
+-- Backfill старых заказов: пропуска у них не было → 0. Идемпотентно
+-- (WHERE IS NULL). Без backfill строгая проверка полноты снапшота в
+-- grantFromOrderSnapshot всё равно толерантна к NULL в этом поле, но
+-- явный 0 чище для аудита.
+UPDATE orders SET grant_season_pass_days = 0 WHERE grant_season_pass_days IS NULL;
+
+-- 2. Аудит BotSubscriptionUpdated (идемпотентно).
+CREATE TABLE IF NOT EXISTS subscription_events (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id    INTEGER NOT NULL,
+  nonce      TEXT NOT NULL,
+  charge_id  TEXT,
+  state      TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_subscription_events_nonce ON subscription_events(nonce);
+
+-- 3. Триггер — ПЕРЕСОЗДАТЬ с ветками season_pass (полный текст — как в
+-- worker/schema.sql; DROP нужен, т.к. CREATE TRIGGER IF NOT EXISTS не
+-- обновляет существующий триггер).
+DROP TRIGGER IF EXISTS trg_wallet_ledger_apply;
+CREATE TRIGGER trg_wallet_ledger_apply
+AFTER INSERT ON wallet_ledger
+BEGIN
+  INSERT OR IGNORE INTO wallets(user_id, purchased_rna, booster_until_ms, season_pass_until_ms, skins_json, updated_at)
+  VALUES (NEW.user_id, 0, 0, 0, '[]', NEW.created_at);
+
+  UPDATE wallets
+     SET purchased_rna = purchased_rna + NEW.amount,
+         updated_at = NEW.created_at
+   WHERE user_id = NEW.user_id
+     AND NEW.kind = 'grant' AND NEW.grant_type = 'rna';
+
+  UPDATE wallets
+     SET booster_until_ms = max(booster_until_ms, NEW.created_at) + NEW.amount,
+         updated_at = NEW.created_at
+   WHERE user_id = NEW.user_id
+     AND NEW.kind = 'grant' AND NEW.grant_type = 'booster';
+
+  UPDATE wallets
+     SET season_pass_until_ms = max(season_pass_until_ms, NEW.created_at) + NEW.amount,
+         updated_at = NEW.created_at
+   WHERE user_id = NEW.user_id
+     AND NEW.kind = 'grant' AND NEW.grant_type = 'season_pass';
+
+  INSERT OR IGNORE INTO wallet_skins(user_id, skin_id, charge_id, status, granted_at)
+  SELECT NEW.user_id, NEW.skin_id, NEW.charge_id, 'active', NEW.created_at
+   WHERE NEW.kind = 'grant' AND NEW.grant_type = 'skin';
+
+  UPDATE wallets
+     SET purchased_rna = max(0, purchased_rna + NEW.amount),
+         updated_at = NEW.created_at
+   WHERE user_id = NEW.user_id
+     AND NEW.kind = 'reversal' AND NEW.grant_type = 'rna';
+
+  UPDATE wallets
+     SET booster_until_ms = max(NEW.created_at, booster_until_ms + NEW.amount),
+         updated_at = NEW.created_at
+   WHERE user_id = NEW.user_id
+     AND NEW.kind = 'reversal' AND NEW.grant_type = 'booster';
+
+  UPDATE wallets
+     SET season_pass_until_ms = max(NEW.created_at, season_pass_until_ms + NEW.amount),
+         updated_at = NEW.created_at
+   WHERE user_id = NEW.user_id
+     AND NEW.kind = 'reversal' AND NEW.grant_type = 'season_pass';
+
+  UPDATE wallet_skins
+     SET status = 'reversed'
+   WHERE charge_id = NEW.reverses_charge_id
+     AND status = 'active'
+     AND NEW.kind = 'reversal' AND NEW.grant_type = 'skin';
+END;
+
+-- 4. Отметка о применении (идемпотентно).
+INSERT OR IGNORE INTO schema_migrations (version, applied_at)
+VALUES ('v17', strftime('%s','now')*1000);

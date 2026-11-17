@@ -11,6 +11,7 @@ import {
   SQL_COMPLETE_REFUND_OP,
   SQL_UPDATE_PAYMENT_REFUNDED_FROM_ANY,
   SQL_INSERT_LEDGER_REVERSAL,
+  SQL_INSERT_SUBSCRIPTION_EVENT,
 } from './sql';
 
 /**
@@ -18,6 +19,43 @@ import {
  *
  * Зачем: Telegram Stars-инвойсы НЕЛЬЗЯ создавать из клиента (нужен bot token),
  * поэтому игре нужен минимальный бэкенд.
+ *
+ * Монетизация v3 (сезонный пропуск, GRANTS_VERSION=3, схема v17):
+ *  - Новый товар 'season-pass.basic-30d' (250 Stars, 30 дней) — ПОДПИСКА
+ *    Telegram Stars: /api/invoice передаёт в createInvoiceLink
+ *    subscription_period=2592000 (30 дней — ЕДИНСТВЕННОЕ допустимое
+ *    значение; кап цены подписки 10 000 Stars). ТОЛЬКО createInvoiceLink —
+ *    sendInvoice воркер не использует и не добавляет.
+ *  - Продление подписки приходит successful_payment с ТЕМ ЖЕ invoice_payload
+ *    (nonce), что и первая оплата, но с новым charge_id и
+ *    is_recurring=true / is_first_recurring=false. Без отдельного пути оно
+ *    ушло бы в nonce_reuse БЕЗ гранта (P1-5). Путь продления: пропустить
+ *    nonce-reuse-отклонение; сверить user + amount с заказом; вставить
+ *    payments с ПРОИЗВОДНЫМ nonce `${nonce}:r:${chargeId}` (уникален;
+ *    verify по нему никто не зовёт); грант season_pass +30d из снапшота
+ *    заказа; батч из 2 statement'ов (payments + ledger, без UPDATE orders —
+ *    заказ уже 'paid'). Дубликат продления (тот же charge_id) → ON CONFLICT
+ *    DO NOTHING → лог duplicate. is_recurring у НЕ-подписки или без заказа —
+ *    как раньше (nonce_reuse / unknown_order, без гранта).
+ *    subscription_expiration_date из successful_payment (продления) —
+ *    кросс-чек: расхождение с wallets.season_pass_until_ms > суток →
+ *    диагностический лог 'subscription_expiration_drift'.
+ *  - BotSubscriptionUpdated (Bot API 10.2, update.subscription): ТОЧНАЯ
+ *    форма по докам — {user: {id}, invoice_payload, state} (state ∈
+ *    canceled|active|failed). charge_id и даты в апдейте НЕТ — charge_id
+ *    резолвится из payments по nonce (invoice_payload), дата истечения
+ *    живёт только в successful_payment.subscription_expiration_date.
+ *    Апдейт пишется в subscription_events (аудит + админ-видимость) и
+ *    НИКАК не меняет доступ: доступ гейтится датой season_pass_until_ms.
+ *  - POST /api/admin/subscription {chargeId, isCanceled} (ADMIN_TOKEN):
+ *    Bot API editUserStarSubscription (HTTPS, НЕ MTProto) — отмена
+ *    подписки при возврате пропуска: refundStarPayment подписку НЕ
+ *    отменяет сам.
+ *  - POST /api/wallet: + season_pass_until_ms (аддитивное поле,
+ *    schema_version остаётся 2).
+ *  - Триггер: season_pass — как бустер (grant: max(текущий, created_at) +
+ *    amount; reversal: max(created_at, текущий + amount) — время вспять
+ *    не отматываем).
  *
  * Протокол v5 (патч №16, один батч + SQL-триггер):
  *  Ключевое изменение: выдача гранта — ОДИН атомарный db.batch() из трёх
@@ -422,6 +460,19 @@ async function handleInvoice(request: Request, env: Env): Promise<Response> {
     logEvent('invoice_catalog_misconfigured', { productId, stars: product.stars });
     return json({ error: 'catalog-misconfigured' }, 500);
   }
+  // Монетизация v3: подписка — только periodSeconds 2592000 (30 дней,
+  // единственное значение Telegram) и цена ≤ 10 000 Stars (кап подписок).
+  // Битый каталог — 500, а не инвойс, который Telegram отвергнет.
+  if (product.subscription) {
+    if (product.subscription.periodSeconds !== 2592000 || product.stars > 10_000) {
+      logEvent('invoice_subscription_misconfigured', {
+        productId,
+        periodSeconds: product.subscription.periodSeconds,
+        stars: product.stars,
+      });
+      return json({ error: 'catalog-misconfigured' }, 500);
+    }
+  }
   if (!isValidNonce(nonce)) return json({ error: 'bad-nonce' }, 400);
   const v = await validateInitData(initData, env.TELEGRAM_BOT_TOKEN);
   if (!v.ok) return json({ error: 'bad-init-data', reason: v.reason }, 401);
@@ -435,7 +486,7 @@ async function handleInvoice(request: Request, env: Env): Promise<Response> {
     await env.PAYMENTS_DB.prepare(SQL_INSERT_ORDER)
       .bind(
         nonce, v.userId, productId, product.stars, GRANTS_VERSION,
-        product.rna, product.boosterDays, product.skinId,
+        product.rna, product.boosterDays, product.skinId, product.seasonPassDays,
         Date.now()
       )
       .run();
@@ -451,6 +502,11 @@ async function handleInvoice(request: Request, env: Env): Promise<Response> {
       provider_token: '', // пусто для Stars (цифровые товары)
       currency: 'XTR',
       prices: [{ label: product.title, amount: product.stars }],
+      // Монетизация v3: подписка — subscription_period ТОЛЬКО здесь.
+      // На sendInvoice он ничего не делает (воркер его не использует).
+      ...(product.subscription
+        ? { subscription_period: product.subscription.periodSeconds }
+        : {}),
     })) as string;
   } catch {
     return json({ error: 'invoice-create-failed' }, 502);
@@ -473,6 +529,30 @@ interface SuccessfulPayment {
   invoice_payload?: string;
   telegram_payment_charge_id?: string;
   provider_payment_charge_id?: string;
+  /** Монетизация v3: продление подписки (тот же nonce, новый charge_id). */
+  is_recurring?: boolean;
+  /** Первая оплата подписки (идёт обычным путём, как разовый товар). */
+  is_first_recurring?: boolean;
+  /**
+   * Дата истечения подписки в секундах (только для продлений) — кросс-чек
+   * против wallets.season_pass_until_ms (диагностика, не гейт).
+   */
+  subscription_expiration_date?: number;
+}
+
+/**
+ * BotSubscriptionUpdated (Bot API 10.2, update.subscription).
+ * ТОЧНАЯ форма по официальным докам: только {user, invoice_payload, state}.
+ * charge_id и даты в апдейте НЕТ: charge_id резолвится из payments по
+ * nonce (invoice_payload), а дата истечения живёт только в
+ * SuccessfulPayment.subscription_expiration_date. Бриф ошибочно называл
+ * поля user_id / telegram_payment_charge_id / subscription_expiration_date —
+ * исправлено по докам (см. memory/02_DECISIONS.md).
+ */
+interface BotSubscriptionUpdated {
+  user?: { id?: number };
+  invoice_payload?: string;
+  state?: string;
 }
 
 function logEvent(event: string, extra: Record<string, unknown> = {}): void {
@@ -491,6 +571,8 @@ interface DbOrderRow {
   grant_rna: number | null;
   grant_booster_days: number | null;
   grant_skin_id: string | null;
+  /** Монетизация v3: снапшот дней пропуска (NULL у заказов до миграции-17). */
+  grant_season_pass_days: number | null;
 }
 
 interface DbPaymentRow {
@@ -503,7 +585,7 @@ interface DbPaymentRow {
 
 async function getOrder(db: D1Database, nonce: string): Promise<DbOrderRow | null> {
   const row = await db
-    .prepare('SELECT user_id, product_id, status, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id FROM orders WHERE nonce=?')
+    .prepare('SELECT user_id, product_id, status, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days FROM orders WHERE nonce=?')
     .bind(nonce)
     .first<DbOrderRow>();
   if (!row || typeof row.user_id !== 'number' || typeof row.product_id !== 'string') return null;
@@ -526,6 +608,7 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
   const update = parsed.body as {
     pre_checkout_query?: PreCheckoutQuery;
     message?: { successful_payment?: SuccessfulPayment; from?: { id?: number } };
+    subscription?: BotSubscriptionUpdated;
   };
 
   // 1. Pre-checkout: ответить ОБЯЗАТЕЛЬНО в течение 10 секунд.
@@ -614,7 +697,68 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
       return json({ ok: false, error: 'db_unavailable' }, 503);
     }
   }
+
+  // 3. BotSubscriptionUpdated (монетизация v3, Bot API 10.2): состояние
+  //    подписки изменилось (canceled/active/failed). Аудит-only: запись в
+  //    subscription_events, доступ НЕ меняется (гейтится датой
+  //    season_pass_until_ms). Ошибка записи — лог + 200: потеря одной
+  //    аудит-строки не стоит ретрая Telegram (дубликат апдейта дал бы
+  //    вторую строку в журнале).
+  const sub = update.subscription;
+  if (sub) {
+    await recordSubscriptionUpdate(sub, env);
+  }
   return json({ ok: true });
+}
+
+/**
+ * BotSubscriptionUpdated → subscription_events (монетизация v3, аудит).
+ * Никогда не бросает: ошибка инфраструктуры — лог, вебхук отвечает 200.
+ * Невалидный апдейт (нет user.id / nonce / неизвестный state) — лог,
+ * без записи. Будущие значения state Telegram может добавить — allowlist
+ * из трёх известных; неизвестное значение логируется как invalid, а не
+ * записывается (иначе админ-панель увидит мусор).
+ */
+async function recordSubscriptionUpdate(sub: BotSubscriptionUpdated, env: Env): Promise<void> {
+  const userId = sub.user?.id;
+  const nonce = sub.invoice_payload ?? '';
+  const state = sub.state ?? '';
+  if (
+    typeof userId !== 'number' ||
+    !isValidNonce(nonce) ||
+    (state !== 'canceled' && state !== 'active' && state !== 'failed')
+  ) {
+    logEvent('subscription_update_invalid', { userId, nonce, state });
+    return;
+  }
+  if (!env.PAYMENTS_DB) {
+    logEvent('subscription_update_no_db', { userId, nonce, state });
+    return;
+  }
+  try {
+    // charge_id для админ-видимости: платёж по nonce (первая оплата).
+    const payment = await env.PAYMENTS_DB.prepare(
+      'SELECT charge_id FROM payments WHERE nonce=?'
+    )
+      .bind(nonce)
+      .first<{ charge_id: string }>();
+    await env.PAYMENTS_DB.prepare(SQL_INSERT_SUBSCRIPTION_EVENT)
+      .bind(userId, nonce, payment?.charge_id ?? null, state, Date.now())
+      .run();
+    logEvent('subscription_updated', {
+      userId,
+      nonce,
+      state,
+      chargeId: payment?.charge_id ?? null,
+    });
+  } catch (err) {
+    logEvent('subscription_update_db_error', {
+      userId,
+      nonce,
+      state,
+      error: String(err),
+    });
+  }
 }
 
 /**
@@ -641,27 +785,36 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
 /**
  * P1-2 (независимый review): грант из снапшота заказа.
  * Возвращает {kind, grant} как grantForProduct, но по зафиксированным
- * в заказе значениям. Legacy (все три поля NULL) → fallback на текущий
+ * в заказе значениям. Legacy (все поля NULL) → fallback на текущий
  * каталог (возвращает null, если товара нет и там — unknown-product).
  * Частичный снапшот (только часть полей NULL) — битые данные → null.
+ * ИСКЛЮЧЕНИЕ (монетизация v3): grant_season_pass_days NULL при полном
+ * v16-снапшоте (rna/booster/skin на месте) — это переходное состояние
+ * v16→v17 (заказ создан старым воркером до миграции-17), а не битые
+ * данные: трактуется как 0. Миграция-17 делает backfill 0, но окно
+ * «миграция применена, воркер ещё v16» существует — толерантность
+ * закрывает его без потери гранта.
  */
 function grantFromOrderSnapshot(
   order: DbOrderRow
-): { kind: 'rna' | 'booster' | 'skin'; grant: ServerGrant } | null {
-  const { grant_rna, grant_booster_days, grant_skin_id } = order;
+): { kind: 'rna' | 'booster' | 'skin' | 'season_pass'; grant: ServerGrant } | null {
+  const { grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days } = order;
   const hasSnapshot =
     typeof grant_rna === 'number' ||
     typeof grant_booster_days === 'number' ||
-    typeof grant_skin_id === 'string';
+    typeof grant_skin_id === 'string' ||
+    typeof grant_season_pass_days === 'number';
   if (!hasSnapshot) {
     // Legacy-заказ без снимка: текущий каталог (громкий лог — у вызывающего).
     return grantForProduct(order.product_id);
   }
   // Снапшот должен быть полным; иначе — битые данные, не выдаём.
+  // grant_season_pass_days NULL — толерантность v16→v17 (см. шапку).
   if (
     typeof grant_rna !== 'number' ||
     typeof grant_booster_days !== 'number' ||
-    (grant_skin_id !== null && typeof grant_skin_id !== 'string')
+    (grant_skin_id !== null && typeof grant_skin_id !== 'string') ||
+    (grant_season_pass_days !== null && typeof grant_season_pass_days !== 'number')
   ) {
     return null;
   }
@@ -672,11 +825,112 @@ function grantFromOrderSnapshot(
     rna: Math.max(0, Math.floor(grant_rna)),
     boosterDays: Math.max(0, Math.floor(grant_booster_days)),
     skinId: grant_skin_id,
+    seasonPassDays: Math.max(0, Math.floor(grant_season_pass_days ?? 0)),
   };
   if (grant.skinId) return { kind: 'skin', grant };
+  if (grant.seasonPassDays > 0) return { kind: 'season_pass', grant };
   if (grant.boosterDays > 0) return { kind: 'booster', grant };
   if (grant.rna > 0) return { kind: 'rna', grant };
   return null;
+}
+
+/**
+ * Продление подписки (монетизация v3): successful_payment с тем же nonce,
+ * что и первая оплата, новым charge_id и is_recurring=true /
+ * is_first_recurring=false. Вызывается из recordSuccessfulPayment, когда
+ * nonce уже занят другим charge_id (иначе это был бы nonce_reuse).
+ *
+ * Возвращает true, если продление ОБРАБОТАНО (грант выдан, дубликат
+ * опознан или платёж отвергнут с логом — вызывающий ничего больше не
+ * делает), и false, если это НЕ продление подписки (товар не пропуск —
+ * вызывающий падает в обычный nonce_reuse-путь).
+ *
+ * Батч из 2 statement'ов (payments + ledger, без UPDATE orders — заказ
+ * уже 'paid'). Платеж пишется с ПРОИЗВОДНЫМ nonce `${nonce}:r:${chargeId}`
+ * (UNIQUE(payments.nonce) не даёт вставить второй платёж с тем же nonce;
+ * verify по производному nonce никто не зовёт).
+ */
+async function recordSubscriptionRenewal(
+  sp: SuccessfulPayment,
+  order: DbOrderRow,
+  chargeId: string,
+  fromId: number,
+  env: Env
+): Promise<boolean> {
+  const nonce = sp.invoice_payload ?? '';
+  const resolved = grantFromOrderSnapshot(order);
+  if (!resolved || resolved.kind !== 'season_pass') {
+    // is_recurring у не-подписки (или битый снапшот): не наше — пусть
+    // вызывающий обработает как nonce_reuse (без гранта).
+    return false;
+  }
+  const { grant } = resolved;
+  const amount = sp.total_amount;
+  const base = {
+    stars: amount,
+    currency: sp.currency,
+    telegramChargeId: chargeId,
+    nonce,
+  };
+  // Продление сверяется с НЕИЗМЕНЯЕМЫМ заказом, как первая оплата.
+  if (typeof order.amount_stars !== 'number' || amount !== order.amount_stars) {
+    logEvent('stars_renewal_amount_mismatch', {
+      ...base,
+      userId: fromId,
+      productId: order.product_id,
+      expectedStars: order.amount_stars,
+    });
+    return true;
+  }
+  const db = env.PAYMENTS_DB;
+  if (!db) throw new Error('db_unavailable');
+  const now = Date.now();
+  const skuVersion = typeof order.sku_version === 'number' ? order.sku_version : GRANTS_VERSION;
+  const ledgerAmount = Math.max(0, Math.floor(grant.seasonPassDays)) * 86_400_000;
+  const derivedNonce = `${nonce}:r:${chargeId}`;
+  const results = await db.batch([
+    db.prepare(SQL_INSERT_PAYMENT).bind(
+      chargeId, fromId, order.product_id, amount, sp.currency, 'paid', derivedNonce, skuVersion, now, null
+    ),
+    db.prepare(SQL_INSERT_LEDGER_GRANT).bind(
+      fromId, chargeId, 'grant', 'season_pass', ledgerAmount, null, null, grantAmountText('season_pass', grant), now
+    ),
+  ]);
+  if (results[0]?.meta.changes === 0) {
+    // Дубликатная доставка продления: тот же charge_id — no-op.
+    logEvent('stars_payment_duplicate', { ...base, userId: fromId });
+    return true;
+  }
+  logEvent('stars_subscription_renewed', {
+    ...base,
+    userId: fromId,
+    productId: order.product_id,
+    seasonPassDays: grant.seasonPassDays,
+  });
+  // Кросс-чек с Telegram: subscription_expiration_date (секунды) из
+  // продления против серверного season_pass_until_ms. Расхождение > суток —
+  // диагностика (не гейт): доступ гейтится серверной датой.
+  const expSec = sp.subscription_expiration_date;
+  if (typeof expSec === 'number' && Number.isFinite(expSec) && expSec > 0) {
+    try {
+      const wallet = await db
+        .prepare('SELECT season_pass_until_ms FROM wallets WHERE user_id=?')
+        .bind(fromId)
+        .first<{ season_pass_until_ms: number }>();
+      const serverUntil = typeof wallet?.season_pass_until_ms === 'number' ? wallet.season_pass_until_ms : 0;
+      if (Math.abs(serverUntil - expSec * 1000) > 86_400_000) {
+        logEvent('subscription_expiration_drift', {
+          ...base,
+          userId: fromId,
+          serverUntilMs: serverUntil,
+          telegramExpirationMs: expSec * 1000,
+        });
+      }
+    } catch {
+      // Кросс-чек best-effort: грант уже выдан, диагностика не роняет вебхук.
+    }
+  }
+  return true;
 }
 
 async function recordSuccessfulPayment(
@@ -744,6 +998,18 @@ async function recordSuccessfulPayment(
     .bind(nonce)
     .first<{ charge_id: string }>();
   if (nonceRow && nonceRow.charge_id !== chargeId) {
+    // Монетизация v3: продление подписки приходит с ТЕМ ЖЕ nonce, что и
+    // первая оплата, но с новым charge_id и is_recurring=true /
+    // is_first_recurring=false. Без отдельного пути оно ушло бы в
+    // nonce_reuse БЕЗ гранта (Stars уже списаны Telegram). Первая оплата
+    // подписки (is_first_recurring=true) и разовые товары сюда не попадают:
+    // у них nonce свободен (или charge_id тот же — дубликат доставки ниже).
+    if (sp.is_recurring === true && sp.is_first_recurring !== true) {
+      const handled = await recordSubscriptionRenewal(sp, order, chargeId, fromId, env);
+      if (handled) return;
+      // Не продление подписки (товар не пропуск / битый снапшот) —
+      // падаем в обычный nonce_reuse-путь ниже (без гранта).
+    }
     try {
       const dupNow = Date.now();
       await db
@@ -796,6 +1062,16 @@ async function recordSuccessfulPayment(
     return;
   }
   const { kind, grant } = resolved;
+  // Цена из ТЕКУЩЕГО каталога — для диагностики дрейфа. grant из снапшота
+  // заказа несёт stars: 0 (цена — в order.amount_stars, см.
+  // grantFromOrderSnapshot), поэтому сравнение order.amount_stars против
+  // grant.stars ложно срабатывало на КАЖДОМ платеже со снапшотом — т.е.
+  // на всех реальных заказах с v16 (нашёл тест сезонного пропуска:
+  // catalogStars: 0 в каждом stars_payment_sku_drift). Монетизация v3:
+  // дрейф считается против текущего каталога; товар вне каталога — null
+  // (тогда работает только проверка версии).
+  const catalogGrant = grantForProduct(order.product_id);
+  const catalogStars = catalogGrant ? catalogGrant.grant.stars : null;
   // B2: платёж сверяется с НЕИЗМЕНЯЕМЫМ заказом (amount_stars зафиксирован
   // в /api/invoice), а не только с текущим каталогом. NULL у строк,
   // созданных до миграции-16 без backfill, — тоже fail-closed: такие заказы
@@ -806,32 +1082,37 @@ async function recordSuccessfulPayment(
       userId: fromId,
       productId: order.product_id,
       expectedStars: order.amount_stars,
-      catalogStars: grant.stars,
+      catalogStars,
     });
     return;
   }
   // Дрейф каталога между инвойсом и оплатой: заказ — иммутабельный контракт
   // (игрок заплатил ровно то, что просили), поэтому выдача идёт, но дрейф
   // логируется громко — Mark видит расхождение цен в логах.
-  if (order.amount_stars !== grant.stars || skuVersion !== GRANTS_VERSION) {
+  if (
+    (catalogStars !== null && order.amount_stars !== catalogStars) ||
+    skuVersion !== GRANTS_VERSION
+  ) {
     logEvent('stars_payment_sku_drift', {
       ...base,
       userId: fromId,
       productId: order.product_id,
       orderStars: order.amount_stars,
       orderSku: skuVersion,
-      catalogStars: grant.stars,
+      catalogStars,
       catalogSku: GRANTS_VERSION,
     });
   }
   // amount для журнала (знаковый INTEGER, см. schema.sql):
-  // rna +N; booster +мс; skin 0. Триггер применит к wallets/wallet_skins.
+  // rna +N; booster +мс; season_pass +мс; skin 0. Триггер применит к wallets/wallet_skins.
   const ledgerAmount =
     kind === 'rna'
       ? Math.max(0, Math.floor(grant.rna))
       : kind === 'booster'
         ? Math.max(0, Math.floor(grant.boosterDays)) * 86_400_000
-        : 0;
+        : kind === 'season_pass'
+          ? Math.max(0, Math.floor(grant.seasonPassDays)) * 86_400_000
+          : 0;
   const skinId = kind === 'skin' ? grant.skinId : null;
   // ОДИН батч — одна транзакция: либо платёж+грант+кошелёк, либо ничего.
   // Ошибка → throw → 503 → Telegram переотправит (идемпотентно).
@@ -1029,9 +1310,9 @@ async function handleWallet(request: Request, env: Env): Promise<Response> {
   try {
     const db = env.PAYMENTS_DB;
     const wallet = await db
-      .prepare('SELECT purchased_rna, booster_until_ms FROM wallets WHERE user_id=?')
+      .prepare('SELECT purchased_rna, booster_until_ms, season_pass_until_ms FROM wallets WHERE user_id=?')
       .bind(v.userId)
-      .first<{ purchased_rna: number; booster_until_ms: number }>();
+      .first<{ purchased_rna: number; booster_until_ms: number; season_pass_until_ms: number }>();
     const { results: skinRows } = await db
       .prepare("SELECT skin_id FROM wallet_skins WHERE user_id=? AND status='active' ORDER BY granted_at ASC")
       .bind(v.userId)
@@ -1068,6 +1349,11 @@ async function handleWallet(request: Request, env: Env): Promise<Response> {
       booster_until_ms:
         typeof wallet?.booster_until_ms === 'number' && wallet.booster_until_ms > 0
           ? Math.floor(wallet.booster_until_ms)
+          : 0,
+      // Монетизация v3: аддитивное поле, schema_version остаётся 2.
+      season_pass_until_ms:
+        typeof wallet?.season_pass_until_ms === 'number' && wallet.season_pass_until_ms > 0
+          ? Math.floor(wallet.season_pass_until_ms)
           : 0,
       skins: skinRows
         .map((r) => r.skin_id)
@@ -1301,6 +1587,69 @@ async function handleAdminRefund(request: Request, env: Env): Promise<Response> 
 }
 
 /**
+ * POST /api/admin/subscription {chargeId, isCanceled} — отмена/восстановление
+ * подписки Stars (монетизация v3). Нужен для возврата пропуска: refund
+ * (refundStarPayment) подписку НЕ отменяет сам — без этого вызова Telegram
+ * продолжит списывать продления за возвращённый товар.
+ *
+ * Bot API editUserStarSubscription (HTTPS botApi(), НЕ MTProto): params
+ * user_id + telegram_payment_charge_id + is_canceled. user_id берётся из
+ * payments (не из тела — админ не должен подменять владельца).
+ * is_canceled=true — отмена продления (текущий период действует до конца);
+ * false — разрешить пользователю переподключить ранее отменённую ботом
+ * подписку. Авторизация: Authorization: Bearer <ADMIN_TOKEN>, как refund.
+ * Без PAYMENTS_DB → 501; неизвестный chargeId → {ok:false, error:'not-found'}.
+ * Ошибка Bot API → 502 (операция не застряла: состояние нигде не пишется,
+ * повтор безопасен — вызов идемпотентен на стороне Telegram).
+ */
+async function handleAdminSubscription(request: Request, env: Env): Promise<Response> {
+  const auth = request.headers.get('authorization') ?? '';
+  if (!env.ADMIN_TOKEN || auth !== `Bearer ${env.ADMIN_TOKEN}`) {
+    return json({ error: 'unauthorized' }, 401);
+  }
+  if (!env.PAYMENTS_DB) return json({ error: 'db_unavailable' }, 501);
+  let body: { chargeId?: unknown; isCanceled?: unknown };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return json({ error: 'bad-json' }, 400);
+  }
+  const chargeId = typeof body.chargeId === 'string' && body.chargeId.length > 0 ? body.chargeId : '';
+  if (!chargeId) return json({ error: 'bad-charge-id' }, 400);
+  if (typeof body.isCanceled !== 'boolean') return json({ error: 'bad-is-canceled' }, 400);
+  if (!env.TELEGRAM_BOT_TOKEN) {
+    return json({ ok: false, error: 'bot-token-misconfigured' }, 503);
+  }
+  try {
+    const payment = await env.PAYMENTS_DB.prepare(
+      'SELECT charge_id, user_id, product_id, status FROM payments WHERE charge_id=?'
+    )
+      .bind(chargeId)
+      .first<{ charge_id: string; user_id: number; product_id: string; status: string }>();
+    if (!payment) return json({ ok: false, error: 'not-found' });
+    await botApi(env.TELEGRAM_BOT_TOKEN, 'editUserStarSubscription', {
+      user_id: payment.user_id,
+      telegram_payment_charge_id: chargeId,
+      is_canceled: body.isCanceled,
+    });
+    logEvent('stars_subscription_edited', {
+      telegramChargeId: chargeId,
+      userId: payment.user_id,
+      productId: payment.product_id,
+      isCanceled: body.isCanceled,
+    });
+    return json({ ok: true, chargeId, isCanceled: body.isCanceled });
+  } catch (err) {
+    logEvent('stars_subscription_edit_failed', {
+      telegramChargeId: chargeId,
+      isCanceled: body.isCanceled,
+      error: String(err),
+    });
+    return json({ ok: false, error: 'subscription-edit-failed' }, 502);
+  }
+}
+
+/**
  * GET /api/admin/stale-orders?olderThanMin=N — ручная сверка (патч №15, P1-5).
  * Возвращает заказы 'pending' и платежи 'paid' (без fulfilled) старше N минут
  * (default 60, кап 1440): кандидаты на разбор — платёж потерян, завис или
@@ -1367,6 +1716,9 @@ export default {
     }
     if (request.method === 'POST' && url.pathname === '/api/admin/refund') {
       return handleAdminRefund(request, env);
+    }
+    if (request.method === 'POST' && url.pathname === '/api/admin/subscription') {
+      return handleAdminSubscription(request, env);
     }
     if (request.method === 'GET' && url.pathname === '/api/admin/stale-orders') {
       return handleStaleOrders(request, env);

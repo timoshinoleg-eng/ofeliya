@@ -1,5 +1,6 @@
 /**
- * d1-v16-stub — общий in-memory D1-стаб под протокол воркера патча №16.
+ * d1-v16-stub — общий in-memory D1-стаб под протокол воркера патча №16
+ * (+ монетизация v3 / v17: season_pass, subscription_events).
  *
  * Используется legacy воркер-тестами (worker-payments*.mjs,
  * worker-entitlements.mjs) вместо их собственных стабов под старые схемы.
@@ -13,7 +14,7 @@
  * Хуки: _failNext (следующий run() бросит), failBatchAtStatement (n-й
  * statement батча бросит), parkLedgerInsert (парковка перед вставкой
  * гранта — для интерливинг-тестов). Карты orders/payments/wallets/ledger/
- * walletSkins/refundOps доступны для assert'ов и сидинга.
+ * walletSkins/refundOps/subscriptionEvents доступны для assert'ов и сидинга.
  *
  * Не регистрируется как test:* — это хелпер.
  */
@@ -26,6 +27,7 @@ export function makeD1() {
   const ledger = new Map(); // charge_id -> row (id монотонный)
   const walletSkins = new Map(); // charge_id -> row
   const refundOps = new Map();
+  const subscriptionEvents = []; // {id, user_id, nonce, charge_id, state, created_at}
   const hooks = { failBatchAtStatement: -1, parkLedgerInsert: false };
   const parked = [];
   let batchCalls = 0;
@@ -39,6 +41,7 @@ export function makeD1() {
     ledger: structuredClone(ledger),
     walletSkins: structuredClone(walletSkins),
     refundOps: structuredClone(refundOps),
+    subscriptionEvents: structuredClone(subscriptionEvents),
   });
   const restore = (s) => {
     for (const [m, v] of [
@@ -48,6 +51,8 @@ export function makeD1() {
       m.clear();
       for (const [k, val] of v) m.set(k, val);
     }
+    subscriptionEvents.length = 0;
+    subscriptionEvents.push(...s.subscriptionEvents);
   };
 
   /** Эмуляция trg_wallet_ledger_apply (worker/schema.sql). */
@@ -55,17 +60,19 @@ export function makeD1() {
     const { user_id, kind, grant_type, amount, skin_id, charge_id, reverses_charge_id, created_at } = row;
     let w = wallets.get(user_id);
     if (!w) {
-      w = { user_id, purchased_rna: 0, booster_until_ms: 0, skins_json: '[]', updated_at: created_at };
+      w = { user_id, purchased_rna: 0, booster_until_ms: 0, season_pass_until_ms: 0, skins_json: '[]', updated_at: created_at };
       wallets.set(user_id, w);
     }
     if (kind === 'grant' && grant_type === 'rna') w.purchased_rna += amount;
     else if (kind === 'grant' && grant_type === 'booster') w.booster_until_ms = Math.max(w.booster_until_ms, created_at) + amount;
+    else if (kind === 'grant' && grant_type === 'season_pass') w.season_pass_until_ms = Math.max(w.season_pass_until_ms, created_at) + amount;
     else if (kind === 'grant' && grant_type === 'skin' && skin_id) {
       if (!walletSkins.has(charge_id)) {
         walletSkins.set(charge_id, { user_id, skin_id, charge_id, status: 'active', granted_at: created_at });
       }
     } else if (kind === 'reversal' && grant_type === 'rna') w.purchased_rna = Math.max(0, w.purchased_rna + amount);
     else if (kind === 'reversal' && grant_type === 'booster') w.booster_until_ms = Math.max(created_at, w.booster_until_ms + amount);
+    else if (kind === 'reversal' && grant_type === 'season_pass') w.season_pass_until_ms = Math.max(created_at, w.season_pass_until_ms + amount);
     else if (kind === 'reversal' && grant_type === 'skin' && reverses_charge_id) {
       const s = walletSkins.get(reverses_charge_id);
       if (s && s.status === 'active') s.status = 'reversed';
@@ -78,11 +85,11 @@ export function makeD1() {
     if (batchCtx && hooks.failBatchAtStatement === batchCtx.index) {
       throw new Error('d1-stub: injected statement failure');
     }
-    // SQL_INSERT_ORDER (v16, B2): заказ иммутабелен.
+    // SQL_INSERT_ORDER (v16, B2): заказ иммутабелен. v17: + grant_season_pass_days.
     if (q.startsWith('INSERT INTO orders')) {
-      const [nonce, user_id, product_id, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, created_at] = params;
+      const [nonce, user_id, product_id, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, created_at] = params;
       if (orders.has(nonce)) throw new Error('UNIQUE constraint failed: orders.nonce');
-      orders.set(nonce, { nonce, user_id, product_id, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, status: 'pending', created_at });
+      orders.set(nonce, { nonce, user_id, product_id, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, status: 'pending', created_at });
       return { success: true, meta: { changes: 1 } };
     }
     if (q === "UPDATE orders SET status='paid' WHERE nonce=? AND status='pending'") {
@@ -133,6 +140,14 @@ export function makeD1() {
       };
       ledger.set(rev_charge_id, row);
       applyTrigger(row);
+      return { success: true, meta: { changes: 1 } };
+    }
+    // SQL_INSERT_SUBSCRIPTION_EVENT (v17): аудит BotSubscriptionUpdated.
+    if (q.startsWith('INSERT INTO subscription_events')) {
+      const [user_id, nonce, charge_id, state, created_at] = params;
+      subscriptionEvents.push({
+        id: subscriptionEvents.length + 1, user_id, nonce, charge_id, state, created_at,
+      });
       return { success: true, meta: { changes: 1 } };
     }
     if (q.startsWith('INSERT INTO refund_ops')) {
@@ -204,10 +219,10 @@ export function makeD1() {
 
   function execSelect(sql, params) {
     const q = norm(sql);
-    if (q === 'SELECT user_id, product_id, status, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id FROM orders WHERE nonce=?') {
+    if (q === 'SELECT user_id, product_id, status, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days FROM orders WHERE nonce=?') {
       const row = orders.get(params[0]);
       return row
-        ? [{ user_id: row.user_id, product_id: row.product_id, status: row.status, amount_stars: row.amount_stars, sku_version: row.sku_version, grant_rna: row.grant_rna ?? null, grant_booster_days: row.grant_booster_days ?? null, grant_skin_id: row.grant_skin_id ?? null }]
+        ? [{ user_id: row.user_id, product_id: row.product_id, status: row.status, amount_stars: row.amount_stars, sku_version: row.sku_version, grant_rna: row.grant_rna ?? null, grant_booster_days: row.grant_booster_days ?? null, grant_skin_id: row.grant_skin_id ?? null, grant_season_pass_days: row.grant_season_pass_days ?? null }]
         : [];
     }
     // handleStaleOrders: заказы pending старше cutoff.
@@ -258,9 +273,14 @@ export function makeD1() {
       const row = refundOps.get(params[0]);
       return row ? [{ operation_id: row.operation_id, charge_id: row.charge_id, action: row.action, status: row.status }] : [];
     }
-    if (q === 'SELECT purchased_rna, booster_until_ms FROM wallets WHERE user_id=?') {
+    if (q === 'SELECT purchased_rna, booster_until_ms, season_pass_until_ms FROM wallets WHERE user_id=?') {
       const w = wallets.get(params[0]);
-      return w ? [{ purchased_rna: w.purchased_rna, booster_until_ms: w.booster_until_ms }] : [];
+      return w ? [{ purchased_rna: w.purchased_rna, booster_until_ms: w.booster_until_ms, season_pass_until_ms: w.season_pass_until_ms }] : [];
+    }
+    // Кросс-чек продления (v17): season_pass_until_ms после гранта.
+    if (q === 'SELECT season_pass_until_ms FROM wallets WHERE user_id=?') {
+      const w = wallets.get(params[0]);
+      return w ? [{ season_pass_until_ms: w.season_pass_until_ms }] : [];
     }
     if (q === "SELECT skin_id FROM wallet_skins WHERE user_id=? AND status='active' ORDER BY granted_at ASC") {
       return [...walletSkins.values()]
@@ -290,7 +310,7 @@ export function makeD1() {
   }
 
   const db = {
-    orders, payments, wallets, ledger, walletSkins, refundOps, hooks, parked,
+    orders, payments, wallets, ledger, walletSkins, refundOps, subscriptionEvents, hooks, parked,
     batchCalls: () => batchCalls,
     batchSizes,
     /** Тестовый хук (legacy): следующий run() бросит. */
@@ -347,14 +367,14 @@ export function makeD1() {
   return db;
 }
 
-/** Засеять заказ новым SQL (как его пишет /api/invoice v16). */
+/** Засеять заказ новым SQL (как его пишет /api/invoice v16/v17). */
 export async function seedOrder(db, nonce, userId, productId, amountStars, opts = {}) {
   const { skuVersion = 2, status = 'pending', createdAt = Date.now(),
-    grantRna = null, grantBoosterDays = null, grantSkinId = null } =
+    grantRna = null, grantBoosterDays = null, grantSkinId = null, grantSeasonPassDays = null } =
     typeof opts === 'object' && opts !== null ? opts : {};
   await db
-    .prepare("INSERT INTO orders (nonce, user_id, product_id, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, status, created_at) VALUES (?,?,?,?,?,?,?,?, 'pending',?)")
-    .bind(nonce, userId, productId, amountStars, skuVersion, grantRna, grantBoosterDays, grantSkinId, createdAt)
+    .prepare("INSERT INTO orders (nonce, user_id, product_id, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, status, created_at) VALUES (?,?,?,?,?,?,?,?,?, 'pending',?)")
+    .bind(nonce, userId, productId, amountStars, skuVersion, grantRna, grantBoosterDays, grantSkinId, grantSeasonPassDays, createdAt)
     .run();
   if (status !== 'pending') {
     const row = db.orders.get(nonce);

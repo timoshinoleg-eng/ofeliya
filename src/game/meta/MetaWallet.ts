@@ -26,6 +26,8 @@ export interface MetaState {
   maxStreak: number;
   /** Epoch-мс окончания бустера «РНК ×2» (витрина); 0 — бустера нет. */
   boosterUntilMs: number;
+  /** Epoch-мс окончания сезонного пропуска (монетизация v3); 0 — пропуска нет. */
+  seasonPassUntilMs: number;
 }
 
 const STORAGE_KEY = 'ofeliya.meta.v1';
@@ -40,6 +42,7 @@ const ZERO: MetaState = {
   starsSpent: 0,
   maxStreak: 0,
   boosterUntilMs: 0,
+  seasonPassUntilMs: 0,
 };
 
 function sanitize(p: Partial<MetaState>): MetaState {
@@ -53,6 +56,7 @@ function sanitize(p: Partial<MetaState>): MetaState {
     starsSpent: n(p.starsSpent),
     maxStreak: n(p.maxStreak),
     boosterUntilMs: n(p.boosterUntilMs),
+    seasonPassUntilMs: n(p.seasonPassUntilMs),
   };
 }
 
@@ -169,6 +173,36 @@ export function getBoosterUntilMs(): number {
 export function isBoosterActive(nowMs: number = Date.now()): boolean {
   try {
     return loadMeta().boosterUntilMs > nowMs;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Установить абсолютный срок сезонного пропуска (монетизация v3) — зеркало
+ * бустера: серверный синк берёт max(локальный, серверный). Санитизация:
+ * неотрицательное целое, иначе no-op. Никогда не бросает.
+ */
+export function setSeasonPassUntilMs(ms: number): void {
+  if (!Number.isFinite(ms) || ms < 0) return;
+  const st = loadMeta();
+  st.seasonPassUntilMs = Math.floor(ms);
+  saveMeta(st);
+}
+
+/** Окончание действия сезонного пропуска (epoch ms; 0 = неактивен). */
+export function getSeasonPassUntilMs(): number {
+  try {
+    return loadMeta().seasonPassUntilMs;
+  } catch {
+    return 0;
+  }
+}
+
+/** Активен ли сезонный пропуск сейчас (гейт paid-трека сезонных миссий). */
+export function isSeasonPassActive(nowMs: number = Date.now()): boolean {
+  try {
+    return loadMeta().seasonPassUntilMs > nowMs;
   } catch {
     return false;
   }

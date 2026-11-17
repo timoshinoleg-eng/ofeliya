@@ -18,6 +18,10 @@
  *     не отматываем», зафиксирована в README_DEPLOY);
  *  7. reversal skin → гасится только строка своего charge_id (второй
  *     активный грант того же скина сохраняет владение).
+ *  8. grant season_pass → season_pass_until_ms = max(cur, created_at) + мс
+ *     (монетизация v3, схема v17);
+ *  9. reversal season_pass → не ниже момента возврата;
+ * 10. subscription_events существует (аудит BotSubscriptionUpdated).
  *
  * Запуск: node --experimental-strip-types --test worker/scripts/sql-smoke.test.mjs
  */
@@ -43,7 +47,7 @@ function freshDb() {
 
 function wallet(db, userId) {
   return db
-    .prepare('SELECT purchased_rna, booster_until_ms FROM wallets WHERE user_id=?')
+    .prepare('SELECT purchased_rna, booster_until_ms, season_pass_until_ms FROM wallets WHERE user_id=?')
     .get(userId);
 }
 
@@ -175,5 +179,46 @@ test('двойной reversal одного гранта: второй — 0 ст
     .prepare("SELECT COUNT(*) AS c FROM wallet_ledger WHERE kind='reversal'")
     .get().c;
   assert.equal(revCount, 1);
+  db.close();
+});
+
+test('grant season_pass: max(cur, created_at) + мс, время не сгорает (v17)', () => {
+  const db = freshDb();
+  const month = 30 * 86_400_000;
+  grant(db, { userId: 9, chargeId: 'p1', grantType: 'season_pass', amount: month, skinId: null, createdAt: 1000 });
+  assert.equal(wallet(db, 9).season_pass_until_ms, 1000 + month);
+  // Продление позже: продлевает от текущего срока, а не от now.
+  grant(db, { userId: 9, chargeId: 'p2', grantType: 'season_pass', amount: month, skinId: null, createdAt: 2000 });
+  assert.equal(wallet(db, 9).season_pass_until_ms, 1000 + 2 * month);
+  // Бустер и пропуск независимы.
+  assert.equal(wallet(db, 9).booster_until_ms, 0);
+  db.close();
+});
+
+test('reversal season_pass: не ниже момента возврата (v17)', () => {
+  const db = freshDb();
+  const month = 30 * 86_400_000;
+  grant(db, { userId: 10, chargeId: 'p1', grantType: 'season_pass', amount: month, skinId: null, createdAt: 1000 });
+  assert.equal(wallet(db, 10).season_pass_until_ms, 1000 + month);
+  // Возврат «съедает» больше, чем осталось: clamp на created_at reversal.
+  reversal(db, { revChargeId: 'rev:op1', origChargeId: 'p1', createdAt: 2000 });
+  assert.equal(wallet(db, 10).season_pass_until_ms, 2000);
+  db.close();
+});
+
+test('subscription_events: таблица аудита существует (v17)', () => {
+  const db = freshDb();
+  const row = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='subscription_events'")
+    .get();
+  assert.equal(row?.name, 'subscription_events');
+  db.prepare(
+    'INSERT INTO subscription_events (user_id, nonce, charge_id, state, created_at) VALUES (?,?,?,?,?)'
+  ).run(11, 'nonce-sp-ev', 'ch-ev', 'canceled', 1000);
+  const ev = db
+    .prepare('SELECT state, charge_id FROM subscription_events WHERE nonce=?')
+    .get('nonce-sp-ev');
+  assert.equal(ev.state, 'canceled');
+  assert.equal(ev.charge_id, 'ch-ev');
   db.close();
 });

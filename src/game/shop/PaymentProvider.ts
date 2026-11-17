@@ -11,7 +11,7 @@
 
 export type ProviderId = 'mock' | 'max-bridge' | 'telegram-stars';
 
-export type ProductKind = 'skin' | 'booster' | 'currency';
+export type ProductKind = 'skin' | 'booster' | 'currency' | 'season_pass';
 
 /** Нейтральный формат цены: major units + ISO 4217 код. */
 export interface ProductPrice {

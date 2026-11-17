@@ -40,7 +40,7 @@
  *
  * Phaser-free, Node-safe. Никогда не бросает.
  */
-import { addRna, loadMeta, setBoosterUntilMs } from '../meta/MetaWallet';
+import { addRna, loadMeta, setBoosterUntilMs, setSeasonPassUntilMs } from '../meta/MetaWallet';
 import { grantSkin } from '../skins/SkinOwnership';
 
 /**
@@ -62,6 +62,8 @@ export const WALLET_FETCH_TIMEOUT_MS = 8000;
 export interface ServerWalletState {
   purchased_rna: number;
   booster_until_ms: number;
+  /** Монетизация v3: абсолютный срок сезонного пропуска (epoch ms). */
+  season_pass_until_ms: number;
   skins: string[];
 }
 
@@ -72,6 +74,8 @@ export interface WalletSyncApplied {
   skins: string[];
   /** Итоговый срок бустера (max local/server). */
   boosterUntilMs: number;
+  /** Итоговый срок сезонного пропуска (max local/server). Монетизация v3. */
+  seasonPassUntilMs: number;
   /**
    * Обработано событий журнала с seq > last_seq (гранты + учтённые
    * reversal). Свежий синк: число событий, вошедших в неттинг.
@@ -95,8 +99,8 @@ export interface WalletLedgerEvent {
   seq: number;
   charge_id: string;
   kind: 'grant' | 'reversal';
-  grant_type: 'rna' | 'booster' | 'skin';
-  /** Знаковое целое: +N grant / −N reversal (РНК); ±E_ms бустер; 0 скин. */
+  grant_type: 'rna' | 'booster' | 'skin' | 'season_pass';
+  /** Знаковое целое: +N grant / −N reversal (РНК); ±E_ms бустер/пропуск; 0 скин. */
   amount: number;
   skin_id: string | null;
   /** Для reversal — charge_id исходного гранта (иначе null). */
@@ -241,7 +245,10 @@ function sanitizeEvent(raw: unknown): WalletLedgerEvent | null {
   const kind = e.kind === 'grant' || e.kind === 'reversal' ? e.kind : null;
   if (!kind) return null;
   const grantType =
-    e.grant_type === 'rna' || e.grant_type === 'booster' || e.grant_type === 'skin'
+    e.grant_type === 'rna' ||
+    e.grant_type === 'booster' ||
+    e.grant_type === 'skin' ||
+    e.grant_type === 'season_pass'
       ? e.grant_type
       : null;
   if (!grantType) return null;
@@ -269,6 +276,7 @@ interface WalletResponse {
   userId: number;
   purchasedRna: number;
   boosterUntilMs: number;
+  seasonPassUntilMs: number;
   skins: string[];
   ledger: WalletLedgerEvent[];
   tipSeq: number;
@@ -354,6 +362,7 @@ export async function syncServerWallet(opts: SyncServerWalletOptions): Promise<S
             userId: typeof d.user_id === 'number' ? Math.floor(d.user_id) : 0,
             purchasedRna: num(d.purchased_rna),
             boosterUntilMs: num(d.booster_until_ms),
+            seasonPassUntilMs: num(d.season_pass_until_ms),
             skins,
             ledger,
             tipSeq,
@@ -387,6 +396,7 @@ export async function syncServerWallet(opts: SyncServerWalletOptions): Promise<S
       rna: 0,
       skins: [],
       boosterUntilMs: num(loadMeta().boosterUntilMs),
+      seasonPassUntilMs: num(loadMeta().seasonPassUntilMs),
       eventsApplied: 0,
       grantChargeIds: [],
     };
@@ -484,6 +494,14 @@ export async function syncServerWallet(opts: SyncServerWalletOptions): Promise<S
     const boosterUntilMs = Math.max(localBooster, resp.boosterUntilMs);
     if (boosterUntilMs > localBooster) setBoosterUntilMs(boosterUntilMs);
     applied.boosterUntilMs = boosterUntilMs;
+
+    // Сезонный пропуск — max(local, server), как бустер (монетизация v3).
+    // События season_pass в журнале не неттятся по charge_id: срок — одна
+    // абсолютная дата, серверное значение авторитетно.
+    const localPass = num(loadMeta().seasonPassUntilMs);
+    const seasonPassUntilMs = Math.max(localPass, resp.seasonPassUntilMs);
+    if (seasonPassUntilMs > localPass) setSeasonPassUntilMs(seasonPassUntilMs);
+    applied.seasonPassUntilMs = seasonPassUntilMs;
 
     // Курсор всегда двигается на tip_seq — сервер авторитетен, что новее
     // ничего нет (даже если событий 0).

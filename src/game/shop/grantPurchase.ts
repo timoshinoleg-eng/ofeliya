@@ -14,6 +14,8 @@
  *   - kind 'booster'  → MetaWallet.boosterUntilMs (РНК ×2 на 7 дней;
  *     множитель применяется в GameScene.spawnGem рядом с флагом
  *     events.doubleRna — та же точка, тот же смысл).
+ *   - kind 'season_pass' → MetaWallet.seasonPassUntilMs (монетизация v3:
+ *     пропуск на 30 дней; гейт paid-трека сезонных миссий).
  *
  * Патч №13 (P1-a): applyPurchaseGrants бросает при неудаче — см. его
  * комментарий; fulfillPurchase ловит и возвращает {ok:false}, витрина
@@ -25,14 +27,21 @@
  * при неудаче (ловит fulfillPurchase → {ok:false}; витрина не падает,
  * но провал виден — см. P1-a ниже).
  */
-import { addRna, getBoosterUntilMs, setBoosterUntilMs } from '../meta/MetaWallet';
+import {
+  addRna,
+  getBoosterUntilMs,
+  setBoosterUntilMs,
+  getSeasonPassUntilMs,
+  setSeasonPassUntilMs,
+} from '../meta/MetaWallet';
 import { grantSkin } from '../skins/SkinOwnership';
 import type { Product } from './PaymentProvider';
 
 export type PurchaseGrant =
   | { type: 'skin'; skinId: string }
   | { type: 'rna'; amount: number }
-  | { type: 'booster'; durationMs: number };
+  | { type: 'booster'; durationMs: number }
+  | { type: 'season_pass'; durationMs: number };
 
 /** Наборы РНК: id товара → количество (из названий каталога). */
 const RNA_PACK_AMOUNTS: Record<string, number> = {
@@ -42,6 +51,9 @@ const RNA_PACK_AMOUNTS: Record<string, number> = {
 
 /** Длительность бустера «РНК ×2» — 7 дней (из названия товара). */
 export const BOOSTER_DURATION_MS = 7 * 24 * 3600 * 1000;
+
+/** Длительность сезонного пропуска — 30 дней (монетизация v3). */
+export const SEASON_PASS_DURATION_MS = 30 * 24 * 3600 * 1000;
 
 /**
  * Чистая функция: какие награды даёт товар. Неизвестный id/вид —
@@ -54,6 +66,9 @@ export function purchaseGrants(product: Product): PurchaseGrant[] {
     return amount !== undefined ? [{ type: 'rna', amount }] : [];
   }
   if (product.kind === 'booster') return [{ type: 'booster', durationMs: BOOSTER_DURATION_MS }];
+  if (product.kind === 'season_pass') {
+    return [{ type: 'season_pass', durationMs: SEASON_PASS_DURATION_MS }];
+  }
   return [];
 }
 
@@ -72,7 +87,10 @@ export function applyPurchaseGrants(product: Product): PurchaseGrant[] {
     else if (grant.type === 'rna') addRna(grant.amount);
     // Пост-ревью (патч №11): повторная покупка продлевает от
     // max(now, текущий срок) — время не сгорает.
-    else setBoosterUntilMs(Math.max(Date.now(), getBoosterUntilMs()) + grant.durationMs);
+    else if (grant.type === 'booster')
+      setBoosterUntilMs(Math.max(Date.now(), getBoosterUntilMs()) + grant.durationMs);
+    else if (grant.type === 'season_pass')
+      setSeasonPassUntilMs(Math.max(Date.now(), getSeasonPassUntilMs()) + grant.durationMs);
   }
   return grants;
 }
