@@ -29,6 +29,16 @@ npx wrangler d1 create ofeliya-payments   # запомнить выданный 
 npx wrangler d1 execute ofeliya-payments --file=schema.sql --remote
 # database_id → в wrangler.toml, [[d1_databases]] (см. wrangler.toml.example)
 
+# ГЕЙТ СХЕМЫ (P1-3) — СТОП, если проверка красная. Без триггера
+# trg_wallet_ledger_apply гранты ТИХО теряются: платёж запишется paid,
+# а кошелёк останется пустым. Воркер НЕ деплоить до зелёного гейта.
+# Локальная проверка файлов схемы (изолированно, D1 не трогает):
+npm run check-schema
+# Проверка УЖЕ созданной D1 — только чтение (SELECT/PRAGMA):
+node worker/scripts/check-schema.mjs --print-commands
+# → выполнить выданные wrangler d1 execute --command и сверить
+# с ожидаемым (триггер на месте, тело содержит ветки season_pass).
+
 npx wrangler deploy
 # → получишь https://ofeliya-payments.<твой-аккаунт>.workers.dev
 ```
@@ -354,6 +364,49 @@ curl -X POST https://<worker>/api/admin/refund \
 - Журнал админа = таблица `refund_ops` (operation_id, charge_id, reason,
   статусы, timestamps). Секреты в логи не пишутся (аудит — патч №16, D).
 
+### Возврат дубликата (P1-1)
+
+Дубликатные платежи (`duplicate_payments`: гонка двух pre_checkout —
+`reason='nonce_reuse'`, или отклонённая вторая подписка —
+`reason='subscription_active'`, см. §11) возвращаются ТЕМ ЖЕ эндпоинтом
+и тем же state machine (`refund_ops` + бронь, идемпотентный повтор,
+возобновление execute). Отличия:
+
+- ответ помечен `{duplicate:true}`;
+- reversal-строки в журнале НЕТ — у дубликата не было гранта;
+- исходная законная покупка НЕ трогается (её грант и статус целы);
+- состояние дубликата: `pending` → `refund_requested` → `refunded`
+  (колонка `duplicate_payments.status`).
+
+`reconcile.mjs` находит зависшие дубликаты автоматически
+(`duplicate_without_refund`, §11).
+
+### Возврат пропуска: ОБЯЗАТЕЛЬНЫЙ двухшаговый процесс (P2-2)
+
+`refundStarPayment` НЕ отменяет подписку Telegram: деньги вернутся,
+а продления продолжат списываться каждый месяц. Поэтому возврат
+сезонного пропуска — всегда ДВА шага:
+
+1. **Возврат денег** — `POST /api/admin/refund` как обычно. Ответ для
+   subscription-товара содержит флаг:
+   `{subscriptionStillActive:true, hint:"refundStarPayment does not
+   cancel the Telegram subscription — ..."}` — напоминание о шаге 2.
+2. **Отмена подписки** — один из двух вариантов:
+   - отдельным вызовом: `POST /api/admin/subscription`
+     `{"chargeId":"<telegram_charge_id>","isCanceled":true}`
+     (отмена продления; текущий период действует до конца);
+   - или сразу в refund: добавить `"cancelSubscription":true` —
+     воркер вызовет `editUserStarSubscription` в том же флоу.
+     Успех → `{subscriptionCanceled:true, subscriptionStillActive:false}`;
+     провал отмены → возврат всё равно `ok:true`, но с флагом
+     `{subscriptionCancelFailed:true}` — повторить шаг 2 отдельно.
+
+Админские действия с подписками пишутся в `subscription_events` с
+`source='admin'` (P2-3) — видно, кто и когда отменил подписку.
+Отклонённая вторая подписка (P1-2) живёт только в `duplicate_payments` —
+её тоже можно отменить через `/api/admin/subscription` по её charge_id
+(и вернуть деньги через refund дубликата, см. выше).
+
 ### Политика booster-reversal (зафиксирована)
 
 Возврат НЕ отматывает время бустера вспять: триггер ставит
@@ -380,12 +433,17 @@ Read-only сверка трёх источников (D1-дампы + Telegram).
 расхождениях.
 
 ```bash
-# 1. Дампы из D1 (пример; orders/ledger/refund_ops — аналогичными SELECT):
+# 1. Дампы из D1 (пример; orders/ledger/refund_ops/duplicate_payments — аналогичными SELECT):
 wrangler d1 execute ofeliya-payments --remote \
   --command "SELECT charge_id,user_id,product_id,amount,currency,status,nonce,sku_version,created_at FROM payments" \
   --json > /tmp/payments.json
-# payments.json — объект {payments:[...], orders:[...], refund_ops:[...]}
-# (допускается голый массив = payments)
+wrangler d1 execute ofeliya-payments --remote \
+  --command "SELECT charge_id,nonce,user_id,product_id,amount,currency,reason,status,created_at FROM duplicate_payments" \
+  --json > /tmp/duplicates.json
+# payments.json — объект {payments:[...], orders:[...], refund_ops:[...], duplicate_payments:[...]}
+# (допускается голый массив = payments; duplicate_payments можно дописать
+# в тот же файл под своим ключом — без него дубликаты не сверяются,
+# а их Telegram-транзакции ложно помечаются telegram_without_d1)
 
 # 2. Запуск (без токена — только D1-внутренние проверки):
 node worker/scripts/reconcile.mjs --dump /tmp/payments.json --ledger /tmp/ledger.json
@@ -398,10 +456,12 @@ node worker/scripts/reconcile.mjs --dump /tmp/payments.json --ledger /tmp/ledger
 
 Проверки: `paid_without_grant` (потерянный грант), `refunded_without_reversal`,
 `duplicate_nonce`/`duplicate_charge_id`, `stuck_refund_op` (`'requested'`
-старше порога), `stale_pending_order`, `grant_without_payment`,
-`reversal_without_grant`, `telegram_without_d1` (платёж Telegram без D1 —
-главный кейс), `d1_without_telegram` (warning: история Telegram может быть
-неполной). Тест со стабом Telegram HTTP:
+старше порога), `stale_pending_order`, `duplicate_without_refund`
+(дубликат `'pending'` старше порога без завершённого возврата — P1-1),
+`grant_without_payment`, `reversal_without_grant`, `telegram_without_d1`
+(платёж Telegram без D1 — главный кейс; дубликаты из `duplicate_payments`
+считаются «в D1», а не потерянными), `d1_without_telegram` (warning:
+история Telegram может быть неполной). Тест со стабом Telegram HTTP:
 `node --test worker/scripts/reconcile.test.mjs`.
 
 Разбор по сценариям:
@@ -424,6 +484,23 @@ node worker/scripts/reconcile.mjs --dump /tmp/payments.json --ledger /tmp/ledger
    с `execute:true` (§10).
 6. **Операция refund зависла в `'requested'`** — повторить execute с тем же
    `operationId` (§10); `reconcile.mjs` находит такие автоматически.
+7. **Дубликат (P1-1/P1-2)** — деньги списаны, гранта нет: `reason='nonce_reuse'`
+   (гонка двух pre_checkout) или `'subscription_active'` (вторая подписка
+   при активном пропуске — заказ переведён в `'denied'`, продления этой
+   подписки тоже отклоняются). Действие: вернуть через
+   `/api/admin/refund` с `execute:true` (§10, возврат дубликата); для
+   второй подписки — ОБЯЗАТЕЛЬНО отменить её продления
+   (`POST /api/admin/subscription {chargeId, isCanceled:true}` или
+   `cancelSubscription:true` в refund), иначе списания продолжатся
+   ежемесячно. `reconcile.mjs` находит зависшие дубликаты
+   (`duplicate_without_refund`).
+8. **`stars_grant_readback_mismatch` в логах (P1-3)** — грант-батч
+   прошёл, а кошелёк не изменился: триггер `trg_wallet_ledger_apply`
+   потерян или сломан. СТОП: не принимать платежи, прогнать гейт схемы
+   (§2, `npm run check-schema` + `--print-commands` против реальной D1),
+   восстановить триггер из `worker/schema.sql` (весь `CREATE TRIGGER` —
+   одним `--command`), затем пересчитать пострадавшие кошельки из
+   `wallet_ledger` вручную (гранты в журнале целы — батч их записал).
 
 ## 12. Миграция существующей D1 (если база уже создана)
 
@@ -466,6 +543,58 @@ skin-грантов (refunded исключены); новые таблицы `re
 (бэкфилла нет — нельзя отличить уже выданное локально). Их гранты уже
 материализованы старыми клиентами локально; новые клиенты увидят
 `purchased_rna=0` — это корректно, задвоения не будет.
+
+### Миграция v16 → v17 (монетизация v3) + гейт схемы (P1-3, P2-4)
+
+Порядок — строго такой (обратное окно «новый воркер, старая схема»
+НЕДОПУСТИМО: INSERT заказа упадёт на несуществующей колонке):
+
+```bash
+# 0. Снапшот ОБЯЗАТЕЛЕН:
+wrangler d1 export ofeliya-payments --remote --output=backup-v16.sql
+# 1. Pre-check: миграция ещё не применена (0 строк):
+wrangler d1 execute ofeliya-payments --remote --command \
+  "SELECT version FROM schema_migrations WHERE version='v17'"
+# 2. Локальный гейт файлов схемы (изолированно, D1 не трогает):
+npm run check-schema
+# 3. Миграция:
+wrangler d1 execute ofeliya-payments --remote --file=worker/migration-17.sql
+# 4. ГЕЙТ РЕАЛЬНОЙ D1 — только чтение, СТОП при красном:
+node worker/scripts/check-schema.mjs --print-commands
+# → выполнить выданные команды и сверить: триггер на месте, тело
+#    содержит ветки season_pass, UNIQUE журнала — (charge_id,
+#    grant_type, skin_id), колонки v17 на месте.
+# 5. Деплой воркера v17 — ТОЛЬКО после зелёного гейта.
+```
+
+**Частичная миграция (P2-4)** — если файл упал посередине (обрыв
+соединения, ошибка wrangler): НЕ запускать файл повторно вслепую
+(четыре `ALTER TABLE ADD COLUMN` упадут с `duplicate column name` —
+это нормально, но не показатель прогресса). Точная процедура — в шапке
+`worker/migration-17.sql`; коротко:
+
+1. Диагностика (только чтение): `SELECT version FROM schema_migrations`
+   (`v17` есть = файл дошёл до конца); `PRAGMA table_info(orders)` /
+   `table_info(wallets)` / `table_info(duplicate_payments)` (какие
+   колонки уже добавлены); `SELECT name FROM sqlite_master WHERE
+   type='table' AND name='subscription_events'`; `PRAGMA
+   index_list('wallet_ledger')` (новый UNIQUE?); `SELECT sql FROM
+   sqlite_master WHERE type='trigger'` (триггер с season_pass?).
+2. Если `wallet_ledger_new` или `wallet_skins_new` существует в
+   `sqlite_master` — миграция упала ВНУТРИ пересоздания таблиц:
+   **восстановить базу из снапшота шага 0 и прогнать файл заново**.
+   Вручную не достраивать: триггер в этот момент уже снесён, копия
+   журнала может быть частичной.
+3. В остальных случаях — доработать недостающие шаги вручную по таблице
+   шагов в шапке миграции (шаги 0/2/5 идемпотентны — безопасно
+   повторить; шаг 1 — пропустить уже добавленные колонки; шаг 4 —
+   пересоздать триггер целиком), затем прогнать гейт шага 4.
+4. При ЛЮБЫХ сомнениях — восстановить из снапшота и начать заново:
+   файл рассчитан на один прогон на чистой v16.
+
+После любого отката воркера на v16 схема v17 безопасна без отката
+(v16-код новые колонки не читает; триггер с season_pass-ветками на
+старых grant_type ведёт себя как v16).
 
 ## 13. Протокол v5 (патч №16) — что изменилось
 
