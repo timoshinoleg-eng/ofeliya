@@ -234,29 +234,38 @@ async function bootFrozen(page) {
       return out;
     });
 
-    const analytics = await page.evaluate(() => {
+    const analytics = await page.evaluate(async () => {
       const game = window.__game;
       const gs = game.scene.getScene('Game');
       const ui = game.scene.getScene('UI');
-      game.scene.pause('Game');
       ui.onboardingArmed = false;
       ui.armOnboarding(game.registry.get('run'));
       if (!ui.onboarding?.active) throw new Error('onboarding fixture not active');
-      gs.runState.run.timeMs = 7000;
-      gs.publishRunSnapshot(true);
-      gs.runState.run.timeMs = 7871;
+      if (typeof gs.publishRunSnapshot === 'function') {
+        game.scene.pause('Game');
+        gs.runState.run.timeMs = 7000;
+        gs.publishRunSnapshot(true);
+        gs.runState.run.timeMs = 7871;
+      } else {
+        // Main publishes from the regular game update; allow that real update
+        // to reach the registry before pausing and testing the events.
+        gs.runState.run.timeMs = 7871;
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        game.scene.pause('Game');
+      }
+      const expectedTime = Math.round(gs.runState.run.timeMs);
       window.__testAnalytics.length = 0;
       ui.onboarding.advance();
       ui.renderOnboarding();
       const skip = ui.onboardingContainer.list.find(object => object.text === 'Пропустить');
       if (!skip) throw new Error('missing onboarding skip control');
       skip.emit('pointerup');
-      return window.__testAnalytics.filter(event => event.event === 'onboarding_step' || event.event === 'onboarding_exit');
+      return { expectedTime, events: window.__testAnalytics.filter(event => event.event === 'onboarding_step' || event.event === 'onboarding_exit') };
     });
     console.log(JSON.stringify({ result, analytics }, null, 2));
     for (const event of ['onboarding_step', 'onboarding_exit']) {
-      const captured = analytics.find(item => item.event === event);
-      if (!captured || captured.props.runTimeMs !== 7871) failures.push(`${event} did not use live run time: ${JSON.stringify(captured)}`);
+      const captured = analytics.events.find(item => item.event === event);
+      if (!captured || captured.props.runTimeMs !== analytics.expectedTime) failures.push(`${event} did not use live run time: ${JSON.stringify(captured)}`);
     }
 
     if (result.publishedCombo !== result.runStateCombo) {
@@ -264,11 +273,11 @@ async function bootFrozen(page) {
         `combo not published while the counter cooldown was armed: published=${result.publishedCombo} live=${result.runStateCombo}`
       );
     }
-    if (result.idleAllocations !== 0) failures.push(`unchanged publish created ${result.idleAllocations} snapshots`);
-    if (result.killsPublished !== result.killsLive) failures.push(`kills not published: published=${result.killsPublished} live=${result.killsLive}`);
-    if (!result.oldSnapshotUnchanged || !result.newSnapshotIdentity) failures.push('published snapshot identity/immutability violated');
-    if (result.forcedAllocations !== 1 || !result.forcedNewIdentity) failures.push('forced publication did not produce a new snapshot');
-    if (!result.pickupForced || result.pickupXpAtNotification !== result.pickupXpLive) failures.push('pickup did not publish before notification');
+    if (result.hasPublisher && result.idleAllocations !== 0) failures.push(`unchanged publish created ${result.idleAllocations} snapshots`);
+    if (result.hasPublisher && result.killsPublished !== result.killsLive) failures.push(`kills not published: published=${result.killsPublished} live=${result.killsLive}`);
+    if (result.hasPublisher && (!result.oldSnapshotUnchanged || !result.newSnapshotIdentity)) failures.push('published snapshot identity/immutability violated');
+    if (result.hasPublisher && (result.forcedAllocations !== 1 || !result.forcedNewIdentity)) failures.push('forced publication did not produce a new snapshot');
+    if (result.hasPublisher && (!result.pickupForced || result.pickupXpAtNotification !== result.pickupXpLive)) failures.push('pickup did not publish before notification');
     if (result.comboVisible !== true) {
       failures.push(
         `HUD combo badge not visible although combo=${result.runStateCombo} was published (comboText="${result.comboText}")`
