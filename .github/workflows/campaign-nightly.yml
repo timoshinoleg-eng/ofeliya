@@ -5,6 +5,17 @@ name: Campaign Nightly
 # golden-path replay and the render / telegram / score contract suites.
 # No retries by design: a flaky run goes to the quarantine list, not into a
 # silent retry (§6.1).
+#
+# Visual profiles (§6.1, track E): the matrix crosses difficulty with the
+# three profiles from scripts/lib/visual-profiles.cjs (OFELIYA_VISUAL_PROFILE).
+# logic-stress is the main 20-run leg; rendering-performance and
+# release-visual are shortened 1-run smoke legs — the full series on all
+# six legs would not fit the 120-minute timeout, and the profile legs exist
+# to catch visual-level-specific failures, not to re-prove logic. The
+# profile-independent checks (speed parity, replay, contract suites, audio
+# diagnostics) run on the logic-stress legs only, for the same reason.
+# The campaign runner applies the profile (track C integration stitches in
+# scripts/lib/visual-profiles.cjs); until then the env var is set but unused.
 on:
   schedule:
     - cron: '0 2 * * *'
@@ -14,10 +25,13 @@ jobs:
   nightly-campaign:
     runs-on: ubuntu-22.04
     timeout-minutes: 120
+    env:
+      OFELIYA_VISUAL_PROFILE: ${{ matrix.profile }}
     strategy:
       fail-fast: false
       matrix:
         difficulty: [standard, strained]
+        profile: [logic-stress, rendering-performance, release-visual]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,28 +62,49 @@ jobs:
           exit 1
 
       - name: 20-run campaign series (${{ matrix.difficulty }})
+        if: matrix.profile == 'logic-stress'
         run: OFELIYA_CAMPAIGN_RUNS=20 NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:campaign -- --difficulty ${{ matrix.difficulty }}
 
+      - name: 1-run campaign smoke (${{ matrix.difficulty }}, ${{ matrix.profile }})
+        if: matrix.profile != 'logic-stress'
+        run: OFELIYA_CAMPAIGN_RUNS=1 NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:campaign -- --difficulty ${{ matrix.difficulty }}
+
       - name: Speed parity 1x
+        if: matrix.profile == 'logic-stress'
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:campaign -- --speed 1 --difficulty ${{ matrix.difficulty }}
 
       - name: Speed parity 4x
+        if: matrix.profile == 'logic-stress'
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:campaign -- --speed 4 --difficulty ${{ matrix.difficulty }}
 
       - name: Speed parity 10x (stress, not trusted-score equivalence)
+        if: matrix.profile == 'logic-stress'
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:campaign -- --speed 10 --difficulty ${{ matrix.difficulty }}
 
       - name: Golden-path replay (one seed twice, identical hash)
+        if: matrix.profile == 'logic-stress'
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:campaign:replay
 
       - name: QA render-split contract
+        if: matrix.profile == 'logic-stress'
         run: npm run test:qa-render-split
 
       - name: Telegram runtime contract
+        if: matrix.profile == 'logic-stress'
         run: npm run test:telegram-runtime
 
       - name: Score outbox contract
+        if: matrix.profile == 'logic-stress'
         run: npm run test:score-outbox
+
+      # Diagnostic, not a gate (§4.3): probes whether headless Chromium in
+      # this image can run audio at all. ENVIRONMENT_AUDIO_UNAVAILABLE
+      # exits 0; only AUDIO_FAIL (clock runs, test node never completes)
+      # fails the step. Runs on the logic-stress legs only — audio
+      # capability is environment-level, not profile-level.
+      - name: Audio diagnostics (non-gating)
+        if: matrix.profile == 'logic-stress'
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:audio-diagnostics
 
       - name: Build campaign HTML report
         if: always()
@@ -84,9 +119,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: autonomous-campaign-nightly-${{ matrix.difficulty }}
+          name: autonomous-campaign-nightly-${{ matrix.difficulty }}-${{ matrix.profile }}
           path: |
             artifacts/autonomous-campaign/
             artifacts/campaign/
+            artifacts/audio-diagnostics/
           retention-days: 30
           if-no-files-found: ignore
