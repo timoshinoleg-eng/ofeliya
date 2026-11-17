@@ -273,7 +273,12 @@ export function showDailyModal(
 }
 
 /** Компактный тост (зеркалит паттерн GameScene.showAchievementToast). */
-export function showMetaToast(scene: Phaser.Scene, title: string, sub: string): void {
+export function showMetaToast(
+  scene: Phaser.Scene,
+  title: string,
+  sub: string,
+  headerText: string = 'ДОСТИЖЕНИЕ'
+): void {
   if (!scene || !scene.scene.isActive()) return;
   const W = scene.scale.width;
   const H = scene.scale.height;
@@ -283,7 +288,7 @@ export function showMetaToast(scene: Phaser.Scene, title: string, sub: string): 
     .rectangle(0, 0, panelW, 52, 0x101522, 0.94)
     .setStrokeStyle(1.5, 0xffd56a, 0.82);
   const header = scene.add
-    .text(-panelW / 2 + 14, -16, 'ДОСТИЖЕНИЕ', {
+    .text(-panelW / 2 + 14, -16, headerText, {
       fontFamily: FONT,
       fontSize: '9px',
       fontStyle: 'bold',

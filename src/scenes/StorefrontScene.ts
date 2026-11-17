@@ -37,6 +37,13 @@ import {
   hasManualCheckEntries,
 } from '../game/shop/PendingWalletSync';
 import { formatPrice, validateCatalog } from '../game/shop/products';
+import { getSeasonPassUntilMs, isSeasonPassActive } from '../game/meta/MetaWallet';
+import {
+  SEASON_MISSIONS,
+  seasonDisplayName,
+  seasonIdFor,
+  seasonSnapshot,
+} from '../quests/seasonQuests';
 import { grantMetaRna } from '../game/lab/LabState';
 import {
   collectLifetimeStats,
@@ -421,8 +428,11 @@ export class StorefrontScene extends Phaser.Scene {
       }
     }
     for (const product of this.products) {
-      this.buildCard(list, product, 0, cy, width, cardH);
-      cy += cardH + gap;
+      // Монетизация v3: карточка пропуска выше (+28px) — в ней две
+      // строки статуса (срок + сезон), обычной карточке они не нужны.
+      const h = product.kind === 'season_pass' ? cardH + 28 : cardH;
+      this.buildCard(list, product, 0, cy, width, h);
+      cy += h + gap;
     }
     const totalH = Math.max(0, cy - gap);
     this.scrollLimit = Math.max(0, totalH - height);
@@ -536,6 +546,45 @@ export class StorefrontScene extends Phaser.Scene {
       .setResolution(2);
     card.add([title, desc]);
 
+    // Монетизация v3: карточка пропуска — статус и сезон. Активный
+    // пропуск НЕ продаётся повторно: подписка Telegram продлевается
+    // автоматически, а вторая покупка создала бы параллельную подписку
+    // (двойное списание) — кнопка становится неактивным статусом.
+    // Отмену подписки игрок делает в настройках Telegram (Stars).
+    if (product.kind === 'season_pass') {
+      const passActive = isSeasonPassActive();
+      const season = seasonSnapshot();
+      const done = season.filter((p) => p.complete).length;
+      const claimed = season.filter((p) => p.claimed).length;
+      const statusY = 80;
+      const lineA = passActive
+        ? `Активен до ${this.fmtDate(getSeasonPassUntilMs())}`
+        : `Сезон ${seasonDisplayName(seasonIdFor(Date.now()))}: ${done}/${season.length} выполнено`;
+      const lineB = passActive
+        ? `Сезон: ${done}/${season.length} выполнено · наград забрано ${claimed}`
+        : this.paidTrackSummary();
+      const line1 = this.add
+        .text(textX, statusY, lineA, {
+          fontFamily: UI_FONT,
+          fontSize: '11px',
+          fontStyle: 'bold',
+          color: passActive ? VISUAL_TEXT.host : VISUAL_TEXT.muted,
+          wordWrap: { width: width - textX - width / 2 - 108 },
+        })
+        .setOrigin(0, 0)
+        .setResolution(2);
+      const line2 = this.add
+        .text(textX, statusY + 18, lineB, {
+          fontFamily: UI_FONT,
+          fontSize: '11px',
+          color: VISUAL_TEXT.muted,
+          wordWrap: { width: width - textX - width / 2 - 108 },
+        })
+        .setOrigin(0, 0)
+        .setResolution(2);
+      card.add([line1, line2]);
+    }
+
     if (product.tag) {
       const tag = this.add
         .text(width / 2 - 12, 10, product.tag, {
@@ -557,20 +606,29 @@ export class StorefrontScene extends Phaser.Scene {
     const btnX = width / 2 - 12 - btnW / 2;
     const btnY = height - btnH / 2 - 10;
     const buying = this.state === 'purchasing' && this.purchasingId === product.id;
+    // Монетизация v3: активный пропуск не продаётся (см. выше).
+    const passOwned = product.kind === 'season_pass' && isSeasonPassActive();
     const btnBg = this.add
-      .rectangle(btnX, btnY, btnW, btnH, ROLE.faction.reward, buying ? 0.55 : PANEL.button)
+      .rectangle(
+        btnX,
+        btnY,
+        btnW,
+        btnH,
+        passOwned ? ROLE.surface.panel : ROLE.faction.reward,
+        buying || passOwned ? 0.55 : PANEL.button
+      )
       .setStrokeStyle(BORDER.thin, 0x0b0f1a, 0.6)
-      .setInteractive({ useHandCursor: true });
+      .setInteractive({ useHandCursor: !passOwned });
     const btnLabel = this.add
-      .text(btnX, btnY, buying ? '···' : this.priceLabel(product), {
+      .text(btnX, btnY, buying ? '···' : passOwned ? 'АКТИВЕН' : this.priceLabel(product), {
         fontFamily: FONT,
         fontSize: '13px',
         fontStyle: 'bold',
-        color: '#0b0f1a',
+        color: passOwned ? VISUAL_TEXT.muted : '#0b0f1a',
       })
       .setOrigin(0.5)
       .setResolution(2);
-    if (!buying) {
+    if (!buying && !passOwned) {
       btnBg.on('pointerdown', () => btnBg.setAlpha(0.6));
       btnBg.on('pointerup', () => {
         btnBg.setAlpha(1);
@@ -588,6 +646,38 @@ export class StorefrontScene extends Phaser.Scene {
   private priceLabel(product: Product): string {
     if (this.provider?.id === 'telegram-stars' && product.stars) return `${product.stars} ★`;
     return formatPrice(product.price);
+  }
+
+  /** Дата «17.12.2026» для статуса пропуска. */
+  private fmtDate(ms: number): string {
+    try {
+      return new Date(ms).toLocaleDateString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      });
+    } catch {
+      return '';
+    }
+  }
+
+  /**
+   * Монетизация v3: сводка paid-трека для карточки пропуска — считается
+   * из каталога SEASON_MISSIONS, а не хардкодится (иначе копипаст
+   * рассинхронится с каталогом при первой же правке наград).
+   */
+  private paidTrackSummary(): string {
+    let rna = 0;
+    let boosterDays = 0;
+    for (const m of SEASON_MISSIONS) {
+      if (m.track !== 'paid') continue;
+      if (m.reward.kind === 'rna') rna += m.reward.amount;
+      else if (m.reward.kind === 'booster') boosterDays += m.reward.days;
+    }
+    const parts: string[] = [];
+    if (rna > 0) parts.push(`+${rna} РНК`);
+    if (boosterDays > 0) parts.push(`бустер ×2 на ${boosterDays} дн.`);
+    return parts.length > 0 ? `Платный трек: ${parts.join(', ')}` : 'Платный трек сезонных миссий';
   }
 
   /**
