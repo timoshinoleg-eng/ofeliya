@@ -624,6 +624,11 @@ async function checkScroll(page, label, failures) {
             }
           }
         }
+        // Закрытие оверлея — тапом по димму (тот же dismiss, что и у
+        // таймера 2400 мс). Таймер в headless ждать нельзя: при ~8 fps на
+        // SwiftShader игровое время (smoothStep) идёт в разы медленнее
+        // стены, и 2400 мс игрового времени — это ~20 с стены.
+        await touchAt(ctx, page, { x: 20, y: 20 });
         try {
           await page.waitForFunction(
             () => window.__game.scene.getScene('Storefront').state === 'ready',
@@ -631,7 +636,7 @@ async function checkScroll(page, label, failures) {
             { timeout: 10000 }
           );
         } catch {
-          failures.push(`${label}: оверлей успеха не закрылся, нет возврата в ready`);
+          failures.push(`${label}: оверлей успеха не закрылся по тапу, нет возврата в ready`);
         }
         if (errors.length) failures.push(`${label}: page errors: ${errors.join(' | ')}`);
         }
