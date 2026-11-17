@@ -272,6 +272,9 @@ jobs:
           cat /tmp/vite.log
           exit 1
 
+      - name: Run snapshot publication and analytics
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:run-snapshot-publish
+
       - name: Muse quest-to-Phaser scenes and touch lifecycle
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:quest-scenes
 

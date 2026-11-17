@@ -1337,7 +1337,7 @@ export class UIScene extends Phaser.Scene {
       void trackProductEvent('onboarding_step', PlatformBridge, {
         step,
         outcome: 'completed',
-        runTimeMs: Math.round(currentRun?.timeMs ?? 0),
+        runTimeMs: Math.round(this.gs?.runState?.run.timeMs ?? currentRun?.timeMs ?? 0),
       });
     });
     this.onboarding.start();
@@ -1413,7 +1413,7 @@ export class UIScene extends Phaser.Scene {
         void trackProductEvent('onboarding_exit', PlatformBridge, {
           reason: 'skip',
           step,
-          runTimeMs: Math.round(run?.timeMs ?? 0),
+          runTimeMs: Math.round(this.gs?.runState?.run.timeMs ?? run?.timeMs ?? 0),
         });
         this.onboarding?.skip();
         this.persistOnboarding();
