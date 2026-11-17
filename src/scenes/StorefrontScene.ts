@@ -197,6 +197,20 @@ export class StorefrontScene extends Phaser.Scene {
   private products: Product[] = [];
   private errorReason = '';
   private purchasingId: string | null = null;
+  /**
+   * CR-R3-10: поколение сцены — инкремент в create() (рестарт при resize
+   * проходит через create на том же экземпляре). Асинхронные продолжения
+   * (buy) захватывают поколение на старте и не трогают UI чужого
+   * поколения: исходная покупка дорабатывает платёжную бухгалтерию, но
+   * не переписывает состояние новой генерации.
+   */
+  private generation = 0;
+  /**
+   * CR-R3-10: покупка в полёте — переживает рестарт сцены (НЕ сбрасывается
+   * в create): после resize новая генерация не может начать вторую покупку,
+   * пока не завершилась исходная. Снимается в finally buy().
+   */
+  private inFlightPurchase: { productId: string; generation: number } | null = null;
   private lastBought: Product | null = null;
   /** Патч №16 (A3): покупка с неподтверждённым синком (баннер + «Повторить»). */
   private syncPending: SyncPendingInfo | null = null;
@@ -248,6 +262,10 @@ export class StorefrontScene extends Phaser.Scene {
 
   create(): void {
     this.cameras.main.setBackgroundColor(COLORS.bg);
+    // CR-R3-10: новое поколение (рестарт при resize — тоже): продолжения
+    // buy из прошлого поколения после этого UI не трогают. inFlightPurchase
+    // НЕ сбрасывается — гейт покупки переживает рестарт.
+    this.generation += 1;
     // P1-4: рестарт при resize (onResize) проходит через create() заново
     // на том же экземпляре сцены — сбрасываем состояние, иначе сцена
     // стартует с «purchasing» и указателями на уничтоженные объекты.
@@ -844,7 +862,12 @@ export class StorefrontScene extends Phaser.Scene {
     // Кнопка цены — отдельной строкой под текстом, справа.
     const btnY = y + CARD_GAP_DESC_BTN + CARD_BTN_H / 2;
     const btnX = width / 2 - CARD_PAD_X - CARD_BTN_W / 2;
-    const buying = this.state === 'purchasing' && this.purchasingId === product.id;
+    // CR-R3-10: '···' — и у покупки из прошлого поколения (рестарт при
+    // resize): гейт переживает рестарт, кнопка не должна выглядеть
+    // доступной, пока исходная покупка в полёте.
+    const buying =
+      (this.state === 'purchasing' && this.purchasingId === product.id) ||
+      this.inFlightPurchase?.productId === product.id;
     // Монетизация v3: активный пропуск не продаётся (см. выше).
     const passOwned = product.kind === 'season_pass' && isSeasonPassActive();
     // CR3: пока restore не завершён, состояние пропуска НЕИЗВЕСТНО —
@@ -1263,12 +1286,40 @@ export class StorefrontScene extends Phaser.Scene {
 
   // ---------- purchase flow ----------
 
+  /**
+   * CR-R3-10: гейт покупки переживает рестарт сцены. buyInner захватывает
+   * поколение на старте: бухгалтерия (fulfill, синк кошелька, достижения,
+   * аналитика) дорабатывает всегда, а UI-хвост — только в своём поколении.
+   */
   private async buy(product: Product): Promise<void> {
     const provider = this.provider;
     if (!provider || this.state !== 'ready') return;
     // CR3: покупка пропуска до известного состояния restore блокируется
     // (кнопка в этом состоянии не wired — это defense in depth).
     if (product.kind === 'season_pass' && this.restoreState === 'pending') return;
+    // CR-R3-10: вторая покупка не начинается, пока в полёте исходная
+    // (хоть из прошлого поколения — рестарт при resize гейт не снимает).
+    if (this.inFlightPurchase) return;
+    const gen = this.generation;
+    this.inFlightPurchase = { productId: product.id, generation: gen };
+    try {
+      await this.buyInner(product, provider, gen);
+    } finally {
+      if (this.inFlightPurchase?.generation === gen) this.inFlightPurchase = null;
+      // CR-R3-10: исходная покупка завершилась в чужой генерации —
+      // обновить кнопки новой генерации (снять '···'), если это безопасно:
+      // renderContent только в состояниях со списком, без оверлеев.
+      if (
+        gen !== this.generation &&
+        this.sys.isActive() &&
+        (this.state === 'ready' || this.state === 'empty' || this.state === 'sync-pending')
+      ) {
+        this.renderContent();
+      }
+    }
+  }
+
+  private async buyInner(product: Product, provider: PaymentProvider, gen: number): Promise<void> {
     this.purchasingId = product.id;
     this.syncPending = null;
     this.setState('purchasing');
@@ -1348,12 +1399,17 @@ export class StorefrontScene extends Phaser.Scene {
           } else {
             if (chargeId) enqueuePendingWalletSync({ chargeId, productId: product.id });
             const syncError = r.ok ? 'not-materialized' : r.error;
-            this.syncPending = {
-              productId: product.id,
-              productTitle: product.title,
-              chargeId,
-              error: syncError,
-            };
+            // CR-R3-10: syncPending — UI-состояние: в чужом поколении не
+            // ставим (баннер новой генерации и так покажет очередь через
+            // getPendingSyncChargeIds). Очередь выше — бухгалтерия, остаётся.
+            if (gen === this.generation) {
+              this.syncPending = {
+                productId: product.id,
+                productTitle: product.title,
+                chargeId,
+                error: syncError,
+              };
+            }
             void trackProductEvent('purchase_sync_pending', PlatformBridge, {
               productId: product.id,
               provider: provider.id,
@@ -1400,6 +1456,10 @@ export class StorefrontScene extends Phaser.Scene {
       });
     }
     if (!this.sys.isActive()) return;
+    // CR-R3-10: чужое поколение (рестарт при resize) — бухгалтерия выше
+    // доработана, UI новой генерации не трогаем: ни тосты, ни setState,
+    // ни purchasingId/lastBought. Кнопки обновит finally buy().
+    if (gen !== this.generation) return;
     // E3: тосты — только после проверки isActive (Phaser-объекты сцены).
     for (const t of pendingToasts) {
       if (t.skinId) showSkinGrantToast(this, t.skinId);
