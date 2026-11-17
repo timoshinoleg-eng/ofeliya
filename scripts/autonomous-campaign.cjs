@@ -27,6 +27,37 @@
 // 1x/4x speed-parity check meaningful. Effective speed is measured and a
 // TIME_SCALE_DEGRADED marker is emitted when the machine cannot keep up.
 //
+// Stepped mode still RENDERS: Game.step always renders (Game.js:474–522),
+// there is no "render off" mode anywhere in this runner (Appendix C §2).
+// No global Date.now / performance.now pinning is done anywhere either
+// (Appendix C §3) — the runner measures wall time only for pacing and
+// watchdogs, never for the game clock.
+//
+// Screenshots (Appendix C §1): the primary mechanism is the renderer
+// snapshot API via window.__game.renderer — WebGLRenderer.snapshot(cb)
+// (callback-based, fires on the NEXT render; WebGLRenderer.js:2891) and
+// CanvasRenderer.snapshotCanvas(canvas, cb) (immediate). With RAF stopped,
+// one synthetic step renders the next frame and fires the callback. The
+// handshake is folded into the loop's regular advance() so it consumes NO
+// extra simulation frames (arm before the advance, collect after it); only
+// post-run shots use an explicit advance(1), when the run is already over.
+// preserveDrawingBuffer is NOT set anywhere. A composited page screenshot
+// is kept only as a fallback when the renderer API is unavailable.
+//
+// Visual profiles (Appendix C §5): the runner reads OFELIYA_VISUAL_PROFILE
+// (logic-stress | rendering-performance | release-visual, default
+// release-visual; --visual-profile overrides the env) and passes it into
+// the page as the URL parameter ?ofeliyaVisualProfile=<profile>. The game
+// ignores unknown query params (FeatureFlags reads only flag.*, qaHide
+// reads only qaHide), so the parameter is inert until track E's
+// scripts/lib/visual-profiles.cjs (not present in this worktree yet) maps
+// the profile name to settings. The profile is recorded in run.json
+// diagnostics and in series.json.
+//
+// Movement has no arena-edge rule: the game world is unbounded (no
+// setBounds / world constants in GameScene), so no "arena edge" logic
+// exists in the bot (Appendix C §4). No angular planner either.
+//
 // Score (Contract QA, design §2.5): a local `node server/index.mjs` is
 // started per run on a test port with a fresh store, and /api/score +
 // /api/run/start are routed to it from the page. The game forms the real
@@ -62,8 +93,10 @@
 //     [--speed N] [--runs N] [--replay inputs.json] [--until MARKER]
 //     [--out DIR] [--url URL] [--platform browser|max]
 //     [--max-frames N] [--wall-timeout-ms N] [--no-video] [--no-trace]
+//     [--visual-profile NAME]
 //   Env: OFELIYA_BASE_URL (default http://127.0.0.1:5173/),
-//        OFELIYA_CAMPAIGN_RUNS (default 1).
+//        OFELIYA_CAMPAIGN_RUNS (default 1),
+//        OFELIYA_VISUAL_PROFILE (default release-visual).
 // Exit codes: 0 all runs passed · 1 a run failed/timed out/diverged ·
 //             2 usage error or Test API absent.
 
@@ -114,6 +147,13 @@ const TEARDOWN_INVARIANTS = new Set([
   'runResultConsistent',
 ]);
 
+// Visual profiles (Appendix C §5). The runner only passes the name into
+// the page (URL parameter); the profile -> settings mapping is owned by
+// track E's scripts/lib/visual-profiles.cjs, not present in this worktree
+// yet. Default is the stock profile.
+const VISUAL_PROFILES = ['logic-stress', 'rendering-performance', 'release-visual'];
+const DEFAULT_VISUAL_PROFILE = 'release-visual';
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function log(message) {
@@ -134,7 +174,7 @@ function usageError(message) {
     'Usage: node scripts/autonomous-campaign.cjs [--seed X] [--difficulty standard|strained]\n' +
       '  [--speed N] [--runs N] [--replay inputs.json] [--until MARKER] [--out DIR]\n' +
       '  [--url URL] [--platform browser|max] [--max-frames N] [--wall-timeout-ms N]\n' +
-      '  [--no-video] [--no-trace] [--score-port N]\n\n' +
+      '  [--no-video] [--no-trace] [--score-port N] [--visual-profile NAME]\n\n' +
       '  --seed X             run seed, /^[A-Za-z0-9_-]{1,32}$/ (score contract)\n' +
       '  --difficulty ID      standard | strained (default standard)\n' +
       '  --speed N            wall-clock pacing multiplier (default 4; the\n' +
@@ -151,7 +191,11 @@ function usageError(message) {
       '  --wall-timeout-ms N  watchdog: max wall time per run (default 1800000)\n' +
       '  --no-video           disable retain-on-failure video\n' +
       '  --no-trace           disable Playwright tracing\n' +
-      '  --score-port N       local score server port (default: a free port)\n\n' +
+      '  --score-port N       local score server port (default: a free port)\n' +
+      '  --visual-profile NAME  logic-stress | rendering-performance |\n' +
+      '                       release-visual (default: $OFELIYA_VISUAL_PROFILE\n' +
+      '                       or release-visual); passed to the page as\n' +
+      '                       ?ofeliyaVisualProfile=NAME\n\n' +
       'Exit codes: 0 all runs passed · 1 a run failed/timed out/diverged ·\n' +
       '            2 usage error or Test API absent.'
   );
@@ -168,7 +212,7 @@ function parseArgs(argv) {
   };
   const valued = new Set([
     'seed', 'difficulty', 'speed', 'runs', 'replay', 'until', 'out', 'url',
-    'platform', 'max-frames', 'wall-timeout-ms', 'score-port',
+    'platform', 'max-frames', 'wall-timeout-ms', 'score-port', 'visual-profile',
   ]);
   const flags = new Set(['no-video', 'no-trace']);
   for (let i = 0; i < argv.length; i++) {
@@ -227,6 +271,10 @@ function parseOptions(args) {
   if (seed !== null && !SEED_RE.test(seed)) {
     usageError(`--seed must match /^[A-Za-z0-9_-]{1,32}$/ (server RUN_SEED_RE), got ${seed}`);
   }
+  const visualProfile = args['visual-profile'] ?? process.env.OFELIYA_VISUAL_PROFILE ?? DEFAULT_VISUAL_PROFILE;
+  if (!VISUAL_PROFILES.includes(visualProfile)) {
+    usageError(`--visual-profile must be one of ${VISUAL_PROFILES.join(', ')}, got ${visualProfile}`);
+  }
   return {
     seed,
     difficulty: args.difficulty,
@@ -242,6 +290,7 @@ function parseOptions(args) {
     maxFrames,
     wallTimeoutMs,
     scorePort,
+    visualProfile,
   };
 }
 
@@ -687,6 +736,129 @@ async function readHeap(page) {
   return null;
 }
 
+/** Game URL with the visual profile passed as a query parameter (Appendix C §5). */
+function withVisualProfile(url, visualProfile) {
+  const parsed = new URL(url);
+  parsed.searchParams.set('ofeliyaVisualProfile', visualProfile);
+  return parsed.toString();
+}
+
+// ---------------------------------------------------------------------------
+// Renderer snapshots (Appendix C §1)
+//
+// Primary mechanism: window.__game.renderer.snapshot(cb) on WebGL
+// (callback-based, fires on the NEXT render) and snapshotCanvas(canvas, cb)
+// on Canvas (immediate). With RAF stopped, one synthetic step renders the
+// next frame and fires the WebGL callback. No preserveDrawingBuffer is set
+// anywhere — the snapshot reads pixels during the render itself.
+//
+// The handshake is folded into the loop's regular advance() so it consumes
+// NO extra simulation frames: arm before the advance, collect after it.
+// Only post-run shots (the run is already over) use an explicit advance(1).
+// A composited page screenshot is kept only as a fallback when the renderer
+// API is unavailable.
+// ---------------------------------------------------------------------------
+
+/**
+ * Arm a renderer snapshot. Returns 'webgl' | 'canvas' when armed,
+ * otherwise a reason string ('no-renderer' | 'no-api' | 'error').
+ * The pending data URL lands on window.__harnessSnapshot (a promise).
+ */
+async function armRendererSnapshot(page) {
+  return page.evaluate(() => {
+    try {
+      const game = window.__game;
+      const renderer = game ? game.renderer : null;
+      if (!renderer) {
+        window.__harnessSnapshot = null;
+        return 'no-renderer';
+      }
+      if (typeof renderer.snapshotCanvas === 'function') {
+        // Canvas renderer: snapshotCanvas(game.canvas, cb) is immediate.
+        window.__harnessSnapshot = new Promise((resolve) => {
+          try {
+            renderer.snapshotCanvas(game.canvas, (image) => resolve(image ? image.src : null));
+          } catch {
+            resolve(null);
+          }
+        });
+        return 'canvas';
+      }
+      if (typeof renderer.snapshot === 'function') {
+        // WebGL renderer: callback fires on the NEXT render.
+        window.__harnessSnapshot = new Promise((resolve) => {
+          try {
+            renderer.snapshot((image) => resolve(image ? image.src : null));
+          } catch {
+            resolve(null);
+          }
+        });
+        return 'webgl';
+      }
+      window.__harnessSnapshot = null;
+      return 'no-api';
+    } catch {
+      window.__harnessSnapshot = null;
+      return 'error';
+    }
+  });
+}
+
+/**
+ * Collect an armed snapshot. Must be called after at least one render
+ * since arming (the loop's regular advance provides it). Returns a PNG
+ * Buffer, or null when the snapshot never materialized (guarded by a
+ * wall-clock timeout so a missed render cannot hang the runner).
+ */
+async function collectRendererSnapshot(page, timeoutMs = 10000) {
+  const dataUrl = await page.evaluate(async (timeout) => {
+    const pending = window.__harnessSnapshot;
+    window.__harnessSnapshot = null;
+    if (!pending) return null;
+    let timer = null;
+    try {
+      return await Promise.race([
+        pending,
+        new Promise((resolve) => {
+          timer = setTimeout(() => resolve(null), timeout);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }, timeoutMs);
+  if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return null;
+  const base64 = dataUrl.split(',')[1];
+  if (!base64) return null;
+  return Buffer.from(base64, 'base64');
+}
+
+/**
+ * One-shot snapshot outside the loop (post-run failure frames): arm, one
+ * synthetic step to render (the run is over, so the extra frame is
+ * harmless), collect. Falls back to a composited page screenshot.
+ */
+async function snapshotNow(page) {
+  const armed = await armRendererSnapshot(page);
+  if (armed === 'webgl') {
+    try {
+      await page.evaluate(() => window.__ofeliyaTest.advance(1));
+    } catch {
+      return null;
+    }
+    const buffer = await collectRendererSnapshot(page);
+    if (buffer) return buffer;
+  } else if (armed === 'canvas') {
+    const buffer = await collectRendererSnapshot(page);
+    if (buffer) return buffer;
+  }
+  try {
+    return await page.screenshot();
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Drivers: bot vs replay. Both answer decide(snapshot, tick) with
 // { input, choices, ack } — the loop applies them identically, so bot runs
@@ -968,6 +1140,7 @@ async function runCampaign(browser, options, runIndex, seriesState) {
     deathSinceTick: null,
     stageScreenshots: [],
     ringScreenshots: [], // Last 2 frames (2 s cadence) for the t-2s shot.
+    pendingShot: null, // Armed renderer snapshot, collected after the next advance.
     lastScreenshotTick: -SCREENSHOT_INTERVAL_FRAMES,
     lastPerfTick: 0,
     lastSnapshotTick: 0,
@@ -1151,7 +1324,7 @@ async function runCampaign(browser, options, runIndex, seriesState) {
   let page = null;
   try {
     ({ ctx, page } = await makeRunContext(browser, options, run));
-    await page.goto(options.url, { waitUntil: 'domcontentloaded' });
+    await page.goto(withVisualProfile(options.url, options.visualProfile), { waitUntil: 'domcontentloaded' });
     try {
       await page.waitForFunction(
         () => typeof window.__ofeliyaTest?.startCampaign === 'function',
@@ -1234,11 +1407,23 @@ async function runCampaign(browser, options, runIndex, seriesState) {
           timeline.push('STAGE_START', ctxFor(state, { stage: event.to }));
           checkTransitionInvariants(state, diag, event.from, event.to);
           st.transitionSinceTick = null;
-          // Stage screenshot (§6.2).
+          // Stage screenshot (§6.2): arm a renderer snapshot, collected
+          // after this iteration's advance (no extra frames). If a ring
+          // shot is already pending, fall back to a composited screenshot
+          // rather than orphaning it (one snapshot per frame).
           try {
-            const shot = path.join(runDir, `stage-${event.to}.png`);
-            await page.screenshot({ path: shot });
-            st.stageScreenshots.push(`stage-${event.to}.png`);
+            if (!st.pendingShot) {
+              const armed = await armRendererSnapshot(page);
+              if (armed === 'webgl' || armed === 'canvas') {
+                st.pendingShot = { kind: 'stage', to: event.to };
+              } else {
+                await page.screenshot({ path: path.join(runDir, `stage-${event.to}.png`) });
+                st.stageScreenshots.push(`stage-${event.to}.png`);
+              }
+            } else {
+              await page.screenshot({ path: path.join(runDir, `stage-${event.to}.png`) });
+              st.stageScreenshots.push(`stage-${event.to}.png`);
+            }
           } catch (error) {
             warn(`stage screenshot failed: ${error.message}`);
           }
@@ -1518,13 +1703,50 @@ async function runCampaign(browser, options, runIndex, seriesState) {
       await applyInputAndAdvance(page, inputToApply, DECISION_FRAMES);
       st.tick += DECISION_FRAMES;
 
+      // --- collect an armed renderer snapshot -------------------------------------
+      // Armed earlier this iteration (stage shot) or in the previous one
+      // (ring shot); the advance above rendered the frame that fires it.
+      if (st.pendingShot) {
+        const shot = st.pendingShot;
+        st.pendingShot = null;
+        let buffer = null;
+        try {
+          buffer = await collectRendererSnapshot(page);
+        } catch (error) {
+          warn(`snapshot collect failed: ${error.message}`);
+        }
+        if (!buffer) {
+          try {
+            buffer = await page.screenshot();
+          } catch {
+            buffer = null;
+          }
+        }
+        if (buffer) {
+          if (shot.kind === 'ring') {
+            st.ringScreenshots.push({ tick: shot.tick, runTimeMs: shot.runTimeMs, buffer });
+            if (st.ringScreenshots.length > 2) st.ringScreenshots.shift();
+          } else if (shot.kind === 'stage') {
+            fs.writeFileSync(path.join(runDir, `stage-${shot.to}.png`), buffer);
+            st.stageScreenshots.push(`stage-${shot.to}.png`);
+          }
+        }
+      }
+
       // --- periodic sampling --------------------------------------------------------------
-      if (st.tick - st.lastScreenshotTick >= SCREENSHOT_INTERVAL_FRAMES) {
+      // Arm the next ring shot when due (2 s cadence); it is collected
+      // after the NEXT advance, so the handshake costs zero extra frames.
+      if (st.tick - st.lastScreenshotTick >= SCREENSHOT_INTERVAL_FRAMES && !st.pendingShot) {
         st.lastScreenshotTick = st.tick;
         try {
-          const buffer = await page.screenshot();
-          st.ringScreenshots.push({ tick: st.tick, runTimeMs: state.runTimeMs, buffer });
-          if (st.ringScreenshots.length > 2) st.ringScreenshots.shift();
+          const armed = await armRendererSnapshot(page);
+          if (armed === 'webgl' || armed === 'canvas') {
+            st.pendingShot = { kind: 'ring', tick: st.tick, runTimeMs: state.runTimeMs };
+          } else {
+            const buffer = await page.screenshot();
+            st.ringScreenshots.push({ tick: st.tick, runTimeMs: state.runTimeMs, buffer });
+            if (st.ringScreenshots.length > 2) st.ringScreenshots.shift();
+          }
         } catch (error) {
           warn(`ring screenshot failed: ${error.message}`);
         }
@@ -1573,6 +1795,28 @@ async function runCampaign(browser, options, runIndex, seriesState) {
 
     void lastPoll;
 
+    // Flush a snapshot armed but not yet collected (e.g. --until broke on
+    // the same tick a stage shot was armed): one explicit step renders it.
+    // The run is over for decision purposes, so the extra frame is harmless.
+    if (st.pendingShot) {
+      const shot = st.pendingShot;
+      st.pendingShot = null;
+      try {
+        await page.evaluate(() => window.__ofeliyaTest.advance(1));
+        st.tick += 1;
+        const buffer = await collectRendererSnapshot(page);
+        if (buffer && shot.kind === 'stage') {
+          fs.writeFileSync(path.join(runDir, `stage-${shot.to}.png`), buffer);
+          st.stageScreenshots.push(`stage-${shot.to}.png`);
+        } else if (buffer && shot.kind === 'ring') {
+          st.ringScreenshots.push({ tick: shot.tick, runTimeMs: shot.runTimeMs, buffer });
+          if (st.ringScreenshots.length > 2) st.ringScreenshots.shift();
+        }
+      } catch (error) {
+        warn(`pending snapshot flush failed: ${error.message}`);
+      }
+    }
+
     // --- post-run: no-stuck-input invariant (checked at RUN_END, before the
     // result screen opens its own modal) -----------------------------------------
     if (st.runEnded && st.finalDiag && !st.finalDiag.error) {
@@ -1616,10 +1860,11 @@ async function runCampaign(browser, options, runIndex, seriesState) {
     // --- failure screenshots: t (now) and t+2s --------------------------------------
     const died = st.runEnded && st.runResult && st.runResult.win === false;
     if (died || st.failure || st.watchdog) {
-      try {
-        await page.screenshot({ path: path.join(runDir, 'failure.png') });
-      } catch (error) {
-        warn(`failure screenshot failed: ${error.message}`);
+      const failureShot = await snapshotNow(page);
+      if (failureShot) {
+        fs.writeFileSync(path.join(runDir, 'failure.png'), failureShot);
+      } else {
+        warn('failure screenshot failed: renderer snapshot and page fallback both missed');
       }
       const before = st.ringScreenshots[st.ringScreenshots.length - 1];
       if (before) {
@@ -1627,7 +1872,8 @@ async function runCampaign(browser, options, runIndex, seriesState) {
       }
       try {
         await page.evaluate((frames) => window.__ofeliyaTest.advance(frames), 120);
-        await page.screenshot({ path: path.join(runDir, 'failure-plus-2s.png') });
+        const afterShot = await snapshotNow(page);
+        if (afterShot) fs.writeFileSync(path.join(runDir, 'failure-plus-2s.png'), afterShot);
       } catch (error) {
         warn(`failure+2s screenshot failed: ${error.message}`);
       }
@@ -1940,6 +2186,7 @@ async function runCampaign(browser, options, runIndex, seriesState) {
         transitionsAcked: st.transitionsAcked,
         heapGrowth,
         replayVerdict,
+        visualProfile: options.visualProfile,
         effectiveSpeed: st.chunkWallEmaMs
           ? Number(((DECISION_FRAMES * FRAME_MS) / st.chunkWallEmaMs).toFixed(2))
           : null,
@@ -2069,7 +2316,7 @@ async function main() {
   log(
     `autonomous campaign: ${options.runs} run(s) difficulty=${options.difficulty} `
     + `speed=${options.speed}x url=${options.url} platform=${options.platform} `
-    + `mode=${options.replay ? `replay(${options.replay})` : 'bot'}`
+    + `visual=${options.visualProfile} mode=${options.replay ? `replay(${options.replay})` : 'bot'}`
     + (options.until ? ` until=${options.until}` : '')
     + (options.seed ? ` seed=${options.seed}` : ''),
   );
@@ -2118,6 +2365,7 @@ async function main() {
     failed,
     difficulty: options.difficulty,
     speed: options.speed,
+    visualProfile: options.visualProfile,
     mode: options.replay ? 'replay' : 'bot',
     results: results.map((r) => ({
       runId: r.runId,
