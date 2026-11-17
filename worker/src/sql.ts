@@ -43,6 +43,16 @@ export const SQL_UPDATE_ORDER_PAID =
   "UPDATE orders SET status='paid' WHERE nonce=? AND status='pending'";
 
 /**
+ * P1-2: заказ отклонённой подписки → терминальный статус 'denied'.
+ * Только из 'pending' (первая оплата отклонённой подписки приходит,
+ * пока заказ ещё pending). Продления denied-заказа не грантятся
+ * (гейт в recordSuccessfulPayment). Pre_checkout отклоняет не-pending
+ * заказы, поэтому 'denied' заодно блокирует оплату старых инвойсов.
+ */
+export const SQL_UPDATE_ORDER_DENIED =
+  "UPDATE orders SET status='denied' WHERE nonce=? AND status='pending'";
+
+/**
  * Запись платежа. ON CONFLICT(charge_id) DO NOTHING — дубликатная доставка
  * вебхука превращается в no-op (meta.changes==0 → детект дубликата в JS),
  * триггер при этом НЕ срабатывает (вставки не было) → ноль доп. начисления.
