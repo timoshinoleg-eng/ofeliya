@@ -65,6 +65,12 @@
 --   'expired' — вручную/скриптом: окно оплаты истекло без платежа.
 --   'denied'  — P1-2: оплата подписки отклонена (у пользователя уже был
 --               активный пропуск); терминальный, грантов по нему не будет.
+--   'invoice_failed' — CR-R3-2: createInvoiceLink упал, инвойс не создан;
+--               терминальный, гейт freshPendingSub его не видит (иначе
+--               несуществующий инвойс блокировал бы покупку на 24ч).
+--               pre_checkout требует status='pending', поэтому даже
+--               «потерянный» инвойс Telegram по такому заказу не оплатить.
+-- CHECK на status нет: новые значения не требуют миграции.
 -- Строгий pre_checkout (патч №15, P0-2): ok:true ТОЛЬКО при status='pending'
 -- И совпадении from.id с order.user_id. Повторная оплата того же nonce
 -- невозможна: после первой оплаты заказ уже 'paid'.
@@ -127,7 +133,7 @@
 --       AND created_at < (strftime('%s','now')*1000 - 86400000);
 --   -- 2. удалить протухшие старше 30 дней (история платежей не трогается):
 --   DELETE FROM orders
---     WHERE status='expired'
+--     WHERE status IN ('expired', 'invoice_failed')
 --       AND created_at < (strftime('%s','now')*1000 - 2592000000);
 
 CREATE TABLE IF NOT EXISTS orders (

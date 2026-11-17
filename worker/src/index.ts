@@ -3,6 +3,7 @@ import type { BundleComponent, ResolvedGrant, ServerGrant } from './grants';
 import {
   SQL_UPDATE_ORDER_PAID,
   SQL_UPDATE_ORDER_DENIED,
+  SQL_UPDATE_ORDER_INVOICE_FAILED,
   SQL_INSERT_PAYMENT,
   SQL_INSERT_LEDGER_GRANT,
   SQL_INSERT_ORDER,
@@ -605,6 +606,21 @@ async function handleInvoice(request: Request, env: Env): Promise<Response> {
         : {}),
     })) as string;
   } catch {
+    // CR-R3-2: инвойс НЕ создан — заказ не должен блокировать гейт
+    // freshPendingSub (24ч) для следующего инвойса подписки с новым
+    // nonce: инвойса нет, оплачивать нечего. Помечаем заказ терминальным
+    // 'invoice_failed' (pre_checkout требует status='pending', поэтому
+    // даже «потерянный» инвойс Telegram — если ссылка всё же создалась,
+    // а ответ потерялся — оплатить нельзя: URL никому не выдан, а
+    // pre_checkout его отклонит). Брошенный инвойс, чьё создание
+    // УДАЛОСЬ, по-прежнему блокирует 24ч (заказ остаётся pending).
+    // Best-effort: провал пометки — громкий лог, заказ остаётся pending
+    // (старое поведение: блок, но не потеря денег).
+    try {
+      await env.PAYMENTS_DB.prepare(SQL_UPDATE_ORDER_INVOICE_FAILED).bind(nonce).run();
+    } catch (markErr) {
+      logEvent('invoice_mark_failed_error', { productId, nonce, error: String(markErr) });
+    }
     return json({ error: 'invoice-create-failed' }, 502);
   }
   return json({ invoiceUrl, nonce });

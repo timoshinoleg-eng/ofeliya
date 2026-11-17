@@ -53,6 +53,21 @@ export const SQL_UPDATE_ORDER_DENIED =
   "UPDATE orders SET status='denied' WHERE nonce=? AND status='pending'";
 
 /**
+ * CR-R3-2: заказ, чей инвойс НЕ создан (createInvoiceLink упал), —
+ * терминальный статус 'invoice_failed'. Без этого свежий pending-заказ
+ * подписки блокировал гейт freshPendingSub на 24ч, хотя инвойса нет и
+ * оплачивать нечего. Только из 'pending' (гонка с оплатой невозможна:
+ * инвойса нет — pre_checkout его не пропустит, но гейт бесплатный).
+ * Статус задокументирован в worker/schema.sql; CHECK на orders.status
+ * нет — миграция не нужна. Чистка — как 'expired' (30 дней, см.
+ * schema.sql). Same-nonce ретрай (P2-5) такой заказ не воскрешает:
+ * клиент генерирует свежий nonce на каждую попытку, а P2-5 нужен для
+ * потерянных ответов при УДАВШЕМСЯ создании инвойса (заказ pending).
+ */
+export const SQL_UPDATE_ORDER_INVOICE_FAILED =
+  "UPDATE orders SET status='invoice_failed' WHERE nonce=? AND status='pending'";
+
+/**
  * Запись платежа. ON CONFLICT(charge_id) DO NOTHING — дубликатная доставка
  * вебхука превращается в no-op (meta.changes==0 → детект дубликата в JS),
  * триггер при этом НЕ срабатывает (вставки не было) → ноль доп. начисления.

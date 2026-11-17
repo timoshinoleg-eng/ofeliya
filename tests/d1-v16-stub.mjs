@@ -251,6 +251,16 @@ export function makeD1() {
       }
       return { success: true, meta: { changes: 0 } };
     }
+    // CR-R3-2: заказ без созданного инвойса — терминальный 'invoice_failed'.
+    if (q === "UPDATE orders SET status='invoice_failed' WHERE nonce=? AND status='pending'") {
+      const [nonce] = params;
+      const row = orders.get(nonce);
+      if (row && row.status === 'pending') {
+        row.status = 'invoice_failed';
+        return { success: true, meta: { changes: 1 } };
+      }
+      return { success: true, meta: { changes: 0 } };
+    }
     if (q.startsWith('INSERT INTO refund_ops')) {
       const [operation_id, charge_id, user_id, action, status, reason, telegram_confirmed_at, created_at, updated_at] = params;
       if (refundOps.has(operation_id)) throw new Error('UNIQUE constraint failed: refund_ops.operation_id');
