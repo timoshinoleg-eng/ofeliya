@@ -284,3 +284,125 @@ e193638 docs(memory): P1 remediation state, decisions, backlog, handoff
 
 - **CI:** запускается на пуше; статус — в PR (check-runs на финальном HEAD).
   Локально все контракты зелёные (см. §3–§4).
+
+## 10. Раунд 3: CodeRabbit review 5943019617 (на `6f610ae`)
+
+Ревью поступило 2026-11-17T17:05:03Z на HEAD `6f610ae` (после пуша
+раунда P1), state COMMENTED, 13 actionable + 1 nitpick. Мердж был
+приостановлен владельцем до исправления. Все 14 пунктов сверены с кодом
+на `6f610ae` — **ложных срабатываний нет, все 14 подтверждены и
+исправлены**, каждое с RED-тестом на старом коде и GREEN после.
+Пункты 1–5 были предварительно подтверждены главным агентом чтением
+кода; треки перепроверили их независимо.
+
+| # | Замечание | Статус | Фикс | Файлы | Коммиты |
+|---|---|---|---|---|---|
+| 1 | Redelivery первой оплаты пропуска: валидный платёж → duplicate_payments, заказ denied, отмена действующей подписки (Major, деньги) | ✅ Исправлен | Дедуп по charge_id ДО active-pass check: сохранившийся `nonceRow` с тем же charge_id → `stars_payment_duplicate`, no-op; доп. запроса в D1 нет (строка уже прочитана). Настоящий второй платёж по-прежнему отклоняется, продления по-прежнему грантятся | `worker/src/index.ts`, `tests/worker-p1-worker.mjs` | `c82b9b2` (+ RED `5e61b5f`) |
+| 2 | Падение `createInvoiceLink` оставляет pending-заказ → блок подписки на 24ч (Major, деньги) | ✅ Исправлен | В catch-пути заказ → терминальный `invoice_failed` (best-effort); CHECK на статусы в схеме нет — миграция не нужна; статус задокументирован в `schema.sql`, включён в 30-дневную чистку. Брошенные инвойсы с УДАВШИМСЯ созданием по-прежнему блокируют 24ч. Same-nonce ретрай такой заказ не воскрешает (клиент генерирует свежий nonce на попытку) | `worker/src/index.ts`, `worker/src/sql.ts`, `worker/schema.sql`, `tests/worker-p1-worker.mjs` | `ccc7d4e` (+ RED `5e61b5f`) |
+| 3 | Гейт схемы не ловит старый UNIQUE(charge_id) на `wallet_skins` при частичной миграции (Major, деньги/гейт) | ✅ Исправлен | `checkDatabase` инспектирует unique-индексы `wallet_skins`, отклоняет любой уникальный индекс ровно по `(charge_id)` (чек `wallet-skins-no-charge-unique`); регрессия строит частичное состояние и доказывает слепоту старого гейта | `worker/scripts/check-schema.mjs`, `worker/scripts/check-schema.test.mjs` | `1bf74f0` (+ RED `5e61b5f`) |
+| 4 | Команда гейта `node worker/scripts/...` после `cd worker` — неверный путь (Minor) | ✅ Исправлен | `node scripts/check-schema.mjs --print-commands`; весь README проверен на аналогичные ошибки. Бонус: `npm run check-schema` в том же блоке тоже не работал (скрипта нет в `worker/package.json`) — заменён на прямой `node scripts/check-schema.mjs` | `worker/README_DEPLOY.md` | `f98acc1` |
+| 5 | Откат снапшотом стирает платежи после снапшота (Major, процедура) | ✅ Исправлен | Пауза платёжного трафика от создания снапшота до завершения отката (проверенный рычаг вебхука + оговорка: кодового kill-switch инвойсов нет); перед восстановлением — полный экспорт живой базы + сверка пост-снапшотных платежей; после — возврат либо ручное переприменение гранта (пропуск — только возврат: в v16 нет колонки/ветки). Та же правка — в шапке `migration-17.sql` и в ранбуке Этапа 0 (строка 217) | `worker/README_DEPLOY.md`, `worker/migration-17.sql`, ранбук (вне репо) | `f98acc1`, `e514683` |
+| 6 | Возврат истёкшей покупки бустера съедал миссионную награду (Major, деньги) | ✅ Исправлен | Неттинг P2-N3 заменён банком заработанного времени: серверный снапшот авторитетен для купленной компоненты, миссионный банк (`MetaWallet.boosterEarnedMs` + `boosterEarnedAnchorMs`) складывается поверх | `src/game/shop/ServerWalletSync.ts`, `src/game/meta/MetaWallet.ts`, `tests/server-wallet-sync.mjs` | `dba2cb9` (+ RED `be435ca`) |
+| 7 | Покупка бустера ЗАМЕНЯЛА миссионное время (3+7=7) (Major, деньги) | ✅ Исправлен | Банк персистентен: 3+7=10, повторный синк идемпотентен; ожидание в тесте обновлено с b0+7d на b0+10d | `src/game/shop/ServerWalletSync.ts`, `src/game/meta/MetaWallet.ts`, `tests/server-wallet-sync.mjs` | `dba2cb9` (+ RED `be435ca`) |
+| 8 | Stale-ответ воскрешал отозванный бустер (Major, деньги) | ✅ Исправлен | Бустер не трогается при устаревшем ответе, как пропуск. Асимметрия: бустер использует строгий `tip < cursor` (равный tip — та же история, журнал append-only), пропуск сохраняет `<=` по контракту P1-5 §в — задокументировано в коде | `src/game/shop/ServerWalletSync.ts`, `tests/server-wallet-sync.mjs` | `dba2cb9` (+ RED `be435ca`) |
+| 9 | Курсор захватывался до сети: двойное начисление РНК, откат курсора (Major, деньги) | ✅ Исправлен | Курсор перечитывается из хранилища непосредственно перед синхронным блоком применения, запись — через свежую карту. Фикс опирается на синхронность блока (без await между перечитыванием и записью) — отмечено комментарием | `src/game/shop/ServerWalletSync.ts`, `tests/server-wallet-sync.mjs` | `a6a7fb4` (+ RED `6230826`) |
+| 10 | Resize во время покупки терял гейт (Major) | ✅ Исправлен | Generation token + `inFlightPurchase`, переживающий рестарт: бухгалтерия дорабатывает, UI чужого поколения не трогается, кнопки обновляются по завершении | `src/scenes/StorefrontScene.ts`, `scripts/storefront-layout-smoke.cjs` | `3aceeac` (+ RED `cadd641`) |
+| 11 | Частично замаскированная кнопка покупала (Minor) | ✅ Исправлен | Input включён только когда ВСЯ кнопка внутри контентной области; тап по невидимой части больше не покупает (подтверждено Playwright: до фикса покупал `skin.virulent-magenta`) | `src/scenes/StorefrontScene.ts`, `scripts/storefront-layout-smoke.cjs` | `cfa66b5` (+ RED `36c5f6f`) |
+| 12 | `app_open` помечался seen при полном буфере → сессия без открытия (Minor) | ✅ Исправлен | `appOpenSeen` ставится только после успешной отправки (`track()` вернул true) или принятия в буфер; подавление после принятого `app_open` сохранено | `src/systems/ClientExperience.ts`, `tests/client-experience-app-open.mjs` | `f125efb` (+ RED `9899b77`) |
+| 13 | Восстановление инвойса по текущей цене каталога вместо stored (Minor, деньги) | ✅ Исправлен | Ретрай — по `existing.amount_stars`, новые заказы — по-прежнему по каталогу; NULL/битая stored-цена — fail-closed 502 `order-price-invalid` | `worker/src/index.ts`, `tests/worker-p1-worker.mjs` | `aee9fc1` (+ RED `5e61b5f`) |
+| 14 | Masked-button probe недетерминирован (молчаливый skip) (Nitpick) | ✅ Исправлен | Детерминированный выбор цели: первая карточка, чью кнопку можно поставить центром в середину полосы шапки подбором scroll offset; нет цели или промах — провал кейса, ветки `skipped` больше нет | `scripts/storefront-layout-smoke.cjs` | `318da38` |
+
+Пропущенных пунктов нет. Новых P0/P1 в раунде 3 не найдено.
+
+### RED/GREEN (раунд 3)
+
+- Воркер (изолированный откат каждого фикса): без CR-R3-1 —
+  `redelivered charge NOT in duplicate_payments` падает; без CR-R3-2 —
+  `expected 200, got 409`; без CR-R3-13 — `expected 50, got 35`; без
+  CR-R3-3 — гейт пропускает частичную миграцию.
+- Клиент: 6 — возврат срезал 1 день награды (b0+5d → b0+4d); 7 — 3+7
+  давало 7; 8 — откат сервера возвращал бустер b0 → b0+7d; 9 — два
+  конкурентных синка начисляли РНК дважды (500 → 1000), курсор
+  откатывался 3 → 1; 10 — Playwright: после resize вторая покупка
+  начиналась, завершение первой переписывало UI новой генерации;
+  11 — Playwright: тап по невидимой части реально купил
+  `skin.virulent-magenta`; 12 — 48 событий + `app_open` → 0 открытий.
+- Доки/тесты: хрупкость probe подтверждена пробником геометрии
+  (полоса шапки 77 px, шаг центров 157–225 px — в полосу случайно
+  попадала только одна кнопка).
+
+### Оговорки и принятые решения (раунд 3)
+
+- Банк бустера — длительность, а не окно: модель «3+7=10» складывает
+  полное миссионное время даже при перекрытии с купленным окном
+  (семантика ревью); полное истечение (local <= now) банк обнуляет.
+- Мок-гранты vs строгий пересчёт: локальное время из неизвестных
+  синку источников (QA-мок, `grantPurchase`) сохраняется веткой без
+  событий бустера; батч с событиями бустера пересчитывает строго
+  (серверно-авторитетно). Комбинация «мок-грант + реальный возврат»
+  сотрёт мок-время — только QA-путь, принято осознанно.
+- Кодового kill-switch для остановки новых инвойсов не существует —
+  пауза трафика опирается на прокси-рычаг вебхука + окно минимальной
+  активности + пост-проверку (follow-up в 03_BACKLOG.md).
+- Попутное наблюдение (не баг): в тесте CR-R3-3 `ALTER TABLE … RENAME`
+  падает, пока жив триггер на удаляемую таблицу; настоящая миграция
+  избегает этого порядком шагов (шаг 3 сносит `wallet_ledger` с
+  триггерами до шага 3b).
+
+### Верификация интегрированного дерева (раунд 3)
+
+- `tsc --noEmit` — чистый; `vite build` + stamp — зелёный.
+- Node-сьюты: **101/103** зелёных; 2 красных — только окружение:
+  `test:telegram-compose` (нет docker в VM — `spawnSync('docker')`
+  даёт `status: null`) и `test:mobile-evidence` (нет
+  `artifacts/mobile-acceptance.json`) — оба не связаны с раундом 3.
+- `sql-smoke` 23/23, `reconcile` 6/6, `hosting` — зелёные.
+- `test:storefront-layout` (Playwright, интегрированный скрипт) —
+  **20/20, 0 failures**, 0 вхождений `skipped`; новые кейсы
+  `partially-masked-button-tap` и `resize-during-purchase` зелёные.
+- `test:check-schema` — 13/13 (вкл. новый чек
+  `wallet-skins-no-charge-unique`).
+
+### Вердикты (подтверждены после раунда 3)
+
+- **READY FOR MERGE** — все 5 P1 (§1), все пункты раунда 2 (§2) и все
+  14 замечаний CodeRabbit review 5943019617 исправлены и покрыты
+  регрессиями; новых P0/P1 не найдено.
+- **NOT READY FOR LIVE PAYMENTS** — без изменений относительно §8:
+  остаются Этап 0, живые тесты Stars, продление на 30-й день.
+
+### Коммиты раунда 3 (поверх `6f610ae`, 17 файлов, +1080/−90)
+
+```
+5e61b5f test(worker): CR-R3 RED — redelivery dedup, invoice-failure gate, stored price, skins UNIQUE
+c82b9b2 fix(worker): CR-R3-1 dedup redelivered season-pass payment before active-pass check
+ccc7d4e fix(worker): CR-R3-2 mark order invoice_failed when createInvoiceLink fails
+aee9fc1 fix(worker): CR-R3-13 rebuild recovered invoice at the stored order price
+1bf74f0 fix(worker): CR-R3-3 schema gate rejects obsolete UNIQUE(charge_id) on wallet_skins
+9899b77 test(client): CR-R3-12 dropped app_open at full buffer must fall back
+f125efb fix(client): CR-R3-12 mark app_open seen only after accept
+be435ca test(client): CR-R3-6/7/8 booster bank scenarios (RED)
+dba2cb9 fix(client): CR-R3-6/7/8 booster earned bank replaces event netting
+6230826 test(client): CR-R3-9 concurrent syncs must not double-apply (RED)
+a6a7fb4 fix(client): CR-R3-9 re-read persisted cursor before applying a response
+36c5f6f test(client): CR-R3-11 partially-masked button tap must not buy (RED)
+cfa66b5 fix(client): CR-R3-11 disable input unless the whole button is in view
+cadd641 test(client): CR-R3-10 resize during purchase must keep the gate (RED)
+3aceeac fix(client): CR-R3-10 keep the purchase gate across resize
+f98acc1 fix(docs): CR-R3-4/5 deploy README — schema-gate paths after cd worker, rollback must preserve post-snapshot payments
+318da38 test(storefront): CR-R3-14 make masked-button probe deterministic
+994c4e6 Merge fix/r3-worker-291: CodeRabbit R3 worker fixes (CR-R3-1/2/3/13)
+7db081d Merge fix/r3-client-291: CodeRabbit R3 client fixes (CR-R3-6/7/8/9/10/11/12)
+b8e0ecd Merge fix/r3-docs-291: CodeRabbit R3 docs + storefront smoke determinism (CR-R3-4/5/14)
+e514683 fix(docs): CR-R3-5 migration-17 rollback header — snapshot restore alone loses post-snapshot payments
+```
+
+- **CI:** запускается на пуше; статус — в PR (check-runs на
+  финальном HEAD). Локально все контракты зелёные (см. выше).
+
+### Примечание о SHA в §1 и §9
+
+SHA коммитов в таблицах §1 и §9 — локальные, до ребейза и REST-пуша
+раунда P1: GitHub пересоздал коммиты с новыми SHA. Карта соответствия
+локальных и удалённых SHA жила в `/tmp/push1.log` и больше недоступна;
+актуальные SHA — в истории ветки на GitHub (HEAD `6f610ae` и ниже).
