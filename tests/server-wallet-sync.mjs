@@ -11,7 +11,12 @@
  * - бустер — max(local, server);
  * - сезонный пропуск — max(local, server) (монетизация v3); события
  *   season_pass в журнале санитизируются и не неттятся по РНК;
- * - refund на сервере (reversal-событие) — только учёт, локальное значение
+ * - P1-5: reversal пропуска в применённом батче делает серверное значение
+ *   авторитетным (local := server): возврат отзывает пропуск локально
+ *   (инкрементально и на свежем синке); без reversal — max(), как раньше;
+ *   устаревший ответ (tip_seq <= курсора) локальное значение не трогает
+ *   и курсор назад не двигает;
+ * - refund на сервере (reversal-событие РНК) — только учёт, локальное значение
  *   НЕ отзывается (задокументировано);
  * - детерминизм: свежий синк == инкрементальное применение тех же событий;
  * - курсор изолирован по (server_id, tgUserId); смена server_id → свежий синк;
@@ -61,6 +66,12 @@ try {
       'src/game/meta/MetaWallet.ts',
       'src/game/skins/SkinOwnership.ts',
       'src/game/skins/SkinCatalog.ts',
+      // P1-5 §(е): связь синка с сезонными миссиями (гейт paid-трека).
+      'src/game/shop/seasonQuests.ts',
+      'src/game/lab/LabState.ts',
+      'src/game/lab/LabBranches.ts',
+      'src/game/lab/LabModifiers.ts',
+      'src/game/FeatureFlags.ts',
       '--target',
       'ES2020',
       '--module',
@@ -84,6 +95,7 @@ try {
   );
   const meta = require(join(temp, 'game/meta/MetaWallet.js'));
   const skins = require(join(temp, 'game/skins/SkinOwnership.js'));
+  const season = require(join(temp, 'game/shop/seasonQuests.js'));
 
   // Серверный стаб: журнал wallet_ledger (v2-контракт).
   let ledger = [];
@@ -123,10 +135,17 @@ try {
     ({ seq, charge_id: chargeId, kind: 'grant', grant_type: 'rna', amount, skin_id: null, created_at: seq });
   const reversal = (seq, chargeId, amount) =>
     ({ seq, charge_id: chargeId, kind: 'reversal', grant_type: 'rna', amount, skin_id: null, created_at: seq });
+  // P1-5: события пропуска. Длительность — 30 дней в мс (как триггер воркера).
+  const PASS_MS = 30 * 24 * 3600 * 1000;
+  const passGrant = (seq, chargeId) =>
+    ({ seq, charge_id: chargeId, kind: 'grant', grant_type: 'season_pass', amount: PASS_MS, skin_id: null, created_at: seq });
+  const passReversal = (seq, chargeId, reverses) =>
+    ({ seq, charge_id: chargeId, kind: 'reversal', grant_type: 'season_pass', amount: -PASS_MS, skin_id: null, reverses_charge_id: reverses, created_at: seq });
 
   const reset = () => {
     store.clear();
     debugResetWalletSync();
+    season.debugResetSeasonQuests();
     ledger = []; serverSkins = []; serverBooster = 0; serverPass = 0; serverId = 'test-server'; failWith = 0; v1Mode = false;
   };
 
@@ -188,6 +207,10 @@ try {
   const rp1 = await sync();
   eq(rp1.applied.seasonPassUntilMs, nowP + 2_000_000, 'pass: local wins when greater');
   eq(meta.loadMeta().seasonPassUntilMs, nowP + 2_000_000, 'local pass kept');
+  // Серверный срок растёт ТОЛЬКО через событие журнала (триггер воркера
+  // пишет season_pass_until_ms лишь на вставку в ledger): голый рост
+  // значения без события — невозможный ответ, синк его игнорирует (P1-5 §в).
+  ledger = [passGrant(1, 'cp-4b')];
   serverPass = nowP + 6_000_000; // серверный больше
   const rp2 = await sync();
   eq(rp2.applied.seasonPassUntilMs, nowP + 6_000_000, 'pass: server wins when greater');
@@ -255,6 +278,156 @@ try {
   eq(rb.ok, true, 'resync on new server ok');
   eq(rb.applied.rna, 100, 'fresh sync on new server_id (cursor not reused)');
   eq(meta.loadMeta().rna, 200, 'both servers netted independently');
+
+  // --- 10. P1-5: покупка → синк → возврат → синк → пропуск неактивен ---
+  reset();
+  const base10 = Date.now();
+  const until10 = base10 + PASS_MS;
+  const refundAt10 = base10 - 1000; // триггер: откат к моменту возврата
+  meta.setSeasonPassUntilMs(until10); // локальный грант при покупке
+  ledger = [passGrant(1, 'cp10')];
+  serverPass = until10;
+  const r10a = await sync();
+  eq(r10a.ok, true, 'pass purchase sync ok');
+  eq(meta.isSeasonPassActive(), true, 'pass active after purchase sync');
+  ledger.push(passReversal(2, 'rev:op10:season_pass:', 'cp10'));
+  serverPass = refundAt10;
+  const r10b = await sync();
+  eq(r10b.ok, true, 'sync after pass refund ok');
+  eq(r10b.applied.seasonPassUntilMs, refundAt10, 'reversal: server value is authoritative');
+  eq(meta.loadMeta().seasonPassUntilMs, refundAt10, 'local pass revoked after refund');
+  eq(meta.isSeasonPassActive(), false, 'pass inactive after refund sync');
+
+  // --- 11. P1-5: возврат ДО первого синка — синк не «воскрешает» пропуск ---
+  reset();
+  const base11 = Date.now();
+  const refundAt11 = base11 - 1000;
+  // (a) локальный грант при покупке есть, синка ещё не было.
+  meta.setSeasonPassUntilMs(base11 + PASS_MS);
+  ledger = [passGrant(1, 'cp11'), passReversal(2, 'rev:op11:season_pass:', 'cp11')];
+  serverPass = refundAt11;
+  const r11a = await sync();
+  eq(r11a.ok, true, 'fresh sync with grant+reversal ok');
+  eq(meta.loadMeta().seasonPassUntilMs, refundAt11, 'fresh sync revokes locally granted pass');
+  eq(meta.isSeasonPassActive(), false, 'pass inactive after fresh sync with reversal');
+  // (b) чистое устройство: локально пропуска не было — синк его не создаёт.
+  reset();
+  ledger = [passGrant(1, 'cp11b'), passReversal(2, 'rev:op11b:season_pass:', 'cp11b')];
+  serverPass = refundAt11;
+  const r11b = await sync();
+  eq(r11b.ok, true, 'fresh-device sync ok');
+  eq(meta.isSeasonPassActive(), false, 'refunded pass not resurrected on fresh device');
+
+  // --- 12. P1-5: повторный синк после отзыва — идемпотентность ---
+  const r12 = await sync();
+  eq(r12.ok, true, 'repeat sync after revocation ok');
+  eq(meta.loadMeta().seasonPassUntilMs, refundAt11, 'repeat sync keeps revoked value');
+  eq(meta.isSeasonPassActive(), false, 'pass stays inactive');
+
+  // --- 13. P1-5: восстановление на новом устройстве — корректный срок ---
+  reset();
+  const base13 = Date.now();
+  ledger = [passGrant(1, 'cp13')];
+  serverPass = base13 + PASS_MS;
+  const r13 = await sync();
+  eq(r13.ok, true, 'new-device sync ok');
+  eq(meta.loadMeta().seasonPassUntilMs, base13 + PASS_MS, 'new device restores server term');
+  eq(meta.isSeasonPassActive(), true, 'restored pass active');
+
+  // --- 14. P1-5: сетевой сбой — локальная подписка не сокращается ---
+  failWith = 503;
+  const r14 = await sync();
+  eq(r14.ok, false, 'network failure → ok:false');
+  eq(meta.loadMeta().seasonPassUntilMs, base13 + PASS_MS, 'network failure keeps local pass');
+  eq(meta.isSeasonPassActive(), true, 'pass still active after failed sync');
+  failWith = 0;
+
+  // --- 15. P1-5: продление (+30д) — локальное значение растёт ---
+  ledger.push(passGrant(2, 'cp13-renew'));
+  serverPass = base13 + 2 * PASS_MS;
+  const r15 = await sync();
+  eq(r15.ok, true, 'renewal sync ok');
+  eq(meta.loadMeta().seasonPassUntilMs, base13 + 2 * PASS_MS, 'renewal extends local pass');
+  eq(meta.isSeasonPassActive(), true, 'renewed pass active');
+
+  // --- 16. P1-5: повторная покупка после истечения срока ---
+  reset();
+  const base16 = Date.now();
+  await sync(); // пустой свежий синк: курсор 0
+  meta.setSeasonPassUntilMs(base16 - 5000); // старый пропуск истёк
+  ledger = [passGrant(1, 'cp16')];
+  serverPass = base16 + PASS_MS;
+  const r16 = await sync();
+  eq(r16.ok, true, 'repurchase sync ok');
+  eq(meta.loadMeta().seasonPassUntilMs, base16 + PASS_MS, 'repurchase sets new term');
+  eq(meta.isSeasonPassActive(), true, 'repurchased pass active');
+
+  // --- 17. P1-5 §(в): устаревший ответ — локальное не трогается, курсор не пятится ---
+  reset();
+  const base17 = Date.now();
+  const refundAt17 = base17 - 1000;
+  ledger = [grant(1, 'cr17a', 500), passGrant(2, 'cp17')];
+  serverPass = base17 + PASS_MS;
+  await sync();
+  eq(meta.loadMeta().rna, 500, 'pre-rewind balance');
+  eq(meta.isSeasonPassActive(), true, 'pre-rewind pass active');
+  ledger.push(passReversal(3, 'rev:op17:season_pass:', 'cp17'));
+  serverPass = refundAt17;
+  await sync();
+  eq(meta.isSeasonPassActive(), false, 'pass revoked before rewind');
+  // Сервер «откатился» (снапшот/реплика): tip_seq 2 < курсора 3,
+  // а season_pass_until_ms — старое высокое значение.
+  ledger = [grant(1, 'cr17a', 500), passGrant(2, 'cp17')];
+  serverPass = base17 + PASS_MS;
+  const r17a = await sync();
+  eq(r17a.ok, true, 'stale response still ok');
+  eq(meta.loadMeta().seasonPassUntilMs, refundAt17, 'stale response does not resurrect pass');
+  eq(meta.isSeasonPassActive(), false, 'pass stays inactive after stale response');
+  const cursorRaw17 = store.get(WALLET_SEQ_KEY);
+  assert(cursorRaw17 && cursorRaw17.includes('"last_seq":3'), `cursor not rewound: ${cursorRaw17}`);
+  // Живой сервер вернулся: уже применённые события не применяются повторно.
+  ledger = [grant(1, 'cr17a', 500), passGrant(2, 'cp17'), passReversal(3, 'rev:op17:season_pass:', 'cp17')];
+  serverPass = refundAt17;
+  const r17b = await sync();
+  eq(r17b.ok, true, 'post-rewind sync ok');
+  eq(meta.loadMeta().rna, 500, 'no double RNA after rewind');
+  eq(meta.isSeasonPassActive(), false, 'pass stays inactive after post-rewind sync');
+
+  // --- 17b. P1-5 §(в): откат курсора не даёт двойного начисления РНК ---
+  reset();
+  ledger = [grant(1, 'cr17x', 500), grant(2, 'cr17y', 300)];
+  const r17x = await sync();
+  eq(r17x.applied.rna, 800, 'two grants applied');
+  ledger = [grant(1, 'cr17x', 500)]; // устаревший ответ: tip 1 < курсора 2
+  await sync();
+  ledger = [grant(1, 'cr17x', 500), grant(2, 'cr17y', 300)]; // живой сервер вернулся
+  const r17y = await sync();
+  eq(r17y.applied.rna, 0, 'no re-application after stale response');
+  eq(meta.loadMeta().rna, 800, 'balance unchanged after stale response');
+
+  // --- 18. P1-5 §(е): после отзыва claim paid-миссий недоступен, прогресс цел ---
+  reset();
+  const base18 = Date.now();
+  const until18 = base18 + PASS_MS;
+  meta.setSeasonPassUntilMs(until18);
+  ledger = [passGrant(1, 'cp18')];
+  serverPass = until18;
+  await sync();
+  season.recordSeasonRun({ kills: 2000, rnaCollected: 0, bossesDefeated: 0, mutations: 50 }, base18);
+  const claimPaid1 = season.claimSeasonMission('season.kills-2000', base18);
+  eq(claimPaid1.ok, true, 'paid claim works while pass active');
+  // Возврат пропуска → синк → отзыв.
+  ledger.push(passReversal(2, 'rev:op18:season_pass:', 'cp18'));
+  serverPass = base18 - 1000;
+  await sync();
+  eq(meta.isSeasonPassActive(base18), false, 'pass revoked before season claim check');
+  const claimPaid2 = season.claimSeasonMission('season.mutations-50', base18);
+  eq(claimPaid2.ok, false, 'paid claim blocked after revocation');
+  eq(claimPaid2.reason, 'pass-required', 'paid claim reason is pass-required');
+  const st18 = season.loadSeasonState(base18);
+  eq(st18.progress.mutations, 50, 'paid progress NOT wiped by revocation');
+  eq(st18.progress.kills, 2000, 'claimed mission progress kept');
+  assert(st18.claimed.includes('season.kills-2000'), 'earlier claim stays claimed');
 
   console.log('server-wallet-sync: all assertions passed');
 } finally {

@@ -14,10 +14,18 @@
  *    reversal (по reverses_charge_id); РНК net>0 → addRna(net) ПЛОСКО, без
  *    бонуса лаборатории; скины — union АВТОРИТЕТНОГО server.skins (не
  *    неттинг событий); бустер — max(local, server.booster_until_ms);
+ *    пропуск — local := server, если в батче есть его reversal, иначе
+ *    max(local, server) (P1-5: возврат отзывает доступ локально);
  *  - инкрементальный: гранты батча минус reversal тех же грантов (если
  *    reversal пришёл в том же батче); reversal старого гранта — только
  *    учёт (локально не вычитаем: нельзя отозвать потраченное);
- *  - события с seq<=last_seq — пропуск (идемпотентность).
+ *    исключение — пропуск: reversal в батче делает серверный срок
+ *    авторитетным (local := server);
+ *  - события с seq<=last_seq — пропуск (идемпотентность);
+ *  - устаревший ответ (tip_seq <= last_seq — снапшот/реплика старше
+ *    применённого) серверные сроки не применяет и курсор назад не
+ *    двигает: старое высокое значение не «воскрешает» отозванный пропуск,
+ *    а откат курсора не даёт двойного начисления на следующем синке.
  *
  * Детерминизм: свежий синк даёт тот же локальный итог, что и
  * инкрементальное применение тех же событий. Возврат → новое
@@ -74,7 +82,11 @@ export interface WalletSyncApplied {
   skins: string[];
   /** Итоговый срок бустера (max local/server). */
   boosterUntilMs: number;
-  /** Итоговый срок сезонного пропуска (max local/server). Монетизация v3. */
+  /**
+   * Итоговый срок сезонного пропуска (монетизация v3). P1-5: серверное
+   * значение, если в применённом батче есть reversal пропуска, иначе
+   * max(local, server); устаревший ответ оставляет локальное как есть.
+   */
   seasonPassUntilMs: number;
   /**
    * Обработано событий журнала с seq > last_seq (гранты + учтённые
@@ -406,6 +418,22 @@ export async function syncServerWallet(opts: SyncServerWalletOptions): Promise<S
     }
     applied.grantChargeIds = [...grantChargeIds];
 
+    // P1-5: сезонный пропуск — серверно-авторитетный срок. Сервер меняет
+    // season_pass_until_ms ТОЛЬКО через события журнала (триггер воркера
+    // на вставку в wallet_ledger), поэтому применённый батч — источник
+    // истины о направлении изменения: есть reversal пропуска — локальное
+    // значение ПРИСВАИВАЕТСЯ серверному (возврат отзывает доступ), иначе
+    // max(local, server) — локальная покупка до синка не сгорает.
+    // Свежий синк: батч — весь ledger ответа; инкрементальный — события
+    // seq > cursor. Устаревший ответ (tip_seq <= курсора — снапшот/реплика
+    // старше применённого) серверные сроки не применяет вообще.
+    const appliedEvents =
+      cursor == null ? resp.ledger : resp.ledger.filter((ev) => ev.seq > cursor);
+    const passReversalInBatch = appliedEvents.some(
+      (ev) => ev.kind === 'reversal' && ev.grant_type === 'season_pass'
+    );
+    const staleResponse = cursor != null && resp.tipSeq <= cursor;
+
     if (cursor == null) {
       // ---------- Свежий синк: неттинг грантов МИНУС reversal ----------
       // P0-1 (независимый review): reversal НЕЛЬЗЯ игнорировать — иначе
@@ -495,18 +523,33 @@ export async function syncServerWallet(opts: SyncServerWalletOptions): Promise<S
     if (boosterUntilMs > localBooster) setBoosterUntilMs(boosterUntilMs);
     applied.boosterUntilMs = boosterUntilMs;
 
-    // Сезонный пропуск — max(local, server), как бустер (монетизация v3).
+    // Сезонный пропуск (монетизация v3; P1-5): серверное значение
+    // авторитетно. Если в применённом батче есть reversal пропуска —
+    // локальное значение ПРИСВАИВАЕТСЯ серверному (иначе возврат не
+    // отзывает доступ: max() никогда не уменьшает срок). Без reversal —
+    // max(local, server): грант/продление/повторная покупка растут от
+    // серверных событий, а локальная покупка до синка не сгорает.
     // События season_pass в журнале не неттятся по charge_id: срок — одна
-    // абсолютная дата, серверное значение авторитетно.
+    // абсолютная дата. Устаревший ответ (tip_seq <= курсора) локальное
+    // значение не трогает: старое высокое серверное значение не должно
+    // «воскрешать» отозванный пропуск. Сетевая ошибка сюда не доходит
+    // (fail до применения) — действующая подписка не сокращается.
     const localPass = num(loadMeta().seasonPassUntilMs);
-    const seasonPassUntilMs = Math.max(localPass, resp.seasonPassUntilMs);
-    if (seasonPassUntilMs > localPass) setSeasonPassUntilMs(seasonPassUntilMs);
+    let seasonPassUntilMs = localPass;
+    if (!staleResponse) {
+      seasonPassUntilMs = passReversalInBatch
+        ? resp.seasonPassUntilMs
+        : Math.max(localPass, resp.seasonPassUntilMs);
+      if (seasonPassUntilMs !== localPass) setSeasonPassUntilMs(seasonPassUntilMs);
+    }
     applied.seasonPassUntilMs = seasonPassUntilMs;
 
     // Курсор всегда двигается на tip_seq — сервер авторитетен, что новее
-    // ничего нет (даже если событий 0).
+    // ничего нет (даже если событий 0). Назад курсор НЕ двигается:
+    // устаревший ответ (tip_seq < курсора) иначе заставил бы следующий
+    // синк переприменить уже применённые события (двойное начисление РНК).
     const users = seqMap[resp.serverId] ?? {};
-    users[userKey] = { last_seq: resp.tipSeq };
+    users[userKey] = { last_seq: Math.max(cursor ?? 0, resp.tipSeq) };
     seqMap[resp.serverId] = users;
     writeSeqMap(seqMap);
 
