@@ -560,6 +560,9 @@ async function handleInvoice(request: Request, env: Env): Promise<Response> {
   // у одиночных товаров — NULL.
   const bundleJson =
     product.bundle && product.bundle.length > 0 ? JSON.stringify(product.bundle) : null;
+  // P2-5: заказ предыдущей попытки (идемпотентный ретрай) — нужен ниже
+  // для цены восстановления (CR-R3-13).
+  let existing: DbOrderRow | null = null;
   try {
     await env.PAYMENTS_DB.prepare(SQL_INSERT_ORDER)
       .bind(
@@ -575,7 +578,6 @@ async function handleInvoice(request: Request, env: Env): Promise<Response> {
     // перевыпускаем ссылку (createInvoiceLink ниже с тем же nonce).
     // Иначе (чужой заказ, другой товар, заказ оплачен) — честный 502:
     // чужой заказ не раскрываем, оплаченный не перевыпускаем.
-    let existing: DbOrderRow | null = null;
     try {
       existing = await getOrder(env.PAYMENTS_DB, nonce);
     } catch {
@@ -590,6 +592,29 @@ async function handleInvoice(request: Request, env: Env): Promise<Response> {
       return json({ error: 'order-store-failed' }, 502);
     }
   }
+  // CR-R3-13: восстановление инвойса (идемпотентный ретрай P2-5) — по
+  // ЗАФИКСИРОВАННОЙ цене заказа (existing.amount_stars), а не текущей
+  // цене каталога: каталог мог смениться между созданием заказа и
+  // ретраем, а pre_checkout и вебхук сверяют платёж именно с
+  // order.amount_stars — инвойс по новой цене был бы отклонён.
+  // Новый заказ — по-прежнему product.stars (проверен выше как
+  // catalog-misconfigured). NULL/битая stored-цена — fail-closed 502:
+  // такой заказ всё равно нельзя оплатить (pre_checkout требует
+  // числовой amount_stars), честный путь — новый инвойс.
+  const invoiceStars = existing ? existing.amount_stars : product.stars;
+  if (
+    typeof invoiceStars !== 'number' ||
+    !Number.isSafeInteger(invoiceStars) ||
+    invoiceStars < 1 ||
+    invoiceStars > 10_000_000
+  ) {
+    logEvent('invoice_stored_price_invalid', {
+      productId,
+      nonce,
+      amountStars: existing?.amount_stars ?? null,
+    });
+    return json({ error: 'order-price-invalid' }, 502);
+  }
   let invoiceUrl: string;
   try {
     invoiceUrl = (await botApi(env.TELEGRAM_BOT_TOKEN, 'createInvoiceLink', {
@@ -598,7 +623,7 @@ async function handleInvoice(request: Request, env: Env): Promise<Response> {
       payload: nonce, // сырой nonce, не JSON (лимит Telegram 1–128 байт)
       provider_token: '', // пусто для Stars (цифровые товары)
       currency: 'XTR',
-      prices: [{ label: product.title, amount: product.stars }],
+      prices: [{ label: product.title, amount: invoiceStars }],
       // Монетизация v3: подписка — subscription_period ТОЛЬКО здесь.
       // На sendInvoice он ничего не делает (воркер его не использует).
       ...(product.subscription
