@@ -54,6 +54,18 @@ const unconfiguredSupport = buildTelegramWebhookMethod(supportUpdate,
   { ...opts, paymentSupportEmail: '' });
 assert.match(unconfiguredSupport.text, /не настроена/);
 assert.equal(unconfiguredSupport.reply_markup, undefined);
+// CR1: пустая OFELIYA_SUPPORT_EMAIL не должна блокировать fallback на
+// VITE_SUPPORT_EMAIL (?? не ловит пустую строку). Явно переданный ''
+// выше — по-прежнему unconfigured (семантика не меняется).
+process.env.OFELIYA_SUPPORT_EMAIL = '';
+process.env.VITE_SUPPORT_EMAIL = 'fallback@example.test';
+const fallbackSupport = buildTelegramWebhookMethod(supportUpdate, opts);
+assert.ok(fallbackSupport.text.includes('fallback@example.test'), 'empty OFELIYA_SUPPORT_EMAIL falls back to VITE_SUPPORT_EMAIL');
+process.env.VITE_SUPPORT_EMAIL = '';
+const bothEmptySupport = buildTelegramWebhookMethod(supportUpdate, opts);
+assert.match(bothEmptySupport.text, /не настроена/, 'both emails empty → unconfigured');
+delete process.env.OFELIYA_SUPPORT_EMAIL;
+delete process.env.VITE_SUPPORT_EMAIL;
 const helpMethod = buildTelegramWebhookMethod(
   { message: { ...supportUpdate.message, text: '/help' } }, opts);
 assert.ok(helpMethod.text.includes('/paysupport'));

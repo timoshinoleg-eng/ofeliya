@@ -4,6 +4,16 @@ function safeText(value, max = 96) {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
 }
 
+// CR1: первое НЕПУСТОЕ значение. `??` пустую строку не ловит: при
+// OFELIYA_SUPPORT_EMAIL='' fallback на VITE_SUPPORT_EMAIL не срабатывал,
+// и /paysupport отвечал «не настроена» при заданном втором адресе.
+function firstNonBlank(...values) {
+  for (const v of values) {
+    if (typeof v === 'string' && v.trim() !== '') return v;
+  }
+  return '';
+}
+
 function safeHttpsUrl(value) {
   if (typeof value !== 'string' || !value.trim()) return '';
   try {
@@ -32,7 +42,8 @@ export function parseTelegramStartParam(text) {
 export function buildTelegramWebhookMethod(update, {
   gameUrl = '', miniAppUrl = process.env.OFELIYA_TELEGRAM_GAME_URL ?? '',
   // Publish a real, operator-owned support mailbox before enabling Stars.
-  paymentSupportEmail = process.env.OFELIYA_SUPPORT_EMAIL ?? process.env.VITE_SUPPORT_EMAIL ?? '',
+  // CR1: первое НЕПУСТОЕ значение env (пустая строка не блокирует fallback).
+  paymentSupportEmail = firstNonBlank(process.env.OFELIYA_SUPPORT_EMAIL, process.env.VITE_SUPPORT_EMAIL),
 } = {}) {
   const message = update?.message;
   const chatId = message?.chat?.id;
