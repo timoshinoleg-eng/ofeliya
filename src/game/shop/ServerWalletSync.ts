@@ -69,6 +69,8 @@ export const WALLET_SYNC_WATERMARK_KEY = 'ofeliya.wallet.sync.v1';
 
 /** Таймаут запроса /api/wallet. */
 export const WALLET_FETCH_TIMEOUT_MS = 8000;
+/** P3-10: максимум страниц журнала за один синк (20 × 5000 = 100k событий). */
+export const WALLET_MAX_PAGES = 20;
 
 export interface ServerWalletState {
   purchased_rna: number;
@@ -295,6 +297,8 @@ interface WalletResponse {
   skins: string[];
   ledger: WalletLedgerEvent[];
   tipSeq: number;
+  /** P3-10: есть ещё строки за страницей (воркер отдаёт максимум 5000). */
+  truncated: boolean;
 }
 
 const fail = (error: string): SyncResult => ({ ok: false, error, reason: error });
@@ -381,6 +385,10 @@ export async function syncServerWallet(opts: SyncServerWalletOptions): Promise<S
             skins,
             ledger,
             tipSeq,
+            // Старый воркер (до P3-10) флаг не шлёт — false (ограничение:
+            // с таким воркером журнал >5000 строк по-прежнему усекается
+            // молча; сначала обновляется воркер, потом клиент — runbook).
+            truncated: d.truncated === true,
           },
         };
       } catch {
@@ -403,6 +411,31 @@ export async function syncServerWallet(opts: SyncServerWalletOptions): Promise<S
       resp = wr2.wallet;
       sinceSeq = 0;
       assumedServer = null;
+    }
+    // P3-10: пагинация усечённого журнала. Воркер отдаёт максимум 5000
+    // событий за страницу и ставит truncated:true (LIMIT 5001). Без
+    // пагинации свежий синк пользователя с >5000 строк навсегда пропускал
+    // бы середину событий, а недавний reversal пропуска — «воскрешал» бы
+    // его через max(). Страницы склеиваются в один resp.ledger (снапшот —
+    // с последней страницы, самой свежей); курсор двигается только после
+    // применения ВСЕХ страниц. Лимит 20 страниц (100k событий) — дальше
+    // fail-closed БЕЗ применения: частичный синк хуже отсутствия синка
+    // (курсор прыгнул бы мимо середины). Пустая страница при truncated
+    // или смена server_id mid-sync — тоже fail (битый воркер).
+    if (resp.truncated) {
+      const allLedger = [...resp.ledger];
+      let pages = 1;
+      while (resp.truncated) {
+        if (pages >= WALLET_MAX_PAGES) return fail('wallet-truncated');
+        const lastSeq = allLedger.reduce((m, ev) => Math.max(m, ev.seq), sinceSeq);
+        const next = await doPost(lastSeq);
+        if (next.ok === false) return next;
+        if (next.wallet.serverId !== resp.serverId) return fail('server-changed');
+        if (next.wallet.ledger.length === 0) return fail('wallet-truncated');
+        allLedger.push(...next.wallet.ledger);
+        resp = { ...next.wallet, ledger: allLedger };
+        pages += 1;
+      }
     }
     const cursor: number | null =
       assumedServer === resp.serverId ? sinceSeq : (seqMap[resp.serverId]?.[userKey]?.last_seq ?? null);

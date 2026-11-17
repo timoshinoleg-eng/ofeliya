@@ -31,7 +31,7 @@ import { createRequire } from 'node:module';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { makeD1, seedOrder } from './d1-v16-stub.mjs';
+import { makeD1, seedLedgerBulk, seedOrder } from './d1-v16-stub.mjs';
 
 const temp = mkdtempSync(join(tmpdir(), 'ofeliya-worker-round2-'));
 writeFileSync(join(temp, 'package.json'), JSON.stringify({ type: 'commonjs' }));
@@ -318,6 +318,33 @@ try {
     eq(editCalls().length, 1, 'P2-N2(c): denied-order gate re-attempts cancel on renewal');
     eq(editCalls()[0].body.telegram_payment_charge_id, 'r2-n2c-ch-6r', 'P2-N2(c): cancel targets the renewal charge');
     assert(db3.duplicatePayments.has('r2-n2c-ch-6r'), 'P2-N2(c): renewal recorded as duplicate');
+  }
+
+  // === P3-10: /api/wallet — truncated:true при >5000 строк ===
+  {
+    const db = makeD1();
+    const env = adminEnv(db);
+    const bulkRows = (n) =>
+      Array.from({ length: n }, (_, i) => ({
+        user_id: USER_ID, charge_id: `bulk-${i + 1}`, kind: 'grant', grant_type: 'rna', amount: 1,
+      }));
+    await seedLedgerBulk(db, bulkRows(5001));
+    const w1 = await postJson(handler, '/api/wallet', { initData, since_seq: 0 }, env);
+    eq(w1.status, 200, 'P3-10: wallet 200');
+    eq(w1.json?.ledger?.length, 5000, 'P3-10: first page = 5000 events');
+    eq(w1.json?.truncated, true, 'P3-10: truncated:true on first page (was: absent)');
+    eq(w1.json?.tip_seq, 5001, 'P3-10: tip_seq is the real tip');
+    const w2 = await postJson(handler, '/api/wallet', { initData, since_seq: 5000 }, env);
+    eq(w2.json?.ledger?.length, 1, 'P3-10: second page = 1 event');
+    eq(w2.json?.truncated, false, 'P3-10: truncated:false on last page');
+    eq(w2.json?.ledger?.[0]?.seq, 5001, 'P3-10: last event seq 5001');
+    // Ровно 5000 строк — не truncated.
+    const db2 = makeD1();
+    const env2 = adminEnv(db2);
+    await seedLedgerBulk(db2, bulkRows(5000));
+    const w3 = await postJson(handler, '/api/wallet', { initData, since_seq: 0 }, env2);
+    eq(w3.json?.ledger?.length, 5000, 'P3-10: exactly 5000 rows returned');
+    eq(w3.json?.truncated, false, 'P3-10: exactly 5000 rows not truncated');
   }
 
   console.log('worker-round2: all assertions passed');

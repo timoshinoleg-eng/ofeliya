@@ -105,10 +105,12 @@ try {
   let serverId = 'test-server';
   let failWith = 0;
   let v1Mode = false; // эмуляция старого воркера (без schema_version/ledger)
+  let walletCalls = 0; // P3-10: счётчик запросов /api/wallet (пагинация)
   const fetchFn = async (url, opts) => {
     assert(String(url).endsWith('/api/wallet'), 'wallet endpoint path');
     const body = JSON.parse(opts.body);
     assert(typeof body.initData === 'string' && body.initData.length > 0, 'initData sent');
+    walletCalls += 1;
     if (failWith) {
       return { ok: false, status: failWith, json: async () => null };
     }
@@ -117,6 +119,10 @@ try {
     }
     const since = typeof body.since_seq === 'number' ? body.since_seq : -1;
     const tip = ledger.reduce((m, r) => Math.max(m, r.seq), 0);
+    // P3-10: эмуляция воркера — страница максимум 5000 событий +
+    // truncated:true (LIMIT 5001 на сервере).
+    const page = ledger.filter((r) => r.seq > since);
+    const truncated = page.length > 5000;
     return {
       ok: true,
       status: 200,
@@ -124,7 +130,7 @@ try {
         ok: true, user_id: USER_ID, server_id: serverId, schema_version: 2,
         purchased_rna: 0, booster_until_ms: serverBooster, season_pass_until_ms: serverPass,
         skins: [...serverSkins],
-        ledger: ledger.filter((r) => r.seq > since), tip_seq: tip, ledger_tip: null,
+        ledger: page.slice(0, 5000), tip_seq: tip, ledger_tip: null, truncated,
       }),
     };
   };
@@ -154,6 +160,7 @@ try {
     debugResetWalletSync();
     season.debugResetSeasonQuests();
     ledger = []; serverSkins = []; serverBooster = 0; serverPass = 0; serverId = 'test-server'; failWith = 0; v1Mode = false;
+    walletCalls = 0;
   };
 
   eq(parseTelegramUserId(initData), USER_ID, 'parseTelegramUserId');
@@ -496,6 +503,34 @@ try {
   eq(st18.progress.mutations, 50, 'paid progress NOT wiped by revocation');
   eq(st18.progress.kills, 2000, 'claimed mission progress kept');
   assert(st18.claimed.includes('season.kills-2000'), 'earlier claim stays claimed');
+
+  // --- 19. P3-10: журнал >5000 строк — пагинация, reversal не теряется ---
+  reset();
+  const base19 = Date.now();
+  const until19 = base19 + PASS_MS;
+  // Локальный пропуск активен (выдан ранее); сервер его уже отозвал,
+  // но reversal — на 5001-й строке журнала (за LIMIT 5000).
+  meta.setSeasonPassUntilMs(until19);
+  const bulk = [passGrant(1, 'cp19')];
+  for (let i = 2; i <= 5000; i++) bulk.push(grant(i, `bulk19-${i}`, 1));
+  bulk.push(passReversal(5001, 'rev:op19:season_pass:', 'cp19'));
+  ledger = bulk;
+  serverPass = base19 - 1000; // отозван
+  const r19 = await sync();
+  eq(r19.ok, true, 'P3-10: paginated sync ok');
+  eq(walletCalls, 2, 'P3-10: two pages fetched');
+  eq(r19.applied.eventsApplied, 5001, 'P3-10: all 5001 events applied');
+  eq(r19.applied.rna, 4999, 'P3-10: all bulk RNA grants netted');
+  eq(meta.loadMeta().seasonPassUntilMs, base19 - 1000, 'P3-10: pass reversal not missed (was: resurrected via max)');
+  eq(meta.isSeasonPassActive(base19), false, 'P3-10: revoked pass inactive');
+  const cursorRaw19 = store.get(WALLET_SEQ_KEY);
+  assert(cursorRaw19 && cursorRaw19.includes('"last_seq":5001'), `P3-10: cursor at tip: ${cursorRaw19}`);
+  // Повторный синк: 0 событий, 1 запрос (курсор на tip).
+  walletCalls = 0;
+  const r19b = await sync();
+  eq(r19b.ok, true, 'P3-10: repeat sync ok');
+  eq(r19b.applied.eventsApplied, 0, 'P3-10: repeat sync applies nothing');
+  eq(walletCalls, 1, 'P3-10: repeat sync is one request');
 
   console.log('server-wallet-sync: all assertions passed');
 } finally {

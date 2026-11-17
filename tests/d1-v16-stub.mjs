@@ -415,10 +415,11 @@ export function makeD1() {
     }
     if (q.startsWith('SELECT id, charge_id, kind, grant_type, amount, skin_id, reverses_charge_id, created_at FROM wallet_ledger')) {
       const [userId, sinceSeq] = params;
+      // P3-10: LIMIT 5001 — 5001-я строка только детектирует усечение.
       return [...ledger.values()]
         .filter((r) => r.user_id === userId && r.id > sinceSeq)
         .sort((a, b) => a.id - b.id)
-        .slice(0, 5000)
+        .slice(0, 5001)
         .map((r) => ({ id: r.id, charge_id: r.charge_id, kind: r.kind, grant_type: r.grant_type, amount: r.amount, skin_id: r.skin_id, reverses_charge_id: r.reverses_charge_id ?? null, created_at: r.created_at }));
     }
     if (q.startsWith('SELECT MAX(id) AS tip_seq')) {
@@ -490,6 +491,32 @@ export function makeD1() {
     },
   };
   return db;
+}
+
+/**
+ * Засеять строки журнала реальным INSERT (триггер применяется, id —
+ * монотонный по порядку вставки). Для объёмных фикстур (P3-10: >5000
+ * строк) — одним батчем.
+ */
+export async function seedLedgerBulk(db, rows) {
+  const stmts = rows.map((r) =>
+    db
+      .prepare(
+        'INSERT INTO wallet_ledger (user_id, charge_id, kind, grant_type, amount, skin_id, reverses_charge_id, amount_text, created_at) VALUES (?,?,?,?,?,?,?,?,?)'
+      )
+      .bind(
+        r.user_id,
+        r.charge_id,
+        r.kind,
+        r.grant_type,
+        r.amount,
+        r.skin_id ?? null,
+        r.reverses_charge_id ?? null,
+        r.amount_text ?? null,
+        r.created_at ?? Date.now()
+      )
+  );
+  await db.batch(stmts);
 }
 
 /** Засеять заказ новым SQL (как его пишет /api/invoice v16/v17). */

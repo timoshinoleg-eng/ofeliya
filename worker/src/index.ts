@@ -79,7 +79,8 @@ import {
  *  amount — знаковый INTEGER, id — монотонный seq. Владение скинами —
  *  wallet_skins (active/reversed). Возвраты — state machine в refund_ops.
  *  POST /api/wallet → {server_id, schema_version:2, purchased_rna,
- *  booster_until_ms, skins[], ledger[] (по since_seq), tip_seq, ledger_tip}.
+ *  booster_until_ms, skins[], ledger[] (по since_seq, страница 5000,
+ *  truncated — P3-10), tip_seq, ledger_tip}.
  *  SKU: GRANTS_VERSION=2 (worker/src/grants.ts); заказ иммутабелен
  *  (amount_stars+sku_version+снапшот гранта); вебхук сверяет sp.total_amount
  *  с заказом И каталогом; границы сумм — isSafeInteger, 1..10_000_000, XTR,
@@ -184,7 +185,8 @@ import {
  *  POST /api/wallet {initData, since_seq?} — серверный кошелёк (v5, патч №16)
  *    → {ok, user_id, server_id, schema_version:2, purchased_rna,
  *    booster_until_ms, skins[] (активные из wallet_skins),
- *    ledger[] (по since_seq, seq=id, LIMIT 5000), tip_seq, ledger_tip}.
+ *    ledger[] (по since_seq, seq=id, страница 5000, truncated — P3-10),
+ *    tip_seq, ledger_tip}.
  *    purchased_rna — append-only сумма выданных сервером РНК (целые);
  *    уменьшается только reversal при refund. Клиент материализует дельту
  *    по seq (см. src/game/shop/ServerWalletSync.ts) и сам суммы не выдумывает.
@@ -1706,8 +1708,13 @@ async function handleAck(request: Request, env: Env): Promise<Response> {
  * → {ok, user_id, server_id, schema_version:2, purchased_rna,
  *    booster_until_ms, skins[] (активные из wallet_skins),
  *    ledger[] (строки с id>since_seq, seq=id, LIMIT 5000),
+ *    truncated (есть ли ещё строки за страницей — P3-10),
  *    tip_seq (MAX(id)), ledger_tip (legacy: MAX(created_at))}.
  * Клиент синкается по seq (монотонен): since_seq=0 → весь журнал.
+ * P3-10: страница — 5000 событий (LIMIT 5001 + truncated:true, если есть
+ * 5001-я строка); клиент при truncated запрашивает следующую страницу
+ * с since_seq = max seq страницы. Без флага свежий синк пользователя
+ * с >5000 строк молча пропускал середину событий.
  * server_id — env.PAYMENTS_SERVER_ID (дефолт 'ofeliya-d1-v1'): Mark держит
  * стабильным; смена значения = другой серверный источник правды.
  * POST, а не GET: initData в теле, а не в query (не светится в логах).
@@ -1741,10 +1748,14 @@ async function handleWallet(request: Request, env: Env): Promise<Response> {
       .prepare("SELECT skin_id FROM wallet_skins WHERE user_id=? AND status='active' ORDER BY granted_at ASC")
       .bind(v.userId)
       .all<{ skin_id: string }>();
-    const { results: ledgerRows } = await db
+    // P3-10: LIMIT 5001 — 5001-я строка только детектирует усечение
+    // (в ответ не попадает); truncated:true заставляет клиента
+    // допрашивать следующие страницы вместо молчаливого пропуска
+    // середины журнала.
+    const { results: ledgerRowsPlus } = await db
       .prepare(
         'SELECT id, charge_id, kind, grant_type, amount, skin_id, reverses_charge_id, created_at FROM wallet_ledger ' +
-          'WHERE user_id=? AND id>? ORDER BY id ASC LIMIT 5000'
+          'WHERE user_id=? AND id>? ORDER BY id ASC LIMIT 5001'
       )
       .bind(v.userId, sinceSeq)
       .all<{
@@ -1757,6 +1768,8 @@ async function handleWallet(request: Request, env: Env): Promise<Response> {
         reverses_charge_id: string | null;
         created_at: number;
       }>();
+    const truncated = ledgerRowsPlus.length > 5000;
+    const ledgerRows = truncated ? ledgerRowsPlus.slice(0, 5000) : ledgerRowsPlus;
     const tip = await db
       .prepare('SELECT MAX(id) AS tip_seq, MAX(created_at) AS tip_created FROM wallet_ledger WHERE user_id=?')
       .bind(v.userId)
@@ -1792,6 +1805,8 @@ async function handleWallet(request: Request, env: Env): Promise<Response> {
         reverses_charge_id: typeof r.reverses_charge_id === 'string' ? r.reverses_charge_id : null,
         created_at: r.created_at,
       })),
+      // P3-10: есть ещё строки за страницей — клиент пагинирует.
+      truncated,
       tip_seq: typeof tip?.tip_seq === 'number' ? tip.tip_seq : 0,
       // ledger_tip — legacy для клиентов до патча №16 (watermark по created_at).
       ledger_tip: typeof tip?.tip_created === 'number' ? tip.tip_created : null,
