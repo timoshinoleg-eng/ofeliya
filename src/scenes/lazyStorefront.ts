@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import { showLazyLoadFailure } from '../ui/lazyLoadFailure';
 
 /**
  * P-07: ленивая загрузка StorefrontScene.
@@ -14,16 +15,24 @@ type StorefrontSceneModule = typeof import('./StorefrontScene');
 let storefrontModulePromise: Promise<StorefrontSceneModule> | null = null;
 
 export function loadStorefrontScene(): Promise<StorefrontSceneModule> {
-  storefrontModulePromise ??= import('./StorefrontScene');
+  storefrontModulePromise ??= import('./StorefrontScene').catch((error: unknown) => {
+    storefrontModulePromise = null;
+    throw error;
+  });
   return storefrontModulePromise;
 }
 
 /** Загрузить (при необходимости) зарегистрировать и запустить витрину. */
-export function startStorefrontLazy(scene: Phaser.Scene): void {
+export function startStorefrontLazy(scene: Phaser.Scene, isCurrent = () => scene.scene.isActive()): void {
+  let sceneAlive = true;
+  const onShutdown = (): void => { sceneAlive = false; };
+  scene.events.once('shutdown', onShutdown);
   void loadStorefrontScene()
     .then(({ StorefrontScene }) => {
+      if (!sceneAlive || !isCurrent()) return;
       if (!scene.scene.get('Storefront')) scene.scene.add('Storefront', StorefrontScene);
       scene.scene.start('Storefront');
     })
-    .catch(() => undefined);
+    .catch(() => { if (sceneAlive && isCurrent()) showLazyLoadFailure(); })
+    .finally(() => scene.events.off('shutdown', onShutdown));
 }

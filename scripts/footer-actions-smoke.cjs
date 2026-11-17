@@ -127,17 +127,17 @@ async function audioLabel(page, name) {
             assert.ok(onLabel && onLabel.endsWith(': вкл'), 'the switch never returned from the off extreme ' + t.name + ' (' + onLabel + ')');
             check(await geometry(p), viewport);
           } else if (t.name === 'ofeliya-menu-nav-rating') {
-            assert.equal(await p.evaluate(() => !!window.__game.scene.getScene('Menu').socialHub), true);
+            await p.waitForFunction(() => !!window.__game.scene.getScene('Menu').socialHub, null, { timeout: 20000 });
           } else if (t.name === 'ofeliya-menu-nav-tasks') {
-            assert.equal(await p.evaluate(() => !!window.__game.scene.getScene('Menu').questBoard), true);
+            await p.waitForFunction(() => !!window.__game.scene.getScene('Menu').questBoard, null, { timeout: 20000 });
           } else if (t.name === 'ofeliya-menu-nav-codex') {
             assert.equal(await p.evaluate(() => !!window.__game.scene.getScene('Menu').codexOverlay), true);
           } else if (t.name === 'ofeliya-menu-nav-collection') {
             assert.equal(await p.evaluate(() => !!window.__game.scene.getScene('Menu').collectionBoard), true);
           } else if (t.name === 'ofeliya-menu-nav-lab') {
-            assert.equal(await p.evaluate(() => !!window.__game.scene.getScene('Menu').labPanel), true);
+            await p.waitForFunction(() => !!window.__game.scene.getScene('Menu').labPanel, null, { timeout: 20000 });
           } else if (t.name === 'ofeliya-menu-nav-strains') {
-            assert.equal(await p.evaluate(() => !!window.__game.scene.getScene('Menu').skinGallery), true);
+            await p.waitForFunction(() => !!window.__game.scene.getScene('Menu').skinGallery, null, { timeout: 20000 });
           } else if (t.name === 'ofeliya-menu-diagnostics') {
             for (let n = 0; n < 4; n++) await p.touchscreen.tap(t.x + t.w / 2, t.y + t.h - 2);
             assert.equal(await p.locator('#ofeliya-startup-trace').count(), 1, 'five diagnostic taps reveal the trace');

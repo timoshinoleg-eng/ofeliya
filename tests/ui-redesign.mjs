@@ -748,7 +748,11 @@ try {
         else if (name === 'codex') menu.showCodex();
         else menu.showCollectionBoard();
       }, target);
-      await metaPage.waitForTimeout(350);
+      await metaPage.waitForFunction((name) => {
+        const menu = window.__game.scene.getScene('Menu');
+        const expected = name === 'tasks' ? 'ofeliya-quests' : name === 'codex' ? 'ofeliya-codex' : 'ofeliya-collection';
+        return menu.children.list.some((object) => object.name === expected);
+      }, target, { timeout: 20000 });
       return metaPage.evaluate(() => {
         const menu = window.__game.scene.getScene('Menu');
         const board = menu.children.list.find((o) => o.name === 'ofeliya-quests')
@@ -1082,7 +1086,10 @@ try {
     await ratingPage.goto(base, { waitUntil: 'domcontentloaded' });
     await ratingPage.waitForFunction(() => window.__game?.scene.isActive('Menu'), null, { timeout: 20000 });
     await ratingPage.evaluate(() => window.__game.scene.getScene('Menu').showSocialHub());
-    await ratingPage.waitForTimeout(900);
+    await ratingPage.waitForFunction(() => {
+      const menu = window.__game.scene.getScene('Menu');
+      return menu.children.list.some((object) => object.name === 'ofeliya-social-hub');
+    }, null, { timeout: 20000 });
     const rating = await ratingPage.evaluate(() => {
       const menu = window.__game.scene.getScene('Menu');
       const hub = menu.children.list.find((o) => o.name === 'ofeliya-social-hub');

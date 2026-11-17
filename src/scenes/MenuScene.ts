@@ -36,6 +36,7 @@ import { clearDailyIntent, launchDailyRun } from '../game/DailyRunIntent';
 import { FeatureFlags } from '../game/FeatureFlags';
 import { isStorefrontVisible } from '../game/shop/storefrontVisibility';
 import { loadStorefrontScene, startStorefrontLazy } from './lazyStorefront';
+import { showLazyLoadFailure } from '../ui/lazyLoadFailure';
 import { getDailyStatus } from '../game/daily/DailyCalendar';
 import { showDailyModal, showMetaToast } from '../ui/RetentionOverlays';
 import { showLegalOverlay } from '../legal/LegalOverlay';
@@ -83,6 +84,7 @@ export class MenuScene extends Phaser.Scene {
   private questBoardLoading = false;
   private labPanelLoading = false;
   private skinGalleryLoading = false;
+  private menuGeneration = 0;
   private founderBadge: Phaser.GameObjects.Container | null = null;
   private profileLoadGeneration = 0;
 
@@ -90,7 +92,17 @@ export class MenuScene extends Phaser.Scene {
     super('Menu');
   }
 
+  private metaSurfaceLoading(): boolean {
+    return this.storefrontLoading || this.socialHubLoading || this.questBoardLoading ||
+      this.labPanelLoading || this.skinGalleryLoading;
+  }
+
+  private isCurrentMenu(generation: number): boolean {
+    return this.menuGeneration === generation && this.scene.isActive();
+  }
+
   create(): void {
+    this.menuGeneration += 1;
     if (clientFlags().collection.enabled) clientCollection().visit();
     StartupTrace.mark('menu.create.start');
     StartupTrace.mark('menu.cinematicTextures.start');
@@ -122,7 +134,7 @@ export class MenuScene extends Phaser.Scene {
     Sfx.stopMusic();
     PlatformBridge.setBackHandler(null);
     const keyboard = new MenuKeyboard(this, {
-      blocked: () => Boolean(this.collectionBoard || this.questBoard || this.codexOverlay || this.socialHub || this.labPanel || this.skinGallery),
+      blocked: () => this.metaSurfaceLoading() || Boolean(this.collectionBoard || this.questBoard || this.codexOverlay || this.socialHub || this.labPanel || this.skinGallery),
       escape: () => {
         if (this.collectionBoard) { this.collectionBoard.destroy(); return true; }
         if (this.questBoard) { this.questBoard.destroy(); return true; }
@@ -1114,30 +1126,39 @@ export class MenuScene extends Phaser.Scene {
         .setDepth(8);
       shopBg.on('pointerdown', () => shopBg.setAlpha(0.6));
       shopBg.on('pointerup', () => {
-        if (this.storefrontLoading) return;
+        if (this.metaSurfaceLoading() || this.collectionBoard || this.questBoard || this.codexOverlay || this.socialHub || this.labPanel || this.skinGallery) return;
         Sfx.play('click');
         PlatformBridge.haptic('light');
         // P-07: the Storefront scene and the whole payment chain load on
         // demand; the chip stays dimmed until the chunk arrives (R-02 guard
         // against rapid re-tap races while the import is in flight).
         this.storefrontLoading = true;
+        const generation = this.menuGeneration;
         shopBg.setAlpha(0.45);
         loadStorefrontScene()
           .then(() => {
-            if (!this.scene.isActive()) return;
-            startStorefrontLazy(this);
+            if (!this.isCurrentMenu(generation)) return;
+            startStorefrontLazy(this, () => this.isCurrentMenu(generation));
           })
           .catch(() => {
+            if (!this.isCurrentMenu(generation)) return;
             if (shopBg.scene) shopBg.setAlpha(1);
+            showLazyLoadFailure();
           })
           .finally(() => {
-            this.storefrontLoading = false;
+            if (this.menuGeneration === generation) this.storefrontLoading = false;
           });
       });
     }
 
     this.scale.on('resize', this.onResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.menuGeneration += 1;
+      this.storefrontLoading = false;
+      this.socialHubLoading = false;
+      this.questBoardLoading = false;
+      this.labPanelLoading = false;
+      this.skinGalleryLoading = false;
       this.scale.off('resize', this.onResize, this);
       this.collectionBoard?.destroy();this.collectionBoard=null;
       this.questBoard?.destroy();
@@ -1190,14 +1211,15 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private showSocialHub(): void {
-    if (this.socialHub || this.socialHubLoading || this.codexOverlay || this.questBoard || this.collectionBoard) return;
+    if (this.metaSurfaceLoading() || this.socialHub || this.codexOverlay || this.questBoard || this.collectionBoard || this.labPanel || this.skinGallery) return;
     // P-07: lazy chunk + in-flight guard (R-02) — a fast second tap is a no-op
     // until the module resolves; if the player left the menu meanwhile, the
     // overlay is not constructed at all.
     this.socialHubLoading = true;
+    const generation = this.menuGeneration;
     void import('../ui/SocialHub')
       .then(({ SocialHub }) => {
-        if (!this.scene.isActive()) return;
+        if (!this.isCurrentMenu(generation)) return;
         this.socialHub = new SocialHub(
           this,
           PlatformBridge,
@@ -1218,9 +1240,9 @@ export class MenuScene extends Phaser.Scene {
           }
         );
       })
-      .catch(() => undefined)
+      .catch(() => { if (this.isCurrentMenu(generation)) showLazyLoadFailure(); })
       .finally(() => {
-        this.socialHubLoading = false;
+        if (this.menuGeneration === generation) this.socialHubLoading = false;
       });
   }
 
@@ -1252,25 +1274,26 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private showQuestBoard(): void {
-    if (this.questBoard || this.questBoardLoading || this.codexOverlay || this.socialHub || this.collectionBoard) return;
+    if (this.metaSurfaceLoading() || this.questBoard || this.codexOverlay || this.socialHub || this.collectionBoard || this.labPanel || this.skinGallery) return;
     this.questBoardLoading = true;
+    const generation = this.menuGeneration;
     void import('../ui/QuestBoard')
       .then(({ QuestBoard }) => {
-        if (!this.scene.isActive()) return;
+        if (!this.isCurrentMenu(generation)) return;
         this.questBoard = new QuestBoard(
           this,
           () => { this.questBoard = null; },
           (target) => this.openMetaSurface(target)
         );
       })
-      .catch(() => undefined)
+      .catch(() => { if (this.isCurrentMenu(generation)) showLazyLoadFailure(); })
       .finally(() => {
-        this.questBoardLoading = false;
+        if (this.menuGeneration === generation) this.questBoardLoading = false;
       });
   }
 
   private showCollectionBoard(): void {
-    if (this.collectionBoard || this.codexOverlay || this.socialHub || this.questBoard) return;
+    if (this.metaSurfaceLoading() || this.collectionBoard || this.codexOverlay || this.socialHub || this.questBoard || this.labPanel || this.skinGallery) return;
     if (!clientFlags().collection.enabled) return;
     this.collectionBoard = new CollectionBoard(
       this,
@@ -1285,17 +1308,18 @@ export class MenuScene extends Phaser.Scene {
    * visible cell whose tap does nothing.
    */
   private showLab(): void {
-    if (this.labPanel || this.labPanelLoading || this.codexOverlay || this.socialHub || this.questBoard || this.collectionBoard || this.skinGallery) return;
+    if (this.metaSurfaceLoading() || this.labPanel || this.codexOverlay || this.socialHub || this.questBoard || this.collectionBoard || this.skinGallery) return;
     if (!FeatureFlags.get('economy.lab')) return;
     this.labPanelLoading = true;
+    const generation = this.menuGeneration;
     void import('../ui/LabOverlays')
       .then(({ showLabPanel }) => {
-        if (!this.scene.isActive()) return;
+        if (!this.isCurrentMenu(generation)) return;
         this.labPanel = showLabPanel(this, () => { this.labPanel = null; });
       })
-      .catch(() => undefined)
+      .catch(() => { if (this.isCurrentMenu(generation)) showLazyLoadFailure(); })
       .finally(() => {
-        this.labPanelLoading = false;
+        if (this.menuGeneration === generation) this.labPanelLoading = false;
       });
   }
 
@@ -1305,22 +1329,23 @@ export class MenuScene extends Phaser.Scene {
    * untouched. Gated by skins.gallery like the lab is gated by economy.lab.
    */
   private showSkins(): void {
-    if (this.skinGallery || this.skinGalleryLoading || this.codexOverlay || this.socialHub || this.questBoard || this.collectionBoard || this.labPanel) return;
+    if (this.metaSurfaceLoading() || this.skinGallery || this.codexOverlay || this.socialHub || this.questBoard || this.collectionBoard || this.labPanel) return;
     if (!FeatureFlags.get('skins.gallery')) return;
     this.skinGalleryLoading = true;
+    const generation = this.menuGeneration;
     void import('../ui/SkinGallery')
       .then(({ showSkinGallery }) => {
-        if (!this.scene.isActive()) return;
+        if (!this.isCurrentMenu(generation)) return;
         this.skinGallery = showSkinGallery(this, () => { this.skinGallery = null; });
       })
-      .catch(() => undefined)
+      .catch(() => { if (this.isCurrentMenu(generation)) showLazyLoadFailure(); })
       .finally(() => {
-        this.skinGalleryLoading = false;
+        if (this.menuGeneration === generation) this.skinGalleryLoading = false;
       });
   }
 
   private showCodex(): void {
-    if (this.codexOverlay || this.socialHub || this.questBoard || this.collectionBoard) return;
+    if (this.metaSurfaceLoading() || this.codexOverlay || this.socialHub || this.questBoard || this.collectionBoard || this.labPanel || this.skinGallery) return;
 
     const W = this.scale.width;
     const H = this.scale.height;
