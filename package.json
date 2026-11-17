@@ -64,6 +64,7 @@
     "test:worker-season-pass": "node tests/worker-season-pass.mjs",
     "test:worker-bundles": "node tests/worker-bundles.mjs",
     "test:worker-p1": "node tests/worker-p1-worker.mjs",
+    "test:worker-round2": "node tests/worker-round2.mjs",
     "test:check-schema": "node --test worker/scripts/check-schema.test.mjs",
     "check-schema": "node worker/scripts/check-schema.mjs",
     "test:invite-collab": "node tests/invite-collab.mjs",

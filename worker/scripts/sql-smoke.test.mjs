@@ -203,6 +203,11 @@ test('grant season_pass: max(cur, created_at) + мс, время не сгора
   grant(db, { userId: 9, chargeId: 'p1', grantType: 'season_pass', amount: month, skinId: null, createdAt: 1000 });
   assert.equal(wallet(db, 9).season_pass_until_ms, 1000 + month);
   // Продление позже: продлевает от текущего срока, а не от now.
+  // P2-N1: второй season_pass-грант тому же пользователю при активном
+  // пропуске — только продление (derived nonce с ':'), иначе guard
+  // RAISE(ABORT). Здесь моделируем именно продление: payments-строка
+  // с derived nonce, как её пишет recordSubscriptionRenewal.
+  pay(db, { chargeId: 'p2', nonce: 'nonce-p1:r:p2', userId: 9, createdAt: 2000 });
   grant(db, { userId: 9, chargeId: 'p2', grantType: 'season_pass', amount: month, skinId: null, createdAt: 2000 });
   assert.equal(wallet(db, 9).season_pass_until_ms, 1000 + 2 * month);
   // Бустер и пропуск независимы.
@@ -343,6 +348,122 @@ test('duplicate_payments: status state machine (P1-1)', () => {
   const fin = db.prepare(SQL_UPDATE_DUPLICATE_REFUNDED_FROM_ANY).run('dup-1');
   assert.equal(fin.changes, 1);
   assert.equal(status(), 'refunded');
+  db.close();
+});
+
+/**
+ * P2-N1 (раунд 2): конкурентная двойная подписка. JS-проверка активного
+ * пропуска в recordSuccessfulPayment и грант-батч — отдельные вызовы D1:
+ * два параллельных платежа второй подписки оба читают pass=0 и оба
+ * выдают грант (аудит воспроизвёл интерливингом: payments=2, pass=+60д).
+ * Guard — BEFORE INSERT триггер trg_wallet_ledger_season_pass_guard
+ * (worker/schema.sql + worker/migration-17.sql): RAISE(ABORT) для
+ * НЕ-продлённых season_pass-грантов при активном пропуске. Продление
+ * отличается по payments.nonce: derived `${nonce}:r:${chargeId}` содержит
+ * ':', обычный nonce — нет (NONCE_RE). INSERT payments идёт в батче
+ * РАНЬШЕ INSERT ledger (recordSuccessfulPayment / recordSubscriptionRenewal).
+ */
+function pay(db, { chargeId, nonce, userId, createdAt }) {
+  db.prepare(
+    'INSERT INTO payments (charge_id, user_id, product_id, amount, currency, status, nonce, sku_version, created_at, fulfilled_at) ' +
+      "VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(charge_id) DO NOTHING"
+  ).run(chargeId, userId, 'season-pass.basic-30d', 250, 'XTR', 'paid', nonce, 4, createdAt, null);
+}
+
+test('guard: второй первый платёж пропуска при активном — ABORT, батч откатывается (P2-N1)', () => {
+  const db = freshDb();
+  const month = 30 * 86_400_000;
+  const now = Date.now();
+  // Первый платёж: грант применён.
+  pay(db, { chargeId: 'n1-ch-1', nonce: 'n1-nonce-1', userId: 21, createdAt: now });
+  grant(db, { userId: 21, chargeId: 'n1-ch-1', grantType: 'season_pass', amount: month, skinId: null, createdAt: now });
+  assert.equal(wallet(db, 21).season_pass_until_ms, now + month);
+  // Второй первый платёж (другой заказ, другой charge_id) при активном
+  // пропуске — production-батч в одной транзакции: платёж + грант.
+  // Guard обязан уронить батч целиком (платёж тоже откатывается).
+  db.exec('BEGIN IMMEDIATE');
+  let aborted = null;
+  try {
+    pay(db, { chargeId: 'n1-ch-2', nonce: 'n1-nonce-2', userId: 21, createdAt: now });
+    grant(db, { userId: 21, chargeId: 'n1-ch-2', grantType: 'season_pass', amount: month, skinId: null, createdAt: now });
+    db.exec('COMMIT');
+  } catch (e) {
+    aborted = e;
+    db.exec('ROLLBACK');
+  }
+  assert.ok(aborted, 'second first-payment grant must ABORT while pass is active');
+  assert.match(String(aborted.message), /already active/, 'guard error message');
+  assert.equal(wallet(db, 21).season_pass_until_ms, now + month, 'pass not extended by denied grant');
+  assert.equal(
+    db.prepare('SELECT COUNT(*) AS c FROM payments WHERE charge_id=?').get('n1-ch-2').c,
+    0,
+    'batch rolled back: no payment row for denied grant'
+  );
+  assert.equal(
+    db.prepare("SELECT COUNT(*) AS c FROM wallet_ledger WHERE grant_type='season_pass' AND user_id=21").get().c,
+    1,
+    'exactly one season_pass grant row'
+  );
+  db.close();
+});
+
+test('guard: продление (derived nonce) при активном пропуске — разрешено (P2-N1)', () => {
+  const db = freshDb();
+  const month = 30 * 86_400_000;
+  const now = Date.now();
+  pay(db, { chargeId: 'n1r-ch-1', nonce: 'n1r-nonce-1', userId: 22, createdAt: now });
+  grant(db, { userId: 22, chargeId: 'n1r-ch-1', grantType: 'season_pass', amount: month, skinId: null, createdAt: now });
+  // Продление: тот же nonce с суффиксом ':r:<chargeId>' (recordSubscriptionRenewal).
+  pay(db, { chargeId: 'n1r-ch-1r', nonce: 'n1r-nonce-1:r:n1r-ch-1r', userId: 22, createdAt: now });
+  const res = grant(db, { userId: 22, chargeId: 'n1r-ch-1r', grantType: 'season_pass', amount: month, skinId: null, createdAt: now });
+  assert.equal(res.changes, 1, 'renewal grant inserted');
+  assert.equal(wallet(db, 22).season_pass_until_ms, now + 2 * month, 'renewal extends the pass');
+  db.close();
+});
+
+test('guard: дубликатная доставка первого гранта — no-op, не ABORT (P2-N1)', () => {
+  const db = freshDb();
+  const month = 30 * 86_400_000;
+  const now = Date.now();
+  pay(db, { chargeId: 'n1d-ch-1', nonce: 'n1d-nonce-1', userId: 23, createdAt: now });
+  grant(db, { userId: 23, chargeId: 'n1d-ch-1', grantType: 'season_pass', amount: month, skinId: null, createdAt: now });
+  // Повторная доставка того же charge_id: ON CONFLICT DO NOTHING.
+  // BEFORE-триггер срабатывает и для конфликтующей строки — guard обязан
+  // пропускать уже существующий ключ, иначе ретрай Telegram ушёл бы в
+  // вечный 503 вместо no-op.
+  const dup = grant(db, { userId: 23, chargeId: 'n1d-ch-1', grantType: 'season_pass', amount: month, skinId: null, createdAt: now });
+  assert.equal(dup.changes, 0, 'duplicate delivery is a no-op');
+  assert.equal(wallet(db, 23).season_pass_until_ms, now + month, 'pass not extended by duplicate');
+  db.close();
+});
+
+test('guard: после истечения пропуска новый первый платёж — разрешён (P2-N1)', () => {
+  const db = freshDb();
+  const month = 30 * 86_400_000;
+  const now = Date.now();
+  pay(db, { chargeId: 'n1e-ch-1', nonce: 'n1e-nonce-1', userId: 24, createdAt: now });
+  grant(db, { userId: 24, chargeId: 'n1e-ch-1', grantType: 'season_pass', amount: month, skinId: null, createdAt: now });
+  // Покупка после истечения (created_at гранта позже срока пропуска).
+  const later = now + 31 * 86_400_000;
+  pay(db, { chargeId: 'n1e-ch-2', nonce: 'n1e-nonce-2', userId: 24, createdAt: later });
+  const res = grant(db, { userId: 24, chargeId: 'n1e-ch-2', grantType: 'season_pass', amount: month, skinId: null, createdAt: later });
+  assert.equal(res.changes, 1, 'post-expiry first payment granted');
+  assert.equal(wallet(db, 24).season_pass_until_ms, later + month);
+  db.close();
+});
+
+test('guard: reversal пропуска и гранты других видов не блокируются (P2-N1)', () => {
+  const db = freshDb();
+  const month = 30 * 86_400_000;
+  const now = Date.now();
+  pay(db, { chargeId: 'n1x-ch-1', nonce: 'n1x-nonce-1', userId: 25, createdAt: now });
+  grant(db, { userId: 25, chargeId: 'n1x-ch-1', grantType: 'season_pass', amount: month, skinId: null, createdAt: now });
+  // РНК-грант при активном пропуске — не трогается guard'ом.
+  const rna = grant(db, { userId: 25, chargeId: 'n1x-rna', grantType: 'rna', amount: 500, skinId: null, createdAt: now });
+  assert.equal(rna.changes, 1, 'rna grant unaffected by the guard');
+  // Reversal пропуска — не грант, guard не применяется.
+  reversal(db, { op: 'n1x-op', origChargeId: 'n1x-ch-1', createdAt: now });
+  assert.equal(wallet(db, 25).season_pass_until_ms, now, 'reversal applied (floor: moment of return)');
   db.close();
 });
 

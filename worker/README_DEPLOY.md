@@ -458,7 +458,9 @@ node worker/scripts/reconcile.mjs --dump /tmp/payments.json --ledger /tmp/ledger
 `duplicate_nonce`/`duplicate_charge_id`, `stuck_refund_op` (`'requested'`
 старше порога), `stale_pending_order`, `duplicate_without_refund`
 (дубликат `'pending'` старше порога без завершённого возврата — P1-1),
-`grant_without_payment`, `reversal_without_grant`, `telegram_without_d1`
+`grant_without_payment`, `reversal_without_grant`,
+`overlapping_season_pass_grants` (первый платёж пропуска при активном —
+P2-N1, guard должен был не дать), `telegram_without_d1`
 (платёж Telegram без D1 — главный кейс; дубликаты из `duplicate_payments`
 считаются «в D1», а не потерянными), `d1_without_telegram` (warning:
 история Telegram может быть неполной). Тест со стабом Telegram HTTP:
@@ -562,8 +564,10 @@ wrangler d1 execute ofeliya-payments --remote --file=worker/migration-17.sql
 # 4. ГЕЙТ РЕАЛЬНОЙ D1 — только чтение, СТОП при красном:
 node worker/scripts/check-schema.mjs --print-commands
 # → выполнить выданные команды и сверить: триггер на месте, тело
-#    содержит ветки season_pass, UNIQUE журнала — (charge_id,
-#    grant_type, skin_id), колонки v17 на месте.
+#    содержит ветки season_pass, guard-триггер
+#    trg_wallet_ledger_season_pass_guard на месте (P2-N1 — без него
+#    конкурентная двойная подписка снова возможна), UNIQUE журнала —
+#    (charge_id, grant_type, skin_id), колонки v17 на месте.
 # 5. Деплой воркера v17 — ТОЛЬКО после зелёного гейта.
 ```
 
@@ -588,7 +592,8 @@ node worker/scripts/check-schema.mjs --print-commands
 3. В остальных случаях — доработать недостающие шаги вручную по таблице
    шагов в шапке миграции (шаги 0/2/5 идемпотентны — безопасно
    повторить; шаг 1 — пропустить уже добавленные колонки; шаг 4 —
-   пересоздать триггер целиком), затем прогнать гейт шага 4.
+   пересоздать триггер целиком, шаг 4b — guard-триггер P2-N1),
+   затем прогнать гейт шага 4.
 4. При ЛЮБЫХ сомнениях — восстановить из снапшота и начать заново:
    файл рассчитан на один прогон на чистой v16.
 

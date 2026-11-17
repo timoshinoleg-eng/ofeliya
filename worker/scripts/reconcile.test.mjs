@@ -167,6 +167,39 @@ test('дубликаты (P1-1/P1-2): stale pending без возврата — 
   assert.ok(findings[0].detail.includes('dup-stale'));
 });
 
+test('P2-N1: перекрывающиеся season_pass-гранты флагятся; продления и repurchase — нет', async () => {
+  const MONTH = 30 * 86_400_000;
+  const dump = writeTmp('dump.json', {
+    payments: [
+      // user 1: два первых платежа при активном пропуске (гонка до guard).
+      { charge_id: 'sp-1a', user_id: 1, product_id: 'season-pass.basic-30d', amount: 250, currency: 'XTR', status: 'paid', nonce: 'sp-n1', created_at: NOW },
+      { charge_id: 'sp-1b', user_id: 1, product_id: 'season-pass.basic-30d', amount: 250, currency: 'XTR', status: 'paid', nonce: 'sp-n2', created_at: NOW },
+      // user 2: первая оплата + продление (derived nonce) — легитимно.
+      { charge_id: 'sp-2a', user_id: 2, product_id: 'season-pass.basic-30d', amount: 250, currency: 'XTR', status: 'paid', nonce: 'sp-n3', created_at: NOW },
+      { charge_id: 'sp-2r', user_id: 2, product_id: 'season-pass.basic-30d', amount: 250, currency: 'XTR', status: 'paid', nonce: 'sp-n3:r:sp-2r', created_at: NOW },
+      // user 3: repurchase после истечения — легитимно.
+      { charge_id: 'sp-3a', user_id: 3, product_id: 'season-pass.basic-30d', amount: 250, currency: 'XTR', status: 'paid', nonce: 'sp-n4', created_at: NOW },
+      { charge_id: 'sp-3b', user_id: 3, product_id: 'season-pass.basic-30d', amount: 250, currency: 'XTR', status: 'paid', nonce: 'sp-n5', created_at: NOW + MONTH + 1000 },
+    ],
+    orders: [],
+    refund_ops: [],
+  });
+  const ledger = writeTmp('ledger.json', [
+    { id: 1, user_id: 1, charge_id: 'sp-1a', kind: 'grant', grant_type: 'season_pass', amount: MONTH, skin_id: null, reverses_charge_id: null, created_at: NOW },
+    { id: 2, user_id: 1, charge_id: 'sp-1b', kind: 'grant', grant_type: 'season_pass', amount: MONTH, skin_id: null, reverses_charge_id: null, created_at: NOW },
+    { id: 3, user_id: 2, charge_id: 'sp-2a', kind: 'grant', grant_type: 'season_pass', amount: MONTH, skin_id: null, reverses_charge_id: null, created_at: NOW },
+    { id: 4, user_id: 2, charge_id: 'sp-2r', kind: 'grant', grant_type: 'season_pass', amount: MONTH, skin_id: null, reverses_charge_id: null, created_at: NOW },
+    { id: 5, user_id: 3, charge_id: 'sp-3a', kind: 'grant', grant_type: 'season_pass', amount: MONTH, skin_id: null, reverses_charge_id: null, created_at: NOW },
+    { id: 6, user_id: 3, charge_id: 'sp-3b', kind: 'grant', grant_type: 'season_pass', amount: MONTH, skin_id: null, reverses_charge_id: null, created_at: NOW + MONTH + 1000 },
+  ]);
+  const { findings } = await reconcile({ dump, ledger, stuckMin: 60, now: NOW });
+  assert.deepEqual(findings.map((f) => f.code), ['overlapping_season_pass_grants']);
+  assert.equal(findings[0].severity, 'error');
+  assert.ok(findings[0].detail.includes('sp-1b'), 'flags the second first-payment grant');
+  assert.ok(!findings[0].detail.includes('sp-2r'), 'renewal not flagged');
+  assert.ok(!findings[0].detail.includes('sp-3b'), 'post-expiry repurchase not flagged');
+});
+
 test('кросс-чек Telegram: дубликат считается «в D1»', async () => {
   const fetchFn = async () => ({
     ok: true,

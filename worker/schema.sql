@@ -370,3 +370,52 @@ BEGIN
      AND status = 'active'
      AND NEW.kind = 'reversal' AND NEW.grant_type = 'skin';
 END;
+
+-- Guard конкурентной двойной подписки (P2-N1, раунд 2). JS-проверка
+-- активного пропуска в recordSuccessfulPayment и грант-батч — отдельные
+-- вызовы D1: два параллельных платежа второй подписки оба читают pass=0
+-- и оба выдают грант (аудит воспроизвёл интерливингом: payments=2,
+-- pass=+60д). Этот BEFORE INSERT триггер — атомарный слой внутри батча:
+-- RAISE(ABORT) роняет statement, а db.batch() откатывает весь батч
+-- (платёж тоже не записывается); вебхук отвечает 503, ретрай Telegram
+-- уходит в denied-путь (JS-проверка к тому моменту видит активный
+-- пропуск → duplicate_payments + заказ 'denied').
+--
+-- Различение продления от первой оплаты — по payments.nonce: продление
+-- пишется с ПРОИЗВОДНЫМ nonce `${nonce}:r:${chargeId}` (содержит ':'),
+-- обычный nonce ':' не содержит (NONCE_RE в worker/src/index.ts).
+-- INSERT payments идёт в батче РАНЬШЕ INSERT ledger (и в
+-- recordSuccessfulPayment, и в recordSubscriptionRenewal), поэтому
+-- payments-строка уже видна триггеру внутри той же транзакции.
+-- Прямые вставки в журнал без payments-строки (только тесты/тулинг)
+-- трактуются как первая оплата (fail-closed).
+--
+-- Два обхода, без которых guard ломает легитимные пути:
+--  - дубликатная доставка (тот же charge_id/grant_type/skin_id):
+--    BEFORE-триггер срабатывает и для конфликтующей строки, поэтому
+--    уже существующий ключ пропускается — иначе ретрай ушёл бы в вечный
+--    503 вместо ON CONFLICT DO NOTHING;
+--  - «активен» — относительно NEW.created_at (момент записи гранта),
+--    а не wall-clock: триггер не знает Date.now() воркера, а created_at
+--    — это и есть момент платежа.
+-- Reversal и другие grant_type guard не трогает (условие — только
+-- kind='grant' AND grant_type='season_pass').
+CREATE TRIGGER IF NOT EXISTS trg_wallet_ledger_season_pass_guard
+BEFORE INSERT ON wallet_ledger
+BEGIN
+  SELECT RAISE(ABORT, 'season pass already active for user')
+   WHERE NEW.kind = 'grant' AND NEW.grant_type = 'season_pass'
+     AND NOT EXISTS (
+       SELECT 1 FROM wallet_ledger
+        WHERE charge_id = NEW.charge_id AND grant_type = NEW.grant_type
+          AND skin_id = COALESCE(NEW.skin_id, '')
+     )
+     AND EXISTS (
+       SELECT 1 FROM wallets
+        WHERE user_id = NEW.user_id AND season_pass_until_ms > NEW.created_at
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM payments
+        WHERE charge_id = NEW.charge_id AND instr(nonce, ':') > 0
+     );
+END;

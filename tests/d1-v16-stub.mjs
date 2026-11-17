@@ -8,6 +8,9 @@
  *  - мутации из worker/src/sql.ts (заказ, платёж, грант, reversal, refund_ops);
  *  - чтения хендлеров (getOrder, verify, entitlements, ack, wallet, refund);
  *  - эмуляция триггера trg_wallet_ledger_apply (см. worker/schema.sql);
+ *  - эмуляция guard-триггера trg_wallet_ledger_season_pass_guard (P2-N1):
+ *    НЕ-продлённый season_pass-грант при активном пропуске бросает
+ *    (батч откатывается целиком — как RAISE(ABORT) в D1);
  *  - атомарность batch(): snapshot/restore — ошибка любого statement
  *    откатывает весь батч (как D1).
  *
@@ -134,6 +137,19 @@ export function makeD1() {
       const [user_id, charge_id, kind, grant_type, amount, skin_id, reverses_charge_id, amount_text, created_at] = params;
       const normSkinId = skin_id ?? '';
       if (ledger.has(ledgerKey(charge_id, grant_type, normSkinId))) return { success: true, meta: { changes: 0 } };
+      // P2-N1: эмуляция guard-триггера trg_wallet_ledger_season_pass_guard
+      // (worker/schema.sql). Дубликатная доставка уже отсеяна выше
+      // (changes=0 — как NOT EXISTS в триггере); продление отличается по
+      // payments.nonce с ':' (derived nonce recordSubscriptionRenewal).
+      // Кошелёк здесь — ДО вставки (applyTrigger ниже), как в BEFORE.
+      if (kind === 'grant' && grant_type === 'season_pass') {
+        const w = wallets.get(user_id);
+        const payment = payments.get(charge_id);
+        const isRenewal = typeof payment?.nonce === 'string' && payment.nonce.includes(':');
+        if (w && w.season_pass_until_ms > created_at && !isRenewal) {
+          throw new Error('season pass already active for user');
+        }
+      }
       const row = { id: ledger.size + 1, user_id, charge_id, kind, grant_type, amount, skin_id: normSkinId, reverses_charge_id, amount_text, created_at };
       ledger.set(ledgerKey(charge_id, grant_type, normSkinId), row);
       applyTrigger(row);

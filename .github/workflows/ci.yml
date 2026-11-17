@@ -164,6 +164,9 @@ jobs:
       - name: Worker P1 remediation contract
         run: npm run test:worker-p1
 
+      - name: Worker round 2 contract
+        run: npm run test:worker-round2
+
       - name: D1 schema gate contract
         run: npm run test:check-schema
 

@@ -25,8 +25,10 @@
 --        --print-commands → выполнить выданные wrangler d1 execute
 --        --command и сверить с ожидаемым. Дополнительно вручную:
 --        SELECT version FROM schema_migrations;  -- содержит 'v17'
---        -- триггер пересоздан (проверить тело — есть season_pass):
+--        -- триггеры пересозданы (проверить тела: apply — есть season_pass,
+--        -- guard — RAISE(ABORT) для второй подписки, P2-N1):
 --        SELECT sql FROM sqlite_master WHERE type='trigger' AND name='trg_wallet_ledger_apply';
+--        SELECT sql FROM sqlite_master WHERE type='trigger' AND name='trg_wallet_ledger_season_pass_guard';
 --        -- снапшот гранта у старых заказов полный (0 — backfill сработал):
 --        SELECT COUNT(*) FROM orders WHERE grant_season_pass_days IS NULL;
 --        -- кошельки не изменились (миграция только добавляет колонку):
@@ -49,14 +51,15 @@
 --   season_pass-ветками на старых grant_type ведёт себя как v16.
 --   После ЛЮБОГО отката воркера: вернуть деплой v16.
 --
--- ВАЖНО ПРО ТРИГГЕР: DROP + CREATE TRIGGER ниже — внутри BEGIN...END есть
+-- ВАЖНО ПРО ТРИГГЕРЫ: DROP + CREATE TRIGGER ниже — внутри BEGIN...END есть
 -- точки с запятой. Если `wrangler d1 execute --file` режет файл наивно
 -- по ';' и падает на кусках триггера — это ограничение инструмента:
--- примените ВЕСЬ CREATE TRIGGER (от CREATE до END;) отдельно одним
+-- примените КАЖДЫЙ CREATE TRIGGER (от CREATE до END;) отдельно одним
 -- --command либо в SQL-консоли дашборда D1. Остальная часть файла
 -- применяется --file как обычно. После применения проверьте:
 --   SELECT name FROM sqlite_master WHERE type='trigger';
--- должен вернуть trg_wallet_ledger_apply.
+-- должен вернуть trg_wallet_ledger_apply И trg_wallet_ledger_season_pass_guard
+-- (guard — P2-N1: без него конкурентная двойная подписка снова возможна).
 --
 -- ИДЕМПОТЕНТНОСТЬ: все CREATE — IF NOT EXISTS; backfill-UPDATE — с
 -- WHERE IS NULL (повторный прогон меняет 0 строк); INSERT — OR IGNORE.
@@ -108,8 +111,9 @@
 --         шаг 3b (wallet_skins) — выполнить целиком, только если
 --           PRAGMA index_list('wallet_skins') ещё показывает UNIQUE
 --           на charge_id (sqlite_autoindex); иначе пропустить;
---         шаг 4 (триггер) — идемпотентен (DROP IF EXISTS + CREATE),
---           пересоздать целиком;
+--         шаг 4 (триггер apply) — идемпотентен (DROP IF EXISTS + CREATE),
+--           пересоздать целиком; шаг 4b (guard-триггер P2-N1) — так же,
+--           пересоздать целиком (без него гейт check-schema красный);
 --         шаг 5 (отметка v17) — INSERT OR IGNORE, выполнить как есть.
 --     - При ЛЮБЫХ сомнениях — восстановить из снапшота и начать
 --       заново: файл рассчитан на один прогон на чистой v16.
@@ -146,6 +150,11 @@
 --     текущий + amount) — политика «время вспять не отматываем»).
 --     Пересоздание триггера НЕ меняет wallets (триггер срабатывает только
 --     на новые вставки в wallet_ledger).
+--   - триггер trg_wallet_ledger_season_pass_guard (P2-N1, раунд 2):
+--     BEFORE INSERT, RAISE(ABORT) для НЕ-продлённых season_pass-грантов
+--     при активном пропуске (атомарный слой против конкурентной двойной
+--     подписки; продления — по derived nonce с ':', дубликатная доставка
+--     — по существующему ключу журнала).
 -- ============================================================================
 
 -- 0. Guard-таблица миграций (идемпотентно).
@@ -274,6 +283,33 @@ BEGIN
    WHERE charge_id = NEW.reverses_charge_id
      AND status = 'active'
      AND NEW.kind = 'reversal' AND NEW.grant_type = 'skin';
+END;
+
+-- 4b. Guard конкурентной двойной подписки (P2-N1, раунд 2) — полный
+-- текст, как в worker/schema.sql (триггер новый для v17: в v16 его не
+-- было, DROP IF EXISTS — идемпотентность повторного прогона шага).
+-- BEFORE INSERT: RAISE(ABORT) для НЕ-продлённых season_pass-грантов при
+-- активном пропуске (продление — по payments.nonce с ':', дубликатная
+-- доставка — по существующему ключу журнала; см. комментарий в schema.sql).
+DROP TRIGGER IF EXISTS trg_wallet_ledger_season_pass_guard;
+CREATE TRIGGER trg_wallet_ledger_season_pass_guard
+BEFORE INSERT ON wallet_ledger
+BEGIN
+  SELECT RAISE(ABORT, 'season pass already active for user')
+   WHERE NEW.kind = 'grant' AND NEW.grant_type = 'season_pass'
+     AND NOT EXISTS (
+       SELECT 1 FROM wallet_ledger
+        WHERE charge_id = NEW.charge_id AND grant_type = NEW.grant_type
+          AND skin_id = COALESCE(NEW.skin_id, '')
+     )
+     AND EXISTS (
+       SELECT 1 FROM wallets
+        WHERE user_id = NEW.user_id AND season_pass_until_ms > NEW.created_at
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM payments
+        WHERE charge_id = NEW.charge_id AND instr(nonce, ':') > 0
+     );
 END;
 
 -- 5. Отметка о применении (идемпотентно).

@@ -11,6 +11,9 @@
  *  - все 9 таблиц v17 на месте;
  *  - триггер trg_wallet_ledger_apply существует, его текст (нормализованно)
  *    равен тексту из schema.sql, ветки season_pass (grant + reversal) есть;
+ *  - триггер trg_wallet_ledger_season_pass_guard (P2-N1) существует, его
+ *    текст равен тексту из schema.sql (без него конкурентная двойная
+ *    подписка снова возможна);
  *  - колонки v17: orders.grant_season_pass_days, orders.grant_bundle_json,
  *    wallets.season_pass_until_ms, duplicate_payments.status,
  *    subscription_events.source;
@@ -49,6 +52,8 @@ export const MIGRATION_17_SQL = readFileSync(join(workerDir, 'migration-17.sql')
 export const V16_SCHEMA_SQL = readFileSync(join(here, 'v16-schema.fixture.sql'), 'utf8');
 
 const TRIGGER_NAME = 'trg_wallet_ledger_apply';
+/** P2-N1: guard конкурентной двойной подписки (BEFORE INSERT, RAISE(ABORT)). */
+const GUARD_TRIGGER_NAME = 'trg_wallet_ledger_season_pass_guard';
 
 /**
  * Нормализация SQL-текста триггера для сравнения: убираем комментарии,
@@ -66,15 +71,16 @@ function normalizeTriggerSql(sql) {
 }
 
 /** Извлекает (нормализованный) текст триггера из SQL-файла; null, если нет. */
-export function extractTriggerSql(sqlText) {
+export function extractTriggerSql(sqlText, name = TRIGGER_NAME) {
   const m = sqlText.match(
-    new RegExp(`CREATE\\s+TRIGGER\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?${TRIGGER_NAME}\\b[\\s\\S]*?\\bEND\\s*;`, 'i')
+    new RegExp(`CREATE\\s+TRIGGER\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?${name}\\b[\\s\\S]*?\\bEND\\s*;`, 'i')
   );
   if (!m) return null;
   return normalizeTriggerSql(m[0]);
 }
 
 const EXPECTED_TRIGGER_SQL = extractTriggerSql(SCHEMA_SQL);
+const EXPECTED_GUARD_TRIGGER_SQL = extractTriggerSql(SCHEMA_SQL, GUARD_TRIGGER_NAME);
 
 const REQUIRED_TABLES = [
   'orders',
@@ -154,6 +160,29 @@ export function checkDatabase(db) {
   } else {
     push('trigger-text', false, 'no trigger to compare');
     push('trigger-season-pass', false, 'no trigger to compare');
+  }
+
+  // P2-N1: guard-триггер конкурентной двойной подписки. Без него JS-гейт
+  // в recordSuccessfulPayment — единственная защита, а он не атомарен.
+  const guardRow = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type='trigger' AND name=?")
+    .get(GUARD_TRIGGER_NAME);
+  push(
+    'guard-trigger-exists',
+    !!guardRow,
+    guardRow ? '' : 'trg_wallet_ledger_season_pass_guard missing — concurrent double subscription possible'
+  );
+  if (guardRow) {
+    const liveGuard = normalizeTriggerSql(guardRow.sql);
+    push(
+      'guard-trigger-text',
+      liveGuard === EXPECTED_GUARD_TRIGGER_SQL,
+      liveGuard === EXPECTED_GUARD_TRIGGER_SQL
+        ? 'matches schema.sql'
+        : 'guard trigger body differs from schema.sql'
+    );
+  } else {
+    push('guard-trigger-text', false, 'no guard trigger to compare');
   }
 
   for (const [table, cols] of Object.entries(REQUIRED_COLUMNS)) {
@@ -309,6 +338,7 @@ export function applyMigration(db) {
 
 const READONLY_COMMANDS = [
   "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND name='trg_wallet_ledger_apply';",
+  "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND name='trg_wallet_ledger_season_pass_guard';",
   "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;",
   "SELECT name FROM sqlite_master WHERE type='index' ORDER BY name;",
   'PRAGMA table_info(orders);',
@@ -328,7 +358,8 @@ function printCommands() {
     console.log(`wrangler d1 execute ofeliya-payments --command ${JSON.stringify(sql)}`);
   }
   console.log('# Expected: trigger trg_wallet_ledger_apply present, body contains');
-  console.log('# season_pass branches (grant + reversal); wallet_ledger has a UNIQUE');
+  console.log('# season_pass branches (grant + reversal); guard trigger');
+  console.log('# trg_wallet_ledger_season_pass_guard present (P2-N1); wallet_ledger has a UNIQUE');
   console.log('# index on (charge_id, grant_type, skin_id); columns');
   console.log('# orders.grant_season_pass_days, orders.grant_bundle_json,');
   console.log('# wallets.season_pass_until_ms, duplicate_payments.status,');

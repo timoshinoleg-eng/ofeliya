@@ -39,7 +39,11 @@
  *    завершённой refund-операции (деньги списаны, гранта нет, возврат
  *    не выполнен — P1-1/P1-2);
  *  - grant_without_payment: grant-строка без платежа в payments;
- *  - reversal_without_grant: reversal без исходного гранта.
+ *  - reversal_without_grant: reversal без исходного гранта;
+ *  - overlapping_season_pass_grants (P2-N1, defense in depth): первый
+ *    платёж пропуска при ещё активном пропуске того же пользователя
+ *    (guard-триггер должен был не дать; продления — derived nonce с ':'
+ *    — легитимный стакинг и не флагятся).
  * С токеном:
  *  - telegram_without_d1: входящий invoice_payment в Telegram без записи
  *    в D1 (потерянный платёж — главный кейс скрипта; дубликаты из
@@ -181,6 +185,47 @@ export async function reconcile(opts) {
     }
     if (row.kind === 'reversal' && row.reverses_charge_id && !grantsByCharge.has(row.reverses_charge_id)) {
       add('error', 'reversal_without_grant', `ledger seq=${row.id} reverses ${row.reverses_charge_id} — исходного гранта нет`);
+    }
+  }
+
+  // P2-N1 (defense in depth): перекрывающиеся season_pass-гранты.
+  // Guard-триггер trg_wallet_ledger_season_pass_guard обязан не дать
+  // второй первой оплате при активном пропуске; если такое есть в
+  // журнале — guard отсутствовал на момент выдачи или обходился.
+  // Продления (payments.nonce с ':' — derived nonce) — легитимный
+  // стакинг, не флагятся. Семантика runningUntil — зеркало триггера:
+  // grant — max(cur, created_at) + amount; reversal — max(created_at,
+  // cur + amount). Гранты без платежа пропускаем (их ловит
+  // grant_without_payment выше).
+  {
+    const passRows = ledger
+      .filter(
+        (r) =>
+          r.grant_type === 'season_pass' &&
+          typeof r.user_id === 'number' &&
+          typeof r.created_at === 'number' &&
+          typeof r.amount === 'number'
+      )
+      .sort((a, b) => (a.id ?? 0) - (b.id ?? 0) || a.created_at - b.created_at);
+    const passUntilByUser = new Map();
+    for (const row of passRows) {
+      const until = passUntilByUser.get(row.user_id) ?? 0;
+      if (row.kind === 'grant') {
+        const payment = byCharge.get(row.charge_id);
+        if (payment) {
+          const isRenewal = typeof payment.nonce === 'string' && payment.nonce.includes(':');
+          if (!isRenewal && row.created_at < until) {
+            add(
+              'error',
+              'overlapping_season_pass_grants',
+              `user_id=${row.user_id} ledger seq=${row.id} charge_id=${row.charge_id} — первый платёж пропуска при активном (until=${until}, created_at=${row.created_at})`
+            );
+          }
+        }
+        passUntilByUser.set(row.user_id, Math.max(until, row.created_at) + Math.max(0, row.amount));
+      } else if (row.kind === 'reversal') {
+        passUntilByUser.set(row.user_id, Math.max(row.created_at, until + row.amount));
+      }
     }
   }
 

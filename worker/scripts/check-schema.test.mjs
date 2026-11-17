@@ -103,6 +103,27 @@ test('migration v16→v17: checks green, data preserved, trigger text equals sch
     assert.ok(fromSchema, 'schema.sql contains trigger');
     assert.ok(fromMigration, 'migration-17.sql contains trigger');
     assert.equal(fromMigration, fromSchema, 'migration trigger text equals schema trigger text');
+    // То же — для guard-триггера P2-N1.
+    const guardFromSchema = extractTriggerSql(SCHEMA_SQL, 'trg_wallet_ledger_season_pass_guard');
+    const guardFromMigration = extractTriggerSql(MIGRATION_17_SQL, 'trg_wallet_ledger_season_pass_guard');
+    assert.ok(guardFromSchema, 'schema.sql contains guard trigger');
+    assert.ok(guardFromMigration, 'migration-17.sql contains guard trigger');
+    assert.equal(guardFromMigration, guardFromSchema, 'migration guard trigger text equals schema guard trigger text');
+  } finally {
+    cleanup();
+  }
+});
+
+test('missing guard trigger (P2-N1) → checks RED', () => {
+  const { db, cleanup } = buildFreshDb();
+  try {
+    db.exec('DROP TRIGGER trg_wallet_ledger_season_pass_guard');
+    const result = checkDatabase(db);
+    assert.equal(result.ok, false, 'DB without guard trigger must FAIL the gate');
+    assert.ok(
+      failingNames(result).some((n) => n.includes('guard-trigger')),
+      `failing checks must mention guard-trigger (got: ${failingNames(result).join(', ')})`
+    );
   } finally {
     cleanup();
   }
