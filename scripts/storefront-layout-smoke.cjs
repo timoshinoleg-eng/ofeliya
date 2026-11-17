@@ -14,6 +14,8 @@
  *  - resize: после смены вьюпорта сцена перестраивается и пересечений нет;
  *  - покупка пропуска (mock): оверлей успеха — заголовок и подзаголовок
  *    не пересекаются, сцена возвращается в ready.
+ *  - P2-N4 (порог тапа): drag 12px с кнопки с отпуском над ней — покупки
+ *    нет, тап по той же кнопке — покупка; drag 70px по фону — скролл.
  *
  * Матрица: 320x520, 320x568, 360x640, 390x844, 412x915 x пропуск
  * активен/неактивен. Пропуск активен — seed ofeliya.meta.v1
@@ -76,6 +78,25 @@ async function touchAt(ctx, page, point) {
     touchPoints: [{ x: point.x, y: point.y, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
   });
   await sleep(45);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+}
+
+// P2-N4: drag касанием от from к to (шагами, как живой палец).
+async function touchDrag(ctx, page, from, to, steps = 4) {
+  const cdp = await ctx.newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: from.x, y: from.y, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
+  });
+  for (let i = 1; i <= steps; i++) {
+    const x = Math.round(from.x + ((to.x - from.x) * i) / steps);
+    const y = Math.round(from.y + ((to.y - from.y) * i) / steps);
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x, y, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
+    });
+    await sleep(15);
+  }
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
 }
 
@@ -663,6 +684,86 @@ async function checkScroll(page, label, failures) {
         if (errors.length) failures.push(`${label}: page errors: ${errors.join(' | ')}`);
         }
       }
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  // P2-N4: прерванный скролл не покупает. Drag 12px с кнопки с отпуском
+  // над ней же — покупки нет; обычный тап по той же кнопке — покупка.
+  await runCase('tap-threshold drag-12px no-buy 390x844', async () => {
+    const label = 'tap-threshold drag-12px no-buy 390x844';
+    const { ctx, page, errors } = await bootStorefront(browser, { width: 390, height: 844 }, { passActive: false });
+    try {
+      const g = await extractGeometry(page);
+      const card = g.cards.find((c) => c.buyButton);
+      if (!card?.buyButton) {
+        failures.push(`${label}: кнопка покупки не найдена`);
+        return;
+      }
+      const c = center(card.buyButton);
+      // Отпуск — всё ещё над кнопкой (44px высота, 12px от центра).
+      if (c.y + 12 >= card.buyButton.y + card.buyButton.h) {
+        failures.push(`${label}: зонд невалиден — отпуск вне кнопки`);
+        return;
+      }
+      await touchDrag(ctx, page, c, { x: c.x, y: c.y + 12 });
+      await sleep(600);
+      const st = await page.evaluate(() => {
+        const s = window.__game.scene.getScene('Storefront');
+        return { state: s.state, lastBought: s.lastBought?.id ?? null };
+      });
+      if (st.state !== 'ready' || st.lastBought) {
+        failures.push(
+          `${label}: drag 12px с кнопки начал покупку (state=${st.state}, lastBought=${st.lastBought})`
+        );
+        return;
+      }
+      // Контроль: обычный тап по той же кнопке — покупка идёт.
+      await touchAt(ctx, page, c);
+      try {
+        await page.waitForFunction(
+          () => window.__game.scene.getScene('Storefront').state === 'success',
+          null,
+          { timeout: 10000 }
+        );
+      } catch {
+        failures.push(`${label}: тап по кнопке после порога не начал покупку`);
+      }
+      if (errors.length) failures.push(`${label}: page errors: ${errors.join(' | ')}`);
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  // P2-N4: drag 70px по фону карточки — скролл (порог тапа его не ломает).
+  await runCase('tap-threshold drag-70px scrolls 390x844', async () => {
+    const label = 'tap-threshold drag-70px scrolls 390x844';
+    const { ctx, page, errors } = await bootStorefront(browser, { width: 390, height: 844 }, { passActive: false });
+    try {
+      const g = await extractGeometry(page);
+      const card = g.cards.find((c) => c.buyButton && c.bg);
+      if (!card?.bg) {
+        failures.push(`${label}: карточка не найдена`);
+        return;
+      }
+      // Старт — на фоне карточки слева (не на кнопке справа).
+      const from = { x: Math.round(card.bg.x + 30), y: Math.round(card.bg.y + card.bg.h / 2) };
+      const before = await page.evaluate(() => window.__game.scene.getScene('Storefront').scrollOffset);
+      await touchDrag(ctx, page, from, { x: from.x, y: from.y - 70 });
+      await sleep(300);
+      const after = await page.evaluate(() => window.__game.scene.getScene('Storefront').scrollOffset);
+      if (!(after > before + 20)) {
+        failures.push(`${label}: drag 70px не проскроллил (offset ${before} -> ${after})`);
+      }
+      const st = await page.evaluate(() => {
+        const s = window.__game.scene.getScene('Storefront');
+        return { state: s.state, lastBought: s.lastBought?.id ?? null };
+      });
+      if (st.state !== 'ready' || st.lastBought) {
+        failures.push(`${label}: drag по фону начал покупку (state=${st.state})`);
+      }
+      if (errors.length) failures.push(`${label}: page errors: ${errors.join(' | ')}`);
     } finally {
       await ctx.close();
     }

@@ -108,6 +108,35 @@ export function purchaseFailureMessage(result: PurchaseFailure): string {
   }
 }
 
+/**
+ * P2-N4: порог тапа — pointerup после смещения >= 10px не клик (иначе
+ * прерванный скролл с кнопки покупает). Phaser.Pointer несёт downX/downY
+ * (координаты pointerdown), поэтому порог — stateless: сравниваем
+ * pointer.x/y с pointer.downX/downY в pointerup.
+ */
+export const STOREFRONT_TAP_THRESHOLD_PX = 10;
+
+function isTap(pointer: Phaser.Input.Pointer): boolean {
+  const dx = pointer.x - pointer.downX;
+  const dy = pointer.y - pointer.downY;
+  return Math.hypot(dx, dy) < STOREFRONT_TAP_THRESHOLD_PX;
+}
+
+/**
+ * P2-N4: кнопка с порогом тапа. pointerdown — затемнение; pointerup —
+ * действие ТОЛЬКО если смещение < 10px (иначе это был drag/скролл);
+ * pointerout — снять затемнение без действия (иначе drag-off оставляет
+ * кнопку затемнённой).
+ */
+function wireTapButton(btn: Phaser.GameObjects.Rectangle, onTap: () => void): void {
+  btn.on('pointerdown', () => btn.setAlpha(0.6));
+  btn.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+    btn.setAlpha(1);
+    if (isTap(pointer)) onTap();
+  });
+  btn.on('pointerout', () => btn.setAlpha(1));
+}
+
 /** Палитры заглушек арта (до DiceBear-рендера Фазы 5). */
 const STUB_PALETTES: Record<string, number> = {
   magenta: 0xff4fb5,
@@ -298,11 +327,7 @@ export class StorefrontScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setResolution(2);
-    backBg.on('pointerdown', () => backBg.setAlpha(0.6));
-    backBg.on('pointerup', () => {
-      backBg.setAlpha(1);
-      this.scene.start('Menu');
-    });
+    wireTapButton(backBg, () => this.scene.start('Menu'));
     this.root.add([backBg, backLabel]);
 
     // Заголовок — по центру, но сдвигается вправо, если измеренная ширина
@@ -477,9 +502,7 @@ export class StorefrontScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setResolution(2);
-    btn.on('pointerdown', () => btn.setAlpha(0.6));
-    btn.on('pointerup', () => {
-      btn.setAlpha(1);
+    wireTapButton(btn, () => {
       this.setState('loading');
       void this.loadProducts();
     });
@@ -832,11 +855,7 @@ export class StorefrontScene extends Phaser.Scene {
       .setResolution(2)
       .setName('card-buy-label');
     if (!buying && !passOwned) {
-      btnBg.on('pointerdown', () => btnBg.setAlpha(0.6));
-      btnBg.on('pointerup', () => {
-        btnBg.setAlpha(1);
-        void this.buy(product);
-      });
+      wireTapButton(btnBg, () => void this.buy(product));
     }
     children.push(btnBg, btnLabel);
     this.listButtons.push(btnBg);
@@ -956,11 +975,7 @@ export class StorefrontScene extends Phaser.Scene {
         })
         .setOrigin(0.5)
         .setResolution(2);
-      btnBg.on('pointerdown', () => btnBg.setAlpha(0.6));
-      btnBg.on('pointerup', () => {
-        btnBg.setAlpha(1);
-        opts.onButton?.(btnLabel);
-      });
+      wireTapButton(btnBg, () => opts.onButton?.(btnLabel));
       children.push(btnBg, btnLabel);
       this.listButtons.push(btnBg);
       y = btnY + btnH / 2;
