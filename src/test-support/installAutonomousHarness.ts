@@ -68,7 +68,11 @@
  *    frame (RunSnapshot scalars + all 8 RunRng stream states); `inputHash`
  *    covers API-issued inputs, keyed by `game.loop.frame`.
  * 8. `readState()` before any run returns the menu shape (`phase: 'MENU'`)
- *    instead of throwing.
+ *    instead of throwing. A run counts as live while the Game scene is
+ *    RUNNING *or PAUSED*: Phaser's `isActive()` is true only for RUNNING
+ *    scenes (Systems.js), and the level-up modal pauses Game — using
+ *    `isActive` alone would misread every mutation choice as "no run". The
+ *    game itself uses the same `isActive || isPaused` pair.
  *
  * Known limitation: `resume()` realigns scene clocks to wall time. Absolute
  * scene-time deadlines scheduled during stepping (hit-stop, fire timers,
@@ -289,9 +293,20 @@ export function installAutonomousHarness(game: Phaser.Game): void {
     return (game.scene.getScene('Game') as unknown as GameScene | null) ?? null;
   }
 
+  /**
+   * A run is live while the Game scene is RUNNING or PAUSED. Phaser's
+   * `isActive()` is true only for RUNNING scenes (Systems.isActive checks
+   * `status === RUNNING`) — the level-up modal pauses Game, so `isActive`
+   * alone would misread every mutation choice as "no run". The game itself
+   * uses the same `isActive || isPaused` pair (GameScene.ts, UIScene.ts).
+   */
+  function isGameLive(): boolean {
+    return game.scene.isActive('Game') || game.scene.isPaused('Game');
+  }
+
   function requireGameScene(): GameScene {
     const gs = getGameScene();
-    if (!gs || !game.scene.isActive('Game') || !gs.runState) {
+    if (!gs || !isGameLive() || !gs.runState) {
       throw new Error('harness: no active Game run (call startCampaign first)');
     }
     return gs;
@@ -331,10 +346,13 @@ export function installAutonomousHarness(game: Phaser.Game): void {
    */
   function onPostStep(): void {
     const gs = getGameScene();
-    const active = Boolean(gs && game.scene.isActive('Game') && gs.runState);
+    const active = Boolean(gs && isGameLive() && gs.runState);
     if (!active || !gs) {
       if (prevActive && !prevRunResultSeen) {
-        pushEvent({ type: 'RUN_END', reason: 'unknown', win: false });
+        // Game stopped without a runResult: the only such path is exitToMenu
+        // (pause-menu "В МЕНЮ"), i.e. an abandoned run — finish() always
+        // writes runResult first.
+        pushEvent({ type: 'RUN_END', reason: 'abandoned', win: false });
       }
       prevActive = false;
       return;
@@ -427,7 +445,8 @@ export function installAutonomousHarness(game: Phaser.Game): void {
   // --- readState ------------------------------------------------------------
 
   function activeSceneKey(): string {
-    for (const key of ['Game', 'Menu', 'UI', 'Boot']) {
+    if (isGameLive()) return 'Game';
+    for (const key of ['Menu', 'UI', 'Boot']) {
       if (game.scene.isActive(key)) return key;
     }
     return 'unknown';
@@ -519,7 +538,7 @@ export function installAutonomousHarness(game: Phaser.Game): void {
 
   function readState(): HarnessState {
     const gs = getGameScene();
-    if (!gs || !game.scene.isActive('Game') || !gs.runState) return menuState();
+    if (!gs || !isGameLive() || !gs.runState) return menuState();
     const gi = internalsOf(gs);
     const stage = gi.stageDirector.currentStage;
     const st = gs.runState.stage;
@@ -653,7 +672,7 @@ export function installAutonomousHarness(game: Phaser.Game): void {
     const deadline = Date.now() + START_TIMEOUT_MS;
     for (;;) {
       const gs = getGameScene();
-      if (gs && game.scene.isActive('Game') && gs.runState) return;
+      if (gs && isGameLive() && gs.runState) return;
       if (Date.now() > deadline) {
         throw new Error('startCampaign: Game scene did not become active within 10s');
       }
@@ -831,7 +850,7 @@ export function installAutonomousHarness(game: Phaser.Game): void {
 
   function debugPools(): HarnessPools {
     const gs = getGameScene();
-    const gi = gs ? internalsOf(gs) : null;
+    const gi = gs && isGameLive() ? internalsOf(gs) : null;
     const ui = game.scene.getScene('UI');
     return {
       enemies: gi ? gi.enemies.countActive(true) : 0,
