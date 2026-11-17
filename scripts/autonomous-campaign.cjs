@@ -103,6 +103,17 @@ const HEAP_GROWTH_LIMIT = 0.15; // §4.3: < 15% vs the first run of the series.
 const MAX_CONSOLE_LINES = 2000;
 const MAX_NETWORK_ENTRIES = 2000;
 
+// Invariants that only apply after teardown (RUN_END). On --until runs
+// they are recorded as "not exercised" and excluded from the verdict gate;
+// gameplay invariants still gate those runs.
+const TEARDOWN_INVARIANTS = new Set([
+  'listenerBaseline',
+  'noStuckInput',
+  'saveAfterResult',
+  'scoreContract',
+  'runResultConsistent',
+]);
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function log(message) {
@@ -1344,6 +1355,9 @@ async function runCampaign(browser, options, runIndex, seriesState) {
       if (progressKey !== st.lastProgressKey) {
         st.lastProgressKey = progressKey;
         st.lastProgressTick = st.tick;
+        invariants.check('waveProgressing', true, {
+          expected: 'waveId / aliveCount change within the watchdog interval',
+        });
       } else if (
         (state.phase === 'PLAYING' || state.phase === 'BOSS_ACTIVE')
         && st.tick - st.lastProgressTick >= WAVE_STALL_FRAMES
@@ -1574,6 +1588,11 @@ async function runCampaign(browser, options, runIndex, seriesState) {
           : `joy=${JSON.stringify(joy)} modalOpen=${modalOpen} milestones=${st.finalDiag.milestonesActive}`,
         failAt: passed ? undefined : markInvariantFail('noStuckInput', st.finalState, 'stuck input/modal after run end'),
       });
+    } else {
+      invariants.check('noStuckInput', true, {
+        expected: 'no modal, milestone, timer or input listener active after victory; input not stuck after reset',
+        actual: 'not exercised (run did not end)',
+      });
     }
 
     // --- post-run: let the result screen submit the score -------------------------
@@ -1649,10 +1668,17 @@ async function runCampaign(browser, options, runIndex, seriesState) {
         failAt: committed ? undefined : markInvariantFail('saveAfterResult', st.finalState, 'save not committed'),
       });
       if (committed) timeline.push('SAVE_COMMITTED', ctxFor(st.finalState, { runs: saveRunsAfter }));
+    } else {
+      invariants.check('saveAfterResult', true, {
+        expected: 'save is committed only after the campaign result is final',
+        actual: 'not exercised (run did not end)',
+      });
     }
 
     // Listener baseline (§4.3): pools after vs the RUN_START baseline.
-    if (st.poolsBaseline && finalPools) {
+    // Only meaningful after teardown (RUN_END): mid-run timers/tweens are
+    // live combat state, not leaks, so --until runs skip the check.
+    if (st.runEnded && st.poolsBaseline && finalPools) {
       const listenerDelta = finalPools.listeners - st.poolsBaseline.listeners;
       const timerDelta = finalPools.timers - st.poolsBaseline.timers;
       const tweenDelta = finalPools.tweens - st.poolsBaseline.tweens;
@@ -1663,6 +1689,11 @@ async function runCampaign(browser, options, runIndex, seriesState) {
         failAt: passed ? undefined : markInvariantFail('listenerBaseline', st.finalState, `listener delta ${listenerDelta}`),
       });
       st.listenerDelta = listenerDelta;
+    } else {
+      invariants.check('listenerBaseline', true, {
+        expected: 'no listener / timer / tween growth after teardown vs baseline',
+        actual: 'not exercised (run did not end)',
+      });
     }
 
     // Page errors (§4.3: zero over the series).
@@ -1685,6 +1716,11 @@ async function runCampaign(browser, options, runIndex, seriesState) {
           ? `reason=${result.reason} stage=${result.stageId} bosses=${result.bossesDefeated}`
           : `runResult=${JSON.stringify({ reason: result.reason, stageId: result.stageId, stageOrder: result.stageOrder, bossesDefeated: result.bossesDefeated })} vs state=${st.finalState.stageId}/${st.finalState.stageOrder}`,
         failAt: consistent ? undefined : markInvariantFail('runResultConsistent', st.finalState, 'runResult mismatch'),
+      });
+    } else {
+      invariants.check('runResultConsistent', true, {
+        expected: 'RunState and runResult agree; rulesetVersion / campaignVersion / stage clear times valid',
+        actual: 'not exercised (run did not end)',
       });
     }
 
@@ -1803,13 +1839,28 @@ async function runCampaign(browser, options, runIndex, seriesState) {
       status = replayVerdict === 'DIVERGED' ? 'failed' : 'passed';
       terminal = 'replay-complete';
     }
-    if (status === 'passed' && !invariants.allPassed() && !st.untilReached) {
+    if (status === 'passed' && !st.untilReached && !invariants.allPassed()) {
       status = 'failed';
-      terminal = terminal === 'replay-complete' ? 'replay-complete' : terminal;
       failure = failure || {
         code: 'INVARIANT_FAIL',
         message: `invariants failed: ${invariants.failedIds().join(', ')}`,
       };
+    }
+    if (status === 'passed' && st.untilReached) {
+      // Until-runs never reach teardown, so teardown-only invariants are
+      // recorded as "not exercised" above — but a GAMEPLAY invariant
+      // failure (finite numbers, monotonicity, stage order, ...) must
+      // still fail the run.
+      const gameplayFailed = invariants.failedIds().filter(
+        (id) => !TEARDOWN_INVARIANTS.has(id),
+      );
+      if (gameplayFailed.length > 0) {
+        status = 'failed';
+        failure = failure || {
+          code: 'INVARIANT_FAIL',
+          message: `invariants failed: ${gameplayFailed.join(', ')}`,
+        };
+      }
     }
 
     // --- write artifacts ------------------------------------------------------------
