@@ -41,6 +41,23 @@ for (const type of ['private', 'group', 'supergroup']) {
 }
 const invalid = buildTelegramWebhookMethod({ message: { chat: { id: 23, type: 'private' }, text: '/start bad parameter' } }, opts);
 assert.equal(invalid.reply_markup.inline_keyboard[0][0].web_app.url, opts.gameUrl);
+// Telegram Stars policy: /paysupport must provide an actionable owned
+// mailbox, never a game CTA, and fail visibly when no contact is configured.
+const supportUpdate = { message: { chat: { id: 23, type: 'private' },
+  from: { id: 23 }, text: '/paysupport' } };
+const support = buildTelegramWebhookMethod(supportUpdate,
+  { ...opts, paymentSupportEmail: 'billing@example.test' });
+assert.equal(support.method, 'sendMessage');
+assert.match(support.text, /billing@example\\.test/);
+assert.equal(support.reply_markup, undefined, 'payment support must not upsell');
+const unconfiguredSupport = buildTelegramWebhookMethod(supportUpdate,
+  { ...opts, paymentSupportEmail: '' });
+assert.match(unconfiguredSupport.text, /не настроена/);
+assert.equal(unconfiguredSupport.reply_markup, undefined);
+const helpMethod = buildTelegramWebhookMethod(
+  { message: { ...supportUpdate.message, text: '/help' } }, opts);
+assert.match(helpMethod.text, /\\/paysupport/);
+
 console.log('telegram bot command contract: ok');
 
 for (const text of ['/start', '/start ref_m_12345']) {
