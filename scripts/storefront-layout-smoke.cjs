@@ -528,12 +528,17 @@ async function checkScroll(page, label, failures) {
   });
   const failures = [];
   let cases = 0;
+  // CR-R3-10/11: фильтр кейсов для точечного прогона:
+  // STOREFRONT_SMOKE_CASE=partially-masked-button-tap — только кейсы,
+  // чья метка содержит подстроку. Без фильтра — полный прогон.
+  const caseFilter = process.env.STOREFRONT_SMOKE_CASE || '';
   // P3-N3: per-case catch — один флейк (например, window.__game undefined
   // на 10-м кейсе) больше не убивает оставшиеся кейсы: исключение кейса
   // записывается как failure с именем кейса, прогон продолжается,
   // в конце — сводка по кейсам, exit 1 при любом провале.
   const caseResults = [];
   async function runCase(label, fn) {
+    if (caseFilter && !label.includes(caseFilter)) return;
     cases += 1;
     const before = failures.length;
     try {
@@ -612,6 +617,82 @@ async function checkScroll(page, label, failures) {
             `${label}: тап по невидимой кнопке ${victim.id} начал покупку (state=${st.state}, lastBought=${st.lastBought})`
           );
         }
+      }
+      if (errors.length) failures.push(`${label}: page errors: ${errors.join(' | ')}`);
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  // CR-R3-11: кнопка, чей центр внутри контента, а верх — за маской:
+  // тап по невидимой (замаскированной) части в шапке не должен покупать.
+  // Позиционирование детерминированное: скролл считается из геометрии
+  // так, чтобы центр кнопки был на 7px внутри контента (верх на ~15px
+  // выше верха контента при высоте кнопки 44px). Зонд обязан достичь
+  // страддла — иначе кейс падает, а не пропускается.
+  await runCase('partially-masked-button-tap 390x844', async () => {
+    const label = 'partially-masked-button-tap 390x844';
+    const { ctx, page, errors } = await bootStorefront(browser, { width: 390, height: 844 }, { passActive: false });
+    try {
+      const g0 = await extractGeometry(page);
+      const card0 = g0.cards.find((c) => c.buyButton);
+      if (!card0?.buyButton) {
+        failures.push(`${label}: кнопка покупки не найдена`);
+        return;
+      }
+      const top0 = g0.content.top;
+      const centerY0 = card0.buyButton.y + card0.buyButton.h / 2;
+      await page.evaluate((delta) => {
+        const s = window.__game.scene.getScene('Storefront');
+        s.applyScroll(s.scrollOffset + delta);
+      }, centerY0 - (top0 + 7));
+      await sleep(150);
+      const g = await extractGeometry(page);
+      const card = g.cards.find((c) => c.id === card0.id);
+      const top = g.content.top;
+      const btn = card?.buyButton;
+      if (!btn) {
+        failures.push(`${label}: кнопка ${card0.id} пропала после скролла`);
+        return;
+      }
+      const btnTop = btn.y;
+      const btnCenterY = btn.y + btn.h / 2;
+      if (!(btnTop < top - 8 && btnCenterY > top + 2 && btnCenterY < top + 12)) {
+        failures.push(
+          `${label}: зонд невалиден — кнопка не страддлит верх контента (top=${top}, btnTop=${btnTop}, center=${btnCenterY})`
+        );
+        return;
+      }
+      // Инпут частично замаскированной кнопки должен быть выключен.
+      const inputEnabled = await page.evaluate((want) => {
+        const s = window.__game.scene.getScene('Storefront');
+        for (const b of s.listButtons) {
+          if (!b.input) continue;
+          const r = b.getBounds();
+          const cx = r.x + r.width / 2;
+          const cy = r.y + r.height / 2;
+          if (Math.abs(cx - want.cx) < 1 && Math.abs(cy - want.cy) < 1) return b.input.enabled;
+        }
+        return null;
+      }, { cx: btn.x + btn.w / 2, cy: btnCenterY });
+      if (inputEnabled === null) {
+        failures.push(`${label}: кнопка ${card.id} не найдена в listButtons`);
+        return;
+      }
+      if (inputEnabled) {
+        failures.push(`${label}: инпут частично замаскированной кнопки ${card.id} включён`);
+      }
+      // Тап по невидимой части кнопки — в полосе шапки над контентом.
+      await touchAt(ctx, page, { x: Math.round(btn.x + btn.w / 2), y: Math.round(top - 8) });
+      await sleep(600);
+      const st = await page.evaluate(() => {
+        const s = window.__game.scene.getScene('Storefront');
+        return { state: s.state, lastBought: s.lastBought?.id ?? null };
+      });
+      if (st.state !== 'ready' || st.lastBought) {
+        failures.push(
+          `${label}: тап по невидимой части кнопки ${card.id} начал покупку (state=${st.state}, lastBought=${st.lastBought})`
+        );
       }
       if (errors.length) failures.push(`${label}: page errors: ${errors.join(' | ')}`);
     } finally {
