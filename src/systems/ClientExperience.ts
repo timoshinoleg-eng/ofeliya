@@ -86,13 +86,23 @@ export function trackClientEvent(event: ProductEvent, props: ProductEventProps):
     // второй app_open в Umami не шлём. Серверный /api/event при этом не
     // затронут: он отправляется отдельным путём в trackProductEvent.
     if (appOpenFallbackSent) return;
-    appOpenSeen = true;
   }
   if (webReady) {
-    analytics.track(event, props);
+    // CR-R3-12: appOpenSeen — только после успешной отправки (track
+    // возвращает false, когда Umami недоступен). Иначе открытие
+    // потеряется молча, а fallback будет подавлен.
+    const sent = analytics.track(event, props);
+    if (event === 'app_open' && sent) appOpenSeen = true;
   } else if (earlyEvents.length < MAX_EARLY_EVENTS) {
     earlyEvents.push({ event, props: { ...props } });
+    // CR-R3-12: appOpenSeen — только после принятия в буфер. Раньше seen
+    // ставился до проверки вместимости: при полном буфере (48 событий)
+    // app_open выбрасывался, а fallback подавлялся — сессия оставалась
+    // без opening event. Подавление после принятого app_open сохранено.
+    if (event === 'app_open') appOpenSeen = true;
   }
+  // Буфер полон — событие выброшено, seen не ставится: readiness
+  // fallback при готовности Umami пошлёт opening event.
 }
 
 export function cosmeticColor(id: string): number {
