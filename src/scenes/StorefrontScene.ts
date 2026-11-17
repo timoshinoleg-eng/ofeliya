@@ -666,15 +666,18 @@ export class StorefrontScene extends Phaser.Scene {
    * P1-4: маска режет только отрисовку, но не хит-тест — кнопка карточки,
    * уехавшей за край контентной области, остаётся кликабельной, хотя её
    * не видно (тап в шапку мог случайно начать покупку невидимого товара).
-   * Гасим инпут кнопок, чей центр вне контентной области.
+   * CR-R3-11: инпут включён только когда ВСЯ кнопка внутри контентной
+   * области. Раньше проверялся только центр: кнопка 44px с центром на
+   * 1px внутри оставалась кликабельной на 21px в шапке — тап по
+   * невидимой части вызывал покупку. Частично видимая кнопка не
+   * кликабельна: игрок чуть докручивает скролл до полного показа.
    */
   private updateListButtonInput(): void {
     const { top, height } = this.contentRect();
     for (const btn of this.listButtons) {
       if (!btn.input) continue;
       const b = btn.getBounds();
-      const cy = b.y + b.height / 2;
-      btn.input.enabled = cy >= top && cy <= top + height;
+      btn.input.enabled = b.y >= top && b.y + b.height <= top + height;
     }
   }
 
