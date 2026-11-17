@@ -285,7 +285,7 @@ CREATE TABLE IF NOT EXISTS duplicate_payments (
 CREATE INDEX IF NOT EXISTS idx_duplicate_payments_nonce ON duplicate_payments(nonce);
 
 -- Учёт применённых миграций (записывает migration-17.sql; свежий деплой
--- по этому файлу — тоже v17).
+-- по этому файлу — тоже v17: отметка ставится внизу файла, P3-N2).
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version    TEXT PRIMARY KEY,
   applied_at INTEGER NOT NULL
@@ -419,3 +419,10 @@ BEGIN
         WHERE charge_id = NEW.charge_id AND instr(nonce, ':') > 0
      );
 END;
+
+-- P3-N2: свежий деплой по этому файлу — тоже v17 (см. комментарий у
+-- schema_migrations выше). Отметка нужна гейту check-schema: без неё
+-- функционально-v17 база неотличима от частично мигрированной, а
+-- повторный прогон migration-17.sql упал бы на ALTER TABLE ADD COLUMN.
+INSERT OR IGNORE INTO schema_migrations (version, applied_at)
+VALUES ('v17', strftime('%s','now')*1000);

@@ -114,6 +114,25 @@ test('migration v16→v17: checks green, data preserved, trigger text equals sch
   }
 });
 
+test('P3-N2: functionally-v17 but unmarked DB (no v17 row) → checks RED', () => {
+  const { db, cleanup } = buildFreshDb();
+  try {
+    // База функционально v17 (все таблицы/триггеры/колонки на месте),
+    // но отметки о применении миграции нет: повторный прогон
+    // migration-17.sql упал бы на ALTER TABLE ADD COLUMN, а гейт
+    // обязан не пропускать такую базу как «уже v17».
+    db.exec("DELETE FROM schema_migrations WHERE version='v17'");
+    const result = checkDatabase(db);
+    assert.equal(result.ok, false, 'unmarked DB must FAIL the gate');
+    assert.ok(
+      failingNames(result).some((n) => n.includes('schema-migrations')),
+      `failing checks must mention schema-migrations (got: ${failingNames(result).join(', ')})`
+    );
+  } finally {
+    cleanup();
+  }
+});
+
 test('missing guard trigger (P2-N1) → checks RED', () => {
   const { db, cleanup } = buildFreshDb();
   try {

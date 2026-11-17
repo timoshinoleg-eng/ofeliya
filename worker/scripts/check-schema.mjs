@@ -20,7 +20,10 @@
  *  - wallet_ledger: UNIQUE(charge_id, grant_type, skin_id) (через
  *    PRAGMA index_list — старый UNIQUE(charge_id) гейт не проходит);
  *  - wallet_skins: PK (user_id, skin_id, charge_id);
- *  - все 6 индексов schema.sql на месте.
+ *  - все 6 индексов schema.sql на месте;
+ *  - P3-N2: запись 'v17' в schema_migrations (без неё функционально-v17
+ *    база неотличима от частично мигрированной, а повторный прогон
+ *    migration-17.sql упадёт на ALTER TABLE ADD COLUMN).
  * functionalTriggerTest (ПИШЕТ — только в изолированных базах):
  * вставляет grant-строки (rna/booster/season_pass/skin) и проверяет, что
  * триггер обновил wallets/wallet_skins.
@@ -236,6 +239,24 @@ export function checkDatabase(db) {
     skinsPkDetail = 'wallet_skins missing';
   }
   push('wallet-skins-pk', skinsPkOk, skinsPkDetail);
+
+  // P3-N2: отметка о применении миграции. Функционально-v17 база без
+  // записи 'v17' — либо частичная миграция, либо свежий деплой по
+  // старой копии schema.sql: гейт её не пропускает.
+  let v17Marked = false;
+  try {
+    const row = db
+      .prepare("SELECT version FROM schema_migrations WHERE version='v17'")
+      .get();
+    v17Marked = !!row;
+  } catch {
+    // Таблица отсутствует — покрыто проверкой tables.
+  }
+  push(
+    'schema-migrations-v17',
+    v17Marked,
+    v17Marked ? "schema_migrations contains 'v17'" : "schema_migrations lacks 'v17' — migration marker missing"
+  );
 
   const indexes = new Set(
     db.prepare("SELECT name FROM sqlite_master WHERE type='index'").all().map((r) => r.name)
