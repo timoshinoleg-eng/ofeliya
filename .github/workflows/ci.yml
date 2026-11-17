@@ -161,6 +161,12 @@ jobs:
       - name: Worker bundles contract
         run: npm run test:worker-bundles
 
+      - name: Worker P1 remediation contract
+        run: npm run test:worker-p1
+
+      - name: D1 schema gate contract
+        run: npm run test:check-schema
+
       - name: Invite and collab contract
         run: npm run test:invite-collab
 
