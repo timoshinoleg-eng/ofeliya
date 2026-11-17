@@ -84,6 +84,41 @@ export const SHOP_CATALOG: readonly Product[] = [
     art: { seed: 'season-pass-basic', palette: 'green' },
     tag: 'NEW',
   },
+  {
+    // Монетизация v3: стартовый набор. Эксклюзивный скин «Прайм» —
+    // только здесь (отдельного товара нет; см. SkinCatalog
+    // BUNDLE_ONLY_SKINS). 3-дневный бустер — новый грант только внутри
+    // бандла. Видимость — флаг monetization.starter-pack.
+    id: 'bundle.starter-pack',
+    kind: 'bundle',
+    title: 'Стартовый набор',
+    description: 'Эксклюзивный штамм «Прайм», 500 РНК и бустер ×2 на 3 дня.',
+    price: { amount: 199, currency: 'RUB' },
+    stars: 150,  // Telegram Stars (XTR)
+    art: { seed: 'starter-pack', palette: 'prime' },
+    tag: 'NEW',
+    bundle: [
+      { kind: 'skin', skinId: 'skin.starter-prime' },
+      { kind: 'rna', rna: 500 },
+      { kind: 'booster', boosterDays: 3 },
+    ],
+  },
+  {
+    // Монетизация v3: три шоп-скина одним платежом (по отдельности 450 ★).
+    id: 'bundle.skin-trio',
+    kind: 'bundle',
+    title: 'Трио штаммов',
+    description: '«Вирулентный», «Бездонный» и «Позолоченный» — все три окраса сразу.',
+    price: { amount: 349, currency: 'RUB' },
+    stars: 300,  // Telegram Stars (XTR)
+    art: { seed: 'skin-trio', palette: 'magenta' },
+    tag: '-33%',
+    bundle: [
+      { kind: 'skin', skinId: 'skin.virulent-magenta' },
+      { kind: 'skin', skinId: 'skin.abyssal-teal' },
+      { kind: 'skin', skinId: 'skin.gilded-prime' },
+    ],
+  },
 ];
 
 const VALID_KINDS: readonly ProductKind[] = ['skin', 'booster', 'currency', 'season_pass', 'bundle'];

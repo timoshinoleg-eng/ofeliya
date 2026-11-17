@@ -89,6 +89,22 @@ async function post(handler, path, body, env, headers = {}) {
 const secretHeader = () => ({ 'x-telegram-bot-api-secret-token': WEBHOOK_SECRET });
 const adminHeader = () => ({ authorization: `Bearer ${ADMIN_TOKEN}` });
 
+// --- стаб Bot API (только createInvoiceLink нужен этому файлу) ---
+const botCalls = [];
+globalThis.fetch = async (url, opts) => {
+  const u = String(url);
+  if (u.startsWith('https://api.telegram.org/')) {
+    const body = JSON.parse(opts.body);
+    botCalls.push({ url: u, method: u.split('/').pop(), body });
+    if (u.includes('/createInvoiceLink')) {
+      return new Response(JSON.stringify({ ok: true, result: 'https://t.me/$inv-bnd' }), {
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+  }
+  throw new Error(`unexpected fetch: ${u}`);
+};
+
 const STARTER_BUNDLE = JSON.stringify([
   { kind: 'skin', skinId: 'skin.abyssal-teal' },
   { kind: 'rna', rna: 500 },
@@ -139,13 +155,58 @@ try {
   eq(single[0].grant.rna, 500, 'single grant value');
   eq(grants.grantsForProduct('nope'), null, 'unknown product → null');
   eq(grants.grantForProduct('currency.rna-pack-s').kind, 'rna', 'grantForProduct unchanged for singles');
+  eq(grants.grantForProduct('bundle.starter-pack'), null, 'grantForProduct returns null for bundles');
+  const starter = grants.grantsForProduct('bundle.starter-pack');
+  eq(starter.length, 3, 'starter pack → 3 components');
+  eq(starter.map((g) => g.kind).join(','), 'skin,rna,booster', 'starter component kinds');
+  eq(starter[0].grant.skinId, 'skin.starter-prime', 'starter exclusive skin');
+  eq(starter[2].grant.boosterDays, 3, 'starter 3-day booster (bundle-only grant)');
+  const trio = grants.grantsForProduct('bundle.skin-trio');
+  eq(trio.length, 3, 'skin trio → 3 components');
+  eq(trio.every((g) => g.kind === 'skin'), true, 'trio all skins');
+  eq(grants.SERVER_GRANTS['bundle.starter-pack'].stars, 150, 'starter stars 150');
+  eq(grants.SERVER_GRANTS['bundle.skin-trio'].stars, 300, 'trio stars 300');
+
+  // === /api/invoice для реальных бандлов: без subscription_period, снапшот — JSON ===
+  {
+    const db = makeD1();
+    const env = { ...baseEnv, PAYMENTS_DB: db };
+    botCalls.length = 0;
+    const inv = await post(
+      handler, '/api/invoice',
+      { initData, productId: 'bundle.starter-pack', nonce: 'nonce-bnd-inv-1' }, env
+    );
+    eq(inv.status, 200, 'starter invoice 200');
+    const call = botCalls.find((c) => c.method === 'createInvoiceLink');
+    assert(call, 'createInvoiceLink called for bundle');
+    assert(!('subscription_period' in call.body), 'no subscription_period for bundle (not a subscription)');
+    eq(call.body.prices[0].amount, 150, 'starter amount 150 stars');
+    const order = db.orders.get('nonce-bnd-inv-1');
+    assert(order, 'bundle order written');
+    eq(order.sku_version, 4, 'bundle order sku_version 4');
+    const snap = JSON.parse(order.grant_bundle_json);
+    eq(snap.length, 3, 'order snapshot has 3 bundle components');
+    eq(snap[0].skinId, 'skin.starter-prime', 'snapshot skin component');
+    eq(snap[1].rna, 500, 'snapshot rna component');
+    eq(snap[2].boosterDays, 3, 'snapshot booster component');
+
+    botCalls.length = 0;
+    const inv2 = await post(
+      handler, '/api/invoice',
+      { initData, productId: 'bundle.skin-trio', nonce: 'nonce-bnd-inv-2' }, env
+    );
+    eq(inv2.status, 200, 'trio invoice 200');
+    const call2 = botCalls.find((c) => c.method === 'createInvoiceLink');
+    eq(call2.body.prices[0].amount, 300, 'trio amount 300 stars');
+    eq(JSON.parse(db.orders.get('nonce-bnd-inv-2').grant_bundle_json).length, 3, 'trio snapshot 3 skins');
+  }
 
   // === бандл: 3 компонента одним платежом ===
   {
     const db = makeD1();
     const env = { ...baseEnv, PAYMENTS_DB: db, ADMIN_TOKEN };
     await seedOrder(db, 'nonce-bnd-1', USER_ID, 'bundle.test-starter', 150, {
-      skuVersion: 3, grantRna: 0, grantBoosterDays: 0, grantBundleJson: STARTER_BUNDLE,
+      skuVersion: 4, grantRna: 0, grantBoosterDays: 0, grantBundleJson: STARTER_BUNDLE,
     });
     const before = Date.now();
     const r1 = await post(handler, '/api/webhook', paymentBody('ch-bnd-1', 'nonce-bnd-1'), env, secretHeader());
@@ -204,7 +265,7 @@ try {
     const db = makeD1();
     const env = { ...baseEnv, PAYMENTS_DB: db };
     await seedOrder(db, 'nonce-bnd-2', USER_ID, 'bundle.test-trio', 300, {
-      skuVersion: 3, grantRna: 0, grantBoosterDays: 0, grantBundleJson: TRIO_BUNDLE,
+      skuVersion: 4, grantRna: 0, grantBoosterDays: 0, grantBundleJson: TRIO_BUNDLE,
     });
     const r = await post(handler, '/api/webhook', paymentBody('ch-bnd-2', 'nonce-bnd-2', { amount: 300 }), env, secretHeader());
     eq(r.status, 200, 'trio payment 200');
@@ -227,7 +288,7 @@ try {
     const db = makeD1();
     const env = { ...baseEnv, PAYMENTS_DB: db };
     await seedOrder(db, `nonce-bnd-bad-${name}`, USER_ID, 'bundle.test-bad', 150, {
-      skuVersion: 3, grantRna: 0, grantBoosterDays: 0, grantBundleJson: bundleJson,
+      skuVersion: 4, grantRna: 0, grantBoosterDays: 0, grantBundleJson: bundleJson,
     });
     const r = await post(handler, '/api/webhook', paymentBody(`ch-bnd-bad-${name}`, `nonce-bnd-bad-${name}`), env, secretHeader());
     eq(r.status, 200, `${name}: webhook 200`);

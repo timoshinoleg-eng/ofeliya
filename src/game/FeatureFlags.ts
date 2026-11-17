@@ -49,7 +49,8 @@ export type FlagKey =
   | 'storefront.variant'
   | 'retention.quests'
   | 'economy.lab'
-  | 'skins.gallery';
+  | 'skins.gallery'
+  | 'monetization.starter-pack';
 
 /**
  * Варианты витрины (storefront.variant):
@@ -90,6 +91,15 @@ export interface FlagValues {
    * каноничный арт, поведение игры не меняется; гасится флагом мгновенно.
    */
   'skins.gallery': boolean;
+  /**
+   * Стартовый набор в витрине (монетизация v3, этап 4).
+   * Дефолт true — набор виден всем; выключение прячет ТОЛЬКО карточку
+   * в витрине (StorefrontScene фильтрует список). Сервер флаг не читает:
+   * инвойс по id bundle.starter-pack всегда выдаёт снапшот — флаг это
+   * kill-switch видимости, а не гейт покупки. Ценовой A/B флагом НЕ
+   * делается: цена живёт на сервере (см. memory/02_DECISIONS.md).
+   */
+  'monetization.starter-pack': boolean;
 }
 
 export const FLAG_DEFAULTS: FlagValues = {
@@ -99,6 +109,7 @@ export const FLAG_DEFAULTS: FlagValues = {
   'retention.quests': true,
   'economy.lab': true,
   'skins.gallery': true,
+  'monetization.starter-pack': true,
 };
 
 /** Чистая функция: дефолты + оверрайды. Неизвестные ключи игнорируются. */
@@ -110,6 +121,8 @@ export function resolveFlags(overrides: Partial<FlagValues> = {}): FlagValues {
     'retention.quests': overrides['retention.quests'] ?? FLAG_DEFAULTS['retention.quests'],
     'economy.lab': overrides['economy.lab'] ?? FLAG_DEFAULTS['economy.lab'],
     'skins.gallery': overrides['skins.gallery'] ?? FLAG_DEFAULTS['skins.gallery'],
+    'monetization.starter-pack':
+      overrides['monetization.starter-pack'] ?? FLAG_DEFAULTS['monetization.starter-pack'],
   };
 }
 
@@ -159,6 +172,9 @@ export function readUrlFlagOverrides(search: string): Partial<FlagValues> {
   const rawGallery = params.get('flag.skins.gallery');
   if (rawGallery === 'true' || rawGallery === '1') out['skins.gallery'] = true;
   else if (rawGallery === 'false' || rawGallery === '0') out['skins.gallery'] = false;
+  const rawStarterPack = params.get('flag.monetization.starter-pack');
+  if (rawStarterPack === 'true' || rawStarterPack === '1') out['monetization.starter-pack'] = true;
+  else if (rawStarterPack === 'false' || rawStarterPack === '0') out['monetization.starter-pack'] = false;
   return out;
 }
 

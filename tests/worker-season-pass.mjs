@@ -2,7 +2,7 @@
  * Worker season pass — монетизация v3 (сезонный пропуск, схема v17).
  *
  * Covers:
- * - каталог: GRANTS_VERSION === 3; season-pass.basic-30d — kind
+ * - каталог: GRANTS_VERSION === 4; season-pass.basic-30d — kind
  *   'season_pass', 30 дней, subscription.periodSeconds === 2592000
  *   (единственное допустимое значение Telegram Stars);
  * - /api/invoice: subscription_period=2592000 передаётся в
@@ -159,7 +159,7 @@ try {
   const baseEnv = { TELEGRAM_BOT_TOKEN: BOT_TOKEN, WEBHOOK_SECRET };
 
   // === каталог ===
-  eq(grants.GRANTS_VERSION, 3, 'GRANTS_VERSION 3 (season pass added)');
+  eq(grants.GRANTS_VERSION, 4, 'GRANTS_VERSION 4 (season pass + bundles)');
   const passGrant = grants.grantForProduct(PASS_ID);
   assert(passGrant, 'season pass in catalog');
   eq(passGrant.kind, 'season_pass', 'pass kind');
@@ -186,7 +186,7 @@ try {
     const order = db.orders.get('nonce-sp-inv-1');
     assert(order, 'pass order written');
     eq(order.grant_season_pass_days, 30, 'order snapshot: 30 pass days');
-    eq(order.sku_version, 3, 'order sku_version 3');
+    eq(order.sku_version, 4, 'order sku_version 4');
 
     botCalls.length = 0;
     const inv2 = await post(
@@ -204,7 +204,7 @@ try {
   {
     const db = makeD1();
     const env = { ...baseEnv, PAYMENTS_DB: db };
-    await seedOrder(db, 'nonce-sp-1', USER_ID, PASS_ID, 250, { skuVersion: 3, grantRna: 0, grantBoosterDays: 0, grantSeasonPassDays: 30 });
+    await seedOrder(db, 'nonce-sp-1', USER_ID, PASS_ID, 250, { skuVersion: 4, grantRna: 0, grantBoosterDays: 0, grantSeasonPassDays: 30 });
 
     const before = Date.now();
     const r1 = await post(handler, '/api/webhook', paymentBody('ch-sp-1', 'nonce-sp-1'), env, secretHeader());
@@ -228,7 +228,7 @@ try {
       const origLog = console.log;
       console.log = (...args) => void lines.push(args.join(' '));
       try {
-        await seedOrder(db, 'nonce-sp-1b', USER_ID, PASS_ID, 250, { skuVersion: 3, grantRna: 0, grantBoosterDays: 0, grantSeasonPassDays: 30 });
+        await seedOrder(db, 'nonce-sp-1b', USER_ID, PASS_ID, 250, { skuVersion: 4, grantRna: 0, grantBoosterDays: 0, grantSeasonPassDays: 30 });
         const rb = await post(handler, '/api/webhook', paymentBody('ch-sp-1b', 'nonce-sp-1b'), env, secretHeader());
         eq(rb.status, 200, 'drift-check payment 200');
       } finally {
@@ -292,7 +292,7 @@ try {
   {
     const db = makeD1();
     const env = { ...baseEnv, PAYMENTS_DB: db };
-    await seedOrder(db, 'nonce-sp-2', USER_ID, PASS_ID, 250, { skuVersion: 3, grantRna: 0, grantBoosterDays: 0, grantSeasonPassDays: 30 });
+    await seedOrder(db, 'nonce-sp-2', USER_ID, PASS_ID, 250, { skuVersion: 4, grantRna: 0, grantBoosterDays: 0, grantSeasonPassDays: 30 });
     await post(handler, '/api/webhook', paymentBody('ch-sp-2', 'nonce-sp-2'), env, secretHeader());
     const until = db.wallets.get(USER_ID).season_pass_until_ms;
 
@@ -319,7 +319,7 @@ try {
   {
     const db = makeD1();
     const env = { ...baseEnv, PAYMENTS_DB: db };
-    await seedOrder(db, 'nonce-sp-3', USER_ID, 'currency.rna-pack-s', 35, { skuVersion: 3, grantRna: 500, grantBoosterDays: 0 });
+    await seedOrder(db, 'nonce-sp-3', USER_ID, 'currency.rna-pack-s', 35, { skuVersion: 4, grantRna: 500, grantBoosterDays: 0 });
     await post(handler, '/api/webhook', paymentBody('ch-sp-3', 'nonce-sp-3', { amount: 35 }), env, secretHeader());
     eq(db.wallets.get(USER_ID).purchased_rna, 500, 'rna grant applied');
     const r = await post(
@@ -347,7 +347,7 @@ try {
   {
     const db = makeD1();
     const env = { ...baseEnv, PAYMENTS_DB: db };
-    await seedOrder(db, 'nonce-sp-5', USER_ID, PASS_ID, 250, { skuVersion: 3, grantRna: 0, grantBoosterDays: 0, grantSeasonPassDays: 30 });
+    await seedOrder(db, 'nonce-sp-5', USER_ID, PASS_ID, 250, { skuVersion: 4, grantRna: 0, grantBoosterDays: 0, grantSeasonPassDays: 30 });
     await post(handler, '/api/webhook', paymentBody('ch-sp-5', 'nonce-sp-5'), env, secretHeader());
     const until = db.wallets.get(USER_ID).season_pass_until_ms;
 
@@ -370,7 +370,7 @@ try {
   {
     const db = makeD1();
     const env = { ...baseEnv, PAYMENTS_DB: db, ADMIN_TOKEN };
-    await seedOrder(db, 'nonce-sp-6', USER_ID, PASS_ID, 250, { skuVersion: 3, grantRna: 0, grantBoosterDays: 0, grantSeasonPassDays: 30 });
+    await seedOrder(db, 'nonce-sp-6', USER_ID, PASS_ID, 250, { skuVersion: 4, grantRna: 0, grantBoosterDays: 0, grantSeasonPassDays: 30 });
     await post(handler, '/api/webhook', paymentBody('ch-sp-6', 'nonce-sp-6'), env, secretHeader());
 
     const noAuth = await post(handler, '/api/admin/subscription', { chargeId: 'ch-sp-6', isCanceled: true }, env);

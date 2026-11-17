@@ -62,10 +62,14 @@ try {
   // --- season pass duration is 30 days (монетизация v3) ---
   eq(SEASON_PASS_DURATION_MS, 30 * 24 * 3600 * 1000, 'season pass lasts 30 days');
 
-  // --- every catalog product maps to exactly one grant ---
+  // --- every catalog product maps to grants: singles → 1, bundles → 1 per component ---
   for (const product of SHOP_CATALOG) {
     const grants = purchaseGrants(product);
-    eq(grants.length, 1, `${product.id} maps to exactly one grant`);
+    if (product.kind === 'bundle') {
+      eq(grants.length, product.bundle.length, `${product.id} maps to one grant per component`);
+    } else {
+      eq(grants.length, 1, `${product.id} maps to exactly one grant`);
+    }
   }
 
   // --- skins map to a skin grant (purchase seam, Phase 5 follow-up) ---
@@ -93,6 +97,30 @@ try {
   eq(pass.stars, 250, 'season pass costs 250 stars');
   eq(purchaseGrants(pass)[0].type, 'season_pass', 'season pass grants a season pass');
   eq(purchaseGrants(pass)[0].durationMs, SEASON_PASS_DURATION_MS, 'season pass duration matches');
+
+  // --- bundles map to one grant per component (монетизация v3) ---
+  const starter = SHOP_CATALOG.find((p) => p.id === 'bundle.starter-pack');
+  assert(starter, 'starter pack is in catalog');
+  eq(starter.kind, 'bundle', 'starter pack kind');
+  eq(starter.stars, 150, 'starter pack costs 150 stars');
+  const starterGrants = purchaseGrants(starter);
+  eq(starterGrants.map((g) => g.type).join(','), 'skin,rna,booster', 'starter grant types');
+  eq(starterGrants[0].skinId, 'skin.starter-prime', 'starter grants exclusive skin');
+  eq(starterGrants[1].amount, 500, 'starter grants 500 RNA');
+  eq(starterGrants[2].durationMs, 3 * 24 * 3600 * 1000, 'starter booster is 3 days (bundle-only grant)');
+  const trio = SHOP_CATALOG.find((p) => p.id === 'bundle.skin-trio');
+  assert(trio, 'skin trio is in catalog');
+  eq(trio.stars, 300, 'skin trio costs 300 stars');
+  const trioGrants = purchaseGrants(trio);
+  eq(trioGrants.length, 3, 'trio grants 3 skins');
+  eq(trioGrants.every((g) => g.type === 'skin'), true, 'trio grants are all skins');
+  eq(
+    trioGrants.map((g) => g.skinId).sort().join(','),
+    'skin.abyssal-teal,skin.gilded-prime,skin.virulent-magenta',
+    'trio skin ids'
+  );
+  // битый бандл (нет компонентов) — пустой список, не падение
+  eq(purchaseGrants({ id: 'bundle.broken', kind: 'bundle' }).length, 0, 'bundle without components grants nothing');
 
   // --- unknown products grant nothing (fail-closed) ---
   eq(purchaseGrants({ id: 'nope', kind: 'currency' }).length, 0, 'unknown currency grants nothing');

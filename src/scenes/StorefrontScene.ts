@@ -384,8 +384,14 @@ export class StorefrontScene extends Phaser.Scene {
         this.setState('error');
         return;
       }
-      this.products = products;
-      this.setState(products.length === 0 ? 'empty' : 'ready');
+      // Монетизация v3: стартовый набор прячется флагом (kill-switch
+      // видимости; валидация выше идёт по полному каталогу). Сервер флаг
+      // не читает — покупка по id всё равно выдаст снапшот.
+      const visible = FeatureFlags.get('monetization.starter-pack')
+        ? products
+        : products.filter((p) => p.id !== 'bundle.starter-pack');
+      this.products = visible;
+      this.setState(visible.length === 0 ? 'empty' : 'ready');
     } catch (e) {
       if (!this.sys.isActive()) return;
       this.errorReason = e instanceof Error ? e.message : 'unknown';

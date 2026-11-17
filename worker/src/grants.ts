@@ -86,7 +86,7 @@ export type BundleComponent =
  * ('stars_payment_sku_drift'), заказ при этом остаётся контрактом.
  * При ЛЮБОМ изменении цен/грантов ниже — увеличить на 1.
  */
-export const GRANTS_VERSION = 3;
+export const GRANTS_VERSION = 4;
 
 /**
  * Серверный каталог: ЦЕНА И ГРАНТ ВСЕГДА С СЕРВЕРА.
@@ -167,6 +167,48 @@ export const SERVER_GRANTS: Record<string, ServerGrant> = {
     skinId: null,
     seasonPassDays: 30,
     subscription: { periodSeconds: 2592000 },
+  },
+  /**
+   * Стартовый набор (монетизация v3, этап 4): эксклюзивный скин
+   * 'skin.starter-prime' (только здесь — отдельного товара нет),
+   * 500 РНК и бустер ×2 на 3 дня. 3-дневный бустер — новый грант ТОЛЬКО
+   * внутри бандла (отдельного товара на 3 дня нет). Видимость в витрине —
+   * флаг monetization.starter-pack (клиент; сервер грант не гейтит —
+   * инвойс по id всегда выдаёт снапшот).
+   */
+  'bundle.starter-pack': {
+    title: 'Стартовый набор',
+    description: 'Эксклюзивный штамм «Прайм», 500 РНК и бустер ×2 на 3 дня.',
+    stars: 150,
+    rna: 0,
+    boosterDays: 0,
+    skinId: null,
+    seasonPassDays: 0,
+    bundle: [
+      { kind: 'skin', skinId: 'skin.starter-prime' },
+      { kind: 'rna', rna: 500 },
+      { kind: 'booster', boosterDays: 3 },
+    ],
+  },
+  /**
+   * Трио штаммов (монетизация v3, этап 4): три шоп-скина одним платежом.
+   * По отдельности — 450 ★, бандл — 300 ★ (≈ −33%). Повторная покупка
+   * скина, который уже есть, — no-op на уровне триггера (INSERT OR IGNORE
+   * по PK wallet_skins); дубликат платежа отклоняется UNIQUE журнала.
+   */
+  'bundle.skin-trio': {
+    title: 'Трио штаммов',
+    description: '«Вирулентный», «Бездонный» и «Позолоченный» — все три окраса сразу.',
+    stars: 300,
+    rna: 0,
+    boosterDays: 0,
+    skinId: null,
+    seasonPassDays: 0,
+    bundle: [
+      { kind: 'skin', skinId: 'skin.virulent-magenta' },
+      { kind: 'skin', skinId: 'skin.abyssal-teal' },
+      { kind: 'skin', skinId: 'skin.gilded-prime' },
+    ],
   },
 };
 

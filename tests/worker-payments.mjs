@@ -238,7 +238,7 @@ try {
     // v16 (B2): заказ иммутабелен — цена и версия каталога зафиксированы.
     // v17 (монетизация v3): GRANTS_VERSION 3 (добавлен сезонный пропуск).
     assert(order.amount_stars === 35, 'order amount_stars');
-    assert(order.sku_version === 3, 'order sku_version');
+    assert(order.sku_version === 4, 'order sku_version');
     assert(order.grant_rna === 500, 'order grant snapshot rna');
     assert(order.grant_season_pass_days === 0, 'order grant snapshot season pass (0 for non-pass)');
     inv = await invoicePost(invEnv, {
