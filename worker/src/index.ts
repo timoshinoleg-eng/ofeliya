@@ -430,12 +430,17 @@ export async function validateInitData(
 async function botApi(
   botToken: string,
   method: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  opts?: { timeoutMs?: number }
 ): Promise<unknown> {
   const res = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
+    // P2-6: таймаут для pre_checkout-пути (бюджет Telegram — 10с).
+    // Остальные вызовы (refund, subscription, invoice) без таймаута —
+    // их ретраит админ/клиент, а не 10-секундный pre_checkout.
+    ...(opts?.timeoutMs ? { signal: AbortSignal.timeout(opts.timeoutMs) } : {}),
   });
   const data = (await res.json()) as { ok?: boolean; result?: unknown; description?: string };
   if (!res.ok || !data.ok) {
@@ -767,11 +772,31 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
         ok = false;
       }
     }
-    await botApi(env.TELEGRAM_BOT_TOKEN, 'answerPreCheckoutQuery', {
-      pre_checkout_query_id: q.id,
-      ok,
-      ...(ok ? {} : { error_message: 'Товар недоступен. Попробуйте позже.' }),
-    });
+    // P2-6: ответ pre_checkout — в try/catch с таймаутом 8с (бюджет
+    // Telegram — 10с от отправки query). Падение Bot API раньше
+    // пробрасывалось наверх → 500 воркера и отмена платежа; теперь —
+    // 503, чтобы Telegram ретраил query с новым бюджетом. Остальные
+    // вызовы Bot API (refund, subscription) обёрнуты давно — здесь
+    // не было.
+    try {
+      await botApi(
+        env.TELEGRAM_BOT_TOKEN,
+        'answerPreCheckoutQuery',
+        {
+          pre_checkout_query_id: q.id,
+          ok,
+          ...(ok ? {} : { error_message: 'Товар недоступен. Попробуйте позже.' }),
+        },
+        { timeoutMs: 8000 }
+      );
+    } catch (err) {
+      logEvent('pre_checkout_answer_failed', {
+        nonce,
+        ok,
+        error: String(err),
+      });
+      return json({ ok: false, error: 'pre-checkout-failed' }, 503);
+    }
     const elapsedMs = Date.now() - t0;
     if (elapsedMs > 7000) {
       // Бюджет Telegram — 10с от отправки pre_checkout_query. 503-ретраи
