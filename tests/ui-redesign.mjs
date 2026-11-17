@@ -1086,7 +1086,10 @@ try {
     await ratingPage.goto(base, { waitUntil: 'domcontentloaded' });
     await ratingPage.waitForFunction(() => window.__game?.scene.isActive('Menu'), null, { timeout: 20000 });
     await ratingPage.evaluate(() => window.__game.scene.getScene('Menu').showSocialHub());
-    await ratingPage.waitForTimeout(900);
+    await ratingPage.waitForFunction(() => {
+      const menu = window.__game.scene.getScene('Menu');
+      return menu.children.list.some((object) => object.name === 'ofeliya-social-hub');
+    }, null, { timeout: 20000 });
     const rating = await ratingPage.evaluate(() => {
       const menu = window.__game.scene.getScene('Menu');
       const hub = menu.children.list.find((o) => o.name === 'ofeliya-social-hub');
