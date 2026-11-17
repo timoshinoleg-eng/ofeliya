@@ -25,9 +25,15 @@
 const fs = require('fs');
 const { chromium } = require('playwright-core');
 
-const chrome = ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(
-  fs.existsSync
-);
+// Системный Chrome — приоритет (CI); fallback — bundled Chromium
+// Playwright (паттерн scripts/art-world-geometry-smoke.cjs): в VM
+// системного Chrome нет, а без него smoke не запускается вообще.
+const chrome = [
+  '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/chromium',
+  chromium.executablePath(),
+].find(fs.existsSync);
 if (!chrome) throw new Error('Chrome not found');
 
 const BASE = process.env.OFELIYA_DEV_URL || 'http://127.0.0.1:5173';
@@ -109,6 +115,10 @@ async function bootStorefront(browser, viewport, seed) {
   const errors = [];
   page.on('pageerror', (error) => errors.push(String(error)));
   await page.goto(BASE + '/' + FLAGS, { waitUntil: 'domcontentloaded' });
+  // P3-N3: явное ожидание готовности игры до обращения к window.__game
+  // (флейк: evaluate падал с window.__game undefined, когда игра ещё
+  // не поднялась; отдельный wait даёт понятную стадию отказа).
+  await page.waitForFunction(() => window.__game && window.__game.scene, null, { timeout: 15000 });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'), null, { timeout: 15000 });
   await page.evaluate(() => {
     window.__game.scene.getScene('Menu').scene.start('Storefront');
@@ -445,34 +455,49 @@ async function checkScroll(page, label, failures) {
   });
   const failures = [];
   let cases = 0;
+  // P3-N3: per-case catch — один флейк (например, window.__game undefined
+  // на 10-м кейсе) больше не убивает оставшиеся кейсы: исключение кейса
+  // записывается как failure с именем кейса, прогон продолжается,
+  // в конце — сводка по кейсам, exit 1 при любом провале.
+  const caseResults = [];
+  async function runCase(label, fn) {
+    cases += 1;
+    const before = failures.length;
+    try {
+      await fn();
+    } catch (error) {
+      failures.push(`${label}: EXCEPTION ${error instanceof Error ? error.message : String(error)}`);
+    }
+    const n = failures.length - before;
+    caseResults.push({ label, failures: n });
+    console.log(`  case ${label}: ${n} failure(s)`);
+  }
 
   // Матрица: вьюпорт x состояние пропуска.
   for (const vp of VIEWPORTS) {
     for (const passActive of [false, true]) {
       const label = `${vp.width}x${vp.height} pass=${passActive ? 'active' : 'inactive'}`;
-      const { ctx, page, errors } = await bootStorefront(browser, vp, { passActive });
-      cases += 1;
-      try {
-        const g = await extractGeometry(page);
-        checkFrame(g, label, failures);
-        await checkScroll(page, label, failures);
-        if (errors.length) failures.push(`${label}: page errors: ${errors.join(' | ')}`);
-        const caseFails = failures.filter((f) => f.startsWith(label));
-        console.log(`  case ${label}: ${caseFails.length} failure(s)`);
-        if (caseFails.length) {
-          await page.screenshot({ path: `/tmp/storefront-layout-fail-${vp.width}x${vp.height}-${passActive ? 'active' : 'inactive'}.png` });
+      await runCase(label, async () => {
+        const { ctx, page, errors } = await bootStorefront(browser, vp, { passActive });
+        try {
+          const g = await extractGeometry(page);
+          checkFrame(g, label, failures);
+          await checkScroll(page, label, failures);
+          if (errors.length) failures.push(`${label}: page errors: ${errors.join(' | ')}`);
+          if (failures.some((f) => f.startsWith(label))) {
+            await page.screenshot({ path: `/tmp/storefront-layout-fail-${vp.width}x${vp.height}-${passActive ? 'active' : 'inactive'}.png` });
+          }
+        } finally {
+          await ctx.close();
         }
-      } finally {
-        await ctx.close();
-      }
+      });
     }
   }
 
   // Баннер pending-покупки на самом узком экране.
-  {
+  await runCase('320x568 pending-banner', async () => {
     const label = '320x568 pending-banner';
     const { ctx, page, errors } = await bootStorefront(browser, { width: 320, height: 568 }, { passActive: false, pending: true });
-    cases += 1;
     try {
       const g = await extractGeometry(page);
       if (g.banners.length === 0) failures.push(`${label}: баннер pending-покупки не показался`);
@@ -481,15 +506,14 @@ async function checkScroll(page, label, failures) {
     } finally {
       await ctx.close();
     }
-  }
+  });
 
   // Невидимая кнопка: карточка уехала за маску вверх — тап по её кнопке
   // (она всё ещё хит-тестится Phaser, маска инпут не режет) не должен
   // начинать покупку.
-  {
+  await runCase('masked-button-tap 390x844', async () => {
     const label = 'masked-button-tap 390x844';
     const { ctx, page, errors } = await bootStorefront(browser, { width: 390, height: 844 }, { passActive: false });
-    cases += 1;
     try {
       await page.evaluate(() => {
         const s = window.__game.scene.getScene('Storefront');
@@ -520,13 +544,12 @@ async function checkScroll(page, label, failures) {
     } finally {
       await ctx.close();
     }
-  }
+  });
 
   // Resize: 390x844 -> 320x568, сцена перестраивается без наложений.
-  {
+  await runCase('resize 390x844->320x568', async () => {
     const label = 'resize 390x844->320x568';
     const { ctx, page, errors } = await bootStorefront(browser, { width: 390, height: 844 }, { passActive: false });
-    cases += 1;
     try {
       await page.evaluate(() => {
         window.__storeRootBefore = window.__game.scene.getScene('Storefront').root;
@@ -556,13 +579,12 @@ async function checkScroll(page, label, failures) {
     } finally {
       await ctx.close();
     }
-  }
+  });
 
   // Покупка пропуска (mock): оверлей успеха без наложений, возврат в ready.
-  {
+  await runCase('buy season-pass 390x844', async () => {
     const label = 'buy season-pass 390x844';
     const { ctx, page, errors } = await bootStorefront(browser, { width: 390, height: 844 }, { passActive: false });
-    cases += 1;
     try {
       // Скролл к карточке пропуска (7-я в списке, за пределами вьюпорта).
       await page.evaluate(() => {
@@ -644,10 +666,14 @@ async function checkScroll(page, label, failures) {
     } finally {
       await ctx.close();
     }
-  }
+  });
 
   await browser.close();
   console.log(`storefront layout smoke: ${cases} cases, ${failures.length} failure(s)`);
+  // P3-N3: сводка по кейсам — видно, какие кейсы упали, а какие прошли.
+  for (const r of caseResults) {
+    console.log(`  ${r.failures ? 'FAIL' : 'ok  '} ${r.label} (${r.failures} failure(s))`);
+  }
   if (failures.length) {
     for (const f of failures) console.error('  FAIL ' + f);
     process.exit(1);
