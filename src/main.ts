@@ -15,8 +15,9 @@ import { runStartupBoundary } from './systems/StartupBoundary';
 import { ensureTelegramBridge } from './platform/TelegramBridgeLoader';
 import { trackProductEvent } from './systems/AnalyticsClient';
 import { retryPendingDailySubmission } from './systems/ScoreClient';
+import { isTelegramWebApp, readTelegramInitData } from './game/shop/storefrontVisibility';
+import { showLazyLoadFailure } from './ui/lazyLoadFailure';
 import { FeatureFlags } from './game/FeatureFlags';
-import { TelegramStarsPaymentProvider } from './game/shop/TelegramStarsPaymentProvider';
 import { RELEASE_MARKER, RELEASE_SHA, RELEASE_SHORT } from './release';
 
 declare global {
@@ -395,7 +396,11 @@ async function boot(signal: AbortSignal): Promise<void> {
           }
           return undefined;
         })
-        .catch(() => undefined);
+        .catch(() => {
+          // A failed module fetch can remain cached until reload. Pending
+          // records stay untouched; offer an explicit user-controlled restart.
+          if (isTelegramWebApp() && readTelegramInitData() !== '') showLazyLoadFailure();
+        });
     }
   }
 

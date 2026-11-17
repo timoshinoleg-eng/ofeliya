@@ -748,7 +748,11 @@ try {
         else if (name === 'codex') menu.showCodex();
         else menu.showCollectionBoard();
       }, target);
-      await metaPage.waitForTimeout(350);
+      await metaPage.waitForFunction((name) => {
+        const menu = window.__game.scene.getScene('Menu');
+        const expected = name === 'tasks' ? 'ofeliya-quests' : name === 'codex' ? 'ofeliya-codex' : 'ofeliya-collection';
+        return menu.children.list.some((object) => object.name === expected);
+      }, target, { timeout: 20000 });
       return metaPage.evaluate(() => {
         const menu = window.__game.scene.getScene('Menu');
         const board = menu.children.list.find((o) => o.name === 'ofeliya-quests')

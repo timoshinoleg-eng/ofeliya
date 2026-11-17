@@ -1,0 +1,107 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const { chromium } = require(process.platform === 'win32' ? 'playwright' : 'playwright-core');
+
+(async () => {
+  const executablePath = process.platform === 'win32' ? undefined : ['/usr/bin/google-chrome', '/usr/bin/chromium'].find(fs.existsSync);
+  const browser = await chromium.launch({ headless: true, executablePath, args: process.platform === 'win32' ? [] : ['--no-sandbox', '--disable-dev-shm-usage'] });
+  try {
+    const context = await browser.newContext({ viewport: { width: 390, height: 740 }, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
+    await context.addInitScript(() => localStorage.setItem('ofeliya_save_v1', JSON.stringify({ runs: 1, muted: true })));
+    await context.route('https://st.max.ru/**', route => route.fulfill({ body: '', contentType: 'application/javascript' }));
+    let delayed = false;
+    await context.route('**/src/ui/QuestBoard.ts*', async route => { delayed = true; await new Promise(resolve => setTimeout(resolve, 1800)); await route.continue(); });
+    const page = await context.newPage();
+    await page.goto(process.env.OFELIYA_BASE_URL || 'http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.__game?.scene.isActive('Menu'), null, { timeout: 60000 });
+    const points = await page.evaluate(() => {
+      const menu = window.__game.scene.getScene('Menu');
+      const canvas = window.__game.canvas.getBoundingClientRect();
+      const point = name => { const obj = menu.children.list.find(o => o.name === name); if (!obj) throw new Error(`missing ${name}`); const b = obj.getBounds(); return { x: canvas.left + b.centerX, y: canvas.top + b.centerY }; };
+      return { tasks: point('ofeliya-menu-nav-tasks'), rating: point('ofeliya-menu-nav-rating') };
+    });
+    await page.touchscreen.tap(points.tasks.x, points.tasks.y);
+    await page.waitForFunction(() => window.__game.scene.getScene('Menu').questBoardLoading === true, null, { timeout: 10000 });
+    await page.touchscreen.tap(points.rating.x, points.rating.y);
+    await page.waitForFunction(() => !!window.__game.scene.getScene('Menu').questBoard, null, { timeout: 30000 });
+    await page.waitForTimeout(2000);
+    const state = await page.evaluate(() => { const menu = window.__game.scene.getScene('Menu'); return { quest: !!menu.questBoard, social: !!menu.socialHub }; });
+    assert.ok(delayed, 'QuestBoard chunk must be delayed to exercise the race');
+    assert.equal(state.quest, true, 'first requested surface opens');
+    assert.equal(state.social, false, `a second surface must not open during loading: ${JSON.stringify(state)}`);
+    console.log('lazy menu race: ok');
+    await context.close();
+
+    const failedContext = await browser.newContext({ viewport: { width: 390, height: 740 }, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
+    await failedContext.addInitScript(() => localStorage.setItem('ofeliya_save_v1', JSON.stringify({ runs: 1, muted: true })));
+    await failedContext.route('https://st.max.ru/**', route => route.fulfill({ body: '', contentType: 'application/javascript' }));
+    let rejectChunk = true;
+    await failedContext.route('**/src/ui/QuestBoard.ts*', route => rejectChunk ? route.fulfill({ status: 404, body: 'not found' }) : route.continue());
+    const failedPage = await failedContext.newPage();
+    await failedPage.goto(process.env.OFELIYA_BASE_URL || 'http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
+    await failedPage.waitForFunction(() => window.__game?.scene.isActive('Menu'), null, { timeout: 60000 });
+    const taskPoint = await failedPage.evaluate(() => { const game = window.__game; const o = game.scene.getScene('Menu').children.list.find(x => x.name === 'ofeliya-menu-nav-tasks'); const b = o.getBounds(); const c = game.canvas.getBoundingClientRect(); return { x: c.left + b.centerX, y: c.top + b.centerY }; });
+    await failedPage.touchscreen.tap(taskPoint.x, taskPoint.y);
+    const failure = failedPage.locator('#ofeliya-lazy-load-failure');
+    await failure.waitFor({ state: 'visible', timeout: 10000 });
+    assert.match(await failure.innerText(), /не удалось загрузить/i);
+    assert.equal(await failure.locator('button').count(), 2, 'failure provides reload and dismiss actions');
+    await failure.getByRole('button', { name: /закрыть/i }).click();
+    assert.equal(await failure.count(), 0, 'dismissing the error returns control to the menu');
+    await failedPage.touchscreen.tap(taskPoint.x, taskPoint.y);
+    await failure.waitFor({ state: 'visible', timeout: 10000 });
+    rejectChunk = false;
+    await Promise.all([failedPage.waitForNavigation({ waitUntil: 'domcontentloaded' }), failure.getByRole('button', { name: /перезапустить/i }).click()]);
+    await failedPage.waitForFunction(() => window.__game?.scene.isActive('Menu'), null, { timeout: 60000 });
+    const retryPoint = await failedPage.evaluate(() => { const game = window.__game; const o = game.scene.getScene('Menu').children.list.find(x => x.name === 'ofeliya-menu-nav-tasks'); const b = o.getBounds(); const c = game.canvas.getBoundingClientRect(); return { x: c.left + b.centerX, y: c.top + b.centerY }; });
+    await failedPage.touchscreen.tap(retryPoint.x, retryPoint.y);
+    await failedPage.waitForFunction(() => !!window.__game.scene.getScene('Menu').questBoard, null, { timeout: 30000 });
+    console.log('lazy menu failure: ok');
+    await failedContext.close();
+
+    const reentryContext = await browser.newContext({ viewport: { width: 390, height: 740 }, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
+    await reentryContext.addInitScript(() => localStorage.setItem('ofeliya_save_v1', JSON.stringify({ runs: 1, muted: true })));
+    await reentryContext.route('https://st.max.ru/**', route => route.fulfill({ body: '', contentType: 'application/javascript' }));
+    let releaseChunk;
+    const chunkGate = new Promise(resolve => { releaseChunk = resolve; });
+    await reentryContext.route('**/src/ui/QuestBoard.ts*', async route => { await chunkGate; await route.continue(); });
+    const reentryPage = await reentryContext.newPage();
+    await reentryPage.goto(process.env.OFELIYA_BASE_URL || 'http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
+    await reentryPage.waitForFunction(() => window.__game?.scene.isActive('Menu'), null, { timeout: 60000 });
+    await reentryPage.evaluate(() => window.__game.scene.getScene('Menu').showQuestBoard());
+    await reentryPage.waitForFunction(() => window.__game.scene.getScene('Menu').questBoardLoading, null, { timeout: 10000 });
+    // Exercise scene lifecycle directly; normal navigation would otherwise obscure timing.
+    await reentryPage.evaluate(() => window.__game.scene.getScene('Menu').scene.start('Game'));
+    await reentryPage.waitForFunction(() => window.__game.scene.isActive('Game') || window.__game.scene.isPaused('Game'), null, { timeout: 30000 });
+    await reentryPage.evaluate(() => { window.__game.scene.stop('Game'); window.__game.scene.start('Menu'); });
+    await reentryPage.waitForFunction(() => window.__game.scene.isActive('Menu'), null, { timeout: 30000 });
+    releaseChunk();
+    await reentryPage.waitForTimeout(2500);
+    const stale = await reentryPage.evaluate(() => !!window.__game.scene.getScene('Menu').questBoard);
+    assert.equal(stale, false, 'an import initiated by a previous menu instance must not open on re-entry');
+    console.log('lazy menu re-entry: ok');
+    await reentryContext.close();
+
+    const pausedContext = await browser.newContext({ viewport: { width: 390, height: 740 }, serviceWorkers: 'block' });
+    await pausedContext.addInitScript(() => localStorage.setItem('ofeliya_save_v1', JSON.stringify({ runs: 1, muted: true })));
+    await pausedContext.route('https://st.max.ru/**', route => route.fulfill({ body: '', contentType: 'application/javascript' }));
+    let resumeChunk;
+    const pausedChunkGate = new Promise(resolve => { resumeChunk = resolve; });
+    await pausedContext.route('**/src/ui/QuestBoard.ts*', async route => { await pausedChunkGate; await route.continue(); });
+    const pausedPage = await pausedContext.newPage();
+    await pausedPage.goto(process.env.OFELIYA_BASE_URL || 'http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
+    await pausedPage.waitForFunction(() => window.__game?.scene.isActive('Menu'), null, { timeout: 60000 });
+    await pausedPage.evaluate(() => window.__game.scene.getScene('Menu').showQuestBoard());
+    await pausedPage.waitForFunction(() => window.__game.scene.getScene('Menu').questBoardLoading, null, { timeout: 10000 });
+    await pausedPage.evaluate(() => window.__game.scene.pause('Menu'));
+    await pausedPage.waitForFunction(() => window.__game.scene.isPaused('Menu'), null, { timeout: 10000 });
+    resumeChunk();
+    await pausedPage.waitForFunction(() => !window.__game.scene.getScene('Menu').questBoardLoading, null, { timeout: 20000 });
+    await pausedPage.evaluate(() => window.__game.scene.resume('Menu'));
+    await pausedPage.waitForFunction(() => window.__game.scene.isActive('Menu'), null, { timeout: 10000 });
+    await pausedPage.evaluate(() => window.__game.scene.getScene('Menu').showQuestBoard());
+    await pausedPage.waitForFunction(() => !!window.__game.scene.getScene('Menu').questBoard, null, { timeout: 20000 });
+    console.log('lazy menu pause and retry: ok');
+    await pausedContext.close();
+  } finally { await browser.close(); }
+})().catch(error => { console.error(error); process.exitCode = 1; });

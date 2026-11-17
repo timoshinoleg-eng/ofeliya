@@ -275,6 +275,17 @@ jobs:
       - name: Muse quest-to-Phaser scenes and touch lifecycle
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:quest-scenes
 
+      - name: Lazy menu loading and recovery
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:lazy-menu && npm run test:lazy-storefront
+
+      - name: Lazy pending-payment recovery with local fixture
+        run: |
+          VITE_PAYMENTS_API_URL=http://127.0.0.1:18891 npm run dev -- --host 127.0.0.1 --port 5197 --strictPort > /tmp/vite-payment.log 2>&1 &
+          payment_vite_pid=$!
+          trap 'kill "$payment_vite_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 40); do curl -fsS http://127.0.0.1:5197/ >/dev/null && break; sleep .5; done
+          OFELIYA_BASE_URL=http://127.0.0.1:5197/ NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:lazy-payment-recovery
+
       - name: Combined Muse convergence cross-flow (platform, collection, quests, cosmetics)
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:muse-convergence-crossflow
 
