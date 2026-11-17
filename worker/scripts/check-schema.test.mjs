@@ -14,6 +14,8 @@
  *  6. отсутствующая колонка (нет duplicate_payments.status) → КРАСНАЯ;
  *  7. CLI: дефолтный прогон exit 0; --print-commands печатает
  *     read-only SQL для wrangler; --db на битой базе exit != 0.
+ *  8. CR-R3-3: частичная миграция (шаг 3b пропущен — устаревший
+ *     UNIQUE(charge_id) на wallet_skins при составном PK) → КРАСНАЯ.
  *
  * Запуск: node --test worker/scripts/check-schema.test.mjs
  */
@@ -243,6 +245,61 @@ test('wrong ledger UNIQUE (v16 UNIQUE(charge_id)) → checks RED', () => {
       failingNames(result).some((n) => n.includes('ledger-unique')),
       `failing checks must mention ledger-unique (got: ${failingNames(result).join(', ')})`
     );
+  } finally {
+    cleanup();
+  }
+});
+
+test('CR-R3-3: partial migration (step 3b skipped, obsolete UNIQUE(charge_id) on wallet_skins) → checks RED', () => {
+  const { db, cleanup } = buildFreshDb();
+  try {
+    // Частичная миграция: вся v17 применена, но шаг 3b пропущен —
+    // wallet_skins сохранил устаревший UNIQUE(charge_id) при том же
+    // составном PK. Воспроизводим пересозданием таблицы как в v16
+    // (charge_id TEXT NOT NULL UNIQUE + PK (user_id, skin_id, charge_id)).
+    // Триггеры на время пересоздания снимаем и пересоздаём из schema.sql:
+    // ALTER TABLE RENAME при живом триггере на wallet_skins падает
+    // (SQLite перепроверяет тело триггера, а таблицы в этот момент нет) —
+    // в настоящей миграции триггеров к шагу 3b уже нет (шаг 3 снёс
+    // wallet_ledger вместе с ними, шаг 4 пересоздал).
+    db.exec('DROP TRIGGER trg_wallet_ledger_apply');
+    db.exec('DROP TRIGGER trg_wallet_ledger_season_pass_guard');
+    db.exec(`
+      CREATE TABLE wallet_skins_partial (
+        user_id    INTEGER NOT NULL,
+        skin_id    TEXT NOT NULL,
+        charge_id  TEXT NOT NULL UNIQUE,
+        status     TEXT NOT NULL DEFAULT 'active',
+        granted_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, skin_id, charge_id)
+      );
+      INSERT INTO wallet_skins_partial SELECT * FROM wallet_skins;
+      DROP TABLE wallet_skins;
+      ALTER TABLE wallet_skins_partial RENAME TO wallet_skins;
+    `);
+    db.exec(extractTriggerSql(SCHEMA_SQL));
+    db.exec(extractTriggerSql(SCHEMA_SQL, 'trg_wallet_ledger_season_pass_guard'));
+    const result = checkDatabase(db);
+    assert.equal(result.ok, false, 'partial migration (obsolete UNIQUE(charge_id)) must FAIL the gate');
+    assert.ok(
+      failingNames(result).some((n) => n.includes('wallet-skins')),
+      `failing checks must mention wallet-skins (got: ${failingNames(result).join(', ')})`
+    );
+    // Доказательство слепоты старого гейта: PK-проверка проходит...
+    const pkCheck = result.checks.find((c) => c.name === 'wallet-skins-pk');
+    assert.ok(pkCheck && pkCheck.ok, 'PK check still passes on the partial migration (this is what the old gate missed)');
+    // ...и функциональный тест тоже не ловит (вставляет один скин).
+    const fn = functionalTriggerTest(db);
+    assert.equal(fn.ok, true, 'functional trigger test still passes (single skin insert)');
+    // Контроль: полная v17 — новый чек зелёный.
+    const fresh = buildFreshDb();
+    try {
+      const freshResult = checkDatabase(fresh.db);
+      const newCheck = freshResult.checks.find((c) => c.name === 'wallet-skins-no-charge-unique');
+      assert.ok(newCheck && newCheck.ok, 'full v17 DB passes the new wallet-skins unique check');
+    } finally {
+      fresh.cleanup();
+    }
   } finally {
     cleanup();
   }

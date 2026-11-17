@@ -29,6 +29,17 @@
  * - P1-3 (в): read-back после грант-батча: нормальный платёж — без
  *   mismatch-лога; отключённый триггер (стаб disableTrigger) — громкий
  *   stars_grant_readback_mismatch, вебхук всё равно 200.
+ * - CR-R3-1: повторная доставка первой оплаты пропуска (тот же nonce,
+ *   тот же charge_id) — идемпотентный no-op: без duplicate_payments,
+ *   без denied, без отмены действующей подписки; продление при этом
+ *   по-прежнему грантится.
+ * - CR-R3-2: падение createInvoiceLink помечает заказ терминальным
+ *   'invoice_failed' — следующий инвойс подписки с новым nonce не
+ *   блокируется; брошенный инвойс, чьё создание удалось, по-прежнему
+ *   блокирует 24ч; pre_checkout отклоняет заказ без инвойса.
+ * - CR-R3-13: восстановление инвойса (P2-5 ретрай) — по stored-цене
+ *   заказа, а не текущей цене каталога; новый заказ — по-прежнему по
+ *   каталогу; NULL stored-цена — fail-closed 502 order-price-invalid.
  *
  * D1 — общий стаб tests/d1-v16-stub.mjs (+duplicate_payments).
  * Bot API — стаб globalThis.fetch с флагами падения.
@@ -118,7 +129,7 @@ async function post(handler, path, body, env, headers = {}) {
 
 // --- стаб Bot API ---
 const botCalls = [];
-const botFail = { refund: false, preCheckout: false, edit: false };
+const botFail = { refund: false, preCheckout: false, edit: false, invoice: false };
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (url, opts) => {
   const u = String(url);
@@ -140,6 +151,7 @@ globalThis.fetch = async (url, opts) => {
       });
     }
     if (method === 'createInvoiceLink') {
+      if (botFail.invoice) throw new Error('p1-stub: createInvoiceLink network failure');
       return new Response(JSON.stringify({ ok: true, result: `https://t.me/$inv-p1-${botCalls.length}` }), {
         headers: { 'content-type': 'application/json' },
       });
@@ -374,6 +386,35 @@ try {
     eq(alien.status, 200, 'P1-2: pending check is per-user');
   }
 
+  // === CR-R3-2: падение createInvoiceLink не блокирует следующий инвойс подписки ===
+  {
+    const db = makeD1();
+    const env = { ...baseEnv, PAYMENTS_DB: db };
+    // createInvoiceLink упал — инвойса нет, заказ не должен блокировать гейт.
+    botFail.invoice = true;
+    let failed;
+    try {
+      failed = await post(handler, '/api/invoice', { initData, productId: PASS_ID, nonce: 'nonce-r3-2-a' }, env);
+    } finally {
+      botFail.invoice = false;
+    }
+    eq(failed.status, 502, 'CR-R3-2: invoice creation failure → 502');
+    eq((await failed.json()).error, 'invoice-create-failed', 'CR-R3-2: 502 error code invoice-create-failed');
+    // Следующий инвойс с НОВЫМ nonce — не заблокирован (было: 409 на 24ч).
+    const next = await post(handler, '/api/invoice', { initData, productId: PASS_ID, nonce: 'nonce-r3-2-b' }, env);
+    eq(next.status, 200, 'CR-R3-2: next subscription invoice not blocked by failed creation');
+    eq(db.orders.get('nonce-r3-2-a').status, 'invoice_failed', 'CR-R3-2: failed order is terminal invoice_failed');
+    // Брошенный инвойс, чьё создание УДАЛОСЬ, по-прежнему блокирует 24ч.
+    const third = await post(handler, '/api/invoice', { initData, productId: PASS_ID, nonce: 'nonce-r3-2-c' }, env);
+    eq(third.status, 409, 'CR-R3-2: abandoned (created) invoice still blocks for 24h');
+    eq((await third.json()).error, 'subscription-pending', 'CR-R3-2: 409 error code subscription-pending');
+    // Заказ без инвойса нельзя оплатить: pre_checkout — ok:false.
+    botCalls.length = 0;
+    await post(handler, '/api/webhook', preCheckoutBody('q-r3-2-a', 'nonce-r3-2-a', { amount: 250 }), env, secretHeader());
+    const pc = botCalls.find((c) => c.method === 'answerPreCheckoutQuery' && c.body.pre_checkout_query_id === 'q-r3-2-a');
+    eq(pc.body.ok, false, 'CR-R3-2: pre_checkout rejects invoice_failed order');
+  }
+
   // === P1-2: оплата второго инвойса при активном пропуске → без гранта ===
   {
     const db = makeD1();
@@ -413,6 +454,44 @@ try {
     eq((await rr.json()).ok, true, 'P1-2 webhook: denied payment refundable via P1-1');
     eq(db.duplicatePayments.get('ch-p1-p2-b').status, 'refunded', 'P1-2 webhook: denied payment refunded');
     eq(db.wallets.get(USER_ID).season_pass_until_ms, until1, 'P1-2 webhook: refund of denied payment does not touch pass');
+  }
+
+  // === CR-R3-1: повторная доставка первой оплаты пропуска — no-op, подписка жива ===
+  {
+    const db = makeD1();
+    const env = { ...baseEnv, PAYMENTS_DB: db };
+    const until1 = await buyPass(handler, db, env, 'nonce-r3-1-1', 'ch-r3-1-1');
+    eq([...db.ledger.values()].filter((r) => r.grant_type === 'season_pass').length, 1, 'CR-R3-1: one season_pass grant after first payment');
+    // Telegram переотправил тот же successful_payment (тот же nonce, тот же charge_id).
+    botCalls.length = 0;
+    const lines = [];
+    const origLog = console.log;
+    console.log = (...args) => void lines.push(args.join(' '));
+    let redelivery;
+    try {
+      redelivery = await post(handler, '/api/webhook', paymentBody('ch-r3-1-1', 'nonce-r3-1-1', { amount: 250 }), env, secretHeader());
+    } finally {
+      console.log = origLog;
+    }
+    eq(redelivery.status, 200, 'CR-R3-1: redelivery → 200');
+    assert(!db.duplicatePayments.has('ch-r3-1-1'), 'CR-R3-1: redelivered charge NOT in duplicate_payments');
+    eq(db.orders.get('nonce-r3-1-1').status, 'paid', 'CR-R3-1: order stays paid (not denied)');
+    eq(db.wallets.get(USER_ID).season_pass_until_ms, until1, 'CR-R3-1: pass term unchanged');
+    eq([...db.ledger.values()].filter((r) => r.grant_type === 'season_pass').length, 1, 'CR-R3-1: no second grant row');
+    eq(editCalls().length, 0, 'CR-R3-1: no editUserStarSubscription — live subscription NOT cancelled');
+    assert(lines.some((l) => l.includes('stars_payment_duplicate')), 'CR-R3-1: duplicate delivery logged');
+    assert(!lines.some((l) => l.includes('stars_payment_subscription_active_denied')), 'CR-R3-1: no denial log on redelivery');
+    // Контроль: продление по-прежнему грантится (тот же nonce, новый charge_id).
+    const rr = await post(
+      handler, '/api/webhook',
+      paymentBody('ch-r3-1-1-ren', 'nonce-r3-1-1', { amount: 250, isRecurring: true, isFirstRecurring: false }),
+      env, secretHeader()
+    );
+    eq(rr.status, 200, 'CR-R3-1: renewal after redelivery → 200');
+    assert(
+      db.wallets.get(USER_ID).season_pass_until_ms >= until1 + 30 * DAY_MS - 1000,
+      'CR-R3-1: renewal still extends the pass'
+    );
   }
 
   // === P1-2: продление работает; продление отклонённой подписки — нет ===
@@ -623,6 +702,36 @@ try {
     eq(db.orders.get('nonce-p1-p25-1').status, 'paid', 'P2-5: order paid');
     const afterPaid = await post(handler, '/api/invoice', { initData, productId: RNA_ID, nonce: 'nonce-p1-p25-1' }, env);
     eq(afterPaid.status, 502, 'P2-5: retry after payment → 502');
+  }
+
+  // === CR-R3-13: восстановление инвойса — по stored-цене заказа, не каталога ===
+  {
+    const db = makeD1();
+    const env = { ...baseEnv, PAYMENTS_DB: db };
+    // Заказ создан, когда RNA стоил 50 ★; каталог с тех пор стал 35 ★.
+    await seedOrder(db, 'nonce-r3-13-1', USER_ID, RNA_ID, 50, { skuVersion: 4, grantRna: 500, grantBoosterDays: 0 });
+    botCalls.length = 0;
+    const retry = await post(handler, '/api/invoice', { initData, productId: RNA_ID, nonce: 'nonce-r3-13-1' }, env);
+    eq(retry.status, 200, 'CR-R3-13: retry with stored price → 200');
+    const call = botCalls.find((c) => c.method === 'createInvoiceLink');
+    assert(call, 'CR-R3-13: createInvoiceLink called on retry');
+    eq(call.body.prices[0].amount, 50, 'CR-R3-13: recovered invoice uses stored order price (50), not catalog (35)');
+    // Восстановленный инвойс оплачиваем: pre_checkout сверяется с заказом (50).
+    botCalls.length = 0;
+    await post(handler, '/api/webhook', preCheckoutBody('q-r3-13-1', 'nonce-r3-13-1', { amount: 50 }), env, secretHeader());
+    const pc = botCalls.find((c) => c.method === 'answerPreCheckoutQuery' && c.body.pre_checkout_query_id === 'q-r3-13-1');
+    eq(pc.body.ok, true, 'CR-R3-13: pre_checkout ok:true at stored price');
+    // Контроль: новый заказ — по-прежнему по текущей цене каталога (35).
+    botCalls.length = 0;
+    const fresh = await post(handler, '/api/invoice', { initData, productId: RNA_ID, nonce: 'nonce-r3-13-2' }, env);
+    eq(fresh.status, 200, 'CR-R3-13: fresh invoice 200');
+    const freshCall = botCalls.find((c) => c.method === 'createInvoiceLink');
+    eq(freshCall.body.prices[0].amount, 35, 'CR-R3-13: new order still uses catalog price');
+    // Битая stored-цена (NULL у legacy-заказа) — fail-closed 502, не инвойс по каталогу.
+    await seedOrder(db, 'nonce-r3-13-3', USER_ID, RNA_ID, null, { skuVersion: 2, grantRna: 500, grantBoosterDays: 0 });
+    const badPrice = await post(handler, '/api/invoice', { initData, productId: RNA_ID, nonce: 'nonce-r3-13-3' }, env);
+    eq(badPrice.status, 502, 'CR-R3-13: NULL stored price → 502');
+    eq((await badPrice.json()).error, 'order-price-invalid', 'CR-R3-13: 502 error code order-price-invalid');
   }
 
   // === P2-6: падение Bot API на pre-checkout → 503 ===
