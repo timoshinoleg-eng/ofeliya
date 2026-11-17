@@ -1,26 +1,40 @@
-# Скопируй в wrangler.toml и поправь под себя. Сам wrangler.toml НЕ коммить,
-# если боишься светить имя воркера — пример достаточен для деплоя руками.
+# Конфигурация Cloudflare Worker: скопировать в wrangler.toml (не коммитить
+# реальный файл с database_id). Перед созданием D1 ОБЯЗАТЕЛЬНО проверить
+# наличие существующей базы: npx wrangler d1 list.
+# Если ofeliya-payments уже есть, проверить schema_migrations и использовать
+# её database_id; не создавать дубликат и не применять schema.sql повторно.
 #
-# Секреты ставятся отдельно (НЕ в этот файл):
-#   npx wrangler secret put TELEGRAM_BOT_TOKEN   # токен бота из BotFather
-#   npx wrangler secret put WEBHOOK_SECRET       # ОБЯЗАТЕЛЕН (патч №12):
-#                                               # без него /api/webhook отвечает
-#                                               # 401 fail-closed. Та же строка,
-#                                               # что в secret_token при setWebhook.
+# Секреты устанавливаются отдельно, без записи в репозиторий:
+#   npx wrangler secret put TELEGRAM_BOT_TOKEN
+#   npx wrangler secret put WEBHOOK_SECRET
+#   npx wrangler secret put ADMIN_TOKEN
+#
+# WEBHOOK_SECRET: Render → Worker; тот же ключ в Render env
+# OFELIYA_STARS_WORKER_SECRET. Это НЕ TG_WEBHOOK_SECRET: Telegram → Render
+# использует другой ключ, заданный в setWebhook(secret_token=...).
+# Прямо на Worker Telegram webhook НЕ переводить — иначе потеряются
+# игровые команды /start и /help. См. README_DEPLOY.md §3, §9.
 
 name = "ofeliya-payments"
 main = "src/index.ts"
 compatibility_date = "2026-10-21"
 
-# Патч №13: журнал платежей на Cloudflare D1 (схема — worker/schema.sql).
-# KV-биндинг PAYMENTS удалён из кода полностью (чистая замена, не fallback).
+# Идентификатор источника серверного кошелька должен быть стабильным и
+# совпадать с PAYMENTS_SERVER_ID в Render env сервиса ofeliya-game.
+[vars]
+PAYMENTS_SERVER_ID = "ofeliya-d1-v1"
+
+# Создание БД ТОЛЬКО если npx wrangler d1 list подтвердил её отсутствие:
+#   npx wrangler d1 create ofeliya-payments
+# Свежая БД: из каталога worker/ выполнить:
+#   npx wrangler d1 execute ofeliya-payments --file=schema.sql --remote
+# Существующая v16: сначала backup, затем migration-17.sql (см. runbook).
+# Проверить schema_migrations=v17 и триггер trg_wallet_ledger_apply,
+# после чего выполнить smoke-грант с user_id=-900000017 до живых Stars.
 #
-# Создать базу:        wrangler d1 create ofeliya-payments
-# Применить схему:     wrangler d1 execute ofeliya-payments --file=worker/schema.sql
-# Подставить выданный database_id ниже. Без биндинга воркер работает
-# в деградированном режиме (/api/invoice → 503, pre_checkout → ok:false,
-# /api/entitlements, /api/verify и /api/ack → 501).
+# Без D1-биндинга PAYMENTS_DB Worker работает в деградированном режиме:
+# /api/invoice → 503, pre_checkout → ok:false, entitlements/verify/ack → 501.
 [[d1_databases]]
 binding = "PAYMENTS_DB"
 database_name = "ofeliya-payments"
-database_id = "REPLACE_ME"  # ← вставить id из `wrangler d1 create`
+database_id = "REPLACE_ME" # Взять из list/create; никогда не угадывать
