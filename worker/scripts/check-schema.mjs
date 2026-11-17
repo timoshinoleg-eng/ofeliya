@@ -19,7 +19,10 @@
  *    subscription_events.source;
  *  - wallet_ledger: UNIQUE(charge_id, grant_type, skin_id) (через
  *    PRAGMA index_list — старый UNIQUE(charge_id) гейт не проходит);
- *  - wallet_skins: PK (user_id, skin_id, charge_id);
+ *  - wallet_skins: PK (user_id, skin_id, charge_id) И отсутствие
+ *    устаревшего UNIQUE(charge_id) (CR-R3-3: частичная миграция с
+ *    пропущенным шагом 3b иначе проходит PK-проверку, а бандл из трёх
+ *    скинов теряет 2-й и 3-й скины через INSERT OR IGNORE);
  *  - все 6 индексов schema.sql на месте;
  *  - P3-N2: запись 'v17' в schema_migrations (без неё функционально-v17
  *    база неотличима от частично мигрированной, а повторный прогон
@@ -240,6 +243,35 @@ export function checkDatabase(db) {
   }
   push('wallet-skins-pk', skinsPkOk, skinsPkDetail);
 
+  // CR-R3-3: устаревший UNIQUE(charge_id) на wallet_skins (шаг 3b миграции
+  // пропущен) — PK при этом составной, и skinsPkOk выше проходит, а
+  // functionalTriggerTest вставляет один скин и тоже не ловит. Бандл из
+  // трёх скинов с одним charge_id теряет 2-й и 3-й скины через
+  // INSERT OR IGNORE в триггере. Инспектируем unique-индексы:
+  // любой уникальный индекс ровно по (charge_id) — отклоняем.
+  // PK-индекс (user_id, skin_id, charge_id) сюда не попадает.
+  let skinsNoChargeUniqueOk = true;
+  let skinsNoChargeUniqueDetail = 'no obsolete UNIQUE(charge_id)';
+  try {
+    const skinsIndexes = db.prepare("PRAGMA index_list('wallet_skins')").all();
+    for (const idx of skinsIndexes) {
+      if (!idx.unique) continue;
+      const cols = db
+        .prepare(`PRAGMA index_info('${idx.name}')`)
+        .all()
+        .sort((a, b) => a.seqno - b.seqno)
+        .map((r) => r.name);
+      if (cols.join(',') === 'charge_id') {
+        skinsNoChargeUniqueOk = false;
+        skinsNoChargeUniqueDetail = `obsolete UNIQUE(charge_id) present (${idx.name}) — migration step 3b skipped`;
+        break;
+      }
+    }
+  } catch {
+    // Таблица отсутствует — покрыто проверкой tables.
+  }
+  push('wallet-skins-no-charge-unique', skinsNoChargeUniqueOk, skinsNoChargeUniqueDetail);
+
   // P3-N2: отметка о применении миграции. Функционально-v17 база без
   // записи 'v17' — либо частичная миграция, либо свежий деплой по
   // старой копии schema.sql: гейт её не пропускает.
@@ -381,7 +413,9 @@ function printCommands() {
   console.log('# Expected: trigger trg_wallet_ledger_apply present, body contains');
   console.log('# season_pass branches (grant + reversal); guard trigger');
   console.log('# trg_wallet_ledger_season_pass_guard present (P2-N1); wallet_ledger has a UNIQUE');
-  console.log('# index on (charge_id, grant_type, skin_id); columns');
+  console.log('# index on (charge_id, grant_type, skin_id); wallet_skins has NO unique index');
+  console.log('# on (charge_id) alone (CR-R3-3: obsolete UNIQUE means migration step 3b was');
+  console.log('# skipped and multi-skin bundles lose skins); columns');
   console.log('# orders.grant_season_pass_days, orders.grant_bundle_json,');
   console.log('# wallets.season_pass_until_ms, duplicate_payments.status,');
   console.log('# subscription_events.source present.');
