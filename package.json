@@ -58,6 +58,7 @@
     "test:shop": "node tests/shop-catalog.mjs && node tests/shop-flow.mjs && node tests/shop-provider.mjs && node tests/shop-grants.mjs",
     "test:stars": "node tests/telegram-stars.mjs && node tests/worker-payments.mjs",
     "test:storefront-layout": "node scripts/storefront-layout-smoke.cjs",
+    "test:questboard-toast-depth": "node scripts/questboard-toast-depth-smoke.cjs",
     "test:worker-entitlements": "node tests/worker-entitlements.mjs",
     "test:worker-payments-v4": "node tests/worker-payments-v4.mjs",
     "test:worker-payments-v5": "node tests/worker-payments-v5.mjs",

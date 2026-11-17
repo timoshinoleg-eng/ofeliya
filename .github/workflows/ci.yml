@@ -357,6 +357,9 @@ jobs:
       - name: Storefront layout geometry smoke (P1-4)
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:storefront-layout
 
+      - name: QuestBoard reward toast depth smoke (CR4)
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:questboard-toast-depth
+
       - name: Natural startup and mutation progression
         run: npm run test:natural-progression
 

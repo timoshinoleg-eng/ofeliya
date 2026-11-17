@@ -238,7 +238,9 @@ export class QuestBoard {
                 : typeof res.grantedBoosterDays === 'number'
                   ? `Бустер ×2 на ${res.grantedBoosterDays} дн.`
                   : 'Новый скин';
-            showMetaToast(scene, p.def.title, sub, 'СЕЗОННАЯ МИССИЯ');
+            // CR4: тост — поверх доски (root depth 70 + дим), иначе
+            // подтверждение «+N РНК» не видно. Default 62 — под доской.
+            showMetaToast(scene, p.def.title, sub, 'СЕЗОННАЯ МИССИЯ', 71);
             // Принудительная перестройка: day не сменился, но claimed
             // изменился — без сброса таймер не перерисует доску.
             day = '';
