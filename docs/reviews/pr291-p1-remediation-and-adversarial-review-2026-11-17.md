@@ -297,20 +297,20 @@ e193638 docs(memory): P1 remediation state, decisions, backlog, handoff
 
 | # | Замечание | Статус | Фикс | Файлы | Коммиты |
 |---|---|---|---|---|---|
-| 1 | Redelivery первой оплаты пропуска: валидный платёж → duplicate_payments, заказ denied, отмена действующей подписки (Major, деньги) | ✅ Исправлен | Дедуп по charge_id ДО active-pass check: сохранившийся `nonceRow` с тем же charge_id → `stars_payment_duplicate`, no-op; доп. запроса в D1 нет (строка уже прочитана). Настоящий второй платёж по-прежнему отклоняется, продления по-прежнему грантятся | `worker/src/index.ts`, `tests/worker-p1-worker.mjs` | `c82b9b2` (+ RED `5e61b5f`) |
-| 2 | Падение `createInvoiceLink` оставляет pending-заказ → блок подписки на 24ч (Major, деньги) | ✅ Исправлен | В catch-пути заказ → терминальный `invoice_failed` (best-effort); CHECK на статусы в схеме нет — миграция не нужна; статус задокументирован в `schema.sql`, включён в 30-дневную чистку. Брошенные инвойсы с УДАВШИМСЯ созданием по-прежнему блокируют 24ч. Same-nonce ретрай такой заказ не воскрешает (клиент генерирует свежий nonce на попытку) | `worker/src/index.ts`, `worker/src/sql.ts`, `worker/schema.sql`, `tests/worker-p1-worker.mjs` | `ccc7d4e` (+ RED `5e61b5f`) |
-| 3 | Гейт схемы не ловит старый UNIQUE(charge_id) на `wallet_skins` при частичной миграции (Major, деньги/гейт) | ✅ Исправлен | `checkDatabase` инспектирует unique-индексы `wallet_skins`, отклоняет любой уникальный индекс ровно по `(charge_id)` (чек `wallet-skins-no-charge-unique`); регрессия строит частичное состояние и доказывает слепоту старого гейта | `worker/scripts/check-schema.mjs`, `worker/scripts/check-schema.test.mjs` | `1bf74f0` (+ RED `5e61b5f`) |
-| 4 | Команда гейта `node worker/scripts/...` после `cd worker` — неверный путь (Minor) | ✅ Исправлен | `node scripts/check-schema.mjs --print-commands`; весь README проверен на аналогичные ошибки. Бонус: `npm run check-schema` в том же блоке тоже не работал (скрипта нет в `worker/package.json`) — заменён на прямой `node scripts/check-schema.mjs` | `worker/README_DEPLOY.md` | `f98acc1` |
-| 5 | Откат снапшотом стирает платежи после снапшота (Major, процедура) | ✅ Исправлен | Пауза платёжного трафика от создания снапшота до завершения отката (проверенный рычаг вебхука + оговорка: кодового kill-switch инвойсов нет); перед восстановлением — полный экспорт живой базы + сверка пост-снапшотных платежей; после — возврат либо ручное переприменение гранта (пропуск — только возврат: в v16 нет колонки/ветки). Та же правка — в шапке `migration-17.sql` и в ранбуке Этапа 0 (строка 217) | `worker/README_DEPLOY.md`, `worker/migration-17.sql`, ранбук (вне репо) | `f98acc1`, `e514683` |
-| 6 | Возврат истёкшей покупки бустера съедал миссионную награду (Major, деньги) | ✅ Исправлен | Неттинг P2-N3 заменён банком заработанного времени: серверный снапшот авторитетен для купленной компоненты, миссионный банк (`MetaWallet.boosterEarnedMs` + `boosterEarnedAnchorMs`) складывается поверх | `src/game/shop/ServerWalletSync.ts`, `src/game/meta/MetaWallet.ts`, `tests/server-wallet-sync.mjs` | `dba2cb9` (+ RED `be435ca`) |
-| 7 | Покупка бустера ЗАМЕНЯЛА миссионное время (3+7=7) (Major, деньги) | ✅ Исправлен | Банк персистентен: 3+7=10, повторный синк идемпотентен; ожидание в тесте обновлено с b0+7d на b0+10d | `src/game/shop/ServerWalletSync.ts`, `src/game/meta/MetaWallet.ts`, `tests/server-wallet-sync.mjs` | `dba2cb9` (+ RED `be435ca`) |
-| 8 | Stale-ответ воскрешал отозванный бустер (Major, деньги) | ✅ Исправлен | Бустер не трогается при устаревшем ответе, как пропуск. Асимметрия: бустер использует строгий `tip < cursor` (равный tip — та же история, журнал append-only), пропуск сохраняет `<=` по контракту P1-5 §в — задокументировано в коде | `src/game/shop/ServerWalletSync.ts`, `tests/server-wallet-sync.mjs` | `dba2cb9` (+ RED `be435ca`) |
-| 9 | Курсор захватывался до сети: двойное начисление РНК, откат курсора (Major, деньги) | ✅ Исправлен | Курсор перечитывается из хранилища непосредственно перед синхронным блоком применения, запись — через свежую карту. Фикс опирается на синхронность блока (без await между перечитыванием и записью) — отмечено комментарием | `src/game/shop/ServerWalletSync.ts`, `tests/server-wallet-sync.mjs` | `a6a7fb4` (+ RED `6230826`) |
-| 10 | Resize во время покупки терял гейт (Major) | ✅ Исправлен | Generation token + `inFlightPurchase`, переживающий рестарт: бухгалтерия дорабатывает, UI чужого поколения не трогается, кнопки обновляются по завершении | `src/scenes/StorefrontScene.ts`, `scripts/storefront-layout-smoke.cjs` | `3aceeac` (+ RED `cadd641`) |
-| 11 | Частично замаскированная кнопка покупала (Minor) | ✅ Исправлен | Input включён только когда ВСЯ кнопка внутри контентной области; тап по невидимой части больше не покупает (подтверждено Playwright: до фикса покупал `skin.virulent-magenta`) | `src/scenes/StorefrontScene.ts`, `scripts/storefront-layout-smoke.cjs` | `cfa66b5` (+ RED `36c5f6f`) |
-| 12 | `app_open` помечался seen при полном буфере → сессия без открытия (Minor) | ✅ Исправлен | `appOpenSeen` ставится только после успешной отправки (`track()` вернул true) или принятия в буфер; подавление после принятого `app_open` сохранено | `src/systems/ClientExperience.ts`, `tests/client-experience-app-open.mjs` | `f125efb` (+ RED `9899b77`) |
-| 13 | Восстановление инвойса по текущей цене каталога вместо stored (Minor, деньги) | ✅ Исправлен | Ретрай — по `existing.amount_stars`, новые заказы — по-прежнему по каталогу; NULL/битая stored-цена — fail-closed 502 `order-price-invalid` | `worker/src/index.ts`, `tests/worker-p1-worker.mjs` | `aee9fc1` (+ RED `5e61b5f`) |
-| 14 | Masked-button probe недетерминирован (молчаливый skip) (Nitpick) | ✅ Исправлен | Детерминированный выбор цели: первая карточка, чью кнопку можно поставить центром в середину полосы шапки подбором scroll offset; нет цели или промах — провал кейса, ветки `skipped` больше нет | `scripts/storefront-layout-smoke.cjs` | `318da38` |
+| 1 | Redelivery первой оплаты пропуска: валидный платёж → duplicate_payments, заказ denied, отмена действующей подписки (Major, деньги) | ✅ Исправлен | Дедуп по charge_id ДО active-pass check: сохранившийся `nonceRow` с тем же charge_id → `stars_payment_duplicate`, no-op; доп. запроса в D1 нет (строка уже прочитана). Настоящий второй платёж по-прежнему отклоняется, продления по-прежнему грантятся | `worker/src/index.ts`, `tests/worker-p1-worker.mjs` | `941179d` (+ RED `11e80b0`) |
+| 2 | Падение `createInvoiceLink` оставляет pending-заказ → блок подписки на 24ч (Major, деньги) | ✅ Исправлен | В catch-пути заказ → терминальный `invoice_failed` (best-effort); CHECK на статусы в схеме нет — миграция не нужна; статус задокументирован в `schema.sql`, включён в 30-дневную чистку. Брошенные инвойсы с УДАВШИМСЯ созданием по-прежнему блокируют 24ч. Same-nonce ретрай такой заказ не воскрешает (клиент генерирует свежий nonce на попытку) | `worker/src/index.ts`, `worker/src/sql.ts`, `worker/schema.sql`, `tests/worker-p1-worker.mjs` | `71ee431` (+ RED `11e80b0`) |
+| 3 | Гейт схемы не ловит старый UNIQUE(charge_id) на `wallet_skins` при частичной миграции (Major, деньги/гейт) | ✅ Исправлен | `checkDatabase` инспектирует unique-индексы `wallet_skins`, отклоняет любой уникальный индекс ровно по `(charge_id)` (чек `wallet-skins-no-charge-unique`); регрессия строит частичное состояние и доказывает слепоту старого гейта | `worker/scripts/check-schema.mjs`, `worker/scripts/check-schema.test.mjs` | `7826c35` (+ RED `11e80b0`) |
+| 4 | Команда гейта `node worker/scripts/...` после `cd worker` — неверный путь (Minor) | ✅ Исправлен | `node scripts/check-schema.mjs --print-commands`; весь README проверен на аналогичные ошибки. Бонус: `npm run check-schema` в том же блоке тоже не работал (скрипта нет в `worker/package.json`) — заменён на прямой `node scripts/check-schema.mjs` | `worker/README_DEPLOY.md` | `7256595` |
+| 5 | Откат снапшотом стирает платежи после снапшота (Major, процедура) | ✅ Исправлен | Пауза платёжного трафика от создания снапшота до завершения отката (проверенный рычаг вебхука + оговорка: кодового kill-switch инвойсов нет); перед восстановлением — полный экспорт живой базы + сверка пост-снапшотных платежей; после — возврат либо ручное переприменение гранта (пропуск — только возврат: в v16 нет колонки/ветки). Та же правка — в шапке `migration-17.sql` и в ранбуке Этапа 0 (строка 217) | `worker/README_DEPLOY.md`, `worker/migration-17.sql`, ранбук (вне репо) | `7256595`, `da1223a` |
+| 6 | Возврат истёкшей покупки бустера съедал миссионную награду (Major, деньги) | ✅ Исправлен | Неттинг P2-N3 заменён банком заработанного времени: серверный снапшот авторитетен для купленной компоненты, миссионный банк (`MetaWallet.boosterEarnedMs` + `boosterEarnedAnchorMs`) складывается поверх | `src/game/shop/ServerWalletSync.ts`, `src/game/meta/MetaWallet.ts`, `tests/server-wallet-sync.mjs` | `722b6e1` (+ RED `d6f902e`) |
+| 7 | Покупка бустера ЗАМЕНЯЛА миссионное время (3+7=7) (Major, деньги) | ✅ Исправлен | Банк персистентен: 3+7=10, повторный синк идемпотентен; ожидание в тесте обновлено с b0+7d на b0+10d | `src/game/shop/ServerWalletSync.ts`, `src/game/meta/MetaWallet.ts`, `tests/server-wallet-sync.mjs` | `722b6e1` (+ RED `d6f902e`) |
+| 8 | Stale-ответ воскрешал отозванный бустер (Major, деньги) | ✅ Исправлен | Бустер не трогается при устаревшем ответе, как пропуск. Асимметрия: бустер использует строгий `tip < cursor` (равный tip — та же история, журнал append-only), пропуск сохраняет `<=` по контракту P1-5 §в — задокументировано в коде | `src/game/shop/ServerWalletSync.ts`, `tests/server-wallet-sync.mjs` | `722b6e1` (+ RED `d6f902e`) |
+| 9 | Курсор захватывался до сети: двойное начисление РНК, откат курсора (Major, деньги) | ✅ Исправлен | Курсор перечитывается из хранилища непосредственно перед синхронным блоком применения, запись — через свежую карту. Фикс опирается на синхронность блока (без await между перечитыванием и записью) — отмечено комментарием | `src/game/shop/ServerWalletSync.ts`, `tests/server-wallet-sync.mjs` | `e7e8004` (+ RED `cbaab54`) |
+| 10 | Resize во время покупки терял гейт (Major) | ✅ Исправлен | Generation token + `inFlightPurchase`, переживающий рестарт: бухгалтерия дорабатывает, UI чужого поколения не трогается, кнопки обновляются по завершении | `src/scenes/StorefrontScene.ts`, `scripts/storefront-layout-smoke.cjs` | `597f512` (+ RED `6297be9`) |
+| 11 | Частично замаскированная кнопка покупала (Minor) | ✅ Исправлен | Input включён только когда ВСЯ кнопка внутри контентной области; тап по невидимой части больше не покупает (подтверждено Playwright: до фикса покупал `skin.virulent-magenta`) | `src/scenes/StorefrontScene.ts`, `scripts/storefront-layout-smoke.cjs` | `0de88ad` (+ RED `6aec14d`) |
+| 12 | `app_open` помечался seen при полном буфере → сессия без открытия (Minor) | ✅ Исправлен | `appOpenSeen` ставится только после успешной отправки (`track()` вернул true) или принятия в буфер; подавление после принятого `app_open` сохранено | `src/systems/ClientExperience.ts`, `tests/client-experience-app-open.mjs` | `ec73e87` (+ RED `da2f4d1`) |
+| 13 | Восстановление инвойса по текущей цене каталога вместо stored (Minor, деньги) | ✅ Исправлен | Ретрай — по `existing.amount_stars`, новые заказы — по-прежнему по каталогу; NULL/битая stored-цена — fail-closed 502 `order-price-invalid` | `worker/src/index.ts`, `tests/worker-p1-worker.mjs` | `fddd4c2` (+ RED `11e80b0`) |
+| 14 | Masked-button probe недетерминирован (молчаливый skip) (Nitpick) | ✅ Исправлен | Детерминированный выбор цели: первая карточка, чью кнопку можно поставить центром в середину полосы шапки подбором scroll offset; нет цели или промах — провал кейса, ветки `skipped` больше нет | `scripts/storefront-layout-smoke.cjs` | `9049ef6` |
 
 Пропущенных пунктов нет. Новых P0/P1 в раунде 3 не найдено.
 
@@ -371,30 +371,29 @@ e193638 docs(memory): P1 remediation state, decisions, backlog, handoff
 - **NOT READY FOR LIVE PAYMENTS** — без изменений относительно §8:
   остаются Этап 0, живые тесты Stars, продление на 30-й день.
 
-### Коммиты раунда 3 (поверх `6f610ae`, 17 файлов, +1080/−90)
+### Коммиты раунда 3 (поверх `6f610ae`, remote SHA; история линеаризована ребейзом перед REST-пушем, дерево идентично)
 
 ```
-5e61b5f test(worker): CR-R3 RED — redelivery dedup, invoice-failure gate, stored price, skins UNIQUE
-c82b9b2 fix(worker): CR-R3-1 dedup redelivered season-pass payment before active-pass check
-ccc7d4e fix(worker): CR-R3-2 mark order invoice_failed when createInvoiceLink fails
-aee9fc1 fix(worker): CR-R3-13 rebuild recovered invoice at the stored order price
-1bf74f0 fix(worker): CR-R3-3 schema gate rejects obsolete UNIQUE(charge_id) on wallet_skins
-9899b77 test(client): CR-R3-12 dropped app_open at full buffer must fall back
-f125efb fix(client): CR-R3-12 mark app_open seen only after accept
-be435ca test(client): CR-R3-6/7/8 booster bank scenarios (RED)
-dba2cb9 fix(client): CR-R3-6/7/8 booster earned bank replaces event netting
-6230826 test(client): CR-R3-9 concurrent syncs must not double-apply (RED)
-a6a7fb4 fix(client): CR-R3-9 re-read persisted cursor before applying a response
-36c5f6f test(client): CR-R3-11 partially-masked button tap must not buy (RED)
-cfa66b5 fix(client): CR-R3-11 disable input unless the whole button is in view
-cadd641 test(client): CR-R3-10 resize during purchase must keep the gate (RED)
-3aceeac fix(client): CR-R3-10 keep the purchase gate across resize
-f98acc1 fix(docs): CR-R3-4/5 deploy README — schema-gate paths after cd worker, rollback must preserve post-snapshot payments
-318da38 test(storefront): CR-R3-14 make masked-button probe deterministic
-994c4e6 Merge fix/r3-worker-291: CodeRabbit R3 worker fixes (CR-R3-1/2/3/13)
-7db081d Merge fix/r3-client-291: CodeRabbit R3 client fixes (CR-R3-6/7/8/9/10/11/12)
-b8e0ecd Merge fix/r3-docs-291: CodeRabbit R3 docs + storefront smoke determinism (CR-R3-4/5/14)
-e514683 fix(docs): CR-R3-5 migration-17 rollback header — snapshot restore alone loses post-snapshot payments
+11e80b0 test(worker): CR-R3 RED — redelivery dedup, invoice-failure gate, stored price, skins UNIQUE
+941179d fix(worker): CR-R3-1 dedup redelivered season-pass payment before active-pass check
+71ee431 fix(worker): CR-R3-2 mark order invoice_failed when createInvoiceLink fails
+fddd4c2 fix(worker): CR-R3-13 rebuild recovered invoice at the stored order price
+7826c35 fix(worker): CR-R3-3 schema gate rejects obsolete UNIQUE(charge_id) on wallet_skins
+da2f4d1 test(client): CR-R3-12 dropped app_open at full buffer must fall back
+ec73e87 fix(client): CR-R3-12 mark app_open seen only after accept
+d6f902e test(client): CR-R3-6/7/8 booster bank scenarios (RED)
+722b6e1 fix(client): CR-R3-6/7/8 booster earned bank replaces event netting
+cbaab54 test(client): CR-R3-9 concurrent syncs must not double-apply (RED)
+e7e8004 fix(client): CR-R3-9 re-read persisted cursor before applying a response
+6aec14d test(client): CR-R3-11 partially-masked button tap must not buy (RED)
+0de88ad fix(client): CR-R3-11 disable input unless the whole button is in view
+6297be9 test(client): CR-R3-10 resize during purchase must keep the gate (RED)
+597f512 fix(client): CR-R3-10 keep the purchase gate across resize
+7256595 fix(docs): CR-R3-4/5 deploy README — schema-gate paths after cd worker, rollback must preserve post-snapshot payments
+9049ef6 test(storefront): CR-R3-14 make masked-button probe deterministic
+da1223a fix(docs): CR-R3-5 migration-17 rollback header — snapshot restore alone loses post-snapshot payments
+7f096e0 docs(memory): CodeRabbit round 3 state, decisions, backlog, handoff
+131a156 docs(reviews): CodeRabbit round 3 report (review 5943019617, PR #291)
 ```
 
 - **CI:** запускается на пуше; статус — в PR (check-runs на
