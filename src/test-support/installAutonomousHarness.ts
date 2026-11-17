@@ -42,6 +42,16 @@
  *    wall-clock RAF deltas from the smoothing history and break replay
  *    determinism. `smoothStep` is a public Phaser config property documented
  *    as toggleable at runtime.
+ * 3b. Deterministic synthetic clock: when stepping starts with NO run live,
+ *    the clock restarts from a fixed epoch (0) — `simulationNow = 0` and
+ *    `loop.lastTime = 0` — so the delta sequence (and every absolute-time
+ *    `Math.sin(time * …)` / deadline in the game) is bit-identical across
+ *    runs. A wall-time base leaks into `runTimeMs` through float rounding of
+ *    `time - lastTime` in `TimeStep.step`: the determinism probe showed a
+ *    ~5e-13 divergence at frame 8. When a run IS live, the wall base is kept
+ *    — resetting mid-run would push absolute-time deadlines (hit-stop, fire
+ *    timers, role phases) ~wall-time into the future. `resume()` re-syncs
+ *    `lastTime` to wall time via `TimeStep.start()` → `resetDelta()`.
  * 4. `resume()` passes the captured step callback to `loop.start()` — the
  *    doc's bare `loop.start()` would install an `undefined` callback
  *    (TimeStep.start unconditionally assigns its argument). If the loop was
@@ -649,6 +659,18 @@ export function installAutonomousHarness(game: Phaser.Game): void {
       stepping = true;
       savedSmoothStep = game.loop.smoothStep;
       game.loop.smoothStep = false;
+      // Deterministic synthetic clock (header note 3b): with no run live,
+      // restart from a fixed epoch so the delta sequence is bit-identical
+      // across runs; with a run live, keep the wall base so absolute-time
+      // deadlines already in flight are not pushed into the future.
+      const gs = getGameScene();
+      const runLive = Boolean(gs && isGameLive() && gs.runState);
+      if (!runLive) {
+        simulationNow = 0;
+        game.loop.lastTime = 0;
+      } else if (simulationNow === null) {
+        simulationNow = game.loop.lastTime;
+      }
     }
   }
 
@@ -738,15 +760,11 @@ export function installAutonomousHarness(game: Phaser.Game): void {
     }
     if (n === 0) return;
     const loop = game.loop;
-    if (loop.running) {
-      // Re-sync: synthetic time continues from the last RAF timestamp so the
-      // first stepped delta is exactly FIXED_DT.
-      simulationNow = loop.lastTime;
-      loop.stop();
-    } else if (simulationNow === null) {
-      simulationNow = loop.lastTime;
-    }
+    if (loop.running) loop.stop();
+    // enterSteppedMode picks the synthetic base: fixed epoch when no run is
+    // live, wall base when a run is in flight (header note 3b).
     enterSteppedMode();
+    if (simulationNow === null) simulationNow = loop.lastTime; // defensive; unreachable
     let remaining = n;
     while (remaining > 0) {
       const chunk = Math.min(remaining, STEP_CHUNK);
