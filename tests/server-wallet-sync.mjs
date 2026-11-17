@@ -606,6 +606,70 @@ try {
   eq(r19b.applied.eventsApplied, 0, 'P3-10: repeat sync applies nothing');
   eq(walletCalls, 1, 'P3-10: repeat sync is one request');
 
+  // --- 20. CR-R3-9: два конкурентных синка не начисляют РНК дважды ---
+  // (a) Оба стартуют с курсором 0; первый применяет грант, второй
+  // должен перечитать свежий курсор перед применением и ничего не начислить.
+  reset();
+  ledger = [grant(1, 'cr9', 500)];
+  const gates = [];
+  const gatedFetch = async (url, opts) => {
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    gates.push(release);
+    await gate;
+    return fetchFn(url, opts);
+  };
+  const syncGated = () =>
+    syncServerWallet({ apiBaseUrl: 'https://worker.test', initData, fetchFn: gatedFetch });
+  const pA = syncGated();
+  const pB = syncGated();
+  // Дать обоим дойти до fetch (оба прочитали курсор 0 до сети).
+  await new Promise((r) => setTimeout(r, 0));
+  eq(gates.length, 2, 'R3-9: both syncs reached the network');
+  // Первый применяет, второй — после него.
+  gates[0]();
+  const r9a = await pA;
+  eq(r9a.ok, true, 'R3-9: first sync ok');
+  eq(r9a.applied.rna, 500, 'R3-9: first sync applies grant');
+  eq(meta.loadMeta().rna, 500, 'R3-9: balance +500 after first');
+  gates[1]();
+  const r9b = await pB;
+  eq(r9b.ok, true, 'R3-9: second sync ok');
+  eq(r9b.applied.rna, 0, 'R3-9: second sync applies nothing (fresh cursor)');
+  eq(meta.loadMeta().rna, 500, 'R3-9: no double RNA from concurrent syncs');
+  const cursorRaw9 = store.get(WALLET_SEQ_KEY);
+  assert(cursorRaw9 && cursorRaw9.includes('"last_seq":1'), `R3-9: cursor at tip: ${cursorRaw9}`);
+
+  // (b) Устаревший ответ второго синка не откатывает курсор.
+  // B стартовал раньше с курсором 0 и вернулся с ответом tip 1, когда
+  // A уже применил события 1..3 (курсор 3): B ничего не применяет,
+  // курсор остаётся 3.
+  reset();
+  ledger = [grant(1, 'cr9a', 100)];
+  let releaseB;
+  const fetchB = async (url, opts) => {
+    await new Promise((resolve) => { releaseB = resolve; });
+    return { ok: true, status: 200, json: async () => ({
+      ok: true, user_id: USER_ID, server_id: serverId, schema_version: 2,
+      purchased_rna: 0, booster_until_ms: 0, season_pass_until_ms: 0,
+      skins: [], ledger: [grant(1, 'cr9a', 100)], tip_seq: 1, ledger_tip: null, truncated: false,
+    }) };
+  };
+  const pB9 = syncServerWallet({ apiBaseUrl: 'https://worker.test', initData, fetchFn: fetchB });
+  await new Promise((r) => setTimeout(r, 0));
+  // Тем временем A применяет полную историю (курсор 3).
+  ledger = [grant(1, 'cr9a', 100), grant(2, 'cr9b', 100), grant(3, 'cr9c', 100)];
+  const r9c = await sync();
+  eq(r9c.applied.rna, 300, 'R3-9b: first sync applies 3 grants');
+  eq(meta.loadMeta().rna, 300, 'R3-9b: balance 300');
+  releaseB();
+  const r9d = await pB9;
+  eq(r9d.ok, true, 'R3-9b: stale concurrent sync ok');
+  eq(r9d.applied.rna, 0, 'R3-9b: stale sync applies nothing');
+  eq(meta.loadMeta().rna, 300, 'R3-9b: no double RNA from stale response');
+  const cursorRaw9b = store.get(WALLET_SEQ_KEY);
+  assert(cursorRaw9b && cursorRaw9b.includes('"last_seq":3'), `R3-9b: cursor not rewound: ${cursorRaw9b}`);
+
   console.log('server-wallet-sync: all assertions passed');
 } finally {
   rmSync(temp, { recursive: true, force: true });
