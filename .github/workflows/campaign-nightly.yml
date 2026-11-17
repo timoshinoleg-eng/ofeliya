@@ -1,0 +1,92 @@
+name: Campaign Nightly
+
+# Autonomous Campaign Harness — nightly series (§6.1 of the harness design).
+# 20 Standard + 20 Strained runs on fixed seeds, speed-parity checks,
+# golden-path replay and the render / telegram / score contract suites.
+# No retries by design: a flaky run goes to the quarantine list, not into a
+# silent retry (§6.1).
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  nightly-campaign:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        difficulty: [standard, strained]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install campaign driver and image metrics
+        run: npm install --no-save --package-lock=false playwright-core@1.55.0 pngjs@7.0.0
+
+      - name: Start configured dev server
+        env:
+          VITE_MAX_BOT_NAME: ofeliya_ci_bot
+          VITE_DEVELOPER_LEGAL_NAME: CI Test Developer
+          VITE_DEVELOPER_REGISTRATION: CI-REG-1
+          VITE_DEVELOPER_ADDRESS: CI Test Address
+          VITE_SUPPORT_EMAIL: qa@example.test
+        run: |
+          npm run dev -- --host 127.0.0.1 > /tmp/vite.log 2>&1 &
+          for i in $(seq 1 40); do curl -fsS http://127.0.0.1:5173/ >/dev/null && exit 0; sleep .5; done
+          cat /tmp/vite.log
+          exit 1
+
+      - name: 20-run campaign series (${{ matrix.difficulty }})
+        run: OFELIYA_CAMPAIGN_RUNS=20 NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:campaign -- --difficulty ${{ matrix.difficulty }}
+
+      - name: Speed parity 1x
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:campaign -- --speed 1 --difficulty ${{ matrix.difficulty }}
+
+      - name: Speed parity 4x
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:campaign -- --speed 4 --difficulty ${{ matrix.difficulty }}
+
+      - name: Speed parity 10x (stress, not trusted-score equivalence)
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:campaign -- --speed 10 --difficulty ${{ matrix.difficulty }}
+
+      - name: Golden-path replay (one seed twice, identical hash)
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:campaign:replay
+
+      - name: QA render-split contract
+        run: npm run test:qa-render-split
+
+      - name: Telegram runtime contract
+        run: npm run test:telegram-runtime
+
+      - name: Score outbox contract
+        run: npm run test:score-outbox
+
+      - name: Build campaign HTML report
+        if: always()
+        run: |
+          if [ -d artifacts/autonomous-campaign ]; then
+            node scripts/lib/campaign-report.cjs --input artifacts/autonomous-campaign --out artifacts/campaign
+          else
+            echo "no campaign artifacts to report"
+          fi
+
+      - name: Upload nightly campaign artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: autonomous-campaign-nightly-${{ matrix.difficulty }}
+          path: |
+            artifacts/autonomous-campaign/
+            artifacts/campaign/
+          retention-days: 30
+          if-no-files-found: ignore
