@@ -28,6 +28,23 @@ export interface MetaState {
   boosterUntilMs: number;
   /** Epoch-мс окончания сезонного пропуска (монетизация v3); 0 — пропуска нет. */
   seasonPassUntilMs: number;
+  /**
+   * CR-R3-6/7: банк заработанного бустера — суммарная длительность (мс)
+   * бустера, выданного сезонными миссиями и ещё не истёкшего. Сервер о
+   * нём не знает (локальный источник), поэтому синк кошелька складывает
+   * его поверх серверного срока покупки, а не теряет. Жив, пока жив
+   * local boosterUntilMs; при истечении обнуляется (см.
+   * addBoosterEarnedMs и ServerWalletSync). Инвариант: 0 ⟹ якорь 0.
+   */
+  boosterEarnedMs: number;
+  /**
+   * CR-R3-6/7: якорь банка — абсолютное начало хвоста заработанного
+   * времени (epoch ms). Хвост = [anchor, anchor + boosterEarnedMs].
+   * Якорь > now — хвост ещё не начался (наслоен на будущий купленный
+   * срок) и «сползает» за серверным сроком при возврате; якорь <= now —
+   * хвост уже идёт (наслоен на now при истёкшем бустере) и зафиксирован.
+   */
+  boosterEarnedAnchorMs: number;
 }
 
 const STORAGE_KEY = 'ofeliya.meta.v1';
@@ -43,10 +60,15 @@ const ZERO: MetaState = {
   maxStreak: 0,
   boosterUntilMs: 0,
   seasonPassUntilMs: 0,
+  boosterEarnedMs: 0,
+  boosterEarnedAnchorMs: 0,
 };
 
 function sanitize(p: Partial<MetaState>): MetaState {
   const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
+  // CR-R3-6/7: инвариант банка — при нулевом банке якорь 0 (иначе
+  // битое/старое состояние воскресило бы мёртвую награду).
+  const earned = n(p.boosterEarnedMs);
   return {
     rna: n(p.rna),
     questsCompleted: n(p.questsCompleted),
@@ -57,6 +79,8 @@ function sanitize(p: Partial<MetaState>): MetaState {
     maxStreak: n(p.maxStreak),
     boosterUntilMs: n(p.boosterUntilMs),
     seasonPassUntilMs: n(p.seasonPassUntilMs),
+    boosterEarnedMs: earned,
+    boosterEarnedAnchorMs: earned > 0 ? n(p.boosterEarnedAnchorMs) : 0,
   };
 }
 
@@ -176,6 +200,63 @@ export function isBoosterActive(nowMs: number = Date.now()): boolean {
   } catch {
     return false;
   }
+}
+
+/** CR-R3-6/7: банк заработанного (миссионного) бустера, мс. */
+export function getBoosterEarnedMs(): number {
+  try {
+    return loadMeta().boosterEarnedMs;
+  } catch {
+    return 0;
+  }
+}
+
+/** CR-R3-6/7: якорь банка заработанного бустера (epoch ms; 0 — банка нет). */
+export function getBoosterEarnedAnchorMs(): number {
+  try {
+    return loadMeta().boosterEarnedAnchorMs;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * CR-R3-6/7: записать банк заработанного бустера (синк кошелька).
+ * Инвариант: ms = 0 ⟹ anchor = 0. Никогда не бросает.
+ */
+export function setBoosterEarned(ms: number, anchorMs: number): void {
+  const st = loadMeta();
+  const bank = Number.isFinite(ms) ? Math.max(0, Math.floor(ms)) : 0;
+  st.boosterEarnedMs = bank;
+  st.boosterEarnedAnchorMs =
+    bank > 0 && Number.isFinite(anchorMs) && anchorMs > 0 ? Math.floor(anchorMs) : 0;
+  saveMeta(st);
+}
+
+/**
+ * CR-R3-6/7: начислить заработанный (миссионный) бустер. Локальный срок
+ * растёт как раньше — max(now, local) + ms; одновременно растёт банк,
+ * чтобы синк кошелька складывал награду поверх покупок, а не терял её.
+ * Если local бустер истёк — старый банк мёртв: обнуляется, новый хвост
+ * якорится на now. Никогда не бросает.
+ */
+export function addBoosterEarnedMs(ms: number, nowMs: number = Date.now()): void {
+  const add = Math.floor(ms);
+  if (!Number.isFinite(add) || add <= 0) return;
+  const now = Number.isFinite(nowMs) && nowMs > 0 ? Math.floor(nowMs) : Date.now();
+  const st = loadMeta();
+  let bank = st.boosterEarnedMs;
+  let anchor = st.boosterEarnedAnchorMs;
+  if (st.boosterUntilMs <= now) {
+    // Бустер истёк — старый банк мёртв, новый хвост начинается сейчас.
+    bank = 0;
+    anchor = now;
+  }
+  bank += add;
+  st.boosterEarnedMs = bank;
+  st.boosterEarnedAnchorMs = anchor;
+  st.boosterUntilMs = Math.max(now, st.boosterUntilMs) + add;
+  saveMeta(st);
 }
 
 /**

@@ -38,7 +38,7 @@
  * для Node (как MetaWallet). Формат: {version:1, seasonId, progress,
  * claimed}. Битый JSON / неверная версия → чистое состояние сезона.
  */
-import { getBoosterUntilMs, isSeasonPassActive, setBoosterUntilMs } from '../meta/MetaWallet';
+import { addBoosterEarnedMs, isSeasonPassActive } from '../meta/MetaWallet';
 import { grantMetaRna } from '../lab/LabState';
 import { grantSkin } from '../skins/SkinOwnership';
 
@@ -320,7 +320,10 @@ export function claimSeasonMission(id: string, nowMs: number = Date.now()): Clai
       result = { ok: true, grantedRna: granted };
     } else if (def.reward.kind === 'booster') {
       const ms = def.reward.days * DAY_MS;
-      setBoosterUntilMs(Math.max(nowMs, getBoosterUntilMs()) + ms);
+      // CR-R3-6/7: награда идёт в банк заработанного бустера (см.
+      // MetaWallet.addBoosterEarnedMs), чтобы синк кошелька складывал
+      // её с покупками, а не терял при возврате/новой покупке.
+      addBoosterEarnedMs(ms, nowMs);
       result = { ok: true, grantedBoosterDays: def.reward.days };
     } else {
       // grantSkin=false — скин уже есть (или неизвестный id): награда

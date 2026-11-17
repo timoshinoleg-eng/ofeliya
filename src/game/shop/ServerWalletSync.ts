@@ -13,22 +13,34 @@
  *  - свежий синк (нет last_seq): since_seq=0, неттинг грантов МИНУС
  *    reversal (по reverses_charge_id); РНК net>0 → addRna(net) ПЛОСКО, без
  *    бонуса лаборатории; скины — union АВТОРИТЕТНОГО server.skins (не
- *    неттинг событий); бустер — неттинг по событию (P2-N3): при reversal
- *    в батче local := max(server, local + Σamount бустера батча)
- *    (вычитается ровно возвращённое время, миссионное сохраняется),
- *    иначе max(local, server.booster_until_ms); пропуск — local :=
- *    server, если в батче есть его reversal, иначе max(local, server)
- *    (P1-5: возврат отзывает доступ локально);
+ *    неттинг событий); бустер — серверный срок покупки + банк
+ *    заработанного (миссионного) времени (CR-R3-6/7, см. ниже);
+ *    пропуск — local := server, если в батче есть его reversal, иначе
+ *    max(local, server) (P1-5: возврат отзывает доступ локально);
  *  - инкрементальный: гранты батча минус reversal тех же грантов (если
  *    reversal пришёл в том же батче); reversal старого гранта — только
  *    учёт (локально не вычитаем: нельзя отозвать потраченное);
  *    исключение — пропуск: reversal в батче делает серверный срок
- *    авторитетным (local := server); бустер — неттинг (см. выше);
+ *    авторитетным (local := server); бустер — серверный срок + банк
+ *    заработанного времени (CR-R3-6/7, см. ниже);
  *  - события с seq<=last_seq — пропуск (идемпотентность);
  *  - устаревший ответ (tip_seq <= last_seq — снапшот/реплика старше
  *    применённого) серверные сроки не применяет и курсор назад не
- *    двигает: старое высокое значение не «воскрешает» отозванный пропуск,
- *    а откат курсора не даёт двойного начисления на следующем синке.
+ *    двигает: старое высокое значение не «воскрешает» отозванный пропуск
+ *    и отозванный бустер (CR-R3-8), а откат курсора не даёт двойного
+ *    начисления на следующем синке.
+ *
+ * Бустер (CR-R3-6/7, замена неттинга P2-N3): серверный снапшот
+ * resp.boosterUntilMs авторитетен для КУПЛЕННОЙ компоненты (триггер
+ * воркера уже учёл гранты/возвраты батча), а заработанное (миссионное)
+ * время хранится отдельным персистентным банком
+ * (MetaWallet.boosterEarnedMs + boosterEarnedAnchorMs) и складывается
+ * поверх серверного срока. Возврат истёкшей покупки не срезает
+ * непросроченную награду (банк не трогается), а новая покупка
+ * добавляется к миссионному времени (3 + 7 = 10), а не заменяет его.
+ * Повторный синк идемпотентен: банк — персистентная длительность, а
+ * не дельта событий. Банк жив, пока жив local booster: при истечении
+ * обнуляется, иначе мёртвая награда вечно продлевала бы покупки.
  *
  * Детерминизм: свежий синк даёт тот же локальный итог, что и
  * инкрементальное применение тех же событий. Возврат → новое
@@ -51,7 +63,15 @@
  *
  * Phaser-free, Node-safe. Никогда не бросает.
  */
-import { addRna, loadMeta, setBoosterUntilMs, setSeasonPassUntilMs } from '../meta/MetaWallet';
+import {
+  addRna,
+  getBoosterEarnedAnchorMs,
+  getBoosterEarnedMs,
+  loadMeta,
+  setBoosterEarned,
+  setBoosterUntilMs,
+  setSeasonPassUntilMs,
+} from '../meta/MetaWallet';
 import { grantSkin } from '../skins/SkinOwnership';
 
 /**
@@ -85,7 +105,7 @@ export interface WalletSyncApplied {
   rna: number;
   /** Впервые полученные скины (id). */
   skins: string[];
-  /** Итоговый срок бустера (max local/server). */
+  /** Итоговый срок бустера (серверный срок покупки + банк заработанного). */
   boosterUntilMs: number;
   /**
    * Итоговый срок сезонного пропуска (монетизация v3). P1-5: серверное
@@ -469,6 +489,12 @@ export async function syncServerWallet(opts: SyncServerWalletOptions): Promise<S
       (ev) => ev.kind === 'reversal' && ev.grant_type === 'season_pass'
     );
     const staleResponse = cursor != null && resp.tipSeq <= cursor;
+    // CR-R3-8: бустер — строгий «старше» (tip < cursor). Повторный синк
+    // без новых событий (tip == cursor) — не устаревший: снапшот при
+    // этом может вырасти без событий (тест 4: server wins), а
+    // воскрешение возможно только при откате tip ниже курсора (журнал
+    // append-only: равный tip — та же история, а не старая реплика).
+    const staleBoosterResponse = cursor != null && resp.tipSeq < cursor;
 
     if (cursor == null) {
       // ---------- Свежий синк: неттинг грантов МИНУС reversal ----------
@@ -546,40 +572,60 @@ export async function syncServerWallet(opts: SyncServerWalletOptions): Promise<S
           }
           // reversal скина: учёт; локальное владение НЕ отзывается — честно.
         }
-        // booster: применяется ниже одним неттингом (P2-N3) — время
-        // не сгорает ни при каком порядке событий.
+        // booster: применяется ниже одним пересчётом «сервер + банк»
+        // (CR-R3-6/7) — время не сгорает ни при каком порядке событий.
         applied.eventsApplied += 1;
       }
     }
 
-    // P2-N3: бустер — неттинг по событию. Наивное зеркало P1-5
-    // (local := server при reversal) НЕВЕРНО: у бустера есть ЛОКАЛЬНЫЕ
-    // источники — награды сезонных миссий (seasonQuests.claimSeasonMission
-    // выдаёт бустер локально), и присваивание стёрло бы честно
-    // заработанное время. Reversal несёт отрицательный amount (мс —
-    // длительность возвращённой покупки): вычитаем ровно возвращённое
-    // время, пол — серверное значение. Гранты того же батча тоже
-    // учитываются (rebuy в одном батче с возвратом иначе «съел» бы
-    // миссионное время: local - refund + rebuy). Гранты батча никогда
-    // ещё не в local: local отражает только применённые батчи
-    // (seq <= cursor) и локальные источники. Без reversal в батче —
-    // прежний max(local, server): грант/продление растут от серверного
-    // снапшота, локальное время не сгорает. Повторный синк безопасен:
-    // reversal попадает в appliedEvents только пока seq > cursor
-    // (устаревший ответ даёт пустой appliedEvents — ветка max()).
+    // CR-R3-6/7/8: бустер — серверный срок покупки + банк заработанного
+    // времени (миссионные награды, MetaWallet.boosterEarnedMs/AnchorMs).
+    // Замена неттинга P2-N3 (local + Σamount батча): неттинг вычитал
+    // ИСХОДНУЮ длительность покупки, даже когда она уже истекла, —
+    // возврат истёкшей покупки срезал непросроченную миссионную награду,
+    // а max(local, server) при новой покупке терял её вовсе (3 + 7 = 7).
+    // Серверный снапшот resp.boosterUntilMs авторитетен для купленной
+    // компоненты (триггер воркера уже учёл гранты/возвраты батча):
+    //   base — начало хвоста банка: якорь > now — хвост ещё не начался
+    //   (наслоен на будущий купленный срок) и сползает за серверным
+    //   сроком (base = P'); якорь <= now — хвост уже идёт, зафиксирован
+    //   (base = max(P', anchor)). computed = base + bank.
+    // Батч с событиями бустера — строгий пересчёт (возврат отзывает
+    // купленное время); без событий бустера — max(local, computed):
+    // локальное время из неизвестных синку источников (QA-мок, локальный
+    // грант grantPurchase) не стирается. Повторный синк идемпотентен:
+    // банк — персистентная длительность, а не дельта событий.
+    // Устаревший ответ (R3-8, tip < курсора) бустер не трогает вообще —
+    // как пропуск: старый высокий снапшот не воскрешает отозванный
+    // бустер. Повторный синк (tip == курсора) — не устаревший (см.
+    // staleBoosterResponse выше).
+    // Банк жив, пока жив local booster: при истечении (local <= now)
+    // банк обнуляется, иначе мёртвая награда вечно продлевала бы
+    // будущие покупки.
     const localBooster = num(loadMeta().boosterUntilMs);
-    const boosterReversalInBatch = appliedEvents.some(
-      (ev) => ev.kind === 'reversal' && ev.grant_type === 'booster'
-    );
-    const boosterDeltaMs = boosterReversalInBatch
-      ? appliedEvents
-          .filter((ev) => ev.grant_type === 'booster')
-          .reduce((sum, ev) => sum + ev.amount, 0)
-      : 0;
-    const boosterUntilMs = boosterReversalInBatch
-      ? Math.max(resp.boosterUntilMs, localBooster + boosterDeltaMs)
-      : Math.max(localBooster, resp.boosterUntilMs);
-    if (boosterUntilMs !== localBooster) setBoosterUntilMs(boosterUntilMs);
+    let boosterUntilMs = localBooster;
+    if (!staleBoosterResponse) {
+      const nowMs = Date.now();
+      let bank = getBoosterEarnedMs();
+      let anchor = getBoosterEarnedAnchorMs();
+      if (localBooster <= nowMs && bank > 0) {
+        bank = 0;
+        anchor = 0;
+        setBoosterEarned(0, 0);
+      }
+      const boosterEventsInBatch = appliedEvents.some((ev) => ev.grant_type === 'booster');
+      const base =
+        anchor > nowMs ? resp.boosterUntilMs : Math.max(resp.boosterUntilMs, anchor);
+      const computed = base + bank;
+      boosterUntilMs = boosterEventsInBatch
+        ? computed
+        : Math.max(localBooster, computed);
+      if (boosterUntilMs !== localBooster) setBoosterUntilMs(boosterUntilMs);
+      // Якорь перебазируется на принятое значение — только если пересчёт
+      // принят (иначе max(local) сохранил старое local, и якорь не трогаем).
+      const adopted = boosterEventsInBatch || computed >= localBooster;
+      if (adopted && bank > 0 && anchor !== base) setBoosterEarned(bank, base);
+    }
     applied.boosterUntilMs = boosterUntilMs;
 
     // Сезонный пропуск (монетизация v3; P1-5): серверное значение
