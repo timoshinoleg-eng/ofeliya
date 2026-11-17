@@ -19,13 +19,14 @@ cp wrangler.toml.example wrangler.toml   # поправь name при желан
 
 # Секреты (в репозиторий НЕ коммитить):
 npx wrangler secret put TELEGRAM_BOT_TOKEN   # токен из шага 1
-npx wrangler secret put WEBHOOK_SECRET       # придумай строку, напр. openssl rand -hex 32
+npx wrangler secret put WEBHOOK_SECRET       # секрет прокси Render→воркер (НЕ TG_WEBHOOK_SECRET)
+npx wrangler secret put ADMIN_TOKEN          # отдельный админ-секрет для возвратов/подписок
 
 # D1 — журнал платежей (ОБЯЗАТЕЛЬНО, патч №13):
 # без биндинга PAYMENTS_DB воркер отвечает 503 на /api/invoice
 # и ok:false на pre_checkout_query (fail-closed всей цепочки).
 npx wrangler d1 create ofeliya-payments   # запомнить выданный database_id
-npx wrangler d1 execute ofeliya-payments --file=worker/schema.sql --remote
+npx wrangler d1 execute ofeliya-payments --file=schema.sql --remote
 # database_id → в wrangler.toml, [[d1_databases]] (см. wrangler.toml.example)
 
 npx wrangler deploy
@@ -34,17 +35,30 @@ npx wrangler deploy
 
 Проверка: `curl https://<worker>/api/health` → `{"ok":true,...}`.
 
-## 3. Webhook бота
+## 3. Webhook бота (продакшн: Render → Worker)
+
+**Не переключать Telegram напрямую на Worker:** у Bot API один webhook.
+Прямой Worker URL отключит игровой webhook и команды `/start`/`/help`.
+Сначала настрой прокси в Render (`ofeliya-game`):
+
+```bash
+OFELIYA_STARS_WORKER_URL=https://<worker>.workers.dev
+OFELIYA_STARS_WORKER_SECRET=<тот же WEBHOOK_SECRET, что в Worker>
+```
+
+Затем укажи существующий игровой webhook, сохранив **отдельный**
+`TG_WEBHOOK_SECRET` Render:
 
 ```bash
 curl "https://api.telegram.org/bot<TOKEN>/setWebhook" \
-  -d "url=https://<worker>/api/webhook" \
-  -d "secret_token=<WEBHOOK_SECRET>"
+  -d "url=https://ofeliya-game.onrender.com/api/telegram/webhook" \
+  -d "secret_token=<TG_WEBHOOK_SECRET>"
 ```
 
-Воркер сверяет заголовок `X-Telegram-Bot-Api-Secret-Token` с `WEBHOOK_SECRET`.
-Без `WEBHOOK_SECRET` в env воркер отвечает **401 fail-closed** (патч №12):
-молчаливого отключения проверки больше нет — секрет обязателен.
+Воркер проверяет заголовок `X-Telegram-Bot-Api-Secret-Token` с
+`WEBHOOK_SECRET`, а игровой сервер независимо проверяет
+`TG_WEBHOOK_SECRET`. Оба обязательны, но **не должны совпадать**.
+Подробно о прокси и таймауте pre_checkout — §9.
 
 ## 4. Клиент игры
 
@@ -152,7 +166,9 @@ Telegram webhook (`POST /api/telegram/webhook`, секрет проверяет�
 отдельно, обрабатывает private start). Воркер оплат — независимый
 сервис со своим секретом (`WEBHOOK_SECRET`) и своим URL
 (`https://<worker>/api/webhook`); общий обработчик им не нужен.
-При `setWebhook` для платёжного бота указывай именно URL воркера.
+Для существующего игрового бота `setWebhook` должен указывать URL **Render**,
+который пересылает Stars-апдейты воркеру. Прямой URL воркера допустим
+только для отдельного бота без игровых команд.
 
 ### Статус: прокси реализован (патч №14)
 
