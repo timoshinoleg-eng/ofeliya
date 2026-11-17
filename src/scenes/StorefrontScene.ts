@@ -183,6 +183,17 @@ export class StorefrontScene extends Phaser.Scene {
   private provider: PaymentProvider | null = null;
   private variant = 'hidden';
   private state: SceneState = 'loading';
+  /**
+   * CR3: состояние restore. 'pending' — restore ещё не завершён, и
+   * состояние пропуска НЕИЗВЕСТНО: на чистой установке
+   * isSeasonPassActive() false, пока restore не записал
+   * seasonPassUntilMs, — покупка пропуска блокируется (кнопка '···'),
+   * иначе клиент предложит второй пропуск при активном серверном.
+   * 'known' — restore завершён (успешно или нет — лучше информации не
+   * будет); серверный 409 из P1-2 остаётся backstop'ом. Сбрасывается
+   * в create() (рестарт при resize — новый restore).
+   */
+  private restoreState: 'pending' | 'known' = 'pending';
   private products: Product[] = [];
   private errorReason = '';
   private purchasingId: string | null = null;
@@ -242,6 +253,7 @@ export class StorefrontScene extends Phaser.Scene {
     // стартует с «purchasing» и указателями на уничтоженные объекты.
     this.state = 'loading';
     this.purchasingId = null;
+    this.restoreState = 'pending';
     this.scrollOffset = 0;
     this.scrollLimit = 0;
     this.listContainer = null;
@@ -832,6 +844,10 @@ export class StorefrontScene extends Phaser.Scene {
     const buying = this.state === 'purchasing' && this.purchasingId === product.id;
     // Монетизация v3: активный пропуск не продаётся (см. выше).
     const passOwned = product.kind === 'season_pass' && isSeasonPassActive();
+    // CR3: пока restore не завершён, состояние пропуска НЕИЗВЕСТНО —
+    // кнопка заблокирована ('···'), как при покупке.
+    const passUnknown = product.kind === 'season_pass' && this.restoreState === 'pending';
+    const btnDisabled = buying || passOwned || passUnknown;
     const btnBg = this.add
       .rectangle(
         btnX,
@@ -839,22 +855,27 @@ export class StorefrontScene extends Phaser.Scene {
         CARD_BTN_W,
         CARD_BTN_H,
         passOwned ? ROLE.surface.panel : ROLE.faction.reward,
-        buying || passOwned ? 0.55 : PANEL.button
+        btnDisabled ? 0.55 : PANEL.button
       )
       .setStrokeStyle(BORDER.thin, 0x0b0f1a, 0.6)
-      .setInteractive({ useHandCursor: !passOwned })
+      .setInteractive({ useHandCursor: !btnDisabled })
       .setName('card-buy');
     const btnLabel = this.add
-      .text(btnX, btnY, buying ? '···' : passOwned ? 'АКТИВЕН' : this.priceLabel(product), {
-        fontFamily: FONT,
-        fontSize: '13px',
-        fontStyle: 'bold',
-        color: passOwned ? VISUAL_TEXT.muted : '#0b0f1a',
-      })
+      .text(
+        btnX,
+        btnY,
+        buying || passUnknown ? '···' : passOwned ? 'АКТИВЕН' : this.priceLabel(product),
+        {
+          fontFamily: FONT,
+          fontSize: '13px',
+          fontStyle: 'bold',
+          color: passOwned ? VISUAL_TEXT.muted : '#0b0f1a',
+        }
+      )
       .setOrigin(0.5)
       .setResolution(2)
       .setName('card-buy-label');
-    if (!buying && !passOwned) {
+    if (!btnDisabled) {
       wireTapButton(btnBg, () => void this.buy(product));
     }
     children.push(btnBg, btnLabel);
@@ -1206,6 +1227,10 @@ export class StorefrontScene extends Phaser.Scene {
     } catch {
       /* restore не должен ронять витрину */
     }
+    // CR3: restore завершён (успешно или нет — лучше информации не
+    // будет): состояние пропуска известно, кнопка пропуска
+    // разблокируется перерендером ниже.
+    this.restoreState = 'known';
     for (const id of fulfilled) {
       void trackProductEvent('purchase_completed', PlatformBridge, {
         productId: id,
@@ -1238,6 +1263,9 @@ export class StorefrontScene extends Phaser.Scene {
   private async buy(product: Product): Promise<void> {
     const provider = this.provider;
     if (!provider || this.state !== 'ready') return;
+    // CR3: покупка пропуска до известного состояния restore блокируется
+    // (кнопка в этом состоянии не wired — это defense in depth).
+    if (product.kind === 'season_pass' && this.restoreState === 'pending') return;
     this.purchasingId = product.id;
     this.syncPending = null;
     this.setState('purchasing');

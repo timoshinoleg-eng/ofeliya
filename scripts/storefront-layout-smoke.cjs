@@ -16,6 +16,9 @@
  *    не пересекаются, сцена возвращается в ready.
  *  - P2-N4 (порог тапа): drag 12px с кнопки с отпуском над ней — покупки
  *    нет, тап по той же кнопке — покупка; drag 70px по фону — скролл.
+ *  - CR3 (гейт пропуска): пока restore не завершён — кнопка пропуска
+ *    '···' и тап не покупает; после known — покупка разрешена; при
+ *    активном пропуске — «АКТИВЕН».
  *
  * Матрица: 320x520, 320x568, 360x640, 390x844, 412x915 x пропуск
  * активен/неактивен. Пропуск активен — seed ofeliya.meta.v1
@@ -79,6 +82,55 @@ async function touchAt(ctx, page, point) {
   });
   await sleep(45);
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+}
+
+// CR3: состояние кнопки пропуска — текст её лейбла и restoreState сцены.
+// Лейбл '···' = кнопка заблокирована (покупка/неизвестное состояние),
+// 'АКТИВЕН' = пропуск уже есть, иначе — цена (покупка разрешена).
+async function passButtonState(page) {
+  return page.evaluate(() => {
+    const s = window.__game.scene.getScene('Storefront');
+    let label = null;
+    for (const item of s.listContainer.list) {
+      if (item?.type !== 'Container') continue;
+      const all = [];
+      const visit = (o) => {
+        all.push(o);
+        if (Array.isArray(o?.list)) o.list.forEach(visit);
+      };
+      visit(item);
+      if (!all.some((o) => o?.type === 'Text' && o.text === 'Сезонный пропуск — 30 дней')) continue;
+      label = all.find((o) => o?.name === 'card-buy-label')?.text ?? null;
+      break;
+    }
+    return { label, restoreState: s.restoreState ?? null };
+  });
+}
+
+// CR3: проскроллить карточку пропуска в центр контентной области.
+async function scrollPassIntoView(page) {
+  await page.evaluate(() => {
+    const s = window.__game.scene.getScene('Storefront');
+    const content = s.contentRect();
+    const targetCenter = content.top + content.height / 2;
+    let cardY = null;
+    for (const item of s.listContainer.list) {
+      if (item?.type !== 'Container') continue;
+      const all = [];
+      const visit = (o) => {
+        all.push(o);
+        if (Array.isArray(o?.list)) o.list.forEach(visit);
+      };
+      visit(item);
+      if (all.some((o) => o?.type === 'Text' && o.text === 'Сезонный пропуск — 30 дней')) {
+        const r = item.getBounds();
+        cardY = r.y + r.height / 2;
+        break;
+      }
+    }
+    if (cardY !== null) s.applyScroll(s.scrollOffset + (cardY - targetCenter));
+  });
+  await sleep(150);
 }
 
 // P2-N4: drag касанием от from к to (шагами, как живой палец).
@@ -762,6 +814,124 @@ async function checkScroll(page, label, failures) {
       });
       if (st.state !== 'ready' || st.lastBought) {
         failures.push(`${label}: drag по фону начал покупку (state=${st.state})`);
+      }
+      if (errors.length) failures.push(`${label}: page errors: ${errors.join(' | ')}`);
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  // CR3: покупка пропуска до известного состояния restore блокируется.
+  // Чистая установка: restore завершается (restoreState known); пока
+  // состояние неизвестно (симулируем renderContent при pending) — кнопка
+  // '···' и тап не покупает; после known — покупка разрешена.
+  await runCase('pass-restore-gating 390x844', async () => {
+    const label = 'pass-restore-gating 390x844';
+    const { ctx, page, errors } = await bootStorefront(browser, { width: 390, height: 844 }, { passActive: false });
+    try {
+      try {
+        await page.waitForFunction(
+          () => window.__game.scene.getScene('Storefront').restoreState === 'known',
+          null,
+          { timeout: 15000 }
+        );
+      } catch {
+        failures.push(`${label}: restore не завершился (restoreState не стал known)`);
+        return;
+      }
+      await scrollPassIntoView(page);
+      // Симулируем «restore ещё не завершён»: pending + перерендер.
+      await page.evaluate(() => {
+        const s = window.__game.scene.getScene('Storefront');
+        s.restoreState = 'pending';
+        s.renderContent();
+      });
+      await sleep(200);
+      await scrollPassIntoView(page);
+      const pending = await passButtonState(page);
+      if (pending.label !== '···') {
+        failures.push(`${label}: при неизвестном restore кнопка пропуска — '${pending.label}' вместо '···'`);
+      }
+      const g = await extractGeometry(page);
+      const pass = g.cards.find((c) => c.id === 'season-pass.basic-30d');
+      if (!pass?.buyButton) {
+        failures.push(`${label}: кнопка покупки пропуска не найдена`);
+        return;
+      }
+      await touchAt(ctx, page, center(pass.buyButton));
+      await sleep(600);
+      const st = await page.evaluate(() => {
+        const s = window.__game.scene.getScene('Storefront');
+        return { state: s.state, lastBought: s.lastBought?.id ?? null };
+      });
+      if (st.state !== 'ready' || st.lastBought) {
+        failures.push(
+          `${label}: тап по кнопке пропуска при pending-restore начал покупку (state=${st.state}, lastBought=${st.lastBought})`
+        );
+        return;
+      }
+      // Restore известен — покупка разрешена.
+      await page.evaluate(() => {
+        const s = window.__game.scene.getScene('Storefront');
+        s.restoreState = 'known';
+        s.renderContent();
+      });
+      await sleep(200);
+      await scrollPassIntoView(page);
+      const known = await passButtonState(page);
+      if (known.label === '···' || known.label === 'АКТИВЕН') {
+        failures.push(`${label}: после known кнопка пропуска — '${known.label}' (покупка не разблокирована)`);
+        return;
+      }
+      const g2 = await extractGeometry(page);
+      const pass2 = g2.cards.find((c) => c.id === 'season-pass.basic-30d');
+      await touchAt(ctx, page, center(pass2.buyButton));
+      try {
+        await page.waitForFunction(
+          () => window.__game.scene.getScene('Storefront').state === 'success',
+          null,
+          { timeout: 10000 }
+        );
+      } catch {
+        failures.push(`${label}: после known тап по кнопке пропуска не начал покупку`);
+      }
+      if (errors.length) failures.push(`${label}: page errors: ${errors.join(' | ')}`);
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  // CR3: после restore с активным пропуском — «АКТИВЕН», тап не покупает.
+  await runCase('pass-restore-gating active 390x844', async () => {
+    const label = 'pass-restore-gating active 390x844';
+    const { ctx, page, errors } = await bootStorefront(browser, { width: 390, height: 844 }, { passActive: true });
+    try {
+      try {
+        await page.waitForFunction(
+          () => window.__game.scene.getScene('Storefront').restoreState === 'known',
+          null,
+          { timeout: 15000 }
+        );
+      } catch {
+        failures.push(`${label}: restore не завершился (restoreState не стал known)`);
+        return;
+      }
+      await scrollPassIntoView(page);
+      const st0 = await passButtonState(page);
+      if (st0.label !== 'АКТИВЕН') {
+        failures.push(`${label}: при активном пропуске кнопка — '${st0.label}' вместо 'АКТИВЕН'`);
+        return;
+      }
+      const g = await extractGeometry(page);
+      const pass = g.cards.find((c) => c.id === 'season-pass.basic-30d');
+      await touchAt(ctx, page, center(pass.buyButton));
+      await sleep(600);
+      const st = await page.evaluate(() => {
+        const s = window.__game.scene.getScene('Storefront');
+        return { state: s.state, lastBought: s.lastBought?.id ?? null };
+      });
+      if (st.state !== 'ready' || st.lastBought) {
+        failures.push(`${label}: тап по 'АКТИВЕН' начал покупку (state=${st.state})`);
       }
       if (errors.length) failures.push(`${label}: page errors: ${errors.join(' | ')}`);
     } finally {
