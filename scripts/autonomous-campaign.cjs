@@ -558,6 +558,12 @@ function loadInputsFile(file, cliSeed, cliDifficulty) {
     transitions,
     expectedStateHash: typeof parsed.expectedStateHash === 'string' ? parsed.expectedStateHash : null,
     expectedInputHash: typeof parsed.expectedInputHash === 'string' ? parsed.expectedInputHash : null,
+    // Tick at which the recorded run's hashes were captured. The replay
+    // must end at exactly this tick: stateHash is cumulative, so hashes
+    // taken at different ticks always differ (the 2026-11-18 replay-1800
+    // false DIVERGED: bot ended at 1800, replay ran to 1854 =
+    // lastEventTick + tail, while all 30 per-second snapshots matched).
+    finalTick: Number.isInteger(parsed.finalTick) && parsed.finalTick >= 0 ? parsed.finalTick : null,
   };
 }
 
@@ -973,7 +979,12 @@ class ReplayDriver {
       ...plan.choices.map((e) => e.tick),
       ...plan.transitions.map((e) => e.tick),
     );
-    this.endTick = lastEventTick + REPLAY_TAIL_FRAMES;
+    // End at the recorded run's final tick when known, so the hash
+    // comparison is tick-anchored. Only legacy files without finalTick
+    // fall back to last-event + tail (and then no hash comparison runs).
+    this.endTick = plan.finalTick !== null && plan.finalTick !== undefined
+      ? plan.finalTick
+      : lastEventTick + REPLAY_TAIL_FRAMES;
   }
 
   decideAt(snapshot, tick) {
@@ -2106,9 +2117,11 @@ async function runCampaign(browser, options, runIndex, seriesState) {
       if (st.heapAfter && !seriesState.firstHeapAfter) seriesState.firstHeapAfter = st.heapAfter;
     }
 
-    // Replay determinism comparison.
+    // Replay determinism comparison. Only tick-anchored baselines compare:
+    // without finalTick the recorded hash's tick is unknown, and comparing
+    // hashes from different ticks is a guaranteed false DIVERGED.
     let replayVerdict = null;
-    if (isReplay && options.replayPlan.expectedStateHash) {
+    if (isReplay && options.replayPlan.expectedStateHash && options.replayPlan.finalTick !== null) {
       const match = st.finalHashes.stateHash === options.replayPlan.expectedStateHash
         && st.finalHashes.inputHash === options.replayPlan.expectedInputHash;
       replayVerdict = match ? 'MATCH' : 'DIVERGED';
@@ -2286,8 +2299,10 @@ async function runCampaign(browser, options, runIndex, seriesState) {
 
     // inputs.json carries the hashes the run produced, so --replay can
     // compare against them (extra fields are ignored by verify-campaign-replay).
+    // finalTick anchors the hashes: the replay ends at exactly this tick.
     const inputsOut = {
       ...inputLog,
+      finalTick: st.tick,
       expectedStateHash: st.finalHashes.stateHash,
       expectedInputHash: st.finalHashes.inputHash,
     };
