@@ -195,6 +195,18 @@ try {
     eq(calls.length, 0, 'disabled analytics: no events sent');
   }
 
+  // --- 6. CR-R3-12: буфер полон (48 событий) — app_open выброшен,
+  // но seen не ставится, и fallback при готовности шлёт opening event ---
+  {
+    const s = scenario();
+    for (let i = 0; i < 48; i++) trackClientEvent('store_viewed', { screen: 'menu' });
+    trackClientEvent('app_open', { screen: 'game' });
+    await s.fireReady();
+    await sleep(60);
+    eq(s.appOpens().length, 1, 'full buffer: dropped app_open is replaced by fallback');
+    eq(s.appOpens()[0][0].data.screen, 'menu', 'full buffer: fallback carries screen=menu');
+  }
+
   console.log('client-experience-app-open: all assertions passed');
 } finally {
   delete globalThis.document;
