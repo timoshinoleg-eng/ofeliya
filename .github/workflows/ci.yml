@@ -158,6 +158,9 @@ jobs:
       - name: Worker bundles contract
         run: npm run test:worker-bundles
 
+      - name: Invite and collab contract
+        run: npm run test:invite-collab
+
       - name: Season quests contract
         run: npm run test:season-quests
 

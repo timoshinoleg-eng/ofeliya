@@ -9,6 +9,12 @@
  *
  * Модуль Phaser-free: validateCatalog/formatPrice — чистые функции,
  * тестируются в Node.
+ *
+ * Коллаб-скин (монетизация v3, этап 5): добавляется как обычный скин —
+ * запись здесь + зеркальная запись в worker/src/grants.ts (id/stars/грант
+ * должны совпадать; тест worker-payments сверяет каталоги). Скин сам
+ * попадёт в галерею (SkinCatalog читает SHOP_CATALOG); редкость — в
+ * SHOP_SKIN_META. Диплинк и баннер коллаба — в src/game/shop/collabs.ts.
  */
 import type { Product, ProductKind, ProductPrice } from './PaymentProvider';
 

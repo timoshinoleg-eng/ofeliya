@@ -38,6 +38,8 @@ import {
 } from '../game/shop/PendingWalletSync';
 import { formatPrice, validateCatalog } from '../game/shop/products';
 import { getSeasonPassUntilMs, isSeasonPassActive } from '../game/meta/MetaWallet';
+import { INVITE_SHARE_TEXT, buildInvitePayloadFromInitData } from '../game/shop/invite';
+import { getCollab, type CollabDef } from '../game/shop/collabs';
 import {
   SEASON_MISSIONS,
   seasonDisplayName,
@@ -119,6 +121,17 @@ export class StorefrontScene extends Phaser.Scene {
    * Сбрасывается в create() (одно открытие магазина = одна сессия).
    */
   private viewedProducts = new Set<string>();
+  /**
+   * Монетизация v3: коллаб из данных сцены (MenuScene передаёт collabId
+   * при входе по диплинку). null — обычный вход / неизвестный id.
+   */
+  private collab: CollabDef | null = null;
+  /**
+   * Монетизация v3: ссылка-приглашение (t.me … startapp=t_<uid>).
+   * Только Telegram: на других платформах нет Telegram user id.
+   * null — не Telegram / нет id / бот не сконфигурирован.
+   */
+  private inviteLink: string | null = null;
 
   private root: Phaser.GameObjects.Container | null = null;
   private listContainer: Phaser.GameObjects.Container | null = null;
@@ -132,11 +145,29 @@ export class StorefrontScene extends Phaser.Scene {
     super({ key: 'Storefront' });
   }
 
+  /**
+   * Монетизация v3: данные сцены — только collabId (от MenuScene при
+   * входе по коллаб-диплинку). Неизвестный id → null (обычная витрина).
+   */
+  init(data?: { collabId?: string }): void {
+    this.collab =
+      typeof data?.collabId === 'string' ? getCollab(data.collabId) ?? null : null;
+  }
+
   create(): void {
     this.cameras.main.setBackgroundColor(COLORS.bg);
     this.variant = FeatureFlags.get('storefront.variant');
     // Монетизация v3: новое открытие магазина — новая сессия просмотров.
     this.viewedProducts.clear();
+    // Монетизация v3: ссылка-приглашение — только в Telegram
+    // (user id берётся из initData; на MAX/браузере его нет).
+    const invitePayload =
+      PlatformBridge.kind === 'telegram'
+        ? buildInvitePayloadFromInitData(PlatformBridge.initData)
+        : null;
+    this.inviteLink = invitePayload
+      ? PlatformBridge.buildStartLink(invitePayload)
+      : null;
 
     // Fail-closed: без видимого варианта витрины тут делать нечего.
     // apiBaseUrl читаем здесь (import.meta.env безопасен только в браузере;
@@ -432,6 +463,17 @@ export class StorefrontScene extends Phaser.Scene {
         });
         cy += 76 + gap;
       }
+    }
+    // Монетизация v3: баннер коллаба (вход по диплинку collab_<id>).
+    if (this.state === 'ready' && this.collab) {
+      this.buildCollabBanner(list, 0, cy, width, this.collab);
+      cy += 76 + gap;
+    }
+    // Монетизация v3: баннер приглашения (только Telegram: ссылка
+    // строится из Telegram user id; на MAX/браузере баннера нет).
+    if (this.state === 'ready' && this.inviteLink) {
+      this.buildInviteBanner(list, 0, cy, width, this.inviteLink);
+      cy += 76 + gap;
     }
     for (const product of this.products) {
       // Монетизация v3: карточка пропуска выше (+28px) — в ней две
@@ -748,6 +790,144 @@ export class StorefrontScene extends Phaser.Scene {
       btnLabel.setText('···');
       // Перерендер заменяет баннер, поэтому текст кнопки назад не ставим.
       void this.refreshPendingAndRender();
+    });
+    banner.add([bg, label, sub, btnBg, btnLabel]);
+    parent.add(banner);
+  }
+
+  /**
+   * Монетизация v3: баннер коллаба (информационный, без кнопки —
+   * товар коллаба уже есть в списке карточек ниже).
+   */
+  private buildCollabBanner(
+    parent: Phaser.GameObjects.Container,
+    cx: number,
+    cy: number,
+    width: number,
+    collab: CollabDef
+  ): void {
+    const bannerH = 76;
+    const banner = this.add.container(cx, cy);
+    const bg = this.add
+      .rectangle(0, 0, width, bannerH, ROLE.surface.panel, PANEL.card)
+      .setStrokeStyle(BORDER.thin, 0x7fd4ff, 0.9)
+      .setOrigin(0.5, 0);
+    const label = this.add
+      .text(-width / 2 + 16, 12, collab.title, {
+        fontFamily: FONT,
+        fontSize: '12px',
+        fontStyle: 'bold',
+        color: '#7fd4ff',
+      })
+      .setOrigin(0, 0)
+      .setResolution(2);
+    const sub = this.add
+      .text(-width / 2 + 16, 32, collab.description, {
+        fontFamily: UI_FONT,
+        fontSize: '11px',
+        color: VISUAL_TEXT.muted,
+        wordWrap: { width: width - 32 },
+      })
+      .setOrigin(0, 0)
+      .setResolution(2);
+    banner.add([bg, label, sub]);
+    parent.add(banner);
+  }
+
+  /**
+   * Монетизация v3: баннер приглашения. Кнопка шарит реферальную ссылку
+   * (t.me … startapp=t_<uid>) через PlatformBridge.shareResult; если
+   * шаринг недоступен — фолбэк в буфер обмена. Текст НЕ обещает бонус:
+   * автоматической выдачи РНК пригласившему в v1 нет (см. invite.ts).
+   */
+  private buildInviteBanner(
+    parent: Phaser.GameObjects.Container,
+    cx: number,
+    cy: number,
+    width: number,
+    link: string
+  ): void {
+    const bannerH = 76;
+    const accent = 0x4bc996;
+    const accentCss = '#4bc996';
+    const banner = this.add.container(cx, cy);
+    const bg = this.add
+      .rectangle(0, 0, width, bannerH, ROLE.surface.panel, PANEL.card)
+      .setStrokeStyle(BORDER.thin, accent, 0.9)
+      .setOrigin(0.5, 0);
+    const label = this.add
+      .text(-width / 2 + 16, 12, 'ПРИГЛАСИ ДРУГА', {
+        fontFamily: FONT,
+        fontSize: '12px',
+        fontStyle: 'bold',
+        color: accentCss,
+      })
+      .setOrigin(0, 0)
+      .setResolution(2);
+    const sub = this.add
+      .text(-width / 2 + 16, 32, 'Отправь другу ссылку на игру.', {
+        fontFamily: UI_FONT,
+        fontSize: '11px',
+        color: VISUAL_TEXT.muted,
+        wordWrap: { width: width - 140 },
+      })
+      .setOrigin(0, 0)
+      .setResolution(2);
+    const btnW = 108;
+    const btnH = Math.max(TOUCH.min, 40);
+    const btnX = width / 2 - 12 - btnW / 2;
+    const btnBg = this.add
+      .rectangle(btnX, bannerH / 2, btnW, btnH, ROLE.surface.panelHover, PANEL.button)
+      .setStrokeStyle(BORDER.thin, accent, 0.8)
+      .setInteractive({ useHandCursor: true });
+    const btnLabel = this.add
+      .text(btnX, bannerH / 2, 'ПРИГЛАСИТЬ', {
+        fontFamily: FONT,
+        fontSize: '11px',
+        fontStyle: 'bold',
+        color: accentCss,
+      })
+      .setOrigin(0.5)
+      .setResolution(2);
+    btnBg.on('pointerdown', () => btnBg.setAlpha(0.6));
+    btnBg.on('pointerup', () => {
+      btnBg.setAlpha(1);
+      void PlatformBridge.shareResult(INVITE_SHARE_TEXT, link).then((ok) => {
+        if (!this.sys.isActive()) return;
+        if (ok) {
+          showMetaToast(
+            this,
+            'Приглашение отправлено',
+            'Друг зайдёт в игру по твоей ссылке.',
+            'ПРИГЛАШЕНИЕ'
+          );
+          return;
+        }
+        // Шаринг недоступен — фолбэк в буфер обмена.
+        const clipboard =
+          typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
+        if (clipboard?.writeText) {
+          void clipboard.writeText(link).then(
+            () => {
+              if (this.sys.isActive()) {
+                showMetaToast(
+                  this,
+                  'Ссылка скопирована',
+                  'Отправь её другу любым способом.',
+                  'ПРИГЛАШЕНИЕ'
+                );
+              }
+            },
+            () => {
+              if (this.sys.isActive()) {
+                showMetaToast(this, 'Шаринг недоступен', 'Скопируй ссылку вручную.', 'ПРИГЛАШЕНИЕ');
+              }
+            }
+          );
+          return;
+        }
+        showMetaToast(this, 'Шаринг недоступен в этом клиенте', '', 'ПРИГЛАШЕНИЕ');
+      });
     });
     banner.add([bg, label, sub, btnBg, btnLabel]);
     parent.add(banner);
