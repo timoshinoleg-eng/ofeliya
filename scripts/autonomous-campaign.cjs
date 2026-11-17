@@ -58,6 +58,20 @@
 // setBounds / world constants in GameScene), so no "arena edge" logic
 // exists in the bot (Appendix C §4). No angular planner either.
 //
+// Pace (measured 2026-11-18, 600-frame probe, early game, this VM):
+// stepped frames cost ~283 ms wall on SwiftShader WebGL — Canvas is no
+// faster (293 ms), and screenshots/video/tracing add only ~5-10%. The
+// visual groups dominate: ?qaHide=atmo -> 197 ms/frame,
+// ?qaHide=atmo,gems,ui -> 118 ms/frame (2.4x). Hiding is visibility-only
+// (src/game/qaHide.ts: nothing stops updating), so logic, RNG and state
+// hashes are unchanged — --qa-hide (env OFELIYA_QA_HIDE) is the runner's
+// speed lever for logic/determinism runs. Default hides nothing (faithful
+// visual run); the selection is recorded in run.json diagnostics and
+// series.json. A full campaign is ~40k frames: ~3.2 h unhidden vs ~1.3 h
+// with all groups hidden on this VM. The design's 30-min per-run gate
+// (§4.4) does not fit SwiftShader even for a first-boss smoke (18k
+// frames, ~35 min hidden / ~85 min unhidden) — flagged in the handoff.
+//
 // Score (Contract QA, design §2.5): a local `node server/index.mjs` is
 // started per run on a test port with a fresh store, and /api/score +
 // /api/run/start are routed to it from the page. The game forms the real
@@ -154,6 +168,21 @@ const TEARDOWN_INVARIANTS = new Set([
 const VISUAL_PROFILES = ['logic-stress', 'rendering-performance', 'release-visual'];
 const DEFAULT_VISUAL_PROFILE = 'release-visual';
 
+// QA render-split groups (src/game/qaHide.ts): hiding a group removes only
+// its pixels — nothing is destroyed and nothing stops updating, so game
+// logic, RNG and state hashes are identical with or without hiding. The
+// runner exposes this as --qa-hide for logic/determinism runs on software
+// rendering, where Game.step always renders (Appendix C §2) and the visual
+// groups dominate the per-frame wall cost. Measured 2026-11-18 on this VM
+// (600-frame probe, early game): baseline 283 ms/frame; ?qaHide=atmo
+// 197 ms/frame; ?qaHide=atmo,gems,ui 118 ms/frame (2.4x). Canvas is NOT
+// faster than WebGL here (293 vs 284 ms/frame), and screenshots/video/
+// tracing add only ~5-10%. Default hides nothing (faithful visual run);
+// the selection is recorded in run.json diagnostics and series.json, so a
+// qaHide run can never be mistaken for a visual run. Visual fidelity stays
+// the release-visual matrix's job.
+const QA_HIDE_GROUPS = ['gems', 'atmo', 'ui'];
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function log(message) {
@@ -195,7 +224,12 @@ function usageError(message) {
       '  --visual-profile NAME  logic-stress | rendering-performance |\n' +
       '                       release-visual (default: $OFELIYA_VISUAL_PROFILE\n' +
       '                       or release-visual); passed to the page as\n' +
-      '                       ?ofeliyaVisualProfile=NAME\n\n' +
+      '                       ?ofeliyaVisualProfile=NAME\n' +
+      '  --qa-hide GROUPS     hide render groups for faster logic runs\n' +
+      '                       (comma-separated gems,atmo,ui; default:\n' +
+      '                       $OFELIYA_QA_HIDE or hide nothing). Visibility\n' +
+      '                       only — logic, RNG and hashes are unchanged.\n' +
+      '                       Recorded in run.json diagnostics.\n\n' +
       'Exit codes: 0 all runs passed · 1 a run failed/timed out/diverged ·\n' +
       '            2 usage error or Test API absent.'
   );
@@ -213,6 +247,7 @@ function parseArgs(argv) {
   const valued = new Set([
     'seed', 'difficulty', 'speed', 'runs', 'replay', 'until', 'out', 'url',
     'platform', 'max-frames', 'wall-timeout-ms', 'score-port', 'visual-profile',
+    'qa-hide',
   ]);
   const flags = new Set(['no-video', 'no-trace']);
   for (let i = 0; i < argv.length; i++) {
@@ -275,6 +310,18 @@ function parseOptions(args) {
   if (!VISUAL_PROFILES.includes(visualProfile)) {
     usageError(`--visual-profile must be one of ${VISUAL_PROFILES.join(', ')}, got ${visualProfile}`);
   }
+  const qaHideRaw = args['qa-hide'] ?? process.env.OFELIYA_QA_HIDE ?? '';
+  const qaHide = [];
+  for (const token of qaHideRaw.split(',')) {
+    const group = token.trim().toLowerCase();
+    if (!group) continue;
+    if (!QA_HIDE_GROUPS.includes(group)) {
+      usageError(`--qa-hide groups must be ${QA_HIDE_GROUPS.join(', ')}, got ${group}`);
+    }
+    if (!qaHide.includes(group)) qaHide.push(group);
+  }
+  // Canonical order (qaHideLabel in src/game/qaHide.ts): gems,atmo,ui.
+  qaHide.sort((a, b) => QA_HIDE_GROUPS.indexOf(a) - QA_HIDE_GROUPS.indexOf(b));
   return {
     seed,
     difficulty: args.difficulty,
@@ -291,6 +338,7 @@ function parseOptions(args) {
     wallTimeoutMs,
     scorePort,
     visualProfile,
+    qaHide,
   };
 }
 
@@ -736,10 +784,16 @@ async function readHeap(page) {
   return null;
 }
 
-/** Game URL with the visual profile passed as a query parameter (Appendix C §5). */
-function withVisualProfile(url, visualProfile) {
+/**
+ * Game URL with the visual profile (Appendix C §5) and the QA render-split
+ * selection (?qaHide=, src/game/qaHide.ts) passed as query parameters.
+ */
+function buildPageUrl(url, options) {
   const parsed = new URL(url);
-  parsed.searchParams.set('ofeliyaVisualProfile', visualProfile);
+  parsed.searchParams.set('ofeliyaVisualProfile', options.visualProfile);
+  if (options.qaHide && options.qaHide.length > 0) {
+    parsed.searchParams.set('qaHide', options.qaHide.join(','));
+  }
   return parsed.toString();
 }
 
@@ -1326,7 +1380,7 @@ async function runCampaign(browser, options, runIndex, seriesState) {
   let page = null;
   try {
     ({ ctx, page } = await makeRunContext(browser, options, run));
-    await page.goto(withVisualProfile(options.url, options.visualProfile), { waitUntil: 'domcontentloaded' });
+    await page.goto(buildPageUrl(options.url, options), { waitUntil: 'domcontentloaded' });
     try {
       await page.waitForFunction(
         () => typeof window.__ofeliyaTest?.startCampaign === 'function',
@@ -2209,6 +2263,7 @@ async function runCampaign(browser, options, runIndex, seriesState) {
         heapGrowth,
         replayVerdict,
         visualProfile: options.visualProfile,
+        qaHide: options.qaHide.length > 0 ? options.qaHide.join(',') : 'none',
         effectiveSpeed: st.chunkWallEmaMs
           ? Number(((DECISION_FRAMES * FRAME_MS) / st.chunkWallEmaMs).toFixed(2))
           : null,
@@ -2338,7 +2393,7 @@ async function main() {
   log(
     `autonomous campaign: ${options.runs} run(s) difficulty=${options.difficulty} `
     + `speed=${options.speed}x url=${options.url} platform=${options.platform} `
-    + `visual=${options.visualProfile} mode=${options.replay ? `replay(${options.replay})` : 'bot'}`
+    + `visual=${options.visualProfile} qaHide=${options.qaHide.length > 0 ? options.qaHide.join(',') : 'none'} mode=${options.replay ? `replay(${options.replay})` : 'bot'}`
     + (options.until ? ` until=${options.until}` : '')
     + (options.seed ? ` seed=${options.seed}` : ''),
   );
@@ -2388,6 +2443,7 @@ async function main() {
     difficulty: options.difficulty,
     speed: options.speed,
     visualProfile: options.visualProfile,
+    qaHide: options.qaHide.length > 0 ? options.qaHide.join(',') : 'none',
     mode: options.replay ? 'replay' : 'bot',
     results: results.map((r) => ({
       runId: r.runId,
