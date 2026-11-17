@@ -14,6 +14,10 @@
  *  - resize: после смены вьюпорта сцена перестраивается и пересечений нет;
  *  - покупка пропуска (mock): оверлей успеха — заголовок и подзаголовок
  *    не пересекаются, сцена возвращается в ready.
+ *  - CR-R3-14: тап по замаскированной кнопке — цель выбирается
+ *    детерминированно (первая карточка, чью кнопку можно поставить
+ *    центром в полосу шапки подбором scroll offset); кейс обязан
+ *    выполнить тап, пропуск без проверки запрещён.
  *  - P2-N4 (порог тапа): drag 12px с кнопки с отпуском над ней — покупки
  *    нет, тап по той же кнопке — покупка; drag 70px по фону — скролл.
  *  - CR3 (гейт пропуска): пока restore не завершён — кнопка пропуска
@@ -602,33 +606,81 @@ async function checkScroll(page, label, failures) {
   // Невидимая кнопка: карточка уехала за маску вверх — тап по её кнопке
   // (она всё ещё хит-тестится Phaser, маска инпут не режет) не должен
   // начинать покупку.
+  //
+  // CR-R3-14: цель выбирается детерминированно — первая карточка, чью
+  // кнопку можно поставить центром в полосу шапки подбором scroll offset
+  // (раньше кейс скроллил до предела и надеялся, что какой-нибудь центр
+  // случайно попадёт в полосу, иначе логировал skipped и проходил
+  // впустую: полоса всего ~77px при шаге центров кнопок ~160-225px).
+  // Нет цели — провал кейса, а не пропуск.
   await runCase('masked-button-tap 390x844', async () => {
     const label = 'masked-button-tap 390x844';
     const { ctx, page, errors } = await bootStorefront(browser, { width: 390, height: 844 }, { passActive: false });
     try {
-      await page.evaluate(() => {
-        const s = window.__game.scene.getScene('Storefront');
-        s.applyScroll(s.scrollLimit);
-      });
-      await sleep(150);
-      const g = await extractGeometry(page);
-      const top = g.content.top;
-      const victim = g.cards.find(
-        (c) => c.buyButton && c.buyButton.y + c.buyButton.h / 2 > 8 && c.buyButton.y + c.buyButton.h / 2 < top - 8
-      );
-      if (!victim) {
-        console.log(`  case ${label}: skipped (no button landed in the chrome strip)`);
+      const g0 = await extractGeometry(page);
+      const top = g0.content.top;
+      const stripTop = 8;
+      const stripBottom = top - 8;
+      if (stripBottom - stripTop < 16) {
+        failures.push(`${label}: полоса шапки слишком узкая (${stripTop}..${stripBottom})`);
       } else {
-        await touchAt(ctx, page, center(victim.buyButton));
-        await sleep(600);
-        const st = await page.evaluate(() => {
-          const s = window.__game.scene.getScene('Storefront');
-          return { state: s.state, lastBought: s.lastBought?.id ?? null };
+        // Цель — середина полосы: центр кнопки вне контентной маски
+        // (выше top), но внутри вьюпорта и вдали от обоих краёв полосы.
+        const targetY = Math.round((stripTop + stripBottom) / 2);
+        // Скролл сдвигает список 1:1 (listContainer.y = top - offset),
+        // поэтому нужное смещение считается точно, а не подбором.
+        const target = g0.cards.find((c) => {
+          if (!c.buyButton) return false;
+          const cy = c.buyButton.y + c.buyButton.h / 2;
+          const needed = g0.scroll.offset + (cy - targetY);
+          return needed >= 0 && needed <= g0.scroll.limit;
         });
-        if (st.state !== 'ready' || st.lastBought) {
+        if (!target) {
           failures.push(
-            `${label}: тап по невидимой кнопке ${victim.id} начал покупку (state=${st.state}, lastBought=${st.lastBought})`
+            `${label}: ни одну кнопку нельзя поставить центром в полосу шапки (targetY=${targetY}, scrollLimit=${g0.scroll.limit})`
           );
+        } else {
+          const cy0 = target.buyButton.y + target.buyButton.h / 2;
+          const offset = g0.scroll.offset + (cy0 - targetY);
+          await page.evaluate((o) => {
+            window.__game.scene.getScene('Storefront').applyScroll(o);
+          }, offset);
+          await sleep(150);
+          const g = await extractGeometry(page);
+          const victim = g.cards.find((c) => c.id === target.id);
+          const vc = victim?.buyButton ? victim.buyButton.y + victim.buyButton.h / 2 : null;
+          if (!victim?.buyButton || vc <= stripTop || vc >= stripBottom) {
+            failures.push(
+              `${label}: кнопка ${target.id} не попала в полосу шапки после скролла (offset=${offset}, cy=${vc})`
+            );
+          } else {
+            const point = center(victim.buyButton);
+            const back = g.chrome.back;
+            if (
+              back &&
+              point.x >= back.x - 2 &&
+              point.x <= back.x + back.w + 2 &&
+              point.y >= back.y - 2 &&
+              point.y <= back.y + back.h + 2
+            ) {
+              failures.push(`${label}: точка тапа ${JSON.stringify(point)} пересекается с кнопкой НАЗАД`);
+            } else {
+              console.log(
+                `  case ${label}: tapping masked button ${victim.id} at (${point.x}, ${point.y}), offset=${offset}`
+              );
+              await touchAt(ctx, page, point);
+              await sleep(600);
+              const st = await page.evaluate(() => {
+                const s = window.__game.scene.getScene('Storefront');
+                return { state: s.state, lastBought: s.lastBought?.id ?? null };
+              });
+              if (st.state !== 'ready' || st.lastBought) {
+                failures.push(
+                  `${label}: тап по невидимой кнопке ${victim.id} начал покупку (state=${st.state}, lastBought=${st.lastBought})`
+                );
+              }
+            }
+          }
         }
       }
       if (errors.length) failures.push(`${label}: page errors: ${errors.join(' | ')}`);
