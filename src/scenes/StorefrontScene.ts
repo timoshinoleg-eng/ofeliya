@@ -23,7 +23,7 @@ import { FeatureFlags } from '../game/FeatureFlags';
 import { PlatformBridge } from '../platform';
 import { trackProductEvent } from '../systems/AnalyticsClient';
 import { prefersReducedMotion } from '../systems/MotionPreferences';
-import { BORDER, CLAMP, PANEL, ROLE, SPACE, TOUCH } from '../ui/tokens';
+import { BORDER, BP, CLAMP, PANEL, ROLE, SPACE, TOUCH } from '../ui/tokens';
 import { VISUAL_TEXT } from '../ui/visualTokens';
 import { STOREFRONT_MAX, STOREFRONT_TELEGRAM, isStorefrontVisible, resolveProvider } from '../game/shop/Storefront';
 import {
@@ -92,6 +92,26 @@ const STUB_PALETTES: Record<string, number> = {
 };
 
 /**
+ * Адаптивная компоновка карточек витрины (P1-4): высота карточки считается
+ * по измеренной высоте текстов (title.height / desc.height после layout),
+ * а не фиксирована. Никаких фиксированных Y внутри текстовых блоков:
+ * фиксированный statusY=80 был причиной наезда статуса пропуска на
+ * описание. Кегли — по readability-контракту: заголовок 16px, описание
+ * 11px (compact) / 12px (normal).
+ */
+const CARD_PAD_X = 12;
+const CARD_PAD_TOP = 12;
+const CARD_PAD_BOTTOM = 12;
+const CARD_MEDALLION_R = 24;
+const CARD_TITLE_SIZE = 16;
+const CARD_DESC_SIZE = { compact: 11, normal: 12 } as const;
+const CARD_BTN_W = 112;
+const CARD_BTN_H = 44;
+const CARD_GAP_HEADER_DESC = 8;
+const CARD_GAP_DESC_BTN = 10;
+const CARD_GAP_STATUS = 4;
+
+/**
  * Детерминированный хеш строки → 0..1. Для заглушки арта: один seed —
  * один узор точек, без ассетов.
  */
@@ -136,6 +156,12 @@ export class StorefrontScene extends Phaser.Scene {
   private root: Phaser.GameObjects.Container | null = null;
   private listContainer: Phaser.GameObjects.Container | null = null;
   private maskGraphics: Phaser.GameObjects.Graphics | null = null;
+  /** P1-4: низ шапки от измеренной подписи режима (buildChrome). */
+  private chromeBottom = 96;
+  /** P1-4: scroll-catcher списка (лежит ПОД списком, см. renderList). */
+  private scrollHit: Phaser.GameObjects.Rectangle | null = null;
+  /** P1-4: интерактивные кнопки списка — инпут гасится вне маски. */
+  private listButtons: Phaser.GameObjects.Rectangle[] = [];
   private scrollOffset = 0;
   private scrollLimit = 0;
   private scrollOwner = -1;
@@ -156,6 +182,26 @@ export class StorefrontScene extends Phaser.Scene {
 
   create(): void {
     this.cameras.main.setBackgroundColor(COLORS.bg);
+    // P1-4: рестарт при resize (onResize) проходит через create() заново
+    // на том же экземпляре сцены — сбрасываем состояние, иначе сцена
+    // стартует с «purchasing» и указателями на уничтоженные объекты.
+    this.state = 'loading';
+    this.purchasingId = null;
+    this.scrollOffset = 0;
+    this.scrollLimit = 0;
+    this.listContainer = null;
+    this.maskGraphics = null;
+    this.scrollHit = null;
+    this.listButtons = [];
+    // Resize — до раннего возврата: иначе слушатель переживёт уход в меню.
+    this.scale.on('resize', this.onResize, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.scale.off('resize', this.onResize, this);
+      this.clearListMask();
+      this.listContainer = null;
+      this.root?.destroy(true);
+      this.root = null;
+    });
     this.variant = FeatureFlags.get('storefront.variant');
     // Монетизация v3: новое открытие магазина — новая сессия просмотров.
     this.viewedProducts.clear();
@@ -197,36 +243,21 @@ export class StorefrontScene extends Phaser.Scene {
     // Патч №12: при открытии витрины допроверяем pending-покупки
     // (verify → verified → fulfillPurchase → снять запись; иначе бэкофф).
     void this.refreshPendingAndRender();
+  }
 
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      this.clearListMask();
-      this.root?.destroy(true);
-      this.root = null;
-    });
+  /** P1-4: resize — перестройка с нуля, как в MenuScene (layout от размеров). */
+  private onResize(): void {
+    this.scene.restart();
   }
 
   // ---------- layout ----------
 
   private buildChrome(): void {
     const W = this.scale.width;
-    const H = this.scale.height;
     this.root = this.add.container(0, 0).setDepth(10).setName('ofeliya-storefront');
 
-    // Заголовок.
-    const title = this.add
-      .text(W / 2, 44, 'ВИТРИНА', {
-        fontFamily: FONT,
-        fontSize: '20px',
-        fontStyle: 'bold',
-        color: VISUAL_TEXT.ivory,
-        letterSpacing: 3,
-      })
-      .setOrigin(0.5)
-      .setResolution(2);
-    this.root.add(title);
-
-    // Кнопка «назад».
-    const backW = 104;
+    // Кнопка «назад» — 84px: прежние 104px перекрывали заголовок на 320.
+    const backW = 84;
     const backH = Math.max(TOUCH.min, 40);
     const backBg = this.add
       .rectangle(12 + backW / 2, 44, backW, backH, ROLE.surface.panel, PANEL.button)
@@ -248,6 +279,28 @@ export class StorefrontScene extends Phaser.Scene {
     });
     this.root.add([backBg, backLabel]);
 
+    // Заголовок — по центру, но сдвигается вправо, если измеренная ширина
+    // упирается в кнопку «назад» (на 320 иначе пересечение).
+    const title = this.add
+      .text(0, 44, 'ВИТРИНА', {
+        fontFamily: FONT,
+        fontSize: '20px',
+        fontStyle: 'bold',
+        color: VISUAL_TEXT.ivory,
+        letterSpacing: 3,
+      })
+      .setOrigin(0.5)
+      .setResolution(2);
+    const backRight = 12 + backW;
+    title.setX(
+      Phaser.Math.Clamp(
+        Math.max(W / 2, backRight + 10 + title.width / 2),
+        title.width / 2 + 12,
+        W - 12 - title.width / 2
+      )
+    );
+    this.root.add(title);
+
     // Подзаголовок-режим (видно, какой рельс активен — важно для QA).
     // Telegram — реальный биллинг Stars, а не тестовый режим (в стеке здесь
     // был else-«тестовый режим» и для telegram — исправлено: иначе подпись
@@ -259,15 +312,19 @@ export class StorefrontScene extends Phaser.Scene {
           ? 'Telegram Stars · оплата звёздами'
           : 'тестовый режим · без реальных платежей';
     const mode = this.add
-      .text(W / 2, 72, modeLabel, {
+      .text(W / 2, 68, modeLabel, {
         fontFamily: UI_FONT,
         fontSize: '11px',
         color: VISUAL_TEXT.muted,
+        wordWrap: { width: W - 24 },
+        align: 'center',
       })
-      .setOrigin(0.5)
+      .setOrigin(0.5, 0)
       .setResolution(2);
     this.root.add(mode);
-    void H;
+    // P1-4: низ шапки — от измеренной подписи режима, а не константа:
+    // если подпись перенесётся на две строки, контент не наедет на неё.
+    this.chromeBottom = Math.ceil(68 + mode.height + 12);
   }
 
   /** Область контента под шапкой. */
@@ -275,7 +332,7 @@ export class StorefrontScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
     const width = Math.min(W - CLAMP.padScreen * 2, CLAMP.panelMax);
-    const top = 96;
+    const top = this.chromeBottom;
     return { x: W / 2, top, width, height: Math.max(200, H - top - CLAMP.padScreen) };
   }
 
@@ -290,6 +347,11 @@ export class StorefrontScene extends Phaser.Scene {
     this.clearListMask();
     this.listContainer?.destroy(true);
     this.listContainer = null;
+    // P1-4: catcher тоже уничтожаем — раньше он оставался в root и
+    // копился по одному на каждый ре-рендер списка.
+    this.scrollHit?.destroy();
+    this.scrollHit = null;
+    this.listButtons = [];
     this.scrollOffset = 0;
     this.scrollLimit = 0;
   }
@@ -433,18 +495,29 @@ export class StorefrontScene extends Phaser.Scene {
   private renderList(x: number, top: number, width: number, height: number): void {
     if (!this.root) return;
     const list = this.add.container(x, top).setName('ofeliya-storefront-list');
-    this.root.add(list);
     this.listContainer = list;
+    this.listButtons = [];
 
-    const cardH = 108;
+    // P1-4: scroll-catcher — прямоугольник ПОД списком в root. Phaser input
+    // по умолчанию topOnly: тап получает только верхний интерактивный
+    // объект. Когда catcher лежал поверх списка, кнопки покупки не получали
+    // ни одного тапа (P0: витрина не могла ничего продать при скролле).
+    // Цена: drag-скролл, начатый на кнопке, не стартует (тап — приоритет).
+    const hit = this.add
+      .rectangle(x, top + height / 2, width, height, 0x000000, 0)
+      .setName('ofeliya-storefront-hit');
+    this.root.add(hit);
+    this.root.add(list);
+    this.scrollHit = hit;
+
+    // P1-4: высоты баннеров и карточек — измеренные, а не константы.
     const gap = SPACE.md;
     let cy = 0;
     // Патч №12: баннер неподтверждённых покупок + ручная допроверка.
     if (this.state === 'ready') {
       const pending = loadPendingPurchases();
       if (pending.length > 0) {
-        this.buildPendingBanner(list, 0, cy, width, pending.length);
-        cy += 76 + gap;
+        cy += this.buildPendingBanner(list, 0, cy, width, pending.length) + gap;
       }
     }
     // Патч №16 (A3): баннер неподтверждённого синка кошелька —
@@ -456,31 +529,25 @@ export class StorefrontScene extends Phaser.Scene {
       const queued = getPendingSyncChargeIds();
       const manual = hasManualCheckEntries();
       if (syncInfo || queued.length > 0 || manual) {
-        this.buildSyncBanner(list, 0, cy, width, {
-          title: syncInfo ? syncInfo.productTitle : undefined,
-          queued: queued.length,
-          manual,
-        });
-        cy += 76 + gap;
+        cy +=
+          this.buildSyncBanner(list, 0, cy, width, {
+            title: syncInfo ? syncInfo.productTitle : undefined,
+            queued: queued.length,
+            manual,
+          }) + gap;
       }
     }
     // Монетизация v3: баннер коллаба (вход по диплинку collab_<id>).
     if (this.state === 'ready' && this.collab) {
-      this.buildCollabBanner(list, 0, cy, width, this.collab);
-      cy += 76 + gap;
+      cy += this.buildCollabBanner(list, 0, cy, width, this.collab) + gap;
     }
     // Монетизация v3: баннер приглашения (только Telegram: ссылка
     // строится из Telegram user id; на MAX/браузере баннера нет).
     if (this.state === 'ready' && this.inviteLink) {
-      this.buildInviteBanner(list, 0, cy, width, this.inviteLink);
-      cy += 76 + gap;
+      cy += this.buildInviteBanner(list, 0, cy, width, this.inviteLink) + gap;
     }
     for (const product of this.products) {
-      // Монетизация v3: карточка пропуска выше (+28px) — в ней две
-      // строки статуса (срок + сезон), обычной карточке они не нужны.
-      const h = product.kind === 'season_pass' ? cardH + 28 : cardH;
-      this.buildCard(list, product, 0, cy, width, h);
-      cy += h + gap;
+      cy += this.buildCard(list, product, 0, cy, width) + gap;
     }
     const totalH = Math.max(0, cy - gap);
     this.scrollLimit = Math.max(0, totalH - height);
@@ -493,18 +560,11 @@ export class StorefrontScene extends Phaser.Scene {
     list.setMask(mask);
     this.maskGraphics = clip;
 
-    const hit = this.add
-      .rectangle(x, top + height / 2, width, height, 0x000000, 0)
-      .setName('ofeliya-storefront-hit');
-    this.root.add(hit);
     if (this.scrollLimit > 0) {
       hit.setInteractive();
       hit.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
         this.scrollOwner = pointer.id;
         this.scrollLastY = pointer.y;
-      });
-      hit.on('wheel', (_p: Phaser.Input.Pointer, _dx: number, dy: number) => {
-        this.applyScroll(this.scrollOffset + dy * 0.5);
       });
     }
     const move = (pointer: Phaser.Input.Pointer): void => {
@@ -515,11 +575,20 @@ export class StorefrontScene extends Phaser.Scene {
     const release = (pointer: Phaser.Input.Pointer): void => {
       if (pointer.id === this.scrollOwner) this.scrollOwner = -1;
     };
+    // P1-4: wheel — на уровне сцены, а не catcher: кнопка выше catcher,
+    // и колесо над кнопкой иначе не скроллит (topOnly). Граница — контент.
+    const wheel = (pointer: Phaser.Input.Pointer, _over: unknown, _dx: number, dy: number): void => {
+      const r = this.contentRect();
+      if (pointer.y < r.top || pointer.y > r.top + r.height) return;
+      this.applyScroll(this.scrollOffset + dy * 0.5);
+    };
     this.input.on('pointermove', move);
     this.input.on('pointerup', release);
+    if (this.scrollLimit > 0) this.input.on('wheel', wheel);
     list.once(Phaser.GameObjects.Events.DESTROY, () => {
       this.input.off('pointermove', move);
       this.input.off('pointerup', release);
+      this.input.off('wheel', wheel);
     });
     this.applyScroll(0);
   }
@@ -529,6 +598,23 @@ export class StorefrontScene extends Phaser.Scene {
     const { top } = this.contentRect();
     this.scrollOffset = Phaser.Math.Clamp(next, 0, this.scrollLimit);
     this.listContainer.y = top - this.scrollOffset;
+    this.updateListButtonInput();
+  }
+
+  /**
+   * P1-4: маска режет только отрисовку, но не хит-тест — кнопка карточки,
+   * уехавшей за край контентной области, остаётся кликабельной, хотя её
+   * не видно (тап в шапку мог случайно начать покупку невидимого товара).
+   * Гасим инпут кнопок, чей центр вне контентной области.
+   */
+  private updateListButtonInput(): void {
+    const { top, height } = this.contentRect();
+    for (const btn of this.listButtons) {
+      if (!btn.input) continue;
+      const b = btn.getBounds();
+      const cy = b.y + b.height / 2;
+      btn.input.enabled = cy >= top && cy <= top + height;
+    }
   }
 
   private clearListMask(): void {
@@ -539,103 +625,40 @@ export class StorefrontScene extends Phaser.Scene {
     this.maskGraphics = null;
   }
 
+  /**
+   * P1-4: карточка товара — стековая компоновка с измеренной высотой.
+   *
+   *   шапка: медальон + заголовок (переносится, тег резервирует место)
+   *   описание: на всю ширину карточки (было 68px на 320 — нечитаемо)
+   *   пропуск: разделитель + срок/сезон/награды отдельными строками
+   *   кнопка цены: отдельной строкой под текстом, справа
+   *
+   * Высота возвращается вызывающему (renderList) — карточка растёт под
+   * свой текст, а не обрезает его. Возвращает высоту карточки.
+   */
   private buildCard(
     parent: Phaser.GameObjects.Container,
     product: Product,
     cx: number,
     cy: number,
-    width: number,
-    height: number
-  ): void {
+    width: number
+  ): number {
     // Монетизация v3: product_view — один раз на товар за сессию магазина.
     if (!this.viewedProducts.has(product.id)) {
       this.viewedProducts.add(product.id);
       void trackProductEvent('product_view', PlatformBridge, { productId: product.id });
     }
-    const card = this.add.container(cx, cy);
-    const bg = this.add
-      .rectangle(0, 0, width, height, ROLE.surface.panel, PANEL.card)
-      .setStrokeStyle(BORDER.thin, ROLE.surface.stroke, 0.85)
-      .setOrigin(0.5, 0);
-    card.add(bg);
+    const compact = this.scale.height < BP.compact;
+    const descSize = compact ? CARD_DESC_SIZE.compact : CARD_DESC_SIZE.normal;
+    const card = this.add.container(cx, cy).setName(`ofeliya-store-card-${product.id}`);
+    const children: Phaser.GameObjects.GameObject[] = [];
 
-    // Арт-заглушка: детерминированный узор по хешу seed (до DiceBear Фазы 5).
-    const artColor = STUB_PALETTES[product.art.palette] ?? ROLE.faction.neutral;
-    const medallion = this.add.container(-width / 2 + 52, height / 2);
-    const disc = this.add.circle(0, 0, 30, artColor, 0.28).setStrokeStyle(2, artColor, 0.9);
-    medallion.add(disc);
-    const h = seedHash(product.art.seed);
-    for (let i = 0; i < 5; i++) {
-      const ang = h * Math.PI * 2 + (i * Math.PI * 2) / 5;
-      const r = 8 + ((h * 97 + i * 13) % 10);
-      medallion.add(this.add.circle(Math.cos(ang) * r, Math.sin(ang) * r, 3.5, artColor, 0.95));
-    }
-    card.add(medallion);
-
-    const textX = -width / 2 + 96;
-    const title = this.add
-      .text(textX, 14, product.title, {
-        fontFamily: FONT,
-        fontSize: '15px',
-        fontStyle: 'bold',
-        color: VISUAL_TEXT.ivory,
-      })
-      .setOrigin(0, 0)
-      .setResolution(2);
-    const desc = this.add
-      .text(textX, 38, product.description, {
-        fontFamily: UI_FONT,
-        fontSize: '11px',
-        color: VISUAL_TEXT.muted,
-        wordWrap: { width: width - textX - width / 2 - 108 },
-        lineSpacing: 2,
-      })
-      .setOrigin(0, 0)
-      .setResolution(2);
-    card.add([title, desc]);
-
-    // Монетизация v3: карточка пропуска — статус и сезон. Активный
-    // пропуск НЕ продаётся повторно: подписка Telegram продлевается
-    // автоматически, а вторая покупка создала бы параллельную подписку
-    // (двойное списание) — кнопка становится неактивным статусом.
-    // Отмену подписки игрок делает в настройках Telegram (Stars).
-    if (product.kind === 'season_pass') {
-      const passActive = isSeasonPassActive();
-      const season = seasonSnapshot();
-      const done = season.filter((p) => p.complete).length;
-      const claimed = season.filter((p) => p.claimed).length;
-      const statusY = 80;
-      const lineA = passActive
-        ? `Активен до ${this.fmtDate(getSeasonPassUntilMs())}`
-        : `Сезон ${seasonDisplayName(seasonIdFor(Date.now()))}: ${done}/${season.length} выполнено`;
-      const lineB = passActive
-        ? `Сезон: ${done}/${season.length} выполнено · наград забрано ${claimed}`
-        : this.paidTrackSummary();
-      const line1 = this.add
-        .text(textX, statusY, lineA, {
-          fontFamily: UI_FONT,
-          fontSize: '11px',
-          fontStyle: 'bold',
-          color: passActive ? VISUAL_TEXT.host : VISUAL_TEXT.muted,
-          wordWrap: { width: width - textX - width / 2 - 108 },
-        })
-        .setOrigin(0, 0)
-        .setResolution(2);
-      const line2 = this.add
-        .text(textX, statusY + 18, lineB, {
-          fontFamily: UI_FONT,
-          fontSize: '11px',
-          color: VISUAL_TEXT.muted,
-          wordWrap: { width: width - textX - width / 2 - 108 },
-        })
-        .setOrigin(0, 0)
-        .setResolution(2);
-      card.add([line1, line2]);
-    }
-
+    // Тег — первым: его измеренная ширина резервируется в строке заголовка,
+    // чтобы длинный заголовок переносился, а не резался тегом.
+    let tagW = 0;
     if (product.tag) {
       const tag = this.add
-        .text(width / 2 - 12, 10, product.tag, {
+        .text(width / 2 - CARD_PAD_X, CARD_PAD_TOP, product.tag, {
           fontFamily: FONT,
           fontSize: '10px',
           fontStyle: 'bold',
@@ -644,15 +667,119 @@ export class StorefrontScene extends Phaser.Scene {
           padding: { x: 6, y: 3 },
         })
         .setOrigin(1, 0)
-        .setResolution(2);
-      card.add(tag);
+        .setResolution(2)
+        .setName('card-tag');
+      tagW = tag.width;
+      children.push(tag);
     }
 
-    // Кнопка цены.
-    const btnW = 96;
-    const btnH = Math.max(TOUCH.min, 44);
-    const btnX = width / 2 - 12 - btnW / 2;
-    const btnY = height - btnH / 2 - 10;
+    // Заголовок: переносится в пределах текстовой колонки (минус тег).
+    const titleX = -width / 2 + CARD_PAD_X + CARD_MEDALLION_R * 2 + 10;
+    const titleRight = product.tag
+      ? width / 2 - CARD_PAD_X - tagW - 8
+      : width / 2 - CARD_PAD_X;
+    const title = this.add
+      .text(titleX, CARD_PAD_TOP, product.title, {
+        fontFamily: FONT,
+        fontSize: `${CARD_TITLE_SIZE}px`,
+        fontStyle: 'bold',
+        color: VISUAL_TEXT.ivory,
+        wordWrap: { width: Math.max(60, titleRight - titleX) },
+      })
+      .setOrigin(0, 0)
+      .setResolution(2)
+      .setName('card-title');
+    children.push(title);
+
+    // Шапка: медальон + заголовок; высота — по большему из них.
+    const headerH = Math.max(CARD_MEDALLION_R * 2, title.height);
+    title.setY(CARD_PAD_TOP + (headerH - title.height) / 2);
+
+    // Арт-заглушка: детерминированный узор по хешу seed (до DiceBear Фазы 5).
+    const artColor = STUB_PALETTES[product.art.palette] ?? ROLE.faction.neutral;
+    const medallion = this.add.container(
+      -width / 2 + CARD_PAD_X + CARD_MEDALLION_R,
+      CARD_PAD_TOP + headerH / 2
+    );
+    const disc = this.add.circle(0, 0, CARD_MEDALLION_R, artColor, 0.28).setStrokeStyle(2, artColor, 0.9);
+    medallion.add(disc);
+    const h = seedHash(product.art.seed);
+    for (let i = 0; i < 5; i++) {
+      const ang = h * Math.PI * 2 + (i * Math.PI * 2) / 5;
+      const r = 6 + ((h * 97 + i * 13) % 8);
+      medallion.add(this.add.circle(Math.cos(ang) * r, Math.sin(ang) * r, 3.5, artColor, 0.95));
+    }
+    children.push(medallion);
+
+    // Описание — на всю ширину карточки.
+    const descY = CARD_PAD_TOP + headerH + CARD_GAP_HEADER_DESC;
+    const desc = this.add
+      .text(-width / 2 + CARD_PAD_X, descY, product.description, {
+        fontFamily: UI_FONT,
+        fontSize: `${descSize}px`,
+        color: VISUAL_TEXT.muted,
+        wordWrap: { width: width - CARD_PAD_X * 2 },
+        lineSpacing: 2,
+      })
+      .setOrigin(0, 0)
+      .setResolution(2)
+      .setName('card-desc');
+    children.push(desc);
+    let y = descY + desc.height;
+
+    // Монетизация v3: карточка пропуска — статус и сезон отдельными
+    // строками за разделителем, ниже измеренного описания. Активный
+    // пропуск НЕ продаётся повторно: подписка Telegram продлевается
+    // автоматически, а вторая покупка создала бы параллельную подписку
+    // (двойное списание) — кнопка становится неактивным статусом.
+    // Отмену подписки игрок делает в настройках Telegram (Stars).
+    if (product.kind === 'season_pass') {
+      y += 8;
+      const divider = this.add
+        .rectangle(0, y, width - CARD_PAD_X * 2, 1, ROLE.surface.stroke, 0.6)
+        .setOrigin(0.5, 0);
+      children.push(divider);
+      y += 1 + 8;
+      const passActive = isSeasonPassActive();
+      const season = seasonSnapshot();
+      const done = season.filter((p) => p.complete).length;
+      const claimed = season.filter((p) => p.claimed).length;
+      const lineA = passActive
+        ? `Активен до ${this.fmtDate(getSeasonPassUntilMs())}`
+        : `Сезон ${seasonDisplayName(seasonIdFor(Date.now()))}: ${done}/${season.length} выполнено`;
+      const lineB = passActive
+        ? `Сезон: ${done}/${season.length} выполнено · наград забрано ${claimed}`
+        : this.paidTrackSummary();
+      const status1 = this.add
+        .text(-width / 2 + CARD_PAD_X, y, lineA, {
+          fontFamily: UI_FONT,
+          fontSize: `${descSize}px`,
+          fontStyle: 'bold',
+          color: passActive ? VISUAL_TEXT.host : VISUAL_TEXT.muted,
+          wordWrap: { width: width - CARD_PAD_X * 2 },
+        })
+        .setOrigin(0, 0)
+        .setResolution(2)
+        .setName('card-status-1');
+      children.push(status1);
+      y += status1.height + CARD_GAP_STATUS;
+      const status2 = this.add
+        .text(-width / 2 + CARD_PAD_X, y, lineB, {
+          fontFamily: UI_FONT,
+          fontSize: `${descSize}px`,
+          color: VISUAL_TEXT.muted,
+          wordWrap: { width: width - CARD_PAD_X * 2 },
+        })
+        .setOrigin(0, 0)
+        .setResolution(2)
+        .setName('card-status-2');
+      children.push(status2);
+      y += status2.height;
+    }
+
+    // Кнопка цены — отдельной строкой под текстом, справа.
+    const btnY = y + CARD_GAP_DESC_BTN + CARD_BTN_H / 2;
+    const btnX = width / 2 - CARD_PAD_X - CARD_BTN_W / 2;
     const buying = this.state === 'purchasing' && this.purchasingId === product.id;
     // Монетизация v3: активный пропуск не продаётся (см. выше).
     const passOwned = product.kind === 'season_pass' && isSeasonPassActive();
@@ -660,13 +787,14 @@ export class StorefrontScene extends Phaser.Scene {
       .rectangle(
         btnX,
         btnY,
-        btnW,
-        btnH,
+        CARD_BTN_W,
+        CARD_BTN_H,
         passOwned ? ROLE.surface.panel : ROLE.faction.reward,
         buying || passOwned ? 0.55 : PANEL.button
       )
       .setStrokeStyle(BORDER.thin, 0x0b0f1a, 0.6)
-      .setInteractive({ useHandCursor: !passOwned });
+      .setInteractive({ useHandCursor: !passOwned })
+      .setName('card-buy');
     const btnLabel = this.add
       .text(btnX, btnY, buying ? '···' : passOwned ? 'АКТИВЕН' : this.priceLabel(product), {
         fontFamily: FONT,
@@ -675,7 +803,8 @@ export class StorefrontScene extends Phaser.Scene {
         color: passOwned ? VISUAL_TEXT.muted : '#0b0f1a',
       })
       .setOrigin(0.5)
-      .setResolution(2);
+      .setResolution(2)
+      .setName('card-buy-label');
     if (!buying && !passOwned) {
       btnBg.on('pointerdown', () => btnBg.setAlpha(0.6));
       btnBg.on('pointerup', () => {
@@ -683,8 +812,18 @@ export class StorefrontScene extends Phaser.Scene {
         void this.buy(product);
       });
     }
-    card.add([btnBg, btnLabel]);
+    children.push(btnBg, btnLabel);
+    this.listButtons.push(btnBg);
+
+    const height = btnY + CARD_BTN_H / 2 + CARD_PAD_BOTTOM;
+    const bg = this.add
+      .rectangle(0, 0, width, height, ROLE.surface.panel, PANEL.card)
+      .setStrokeStyle(BORDER.thin, ROLE.surface.stroke, 0.85)
+      .setOrigin(0.5, 0)
+      .setName('card-bg');
+    card.add([bg, ...children]);
     parent.add(card);
+    return height;
   }
 
   /**
@@ -729,6 +868,88 @@ export class StorefrontScene extends Phaser.Scene {
   }
 
   /**
+   * P1-4: общий builder баннеров списка (pending/sync/collab/invite).
+   * Лейбл + подтекст на всю ширину, кнопка (если есть) отдельной строкой
+   * под текстом, справа. Высота — по измеренным текстам. Возвращает
+   * высоту баннера.
+   */
+  private buildInfoBanner(
+    parent: Phaser.GameObjects.Container,
+    cx: number,
+    cy: number,
+    width: number,
+    opts: {
+      accent: number;
+      label: string;
+      labelColor: string;
+      sub: string;
+      buttonLabel?: string;
+      onButton?: (btnLabel: Phaser.GameObjects.Text) => void;
+    }
+  ): number {
+    const banner = this.add.container(cx, cy).setName('ofeliya-store-banner');
+    const padX = 16;
+    const textW = width - padX * 2;
+    const label = this.add
+      .text(-width / 2 + padX, 12, opts.label, {
+        fontFamily: FONT,
+        fontSize: '12px',
+        fontStyle: 'bold',
+        color: opts.labelColor,
+        wordWrap: { width: textW },
+      })
+      .setOrigin(0, 0)
+      .setResolution(2);
+    const sub = this.add
+      .text(-width / 2 + padX, 12 + label.height + 6, opts.sub, {
+        fontFamily: UI_FONT,
+        fontSize: '11px',
+        color: VISUAL_TEXT.muted,
+        wordWrap: { width: textW },
+        lineSpacing: 2,
+      })
+      .setOrigin(0, 0)
+      .setResolution(2);
+    let y = 12 + label.height + 6 + sub.height;
+    const children: Phaser.GameObjects.GameObject[] = [label, sub];
+    if (opts.buttonLabel) {
+      const btnW = 108;
+      const btnH = Math.max(TOUCH.min, 40);
+      const btnY = y + 10 + btnH / 2;
+      const btnX = width / 2 - padX - btnW / 2;
+      const btnBg = this.add
+        .rectangle(btnX, btnY, btnW, btnH, ROLE.surface.panelHover, PANEL.button)
+        .setStrokeStyle(BORDER.thin, opts.accent, 0.8)
+        .setInteractive({ useHandCursor: true });
+      const btnLabel = this.add
+        .text(btnX, btnY, opts.buttonLabel, {
+          fontFamily: FONT,
+          fontSize: '11px',
+          fontStyle: 'bold',
+          color: opts.labelColor,
+        })
+        .setOrigin(0.5)
+        .setResolution(2);
+      btnBg.on('pointerdown', () => btnBg.setAlpha(0.6));
+      btnBg.on('pointerup', () => {
+        btnBg.setAlpha(1);
+        opts.onButton?.(btnLabel);
+      });
+      children.push(btnBg, btnLabel);
+      this.listButtons.push(btnBg);
+      y = btnY + btnH / 2;
+    }
+    const height = y + 12;
+    const bg = this.add
+      .rectangle(0, 0, width, height, ROLE.surface.panel, PANEL.card)
+      .setStrokeStyle(BORDER.thin, opts.accent, 0.9)
+      .setOrigin(0.5, 0);
+    banner.add([bg, ...children]);
+    parent.add(banner);
+    return height;
+  }
+
+  /**
    * Патч №12: баннер «Ожидание подтверждения» для pending-покупок
    * (сервер ещё не подтвердил оплату — выдачи нет). Кнопка «Проверить
    * оплату» — ручная допроверка через provider.restore()
@@ -740,59 +961,22 @@ export class StorefrontScene extends Phaser.Scene {
     cy: number,
     width: number,
     count: number
-  ): void {
-    const bannerH = 76;
-    const banner = this.add.container(cx, cy);
-    const bg = this.add
-      .rectangle(0, 0, width, bannerH, ROLE.surface.panel, PANEL.card)
-      .setStrokeStyle(BORDER.thin, 0xffe066, 0.9)
-      .setOrigin(0.5, 0);
-    const label = this.add
-      .text(-width / 2 + 16, 12, `ОЖИДАНИЕ ПОДТВЕРЖДЕНИЯ${count > 1 ? ` · ${count}` : ''}`, {
-        fontFamily: FONT,
-        fontSize: '12px',
-        fontStyle: 'bold',
-        color: '#ffe066',
-      })
-      .setOrigin(0, 0)
-      .setResolution(2);
-    const sub = this.add
-      .text(-width / 2 + 16, 32, 'Платёж обрабатывается. Товар выдадим автоматически.', {
-        fontFamily: UI_FONT,
-        fontSize: '11px',
-        color: VISUAL_TEXT.muted,
-        wordWrap: { width: width - 140 },
-      })
-      .setOrigin(0, 0)
-      .setResolution(2);
-    const btnW = 108;
-    const btnH = Math.max(TOUCH.min, 40);
-    const btnX = width / 2 - 12 - btnW / 2;
-    const btnBg = this.add
-      .rectangle(btnX, bannerH / 2, btnW, btnH, ROLE.surface.panelHover, PANEL.button)
-      .setStrokeStyle(BORDER.thin, 0xffe066, 0.8)
-      .setInteractive({ useHandCursor: true });
-    const btnLabel = this.add
-      .text(btnX, bannerH / 2, 'ПРОВЕРИТЬ', {
-        fontFamily: FONT,
-        fontSize: '11px',
-        fontStyle: 'bold',
-        color: '#ffe066',
-      })
-      .setOrigin(0.5)
-      .setResolution(2);
+  ): number {
     let checking = false;
-    btnBg.on('pointerdown', () => btnBg.setAlpha(0.6));
-    btnBg.on('pointerup', () => {
-      btnBg.setAlpha(1);
-      if (checking || !this.provider) return;
-      checking = true;
-      btnLabel.setText('···');
-      // Перерендер заменяет баннер, поэтому текст кнопки назад не ставим.
-      void this.refreshPendingAndRender();
+    return this.buildInfoBanner(parent, cx, cy, width, {
+      accent: 0xffe066,
+      label: `ОЖИДАНИЕ ПОДТВЕРЖДЕНИЯ${count > 1 ? ` · ${count}` : ''}`,
+      labelColor: '#ffe066',
+      sub: 'Платёж обрабатывается. Товар выдадим автоматически.',
+      buttonLabel: 'ПРОВЕРИТЬ',
+      onButton: (btnLabel) => {
+        if (checking || !this.provider) return;
+        checking = true;
+        btnLabel.setText('···');
+        // Перерендер заменяет баннер, поэтому текст кнопки назад не ставим.
+        void this.refreshPendingAndRender();
+      },
     });
-    banner.add([bg, label, sub, btnBg, btnLabel]);
-    parent.add(banner);
   }
 
   /**
@@ -805,33 +989,13 @@ export class StorefrontScene extends Phaser.Scene {
     cy: number,
     width: number,
     collab: CollabDef
-  ): void {
-    const bannerH = 76;
-    const banner = this.add.container(cx, cy);
-    const bg = this.add
-      .rectangle(0, 0, width, bannerH, ROLE.surface.panel, PANEL.card)
-      .setStrokeStyle(BORDER.thin, 0x7fd4ff, 0.9)
-      .setOrigin(0.5, 0);
-    const label = this.add
-      .text(-width / 2 + 16, 12, collab.title, {
-        fontFamily: FONT,
-        fontSize: '12px',
-        fontStyle: 'bold',
-        color: '#7fd4ff',
-      })
-      .setOrigin(0, 0)
-      .setResolution(2);
-    const sub = this.add
-      .text(-width / 2 + 16, 32, collab.description, {
-        fontFamily: UI_FONT,
-        fontSize: '11px',
-        color: VISUAL_TEXT.muted,
-        wordWrap: { width: width - 32 },
-      })
-      .setOrigin(0, 0)
-      .setResolution(2);
-    banner.add([bg, label, sub]);
-    parent.add(banner);
+  ): number {
+    return this.buildInfoBanner(parent, cx, cy, width, {
+      accent: 0x7fd4ff,
+      label: collab.title,
+      labelColor: '#7fd4ff',
+      sub: collab.description,
+    });
   }
 
   /**
@@ -846,91 +1010,54 @@ export class StorefrontScene extends Phaser.Scene {
     cy: number,
     width: number,
     link: string
-  ): void {
-    const bannerH = 76;
+  ): number {
     const accent = 0x4bc996;
     const accentCss = '#4bc996';
-    const banner = this.add.container(cx, cy);
-    const bg = this.add
-      .rectangle(0, 0, width, bannerH, ROLE.surface.panel, PANEL.card)
-      .setStrokeStyle(BORDER.thin, accent, 0.9)
-      .setOrigin(0.5, 0);
-    const label = this.add
-      .text(-width / 2 + 16, 12, 'ПРИГЛАСИ ДРУГА', {
-        fontFamily: FONT,
-        fontSize: '12px',
-        fontStyle: 'bold',
-        color: accentCss,
-      })
-      .setOrigin(0, 0)
-      .setResolution(2);
-    const sub = this.add
-      .text(-width / 2 + 16, 32, 'Отправь другу ссылку на игру.', {
-        fontFamily: UI_FONT,
-        fontSize: '11px',
-        color: VISUAL_TEXT.muted,
-        wordWrap: { width: width - 140 },
-      })
-      .setOrigin(0, 0)
-      .setResolution(2);
-    const btnW = 108;
-    const btnH = Math.max(TOUCH.min, 40);
-    const btnX = width / 2 - 12 - btnW / 2;
-    const btnBg = this.add
-      .rectangle(btnX, bannerH / 2, btnW, btnH, ROLE.surface.panelHover, PANEL.button)
-      .setStrokeStyle(BORDER.thin, accent, 0.8)
-      .setInteractive({ useHandCursor: true });
-    const btnLabel = this.add
-      .text(btnX, bannerH / 2, 'ПРИГЛАСИТЬ', {
-        fontFamily: FONT,
-        fontSize: '11px',
-        fontStyle: 'bold',
-        color: accentCss,
-      })
-      .setOrigin(0.5)
-      .setResolution(2);
-    btnBg.on('pointerdown', () => btnBg.setAlpha(0.6));
-    btnBg.on('pointerup', () => {
-      btnBg.setAlpha(1);
-      void PlatformBridge.shareResult(INVITE_SHARE_TEXT, link).then((ok) => {
-        if (!this.sys.isActive()) return;
-        if (ok) {
-          showMetaToast(
-            this,
-            'Приглашение отправлено',
-            'Друг зайдёт в игру по твоей ссылке.',
-            'ПРИГЛАШЕНИЕ'
-          );
-          return;
-        }
-        // Шаринг недоступен — фолбэк в буфер обмена.
-        const clipboard =
-          typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
-        if (clipboard?.writeText) {
-          void clipboard.writeText(link).then(
-            () => {
-              if (this.sys.isActive()) {
-                showMetaToast(
-                  this,
-                  'Ссылка скопирована',
-                  'Отправь её другу любым способом.',
-                  'ПРИГЛАШЕНИЕ'
-                );
+    return this.buildInfoBanner(parent, cx, cy, width, {
+      accent,
+      label: 'ПРИГЛАСИ ДРУГА',
+      labelColor: accentCss,
+      sub: 'Отправь другу ссылку на игру.',
+      buttonLabel: 'ПРИГЛАСИТЬ',
+      onButton: () => {
+        void PlatformBridge.shareResult(INVITE_SHARE_TEXT, link).then((ok) => {
+          if (!this.sys.isActive()) return;
+          if (ok) {
+            showMetaToast(
+              this,
+              'Приглашение отправлено',
+              'Друг зайдёт в игру по твоей ссылке.',
+              'ПРИГЛАШЕНИЕ'
+            );
+            return;
+          }
+          // Шаринг недоступен — фолбэк в буфер обмена.
+          const clipboard =
+            typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
+          if (clipboard?.writeText) {
+            void clipboard.writeText(link).then(
+              () => {
+                if (this.sys.isActive()) {
+                  showMetaToast(
+                    this,
+                    'Ссылка скопирована',
+                    'Отправь её другу любым способом.',
+                    'ПРИГЛАШЕНИЕ'
+                  );
+                }
+              },
+              () => {
+                if (this.sys.isActive()) {
+                  showMetaToast(this, 'Шаринг недоступен', 'Скопируй ссылку вручную.', 'ПРИГЛАШЕНИЕ');
+                }
               }
-            },
-            () => {
-              if (this.sys.isActive()) {
-                showMetaToast(this, 'Шаринг недоступен', 'Скопируй ссылку вручную.', 'ПРИГЛАШЕНИЕ');
-              }
-            }
-          );
-          return;
-        }
-        showMetaToast(this, 'Шаринг недоступен в этом клиенте', '', 'ПРИГЛАШЕНИЕ');
-      });
+            );
+            return;
+          }
+          showMetaToast(this, 'Шаринг недоступен в этом клиенте', '', 'ПРИГЛАШЕНИЕ');
+        });
+      },
     });
-    banner.add([bg, label, sub, btnBg, btnLabel]);
-    parent.add(banner);
   }
 
   /**
@@ -946,75 +1073,33 @@ export class StorefrontScene extends Phaser.Scene {
     cy: number,
     width: number,
     opts: { title?: string; queued: number; manual: boolean }
-  ): void {
-    const bannerH = 76;
-    const banner = this.add.container(cx, cy);
+  ): number {
     const accent = opts.manual ? 0xff9f6a : 0x8fe8ff;
-    const bg = this.add
-      .rectangle(0, 0, width, bannerH, ROLE.surface.panel, PANEL.card)
-      .setStrokeStyle(BORDER.thin, accent, 0.9)
-      .setOrigin(0.5, 0);
-    const label = this.add
-      .text(
-        -width / 2 + 16,
-        12,
-        opts.manual ? 'ТРЕБУЕТСЯ ПРОВЕРКА ОПЛАТЫ' : 'ОПЛАТА ПОДТВЕРЖДЕНА',
-        {
-          fontFamily: FONT,
-          fontSize: '12px',
-          fontStyle: 'bold',
-          color: '#8fe8ff',
-        }
-      )
-      .setOrigin(0, 0)
-      .setResolution(2);
     const subText = opts.manual
       ? 'Автопроверка исчерпана. Товар не потерян — напишите в поддержку с чеком.'
       : `Товар ожидает синхронизации${opts.queued > 1 ? ` · ${opts.queued}` : ''}${
           opts.title ? `: ${opts.title}` : ''
         }. Появится автоматически.`;
-    const sub = this.add
-      .text(-width / 2 + 16, 32, subText, {
-        fontFamily: UI_FONT,
-        fontSize: '11px',
-        color: VISUAL_TEXT.muted,
-        wordWrap: { width: width - 140 },
-      })
-      .setOrigin(0, 0)
-      .setResolution(2);
-    const btnW = 108;
-    const btnH = Math.max(TOUCH.min, 40);
-    const btnX = width / 2 - 12 - btnW / 2;
-    const btnBg = this.add
-      .rectangle(btnX, bannerH / 2, btnW, btnH, ROLE.surface.panelHover, PANEL.button)
-      .setStrokeStyle(BORDER.thin, accent, 0.8)
-      .setInteractive({ useHandCursor: true });
-    const btnLabel = this.add
-      .text(btnX, bannerH / 2, 'ПОВТОРИТЬ', {
-        fontFamily: FONT,
-        fontSize: '11px',
-        fontStyle: 'bold',
-        color: '#8fe8ff',
-      })
-      .setOrigin(0.5)
-      .setResolution(2);
     let retrying = false;
-    btnBg.on('pointerdown', () => btnBg.setAlpha(0.6));
-    btnBg.on('pointerup', () => {
-      btnBg.setAlpha(1);
-      if (retrying) return;
-      retrying = true;
-      btnLabel.setText('···');
-      // Ручной ретрай не сбрасывает кап попыток (без бесконечного цикла):
-      // дрэйн подтвердит по ledger'у или оставит запись в очереди.
-      void this.retryWalletSync().finally(() => {
-        retrying = false;
-        if (this.sys.isActive()) this.renderContent();
-        else btnLabel.setText('ПОВТОРИТЬ');
-      });
+    return this.buildInfoBanner(parent, cx, cy, width, {
+      accent,
+      label: opts.manual ? 'ТРЕБУЕТСЯ ПРОВЕРКА ОПЛАТЫ' : 'ОПЛАТА ПОДТВЕРЖДЕНА',
+      labelColor: '#8fe8ff',
+      sub: subText,
+      buttonLabel: 'ПОВТОРИТЬ',
+      onButton: (btnLabel) => {
+        if (retrying) return;
+        retrying = true;
+        btnLabel.setText('···');
+        // Ручной ретрай не сбрасывает кап попыток (без бесконечного цикла):
+        // дрэйн подтвердит по ledger'у или оставит запись в очереди.
+        void this.retryWalletSync().finally(() => {
+          retrying = false;
+          if (this.sys.isActive()) this.renderContent();
+          else btnLabel.setText('ПОВТОРИТЬ');
+        });
+      },
     });
-    banner.add([bg, label, sub, btnBg, btnLabel]);
-    parent.add(banner);
   }
 
   /**
@@ -1283,8 +1368,10 @@ export class StorefrontScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 0)
       .setResolution(2);
+    // P1-4: подзаголовок — ниже измеренного заголовка (у пропуска заголовок
+    // в две строки, фиксированный y=108 наезжал на вторую строку).
     const sub = this.add
-      .text(0, 108, 'Выдано. Приятной мутации!', {
+      .text(0, 78 + label.height + 8, 'Выдано. Приятной мутации!', {
         fontFamily: UI_FONT,
         fontSize: '12px',
         color: VISUAL_TEXT.muted,
