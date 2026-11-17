@@ -395,6 +395,19 @@ try {
   await sync();
   eq(meta.loadMeta().boosterUntilMs, b0 + 17 * DAY_MS, 'R4-1: later purchase adds only 1d remaining (T+17)');
   eq(meta.getBoosterEarnedMs(), 1 * DAY_MS, 'R4-1: remaining 1d persisted after second purchase');
+  // Легаси-состояние кода раунда 3: банк есть, якорь 0 (награда забрана
+  // при живом купленном бустере — addBoosterEarnedMs тогда не якорил
+  // хвост). Синк выводит якорь как local - bank: возврат покупки
+  // сохраняет награду (b0+3д), а не обнуляет её остатком от якоря 0.
+  reset();
+  freezeNow(b0);
+  meta.setBoosterUntilMs(b0 + BOOSTER_7D + 3 * DAY_MS);
+  meta.setBoosterEarned(3 * DAY_MS, 0);
+  eq(meta.getBoosterEarnedAnchorMs(), 0, 'R4-1: legacy state has zero anchor');
+  ledger = [boosterGrant(1, 'cbR4L'), boosterReversal(2, 'rev:opR4L', 'cbR4L')];
+  serverBooster = b0;
+  await sync();
+  eq(meta.loadMeta().boosterUntilMs, b0 + 3 * DAY_MS, 'R4-1: legacy unanchored bank survives refund');
   restoreNow(); // конец замороженного времени (§4a–§4g)
 
   // --- 4b. Сезонный пропуск — max(local, server) (монетизация v3) ---
