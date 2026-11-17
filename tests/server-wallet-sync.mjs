@@ -14,6 +14,10 @@
  *   награду, покупка складывается с миссионным временем (3+7=10),
  *   повторный синк идемпотентен, устаревший ответ не воскрешает
  *   отозванный бустер, истёкший банк не продлевает позднюю покупку;
+ * - CR-R4-1 (review 5944088831): elapsed-aware банк — покупка через
+ *   день после миссии получает только неизрасходованный остаток
+ *   (миссия 3д в T + покупка 7д в T+1д = T+10д, а не T+11д);
+ *   остаток и якорь персистятся, повторный синк идемпотентен;
  * - сезонный пропуск — max(local, server) (монетизация v3); события
  *   season_pass в журнале санитизируются и не неттятся по РНК;
  * - P1-5: reversal пропуска в применённом батче делает серверное значение
@@ -168,6 +172,16 @@ try {
     walletCalls = 0;
   };
 
+  // CR-R4-1: elapsed-aware банк делает точные ожидания чувствительными
+  // к реальному времени (миллисекунды между claim и синком — уже
+  // израсходованное время). Бустерные секции 4a–4g идут с замороженным
+  // Date.now, чтобы ожидания оставались точными и детерминированными;
+  // restore — после §4g. На старом коде заморозка нейтральна (там
+  // Date.now влияет только на сравнения anchor/liveness с тем же b0).
+  const realDateNow = Date.now;
+  const freezeNow = (ms) => { Date.now = () => ms; };
+  const restoreNow = () => { Date.now = realDateNow; };
+
   eq(parseTelegramUserId(initData), USER_ID, 'parseTelegramUserId');
 
   // --- 1. Свежий синк: неттинг грантов; повторный — ноль (курсор) ---
@@ -222,6 +236,7 @@ try {
   // Серверный снапшот serverBooster — как после триггера воркера:
   // grant — max(cur, created_at)+amount; reversal — max(created_at, cur+amount).
   const b0 = Date.now();
+  freezeNow(b0); // CR-R4-1: замороженное время для §4a–§4g; restore — после §4g.
   // (i) покупка → синк → возврат → синк → бустер отозван.
   reset();
   ledger = [boosterGrant(1, 'cb1')];
@@ -347,6 +362,40 @@ try {
   serverBooster = b0 + BOOSTER_7D;
   await sync();
   eq(meta.loadMeta().boosterUntilMs, b0 + BOOSTER_7D, 'R3-6f: lapsed mission bank does not extend purchase');
+
+  // --- 4g. CR-R4-1: elapsed-aware банк — миссия 3д в T + покупка 7д
+  // в T+1д = T+10д (не T+11д): день миссии к моменту покупки уже прожит.
+  // На старом коде (банк — полная длительность) — T+11д.
+  reset();
+  freezeNow(b0); // T
+  meta.setSeasonPassUntilMs(b0 + 30 * DAY_MS);
+  season.recordSeasonRun({ kills: 0, rnaCollected: 0, bossesDefeated: 0, mutations: 50 }, b0);
+  const mcR4 = season.claimSeasonMission('season.mutations-50', b0);
+  eq(mcR4.ok, true, 'R4-1: mission claim ok');
+  eq(meta.loadMeta().boosterUntilMs, b0 + 3 * DAY_MS, 'R4-1: local = 3d mission');
+  eq(meta.getBoosterEarnedMs(), 3 * DAY_MS, 'R4-1: bank is full 3d at claim');
+  // Покупка 7 дней днём позже; серверный срок — от момента покупки.
+  freezeNow(b0 + DAY_MS); // T+1d
+  ledger = [boosterGrant(1, 'cbR4')];
+  serverBooster = b0 + DAY_MS + BOOSTER_7D; // T+8d
+  await sync();
+  eq(meta.loadMeta().boosterUntilMs, b0 + 10 * DAY_MS, 'R4-1: purchase a day later adds only remaining 2d (T+10, not T+11)');
+  // Остаток и якорь персистятся: повторный синк ничего не добавляет.
+  eq(meta.getBoosterEarnedMs(), 2 * DAY_MS, 'R4-1: remaining 2d persisted');
+  eq(meta.getBoosterEarnedAnchorMs(), b0 + 8 * DAY_MS, 'R4-1: anchor rebased to purchase term end');
+  const rR4b = await sync();
+  eq(rR4b.ok, true, 'R4-1: repeat sync ok');
+  eq(meta.loadMeta().boosterUntilMs, b0 + 10 * DAY_MS, 'R4-1: repeat sync idempotent (still T+10)');
+  eq(meta.getBoosterEarnedMs(), 2 * DAY_MS, 'R4-1: bank unchanged by repeat sync');
+  // Время идёт: в T+9д от остатка остался 1 день; новая покупка 7д
+  // получает только его (T+16д + 1д = T+17д).
+  freezeNow(b0 + 9 * DAY_MS); // T+9d
+  ledger.push(boosterGrant(2, 'cbR4b'));
+  serverBooster = b0 + 9 * DAY_MS + BOOSTER_7D; // T+16d
+  await sync();
+  eq(meta.loadMeta().boosterUntilMs, b0 + 17 * DAY_MS, 'R4-1: later purchase adds only 1d remaining (T+17)');
+  eq(meta.getBoosterEarnedMs(), 1 * DAY_MS, 'R4-1: remaining 1d persisted after second purchase');
+  restoreNow(); // конец замороженного времени (§4a–§4g)
 
   // --- 4b. Сезонный пропуск — max(local, server) (монетизация v3) ---
   reset();
