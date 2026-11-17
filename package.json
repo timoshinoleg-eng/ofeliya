@@ -117,6 +117,7 @@
     "test:campaign:replay": "node scripts/verify-campaign-replay.mjs",
     "test:time-parity": "node scripts/time-parity-smoke.cjs",
     "test:harness-acceptance": "node scripts/harness-acceptance.cjs",
+    "test:audio-diagnostics": "node scripts/audio-diagnostics-smoke.cjs",
     "test:campaign-report": "node scripts/lib/campaign-report.cjs --fixture",
     "test:harness-absent": "node scripts/check-harness-absent.mjs",
     "analytics:funnel": "node scripts/analyze-product-funnel.mjs",
