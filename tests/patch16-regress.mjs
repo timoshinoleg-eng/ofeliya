@@ -248,6 +248,11 @@ function makeD1() {
       }
       return { success: true, meta: { changes: inserted } };
     }
+    if (q.startsWith('INSERT INTO duplicate_payments')) {
+      // P1-1/P1-2: запись дубликата — best-effort; регресс-стаб не хранит
+      // duplicate_payments (ни один сценарий их не читает), успех фиктивен.
+      return { success: true, meta: { changes: 1 } };
+    }
     if (q.startsWith('INSERT INTO refund_ops')) {
       const [operation_id, charge_id, user_id, action, status, reason, telegram_confirmed_at, created_at, updated_at] = params;
       if (refundOps.has(operation_id)) throw new Error('UNIQUE constraint failed: refund_ops.operation_id');
@@ -275,9 +280,28 @@ function makeD1() {
       for (const row of payments.values()) if (row.nonce === params[0]) return [{ charge_id: row.charge_id }];
       return [];
     }
-    if (q === 'SELECT charge_id, user_id, product_id, status FROM payments WHERE charge_id=?') {
+    if (q === 'SELECT charge_id, user_id, product_id, status FROM payments WHERE charge_id=?' ||
+        q === 'SELECT charge_id, user_id, product_id, status, nonce FROM payments WHERE charge_id=?') {
       const row = payments.get(params[0]);
-      return row ? [{ charge_id: row.charge_id, user_id: row.user_id, product_id: row.product_id, status: row.status }] : [];
+      return row ? [{ charge_id: row.charge_id, user_id: row.user_id, product_id: row.product_id, status: row.status, nonce: row.nonce ?? null }] : [];
+    }
+    if (q === 'SELECT charge_id, nonce, user_id, product_id, amount, currency, reason, status, created_at FROM duplicate_payments WHERE charge_id=?') {
+      // Регресс-стаб не хранит duplicate_payments — дубликатов нет.
+      return [];
+    }
+    if (q === 'SELECT purchased_rna, booster_until_ms, season_pass_until_ms FROM wallets WHERE user_id=?') {
+      // P1-3 read-back: реальная строка кошелька (эмуляция триггера выше).
+      const w = wallets.get(params[0]);
+      return w ? [{ purchased_rna: w.purchased_rna ?? 0, booster_until_ms: w.booster_until_ms ?? 0, season_pass_until_ms: w.season_pass_until_ms ?? 0 }] : [];
+    }
+    if (q === "SELECT skin_id FROM wallet_skins WHERE user_id=? AND status='active' ORDER BY granted_at ASC") {
+      // P1-3 read-back (скины): регресс скинов не покупает, но SELECT
+      // должен существовать, чтобы read-back не падал в error-лог.
+      const rows = [...walletSkins.values()]
+        .filter((s) => s.user_id === params[0] && s.status === 'active')
+        .sort((a, b) => a.granted_at - b.granted_at)
+        .map((s) => ({ skin_id: s.skin_id }));
+      return rows;
     }
     if (q === 'SELECT operation_id, charge_id, action, status FROM refund_ops WHERE operation_id=?') {
       const row = refundOps.get(params[0]);

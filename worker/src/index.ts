@@ -670,6 +670,13 @@ interface DbOrderRow {
   grant_bundle_json: string | null;
 }
 
+/** Строка кошелька для read-back проверки (P1-3). */
+interface WalletRow {
+  purchased_rna: number;
+  booster_until_ms: number;
+  season_pass_until_ms: number;
+}
+
 interface DbPaymentRow {
   charge_id: string;
   user_id: number;
@@ -1017,6 +1024,106 @@ function grantsFromOrderSnapshot(order: DbOrderRow): ResolvedGrant[] | null {
 }
 
 /**
+ * Defense in depth (P1-3): read-back проверка грантов.
+ *
+ * Если триггер trg_wallet_ledger_apply потерян при деплое схемы, грант-батч
+ * успешен (платёж paid, строки в журнале есть), а кошелёк пуст — без этой
+ * проверки отказ ТИХИЙ. Проверка — только диагностика: грант уже закоммичен,
+ * вебхук отвечает 200, а расхождение громко логируется
+ * (stars_grant_readback_mismatch) для runbook.
+ *
+ * Сравнения — «не меньше» (>=): конкурентный платёж того же пользователя
+ * между before-read и after-read только увеличивает значения, ложных
+ * срабатываний нет. (Редкая гонка с конкурентным возвратом может дать
+ * ложный mismatch-лог — это шум в логах, а не ошибка ответа.)
+ * Никогда не бросает: собственный сбой read-back логируется отдельно
+ * (stars_grant_readback_error) и вебхук не роняет.
+ */
+async function readWalletRowBestEffort(db: D1Database, userId: number): Promise<WalletRow | null> {
+  try {
+    const row = await db
+      .prepare('SELECT purchased_rna, booster_until_ms, season_pass_until_ms FROM wallets WHERE user_id=?')
+      .bind(userId)
+      .first<WalletRow>();
+    return row ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function verifyGrantsApplied(
+  db: D1Database,
+  userId: number,
+  grants: ResolvedGrant[],
+  before: WalletRow | null,
+  now: number,
+  chargeId: string
+): Promise<void> {
+  try {
+    const after = await db
+      .prepare('SELECT purchased_rna, booster_until_ms, season_pass_until_ms FROM wallets WHERE user_id=?')
+      .bind(userId)
+      .first<WalletRow>();
+    if (!after) {
+      logEvent('stars_grant_readback_mismatch', {
+        telegramChargeId: chargeId,
+        userId,
+        reason: 'wallet-missing',
+        grantKinds: grants.map((g) => g.kind).join(','),
+      });
+      return;
+    }
+    const expectedRna = (before?.purchased_rna ?? 0) +
+      grants.reduce((sum, g) => sum + (g.kind === 'rna' ? Math.max(0, Math.floor(g.grant.rna)) : 0), 0);
+    const boosterMs = grants.reduce(
+      (sum, g) => sum + (g.kind === 'booster' ? Math.max(0, Math.floor(g.grant.boosterDays)) * 86_400_000 : 0),
+      0
+    );
+    const passMs = grants.reduce(
+      (sum, g) => sum + (g.kind === 'season_pass' ? Math.max(0, Math.floor(g.grant.seasonPassDays)) * 86_400_000 : 0),
+      0
+    );
+    const expectedBooster = boosterMs > 0 ? Math.max(before?.booster_until_ms ?? 0, now) + boosterMs : null;
+    const expectedPass = passMs > 0 ? Math.max(before?.season_pass_until_ms ?? 0, now) + passMs : null;
+    const mismatches: string[] = [];
+    if (after.purchased_rna < expectedRna) mismatches.push('rna');
+    if (expectedBooster !== null && after.booster_until_ms < expectedBooster) mismatches.push('booster');
+    if (expectedPass !== null && after.season_pass_until_ms < expectedPass) mismatches.push('season_pass');
+    const skinIds = grants.filter((g) => g.kind === 'skin' && g.grant.skinId).map((g) => g.grant.skinId as string);
+    if (skinIds.length > 0) {
+      const { results: activeSkins } = await db
+        .prepare("SELECT skin_id FROM wallet_skins WHERE user_id=? AND status='active' ORDER BY granted_at ASC")
+        .bind(userId)
+        .all<{ skin_id: string }>();
+      const active = new Set(activeSkins.map((r) => r.skin_id));
+      if (skinIds.some((s) => !active.has(s))) mismatches.push('skin');
+    }
+    if (mismatches.length > 0) {
+      logEvent('stars_grant_readback_mismatch', {
+        telegramChargeId: chargeId,
+        userId,
+        mismatches: mismatches.join(','),
+        expectedRna,
+        actualRna: after.purchased_rna,
+        ...(expectedBooster !== null
+          ? { expectedBoosterUntilMs: expectedBooster, actualBoosterUntilMs: after.booster_until_ms }
+          : {}),
+        ...(expectedPass !== null
+          ? { expectedPassUntilMs: expectedPass, actualPassUntilMs: after.season_pass_until_ms }
+          : {}),
+      });
+    }
+  } catch (err) {
+    // Read-back — диагностика: его собственный сбой не роняет вебхук.
+    logEvent('stars_grant_readback_error', {
+      telegramChargeId: chargeId,
+      userId,
+      error: String(err),
+    });
+  }
+}
+
+/**
  * Продление подписки (монетизация v3): successful_payment с тем же nonce,
  * что и первая оплата, новым charge_id и is_recurring=true /
  * is_first_recurring=false. Вызывается из recordSuccessfulPayment, когда
@@ -1070,6 +1177,8 @@ async function recordSubscriptionRenewal(
   const skuVersion = typeof order.sku_version === 'number' ? order.sku_version : GRANTS_VERSION;
   const ledgerAmount = Math.max(0, Math.floor(grant.seasonPassDays)) * 86_400_000;
   const derivedNonce = `${nonce}:r:${chargeId}`;
+  // P1-3 (в): read-back кошелька после батча — before-снимок здесь.
+  const beforeWallet = await readWalletRowBestEffort(db, fromId);
   const results = await db.batch([
     db.prepare(SQL_INSERT_PAYMENT).bind(
       chargeId, fromId, order.product_id, amount, sp.currency, 'paid', derivedNonce, skuVersion, now, null
@@ -1083,6 +1192,7 @@ async function recordSubscriptionRenewal(
     logEvent('stars_payment_duplicate', { ...base, userId: fromId });
     return true;
   }
+  await verifyGrantsApplied(db, fromId, [resolved], beforeWallet, now, chargeId);
   logEvent('stars_subscription_renewed', {
     ...base,
     userId: fromId,
@@ -1376,6 +1486,8 @@ async function recordSuccessfulPayment(
           : 0;
   // ОДИН батч — одна транзакция: либо платёж+грант(ы)+кошелёк, либо ничего.
   // Ошибка → throw → 503 → Telegram переотправит (идемпотентно).
+  // P1-3 (в): read-back кошелька после батча — before-снимок здесь.
+  const beforeWallet = await readWalletRowBestEffort(db, fromId);
   const results = await db.batch([
     db.prepare(SQL_UPDATE_ORDER_PAID).bind(nonce),
     db.prepare(SQL_INSERT_PAYMENT).bind(
@@ -1394,6 +1506,7 @@ async function recordSuccessfulPayment(
     logEvent('stars_payment_duplicate', { ...base, userId: fromId });
     return;
   }
+  await verifyGrantsApplied(db, fromId, resolvedList, beforeWallet, now, chargeId);
   logEvent('stars_payment_recorded', {
     ...base,
     userId: fromId,
