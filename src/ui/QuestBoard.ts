@@ -7,7 +7,7 @@ import {
   seasonIdFor,
   seasonSnapshot,
   type SeasonMissionProgress,
-} from '../quests/seasonQuests';
+} from '../game/shop/seasonQuests';
 import { SaveSystem } from '../systems/SaveSystem';
 import { FONT, UI_FONT } from '../game/config';
 import { META_COPY } from '../game/UiCopy';

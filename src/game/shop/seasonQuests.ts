@@ -7,6 +7,13 @@
  * в него сезон — большой рефактор ради одной фичи. Сезонный модуль живёт
  * своей жизнью: свой стейт, свой сезон, свои локальные гранты.
  *
+ * Модуль намеренно лежит ВНЕ src/quests/: check-quest-core.mjs сканирует
+ * КАЖДЫЙ .ts в src/quests/ и запрещает value-поля (amount/balance/price/
+ * grantRna — «награда принадлежит серверу»). Сезонные миссии выдают
+ * ценность по дизайну (локальные гранты), поэтому жить в этой папке они
+ * не могут — это не обход гейта, а его соблюдение: гейт защищает дневное
+ * ядро, а сезон — отдельный модуль монетизации рядом с витриной.
+ *
  * Модель доверия — как у DailyCalendar и мета-достижений: награды
  * ЛОКАЛЬНЫЕ (grantMetaRna / бустер / скин через те же фасады, что и
  * остальная игра). Серверного подтверждения нет — это не платёжные
@@ -31,9 +38,9 @@
  * для Node (как MetaWallet). Формат: {version:1, seasonId, progress,
  * claimed}. Битый JSON / неверная версия → чистое состояние сезона.
  */
-import { getBoosterUntilMs, isSeasonPassActive, setBoosterUntilMs } from '../game/meta/MetaWallet';
-import { grantMetaRna } from '../game/lab/LabState';
-import { grantSkin } from '../game/skins/SkinOwnership';
+import { getBoosterUntilMs, isSeasonPassActive, setBoosterUntilMs } from '../meta/MetaWallet';
+import { grantMetaRna } from '../lab/LabState';
+import { grantSkin } from '../skins/SkinOwnership';
 
 export type SeasonMetric = 'runs' | 'kills' | 'rna' | 'bosses' | 'mutations';
 export type SeasonTrack = 'free' | 'paid';

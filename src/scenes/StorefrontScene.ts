@@ -45,7 +45,7 @@ import {
   seasonDisplayName,
   seasonIdFor,
   seasonSnapshot,
-} from '../quests/seasonQuests';
+} from '../game/shop/seasonQuests';
 import { grantMetaRna } from '../game/lab/LabState';
 import {
   collectLifetimeStats,

@@ -4,7 +4,7 @@ import { clientCollection, clientFlags } from '../systems/ClientExperience';
 import { impactZoom } from '../ui/ClientJuice';
 import Phaser from 'phaser';
 import { QuestRuntime } from '../quests/questRuntime';
-import { recordSeasonRun } from '../quests/seasonQuests';
+import { recordSeasonRun } from '../game/shop/seasonQuests';
 import { artScale } from '../game/ArtMetrics';
 import {
   COLORS,

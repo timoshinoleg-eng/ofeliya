@@ -1,5 +1,5 @@
 /**
- * season-quests — монетизация v3 (сезонные миссии, src/quests/seasonQuests.ts).
+ * season-quests — монетизация v3 (сезонные миссии, src/game/shop/seasonQuests.ts).
  *
  * Covers:
  * - seasonIdFor: календарный месяц UTC (границы месяца);
@@ -52,7 +52,7 @@ try {
     process.execPath,
     [
       resolve('node_modules/typescript/bin/tsc'),
-      'src/quests/seasonQuests.ts',
+      'src/game/shop/seasonQuests.ts',
       'src/game/meta/MetaWallet.ts',
       'src/game/lab/LabState.ts',
       'src/game/skins/SkinOwnership.ts',
@@ -75,7 +75,7 @@ try {
     { stdio: 'pipe' }
   );
 
-  const season = require(join(temp, 'quests', 'seasonQuests.js'));
+  const season = require(join(temp, 'game', 'shop', 'seasonQuests.js'));
   const meta = require(join(temp, 'game', 'meta', 'MetaWallet.js'));
 
   const reset = () => {
