@@ -52,8 +52,16 @@ OFELIYA_STARS_WORKER_SECRET=<тот же WEBHOOK_SECRET, что в Worker>
 ```bash
 curl "https://api.telegram.org/bot<TOKEN>/setWebhook" \
   -d "url=https://ofeliya-game.onrender.com/api/telegram/webhook" \
-  -d "secret_token=<TG_WEBHOOK_SECRET>"
+  -d "secret_token=<TG_WEBHOOK_SECRET>" \
+  -d 'allowed_updates=["message","pre_checkout_query","subscription"]'
 ```
+
+**Важно:** Telegram сохраняет старое `allowed_updates`, если параметр
+не передан. После добавления `subscription` необходимо явно разрешить
+этот тип апдейтов (Bot API 10.2), иначе даже исправленный Render-прокси
+не увидит события отмены/сбоя. Пример включает только типы, которые
+обрабатывает текущий webhook; перед изменением проверь `getWebhookInfo`,
+если бот используется также другими обработчиками.
 
 Воркер проверяет заголовок `X-Telegram-Bot-Api-Secret-Token` с
 `WEBHOOK_SECRET`, а игровой сервер независимо проверяет
