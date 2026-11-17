@@ -17,6 +17,7 @@ import {
   SQL_UPDATE_DUPLICATE_REFUNDED_FROM_ANY,
   SQL_INSERT_LEDGER_REVERSAL,
   SQL_INSERT_SUBSCRIPTION_EVENT,
+  SQL_INSERT_SUBSCRIPTION_EVENT_ADMIN,
 } from './sql';
 
 /**
@@ -1597,6 +1598,77 @@ async function handleWallet(request: Request, env: Env): Promise<Response> {
 }
 
 /**
+ * Аудит админского действия с подпиской (P2-3): INSERT в subscription_events
+ * с source='admin'. Никогда не бросает: сбой аудита не должен ронять
+ * операцию (отмена/возврат уже выполнены) — только громкий лог.
+ */
+async function insertSubscriptionAdminAudit(
+  db: D1Database,
+  target: { userId: number; nonce: string | null },
+  chargeId: string,
+  state: 'canceled' | 'active'
+): Promise<void> {
+  try {
+    await db
+      .prepare(SQL_INSERT_SUBSCRIPTION_EVENT_ADMIN)
+      .bind(target.userId, target.nonce ?? '', chargeId, state, 'admin', Date.now())
+      .run();
+  } catch (err) {
+    logEvent('subscription_admin_audit_failed', {
+      telegramChargeId: chargeId,
+      state,
+      error: String(err),
+    });
+  }
+}
+
+/**
+ * Отмена подписки Telegram в рамках возврата (P2-2): refundStarPayment
+ * подписку НЕ отменяет — без этого вызова продления продолжат списывать
+ * деньги за возвращённый пропуск. Возвращает {canceled:true} при успехе
+ * (плюс аудит), {failed:true} при любой ошибке (возврат при этом уже
+ * выполнен — ответ refund остаётся ok:true, админ видит флаг и повторяет
+ * отмену отдельно через /api/admin/subscription).
+ */
+async function cancelSubscriptionForRefund(
+  db: D1Database,
+  env: Env,
+  target: { userId: number; productId: string; nonce: string | null },
+  chargeId: string
+): Promise<{ canceled?: boolean; failed?: boolean }> {
+  if (!env.TELEGRAM_BOT_TOKEN) {
+    logEvent('stars_subscription_cancel_failed', {
+      telegramChargeId: chargeId,
+      userId: target.userId,
+      error: 'bot-token-misconfigured',
+    });
+    return { failed: true };
+  }
+  try {
+    await botApi(env.TELEGRAM_BOT_TOKEN, 'editUserStarSubscription', {
+      user_id: target.userId,
+      telegram_payment_charge_id: chargeId,
+      is_canceled: true,
+    });
+  } catch (err) {
+    logEvent('stars_subscription_cancel_failed', {
+      telegramChargeId: chargeId,
+      userId: target.userId,
+      error: String(err),
+    });
+    return { failed: true };
+  }
+  logEvent('stars_subscription_edited', {
+    telegramChargeId: chargeId,
+    userId: target.userId,
+    productId: target.productId,
+    isCanceled: true,
+  });
+  await insertSubscriptionAdminAudit(db, target, chargeId, 'canceled');
+  return { canceled: true };
+}
+
+/**
  * POST /api/admin/refund {chargeId, reason?, execute?, operationId?,
  * confirmExternalRefund?} — state machine возвратов (патч №16, A5).
  *
@@ -1632,6 +1704,15 @@ async function handleWallet(request: Request, env: Env): Promise<Response> {
  * duplicate_payments; бронь — статусом дубликата ('pending' →
  * 'refund_requested' → 'refunded'); reversal НЕ пишется (гранта не было),
  * исходная покупка не трогается. Ответ помечает {duplicate:true}.
+ * P2-2: возврат подписки НЕ отменяет её (refundStarPayment подписку не
+ * трогает — продления продолжат списывать деньги за возвращённый пропуск).
+ * Поэтому успешный ответ для subscription-товара несёт
+ * {subscriptionStillActive:true, hint} (hint — куда отменять), а параметр
+ * cancelSubscription:true выполняет editUserStarSubscription в том же
+ * флоу (успех → {subscriptionCanceled:true}, провал → refund всё равно
+ * ok:true + {subscriptionCancelFailed:true} — отмена повторяется отдельно
+ * через /api/admin/subscription). Обязательный двухшаговый процесс —
+ * в README_DEPLOY §10.
  * Откат серверного кошелька — reversal-строкой в ledger: триггер
  * trg_wallet_ledger_apply применяет её атомарно в том же батче
  * (rna: max(0, −N); booster: время вспять не отматываем; skin: гасим только
@@ -1651,6 +1732,7 @@ async function handleAdminRefund(request: Request, env: Env): Promise<Response> 
     execute?: unknown;
     operationId?: unknown;
     confirmExternalRefund?: unknown;
+    cancelSubscription?: unknown;
   };
   try {
     body = (await request.json()) as typeof body;
@@ -1673,16 +1755,8 @@ async function handleAdminRefund(request: Request, env: Env): Promise<Response> 
       .prepare('SELECT operation_id, charge_id, action, status FROM refund_ops WHERE operation_id=?')
       .bind(operationId)
       .first<{ operation_id: string; charge_id: string; action: string; status: string }>();
-    if (existingOp) {
-      if (existingOp.charge_id !== chargeId) {
-        return json({ ok: false, error: 'operation-id-mismatch' }, 400);
-      }
-      if (existingOp.status === 'completed') return json({ ok: true, already: true });
-      // status='requested' → execute-флоу в процессе: падаем ниже и
-      // продолжаем с refundStarPayment (идемпотентный повтор).
-      // mark-флоу 'requested' не оставляет — это чужой незавершённый
-      // execute: продолжать его пометкой нельзя.
-      if (!execute) return json({ ok: false, error: 'operation-in-progress' }, 409);
+    if (existingOp && existingOp.charge_id !== chargeId) {
+      return json({ ok: false, error: 'operation-id-mismatch' }, 400);
     }
     const payment = await db
       .prepare('SELECT charge_id, user_id, product_id, status, nonce FROM payments WHERE charge_id=?')
@@ -1705,8 +1779,29 @@ async function handleAdminRefund(request: Request, env: Env): Promise<Response> 
     } else {
       return json({ ok: false, error: 'not-found' });
     }
+    // P2-2: возврат НЕ отменяет подписку (refundStarPayment её не трогает).
+    // Флаг в каждом успешном ответе напоминает админу о втором шаге;
+    // cancelSubscription:true выполняет отмену в том же флоу.
+    const isSubscription = !!SERVER_GRANTS[target.productId]?.subscription;
+    const subscriptionHint =
+      'refundStarPayment does not cancel the Telegram subscription — cancel it via ' +
+      'POST /api/admin/subscription {chargeId, isCanceled:true} (or refund with ' +
+      'cancelSubscription:true) unless already canceled.';
+    const subscriptionFlag = isSubscription
+      ? { subscriptionStillActive: true, hint: subscriptionHint }
+      : {};
+    if (existingOp?.status === 'completed') {
+      return json({ ok: true, already: true, ...subscriptionFlag });
+    }
+    // status='requested' → execute-флоу в процессе: падаем ниже и
+    // продолжаем с refundStarPayment (идемпотентный повтор).
+    // mark-флоу 'requested' не оставляет — это чужой незавершённый
+    // execute: продолжать его пометкой нельзя.
+    if (existingOp && existingOp.status === 'requested' && !execute) {
+      return json({ ok: false, error: 'operation-in-progress' }, 409);
+    }
     if (payment?.status === 'refunded' || duplicate?.status === 'refunded') {
-      return json({ ok: true, already: true });
+      return json({ ok: true, already: true, ...subscriptionFlag });
     }
     // P1-6 (независимый review): mark во время чужого execute ('refund_requested')
     // НЕ ДОЛЖЕН применять reversal: батч mark коммитится (reversal в журнале),
@@ -1720,6 +1815,17 @@ async function handleAdminRefund(request: Request, env: Env): Promise<Response> 
     if (!execute && markBlocked) {
       return json({ ok: false, error: 'refund-in-progress' }, 409);
     }
+
+    // Опциональная отмена подписки ПОСЛЕ успешного возврата (P2-2).
+    // Возвращает поля для ответа; провал отмены не роняет refund.
+    const maybeCancelSubscription = async (): Promise<Record<string, unknown>> => {
+      if (body.cancelSubscription !== true) return {};
+      if (!isSubscription) return { subscriptionCancelSkipped: true };
+      const res = await cancelSubscriptionForRefund(db, env, target, chargeId);
+      return res.canceled
+        ? { subscriptionStillActive: false, subscriptionCanceled: true }
+        : { subscriptionStillActive: true, subscriptionCancelFailed: true, hint: subscriptionHint };
+    };
 
     // Монетизация v3: reversal SQL сам строит charge_id построчно
     // ('rev:' || operationId || ':' || grant_type || ':' || skin_id) —
@@ -1762,7 +1868,7 @@ async function handleAdminRefund(request: Request, env: Env): Promise<Response> 
       if (results[1]?.meta.changes === 0) {
         // Статус сменился между SELECT и батчем (конкурентный refund) —
         // идемпотентный ответ, состояние не портится.
-        return json({ ok: true, already: true });
+        return json({ ok: true, already: true, ...subscriptionFlag });
       }
       logEvent('stars_payment_refunded_mark', {
         telegramChargeId: chargeId,
@@ -1770,7 +1876,8 @@ async function handleAdminRefund(request: Request, env: Env): Promise<Response> 
         reason,
         ...(target.isDuplicate ? { duplicate: true } : {}),
       });
-      return json({ ok: true, executed: false, operationId, ...(target.isDuplicate ? { duplicate: true } : {}) });
+      const cancelOutcomeMark = await maybeCancelSubscription();
+      return json({ ok: true, executed: false, operationId, ...(target.isDuplicate ? { duplicate: true } : {}), ...subscriptionFlag, ...cancelOutcomeMark });
     }
 
     // «ВЫПОЛНИТЬ»: двухшаговый, с бронью перед внешним вызовом.
@@ -1808,7 +1915,7 @@ async function handleAdminRefund(request: Request, env: Env): Promise<Response> 
               .prepare('SELECT status FROM payments WHERE charge_id=?')
               .bind(chargeId)
               .first<{ status: string }>();
-        if (!cur || cur.status === 'refunded') return json({ ok: true, already: true });
+        if (!cur || cur.status === 'refunded') return json({ ok: true, already: true, ...subscriptionFlag });
         // 'refund_requested' чужим operationId — второй админ в том же
         // флоу: не мешаем, сообщаем честно.
         return json({ ok: false, error: 'refund-in-progress' }, 409);
@@ -1859,7 +1966,8 @@ async function handleAdminRefund(request: Request, env: Env): Promise<Response> 
       reason,
       ...(target.isDuplicate ? { duplicate: true } : {}),
     });
-    return json({ ok: true, executed: true, operationId, ...(target.isDuplicate ? { duplicate: true } : {}) });
+    const cancelOutcomeExecute = await maybeCancelSubscription();
+    return json({ ok: true, executed: true, operationId, ...(target.isDuplicate ? { duplicate: true } : {}), ...subscriptionFlag, ...cancelOutcomeExecute });
   } catch {
     return json({ error: 'db-write-failed' }, 502);
   }
@@ -1873,10 +1981,13 @@ async function handleAdminRefund(request: Request, env: Env): Promise<Response> 
  *
  * Bot API editUserStarSubscription (HTTPS botApi(), НЕ MTProto): params
  * user_id + telegram_payment_charge_id + is_canceled. user_id берётся из
- * payments (не из тела — админ не должен подменять владельца).
+ * payments (не из тела — админ не должен подменять владельца); charge
+ * отклонённой второй подписки (P1-2) резолвится из duplicate_payments.
  * is_canceled=true — отмена продления (текущий период действует до конца);
  * false — разрешить пользователю переподключить ранее отменённую ботом
  * подписку. Авторизация: Authorization: Bearer <ADMIN_TOKEN>, как refund.
+ * Успешное действие пишется в subscription_events с source='admin' (P2-3:
+ * аудит «кто отменил подписку»); сбой аудита ответ не роняет.
  * Без PAYMENTS_DB → 501; неизвестный chargeId → {ok:false, error:'not-found'}.
  * Ошибка Bot API → 502 (операция не застряла: состояние нигде не пишется,
  * повтор безопасен — вызов идемпотентен на стороне Telegram).
@@ -1900,23 +2011,41 @@ async function handleAdminSubscription(request: Request, env: Env): Promise<Resp
     return json({ ok: false, error: 'bot-token-misconfigured' }, 503);
   }
   try {
-    const payment = await env.PAYMENTS_DB.prepare(
-      'SELECT charge_id, user_id, product_id, status FROM payments WHERE charge_id=?'
+    const db = env.PAYMENTS_DB;
+    const payment = await db.prepare(
+      'SELECT charge_id, user_id, product_id, status, nonce FROM payments WHERE charge_id=?'
     )
       .bind(chargeId)
-      .first<{ charge_id: string; user_id: number; product_id: string; status: string }>();
-    if (!payment) return json({ ok: false, error: 'not-found' });
+      .first<{ charge_id: string; user_id: number; product_id: string; status: string; nonce: string | null }>();
+    // P1-2: отклонённая вторая подписка живёт только в duplicate_payments —
+    // без этого lookup админ не смог бы остановить её списания.
+    const duplicate = !payment
+      ? await db
+          .prepare('SELECT charge_id, nonce, user_id, product_id, amount, currency, reason, status, created_at FROM duplicate_payments WHERE charge_id=?')
+          .bind(chargeId)
+          .first<{ charge_id: string; nonce: string; user_id: number; product_id: string; amount: number; currency: string; reason: string; status: string; created_at: number }>()
+      : null;
+    let target: { userId: number; productId: string; nonce: string | null } | null = null;
+    if (payment) {
+      target = { userId: payment.user_id, productId: payment.product_id, nonce: payment.nonce };
+    } else if (duplicate) {
+      target = { userId: duplicate.user_id, productId: duplicate.product_id, nonce: duplicate.nonce };
+    }
+    if (!target) return json({ ok: false, error: 'not-found' });
     await botApi(env.TELEGRAM_BOT_TOKEN, 'editUserStarSubscription', {
-      user_id: payment.user_id,
+      user_id: target.userId,
       telegram_payment_charge_id: chargeId,
       is_canceled: body.isCanceled,
     });
     logEvent('stars_subscription_edited', {
       telegramChargeId: chargeId,
-      userId: payment.user_id,
-      productId: payment.product_id,
+      userId: target.userId,
+      productId: target.productId,
       isCanceled: body.isCanceled,
     });
+    // P2-3: аудит админского действия (source='admin'); сбой аудита не
+    // роняет ответ (helper ловит ошибки сам).
+    await insertSubscriptionAdminAudit(db, target, chargeId, body.isCanceled ? 'canceled' : 'active');
     return json({ ok: true, chargeId, isCanceled: body.isCanceled });
   } catch (err) {
     logEvent('stars_subscription_edit_failed', {

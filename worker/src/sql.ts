@@ -105,6 +105,17 @@ export const SQL_INSERT_SUBSCRIPTION_EVENT =
   'INSERT INTO subscription_events (user_id, nonce, charge_id, state, created_at) ' +
   'VALUES (?,?,?,?,?)';
 
+/**
+ * Аудит админской правки подписки (P2-3): та же таблица subscription_events,
+ * но source='admin' — расследование «кто отменил подписку» отличает
+ * действие админа от апдейта Telegram. Параметры: (user_id, nonce,
+ * charge_id, state, source, created_at). state здесь только
+ * 'canceled' | 'active' (isCanceled true/false).
+ */
+export const SQL_INSERT_SUBSCRIPTION_EVENT_ADMIN =
+  'INSERT INTO subscription_events (user_id, nonce, charge_id, state, source, created_at) ' +
+  'VALUES (?,?,?,?,?,?)';
+
 /** Журнал возвратов: новая операция (mark/execute). operation_id — PK. */
 export const SQL_INSERT_REFUND_OP =
   'INSERT INTO refund_ops ' +

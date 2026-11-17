@@ -222,6 +222,9 @@ CREATE TABLE IF NOT EXISTS subscription_events (
   nonce      TEXT NOT NULL,
   charge_id  TEXT,
   state      TEXT NOT NULL,   -- 'canceled' | 'active' | 'failed'
+  -- P2-3: источник записи — 'telegram' (BotSubscriptionUpdated) или
+  -- 'admin' (POST /api/admin/subscription / refund cancelSubscription).
+  source     TEXT NOT NULL DEFAULT 'telegram',
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_subscription_events_nonce ON subscription_events(nonce);
