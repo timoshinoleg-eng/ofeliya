@@ -107,6 +107,19 @@ async function passButtonState(page) {
   });
 }
 
+// CR-R3-10: текст лейбла кнопки покупки карточки по id товара.
+async function cardBuyLabel(page, id) {
+  return page.evaluate((productId) => {
+    const s = window.__game.scene.getScene('Storefront');
+    const card = s.listContainer.list.find((o) => o?.name === `ofeliya-store-card-${productId}`);
+    if (!card) return null;
+    const all = [];
+    const visit = (o) => { all.push(o); if (Array.isArray(o?.list)) o.list.forEach(visit); };
+    visit(card);
+    return all.find((o) => o?.name === 'card-buy-label')?.text ?? null;
+  }, id);
+}
+
 // CR3: проскроллить карточку пропуска в центр контентной области.
 async function scrollPassIntoView(page) {
   await page.evaluate(() => {
@@ -728,6 +741,135 @@ async function checkScroll(page, label, failures) {
         const g = await extractGeometry(page);
         checkFrame(g, label, failures);
         await checkScroll(page, label, failures);
+      }
+      if (errors.length) failures.push(`${label}: page errors: ${errors.join(' | ')}`);
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  // CR-R3-10: resize во время покупки — гейт переживает рестарт сцены,
+  // завершение исходной покупки не трогает UI новой генерации.
+  // Задержка покупки — через monkey-patch провайдера (+5000 мс):
+  // shop.mockDelay из URL задержал бы и listProducts новой генерации,
+  // и окно «новая генерация готова + старая покупка в полёте» схлопнулось бы.
+  await runCase('resize-during-purchase 390x844->320x568', async () => {
+    const label = 'resize-during-purchase 390x844->320x568';
+    const { ctx, page, errors } = await bootStorefront(browser, { width: 390, height: 844 }, { passActive: false });
+    try {
+      const g0 = await extractGeometry(page);
+      const card0 = g0.cards.find((c) => c.buyButton);
+      if (!card0?.buyButton) {
+        failures.push(`${label}: кнопка покупки не найдена`);
+        return;
+      }
+      // Замедлить покупку исходного провайдера на 5 с (новая генерация
+      // после рестарта получит свежий провайдер без патча).
+      await page.evaluate(() => {
+        const s = window.__game.scene.getScene('Storefront');
+        const p = s.provider;
+        const orig = p.purchase.bind(p);
+        p.purchase = (id) => new Promise((resolve) => setTimeout(() => resolve(orig(id)), 5000));
+      });
+      await page.evaluate(() => {
+        window.__storeRootBefore = window.__game.scene.getScene('Storefront').root;
+      });
+      await touchAt(ctx, page, center(card0.buyButton));
+      try {
+        await page.waitForFunction(
+          () => window.__game.scene.getScene('Storefront').state === 'purchasing',
+          null,
+          { timeout: 5000 }
+        );
+      } catch {
+        failures.push(`${label}: покупка не перешла в purchasing`);
+        return;
+      }
+      // Resize в середине покупки: сцена перестраивается.
+      await page.setViewportSize({ width: 320, height: 568 });
+      let rebuilt = true;
+      try {
+        await page.waitForFunction(
+          () => {
+            const s = window.__game.scene.getScene('Storefront');
+            return s.root !== window.__storeRootBefore && s.state === 'ready' && !!s.listContainer;
+          },
+          null,
+          { timeout: 15000 }
+        );
+      } catch {
+        rebuilt = false;
+        failures.push(`${label}: сцена не перестроилась после resize`);
+      }
+      if (!rebuilt) return;
+      await sleep(300);
+      // Гейт: исходная покупка ещё в полёте — кнопка того же товара
+      // '···', тап не начинает вторую покупку.
+      const buyLabel = await cardBuyLabel(page, card0.id);
+      if (buyLabel !== '···') {
+        failures.push(`${label}: во время исходной покупки кнопка — '${buyLabel}' вместо '···'`);
+      }
+      const g1 = await extractGeometry(page);
+      const card1 = g1.cards.find((c) => c.id === card0.id);
+      if (!card1?.buyButton) {
+        failures.push(`${label}: кнопка ${card0.id} не найдена после resize`);
+        return;
+      }
+      await touchAt(ctx, page, center(card1.buyButton));
+      await sleep(800);
+      const stGate = await page.evaluate(() => {
+        const s = window.__game.scene.getScene('Storefront');
+        return { state: s.state, lastBought: s.lastBought?.id ?? null };
+      });
+      if (stGate.state !== 'ready' || stGate.lastBought) {
+        failures.push(
+          `${label}: тап во время исходной покупки начал вторую (state=${stGate.state}, lastBought=${stGate.lastBought})`
+        );
+      }
+      // Ждём завершения исходной покупки (патч +5000 мс от тапа).
+      await sleep(5000);
+      const stDone = await page.evaluate(() => {
+        const s = window.__game.scene.getScene('Storefront');
+        return { state: s.state, lastBought: s.lastBought?.id ?? null };
+      });
+      if (stDone.state !== 'ready' || stDone.lastBought) {
+        failures.push(
+          `${label}: завершение исходной покупки тронуло UI новой генерации (state=${stDone.state}, lastBought=${stDone.lastBought})`
+        );
+      }
+      // Платёжная бухгалтерия исходной покупки доработала: entitlement записан.
+      const entitled = await page.evaluate((id) => {
+        try {
+          const raw = localStorage.getItem('ofeliya.mock.entitlements.v1');
+          const list = raw ? JSON.parse(raw) : [];
+          return Array.isArray(list) && list.some((e) => e?.productId === id);
+        } catch {
+          return false;
+        }
+      }, card0.id);
+      if (!entitled) {
+        failures.push(`${label}: исходная покупка ${card0.id} не оставила entitlement (бухгалтерия не доработала)`);
+      }
+      // Кнопка вернулась к цене, повторная покупка работает.
+      const buyLabel2 = await cardBuyLabel(page, card0.id);
+      if (buyLabel2 === '···') {
+        failures.push(`${label}: после завершения покупки кнопка застряла в '···'`);
+      }
+      const g2 = await extractGeometry(page);
+      const card2 = g2.cards.find((c) => c.id === card0.id);
+      if (!card2?.buyButton) {
+        failures.push(`${label}: кнопка ${card0.id} не найдена для повторной покупки`);
+        return;
+      }
+      await touchAt(ctx, page, center(card2.buyButton));
+      try {
+        await page.waitForFunction(
+          () => window.__game.scene.getScene('Storefront').state === 'success',
+          null,
+          { timeout: 10000 }
+        );
+      } catch {
+        failures.push(`${label}: повторная покупка не дошла до success`);
       }
       if (errors.length) failures.push(`${label}: page errors: ${errors.join(' | ')}`);
     } finally {
