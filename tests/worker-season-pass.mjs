@@ -228,8 +228,11 @@ try {
       const origLog = console.log;
       console.log = (...args) => void lines.push(args.join(' '));
       try {
-        await seedOrder(db, 'nonce-sp-1b', USER_ID, PASS_ID, 250, { skuVersion: 4, grantRna: 0, grantBoosterDays: 0, grantSeasonPassDays: 30 });
-        const rb = await post(handler, '/api/webhook', paymentBody('ch-sp-1b', 'nonce-sp-1b'), env, secretHeader());
+        // P1-2: вторая покупка пропуска при активном запрещена сервером,
+        // поэтому drift-проверка идёт от ДРУГОГО пользователя (иначе платёж
+        // отклонится в duplicate_payments без stars_payment_recorded).
+        await seedOrder(db, 'nonce-sp-1b', OTHER_USER, PASS_ID, 250, { skuVersion: 4, grantRna: 0, grantBoosterDays: 0, grantSeasonPassDays: 30 });
+        const rb = await post(handler, '/api/webhook', paymentBody('ch-sp-1b', 'nonce-sp-1b', { userId: OTHER_USER }), env, secretHeader());
         eq(rb.status, 200, 'drift-check payment 200');
       } finally {
         console.log = origLog;

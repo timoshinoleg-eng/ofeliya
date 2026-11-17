@@ -42,9 +42,15 @@ import { DatabaseSync } from 'node:sqlite';
 const here = dirname(fileURLToPath(import.meta.url));
 const workerDir = join(here, '..');
 
-const { SQL_INSERT_LEDGER_GRANT, SQL_INSERT_LEDGER_REVERSAL } = await import(
-  join(workerDir, 'src', 'sql.ts')
-);
+const {
+  SQL_INSERT_LEDGER_GRANT,
+  SQL_INSERT_LEDGER_REVERSAL,
+  SQL_INSERT_DUPLICATE_PAYMENT,
+  SQL_UPDATE_DUPLICATE_REFUND_REQUESTED,
+  SQL_UPDATE_DUPLICATE_REFUNDED_FROM_ANY,
+  SQL_INSERT_SUBSCRIPTION_EVENT,
+  SQL_INSERT_SUBSCRIPTION_EVENT_ADMIN,
+} = await import(join(workerDir, 'src', 'sql.ts'));
 
 function freshDb() {
   const db = new DatabaseSync(':memory:');
@@ -311,5 +317,43 @@ test('три скина с одним charge_id: три строки wallet_skin
     .prepare("SELECT COUNT(*) AS c FROM wallet_skins WHERE user_id=14 AND status='active'")
     .get().c;
   assert.equal(active, 0);
+  db.close();
+});
+
+test('duplicate_payments: status state machine (P1-1)', () => {
+  const db = freshDb();
+  const ins = db.prepare(SQL_INSERT_DUPLICATE_PAYMENT).run(
+    'dup-1', 'nonce-dup-1', 15, 'currency.rna-pack-s', 35, 'XTR', 'nonce_reuse', 1000
+  );
+  assert.equal(ins.changes, 1);
+  const status = () => db.prepare('SELECT status FROM duplicate_payments WHERE charge_id=?').get('dup-1').status;
+  assert.equal(status(), 'pending');
+  // Повторная вставка того же charge_id — no-op.
+  const dup = db.prepare(SQL_INSERT_DUPLICATE_PAYMENT).run(
+    'dup-1', 'nonce-dup-1', 15, 'currency.rna-pack-s', 35, 'XTR', 'nonce_reuse', 1000
+  );
+  assert.equal(dup.changes, 0);
+  // Бронь execute-возврата: только из pending.
+  const req = db.prepare(SQL_UPDATE_DUPLICATE_REFUND_REQUESTED).run('dup-1');
+  assert.equal(req.changes, 1);
+  assert.equal(status(), 'refund_requested');
+  const req2 = db.prepare(SQL_UPDATE_DUPLICATE_REFUND_REQUESTED).run('dup-1');
+  assert.equal(req2.changes, 0, 'second reservation is a no-op (concurrent refund loses)');
+  // Завершение: из refund_requested → refunded.
+  const fin = db.prepare(SQL_UPDATE_DUPLICATE_REFUNDED_FROM_ANY).run('dup-1');
+  assert.equal(fin.changes, 1);
+  assert.equal(status(), 'refunded');
+  db.close();
+});
+
+test('subscription_events: source telegram by default, admin on admin insert (P2-3)', () => {
+  const db = freshDb();
+  db.prepare(SQL_INSERT_SUBSCRIPTION_EVENT).run(16, 'nonce-src-1', 'ch-src-1', 'canceled', 1000);
+  const tg = db.prepare('SELECT source FROM subscription_events WHERE nonce=?').get('nonce-src-1');
+  assert.equal(tg.source, 'telegram');
+  db.prepare(SQL_INSERT_SUBSCRIPTION_EVENT_ADMIN).run(16, 'nonce-src-2', 'ch-src-2', 'canceled', 'admin', 2000);
+  const adm = db.prepare('SELECT source, state FROM subscription_events WHERE nonce=?').get('nonce-src-2');
+  assert.equal(adm.source, 'admin');
+  assert.equal(adm.state, 'canceled');
   db.close();
 });
