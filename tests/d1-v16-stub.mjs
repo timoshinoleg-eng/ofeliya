@@ -27,8 +27,9 @@ export function makeD1() {
   const ledger = new Map(); // charge_id -> row (id монотонный)
   const walletSkins = new Map(); // charge_id -> row
   const refundOps = new Map();
-  const subscriptionEvents = []; // {id, user_id, nonce, charge_id, state, created_at}
-  const hooks = { failBatchAtStatement: -1, parkLedgerInsert: false };
+  const subscriptionEvents = []; // {id, user_id, nonce, charge_id, state, source, created_at}
+  const duplicatePayments = new Map(); // charge_id -> row (P1-1: возврат дубликатов)
+  const hooks = { failBatchAtStatement: -1, parkLedgerInsert: false, disableTrigger: false };
   const parked = [];
   let batchCalls = 0;
   const batchSizes = [];
@@ -42,11 +43,13 @@ export function makeD1() {
     walletSkins: structuredClone(walletSkins),
     refundOps: structuredClone(refundOps),
     subscriptionEvents: structuredClone(subscriptionEvents),
+    duplicatePayments: structuredClone(duplicatePayments),
   });
   const restore = (s) => {
     for (const [m, v] of [
       [orders, s.orders], [payments, s.payments], [wallets, s.wallets],
       [ledger, s.ledger], [walletSkins, s.walletSkins], [refundOps, s.refundOps],
+      [duplicatePayments, s.duplicatePayments],
     ]) {
       m.clear();
       for (const [k, val] of v) m.set(k, val);
@@ -55,8 +58,12 @@ export function makeD1() {
     subscriptionEvents.push(...s.subscriptionEvents);
   };
 
-  /** Эмуляция trg_wallet_ledger_apply (worker/schema.sql). */
+  /** Эмуляция trg_wallet_ledger_apply (worker/schema.sql). Хук
+   *  disableTrigger=true симулирует отсутствующий триггер (P1-3): вставка
+   *  в журнал проходит, а кошелёк НЕ меняется (включая создание строки
+   *  wallets — INSERT OR IGNORE тоже часть триггера). */
   function applyTrigger(row) {
+    if (hooks.disableTrigger) return;
     const { user_id, kind, grant_type, amount, skin_id, charge_id, reverses_charge_id, created_at } = row;
     let w = wallets.get(user_id);
     if (!w) {
@@ -165,12 +172,68 @@ export function makeD1() {
       return { success: true, meta: { changes: inserted } };
     }
     // SQL_INSERT_SUBSCRIPTION_EVENT (v17): аудит BotSubscriptionUpdated.
+    // P2-3: админская запись — 6 параметров (source='admin'); апдейт
+    // Telegram — 5 (source='telegram' по умолчанию схемы).
     if (q.startsWith('INSERT INTO subscription_events')) {
+      if (params.length === 6) {
+        const [user_id, nonce, charge_id, state, source, created_at] = params;
+        subscriptionEvents.push({
+          id: subscriptionEvents.length + 1, user_id, nonce, charge_id, state, source, created_at,
+        });
+        return { success: true, meta: { changes: 1 } };
+      }
       const [user_id, nonce, charge_id, state, created_at] = params;
       subscriptionEvents.push({
-        id: subscriptionEvents.length + 1, user_id, nonce, charge_id, state, created_at,
+        id: subscriptionEvents.length + 1, user_id, nonce, charge_id, state, source: 'telegram', created_at,
       });
       return { success: true, meta: { changes: 1 } };
+    }
+    // SQL_INSERT_DUPLICATE_PAYMENT (P1-1/P1-2): ON CONFLICT DO NOTHING.
+    // status по умолчанию 'pending' (как DEFAULT в schema.sql).
+    if (q.startsWith('INSERT INTO duplicate_payments')) {
+      const [charge_id, nonce, user_id, product_id, amount, currency, reason, created_at] = params;
+      if (duplicatePayments.has(charge_id)) return { success: true, meta: { changes: 0 } };
+      duplicatePayments.set(charge_id, { charge_id, nonce, user_id, product_id, amount, currency, reason, status: 'pending', created_at });
+      return { success: true, meta: { changes: 1 } };
+    }
+    // P1-1: state machine возврата дубликата (зеркало payments).
+    if (q === "UPDATE duplicate_payments SET status='refund_requested' WHERE charge_id=? AND status='pending'") {
+      const [charge_id] = params;
+      const row = duplicatePayments.get(charge_id);
+      if (row && row.status === 'pending') {
+        row.status = 'refund_requested';
+        return { success: true, meta: { changes: 1 } };
+      }
+      return { success: true, meta: { changes: 0 } };
+    }
+    if (q === "UPDATE duplicate_payments SET status='refunded' WHERE charge_id=? AND status='pending'") {
+      const [charge_id] = params;
+      const row = duplicatePayments.get(charge_id);
+      if (row && row.status === 'pending') {
+        row.status = 'refunded';
+        return { success: true, meta: { changes: 1 } };
+      }
+      return { success: true, meta: { changes: 0 } };
+    }
+    if (q === "UPDATE duplicate_payments SET status='refunded' WHERE charge_id=? AND status IN ('pending','refund_requested')") {
+      const [charge_id] = params;
+      const row = duplicatePayments.get(charge_id);
+      if (row && (row.status === 'pending' || row.status === 'refund_requested')) {
+        row.status = 'refunded';
+        return { success: true, meta: { changes: 1 } };
+      }
+      return { success: true, meta: { changes: 0 } };
+    }
+    // P1-2: заказ отклонённой подписки — терминальный статус 'denied'
+    // (продления такого заказа тоже не грантятся).
+    if (q === "UPDATE orders SET status='denied' WHERE nonce=? AND status='pending'") {
+      const [nonce] = params;
+      const row = orders.get(nonce);
+      if (row && row.status === 'pending') {
+        row.status = 'denied';
+        return { success: true, meta: { changes: 1 } };
+      }
+      return { success: true, meta: { changes: 0 } };
     }
     if (q.startsWith('INSERT INTO refund_ops')) {
       const [operation_id, charge_id, user_id, action, status, reason, telegram_confirmed_at, created_at, updated_at] = params;
@@ -283,9 +346,26 @@ export function makeD1() {
         .sort((a, b) => a.created_at - b.created_at)
         .map((r) => ({ charge_id: r.charge_id, product_id: r.product_id, status: r.status, created_at: r.created_at }));
     }
-    if (q === 'SELECT charge_id, user_id, product_id, status FROM payments WHERE charge_id=?') {
+    if (q === 'SELECT charge_id, user_id, product_id, status FROM payments WHERE charge_id=?' ||
+        q === 'SELECT charge_id, user_id, product_id, status, nonce FROM payments WHERE charge_id=?') {
       const row = payments.get(params[0]);
-      return row ? [{ charge_id: row.charge_id, user_id: row.user_id, product_id: row.product_id, status: row.status }] : [];
+      return row ? [{ charge_id: row.charge_id, user_id: row.user_id, product_id: row.product_id, status: row.status, nonce: row.nonce ?? null }] : [];
+    }
+    // P1-2: свежие pending-заказы пользователя (один pending subscription
+    // order на пользователя).
+    if (q === "SELECT nonce, product_id, created_at FROM orders WHERE user_id=? AND status='pending'") {
+      return [...orders.values()]
+        .filter((r) => r.user_id === params[0] && r.status === 'pending')
+        .map((r) => ({ nonce: r.nonce, product_id: r.product_id, created_at: r.created_at }));
+    }
+    // P1-1: дубликат по charge_id (возврат + админ-подписка).
+    if (q === 'SELECT charge_id, nonce, user_id, product_id, amount, currency, reason, status, created_at FROM duplicate_payments WHERE charge_id=?') {
+      const row = duplicatePayments.get(params[0]);
+      return row ? [{ ...row }] : [];
+    }
+    if (q === 'SELECT status FROM duplicate_payments WHERE charge_id=?') {
+      const row = duplicatePayments.get(params[0]);
+      return row ? [{ status: row.status }] : [];
     }
     if (q === 'SELECT status FROM payments WHERE charge_id=?') {
       const row = payments.get(params[0]);
@@ -332,7 +412,7 @@ export function makeD1() {
   }
 
   const db = {
-    orders, payments, wallets, ledger, walletSkins, refundOps, subscriptionEvents, hooks, parked,
+    orders, payments, wallets, ledger, walletSkins, refundOps, subscriptionEvents, duplicatePayments, hooks, parked,
     batchCalls: () => batchCalls,
     batchSizes,
     /** Тестовый хук (legacy): следующий run() бросит. */
