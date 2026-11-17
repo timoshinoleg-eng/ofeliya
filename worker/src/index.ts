@@ -1175,6 +1175,22 @@ async function recordSubscriptionRenewal(
       productId: order.product_id,
       expectedStars: order.amount_stars,
     });
+    // CR7: деньги списаны Telegram, гранта нет — платёж должен быть
+    // возвращаем через /api/admin/refund, а он ищет charge_id в payments
+    // и duplicate_payments. Пишем duplicate_payments (reason —
+    // 'renewal_amount_mismatch'); запись best-effort — сбой только
+    // логируется внутри recordDuplicatePayment, вебхук не падает.
+    const db = env.PAYMENTS_DB;
+    // Вызывающий (recordSuccessfulPayment) уже проверил границы суммы и
+    // currency==='XTR' до вызова — здесь это только сужение типов для
+    // strict TS; при битом теле записи не будет, но лог выше уже есть.
+    if (db && typeof amount === 'number' && typeof sp.currency === 'string') {
+      await recordDuplicatePayment(
+        db,
+        { chargeId, nonce, userId: fromId, productId: order.product_id, amount, currency: sp.currency },
+        'renewal_amount_mismatch'
+      );
+    }
     return true;
   }
   const db = env.PAYMENTS_DB;
@@ -1235,13 +1251,16 @@ async function recordSubscriptionRenewal(
  * Запись дубликатного платежа в duplicate_payments (P1-1/P1-2): деньги
  * списаны Telegram, гранта нет. Никогда не бросает: сбой записи — громкий
  * лог, платёж найдётся через reconcile (telegram_without_d1).
- * reason: 'nonce_reuse' (гонка двух pre_checkout) или 'subscription_active'
- * (вторая подписка при активном пропуске — P1-2).
+ * reason: 'nonce_reuse' (гонка двух pre_checkout), 'subscription_active'
+ * (вторая подписка при активном пропуске — P1-2) или
+ * 'renewal_amount_mismatch' (продление с неверной суммой — CR7).
+ * У колонки reason нет CHECK-ограничения (см. schema.sql) — новое
+ * значение не требует миграции.
  */
 async function recordDuplicatePayment(
   db: D1Database,
   fields: { chargeId: string; nonce: string; userId: number; productId: string; amount: number; currency: string },
-  reason: 'nonce_reuse' | 'subscription_active'
+  reason: 'nonce_reuse' | 'subscription_active' | 'renewal_amount_mismatch'
 ): Promise<void> {
   try {
     await db

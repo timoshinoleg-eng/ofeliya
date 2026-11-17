@@ -127,6 +127,7 @@ globalThis.fetch = async (url, opts) => {
 };
 
 const secretHeader = () => ({ 'x-telegram-bot-api-secret-token': WEBHOOK_SECRET });
+const adminHeader = () => ({ authorization: `Bearer ${ADMIN_TOKEN}` });
 const editCalls = () => botCalls.filter((c) => c.method === 'editUserStarSubscription');
 
 /** Покупка пропуска: seed заказа + оплата. Возвращает until. */
@@ -345,6 +346,38 @@ try {
     const w3 = await postJson(handler, '/api/wallet', { initData, since_seq: 0 }, env2);
     eq(w3.json?.ledger?.length, 5000, 'P3-10: exactly 5000 rows returned');
     eq(w3.json?.truncated, false, 'P3-10: exactly 5000 rows not truncated');
+  }
+
+  // === CR7: продление с неверной суммой — duplicate_payments, возврат возможен ===
+  {
+    const db = makeD1();
+    const env = adminEnv(db);
+    const until1 = await buyPass(handler, db, env, 'r2-cr7-nonce-1', 'r2-cr7-ch-1');
+    assert(until1 > Date.now(), 'CR7: first pass bought and active');
+    // Продление с неверной суммой (200 вместо 250): гранта нет, но деньги
+    // списаны Telegram — платёж должен быть возвращаем через /api/admin/refund.
+    const ren = await post(
+      handler, '/api/webhook',
+      paymentBody('r2-cr7-ch-1r', 'r2-cr7-nonce-1', { amount: 200, isRecurring: true, isFirstRecurring: false }),
+      env, secretHeader()
+    );
+    eq(ren.status, 200, 'CR7: mismatch renewal webhook 200');
+    eq(db.wallets.get(USER_ID).season_pass_until_ms, until1, 'CR7: mismatched renewal grants nothing');
+    assert(!db.payments.has('r2-cr7-ch-1r'), 'CR7: no payment row for mismatched renewal');
+    const dup = db.duplicatePayments.get('r2-cr7-ch-1r');
+    assert(dup, 'CR7: mismatched renewal recorded in duplicate_payments');
+    eq(dup.reason, 'renewal_amount_mismatch', 'CR7: duplicate reason renewal_amount_mismatch');
+    eq(dup.amount, 200, 'CR7: duplicate amount is the charged amount');
+    // Возврат по charge_id возможен (до фикса: not-found).
+    const ref = await post(
+      handler, '/api/admin/refund',
+      { chargeId: 'r2-cr7-ch-1r', execute: true, confirmExternalRefund: true },
+      env, adminHeader()
+    );
+    const refj = await ref.json();
+    eq(ref.status, 200, 'CR7: refund of mismatched renewal → 200');
+    eq(refj.ok, true, 'CR7: refund ok:true');
+    eq(db.duplicatePayments.get('r2-cr7-ch-1r').status, 'refunded', 'CR7: duplicate status → refunded');
   }
 
   console.log('worker-round2: all assertions passed');

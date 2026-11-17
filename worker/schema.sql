@@ -275,7 +275,7 @@ CREATE TABLE IF NOT EXISTS duplicate_payments (
   product_id TEXT NOT NULL,
   amount     INTEGER NOT NULL,
   currency   TEXT NOT NULL,
-  reason     TEXT NOT NULL,  -- 'nonce_reuse' | 'subscription_active' (P1-2)
+  reason     TEXT NOT NULL,  -- 'nonce_reuse' | 'subscription_active' (P1-2) | 'renewal_amount_mismatch' (CR7); CHECK нет — новые значения без миграции
   -- P1-1: state machine возврата дубликата (зеркало payments):
   -- 'pending' → 'refund_requested' → 'refunded'. Только через
   -- POST /api/admin/refund; гранта у дубликата нет — reversal не нужен.
