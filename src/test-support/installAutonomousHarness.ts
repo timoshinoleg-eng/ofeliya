@@ -86,6 +86,13 @@
  *    scenes (Systems.js), and the level-up modal pauses Game — using
  *    `isActive` alone would misread every mutation choice as "no run". The
  *    game itself uses the same `isActive || isPaused` pair.
+ * 9. `advance()` is guarded against re-entrancy (design Appendix C): a
+ *    second call while the first is still in flight rejects with an error
+ *    instead of interleaving two step loops over the same `simulationNow`.
+ *    The guard is released in a `finally`, so an error inside `advance()`
+ *    never wedges the API. A zero-frame call is a no-op and never trips
+ *    the guard. Regression probe: `scripts/harness-acceptance.cjs`
+ *    check (0).
  *
  * Known limitation: `resume()` realigns scene clocks to wall time. Absolute
  * scene-time deadlines scheduled during stepping (hit-stop, fire timers,
@@ -298,6 +305,9 @@ export function installAutonomousHarness(game: Phaser.Game): void {
   let simulationNow: number | null = null;
   let stepping = false;
   let savedSmoothStep = true;
+  /** Re-entrancy guard for advance() (header note 9): two interleaved step
+   *  loops would share `simulationNow` and corrupt the synthetic clock. */
+  let advanceInFlight = false;
 
   // --- frame-observer state -------------------------------------------------
   let prevActive = false;
@@ -759,21 +769,33 @@ export function installAutonomousHarness(game: Phaser.Game): void {
       throw new Error(`advance: frames must be a non-negative integer, got ${frames}`);
     }
     if (n === 0) return;
-    const loop = game.loop;
-    if (loop.running) loop.stop();
-    // enterSteppedMode picks the synthetic base: fixed epoch when no run is
-    // live, wall base when a run is in flight (header note 3b).
-    enterSteppedMode();
-    if (simulationNow === null) simulationNow = loop.lastTime; // defensive; unreachable
-    let remaining = n;
-    while (remaining > 0) {
-      const chunk = Math.min(remaining, STEP_CHUNK);
-      for (let i = 0; i < chunk; i++) {
-        simulationNow += FIXED_DT;
-        loop.step(simulationNow);
+    if (advanceInFlight) {
+      throw new Error(
+        'advance: already in progress (parallel advance() calls are not allowed — ' +
+          'await the first call before stepping again)'
+      );
+    }
+    advanceInFlight = true;
+    try {
+      const loop = game.loop;
+      if (loop.running) loop.stop();
+      // enterSteppedMode picks the synthetic base: fixed epoch when no run is
+      // live, wall base when a run is in flight (header note 3b).
+      enterSteppedMode();
+      if (simulationNow === null) simulationNow = loop.lastTime; // defensive; unreachable
+      let remaining = n;
+      while (remaining > 0) {
+        const chunk = Math.min(remaining, STEP_CHUNK);
+        for (let i = 0; i < chunk; i++) {
+          simulationNow += FIXED_DT;
+          loop.step(simulationNow);
+        }
+        remaining -= chunk;
+        if (remaining > 0) await sleep(0);
       }
-      remaining -= chunk;
-      if (remaining > 0) await sleep(0);
+    } finally {
+      // Released on error too: a failed advance() must never wedge the API.
+      advanceInFlight = false;
     }
   }
 
