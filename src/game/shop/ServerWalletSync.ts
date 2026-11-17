@@ -13,14 +13,17 @@
  *  - свежий синк (нет last_seq): since_seq=0, неттинг грантов МИНУС
  *    reversal (по reverses_charge_id); РНК net>0 → addRna(net) ПЛОСКО, без
  *    бонуса лаборатории; скины — union АВТОРИТЕТНОГО server.skins (не
- *    неттинг событий); бустер — max(local, server.booster_until_ms);
- *    пропуск — local := server, если в батче есть его reversal, иначе
- *    max(local, server) (P1-5: возврат отзывает доступ локально);
+ *    неттинг событий); бустер — неттинг по событию (P2-N3): при reversal
+ *    в батче local := max(server, local + Σamount бустера батча)
+ *    (вычитается ровно возвращённое время, миссионное сохраняется),
+ *    иначе max(local, server.booster_until_ms); пропуск — local :=
+ *    server, если в батче есть его reversal, иначе max(local, server)
+ *    (P1-5: возврат отзывает доступ локально);
  *  - инкрементальный: гранты батча минус reversal тех же грантов (если
  *    reversal пришёл в том же батче); reversal старого гранта — только
  *    учёт (локально не вычитаем: нельзя отозвать потраченное);
  *    исключение — пропуск: reversal в батче делает серверный срок
- *    авторитетным (local := server);
+ *    авторитетным (local := server); бустер — неттинг (см. выше);
  *  - события с seq<=last_seq — пропуск (идемпотентность);
  *  - устаревший ответ (tip_seq <= last_seq — снапшот/реплика старше
  *    применённого) серверные сроки не применяет и курсор назад не
@@ -510,17 +513,40 @@ export async function syncServerWallet(opts: SyncServerWalletOptions): Promise<S
           }
           // reversal скина: учёт; локальное владение НЕ отзывается — честно.
         }
-        // booster: авторитетное значение сервера применяется ниже одним
-        // max() — время не сгорает ни при каком порядке событий.
+        // booster: применяется ниже одним неттингом (P2-N3) — время
+        // не сгорает ни при каком порядке событий.
         applied.eventsApplied += 1;
       }
     }
 
-    // Бустер — max(local, server) после применения: серверное значение
-    // авторитетно, локальное время не сгорает.
+    // P2-N3: бустер — неттинг по событию. Наивное зеркало P1-5
+    // (local := server при reversal) НЕВЕРНО: у бустера есть ЛОКАЛЬНЫЕ
+    // источники — награды сезонных миссий (seasonQuests.claimSeasonMission
+    // выдаёт бустер локально), и присваивание стёрло бы честно
+    // заработанное время. Reversal несёт отрицательный amount (мс —
+    // длительность возвращённой покупки): вычитаем ровно возвращённое
+    // время, пол — серверное значение. Гранты того же батча тоже
+    // учитываются (rebuy в одном батче с возвратом иначе «съел» бы
+    // миссионное время: local - refund + rebuy). Гранты батча никогда
+    // ещё не в local: local отражает только применённые батчи
+    // (seq <= cursor) и локальные источники. Без reversal в батче —
+    // прежний max(local, server): грант/продление растут от серверного
+    // снапшота, локальное время не сгорает. Повторный синк безопасен:
+    // reversal попадает в appliedEvents только пока seq > cursor
+    // (устаревший ответ даёт пустой appliedEvents — ветка max()).
     const localBooster = num(loadMeta().boosterUntilMs);
-    const boosterUntilMs = Math.max(localBooster, resp.boosterUntilMs);
-    if (boosterUntilMs > localBooster) setBoosterUntilMs(boosterUntilMs);
+    const boosterReversalInBatch = appliedEvents.some(
+      (ev) => ev.kind === 'reversal' && ev.grant_type === 'booster'
+    );
+    const boosterDeltaMs = boosterReversalInBatch
+      ? appliedEvents
+          .filter((ev) => ev.grant_type === 'booster')
+          .reduce((sum, ev) => sum + ev.amount, 0)
+      : 0;
+    const boosterUntilMs = boosterReversalInBatch
+      ? Math.max(resp.boosterUntilMs, localBooster + boosterDeltaMs)
+      : Math.max(localBooster, resp.boosterUntilMs);
+    if (boosterUntilMs !== localBooster) setBoosterUntilMs(boosterUntilMs);
     applied.boosterUntilMs = boosterUntilMs;
 
     // Сезонный пропуск (монетизация v3; P1-5): серверное значение

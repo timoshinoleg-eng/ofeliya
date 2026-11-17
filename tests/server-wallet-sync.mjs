@@ -141,6 +141,13 @@ try {
     ({ seq, charge_id: chargeId, kind: 'grant', grant_type: 'season_pass', amount: PASS_MS, skin_id: null, created_at: seq });
   const passReversal = (seq, chargeId, reverses) =>
     ({ seq, charge_id: chargeId, kind: 'reversal', grant_type: 'season_pass', amount: -PASS_MS, skin_id: null, reverses_charge_id: reverses, created_at: seq });
+  // P2-N3: события бустера. Длительность — 7 дней в мс (как триггер воркера).
+  const DAY_MS = 24 * 3600 * 1000;
+  const BOOSTER_7D = 7 * DAY_MS;
+  const boosterGrant = (seq, chargeId, ms = BOOSTER_7D) =>
+    ({ seq, charge_id: chargeId, kind: 'grant', grant_type: 'booster', amount: ms, skin_id: null, created_at: seq });
+  const boosterReversal = (seq, chargeId, reverses, ms = BOOSTER_7D) =>
+    ({ seq, charge_id: chargeId, kind: 'reversal', grant_type: 'booster', amount: -ms, skin_id: null, reverses_charge_id: reverses, created_at: seq });
 
   const reset = () => {
     store.clear();
@@ -198,6 +205,67 @@ try {
   const r7 = await sync();
   eq(r7.applied.boosterUntilMs, now + 5_000_000, 'booster: server wins when greater');
   eq(meta.loadMeta().boosterUntilMs, now + 5_000_000, 'server booster applied');
+
+  // --- 4a. P2-N3: бустер — неттинг reversal (возврат отзывает срок) ---
+  // Серверный снапшот serverBooster — как после триггера воркера:
+  // grant — max(cur, created_at)+amount; reversal — max(created_at, cur+amount).
+  const b0 = Date.now();
+  // (i) покупка → синк → возврат → синк → бустер отозван.
+  reset();
+  ledger = [boosterGrant(1, 'cb1')];
+  serverBooster = b0 + BOOSTER_7D;
+  const rb1 = await sync();
+  eq(rb1.ok, true, 'N3: grant sync ok');
+  eq(meta.loadMeta().boosterUntilMs, b0 + BOOSTER_7D, 'N3: booster granted by sync');
+  ledger.push(boosterReversal(2, 'rev:op1', 'cb1'));
+  serverBooster = b0; // триггер: max(created_at, cur - 7d)
+  const rb2 = await sync();
+  eq(rb2.ok, true, 'N3: refund sync ok');
+  eq(rb2.applied.boosterUntilMs, b0, 'N3: applied booster revoked');
+  eq(meta.loadMeta().boosterUntilMs, b0, 'N3: refund revokes booster (was: max kept +7d)');
+  // (ii) повторный синк — без двойного вычитания.
+  const rb3 = await sync();
+  eq(meta.loadMeta().boosterUntilMs, b0, 'N3: repeat sync stable');
+  // (iii) миссионный бустер + возврат серверного → миссионный сохранён.
+  reset();
+  ledger = [boosterGrant(1, 'cb1')];
+  serverBooster = b0 + BOOSTER_7D;
+  await sync();
+  // season.mutations-50 — paid-трек: claim требует активного пропуска.
+  meta.setSeasonPassUntilMs(b0 + 30 * DAY_MS);
+  season.recordSeasonRun({ kills: 0, rnaCollected: 0, bossesDefeated: 0, mutations: 50 }, b0);
+  const mc = season.claimSeasonMission('season.mutations-50', b0);
+  eq(mc.ok, true, 'N3: mission claim ok');
+  eq(mc.grantedBoosterDays, 3, 'N3: mission grants 3d');
+  eq(meta.loadMeta().boosterUntilMs, b0 + BOOSTER_7D + 3 * DAY_MS, 'N3: local = purchase + mission');
+  ledger.push(boosterReversal(2, 'rev:op1', 'cb1'));
+  serverBooster = b0;
+  await sync();
+  eq(meta.loadMeta().boosterUntilMs, b0 + 3 * DAY_MS, 'N3: mission booster preserved after server refund');
+  // (iv) продление покупкой после возврата.
+  ledger.push(boosterGrant(3, 'cb2'));
+  serverBooster = b0 + BOOSTER_7D;
+  await sync();
+  eq(meta.loadMeta().boosterUntilMs, b0 + BOOSTER_7D, 'N3: repurchase extends booster');
+  // (v) свежий синк с возвратом в истории — серверное значение, без ухода в прошлое.
+  reset();
+  ledger = [boosterGrant(1, 'cb1'), boosterReversal(2, 'rev:op1', 'cb1')];
+  serverBooster = b0;
+  await sync();
+  eq(meta.loadMeta().boosterUntilMs, b0, 'N3: fresh sync with refund in history = server value');
+  // (vi) грант + reversal в одном батче (rebuy): миссионное время не теряется.
+  reset();
+  ledger = [boosterGrant(1, 'cb1')];
+  serverBooster = b0 + BOOSTER_7D;
+  await sync();
+  meta.setSeasonPassUntilMs(b0 + 30 * DAY_MS); // paid-трек миссии
+  season.recordSeasonRun({ kills: 0, rnaCollected: 0, bossesDefeated: 0, mutations: 50 }, b0);
+  season.claimSeasonMission('season.mutations-50', b0);
+  eq(meta.loadMeta().boosterUntilMs, b0 + BOOSTER_7D + 3 * DAY_MS, 'N3: local before rebuy batch');
+  ledger.push(boosterReversal(2, 'rev:op1', 'cb1'), boosterGrant(3, 'cb2'));
+  serverBooster = b0 + BOOSTER_7D; // -7d + 7d
+  await sync();
+  eq(meta.loadMeta().boosterUntilMs, b0 + BOOSTER_7D + 3 * DAY_MS, 'N3: rebuy batch preserves mission time');
 
   // --- 4b. Сезонный пропуск — max(local, server) (монетизация v3) ---
   reset();
