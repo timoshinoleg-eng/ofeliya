@@ -43,9 +43,16 @@ export interface CollabDef {
  */
 export const COLLAB_REGISTRY: Readonly<Record<string, CollabDef>> = {};
 
-/** Чистая функция: определение коллаба по id (undefined — неизвестен). */
+/**
+ * Чистая функция: определение коллаба по id (undefined — неизвестен).
+ * CR2: own-property check — без него getCollab('constructor') возвращал
+ * унаследованный конструктор (truthy), и пейлоад collab_constructor
+ * проходил truthiness-check в меню и вёл в витрину с баннером.
+ */
 export function getCollab(id: string): CollabDef | undefined {
-  return COLLAB_REGISTRY[id];
+  return Object.prototype.hasOwnProperty.call(COLLAB_REGISTRY, id)
+    ? COLLAB_REGISTRY[id]
+    : undefined;
 }
 
 const COLLAB_START_RE = /^collab_([A-Za-z0-9-]{1,48})$/;

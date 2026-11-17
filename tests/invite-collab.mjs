@@ -110,6 +110,17 @@ try {
   // --- registry: пуст в v1 ---
   eq(Object.keys(COLLAB_REGISTRY).length, 0, 'collab registry is empty in v1 (no partners yet)');
   eq(getCollab('anything'), undefined, 'unknown collab → undefined');
+  // CR2: ключи прототипа — не коллабы (без own-check 'constructor'
+  // возвращал унаследованный конструктор, truthy → витрина с баннером).
+  eq(getCollab('constructor'), undefined, "getCollab('constructor') → undefined");
+  eq(getCollab('toString'), undefined, "getCollab('toString') → undefined");
+  eq(getCollab('__proto__'), undefined, "getCollab('__proto__') → undefined");
+  eq(getCollab('hasOwnProperty'), undefined, "getCollab('hasOwnProperty') → undefined");
+  // Позитивный контроль: легальный id продолжает работать.
+  COLLAB_REGISTRY['test-collab'] = { id: 'test-collab', title: 'T', description: 'D' };
+  eq(getCollab('test-collab')?.id, 'test-collab', 'registered collab still resolves');
+  delete COLLAB_REGISTRY['test-collab'];
+  eq(getCollab('test-collab'), undefined, 'removed collab → undefined');
 
   console.log('invite-collab: ok');
 } finally {
