@@ -48,7 +48,7 @@ const supportUpdate = { message: { chat: { id: 23, type: 'private' },
 const support = buildTelegramWebhookMethod(supportUpdate,
   { ...opts, paymentSupportEmail: 'billing@example.test' });
 assert.equal(support.method, 'sendMessage');
-assert.match(support.text, /billing@example\\.test/);
+assert.ok(support.text.includes('billing@example.test'));
 assert.equal(support.reply_markup, undefined, 'payment support must not upsell');
 const unconfiguredSupport = buildTelegramWebhookMethod(supportUpdate,
   { ...opts, paymentSupportEmail: '' });
@@ -56,7 +56,7 @@ assert.match(unconfiguredSupport.text, /не настроена/);
 assert.equal(unconfiguredSupport.reply_markup, undefined);
 const helpMethod = buildTelegramWebhookMethod(
   { message: { ...supportUpdate.message, text: '/help' } }, opts);
-assert.match(helpMethod.text, /\\/paysupport/);
+assert.ok(helpMethod.text.includes('/paysupport'));
 
 console.log('telegram bot command contract: ok');
 
