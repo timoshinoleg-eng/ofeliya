@@ -232,6 +232,94 @@ try {
     assert(db.wallets.get(USER_ID).season_pass_until_ms > Date.now(), 'P2-N1: post-expiry repurchase granted');
   }
 
+  // === P2-N2 (a): verify отклонённого заказа — 'denied', не вечный 'pending' ===
+  {
+    const db = makeD1();
+    const env = adminEnv(db);
+    await buyPass(handler, db, env, 'r2-n2-nonce-1', 'r2-n2-ch-1');
+    // Вторая подписка при активном пропуске → denied-путь.
+    await seedOrder(db, 'r2-n2-nonce-2', USER_ID, PASS_ID, 250, { skuVersion: 4, grantRna: 0, grantBoosterDays: 0, grantSeasonPassDays: 30 });
+    const pay = await post(handler, '/api/webhook', paymentBody('r2-n2-ch-2', 'r2-n2-nonce-2', { amount: 250 }), env, secretHeader());
+    eq(pay.status, 200, 'P2-N2: denied payment webhook 200');
+    eq(db.orders.get('r2-n2-nonce-2')?.status, 'denied', 'P2-N2: order denied');
+    const v = await postJson(handler, '/api/verify', { initData, nonce: 'r2-n2-nonce-2' }, env);
+    eq(v.status, 200, 'P2-N2: verify 200');
+    eq(v.json?.verified, false, 'P2-N2: denied order not verified');
+    eq(v.json?.reason, 'denied', 'P2-N2: verify reason denied (was: pending forever)');
+    // Обычный pending-заказ (оплаты не было) — по-прежнему 'pending'.
+    await seedOrder(db, 'r2-n2-nonce-3', USER_ID, RNA_ID, 35, { skuVersion: 4, grantRna: 500, grantBoosterDays: 0 });
+    const vPending = await postJson(handler, '/api/verify', { initData, nonce: 'r2-n2-nonce-3' }, env);
+    eq(vPending.json?.reason, 'pending', 'P2-N2: unpaid order still pending');
+    // Дубликат без платежа и без denied-статуса заказа (UPDATE denied
+    // упал, но duplicate_payments записан) — 'duplicate'.
+    await seedOrder(db, 'r2-n2-nonce-4', USER_ID, RNA_ID, 35, { skuVersion: 4, grantRna: 500, grantBoosterDays: 0 });
+    db.duplicatePayments.set('r2-n2-ch-dup', {
+      charge_id: 'r2-n2-ch-dup', nonce: 'r2-n2-nonce-4', user_id: USER_ID, product_id: RNA_ID,
+      amount: 35, currency: 'XTR', reason: 'nonce_reuse', status: 'pending', created_at: Date.now(),
+    });
+    const vDup = await postJson(handler, '/api/verify', { initData, nonce: 'r2-n2-nonce-4' }, env);
+    eq(vDup.json?.verified, false, 'P2-N2: duplicate not verified');
+    eq(vDup.json?.reason, 'duplicate', 'P2-N2: verify reason duplicate');
+  }
+
+  // === P2-N2 (в): отклонение подписки — best-effort отмена в вебхуке ===
+  {
+    const db = makeD1();
+    const env = adminEnv(db);
+    await buyPass(handler, db, env, 'r2-n2c-nonce-1', 'r2-n2c-ch-1');
+    await seedOrder(db, 'r2-n2c-nonce-2', USER_ID, PASS_ID, 250, { skuVersion: 4, grantRna: 0, grantBoosterDays: 0, grantSeasonPassDays: 30 });
+    botCalls.length = 0;
+    const pay = await post(handler, '/api/webhook', paymentBody('r2-n2c-ch-2', 'r2-n2c-nonce-2', { amount: 250 }), env, secretHeader());
+    eq(pay.status, 200, 'P2-N2(c): denied payment webhook 200');
+    const edits = editCalls();
+    eq(edits.length, 1, 'P2-N2(c): editUserStarSubscription called once on denial');
+    eq(edits[0].body.user_id, USER_ID, 'P2-N2(c): cancel targets the payer');
+    eq(edits[0].body.telegram_payment_charge_id, 'r2-n2c-ch-2', 'P2-N2(c): cancel targets the denied charge');
+    eq(edits[0].body.is_canceled, true, 'P2-N2(c): cancel, not restore');
+    // Аудит отмены — в subscription_events (source='auto').
+    const audit = db.subscriptionEvents.find((e) => e.charge_id === 'r2-n2c-ch-2');
+    assert(audit, 'P2-N2(c): auto-cancel audited in subscription_events');
+    eq(audit.state, 'canceled', 'P2-N2(c): audit state canceled');
+    eq(audit.source, 'auto', 'P2-N2(c): audit source auto (not admin)');
+    // Провал отмены: вебхук всё равно 200 + громкий лог, платёж — в
+    // duplicate_payments (reconcile-флаг duplicate_without_refund).
+    const db2 = makeD1();
+    const env2 = adminEnv(db2);
+    await buyPass(handler, db2, env2, 'r2-n2c-nonce-3', 'r2-n2c-ch-3');
+    await seedOrder(db2, 'r2-n2c-nonce-4', USER_ID, PASS_ID, 250, { skuVersion: 4, grantRna: 0, grantBoosterDays: 0, grantSeasonPassDays: 30 });
+    botFail.edit = true;
+    const lines = [];
+    const origLog = console.log;
+    console.log = (...args) => void lines.push(args.join(' '));
+    let pay2;
+    try {
+      pay2 = await post(handler, '/api/webhook', paymentBody('r2-n2c-ch-4', 'r2-n2c-nonce-4', { amount: 250 }), env2, secretHeader());
+    } finally {
+      console.log = origLog;
+      botFail.edit = false;
+    }
+    eq(pay2.status, 200, 'P2-N2(c): webhook 200 even when auto-cancel fails');
+    assert(
+      lines.some((l) => l.includes('stars_subscription_cancel_failed')),
+      'P2-N2(c): loud log on auto-cancel failure'
+    );
+    assert(db2.duplicatePayments.has('r2-n2c-ch-4'), 'P2-N2(c): denied payment still recorded (reconcile flag)');
+    // Продление отклонённой подписки: denied-гейт тоже пытается отменить
+    // (первая отмена могла провалиться; вызов идемпотентен).
+    const db3 = makeD1();
+    const env3 = adminEnv(db3);
+    await buyPass(handler, db3, env3, 'r2-n2c-nonce-5', 'r2-n2c-ch-5');
+    await seedOrder(db3, 'r2-n2c-nonce-6', USER_ID, PASS_ID, 250, { skuVersion: 4, grantRna: 0, grantBoosterDays: 0, grantSeasonPassDays: 30 });
+    await post(handler, '/api/webhook', paymentBody('r2-n2c-ch-6', 'r2-n2c-nonce-6', { amount: 250 }), env3, secretHeader());
+    eq(db3.orders.get('r2-n2c-nonce-6')?.status, 'denied', 'P2-N2(c): second order denied');
+    botCalls.length = 0;
+    const renew = await post(handler, '/api/webhook', paymentBody('r2-n2c-ch-6r', 'r2-n2c-nonce-6', { amount: 250, isRecurring: true, isFirstRecurring: false }), env3, secretHeader());
+    eq(renew.status, 200, 'P2-N2(c): renewal of denied subscription webhook 200');
+    eq(editCalls().length, 1, 'P2-N2(c): denied-order gate re-attempts cancel on renewal');
+    eq(editCalls()[0].body.telegram_payment_charge_id, 'r2-n2c-ch-6r', 'P2-N2(c): cancel targets the renewal charge');
+    assert(db3.duplicatePayments.has('r2-n2c-ch-6r'), 'P2-N2(c): renewal recorded as duplicate');
+  }
+
   console.log('worker-round2: all assertions passed');
 } catch (e) {
   console.error(e.stack || e);

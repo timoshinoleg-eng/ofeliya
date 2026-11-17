@@ -383,6 +383,13 @@ export function makeD1() {
       const row = duplicatePayments.get(params[0]);
       return row ? [{ status: row.status }] : [];
     }
+    // P2-N2 (a): дубликат по nonce (verify: 'duplicate' вместо 'pending').
+    if (q === 'SELECT charge_id FROM duplicate_payments WHERE nonce=?') {
+      for (const row of duplicatePayments.values()) {
+        if (row.nonce === params[0]) return [{ charge_id: row.charge_id }];
+      }
+      return [];
+    }
     if (q === 'SELECT status FROM payments WHERE charge_id=?') {
       const row = payments.get(params[0]);
       return row ? [{ status: row.status }] : [];

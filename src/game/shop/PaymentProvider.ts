@@ -116,6 +116,10 @@ export interface RestoreResult {
   productIds: string[];
   /** Патч №12: productId, выданные из pending-журнала в этом вызове. */
   pendingFulfilled?: string[];
+  /** P2-N2 (b): productId, чья pending-запись снята как отклонённая
+   * (сервер вернул verify-denied/verify-duplicate — гранта не будет,
+   * возврат оформляется сервером). Сцена показывает «платёж отклонён». */
+  pendingDenied?: string[];
 }
 
 /**

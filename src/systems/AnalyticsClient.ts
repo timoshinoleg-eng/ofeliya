@@ -52,6 +52,8 @@ export type ProductEvent =
   | 'purchase_completed'
   | 'purchase_failed'
   | 'purchase_pending'
+  /** P2-N2 (b): сервер отклонил платёж (denied/duplicate) — гранта нет, возврат оформляется. */
+  | 'purchase_denied'
   | 'purchase_grant_failed'
   /** Патч №16 (A3): оплата подтверждена, но синк кошелька не удался — товар в pending-sync. */
   | 'purchase_sync_pending'

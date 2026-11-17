@@ -58,6 +58,7 @@ import { showSkinGrantToast } from '../ui/SkinGallery';
 import type {
   PaymentProvider,
   Product,
+  PurchaseFailure,
   PurchaseResult,
 } from '../game/shop/PaymentProvider';
 // Type-only: нужен для acknowledgeCharge и syncWalletAndDrainPending;
@@ -80,6 +81,31 @@ interface SyncPendingInfo {
   productTitle: string;
   chargeId: string;
   error: string;
+}
+
+/**
+ * Человекочитаемое сообщение об ошибке покупки по машиночитаемой причине
+ * (P2-N2 (b), P3-N7). Неизвестные причины — как раньше, с кодом: игрок
+ * видит, что случилось, а поддержка получает точный reason.
+ * Тексты — по канону GAME_LANGUAGE_BIBLE: без внутренних терминов
+ * (nonce/verify/duplicate) и без обещания сроков возврата.
+ */
+export function purchaseFailureMessage(result: PurchaseFailure): string {
+  if (result.state === 'cancelled') return 'Покупка отменена';
+  switch (result.reason) {
+    case 'verify-denied':
+    case 'verify-duplicate':
+      // P2-N2 (b): сервер отклонил платёж — возврат оформляется сервером.
+      return 'Платёж отклонён — возврат оформляется. Поддержка: /paysupport';
+    case 'subscription-active':
+      // P3-N7: пропуск уже активен — второй не нужен.
+      return 'Пропуск уже активен';
+    case 'subscription-pending':
+      // P3-N7: оплата пропуска уже идёт — дождитесь подтверждения.
+      return 'Ожидается оплата пропуска';
+    default:
+      return `Не удалось: ${result.reason}`;
+  }
 }
 
 /** Палитры заглушек арта (до DiceBear-рендера Фазы 5). */
@@ -1157,9 +1183,11 @@ export class StorefrontScene extends Phaser.Scene {
     const provider = this.provider;
     if (!provider) return;
     let fulfilled: string[] = [];
+    let denied: string[] = [];
     try {
       const res = await provider.restore();
       fulfilled = res.pendingFulfilled ?? [];
+      denied = res.pendingDenied ?? [];
     } catch {
       /* restore не должен ронять витрину */
     }
@@ -1168,6 +1196,22 @@ export class StorefrontScene extends Phaser.Scene {
         productId: id,
         provider: provider.id,
       });
+    }
+    // P2-N2 (b): отклонённые pending-записи — тост вместо вечного баннера
+    // «Ожидание подтверждения». Тост — один на все (не спамим по товару).
+    for (const id of denied) {
+      void trackProductEvent('purchase_denied', PlatformBridge, {
+        productId: id,
+        provider: provider.id,
+      });
+    }
+    if (denied.length > 0 && this.sys.isActive()) {
+      showMetaToast(
+        this,
+        'Платёж отклонён',
+        'Возврат оформляется. Поддержка — /paysupport',
+        'ПЛАТЁЖ'
+      );
     }
     if (this.sys.isActive() && (this.state === 'ready' || this.state === 'empty')) {
       this.renderContent();
@@ -1334,8 +1378,7 @@ export class StorefrontScene extends Phaser.Scene {
       // Баннер «Ожидание подтверждения» рисуется в renderList.
       this.setState('ready');
     } else {
-      this.errorReason =
-        result.state === 'cancelled' ? 'Покупка отменена' : `Не удалось: ${result.reason}`;
+      this.errorReason = purchaseFailureMessage(result);
       this.setState('error');
     }
   }

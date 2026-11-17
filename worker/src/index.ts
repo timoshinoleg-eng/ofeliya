@@ -1311,8 +1311,12 @@ async function recordSuccessfulPayment(
   // P1-2: заказ отклонённой подписки (status='denied') — терминальный:
   // ни запоздалая первая оплата, ни продления этой подписки гранта не
   // дают. Каждый charge записываем в duplicate_payments — деньги списаны,
-  // возврат через /api/admin/refund (P1-1). Остановить списания может
-  // только отмена подписки админом (см. README_DEPLOY §10).
+  // возврат через /api/admin/refund (P1-1).
+  // P2-N2 (в): best-effort авто-отмена подписки — сюда попадает и
+  // продление отклонённой подписки (первая отмена могла провалиться или
+  // подписка создана до появления авто-отмены). Вызов идемпотентен,
+  // провал — громкий лог внутри cancelSubscriptionForRefund + флаг
+  // duplicate_without_refund в reconcile; вебхук не падает.
   if (order.status === 'denied') {
     await recordDuplicatePayment(
       db,
@@ -1320,6 +1324,15 @@ async function recordSuccessfulPayment(
       'subscription_active'
     );
     logEvent('stars_payment_denied_order', { ...base, userId: fromId });
+    if (grantFromOrderSnapshot(order)?.kind === 'season_pass') {
+      await cancelSubscriptionForRefund(
+        db,
+        env,
+        { userId: fromId, productId: order.product_id, nonce },
+        chargeId,
+        { auditSource: 'auto' }
+      );
+    }
     return;
   }
   // Патч №15 (P0-2): backstop повторного использования nonce. Один nonce —
@@ -1430,11 +1443,11 @@ async function recordSuccessfulPayment(
   // (nonceRow-ветка → recordSubscriptionRenewal) и продлевают СВОЮ
   // подписку. Платёж — в duplicate_payments (возврат через P1-1),
   // заказ — в терминальный 'denied' (продления этой подписки тоже
-  // не грантятся, см. гейт выше). ОСТАТОЧНЫЙ РИСК: подписка в Telegram
-  // уже создана и будет продлеваться ежемесячно, пока админ не отменит
-  // её через /api/admin/subscription, — воркер не отменяет подписки
-  // сам (внешний вызов в вебхуке с неясной семантикой повтора);
-  // каждое продление тоже уйдёт в duplicate_payments с громким логом.
+  // не грантятся, см. гейт выше). P2-N2 (в): подписка в Telegram уже
+  // создана — воркер отменяет её сам, best-effort, сразу после записи
+  // отказа (вызов идемпотентен; провал — громкий лог + reconcile-флаг,
+  // а каждое продление повторит попытку отмены через denied-гейт).
+  // Админская отмена через /api/admin/subscription — fallback.
   if (resolvedList.length === 1 && resolvedList[0].kind === 'season_pass') {
     const passWallet = await db
       .prepare('SELECT season_pass_until_ms FROM wallets WHERE user_id=?')
@@ -1463,6 +1476,15 @@ async function recordSuccessfulPayment(
         userId: fromId,
         existingUntilMs: passWallet.season_pass_until_ms,
       });
+      // P2-N2 (в): best-effort отмена — ПОСЛЕ записи отказа, чтобы провал
+      // отмены никогда не потерял сам отказ. Никогда не бросает.
+      await cancelSubscriptionForRefund(
+        db,
+        env,
+        { userId: fromId, productId: order.product_id, nonce },
+        chargeId,
+        { auditSource: 'auto' }
+      );
       return;
     }
   }
@@ -1558,7 +1580,22 @@ async function handleVerify(request: Request, env: Env): Promise<Response> {
       )
       .bind(body.nonce)
       .first<DbPaymentRow>();
-    if (!payment) return json({ verified: false, reason: 'pending' });
+    if (!payment) {
+      // P2-N2 (a): терминальные статусы вместо вечного 'pending'.
+      // Заказ отклонён (denied) — клиент должен снять pending-запись и
+      // показать «платёж отклонён», а не ретраить подтверждение вечно.
+      // Дубликат без платежа (duplicate_payments, например nonce_reuse)
+      // — тоже терминал: гранта не будет, возврат идёт через P1-1.
+      if (order.status === 'denied') {
+        return json({ verified: false, reason: 'denied' });
+      }
+      const dup = await db
+        .prepare('SELECT charge_id FROM duplicate_payments WHERE nonce=?')
+        .bind(body.nonce)
+        .first();
+      if (dup) return json({ verified: false, reason: 'duplicate' });
+      return json({ verified: false, reason: 'pending' });
+    }
     // Строгая сверка: настоящий charge_id от Telegram, свой userId,
     // товар совпадает с заказом.
     if (
@@ -1765,20 +1802,23 @@ async function handleWallet(request: Request, env: Env): Promise<Response> {
 }
 
 /**
- * Аудит админского действия с подпиской (P2-3): INSERT в subscription_events
- * с source='admin'. Никогда не бросает: сбой аудита не должен ронять
- * операцию (отмена/возврат уже выполнены) — только громкий лог.
+ * Аудит действия с подпиской (P2-3): INSERT в subscription_events.
+ * source='admin' — ручная отмена/восстановление админом; source='auto' —
+ * авто-отмена воркером при отклонении подписки (P2-N2 (в)). Никогда не
+ * бросает: сбой аудита не должен ронять операцию (отмена/возврат уже
+ * выполнены) — только громкий лог.
  */
-async function insertSubscriptionAdminAudit(
+async function insertSubscriptionAudit(
   db: D1Database,
   target: { userId: number; nonce: string | null },
   chargeId: string,
-  state: 'canceled' | 'active'
+  state: 'canceled' | 'active',
+  source: 'admin' | 'auto' = 'admin'
 ): Promise<void> {
   try {
     await db
       .prepare(SQL_INSERT_SUBSCRIPTION_EVENT_ADMIN)
-      .bind(target.userId, target.nonce ?? '', chargeId, state, 'admin', Date.now())
+      .bind(target.userId, target.nonce ?? '', chargeId, state, source, Date.now())
       .run();
   } catch (err) {
     logEvent('subscription_admin_audit_failed', {
@@ -1790,18 +1830,23 @@ async function insertSubscriptionAdminAudit(
 }
 
 /**
- * Отмена подписки Telegram в рамках возврата (P2-2): refundStarPayment
- * подписку НЕ отменяет — без этого вызова продления продолжат списывать
- * деньги за возвращённый пропуск. Возвращает {canceled:true} при успехе
- * (плюс аудит), {failed:true} при любой ошибке (возврат при этом уже
- * выполнен — ответ refund остаётся ok:true, админ видит флаг и повторяет
- * отмену отдельно через /api/admin/subscription).
+ * Отмена подписки Telegram в рамках возврата (P2-2) и при отклонении
+ * подписки в вебхуке (P2-N2 (в)): refundStarPayment подписку НЕ отменяет
+ * — без этого вызова продления продолжат списывать деньги за возвращённый
+ * или отклонённый пропуск. Вызов идемпотентен (повторная отмена уже
+ * отменённой подписки — не ошибка). Возвращает {canceled:true} при
+ * успехе (плюс аудит), {failed:true} при любой ошибке (возврат при этом
+ * уже выполнен — ответ refund остаётся ok:true, админ видит флаг и
+ * повторяет отмену отдельно через /api/admin/subscription; при
+ * авто-отмене провал — громкий лог + reconcile-флаг
+ * duplicate_without_refund, вебхук не падает). Никогда не бросает.
  */
 async function cancelSubscriptionForRefund(
   db: D1Database,
   env: Env,
   target: { userId: number; productId: string; nonce: string | null },
-  chargeId: string
+  chargeId: string,
+  opts: { auditSource?: 'admin' | 'auto' } = {}
 ): Promise<{ canceled?: boolean; failed?: boolean }> {
   if (!env.TELEGRAM_BOT_TOKEN) {
     logEvent('stars_subscription_cancel_failed', {
@@ -1831,7 +1876,7 @@ async function cancelSubscriptionForRefund(
     productId: target.productId,
     isCanceled: true,
   });
-  await insertSubscriptionAdminAudit(db, target, chargeId, 'canceled');
+  await insertSubscriptionAudit(db, target, chargeId, 'canceled', opts.auditSource ?? 'admin');
   return { canceled: true };
 }
 
@@ -2212,7 +2257,7 @@ async function handleAdminSubscription(request: Request, env: Env): Promise<Resp
     });
     // P2-3: аудит админского действия (source='admin'); сбой аудита не
     // роняет ответ (helper ловит ошибки сам).
-    await insertSubscriptionAdminAudit(db, target, chargeId, body.isCanceled ? 'canceled' : 'active');
+    await insertSubscriptionAudit(db, target, chargeId, body.isCanceled ? 'canceled' : 'active');
     return json({ ok: true, chargeId, isCanceled: body.isCanceled });
   } catch (err) {
     logEvent('stars_subscription_edit_failed', {
