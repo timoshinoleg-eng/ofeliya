@@ -1146,6 +1146,8 @@ async function runCampaign(browser, options, runIndex, seriesState) {
     lastSnapshotTick: 0,
     degradedNoted: false,
     chunkWallEmaMs: null,
+    lastProgressLogTick: 0,
+    lastProgressLogWall: Date.now(),
     choicesMade: 0,
     transitionsAcked: 0,
     botStuckCount: 0,
@@ -1790,6 +1792,26 @@ async function runCampaign(browser, options, runIndex, seriesState) {
         timeline.push('TIME_SCALE_DEGRADED', ctxFor(state, {
           detail: `requested ${options.speed}x, effective ~${effective.toFixed(1)}x`,
         }));
+      }
+
+      // --- progress log: long runs must stay observable ----------------------------------
+      // Every 600 frames (10 s sim) or 60 s wall, whichever comes first.
+      if (
+        st.tick - st.lastProgressLogTick >= 600
+        || Date.now() - st.lastProgressLogWall >= 60000
+      ) {
+        st.lastProgressLogTick = st.tick;
+        st.lastProgressLogWall = Date.now();
+        const effective = st.chunkWallEmaMs
+          ? ((DECISION_FRAMES * FRAME_MS) / st.chunkWallEmaMs).toFixed(1)
+          : '?';
+        log(
+          `run ${runId}: tick=${st.tick} sim=${Math.round(state.runTimeMs / 1000)}s `
+          + `${state.stageId}/${state.phase} hp=${state.player.hp}/${state.player.maxHp} `
+          + `enemies=${state.enemies.length} kills=${diag && !diag.error ? diag.kills : '?'} `
+          + `boss=${state.boss ? `${state.boss.kind} ${state.boss.hp}/${state.boss.maxHp}` : 'none'} `
+          + `choices=${st.choicesMade} effective=${effective}x wall=${Math.round((Date.now() - wallStart) / 1000)}s`,
+        );
       }
     }
 
