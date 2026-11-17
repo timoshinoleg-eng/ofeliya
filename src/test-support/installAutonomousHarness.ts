@@ -66,7 +66,10 @@
  *    polling `readState()` — so event capture and the hash are independent of
  *    the runner's poll rate. `stateHash` covers one digest line per Game
  *    frame (RunSnapshot scalars + all 8 RunRng stream states); `inputHash`
- *    covers API-issued inputs, keyed by `game.loop.frame`.
+ *    covers API-issued inputs. Both are keyed by a RUN-RELATIVE tick (frames
+ *    observed since RUN_START), never by `game.loop.frame`: the loop counter
+ *    includes wall-dependent RAF frames from boot/Menu and would make
+ *    identical runs hash differently.
  * 8. `readState()` before any run returns the menu shape (`phase: 'MENU'`)
  *    instead of throwing. A run counts as live while the Game scene is
  *    RUNNING *or PAUSED*: Phaser's `isActive()` is true only for RUNNING
@@ -274,6 +277,12 @@ export function installAutonomousHarness(game: Phaser.Game): void {
   let events: HarnessRunLogEvent[] = [];
   let inputHasher = new Sha256();
   let stateHasher = new Sha256();
+  /**
+   * Run-relative tick: Game frames observed since RUN_START. Deliberately NOT
+   * `game.loop.frame` — the loop counter includes wall-dependent RAF frames
+   * from boot/Menu, so identical runs would hash differently.
+   */
+  let runTick = 0;
 
   // --- synthetic-stepping state --------------------------------------------
   let simulationNow: number | null = null;
@@ -322,7 +331,7 @@ export function installAutonomousHarness(game: Phaser.Game): void {
   }
 
   function pushEvent(event: { type: string; [key: string]: unknown }): void {
-    events.push({ tick: game.loop.frame, timeMs: currentRunTimeMs(), ...event });
+    events.push({ tick: runTick, timeMs: currentRunTimeMs(), ...event });
     if (events.length > MAX_RUN_LOG_EVENTS) {
       events.splice(0, events.length - MAX_RUN_LOG_EVENTS);
     }
@@ -364,6 +373,7 @@ export function installAutonomousHarness(game: Phaser.Game): void {
     if (!prevActive) {
       // Run boundary: fresh hashes/log for the new run.
       resetRunLog();
+      runTick = 0;
       pushEvent({ type: 'RUN_START', seed: gs.runSeed, difficulty: gs.difficulty.id, stage: stage.id });
       prevPhase = phase;
       prevStageId = stage.id;
@@ -382,7 +392,7 @@ export function installAutonomousHarness(game: Phaser.Game): void {
     const boss = gi.wave.boss;
     const rng = gi.gameplayRng.snapshot();
     const digest: unknown[] = [
-      game.loop.frame,
+      runTick,
       stage.id,
       phase,
       run.timeMs,
@@ -440,6 +450,7 @@ export function installAutonomousHarness(game: Phaser.Game): void {
     prevBossId = bossId;
     prevAwaitingChoice = gs.awaitingChoice;
     prevRunResultSeen = prevRunResultSeen || Boolean(result);
+    runTick += 1;
   }
 
   // --- readState ------------------------------------------------------------
@@ -704,13 +715,13 @@ export function installAutonomousHarness(game: Phaser.Game): void {
       aimY = clampUnit(input.aimY ?? 0);
       game.registry.set('aimJoy', { x: aimX, y: aimY });
     }
-    hashInput([game.loop.frame, currentRunTimeMs(), 'input', moveX, moveY, aimX, aimY]);
+    hashInput([runTick, currentRunTimeMs(), 'input', moveX, moveY, aimX, aimY]);
   }
 
   function clearInput(): void {
     game.registry.set('joy', { x: 0, y: 0 });
     game.registry.set('aimJoy', { x: 0, y: 0 });
-    hashInput([game.loop.frame, currentRunTimeMs(), 'input', 0, 0, 0, 0]);
+    hashInput([runTick, currentRunTimeMs(), 'input', 0, 0, 0, 0]);
   }
 
   // --- synthetic stepping ---------------------------------------------------
@@ -793,7 +804,7 @@ export function installAutonomousHarness(game: Phaser.Game): void {
       ui.flushContextHint();
     }
     gs.scene.resume();
-    hashInput([game.loop.frame, currentRunTimeMs(), 'choose', id, more ? 1 : 0]);
+    hashInput([runTick, currentRunTimeMs(), 'choose', id, more ? 1 : 0]);
     pushEvent({ type: 'MUTATION_SELECTED', id, kind, legendaryId, evolutionId, more });
   }
 
@@ -807,7 +818,7 @@ export function installAutonomousHarness(game: Phaser.Game): void {
     // Real game handler (same call stage-transition-smoke.cjs makes): honors
     // earliestCommitAt by rescheduling when called too early.
     gi.requestStageTransitionCommit(transaction.token);
-    hashInput([game.loop.frame, currentRunTimeMs(), 'transition-ack', transaction.token]);
+    hashInput([runTick, currentRunTimeMs(), 'transition-ack', transaction.token]);
     pushEvent({ type: 'TRANSITION_ACK', token: transaction.token });
   }
 
