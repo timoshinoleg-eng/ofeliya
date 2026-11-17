@@ -35,8 +35,12 @@
  *   physics step moves a body by velocity x 1/60s, and the number of
  *   steps per frame comes from an accumulator over synthetic deltas
  *   against msPerFrame = 16.6667 x timeScale. The physics expectation
- *   therefore uses the recorded stepsLastFrame per frame (0 while the
- *   world is paused by a hit-stop freeze), not a flat 1 step/frame.
+ *   therefore uses the RECORDED step count per frame, not a flat
+ *   1 step/frame — counted from WORLD_STEP ('worldstep') emissions,
+ *   because World.postUpdate resets stepsLastFrame to 0 before the
+ *   game-level POST_STEP handler could read it. While the world is
+ *   paused by a hit-stop freeze no WORLD_STEP fires, so paused frames
+ *   count as 0 steps automatically.
  * - GameScene.update early-returns during a hit-stop hard freeze
  *   (GameScene.ts: hitStopUntil, scene-time based), so runState.tick is
  *   skipped for frozen frames. Check (3) counts frozen frames from the
@@ -358,20 +362,29 @@ async function check2Subsystems(browser, url, seed) {
 
     // 2c. Arcade physics: a probe body at velocity 120 px/s must move by
     // velocity x (total physics steps / 60). Steps per frame come from the
-    // fixed-step accumulator (World.js); stepsLastFrame is the recorded
-    // count (0 while the world is paused by a hit-stop freeze).
+    // fixed-step accumulator (World.js) and are COUNTED from WORLD_STEP
+    // emissions — stepsLastFrame cannot be read at POST_STEP because
+    // World.postUpdate already reset it to 0 (see header).
     const physics = await page.evaluate(async () => {
       const game = window.__game;
       const gs = game.scene.getScene('Game');
       const api = window.__ofeliyaTest;
       const frames = [];
+      let stepsThisFrame = 0;
+      // 'worldstep' is Phaser.Physics.Arcade.Events.WORLD_STEP, emitted
+      // once per physics step (World.js update + step).
+      const onWorldStep = () => {
+        stepsThisFrame += 1;
+      };
       const onPost = () => {
         frames.push({
-          steps: gs.physics.world.isPaused ? 0 : gs.physics.world.stepsLastFrame,
+          steps: stepsThisFrame,
           paused: gs.physics.world.isPaused,
           ws: gs.physics.world.timeScale,
         });
+        stepsThisFrame = 0;
       };
+      gs.physics.world.on('worldstep', onWorldStep);
       game.events.on('poststep', onPost);
       const img = gs.physics.add.image(400, 400, '__WHITE');
       img.setVelocity(120, 0);
@@ -380,6 +393,7 @@ async function check2Subsystems(browser, url, seed) {
       await api.advance(60);
       const x1 = img.x;
       const y1 = img.y;
+      gs.physics.world.off('worldstep', onWorldStep);
       game.events.off('poststep', onPost);
       img.destroy();
       return { x0, y0, x1, y1, dx: x1 - x0, dy: y1 - y0, frames };
