@@ -3360,50 +3360,29 @@ export class GameScene extends Phaser.Scene {
     };
   }
 
-  // PERF-3/P-04: the HUD snapshot used to be published every frame — an 18-field
-  // allocation plus registry traffic at 60 Hz for data that changes on hits,
-  // pickups and second ticks. Publish only when a displayable field changed,
-  // when the displayed second rolled over (timer text), or when an event site
-  // forces it. Vital state (hp/level/xp/boss) publishes immediately — it is
-  // event-driven and hits must read instantly; high-frequency counters
-  // (kills/infections/combo in dense combat) are capped at 4 Hz — a 250ms delay
-  // on a counter is invisible, while the old 60Hz churn cost GC every frame.
-  // timeMs/stageTimeMs advance every frame and are excluded from change
-  // detection: no consumer reads stageTimeMs from the registry, and timeMs is
-  // covered by the second-roll rule (the only consumer is the HUD timer).
+  // Publish only when a displayed field or the displayed second changes. Read
+  // primitives first so idle frames do not allocate a throwaway snapshot.
+  // Counters and combo publish on the next frame; delaying them can hide the
+  // combo badge and show stale kill totals during combat.
   private lastPublishedRun: RunSnapshot | null = null;
-  private runCounterCooldownUntil = 0;
 
   private publishRunSnapshot(force: boolean): void {
-    const snap = this.snapshot();
     const prev = this.lastPublishedRun;
-    if (!force) {
-      const secondChanged =
-        !prev || Math.floor(snap.timeMs / 1000) !== Math.floor(prev.timeMs / 1000);
-      const vitalChanged =
-        !prev ||
-        snap.hp !== prev.hp ||
-        snap.maxHp !== prev.maxHp ||
-        snap.level !== prev.level ||
-        snap.xp !== prev.xp ||
-        snap.xpNext !== prev.xpNext ||
-        snap.bossHp !== prev.bossHp ||
-        snap.bossMax !== prev.bossMax ||
-        snap.bossName !== prev.bossName ||
-        snap.stageId !== prev.stageId ||
-        snap.stageOrder !== prev.stageOrder ||
-        snap.stageName !== prev.stageName ||
-        snap.phase !== prev.phase;
-      if (!secondChanged && !vitalChanged) {
-        const countersChanged =
-          snap.kills !== prev.kills ||
-          snap.hostCellsInfected !== prev.hostCellsInfected ||
-          snap.combo !== prev.combo;
-        if (!countersChanged) return;
-        if (this.time.now < this.runCounterCooldownUntil) return;
-        this.runCounterCooldownUntil = this.time.now + 250;
-      }
-    }
+    const run = this.runState.run;
+    const progress = this.runState.stage;
+    const stage = this.stageDirector.currentStage;
+    const boss = this.wave.boss;
+    if (!force && prev &&
+      Math.floor(run.timeMs / 1000) === Math.floor(prev.timeMs / 1000) &&
+      progress.hp === prev.hp && progress.maxHp === prev.maxHp &&
+      progress.level === prev.level && progress.xp === prev.xp && progress.xpNext === prev.xpNext &&
+      run.kills === prev.kills && run.hostCellsInfected === prev.hostCellsInfected &&
+      progress.combo === prev.combo &&
+      (boss?.hp ?? 0) === prev.bossHp && (boss?.maxHp ?? 0) === prev.bossMax &&
+      stage.boss.name === prev.bossName && stage.id === prev.stageId &&
+      stage.order === prev.stageOrder && stage.name === prev.stageName &&
+      this.stageDirector.phase === prev.phase) return;
+    const snap = this.snapshot();
     this.lastPublishedRun = snap;
     this.registry.set('run', snap);
   }
