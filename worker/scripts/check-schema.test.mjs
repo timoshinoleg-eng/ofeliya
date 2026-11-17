@@ -133,6 +133,55 @@ test('P3-N2: functionally-v17 but unmarked DB (no v17 row) → checks RED', () =
   }
 });
 
+test('CR5: v16 grant INSERT fails against v17 schema (no charge-only UNIQUE)', () => {
+  // Доказательство неверности старого утверждения «откат воркера на v16
+  // безопасен БЕЗ отката схемы»: v16 SQL_INSERT_LEDGER_GRANT (main
+  // 2bd6320) — INSERT ... ON CONFLICT(charge_id) DO NOTHING, а v17
+  // wallet_ledger имеет только составной UNIQUE (charge_id, grant_type,
+  // skin_id). Такой INSERT против v17-схемы падает — каждая оплата на
+  // откаченном воркере уйдёт в 503/потерю гранта.
+  const { db, cleanup } = buildFreshDb();
+  try {
+    assert.throws(
+      () =>
+        db
+          .prepare(
+            'INSERT INTO wallet_ledger (user_id, charge_id, kind, grant_type, amount, skin_id, reverses_charge_id, amount_text, created_at) ' +
+              "VALUES (1, 'v16-probe', 'grant', 'rna', 500, NULL, NULL, '500', 1700000000000) ON CONFLICT(charge_id) DO NOTHING"
+          )
+          .run(),
+      /ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint/,
+      'v16 ON CONFLICT(charge_id) must fail on the v17 schema'
+    );
+    // Контроль: v17-инсерт (составной ON CONFLICT) работает.
+    db.prepare(
+      'INSERT INTO wallet_ledger (user_id, charge_id, kind, grant_type, amount, skin_id, reverses_charge_id, amount_text, created_at) ' +
+        "VALUES (1, 'v17-probe', 'grant', 'rna', 500, NULL, NULL, '500', 1700000000000) ON CONFLICT(charge_id, grant_type, skin_id) DO NOTHING"
+    ).run();
+    const row = db.prepare("SELECT charge_id FROM wallet_ledger WHERE charge_id='v17-probe'").get();
+    assert.ok(row, 'v17 composite ON CONFLICT insert works');
+  } finally {
+    cleanup();
+  }
+});
+
+test('CR5: rollback docs do not claim v16 worker is safe on v17 schema', () => {
+  // Регрессия на исправление шапки: ложное утверждение не должно вернуться.
+  const dir = dirname(fileURLToPath(import.meta.url));
+  const migration = readFileSync(join(dir, '..', 'migration-17.sql'), 'utf8');
+  const readme = readFileSync(join(dir, '..', 'README_DEPLOY.md'), 'utf8');
+  assert.ok(!migration.includes('безопасен БЕЗ отката'), 'migration header must not claim v16 rollback is safe');
+  assert.ok(!readme.includes('безопасна без отката'), 'README must not claim v16 rollback is safe');
+  assert.ok(
+    migration.includes('НЕ БЕЗОПАСЕН') && migration.includes('снапшота'),
+    'migration header must say snapshot-only rollback'
+  );
+  assert.ok(
+    migration.includes('миграция → деплой v17') || migration.includes('миграция → деплой'),
+    'migration header must document the migration→deploy window'
+  );
+});
+
 test('missing guard trigger (P2-N1) → checks RED', () => {
   const { db, cleanup } = buildFreshDb();
   try {
