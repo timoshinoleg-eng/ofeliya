@@ -29,6 +29,9 @@
  *     ('rev:<op>:<grant_type>:<skin_id>');
  * 14. три скина с одним charge_id → три строки wallet_skins
  *     (UNIQUE с charge_id снят).
+ * 15. CR-R4-2: orders.invoice_url — запись выданного инвойса,
+ *     условная пометка invoice_failed (только при invoice_url IS NULL)
+ *     и оживление заказа из invoice_failed при поздней записи URL.
  *
  * Запуск: node --experimental-strip-types --test worker/scripts/sql-smoke.test.mjs
  */
@@ -50,6 +53,9 @@ const {
   SQL_UPDATE_DUPLICATE_REFUNDED_FROM_ANY,
   SQL_INSERT_SUBSCRIPTION_EVENT,
   SQL_INSERT_SUBSCRIPTION_EVENT_ADMIN,
+  SQL_INSERT_ORDER,
+  SQL_UPDATE_ORDER_INVOICE_FAILED,
+  SQL_UPDATE_ORDER_INVOICE_ISSUED,
 } = await import(join(workerDir, 'src', 'sql.ts'));
 
 function freshDb() {
@@ -476,5 +482,52 @@ test('subscription_events: source telegram by default, admin on admin insert (P2
   const adm = db.prepare('SELECT source, state FROM subscription_events WHERE nonce=?').get('nonce-src-2');
   assert.equal(adm.source, 'admin');
   assert.equal(adm.state, 'canceled');
+  db.close();
+});
+
+test('CR-R4-2: invoice_url — store, условная пометка invoice_failed, revive (real SQLite)', () => {
+  const db = freshDb();
+  const order = (nonce) =>
+    db.prepare('SELECT status, invoice_url FROM orders WHERE nonce=?').get(nonce);
+  const insertOrder = (nonce) =>
+    db
+      .prepare(SQL_INSERT_ORDER)
+      .run(nonce, 42, 'currency.rna-pack-s', 35, 4, 500, 0, null, 0, null, 1000);
+
+  // (a) Первая попытка без выданного инвойса — по-прежнему терминальна
+  // (регрессия на CR-R3-2): пометка проходит, invoice_url NULL.
+  insertOrder('r4-a');
+  assert.equal(order('r4-a').invoice_url, null);
+  const markA = db.prepare(SQL_UPDATE_ORDER_INVOICE_FAILED).run('r4-a');
+  assert.equal(markA.changes, 1, 'first-attempt failure still marks invoice_failed');
+  assert.equal(order('r4-a').status, 'invoice_failed');
+
+  // (b) Инвойс выдан — пометка no-op: заказ остаётся pending, URL жив.
+  insertOrder('r4-b');
+  const storeB = db
+    .prepare(SQL_UPDATE_ORDER_INVOICE_ISSUED)
+    .run('https://t.me/$inv-r4-b', 'r4-b');
+  assert.equal(storeB.changes, 1, 'issued URL stored');
+  assert.equal(order('r4-b').invoice_url, 'https://t.me/$inv-r4-b');
+  assert.equal(order('r4-b').status, 'pending');
+  const markB = db.prepare(SQL_UPDATE_ORDER_INVOICE_FAILED).run('r4-b');
+  assert.equal(markB.changes, 0, 'failed retry does not mark an order with an issued invoice');
+  assert.equal(order('r4-b').status, 'pending');
+
+  // (c) Конкурентный близнец пометил заказ раньше, чем успел записаться
+  // URL, — поздняя запись оживляет заказ обратно в pending.
+  insertOrder('r4-c');
+  db.prepare(SQL_UPDATE_ORDER_INVOICE_FAILED).run('r4-c');
+  assert.equal(order('r4-c').status, 'invoice_failed');
+  db.prepare(SQL_UPDATE_ORDER_INVOICE_ISSUED).run('https://t.me/$inv-r4-c', 'r4-c');
+  assert.equal(order('r4-c').status, 'pending', 'late store revives invoice_failed order');
+  assert.equal(order('r4-c').invoice_url, 'https://t.me/$inv-r4-c');
+
+  // (d) Терминальные статусы запись URL не трогает (оплаченный заказ
+  // не воскресает; pre_checkout требует pending).
+  insertOrder('r4-d');
+  db.prepare("UPDATE orders SET status='paid' WHERE nonce='r4-d'").run();
+  db.prepare(SQL_UPDATE_ORDER_INVOICE_ISSUED).run('https://t.me/$inv-r4-d', 'r4-d');
+  assert.equal(order('r4-d').status, 'paid', 'paid order is not revived by a late store');
   db.close();
 });

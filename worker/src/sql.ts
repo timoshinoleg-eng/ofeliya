@@ -63,9 +63,33 @@ export const SQL_UPDATE_ORDER_DENIED =
  * schema.sql). Same-nonce ретрай (P2-5) такой заказ не воскрешает:
  * клиент генерирует свежий nonce на каждую попытку, а P2-5 нужен для
  * потерянных ответов при УДАВШЕМСЯ создании инвойса (заказ pending).
+ * CR-R4-2: пометка условна — только если инвойс для этого заказа ещё
+ * не выдавался (invoice_url IS NULL). Без гейта упавший ретрай
+ * инвалидировал уже выданный инвойс: pre_checkout требует
+ * status='pending', и первый URL становился мёртвым. Тот же гейт
+ * закрывает конкурентный same-nonce ретрай: кто успел выдать инвойс
+ * и записать URL (SQL_UPDATE_ORDER_INVOICE_ISSUED) — того ссылка
+ * живёт. Атомарно в SQL: D1 выполняет statement'ы последовательно,
+ * WHERE видит последний коммит — отдельной блокировки не нужно.
  */
 export const SQL_UPDATE_ORDER_INVOICE_FAILED =
-  "UPDATE orders SET status='invoice_failed' WHERE nonce=? AND status='pending'";
+  "UPDATE orders SET status='invoice_failed' WHERE nonce=? AND status='pending' AND invoice_url IS NULL";
+
+/**
+ * CR-R4-2: фиксация выданного инвойса. После успешного createInvoiceLink
+ * URL пишется в orders.invoice_url — маркер «инвойс выдан»:
+ *  - ретрай (P2-5) переиспользует сохранённый URL без повторного
+ *    createInvoiceLink (меньше вызовов Telegram, нет ссылок-дубликатов);
+ *  - пометка invoice_failed условна (см. SQL_UPDATE_ORDER_INVOICE_FAILED).
+ * CASE оживляет заказ, который конкурентный близнец успел пометить
+ * invoice_failed между нашим createInvoiceLink и этой записью: у нас на
+ * руках живой инвойс, пометка «инвойса нет» ложна, заказ снова pending.
+ * Остальные статусы не трогаем (paid/denied — терминал: pre_checkout
+ * требует pending, а ретрай не-pending заказа — 502, так что записанный
+ * URL там никому не выдаётся). Параметры: (invoice_url, nonce).
+ */
+export const SQL_UPDATE_ORDER_INVOICE_ISSUED =
+  "UPDATE orders SET invoice_url=?, status=CASE WHEN status='invoice_failed' THEN 'pending' ELSE status END WHERE nonce=?";
 
 /**
  * Запись платежа. ON CONFLICT(charge_id) DO NOTHING — дубликатная доставка

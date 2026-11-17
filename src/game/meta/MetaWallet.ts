@@ -35,6 +35,8 @@ export interface MetaState {
    * его поверх серверного срока покупки, а не теряет. Жив, пока жив
    * local boosterUntilMs; при истечении обнуляется (см.
    * addBoosterEarnedMs и ServerWalletSync). Инвариант: 0 ⟹ якорь 0.
+   * CR-R4-1: синк учитывает elapsed — остаток = anchor + bank - now;
+   * при перебазировании персистится остаток, а не полная длительность.
    */
   boosterEarnedMs: number;
   /**
@@ -238,7 +240,11 @@ export function setBoosterEarned(ms: number, anchorMs: number): void {
  * растёт как раньше — max(now, local) + ms; одновременно растёт банк,
  * чтобы синк кошелька складывал награду поверх покупок, а не терял её.
  * Если local бустер истёк — старый банк мёртв: обнуляется, новый хвост
- * якорится на now. Никогда не бросает.
+ * якорится на now. CR-R4-1: при живом бустере и неякорённом хвосте
+ * (anchor 0 — награда, забранная при живом купленном бустере) хвост
+ * якорится на конец купленного окна (local минус уже учтённый банк):
+ * иначе elapsed-остаток anchor + bank - now посчитался бы от 0 и
+ * обнулил бы живую награду. Никогда не бросает.
  */
 export function addBoosterEarnedMs(ms: number, nowMs: number = Date.now()): void {
   const add = Math.floor(ms);
@@ -251,6 +257,8 @@ export function addBoosterEarnedMs(ms: number, nowMs: number = Date.now()): void
     // Бустер истёк — старый банк мёртв, новый хвост начинается сейчас.
     bank = 0;
     anchor = now;
+  } else if (anchor <= 0) {
+    anchor = Math.max(0, st.boosterUntilMs - bank);
   }
   bank += add;
   st.boosterEarnedMs = bank;

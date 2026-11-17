@@ -24,7 +24,8 @@
  * - P2-3 (попутно): админские правки подписки пишутся в
  *   subscription_events с source='admin'.
  * - P2-5: повтор /api/invoice с тем же nonce (тот же user+product,
- *   pending) → 200 с новым URL; чужой user / оплаченный заказ → 502.
+ *   pending) → 200 с тем же сохранённым URL (CR-R4-2: без повторного
+ *   createInvoiceLink); чужой user / оплаченный заказ → 502.
  * - P2-6: падение Bot API на pre-checkout → 503, не 500/throw.
  * - P1-3 (в): read-back после грант-батча: нормальный платёж — без
  *   mismatch-лога; отключённый триггер (стаб disableTrigger) — громкий
@@ -37,6 +38,13 @@
  *   'invoice_failed' — следующий инвойс подписки с новым nonce не
  *   блокируется; брошенный инвойс, чьё создание удалось, по-прежнему
  *   блокирует 24ч; pre_checkout отклоняет заказ без инвойса.
+ * - CR-R4-2 (раунд 4): уже выданный инвойс не инвалидируется упавшим
+ *   ретраем: URL хранится в orders.invoice_url, ретрай переиспользует
+ *   его без повторного createInvoiceLink; пометка invoice_failed —
+ *   только при invoice_url IS NULL; конкурентный same-nonce ретрай
+ *   (оба порядка — успех первее падения и наоборот) сохраняет живой
+ *   инвойс; первая попытка без выданного инвойса по-прежнему
+ *   терминальна (регрессия на CR-R3-2 — см. тест CR-R3-2 выше).
  * - CR-R3-13: восстановление инвойса (P2-5 ретрай) — по stored-цене
  *   заказа, а не текущей цене каталога; новый заказ — по-прежнему по
  *   каталогу; NULL stored-цена — fail-closed 502 order-price-invalid.
@@ -130,6 +138,12 @@ async function post(handler, path, body, env, headers = {}) {
 // --- стаб Bot API ---
 const botCalls = [];
 const botFail = { refund: false, preCheckout: false, edit: false, invoice: false };
+// CR-R4-2: парковка createInvoiceLink — для конкурентных same-nonce
+// тестов: вызов зависает, пока тест его не отпустит (успехом или
+// падением). botParked — очередь { resolve, reject } в порядке прихода.
+const botParked = [];
+let botParkInvoice = false;
+let parkedInvoiceSeq = 0;
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (url, opts) => {
   const u = String(url);
@@ -152,6 +166,11 @@ globalThis.fetch = async (url, opts) => {
     }
     if (method === 'createInvoiceLink') {
       if (botFail.invoice) throw new Error('p1-stub: createInvoiceLink network failure');
+      if (botParkInvoice) {
+        return new Promise((resolve, reject) => {
+          botParked.push({ resolve, reject });
+        });
+      }
       return new Response(JSON.stringify({ ok: true, result: `https://t.me/$inv-p1-${botCalls.length}` }), {
         headers: { 'content-type': 'application/json' },
       });
@@ -167,6 +186,36 @@ const secretHeader = () => ({ 'x-telegram-bot-api-secret-token': WEBHOOK_SECRET 
 const adminHeader = () => ({ authorization: `Bearer ${ADMIN_TOKEN}` });
 const refundCalls = () => botCalls.filter((c) => c.method === 'refundStarPayment');
 const editCalls = () => botCalls.filter((c) => c.method === 'editUserStarSubscription');
+
+/** CR-R4-2: отпустить припаркованный createInvoiceLink успехом (свежий URL). Возвращает URL. */
+function releaseParkedInvoiceOk(index = 0) {
+  const [parked] = botParked.splice(index, 1);
+  assert(parked, `releaseParkedInvoiceOk: no parked createInvoiceLink at index ${index}`);
+  parkedInvoiceSeq += 1;
+  const url = `https://t.me/$inv-p1-parked-${parkedInvoiceSeq}`;
+  parked.resolve(
+    new Response(JSON.stringify({ ok: true, result: url }), {
+      headers: { 'content-type': 'application/json' },
+    })
+  );
+  return url;
+}
+
+/** CR-R4-2: отпустить припаркованный createInvoiceLink падением. */
+function releaseParkedInvoiceFail(index = 0) {
+  const [parked] = botParked.splice(index, 1);
+  assert(parked, `releaseParkedInvoiceFail: no parked createInvoiceLink at index ${index}`);
+  parked.reject(new Error('p1-stub: parked createInvoiceLink network failure'));
+}
+
+/** CR-R4-2: ждать, пока N вызовов createInvoiceLink не припаркуются. */
+async function waitParked(count) {
+  for (let i = 0; i < 200; i++) {
+    if (botParked.length >= count) return;
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  assert(false, `waitParked: only ${botParked.length}/${count} createInvoiceLink calls parked`);
+}
 
 /** Покупка пропуска: seed заказа + оплата. Возвращает until. */
 async function buyPass(handler, db, env, nonce, chargeId, userId = USER_ID) {
@@ -413,6 +462,103 @@ try {
     await post(handler, '/api/webhook', preCheckoutBody('q-r3-2-a', 'nonce-r3-2-a', { amount: 250 }), env, secretHeader());
     const pc = botCalls.find((c) => c.method === 'answerPreCheckoutQuery' && c.body.pre_checkout_query_id === 'q-r3-2-a');
     eq(pc.body.ok, false, 'CR-R3-2: pre_checkout rejects invoice_failed order');
+  }
+
+  // === CR-R4-2: ретрай после успешного инвойса НЕ убивает первый URL ===
+  {
+    const db = makeD1();
+    const env = { ...baseEnv, PAYMENTS_DB: db };
+    botCalls.length = 0;
+    const first = await post(handler, '/api/invoice', { initData, productId: RNA_ID, nonce: 'nonce-r4-2-seq' }, env);
+    eq(first.status, 200, 'CR-R4-2 seq: first invoice 200');
+    const firstJ = await first.json();
+    assert(firstJ.invoiceUrl, 'CR-R4-2 seq: first invoice has URL');
+    eq(db.orders.get('nonce-r4-2-seq').status, 'pending', 'CR-R4-2 seq: order pending after first invoice');
+    eq(botCalls.filter((c) => c.method === 'createInvoiceLink').length, 1, 'CR-R4-2 seq: one createInvoiceLink for the first invoice');
+    // Ретрай с тем же nonce при упавшем Bot API: раньше — 502 +
+    // invoice_failed, и первый URL мёртв (pre_checkout требует pending).
+    // Теперь ретрай переиспользует сохранённый URL без вызова Telegram.
+    botFail.invoice = true;
+    let retry;
+    try {
+      retry = await post(handler, '/api/invoice', { initData, productId: RNA_ID, nonce: 'nonce-r4-2-seq' }, env);
+    } finally {
+      botFail.invoice = false;
+    }
+    eq(retry.status, 200, 'CR-R4-2 seq: retry reuses stored URL (200, no second Telegram call)');
+    const retryJ = await retry.json();
+    eq(retryJ.invoiceUrl, firstJ.invoiceUrl, 'CR-R4-2 seq: retry returns the SAME stored URL');
+    eq(botCalls.filter((c) => c.method === 'createInvoiceLink').length, 1, 'CR-R4-2 seq: no second createInvoiceLink on retry');
+    eq(db.orders.get('nonce-r4-2-seq').status, 'pending', 'CR-R4-2 seq: order stays pending after failed retry');
+    eq(db.orders.get('nonce-r4-2-seq').invoice_url, firstJ.invoiceUrl, 'CR-R4-2 seq: issued URL stored on the order');
+    // Первый URL жив: pre_checkout его принимает.
+    botCalls.length = 0;
+    await post(handler, '/api/webhook', preCheckoutBody('q-r4-2-seq', 'nonce-r4-2-seq', { amount: 35 }), env, secretHeader());
+    const pc = botCalls.find((c) => c.method === 'answerPreCheckoutQuery' && c.body.pre_checkout_query_id === 'q-r4-2-seq');
+    eq(pc.body.ok, true, 'CR-R4-2 seq: pre_checkout accepts the first URL after failed retry');
+  }
+
+  // === CR-R4-2: конкурентный same-nonce ретрай — успех первее падения ===
+  {
+    const db = makeD1();
+    const env = { ...baseEnv, PAYMENTS_DB: db };
+    botParkInvoice = true;
+    try {
+      const pA = post(handler, '/api/invoice', { initData, productId: RNA_ID, nonce: 'nonce-r4-2-conc1' }, env);
+      await waitParked(1); // A (создатель заказа) — в createInvoiceLink.
+      const pB = post(handler, '/api/invoice', { initData, productId: RNA_ID, nonce: 'nonce-r4-2-conc1' }, env);
+      await waitParked(2); // B (ретрай) — тоже в createInvoiceLink.
+      // B успел, A упал: раньше A помечал заказ invoice_failed и убивал URL B.
+      const urlB = releaseParkedInvoiceOk(1);
+      const rB = await pB;
+      eq(rB.status, 200, 'CR-R4-2 conc1: retry succeeds while creator still in flight');
+      eq((await rB.json()).invoiceUrl, urlB, 'CR-R4-2 conc1: retry returns its own URL');
+      releaseParkedInvoiceFail(0);
+      const rA = await pA;
+      eq(rA.status, 502, 'CR-R4-2 conc1: failed creator still gets 502');
+      eq((await rA.json()).error, 'invoice-create-failed', 'CR-R4-2 conc1: 502 error code invoice-create-failed');
+      eq(db.orders.get('nonce-r4-2-conc1').status, 'pending', 'CR-R4-2 conc1: order stays pending — issued invoice preserved');
+      eq(db.orders.get('nonce-r4-2-conc1').invoice_url, urlB, 'CR-R4-2 conc1: stored URL is the issued one');
+      botCalls.length = 0;
+      await post(handler, '/api/webhook', preCheckoutBody('q-r4-2-c1', 'nonce-r4-2-conc1', { amount: 35 }), env, secretHeader());
+      const pc = botCalls.find((c) => c.method === 'answerPreCheckoutQuery' && c.body.pre_checkout_query_id === 'q-r4-2-c1');
+      eq(pc.body.ok, true, 'CR-R4-2 conc1: pre_checkout accepts the issued URL');
+    } finally {
+      botParkInvoice = false;
+      // Страховка: не оставлять зависшие вызовы для следующих тестов.
+      while (botParked.length > 0) releaseParkedInvoiceFail(0);
+    }
+  }
+
+  // === CR-R4-2: конкурентный same-nonce ретрай — падение первее успеха ===
+  {
+    const db = makeD1();
+    const env = { ...baseEnv, PAYMENTS_DB: db };
+    botParkInvoice = true;
+    try {
+      const pA = post(handler, '/api/invoice', { initData, productId: RNA_ID, nonce: 'nonce-r4-2-conc2' }, env);
+      await waitParked(1);
+      const pB = post(handler, '/api/invoice', { initData, productId: RNA_ID, nonce: 'nonce-r4-2-conc2' }, env);
+      await waitParked(2);
+      // A упал первым и пометил заказ invoice_failed; B успел позже —
+      // у B на руках живой инвойс, заказ должен ожить (pending + URL).
+      releaseParkedInvoiceFail(0);
+      const rA = await pA;
+      eq(rA.status, 502, 'CR-R4-2 conc2: failed creator gets 502');
+      const urlB = releaseParkedInvoiceOk(0);
+      const rB = await pB;
+      eq(rB.status, 200, 'CR-R4-2 conc2: late retry still succeeds');
+      eq((await rB.json()).invoiceUrl, urlB, 'CR-R4-2 conc2: retry returns its own URL');
+      eq(db.orders.get('nonce-r4-2-conc2').status, 'pending', 'CR-R4-2 conc2: order revived to pending — live invoice preserved');
+      eq(db.orders.get('nonce-r4-2-conc2').invoice_url, urlB, 'CR-R4-2 conc2: stored URL is the issued one');
+      botCalls.length = 0;
+      await post(handler, '/api/webhook', preCheckoutBody('q-r4-2-c2', 'nonce-r4-2-conc2', { amount: 35 }), env, secretHeader());
+      const pc = botCalls.find((c) => c.method === 'answerPreCheckoutQuery' && c.body.pre_checkout_query_id === 'q-r4-2-c2');
+      eq(pc.body.ok, true, 'CR-R4-2 conc2: pre_checkout accepts the issued URL');
+    } finally {
+      botParkInvoice = false;
+      while (botParked.length > 0) releaseParkedInvoiceFail(0);
+    }
   }
 
   // === P1-2: оплата второго инвойса при активном пропуске → без гранта ===
@@ -682,13 +828,15 @@ try {
     assert(firstJ.invoiceUrl, 'P2-5: first invoice has URL');
     const createCalls1 = botCalls.filter((c) => c.method === 'createInvoiceLink').length;
     eq(createCalls1, 1, 'P2-5: one createInvoiceLink');
-    // Ретрай с тем же nonce (ответ потерян) — 200 с новым URL, заказ один.
+    // Ретрай с тем же nonce (ответ потерян) — 200 с тем же сохранённым
+    // URL (CR-R4-2: без повторного createInvoiceLink), заказ один.
     const retry = await post(handler, '/api/invoice', { initData, productId: RNA_ID, nonce: 'nonce-p1-p25-1' }, env);
     eq(retry.status, 200, 'P2-5: retry same nonce → 200 (was eternal 502)');
     const retryJ = await retry.json();
     assert(retryJ.invoiceUrl, 'P2-5: retry returns invoice URL');
+    eq(retryJ.invoiceUrl, firstJ.invoiceUrl, 'P2-5: retry returns the SAME stored URL (CR-R4-2)');
     eq(retryJ.nonce, 'nonce-p1-p25-1', 'P2-5: retry echoes nonce');
-    eq(botCalls.filter((c) => c.method === 'createInvoiceLink').length, 2, 'P2-5: createInvoiceLink re-issued on retry');
+    eq(botCalls.filter((c) => c.method === 'createInvoiceLink').length, 1, 'P2-5: no second createInvoiceLink on retry (stored URL reused)');
     eq(db.orders.size, 1, 'P2-5: still one order');
     // Чужой пользователь с тем же nonce — 502 (не раскрываем чужой заказ).
     const alien = await post(handler, '/api/invoice', { initData: otherInitData, productId: RNA_ID, nonce: 'nonce-p1-p25-1' }, env);

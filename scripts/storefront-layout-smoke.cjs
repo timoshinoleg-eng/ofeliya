@@ -802,9 +802,15 @@ async function checkScroll(page, label, failures) {
 
   // CR-R3-10: resize во время покупки — гейт переживает рестарт сцены,
   // завершение исходной покупки не трогает UI новой генерации.
-  // Задержка покупки — через monkey-patch провайдера (+5000 мс):
-  // shop.mockDelay из URL задержал бы и listProducts новой генерации,
-  // и окно «новая генерация готова + старая покупка в полёте» схлопнулось бы.
+  // CR-R4-5 (review 5944088831): задержка покупки — через явный
+  // release-сигнал, а не 5-секундный таймер: таймер гонялся с
+  // 15-секундным ожиданием перестройки — покупка могла завершиться
+  // во время него, и гейт-утверждение ('···') роняло корректную
+  // покупку. Покупка висит pending до релиза после гейта, затем тест
+  // явно ждёт её завершения (кнопка вернулась к цене) вместо
+  // фиксированного сна. shop.mockDelay из URL задержал бы и
+  // listProducts новой генерации, и окно «новая генерация готова +
+  // старая покупка в полёте» схлопнулось бы.
   await runCase('resize-during-purchase 390x844->320x568', async () => {
     const label = 'resize-during-purchase 390x844->320x568';
     const { ctx, page, errors } = await bootStorefront(browser, { width: 390, height: 844 }, { passActive: false });
@@ -815,13 +821,17 @@ async function checkScroll(page, label, failures) {
         failures.push(`${label}: кнопка покупки не найдена`);
         return;
       }
-      // Замедлить покупку исходного провайдера на 5 с (новая генерация
-      // после рестарта получит свежий провайдер без патча).
+      // Задержать покупку исходного провайдера до явного релиза
+      // (новая генерация после рестарта получит свежий провайдер
+      // без патча).
       await page.evaluate(() => {
         const s = window.__game.scene.getScene('Storefront');
         const p = s.provider;
         const orig = p.purchase.bind(p);
-        p.purchase = (id) => new Promise((resolve) => setTimeout(() => resolve(orig(id)), 5000));
+        let release;
+        const gate = new Promise((r) => { release = r; });
+        window.__releasePurchase = () => release();
+        p.purchase = (id) => gate.then(() => orig(id));
       });
       await page.evaluate(() => {
         window.__storeRootBefore = window.__game.scene.getScene('Storefront').root;
@@ -878,8 +888,22 @@ async function checkScroll(page, label, failures) {
           `${label}: тап во время исходной покупки начал вторую (state=${stGate.state}, lastBought=${stGate.lastBought})`
         );
       }
-      // Ждём завершения исходной покупки (патч +5000 мс от тапа).
-      await sleep(5000);
+      // Релиз исходной покупки — только после гейт-утверждений.
+      // Затем явно ждём её завершения: кнопка вернулась к цене —
+      // значит, finally buy() снял inFlightPurchase и перерисовал
+      // список (фиксированный сон с завершением не синхронизирован).
+      await page.evaluate(() => window.__releasePurchase());
+      const doneDeadline = Date.now() + 10000;
+      let buyLabel2 = '···';
+      while (Date.now() < doneDeadline) {
+        buyLabel2 = await cardBuyLabel(page, card0.id);
+        if (buyLabel2 !== '···' && buyLabel2 !== null) break;
+        await sleep(100);
+      }
+      if (buyLabel2 === '···' || buyLabel2 === null) {
+        failures.push(`${label}: исходная покупка не завершилась после релиза (кнопка '${buyLabel2}')`);
+        return;
+      }
       const stDone = await page.evaluate(() => {
         const s = window.__game.scene.getScene('Storefront');
         return { state: s.state, lastBought: s.lastBought?.id ?? null };
@@ -902,11 +926,8 @@ async function checkScroll(page, label, failures) {
       if (!entitled) {
         failures.push(`${label}: исходная покупка ${card0.id} не оставила entitlement (бухгалтерия не доработала)`);
       }
-      // Кнопка вернулась к цене, повторная покупка работает.
-      const buyLabel2 = await cardBuyLabel(page, card0.id);
-      if (buyLabel2 === '···') {
-        failures.push(`${label}: после завершения покупки кнопка застряла в '···'`);
-      }
+      // Кнопка вернулась к цене (проверено ожиданием выше),
+      // повторная покупка работает.
       const g2 = await extractGeometry(page);
       const card2 = g2.cards.find((c) => c.id === card0.id);
       if (!card2?.buyButton) {

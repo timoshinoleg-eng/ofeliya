@@ -188,19 +188,30 @@ try {
             if (sql.startsWith('INSERT INTO orders')) {
               // v16 (B2+P1-2): заказ иммутабелен — amount_stars, sku_version и снапшот гранта пишутся сразу.
               // v17 (монетизация v3): + grant_season_pass_days (4-е поле снапшота) + grant_bundle_json.
+              // CR-R4-2: invoice_url NULL до первой успешной выдачи инвойса.
               const [nonce, userId, productId, amountStars, skuVersion, grantRna, grantBoosterDays, grantSkinId, grantSeasonPassDays, grantBundleJson, createdAt] = params;
               if (orders.has(nonce)) throw new Error('UNIQUE constraint failed: orders.nonce');
-              orders.set(nonce, { user_id: userId, product_id: productId, amount_stars: amountStars, sku_version: skuVersion, grant_rna: grantRna, grant_booster_days: grantBoosterDays, grant_skin_id: grantSkinId, grant_season_pass_days: grantSeasonPassDays, grant_bundle_json: grantBundleJson, status: 'pending', created_at: createdAt });
+              orders.set(nonce, { user_id: userId, product_id: productId, amount_stars: amountStars, sku_version: skuVersion, grant_rna: grantRna, grant_booster_days: grantBoosterDays, grant_skin_id: grantSkinId, grant_season_pass_days: grantSeasonPassDays, grant_bundle_json: grantBundleJson, invoice_url: null, status: 'pending', created_at: createdAt });
+              return { meta: { changes: 1 } };
+            }
+            // CR-R4-2: фиксация выданного инвойса (SQL_UPDATE_ORDER_INVOICE_ISSUED);
+            // CASE оживляет заказ из invoice_failed обратно в pending.
+            if (sql.startsWith('UPDATE orders SET invoice_url=')) {
+              const [invoiceUrl, nonce] = params;
+              const row = orders.get(nonce);
+              if (!row) return { meta: { changes: 0 } };
+              row.invoice_url = invoiceUrl;
+              if (row.status === 'invoice_failed') row.status = 'pending';
               return { meta: { changes: 1 } };
             }
             throw new Error(`worker-payments D1 stub: unknown SQL: ${sql}`);
           },
           // P2-5: идемпотентный ретрай инвойса читает существующий заказ.
           async first() {
-            if (sql.startsWith('SELECT user_id, product_id, status, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, grant_bundle_json FROM orders WHERE nonce=?')) {
+            if (sql.startsWith('SELECT user_id, product_id, status, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, grant_bundle_json, invoice_url FROM orders WHERE nonce=?')) {
               const row = orders.get(params[0]);
               return row
-                ? { user_id: row.user_id, product_id: row.product_id, status: row.status, amount_stars: row.amount_stars, sku_version: row.sku_version, grant_rna: row.grant_rna ?? null, grant_booster_days: row.grant_booster_days ?? null, grant_skin_id: row.grant_skin_id ?? null, grant_season_pass_days: row.grant_season_pass_days ?? null, grant_bundle_json: row.grant_bundle_json ?? null }
+                ? { user_id: row.user_id, product_id: row.product_id, status: row.status, amount_stars: row.amount_stars, sku_version: row.sku_version, grant_rna: row.grant_rna ?? null, grant_booster_days: row.grant_booster_days ?? null, grant_skin_id: row.grant_skin_id ?? null, grant_season_pass_days: row.grant_season_pass_days ?? null, grant_bundle_json: row.grant_bundle_json ?? null, invoice_url: row.invoice_url ?? null }
                 : null;
             }
             return null;
@@ -295,7 +306,8 @@ try {
     assert(botCalls.length === callsBeforeFail, 'no Bot API call on order-store failure');
     assert(!orders.has('nonce-inv-5'), 'failed order not tracked');
     // P2-5: повтор с тем же nonce (тот же user+product, заказ pending) —
-    // идемпотентное перевыпускание инвойса (200), а не вечный 502.
+    // идемпотентный ретрай (200), а не вечный 502. CR-R4-2: ретрай
+    // переиспользует сохранённый URL без повторного createInvoiceLink.
     const callsBeforeRetry = botCalls.length;
     inv = await invoicePost(invEnv, {
       initData: goodInit,
@@ -304,7 +316,7 @@ try {
     });
     assert(inv.status === 200, 'duplicate nonce (same user+product, pending) → 200 idempotent retry');
     assert(inv.json.invoiceUrl === 'https://t.me/$inv-test', 'retry returns invoice URL');
-    assert(botCalls.length === callsBeforeRetry + 1, 'createInvoiceLink re-issued on retry');
+    assert(botCalls.length === callsBeforeRetry, 'retry reuses stored URL — no second createInvoiceLink (CR-R4-2)');
     assert(orders.size === 1, 'still one order after retry');
     // Чужой пользователь с тем же nonce — 502 (не раскрываем чужой заказ).
     const alienFields = { ...fields, user: JSON.stringify({ id: 777002, first_name: 'Alien' }) };

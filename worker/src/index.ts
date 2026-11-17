@@ -4,6 +4,7 @@ import {
   SQL_UPDATE_ORDER_PAID,
   SQL_UPDATE_ORDER_DENIED,
   SQL_UPDATE_ORDER_INVOICE_FAILED,
+  SQL_UPDATE_ORDER_INVOICE_ISSUED,
   SQL_INSERT_PAYMENT,
   SQL_INSERT_LEDGER_GRANT,
   SQL_INSERT_ORDER,
@@ -104,6 +105,10 @@ import {
  *    → Bot API createInvoiceLink (currency='XTR', provider_token='',
  *      prices=[{label, amount}] — amount в ЦЕЛЫХ звёздах, payload=nonce
  *      (лимит Telegram: 1–128 байт))
+ *    → выданный URL фиксируется в orders.invoice_url (CR-R4-2): ретрай
+ *      с тем же nonce переиспользует его без повторного createInvoiceLink,
+ *      а пометка invoice_failed при падении — только при invoice_url
+ *      IS NULL (иначе упавший ретрай убивал бы первый URL)
  *    → 200 {invoiceUrl, nonce}; без PAYMENTS_DB → 503 {error:'db_unavailable'};
  *      ошибка записи заказа → 502 (честно, вместо битого трекинга).
  *
@@ -575,9 +580,9 @@ async function handleInvoice(request: Request, env: Env): Promise<Response> {
     // P2-5: идемпотентный ретрай — ответ на первую попытку мог потеряться
     // (заказ вставлен, createInvoiceLink прошёл, клиент не получил URL).
     // Тот же nonce + тот же user + тот же товар + заказ ещё pending →
-    // перевыпускаем ссылку (createInvoiceLink ниже с тем же nonce).
-    // Иначе (чужой заказ, другой товар, заказ оплачен) — честный 502:
-    // чужой заказ не раскрываем, оплаченный не перевыпускаем.
+    // CR-R4-2: возвращаем СОХРАНЁННЫЙ URL (см. ниже), без повторного
+    // createInvoiceLink. Иначе (чужой заказ, другой товар, заказ оплачен)
+    // — честный 502: чужой заказ не раскрываем, оплаченный не перевыпускаем.
     try {
       existing = await getOrder(env.PAYMENTS_DB, nonce);
     } catch {
@@ -591,6 +596,22 @@ async function handleInvoice(request: Request, env: Env): Promise<Response> {
     ) {
       return json({ error: 'order-store-failed' }, 502);
     }
+  }
+  // CR-R4-2: инвойс уже выдан — переиспользуем сохранённый URL вместо
+  // повторного createInvoiceLink: повторный вызов не только плодит
+  // ссылки-дубликаты, но и — при своём падении — помечал заказ
+  // invoice_failed, убивая первый URL (pre_checkout требует pending).
+  // Заказ здесь уже проверен: свой user, свой товар, pending. URL выдан
+  // по stored-цене заказа, pre_checkout сверяется с ней же — проверка
+  // цены ниже для этого пути не нужна. Нет сохранённого URL (заказ
+  // посеян до v17 / конкурентный близнец ещё не записал) — идём ниже
+  // и создаём инвойс как раньше.
+  if (
+    existing &&
+    typeof existing.invoice_url === 'string' &&
+    existing.invoice_url.length > 0
+  ) {
+    return json({ invoiceUrl: existing.invoice_url, nonce });
   }
   // CR-R3-13: восстановление инвойса (идемпотентный ретрай P2-5) — по
   // ЗАФИКСИРОВАННОЙ цене заказа (existing.amount_stars), а не текущей
@@ -639,6 +660,9 @@ async function handleInvoice(request: Request, env: Env): Promise<Response> {
     // а ответ потерялся — оплатить нельзя: URL никому не выдан, а
     // pre_checkout его отклонит). Брошенный инвойс, чьё создание
     // УДАЛОСЬ, по-прежнему блокирует 24ч (заказ остаётся pending).
+    // CR-R4-2: пометка условна (invoice_url IS NULL — см. SQL): если
+    // инвойс уже выдан (первая попытка или конкурентный близнец),
+    // упавший ретрай заказ не трогает — первый URL остаётся живым.
     // Best-effort: провал пометки — громкий лог, заказ остаётся pending
     // (старое поведение: блок, но не потеря денег).
     try {
@@ -647,6 +671,20 @@ async function handleInvoice(request: Request, env: Env): Promise<Response> {
       logEvent('invoice_mark_failed_error', { productId, nonce, error: String(markErr) });
     }
     return json({ error: 'invoice-create-failed' }, 502);
+  }
+  // CR-R4-2: фиксируем выдачу (orders.invoice_url) — маркер «инвойс
+  // выдан»: ретрай переиспользует URL, пометка invoice_failed при
+  // падении — только при invoice_url IS NULL. UPDATE заодно оживляет
+  // заказ, который конкурентный близнец успел пометить invoice_failed
+  // между нашим createInvoiceLink и этой записью (у нас на руках живой
+  // инвойс — пометка «инвойса нет» ложна). Best-effort, как пометка
+  // выше: провал записи — громкий лог, URL клиенту всё равно
+  // возвращается (инвойс в Telegram создан; ретрай просто перевыпустит
+  // ссылку, как раньше, — деградация до поведения до CR-R4-2).
+  try {
+    await env.PAYMENTS_DB.prepare(SQL_UPDATE_ORDER_INVOICE_ISSUED).bind(invoiceUrl, nonce).run();
+  } catch (storeErr) {
+    logEvent('invoice_url_store_error', { productId, nonce, error: String(storeErr) });
   }
   return json({ invoiceUrl, nonce });
 }
@@ -715,6 +753,11 @@ interface DbOrderRow {
    * (NULL у одиночных товаров и у заказов до миграции-17).
    */
   grant_bundle_json: string | null;
+  /**
+   * CR-R4-2: URL выданного инвойса (NULL — инвойс ещё не выдавался).
+   * Ретрай переиспользует его; пометка invoice_failed — только при NULL.
+   */
+  invoice_url: string | null;
 }
 
 /** Строка кошелька для read-back проверки (P1-3). */
@@ -734,7 +777,7 @@ interface DbPaymentRow {
 
 async function getOrder(db: D1Database, nonce: string): Promise<DbOrderRow | null> {
   const row = await db
-    .prepare('SELECT user_id, product_id, status, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, grant_bundle_json FROM orders WHERE nonce=?')
+    .prepare('SELECT user_id, product_id, status, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, grant_bundle_json, invoice_url FROM orders WHERE nonce=?')
     .bind(nonce)
     .first<DbOrderRow>();
   if (!row || typeof row.user_id !== 'number' || typeof row.product_id !== 'string') return null;
