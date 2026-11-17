@@ -33,23 +33,33 @@ const EVOLUTION_PRIORITY = [
   'evo:halo',
 ];
 
-// Priority tables: first listed available id wins. Survivability before the
-// first boss, damage/attack speed before and during boss windows, defensive
-// bias on Strained (§3.4).
+// Priority tables: first listed available id wins.
+//
+// Early game is a DPS race, not a survival race — proven by the
+// smoke-boss1 run (2026-11-18): hp-first early picks (regen, hp, hp) left
+// the bot at 52 kills / level 4 after 135 s sim, and HP crashed 125 -> 46
+// once the swarm hit the pool cap. Kills feed XP, XP feeds levels, levels
+// feed damage: without early damage the bot cannot scale against spawn
+// pressure, and HP alone only postpones the same death. So damage and AoE
+// (dmg/multi/rate, orbit ring 11 dmg per 340 ms, infect -> lysis 26 dmg
+// in 150 px) lead every table; HP/regen are mid-table insurance. The
+// emergency heal rule (HEAL_THRESHOLD) still covers real danger.
 const TABLES = {
   standard: {
-    // Bloodstream before ~2:30: build the base — HP, speed, damage, magnet.
-    early: ['hp', 'speed', 'dmg', 'rate', 'magnet', 'regen', 'infect', 'multi', 'pierce', 'orbit', 'nova', 'lysis', 'factory', 'heal'],
-    // Bloodstream late / IMMUNE PRIME: damage first.
-    preBoss: ['multi', 'dmg', 'rate', 'pierce', 'orbit', 'nova', 'speed', 'hp', 'lysis', 'magnet', 'infect', 'regen', 'factory', 'heal'],
-    // Heart stage, no boss yet: damage + sustain mix.
-    heart: ['multi', 'dmg', 'rate', 'orbit', 'nova', 'pierce', 'speed', 'hp', 'regen', 'lysis', 'magnet', 'infect', 'factory', 'heal'],
+    // Bloodstream before ~2:30: damage + AoE first — kills are XP.
+    early: ['dmg', 'multi', 'rate', 'orbit', 'infect', 'lysis', 'nova', 'pierce', 'magnet', 'hp', 'speed', 'regen', 'factory', 'heal'],
+    // Bloodstream late / IMMUNE PRIME: damage first, AoE for the swarm.
+    preBoss: ['multi', 'dmg', 'rate', 'orbit', 'infect', 'lysis', 'nova', 'pierce', 'speed', 'hp', 'magnet', 'regen', 'factory', 'heal'],
+    // Heart stage, no boss yet: damage + AoE + sustain mix.
+    heart: ['multi', 'dmg', 'rate', 'orbit', 'nova', 'infect', 'lysis', 'pierce', 'speed', 'hp', 'regen', 'magnet', 'factory', 'heal'],
     // CARDIAC TITAN active: maximum damage.
     titan: ['multi', 'dmg', 'rate', 'pierce', 'nova', 'orbit', 'speed', 'hp', 'regen', 'lysis', 'magnet', 'infect', 'factory', 'heal'],
   },
   strained: {
-    early: ['hp', 'regen', 'speed', 'dmg', 'magnet', 'rate', 'infect', 'multi', 'orbit', 'pierce', 'nova', 'lysis', 'factory', 'heal'],
-    preBoss: ['multi', 'dmg', 'hp', 'rate', 'speed', 'pierce', 'orbit', 'regen', 'nova', 'lysis', 'magnet', 'infect', 'factory', 'heal'],
+    // Strained keeps its defensive bias (hp/regen higher) but damage still
+    // leads: spawn pressure is higher, so the DPS race is tighter.
+    early: ['dmg', 'multi', 'hp', 'rate', 'orbit', 'infect', 'regen', 'lysis', 'nova', 'pierce', 'magnet', 'speed', 'factory', 'heal'],
+    preBoss: ['multi', 'dmg', 'hp', 'rate', 'speed', 'orbit', 'infect', 'pierce', 'regen', 'nova', 'lysis', 'magnet', 'factory', 'heal'],
     heart: ['dmg', 'multi', 'hp', 'regen', 'rate', 'speed', 'orbit', 'pierce', 'nova', 'lysis', 'magnet', 'infect', 'factory', 'heal'],
     titan: ['multi', 'dmg', 'hp', 'rate', 'regen', 'pierce', 'nova', 'orbit', 'speed', 'lysis', 'magnet', 'infect', 'factory', 'heal'],
   },

@@ -23,6 +23,7 @@ const {
   telegraphEscapeDirection,
   telegraphUrgency,
   riskAt,
+  nearestEnemy,
   nearestGem,
   nearestInfectableCell,
 } = require('./ThreatModel.cjs');
@@ -31,10 +32,25 @@ const {
 // inside ~330 so shots land while leaving dodge room.
 const WEAPON_RANGE = 380;
 const ENGAGE_RANGE = 330;
+// No boss: beyond this distance from the nearest enemy the bot closes in,
+// so auto-fire stays engaged. Without it the bot outruns its own DPS
+// (player 180 px/s vs swarm 92 / runner 152) and kills stall — the
+// smoke-boss1 run (52 kills in 135 s) proved it.
+const ENGAGE_FAR = 320;
 // RNA is only chased inside this radius — beyond it the bot holds position.
 const RNA_CHASE_RADIUS = 240;
 // Host cells are only approached inside this radius.
 const HOST_CELL_CHASE_RADIUS = 300;
+// Infection needs 1250 ms inside 58 px (HostCellSystem.ts tuning). The bot
+// dwells when it is already inside 55 px of a cell; enemies must stay
+// beyond 80 px and telegraphs beyond 40 px of edge distance for the dwell
+// to be safe.
+const DWELL_RADIUS = 55;
+const DWELL_SAFE_ENEMY = 80;
+const DWELL_SAFE_TELEGRAPH = 40;
+// Cells this close are quick to reach and infect: worth it even under
+// pressure or while hurt (the risk/HP gates are waived for them).
+const CLOSE_CELL_RADIUS = 160;
 
 function unit(x, y) {
   const d = length(x, y);
@@ -148,16 +164,41 @@ function computeMove(snapshot, profile, opts) {
   }
 
   const seeking = Boolean(opts.seekTarget);
+  const near = nearestEnemy(snapshot, px, py);
+
+  // --- host-cell dwell: infection needs 1250 ms inside 58 px -------------
+  // (HostCellSystem.ts tuning). A passing bot never completes it (crossing
+  // 116 px at 180 px/s takes ~0.64 s), so when the bot is already on top
+  // of a cell with no enemy or telegraph about to hit it, it stands still
+  // until infection completes. The CampaignBot stuck detector (5 s) is the
+  // safety valve if cells cluster and dwells chain. No dwell during a boss
+  // fight (lysis is negligible vs boss HP) or while hurt.
+  if (!seeking && !boss && hpRatio >= profile.safeHpRatio) {
+    const cell = nearestInfectableCell(snapshot, px, py);
+    if (cell && cell.dist < DWELL_RADIUS && cell.cell.infection < 1) {
+      const telegraphClose = snapshot.telegraphs.some(
+        (t) => telegraphEdgeDistance(t, px, py) < DWELL_SAFE_TELEGRAPH,
+      );
+      if ((!near || near.dist > DWELL_SAFE_ENEMY) && !telegraphClose) {
+        const still = projectOutOfTelegraphs(snapshot, { x: 0, y: 0 });
+        return { x: clamp(still.x, -1, 1), y: clamp(still.y, -1, 1) };
+      }
+    }
+  }
 
   // --- host-cell attraction (priority 3) ----------------------------------
   // Only when the cell itself is safe enough (risk limit from the profile)
   // and the player is not already hurt (below safeHpRatio the bot flees
-  // instead of farming).
-  if (!seeking && hpRatio >= profile.safeHpRatio) {
+  // instead of farming). Close cells waive both gates: they are quick to
+  // reach and infect, and the lysis burst clears the ring around the bot.
+  if (!seeking) {
     const found = nearestInfectableCell(snapshot, px, py);
     if (found && found.dist < HOST_CELL_CHASE_RADIUS) {
       const risk = riskAt(snapshot, found.cell.x, found.cell.y, dangerRadius);
-      if (risk <= profile.hostCellRiskLimit) {
+      const close = found.dist < CLOSE_CELL_RADIUS;
+      const safeEnough = risk <= profile.hostCellRiskLimit || close;
+      const healthyEnough = hpRatio >= profile.safeHpRatio || close;
+      if (safeEnough && healthyEnough) {
         const toward = unit(found.cell.x - px, found.cell.y - py);
         // Pull harder when close: infection needs dwell time near the cell.
         const strength = found.dist < 90 ? 1.15 : 0.6;
@@ -229,20 +270,23 @@ function computeMove(snapshot, profile, opts) {
     // No boss: strafe around the nearest threat so the bot never sits still
     // while enemies converge. If nothing is near, drift toward the nearest
     // gem/cell (already handled above) or hold a slow patrol circle.
-    const near = snapshot.enemies.length > 0
-      ? snapshot.enemies.reduce((best, e) => {
-          const d = length(px - e.x, py - e.y);
-          return d < best.d ? { e, d } : best;
-        }, { e: null, d: Infinity })
-      : { e: null, d: Infinity };
-    if (near.e && near.d < dangerRadius * 1.4) {
-      const dx = px - near.e.x;
-      const dy = py - near.e.y;
-      const d = near.d || 1;
-      const radial = { x: dx / d, y: dy / d };
-      const dir = opts.orbitDir >= 0 ? 1 : -1;
-      mx += -radial.y * dir * 0.7;
-      my += radial.x * dir * 0.7;
+    if (near && near.enemy) {
+      if (near.dist > ENGAGE_FAR) {
+        // Too far to shoot (weapon range 380): close in so auto-fire stays
+        // engaged. Without this the bot outruns its own DPS and kills stall.
+        const toward = unit(near.enemy.x - px, near.enemy.y - py);
+        const strength = 0.6 + Math.min(0.4, (near.dist - ENGAGE_FAR) / 400);
+        mx += toward.x * strength;
+        my += toward.y * strength;
+      } else if (near.dist < dangerRadius * 1.4) {
+        const dx = px - near.enemy.x;
+        const dy = py - near.enemy.y;
+        const d = near.dist || 1;
+        const radial = { x: dx / d, y: dy / d };
+        const dir = opts.orbitDir >= 0 ? 1 : -1;
+        mx += -radial.y * dir * 0.7;
+        my += radial.x * dir * 0.7;
+      }
     }
   }
 
@@ -278,8 +322,13 @@ function computeMove(snapshot, profile, opts) {
 module.exports = {
   WEAPON_RANGE,
   ENGAGE_RANGE,
+  ENGAGE_FAR,
   RNA_CHASE_RADIUS,
   HOST_CELL_CHASE_RADIUS,
+  DWELL_RADIUS,
+  DWELL_SAFE_ENEMY,
+  DWELL_SAFE_TELEGRAPH,
+  CLOSE_CELL_RADIUS,
   computeMove,
   projectOutOfTelegraphs,
   unit,

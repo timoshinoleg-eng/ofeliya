@@ -49,7 +49,10 @@ const STUCK_MIN_DISPLACEMENT = 10; // px over the window
 const ESCAPE_TICKS = 10; // 1 s of escape movement
 // Flip the orbit direction every ~25 s of game time so the bot does not
 // loop predictably into a spawn wall (deterministic: tick-based).
-const ORBIT_FLIP_TICKS = 250;
+// Orbit direction flips every 600 ticks (60 s sim). A shorter period
+// scatters the enemy train the bot is kiting — flipping makes the bot run
+// into its own train instead of letting it trail behind in weapon range.
+const ORBIT_FLIP_TICKS = 600;
 
 function hashSeed(seed) {
   let h = 2166136261;
