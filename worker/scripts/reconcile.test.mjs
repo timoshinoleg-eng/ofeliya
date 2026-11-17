@@ -139,3 +139,58 @@ test('getStarTransactions: пагинация offset/limit + кросс-чек',
   // tg-out (исходящий) не должен дать telegram_without_d1
   assert.ok(![...byCode.values()].some((f) => f.detail.includes('tg-out')));
 });
+
+test('дубликаты (P1-1/P1-2): stale pending без возврата — ошибка; остальные — нет', async () => {
+  const dump = writeTmp('dump.json', {
+    payments: [
+      { charge_id: 'c1', user_id: 1, product_id: 'p', amount: 35, currency: 'XTR', status: 'paid', nonce: 'nn1', created_at: NOW },
+    ],
+    orders: [],
+    refund_ops: [
+      // Завершённый возврат дубликата dup-refunded — находки быть не должно.
+      { operation_id: 'op-dup-done', charge_id: 'dup-refunded', user_id: 1, action: 'execute', status: 'completed', created_at: OLD },
+    ],
+    duplicate_payments: [
+      { charge_id: 'dup-stale', nonce: 'n-dup-1', user_id: 1, product_id: 'p', amount: 35, currency: 'XTR', reason: 'nonce_reuse', status: 'pending', created_at: OLD },
+      { charge_id: 'dup-fresh', nonce: 'n-dup-2', user_id: 1, product_id: 'p', amount: 35, currency: 'XTR', reason: 'subscription_active', status: 'pending', created_at: NOW },
+      { charge_id: 'dup-refunded', nonce: 'n-dup-3', user_id: 1, product_id: 'p', amount: 35, currency: 'XTR', reason: 'nonce_reuse', status: 'pending', created_at: OLD },
+      { charge_id: 'dup-done', nonce: 'n-dup-4', user_id: 1, product_id: 'p', amount: 35, currency: 'XTR', reason: 'nonce_reuse', status: 'refunded', created_at: OLD },
+    ],
+  });
+  const ledger = writeTmp('ledger.json', [
+    { id: 1, user_id: 1, charge_id: 'c1', kind: 'grant', grant_type: 'rna', amount: 500, skin_id: null, reverses_charge_id: null, created_at: NOW },
+  ]);
+  const { findings, counts } = await reconcile({ dump, ledger, stuckMin: 60, now: NOW });
+  assert.equal(counts.duplicates, 4);
+  assert.deepEqual(findings.map((f) => f.code), ['duplicate_without_refund']);
+  assert.equal(findings[0].severity, 'error');
+  assert.ok(findings[0].detail.includes('dup-stale'));
+});
+
+test('кросс-чек Telegram: дубликат считается «в D1»', async () => {
+  const fetchFn = async () => ({
+    ok: true,
+    json: async () => ({
+      ok: true,
+      result: {
+        transactions: [
+          { id: 'dup-tg', amount: 35, date: 1700000000, source: { type: 'user', transaction_type: 'invoice_payment', user: { id: 1 } } },
+          { id: 'tg-lost-2', amount: 35, date: 1700000000, source: { type: 'user', transaction_type: 'invoice_payment', user: { id: 1 } } },
+        ],
+      },
+    }),
+  });
+  const dump = writeTmp('dump.json', {
+    payments: [],
+    orders: [],
+    refund_ops: [],
+    duplicate_payments: [
+      { charge_id: 'dup-tg', nonce: 'n-dup-tg', user_id: 1, product_id: 'p', amount: 35, currency: 'XTR', reason: 'nonce_reuse', status: 'pending', created_at: NOW },
+    ],
+  });
+  const ledger = writeTmp('ledger.json', []);
+  const { findings } = await reconcile({ dump, ledger, stuckMin: 60, now: NOW, botToken: 'T', fetchFn });
+  assert.deepEqual(findings.map((f) => f.code), ['telegram_without_d1']);
+  assert.ok(findings[0].detail.includes('tg-lost-2'));
+  assert.ok(!findings[0].detail.includes('dup-tg'));
+});

@@ -15,7 +15,11 @@
  *     "orders"; ledger — под ключом "ledger" в --ledger файле, refund_ops —
  *     под ключом "refund_ops" в любом из файлов)
  *     Формат файлов — объект {payments:[...], orders:[...], ledger:[...],
- *     refund_ops:[...]}; для --ledger допускается голый массив строк.
+ *     refund_ops:[...], duplicate_payments:[...]}; для --ledger допускается
+ *     голый массив строк. duplicate_payments — дамп одноимённой таблицы
+ *     (команда — в README_DEPLOY.md §11); без него сверка дубликатов
+ *     пропускается (пустой список), а Telegram-транзакции дубликатов
+ *     будут ложно помечены telegram_without_d1.
  *  2. Telegram Bot API getStarTransactions (только с --bot-token):
  *     https://core.telegram.org/bots/api#getstartransactions
  *     Параметры сверены с документацией: offset — Integer (сколько
@@ -31,11 +35,16 @@
  *  - duplicate_nonce / duplicate_charge_id в payments;
  *  - stuck_refund_op: refund_ops в 'requested' старше --stuck-min;
  *  - stale_pending_order: orders 'pending' старше --stuck-min;
+ *  - duplicate_without_refund: дубликат 'pending' старше --stuck-min без
+ *    завершённой refund-операции (деньги списаны, гранта нет, возврат
+ *    не выполнен — P1-1/P1-2);
  *  - grant_without_payment: grant-строка без платежа в payments;
  *  - reversal_without_grant: reversal без исходного гранта.
  * С токеном:
  *  - telegram_without_d1: входящий invoice_payment в Telegram без записи
- *    в D1 (потерянный платёж — главный кейс скрипта);
+ *    в D1 (потерянный платёж — главный кейс скрипта; дубликаты из
+ *    duplicate_payments считаются «в D1» — они записаны без гранта
+ *    по дизайну, а не потеряны);
  *  - d1_without_telegram: платёж D1 без транзакции в Telegram (warning:
  *    история getStarTransactions может быть неполной для старых записей).
  *
@@ -100,14 +109,15 @@ function unwrapWrangler(raw) {
   return raw;
 }
 
-/** Дамп: {payments, orders, refund_ops}, голый массив (=payments) или wrangler --json envelope. */
+/** Дамп: {payments, orders, refund_ops, duplicate_payments}, голый массив (=payments) или wrangler --json envelope. */
 function loadDump(path) {
   const raw = unwrapWrangler(JSON.parse(readFileSync(path, 'utf8')));
-  if (Array.isArray(raw)) return { payments: raw, orders: [], refundOps: [] };
+  if (Array.isArray(raw)) return { payments: raw, orders: [], refundOps: [], duplicates: [] };
   return {
     payments: loadTable(raw, 'payments'),
     orders: loadTable(raw, 'orders'),
     refundOps: loadTable(raw, 'refund_ops'),
+    duplicates: loadTable(raw, 'duplicate_payments'),
   };
 }
 
@@ -124,7 +134,7 @@ function loadLedger(path) {
  * Read-only: только GET к Bot API, никаких записей никуда.
  */
 export async function reconcile(opts) {
-  const { payments, orders, refundOps } = loadDump(opts.dump);
+  const { payments, orders, refundOps, duplicates } = loadDump(opts.dump);
   const ledger = loadLedger(opts.ledger);
   const now = typeof opts.now === 'number' && Number.isFinite(opts.now) ? opts.now : Date.now();
   const stuckCutoff = now - opts.stuckMin * 60_000;
@@ -132,6 +142,7 @@ export async function reconcile(opts) {
   const add = (severity, code, detail) => findings.push({ severity, code, detail });
 
   const byCharge = new Map(payments.map((p) => [p.charge_id, p]));
+  const duplicateByCharge = new Map(duplicates.map((d) => [d.charge_id, d]));
   const grantsByCharge = new Map();
   const reversalsByOrig = new Map();
   for (const row of ledger) {
@@ -179,6 +190,25 @@ export async function reconcile(opts) {
     }
   }
 
+  // P1-1/P1-2: дубликат — деньги списаны, гранта нет. 'pending' старше
+  // stuck-min без завершённого возврата = деньги пользователя зависли
+  // (возврат — через POST /api/admin/refund, см. README_DEPLOY.md §10).
+  // 'refund_requested' не флагим: у него есть операция в 'requested',
+  // её ловит stuck_refund_op выше.
+  const completedRefundCharges = new Set(
+    refundOps.filter((op) => op.status === 'completed').map((op) => op.charge_id)
+  );
+  for (const d of duplicates) {
+    if (
+      d.status === 'pending' &&
+      typeof d.created_at === 'number' &&
+      d.created_at < stuckCutoff &&
+      !completedRefundCharges.has(d.charge_id)
+    ) {
+      add('error', 'duplicate_without_refund', `charge_id=${d.charge_id} reason=${d.reason} — дубликат без возврата старше ${opts.stuckMin} мин`);
+    }
+  }
+
   for (const o of orders) {
     if (o.status === 'pending' && typeof o.created_at === 'number' && o.created_at < stuckCutoff) {
       add('warning', 'stale_pending_order', `nonce=${o.nonce} product=${o.product_id} висит в 'pending'`);
@@ -197,7 +227,9 @@ export async function reconcile(opts) {
     for (const t of telegramTxs) {
       const isIncomingPayment =
         t.source && t.source.type === 'user' && t.source.transaction_type === 'invoice_payment';
-      if (isIncomingPayment && !byCharge.has(t.id)) {
+      // Дубликат считается «в D1»: он записан без гранта по дизайну
+      // (P1-1/P1-2), а не потерян.
+      if (isIncomingPayment && !byCharge.has(t.id) && !duplicateByCharge.has(t.id)) {
         add('error', 'telegram_without_d1', `tx id=${t.id} amount=${t.amount} — платёж Telegram без записи в D1`);
       }
     }
@@ -208,7 +240,7 @@ export async function reconcile(opts) {
     }
   }
 
-  return { findings, counts: { payments: payments.length, orders: orders.length, ledger: ledger.length, telegramTxs: telegramTxs ? telegramTxs.length : null } };
+  return { findings, counts: { payments: payments.length, orders: orders.length, ledger: ledger.length, duplicates: duplicates.length, telegramTxs: telegramTxs ? telegramTxs.length : null } };
 }
 
 /**
@@ -236,7 +268,7 @@ export async function fetchStarTransactions({ apiBase, botToken, fetchFn }) {
 }
 
 function printReport({ findings, counts }) {
-  console.log(`reconcile: payments=${counts.payments} orders=${counts.orders} ledger=${counts.ledger}` +
+  console.log(`reconcile: payments=${counts.payments} orders=${counts.orders} ledger=${counts.ledger} duplicates=${counts.duplicates}` +
     (counts.telegramTxs == null ? ' telegram=—' : ` telegram_txs=${counts.telegramTxs}`));
   if (findings.length === 0) {
     console.log('OK: расхождений нет');
