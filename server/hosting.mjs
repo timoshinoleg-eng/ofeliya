@@ -32,7 +32,11 @@ catch { maxState = 'failed'; console.error('[ofeliya-hosting] MAX webhook config
 const { server: api } = await import('./index.mjs');
 if (!api.listening) await once(api, 'listening');
 const root = await realpath(resolve(process.env.OFELIYA_DIST_DIR ?? 'dist'));
-const securityHeaders = browserSecurityHeaders(await readFile(resolve(root, 'index.html'), 'utf8'));
+const securityHeaders = browserSecurityHeaders(await readFile(resolve(root, 'index.html'), 'utf8'), {
+  umamiEnabled: process.env.VITE_UMAMI_ENABLED === '1',
+  umamiSrc: process.env.VITE_UMAMI_SRC ?? '',
+  paymentsApiUrl: process.env.VITE_PAYMENTS_API_URL ?? '',
+});
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png',
   '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ogg': 'audio/ogg', '.mp3': 'audio/mpeg',
