@@ -41,6 +41,7 @@ try {
   const { RunState } = require(join(temp, 'game/RunState.js'));
   const { BLOODSTREAM_STAGE } = require(join(temp, 'game/StageDefinitions.js'));
   const { rollRunChoices } = require(join(temp, 'game/EvolutionSystem.js'));
+  const { guaranteedLegendaryChoices } = require(join(temp, 'game/LegendarySystem.js'));
   const { getDifficultyProfile, pickEliteModifier } = require(join(temp, 'game/DifficultyProfile.js'));
 
   const seed = 'qa-seed-2026';
@@ -107,6 +108,70 @@ try {
   assert(
     JSON.stringify(eliteTrace()) === JSON.stringify(eliteTrace()),
     'same seed produced different elite modifier trace'
+  );
+
+  // Migrated paths (harness track B): the same seed must produce identical
+  // sequences through every function that used to default to Math.random.
+  const progressionTrace = (rng, state, steps) => {
+    const trace = [];
+    for (let step = 0; step < steps; step++) {
+      const choices = rollRunChoices(state, 3, rng);
+      trace.push(choices.map((choice) => choice.id));
+      const chosen = choices[0];
+      chosen.apply(state);
+      if (!chosen.kind) state.bump(chosen.id);
+    }
+    return trace;
+  };
+
+  const legendaryRewardTrace = () => {
+    const rng = new RunRng(seed);
+    const state = new RunState({ id: 'bloodstream', order: 1 });
+    state.resetStageProgression({ id: 'heart', order: 2 });
+    const trace = [];
+    for (let step = 0; step < 3; step++) {
+      const choices = guaranteedLegendaryChoices(state, 2, rng);
+      trace.push(choices.map((choice) => choice.id));
+      if (choices.length > 0) choices[0].apply(state);
+    }
+    return trace;
+  };
+  assert(
+    JSON.stringify(legendaryRewardTrace()) === JSON.stringify(legendaryRewardTrace()),
+    'same seed produced different guaranteed-Legendary reward traces'
+  );
+
+  // Snapshot/restore composes with the migrated paths: restoring the RNG
+  // mid-run and replaying the same choices must continue identically.
+  const buildHead = () => {
+    const rng = new RunRng(seed);
+    const state = new RunState(BLOODSTREAM_STAGE);
+    progressionTrace(rng, state, 5);
+    return { rng, state };
+  };
+  const headA = buildHead();
+  const midSnapshot = headA.rng.snapshot();
+  const continuationA = progressionTrace(headA.rng, headA.state, 5);
+  const headB = buildHead();
+  const restoredMid = new RunRng(seed);
+  restoredMid.restore(midSnapshot);
+  const continuationB = progressionTrace(restoredMid, headB.state, 5);
+  assert(
+    JSON.stringify(continuationA) === JSON.stringify(continuationB),
+    'RNG snapshot/restore diverged the migrated progression continuation'
+  );
+
+  // The migrated functions consume only their own stream: rolling
+  // progression choices must not move the elite sequence.
+  const eliteOnly = new RunRng(seed);
+  const eliteBaseline = Array.from({ length: 8 }, () => pickEliteModifier(strained, eliteOnly));
+  const mixed = new RunRng(seed);
+  const mixedState = new RunState(BLOODSTREAM_STAGE);
+  progressionTrace(mixed, mixedState, 4);
+  const eliteAfterNoise = Array.from({ length: 8 }, () => pickEliteModifier(strained, mixed));
+  assert(
+    JSON.stringify(eliteAfterNoise) === JSON.stringify(eliteBaseline),
+    'progression rolls shifted the elite stream'
   );
 
   const resumable = new RunRng(seed);
