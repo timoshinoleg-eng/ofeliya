@@ -943,8 +943,18 @@ function grantsFromOrderSnapshot(order: DbOrderRow): ResolvedGrant[] | null {
     }
     if (!Array.isArray(parsed) || parsed.length === 0) return null;
     const out: ResolvedGrant[] = [];
+    const seen = new Set<string>();
     for (const c of parsed as Array<Partial<BundleComponent>>) {
       if (!c || typeof c !== 'object') return null;
+      // P2-1: дубликат пары (kind, skinId) — fail-closed (null →
+      // unknown-product путь: платёж записан, гранта нет, ручное
+      // разрешение). Иначе второй компонент молча потерялся бы в
+      // ON CONFLICT DO NOTHING по UNIQUE журнала (charge_id,
+      // grant_type, skin_id).
+      const key =
+        c.kind === 'skin' ? `skin:${typeof c.skinId === 'string' ? c.skinId : ''}` : String(c.kind);
+      if (seen.has(key)) return null;
+      seen.add(key);
       if (c.kind === 'rna' && typeof c.rna === 'number' && c.rna > 0) {
         out.push({ kind: 'rna', grant: { title: '', description: '', stars: 0, rna: Math.floor(c.rna), boosterDays: 0, skinId: null, seasonPassDays: 0 } });
       } else if (c.kind === 'booster' && typeof c.boosterDays === 'number' && c.boosterDays > 0) {

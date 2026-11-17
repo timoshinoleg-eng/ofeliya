@@ -246,14 +246,22 @@ export function grantForProduct(productId: string): { kind: GrantKind; grant: Se
  * одного элемента (эквивалент grantForProduct); бандл — по элементу на
  * компонент, каждый с синтетическим ServerGrant, несущим только значение
  * этого компонента (остальные поля — 0/null; title/description/stars —
- * от товара, для логов). null — товара нет в каталоге.
+ * от товара, для логов). null — товара нет в каталоге или бандл битый
+ * (P2-1: дубликат пары (kind, skinId) внутри бандла).
  */
 export function grantsForProduct(productId: string): ResolvedGrant[] | null {
   const grant = SERVER_GRANTS[productId];
   if (!grant) return null;
   if (grant.bundle && grant.bundle.length > 0) {
     const out: ResolvedGrant[] = [];
+    const seen = new Set<string>();
     for (const c of grant.bundle) {
+      // P2-1: UNIQUE журнала — (charge_id, grant_type, skin_id): два
+      // компонента одного вида молча потеряли бы второй (DO NOTHING).
+      // Дубликат пары (kind, skinId) — битый каталог, fail-closed.
+      const key = c.kind === 'skin' ? `skin:${c.skinId}` : c.kind;
+      if (seen.has(key)) return null;
+      seen.add(key);
       if (c.kind === 'rna') {
         out.push({ kind: 'rna', grant: { ...grant, rna: c.rna, boosterDays: 0, skinId: null, seasonPassDays: 0 } });
       } else if (c.kind === 'booster') {
