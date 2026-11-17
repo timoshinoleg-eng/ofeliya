@@ -20,6 +20,7 @@ try {
       'src/game/RunState.ts',
       'src/game/UpgradeSystem.ts',
       'src/game/ImpactDirector.ts',
+      'src/game/RunRng.ts',
       'src/systems/VfxBudget.ts',
       '--target',
       'ES2020',
@@ -40,6 +41,7 @@ try {
   );
 
   const { RunState } = require(join(temp, 'game/RunState.js'));
+  const { RunRng } = require(join(temp, 'game/RunRng.js'));
   const { ImpactDirector } = require(join(temp, 'game/ImpactDirector.js'));
   const { VfxBudget } = require(join(temp, 'systems/VfxBudget.js'));
   const {
@@ -56,17 +58,23 @@ try {
   assert(!eligible.some((x) => x.id === 'myocardial-rhythm'), 'Heart Legendary leaked into Bloodstream');
   assert(!eligible.some((x) => x.id === 'split-geometry'), 'prerequisite gating failed');
 
+  // 'pity-1': the first eight `progression` draws are all >= 0.1, so the
+  // chance roll fails eight times in a row and pity triggers on the ninth.
+  const pityRng = new RunRng('pity-1');
   for (let i = 0; i < LEGENDARY_PITY_OFFERS; i++) {
-    assert(rollLegendaryChoice(state, () => 0.99) === null, 'pity triggered too early');
+    assert(rollLegendaryChoice(state, pityRng) === null, 'pity triggered too early');
   }
-  const pity = rollLegendaryChoice(state, () => 0.99);
+  const pity = rollLegendaryChoice(state, pityRng);
   assert(pity?.kind === 'legendary', 'pity did not guarantee a Legendary');
   assert(state.run.legendaryPity === 0, 'pity did not reset after shown Legendary');
 
   const deterministicA = new RunState({ id: 'bloodstream', order: 1 });
   const deterministicB = new RunState({ id: 'bloodstream', order: 1 });
-  const a = rollLegendaryChoice(deterministicA, () => 0);
-  const b = rollLegendaryChoice(deterministicB, () => 0);
+  // 'det-9': first `progression` draw is 0.0634, so the 10% chance roll passes
+  // and both instances must pick the same real Legendary.
+  const a = rollLegendaryChoice(deterministicA, new RunRng('det-9'));
+  const b = rollLegendaryChoice(deterministicB, new RunRng('det-9'));
+  assert(a !== null, 'seeded determinism check drew no Legendary');
   assert(a?.id === b?.id, 'Legendary selection is not deterministic with injected RNG');
 
   const heart = new RunState({ id: 'heart', order: 2 });
@@ -77,11 +85,12 @@ try {
 
   const transitionReward = new RunState({ id: 'bloodstream', order: 1 });
   transitionReward.resetStageProgression({ id: 'heart', order: 2 });
-  const rewardRng = [0.65, 0];
+  // 'heart-2': first `progression` draw is 0.6634, inside the
+  // myocardial-rhythm weighted bucket (0.504, 0.809].
   const guaranteed = guaranteedLegendaryChoices(
     transitionReward,
     2,
-    () => rewardRng.shift() ?? 0
+    new RunRng('heart-2')
   );
   assert(guaranteed.length === 2, 'Boss1 reward did not produce two Legendary candidates');
   assert(guaranteed.every((x) => x.kind === 'legendary'), 'Boss1 reward leaked a non-Legendary');
@@ -94,12 +103,12 @@ try {
   const reservedBossTrophy = new RunState({ id: 'bloodstream', order: 1 });
   assert(reservedBossTrophy.addLegendary('zero-point'), 'pre-boss Legendary setup failed');
   assert(
-    rollLegendaryChoice(reservedBossTrophy, () => 0) === null,
+    rollLegendaryChoice(reservedBossTrophy, new RunRng('det-9')) === null,
     'second random pre-boss Legendary consumed the reserved trophy slot'
   );
   reservedBossTrophy.recordBossDefeated('immune-prime');
   reservedBossTrophy.resetStageProgression({ id: 'heart', order: 2 });
-  const bossTrophy = guaranteedLegendaryChoices(reservedBossTrophy, 2, () => 0);
+  const bossTrophy = guaranteedLegendaryChoices(reservedBossTrophy, 2, new RunRng('heart-2'));
   assert(bossTrophy.length > 0, 'IMMUNE PRIME trophy disappeared after a pre-boss Legendary');
   bossTrophy[0].apply(reservedBossTrophy);
   assert(

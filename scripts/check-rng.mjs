@@ -84,7 +84,7 @@ try {
     const state = new RunState(BLOODSTREAM_STAGE);
     const trace = [];
     for (let step = 0; step < 10; step++) {
-      const choices = rollRunChoices(state, 3, () => rng.next('progression'));
+      const choices = rollRunChoices(state, 3, rng);
       trace.push(choices.map((choice) => choice.id));
       const chosen = choices[0];
       chosen.apply(state);
@@ -101,7 +101,7 @@ try {
   const eliteTrace = () => {
     const rng = new RunRng(seed);
     return Array.from({ length: 12 }, () =>
-      pickEliteModifier(strained, () => rng.next('elite'))
+      pickEliteModifier(strained, rng)
     );
   };
   assert(

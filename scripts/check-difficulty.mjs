@@ -24,6 +24,7 @@ try {
       resolve('node_modules/typescript/bin/tsc'),
       'src/game/DifficultyProfile.ts',
       'src/game/HeartbeatPulseDirector.ts',
+      'src/game/RunRng.ts',
       '--target',
       'ES2020',
       '--module',
@@ -60,6 +61,7 @@ try {
   const {
     HEARTBEAT_PULSE_PROFILE,
   } = require(join(temp, 'game/HeartbeatPulseDirector.js'));
+  const { RunRng } = require(join(temp, 'game/RunRng.js'));
 
   // --- Difficulty enumeration -------------------------------------------------
   assertDeepEqual(
@@ -201,10 +203,12 @@ try {
   assert(STRAINED_DIFFICULTY.threatCapStart > 0, 'Strained threat budget missing');
   assert(STRAINED_DIFFICULTY.eliteModifiers.length === 3, 'Strained elite affix set drifted');
 
-  assert(pickEliteModifier(STRAINED_DIFFICULTY, () => 0) === 'regenerator', 'regenerator selection failed');
-  assert(pickEliteModifier(STRAINED_DIFFICULTY, () => 0.4) === 'frenzied', 'frenzied selection failed');
-  assert(pickEliteModifier(STRAINED_DIFFICULTY, () => 0.9) === 'volatile', 'volatile selection failed');
-  assert(pickEliteModifier(STANDARD_DIFFICULTY, () => 0) === null, 'Standard received an elite affix');
+  // Elite buckets are pinned to seeded RunRng instances: the first `elite`
+  // draw of each seed lands in exactly one bucket (0.240 / 0.428 / 0.873).
+  assert(pickEliteModifier(STRAINED_DIFFICULTY, new RunRng('elite-bucket-2')) === 'regenerator', 'regenerator selection failed');
+  assert(pickEliteModifier(STRAINED_DIFFICULTY, new RunRng('elite-bucket-3')) === 'frenzied', 'frenzied selection failed');
+  assert(pickEliteModifier(STRAINED_DIFFICULTY, new RunRng('elite-bucket-0')) === 'volatile', 'volatile selection failed');
+  assert(pickEliteModifier(STANDARD_DIFFICULTY, new RunRng('elite-bucket-2')) === null, 'Standard received an elite affix');
 
   const strainedHeart = heartbeatProfileForDifficulty(STRAINED_DIFFICULTY);
   assert(

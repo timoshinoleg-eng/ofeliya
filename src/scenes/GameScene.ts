@@ -1097,7 +1097,7 @@ export class GameScene extends Phaser.Scene {
       this.pendingChoices = rollRunChoices(
         this.runState,
         3,
-        () => this.gameplayRng.next('progression')
+        this.gameplayRng
       );
       this.awaitingChoice = true;
       if (this.pendingChoices.length > 0) this.trackComprehensionOnce('first_mutation_opened');
@@ -1118,7 +1118,7 @@ export class GameScene extends Phaser.Scene {
     const stage = this.stageDirector.currentStage;
     const { hpScale, dmgScale } = difficultyForStage(stage, this.runState.stage.timeMs);
     const eliteModifier = elite
-      ? pickEliteModifier(this.difficulty, () => this.gameplayRng.next('elite'))
+      ? pickEliteModifier(this.difficulty, this.gameplayRng)
       : null;
     e.activate(this, kind, x, y, {
       elite,
@@ -1609,7 +1609,7 @@ export class GameScene extends Phaser.Scene {
       this.pendingChoices = rollRunChoices(
         this.runState,
         3,
-        () => this.gameplayRng.next('progression')
+        this.gameplayRng
       );
       return true;
     }
@@ -2119,7 +2119,7 @@ export class GameScene extends Phaser.Scene {
       const rewardChoices = guaranteedLegendaryChoices(
         this.runState,
         2,
-        () => this.gameplayRng.next('progression')
+        this.gameplayRng
       );
       if (rewardChoices.length > 0) {
         this.pendingChoices = rewardChoices;
