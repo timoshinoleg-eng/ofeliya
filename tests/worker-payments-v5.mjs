@@ -245,7 +245,7 @@ try {
     eq(d2.status, 200, 'redelivery 200');
     eq(db.wallets.get(USER_ID).purchased_rna, 1500, 'rna granted exactly once');
     eq(db.ledger.size, 1, 'ledger: exactly one row');
-    const entry = db.ledger.get('ch-v5-dup');
+    const entry = [...db.ledger.values()].find((r) => r.charge_id === 'ch-v5-dup');
     eq(entry.kind, 'grant', 'ledger kind grant (v16 schema)');
     eq(entry.grant_type, 'rna', 'ledger grant_type rna');
     eq(entry.amount_text, '1500', 'ledger amount 1500');

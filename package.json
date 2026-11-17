@@ -60,6 +60,7 @@
     "test:worker-payments-v4": "node tests/worker-payments-v4.mjs",
     "test:worker-payments-v5": "node tests/worker-payments-v5.mjs",
     "test:worker-season-pass": "node tests/worker-season-pass.mjs",
+    "test:worker-bundles": "node tests/worker-bundles.mjs",
     "test:season-quests": "node tests/season-quests.mjs",
     "test:server-wallet-sync": "node tests/server-wallet-sync.mjs",
     "test:stars-proxy": "node tests/stars-proxy.mjs",

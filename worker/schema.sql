@@ -144,6 +144,9 @@ CREATE TABLE IF NOT EXISTS orders (
   grant_skin_id       TEXT,
   -- Монетизация v3: снапшот дней сезонного пропуска (4-е поле гранта).
   grant_season_pass_days INTEGER,
+  -- Монетизация v3 (бандлы): снапшот компонентов мульти-гранта —
+  -- JSON-массив BundleComponent (NULL у одиночных товаров).
+  grant_bundle_json TEXT,
   status     TEXT    NOT NULL DEFAULT 'pending',
   created_at INTEGER NOT NULL
 );
@@ -184,21 +187,24 @@ CREATE TABLE IF NOT EXISTS wallets (
 );
 
 -- Append-only журнал грантов и возвратов. id — монотонный seq (клиент
--- синкается по нему: /api/wallet → since_seq/tip_seq). charge_id UNIQUE —
--- идемпотентность выдачи при ретраях Telegram: дубликатная доставка даёт
+-- синкается по нему: /api/wallet → since_seq/tip_seq). UNIQUE —
+-- (charge_id, grant_type, skin_id): один платёж выдаёт N строк (бандл —
+-- по строке на компонент), а дубликатная доставка компонента даёт
 -- ON CONFLICT DO NOTHING → вставки нет → триггер не срабатывает → ноль
--- доп. начисления.
+-- доп. начисления. skin_id нормализуется в '' при вставке (см.
+-- SQL_INSERT_LEDGER_GRANT): NULL в UNIQUE не конфликтовал бы.
 CREATE TABLE IF NOT EXISTS wallet_ledger (
   id                INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id           INTEGER NOT NULL,
-  charge_id         TEXT NOT NULL UNIQUE,
+  charge_id         TEXT NOT NULL,
   kind              TEXT NOT NULL,   -- 'grant' | 'reversal'
   grant_type        TEXT NOT NULL,   -- 'rna' | 'booster' | 'skin' | 'season_pass' (v17)
   amount            INTEGER NOT NULL DEFAULT 0,  -- знаковый: rna ±N; booster ±мс; season_pass ±мс; skin 0
-  skin_id           TEXT,            -- для grant_type='skin'
+  skin_id           TEXT,            -- для grant_type='skin' ('' у остальных — нормализация, см. выше)
   reverses_charge_id TEXT,           -- для kind='reversal': какой грант откатываем
   amount_text       TEXT NOT NULL DEFAULT '',    -- аудит-совместимость (v15)
-  created_at        INTEGER NOT NULL
+  created_at        INTEGER NOT NULL,
+  UNIQUE (charge_id, grant_type, skin_id)
 );
 CREATE INDEX IF NOT EXISTS idx_wallet_ledger_user_seq ON wallet_ledger(user_id, id);
 
@@ -221,10 +227,14 @@ CREATE INDEX IF NOT EXISTS idx_subscription_events_nonce ON subscription_events(
 -- Владение скинами (патч №16). Владение = EXISTS строка status='active'.
 -- PK включает charge_id: один скин может быть выдан дважды (два платежа) —
 -- reversal гасит только строку своего charge_id.
+-- Монетизация v3: UNIQUE на charge_id СНЯТ — бандл из трёх скинов пишет
+-- три строки с ОДНИМ charge_id (skin-trio); уникальность держит PK
+-- (user_id, skin_id, charge_id). Reversal по charge_id гасит все строки
+-- этого платежа (полный возврат бандла), что и нужно.
 CREATE TABLE IF NOT EXISTS wallet_skins (
   user_id    INTEGER NOT NULL,
   skin_id    TEXT NOT NULL,
-  charge_id  TEXT NOT NULL UNIQUE,
+  charge_id  TEXT NOT NULL,
   status     TEXT NOT NULL DEFAULT 'active',  -- 'active' | 'reversed'
   granted_at INTEGER NOT NULL,
   PRIMARY KEY (user_id, skin_id, charge_id)

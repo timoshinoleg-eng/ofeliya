@@ -86,7 +86,7 @@ export const SHOP_CATALOG: readonly Product[] = [
   },
 ];
 
-const VALID_KINDS: readonly ProductKind[] = ['skin', 'booster', 'currency', 'season_pass'];
+const VALID_KINDS: readonly ProductKind[] = ['skin', 'booster', 'currency', 'season_pass', 'bundle'];
 
 /**
  * Чистая функция: проверяет каталог. Возвращает список ошибок (пусто = ок).
@@ -125,6 +125,24 @@ export function validateCatalog(products: readonly Product[]): string[] {
         errors.push(`${where}: skin without art.seed`);
       if (!p.art || typeof p.art.palette !== 'string' || !p.art.palette)
         errors.push(`${where}: skin without art.palette`);
+    }
+    // Монетизация v3: бандл — непустой список валидных компонентов.
+    if (p.kind === 'bundle') {
+      if (!Array.isArray(p.bundle) || p.bundle.length === 0) {
+        errors.push(`${where}: bundle without components`);
+      } else {
+        p.bundle.forEach((c, j) => {
+          const ok =
+            c &&
+            typeof c === 'object' &&
+            ((c.kind === 'rna' && typeof c.rna === 'number' && c.rna > 0) ||
+              (c.kind === 'booster' &&
+                typeof c.boosterDays === 'number' &&
+                c.boosterDays > 0) ||
+              (c.kind === 'skin' && typeof c.skinId === 'string' && c.skinId.length > 0));
+          if (!ok) errors.push(`${where}: bundle component [${j}] invalid`);
+        });
+      }
     }
     if (p.tag !== undefined && (typeof p.tag !== 'string' || !p.tag))
       errors.push(`${where}: bad tag`);

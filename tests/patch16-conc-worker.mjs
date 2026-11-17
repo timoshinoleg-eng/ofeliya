@@ -73,7 +73,7 @@ function runRefundMark(t) {
       t.operationId, t.chargeId, t.userId, 'mark', 'completed', t.reason, null, t.now, t.now
     );
     const r2 = stmt('upr', sql.SQL_UPDATE_PAYMENT_REFUNDED).run(t.chargeId);
-    const r3 = stmt('ilr', sql.SQL_INSERT_LEDGER_REVERSAL).run(t.revChargeId, t.now, t.chargeId, t.chargeId, t.chargeId);
+    const r3 = stmt('ilr', sql.SQL_INSERT_LEDGER_REVERSAL).run(t.operationId, t.now, t.chargeId, t.chargeId, t.chargeId);
     return { changes: [Number(r1.changes), Number(r2.changes), Number(r3.changes)] };
   });
 }

@@ -16,6 +16,9 @@
  *     events.doubleRna — та же точка, тот же смысл).
  *   - kind 'season_pass' → MetaWallet.seasonPassUntilMs (монетизация v3:
  *     пропуск на 30 дней; гейт paid-трека сезонных миссий).
+ *   - kind 'bundle' → по гранту на компонент bundle[] (монетизация v3:
+ *     rna/booster/skin; список компонентов — в Product.bundle, зеркало
+ *     worker/src/grants.ts BundleComponent).
  *
  * Патч №13 (P1-a): applyPurchaseGrants бросает при неудаче — см. его
  * комментарий; fulfillPurchase ловит и возвращает {ok:false}, витрина
@@ -58,6 +61,8 @@ export const SEASON_PASS_DURATION_MS = 30 * 24 * 3600 * 1000;
 /**
  * Чистая функция: какие награды даёт товар. Неизвестный id/вид —
  * пустой список (fail-closed: покупка не выдаёт то, чего нет в маппинге).
+ * Бандл (монетизация v3) — по гранту на компонент; битый компонент
+ * пропускается (валидация каталога ловит его раньше — см. validateCatalog).
  */
 export function purchaseGrants(product: Product): PurchaseGrant[] {
   if (product.kind === 'skin') return [{ type: 'skin', skinId: product.id }];
@@ -68,6 +73,17 @@ export function purchaseGrants(product: Product): PurchaseGrant[] {
   if (product.kind === 'booster') return [{ type: 'booster', durationMs: BOOSTER_DURATION_MS }];
   if (product.kind === 'season_pass') {
     return [{ type: 'season_pass', durationMs: SEASON_PASS_DURATION_MS }];
+  }
+  if (product.kind === 'bundle') {
+    if (!Array.isArray(product.bundle)) return [];
+    const out: PurchaseGrant[] = [];
+    for (const c of product.bundle) {
+      if (c.kind === 'rna' && c.rna > 0) out.push({ type: 'rna', amount: c.rna });
+      else if (c.kind === 'booster' && c.boosterDays > 0)
+        out.push({ type: 'booster', durationMs: c.boosterDays * 24 * 3600 * 1000 });
+      else if (c.kind === 'skin' && c.skinId) out.push({ type: 'skin', skinId: c.skinId });
+    }
+    return out;
   }
   return [];
 }

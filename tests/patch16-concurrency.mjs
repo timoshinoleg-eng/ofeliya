@@ -74,7 +74,7 @@ function grantTask(name, { userId = USER, productId, chargeId, nonce, now = Date
 function refundMarkTask(name, { userId = USER, chargeId, operationId, now = Date.now() }) {
   return {
     type: 'refund-mark', name, userId, chargeId, operationId,
-    revChargeId: `rev:${operationId}`, reason: 'p16-concurrency', now,
+    reason: 'p16-concurrency', now,
   };
 }
 

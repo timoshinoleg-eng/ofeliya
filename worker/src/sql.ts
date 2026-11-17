@@ -60,21 +60,28 @@ export const SQL_INSERT_PAYMENT =
  * wallet_skins. Колонки: (user_id, charge_id, kind='grant', grant_type,
  * amount, skin_id, reverses_charge_id=NULL, amount_text, created_at).
  * amount — знаковый INTEGER: rna +N; booster +мс; skin 0.
+ * Монетизация v3 (бандлы): один charge_id — N строк (по компоненту).
+ * UNIQUE журнала — (charge_id, grant_type, skin_id); skin_id нормализуется
+ * COALESCE(?, '') при вставке, иначе NULL в UNIQUE не конфликтовал бы
+ * (SQLite считает NULL отличными друг от друга — дубликатная доставка
+ * компонента 'rna' прошла бы дважды). ON CONFLICT — по тому же ключу.
  */
 export const SQL_INSERT_LEDGER_GRANT =
   'INSERT INTO wallet_ledger ' +
   "(user_id, charge_id, kind, grant_type, amount, skin_id, reverses_charge_id, amount_text, created_at) " +
-  'VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(charge_id) DO NOTHING';
+  "VALUES (?,?,?,?,?,COALESCE(?,''),?,?,?) ON CONFLICT(charge_id, grant_type, skin_id) DO NOTHING";
 
 /** Создание заказа (B2): цена, версия каталога и СНАПШОТ ГРАНТА фиксируются
  *  в заказе (иммутабельно, P1-2). Параметры:
  *  (nonce, user_id, product_id, amount_stars, sku_version,
  *   grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days,
- *   created_at). Монетизация v3: + grant_season_pass_days. */
+ *   grant_bundle_json, created_at). Монетизация v3: + grant_season_pass_days
+ *  (пропуск) и grant_bundle_json (бандл: JSON-массив BundleComponent,
+ *  NULL у одиночных товаров). */
 export const SQL_INSERT_ORDER =
   'INSERT INTO orders (nonce, user_id, product_id, amount_stars, sku_version, ' +
-  'grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, status, created_at) ' +
-  "VALUES (?,?,?,?,?,?,?,?,?, 'pending',?)";
+  'grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, grant_bundle_json, status, created_at) ' +
+  "VALUES (?,?,?,?,?,?,?,?,?,?, 'pending',?)";
 
 /**
  * Аудит-строка BotSubscriptionUpdated (монетизация v3): состояние подписки
@@ -121,13 +128,22 @@ export const SQL_UPDATE_PAYMENT_REFUNDED_FROM_ANY =
  * P1-6: EXISTS-guard по payments.status='refunded' — reversal применяется
  * ТОЛЬКО если платёж действительно переведён в 'refunded' этим батчем
  * (защита от TOCTOU-гонки: mark во время чужого execute).
- * Параметры: (rev_charge_id, created_at, orig_charge_id, orig_charge_id,
- * orig_charge_id).
+ * Монетизация v3 (бандлы): один charge_id — N grant-строк; SELECT
+ * возвращает N строк и вставляет N reversal-строк (по одной на компонент).
+ * charge_id reversal выводится ПОСТРОЧНО из гранта:
+ * 'rev:' || op || ':' || grant_type || ':' || coalesce(skin_id,'') —
+ * иначе все N строк получили бы один charge_id и нарушили UNIQUE
+ * (charge_id, grant_type, skin_id) при двух компонентах одного вида.
+ * skin_id копируется нормализованным (COALESCE — для строк, записанных
+ * до миграции-17 с NULL).
+ * Параметры: (operation_id, created_at, orig_charge_id, orig_charge_id,
+ * orig_charge_id). Первый параметр — ГОЛЫЙ operationId (раньше —
+ * готовый 'rev:<op>'): префикс 'rev:' добавляет SQL.
  */
 export const SQL_INSERT_LEDGER_REVERSAL =
   'INSERT INTO wallet_ledger ' +
   '(user_id, charge_id, kind, grant_type, amount, skin_id, reverses_charge_id, amount_text, created_at) ' +
-  "SELECT user_id, ?, 'reversal', grant_type, -amount, skin_id, charge_id, " +
+  "SELECT user_id, 'rev:' || ? || ':' || grant_type || ':' || COALESCE(skin_id, ''), 'reversal', grant_type, -amount, COALESCE(skin_id, ''), charge_id, " +
   "'reversal-of:' || charge_id, ? FROM wallet_ledger WHERE charge_id=? AND kind='grant' " +
   "AND NOT EXISTS (SELECT 1 FROM wallet_ledger WHERE reverses_charge_id=? AND kind='reversal') " +
   "AND EXISTS (SELECT 1 FROM payments WHERE charge_id=? AND status='refunded')";

@@ -28,6 +28,14 @@
  *     как бустер. Товар с seasonPassDays > 0 — ПОДПИСКА Telegram Stars:
  *     subscription.periodSeconds = 2592000 (30 дней — ЕДИНСТВЕННОЕ
  *     допустимое значение; кап цены подписки 10 000 Stars).
+ * Мульти-грант (монетизация v3, бандлы): товар с полем bundle выдаёт
+ * НЕСКОЛЬКО грантов одним платежом — по одной строке wallet_ledger на
+ * компонент (один charge_id, N строк; UNIQUE журнала —
+ * (charge_id, grant_type, skin_id), см. worker/schema.sql). Компоненты —
+ * только rna/booster/skin: сезонный пропуск в бандл не входит (пропуск —
+ * подписка, subscription_period применяется ко всему инвойсу).
+ * grantsForProduct возвращает СПИСОК (для одиночных — из одного элемента);
+ * grantForProduct — legacy для одиночных (для бандлов возвращает null).
  */
 export interface ServerGrant {
   /** Заголовок/описание — для createInvoiceLink (бывший SERVER_PRODUCTS). */
@@ -50,7 +58,25 @@ export interface ServerGrant {
    * другое значение → 500 catalog-misconfigured, инвойс не создаётся).
    */
   subscription?: { periodSeconds: number };
+  /**
+   * Бандл (монетизация v3): компоненты мульти-гранта. Товар с bundle
+   * выдаёт по одному гранту на компонент (N строк wallet_ledger, один
+   * charge_id). Одиночные поля (rna/boosterDays/skinId/seasonPassDays)
+   * у бандлов — 0/null; снапшот заказа хранит bundle как JSON
+   * (orders.grant_bundle_json). Компоненты — только rna/booster/skin.
+   */
+  bundle?: BundleComponent[];
 }
+
+/**
+ * Компонент бандла (монетизация v3). Дискриминированный union — у
+ * компонента ровно один активный вид (плоская форма {rna, boosterDays,
+ * skinId} неоднозначна: неясно, какое поле действует).
+ */
+export type BundleComponent =
+  | { kind: 'rna'; rna: number }
+  | { kind: 'booster'; boosterDays: number }
+  | { kind: 'skin'; skinId: string };
 
 /**
  * Версия серверного каталога (патч №16, B2). Пишется в orders.sku_version и
@@ -147,6 +173,12 @@ export const SERVER_GRANTS: Record<string, ServerGrant> = {
 /** Вид гранта для журнала wallet_ledger. */
 export type GrantKind = 'rna' | 'booster' | 'skin' | 'season_pass';
 
+/** Один разрешённый грант: вид + значения (для бандлов — по компоненту). */
+export interface ResolvedGrant {
+  kind: GrantKind;
+  grant: ServerGrant;
+}
+
 /**
  * Грант товара: какой вид и в каком размере применить к кошельку.
  * Возвращает null, если товара нет в каталоге (unknown-product —
@@ -154,6 +186,8 @@ export type GrantKind = 'rna' | 'booster' | 'skin' | 'season_pass';
  * Порядок проверок — тот же, что в grantFromOrderSnapshot (index.ts):
  * скин, пропуск, бустер, РНК. Корректный каталог даёт товару ровно один
  * вид; порядок нужен только для битых данных.
+ * Для бандлов (bundle) возвращает null — у бандла нет одного вида;
+ * используйте grantsForProduct.
  */
 export function grantForProduct(productId: string): { kind: GrantKind; grant: ServerGrant } | null {
   const grant = SERVER_GRANTS[productId];
@@ -163,6 +197,35 @@ export function grantForProduct(productId: string): { kind: GrantKind; grant: Se
   if (grant.boosterDays > 0) return { kind: 'booster', grant };
   if (grant.rna > 0) return { kind: 'rna', grant };
   return null;
+}
+
+/**
+ * Гранты товара — СПИСОК (монетизация v3). Одиночный товар — список из
+ * одного элемента (эквивалент grantForProduct); бандл — по элементу на
+ * компонент, каждый с синтетическим ServerGrant, несущим только значение
+ * этого компонента (остальные поля — 0/null; title/description/stars —
+ * от товара, для логов). null — товара нет в каталоге.
+ */
+export function grantsForProduct(productId: string): ResolvedGrant[] | null {
+  const grant = SERVER_GRANTS[productId];
+  if (!grant) return null;
+  if (grant.bundle && grant.bundle.length > 0) {
+    const out: ResolvedGrant[] = [];
+    for (const c of grant.bundle) {
+      if (c.kind === 'rna') {
+        out.push({ kind: 'rna', grant: { ...grant, rna: c.rna, boosterDays: 0, skinId: null, seasonPassDays: 0 } });
+      } else if (c.kind === 'booster') {
+        out.push({ kind: 'booster', grant: { ...grant, rna: 0, boosterDays: c.boosterDays, skinId: null, seasonPassDays: 0 } });
+      } else if (c.kind === 'skin') {
+        out.push({ kind: 'skin', grant: { ...grant, rna: 0, boosterDays: 0, skinId: c.skinId, seasonPassDays: 0 } });
+      } else {
+        return null;
+      }
+    }
+    return out;
+  }
+  const single = grantForProduct(productId);
+  return single ? [single] : null;
 }
 
 /**

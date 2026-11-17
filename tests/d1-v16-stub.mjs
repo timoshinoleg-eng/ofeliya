@@ -67,29 +67,38 @@ export function makeD1() {
     else if (kind === 'grant' && grant_type === 'booster') w.booster_until_ms = Math.max(w.booster_until_ms, created_at) + amount;
     else if (kind === 'grant' && grant_type === 'season_pass') w.season_pass_until_ms = Math.max(w.season_pass_until_ms, created_at) + amount;
     else if (kind === 'grant' && grant_type === 'skin' && skin_id) {
-      if (!walletSkins.has(charge_id)) {
-        walletSkins.set(charge_id, { user_id, skin_id, charge_id, status: 'active', granted_at: created_at });
+      // Монетизация v3: ключ wallet_skins — (user, skin, charge): бандл
+      // пишет три скина с одним charge_id (UNIQUE с charge_id снят).
+      const sk = `${user_id}|${skin_id}|${charge_id}`;
+      if (!walletSkins.has(sk)) {
+        walletSkins.set(sk, { user_id, skin_id, charge_id, status: 'active', granted_at: created_at });
       }
     } else if (kind === 'reversal' && grant_type === 'rna') w.purchased_rna = Math.max(0, w.purchased_rna + amount);
     else if (kind === 'reversal' && grant_type === 'booster') w.booster_until_ms = Math.max(created_at, w.booster_until_ms + amount);
     else if (kind === 'reversal' && grant_type === 'season_pass') w.season_pass_until_ms = Math.max(created_at, w.season_pass_until_ms + amount);
     else if (kind === 'reversal' && grant_type === 'skin' && reverses_charge_id) {
-      const s = walletSkins.get(reverses_charge_id);
-      if (s && s.status === 'active') s.status = 'reversed';
+      // SQL UPDATE гасит ВСЕ активные строки этого charge_id (бандл).
+      for (const s of walletSkins.values()) {
+        if (s.charge_id === reverses_charge_id && s.status === 'active') s.status = 'reversed';
+      }
     }
     w.updated_at = created_at;
   }
+
+  // Ключ журнала — UNIQUE (charge_id, grant_type, skin_id) v17:
+  // skin_id нормализуется в '' (как COALESCE в SQL_INSERT_LEDGER_GRANT).
+  const ledgerKey = (charge_id, grant_type, skin_id) => `${charge_id}\0${grant_type}\0${skin_id ?? ''}`;
 
   function execRun(sql, params, batchCtx) {
     const q = norm(sql);
     if (batchCtx && hooks.failBatchAtStatement === batchCtx.index) {
       throw new Error('d1-stub: injected statement failure');
     }
-    // SQL_INSERT_ORDER (v16, B2): заказ иммутабелен. v17: + grant_season_pass_days.
+    // SQL_INSERT_ORDER (v16, B2): заказ иммутабелен. v17: + grant_season_pass_days + grant_bundle_json.
     if (q.startsWith('INSERT INTO orders')) {
-      const [nonce, user_id, product_id, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, created_at] = params;
+      const [nonce, user_id, product_id, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, grant_bundle_json, created_at] = params;
       if (orders.has(nonce)) throw new Error('UNIQUE constraint failed: orders.nonce');
-      orders.set(nonce, { nonce, user_id, product_id, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, status: 'pending', created_at });
+      orders.set(nonce, { nonce, user_id, product_id, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, grant_bundle_json, status: 'pending', created_at });
       return { success: true, meta: { changes: 1 } };
     }
     if (q === "UPDATE orders SET status='paid' WHERE nonce=? AND status='pending'") {
@@ -112,35 +121,48 @@ export function makeD1() {
       payments.set(charge_id, { charge_id, user_id, product_id, amount, currency, status, nonce, sku_version, created_at, fulfilled_at });
       return { success: true, meta: { changes: 1 } };
     }
-    // SQL_INSERT_LEDGER_GRANT (+ триггер).
+    // SQL_INSERT_LEDGER_GRANT (+ триггер). UNIQUE v17 — (charge_id,
+    // grant_type, skin_id); skin_id нормализуется в '' (COALESCE в SQL).
     if (q.startsWith('INSERT INTO wallet_ledger (user_id, charge_id, kind, grant_type,') && q.includes('VALUES')) {
       const [user_id, charge_id, kind, grant_type, amount, skin_id, reverses_charge_id, amount_text, created_at] = params;
-      if (ledger.has(charge_id)) return { success: true, meta: { changes: 0 } };
-      const row = { id: ledger.size + 1, user_id, charge_id, kind, grant_type, amount, skin_id, reverses_charge_id, amount_text, created_at };
-      ledger.set(charge_id, row);
+      const normSkinId = skin_id ?? '';
+      if (ledger.has(ledgerKey(charge_id, grant_type, normSkinId))) return { success: true, meta: { changes: 0 } };
+      const row = { id: ledger.size + 1, user_id, charge_id, kind, grant_type, amount, skin_id: normSkinId, reverses_charge_id, amount_text, created_at };
+      ledger.set(ledgerKey(charge_id, grant_type, normSkinId), row);
       applyTrigger(row);
       return { success: true, meta: { changes: 1 } };
     }
-    // SQL_INSERT_LEDGER_REVERSAL (+ триггер). Params: (rev_charge_id, created_at, orig, orig, orig).
-    // P1-6: EXISTS-guard по payments.status='refunded' — стаб проверяет payments Map.
+    // SQL_INSERT_LEDGER_REVERSAL (+ триггер). Params: (operation_id,
+    // created_at, orig, orig, orig). Монетизация v3: один charge_id — N
+    // grant-строк (бандл) → N reversal-строк, charge_id построчный
+    // 'rev:<op>:<grant_type>:<skin_id>'. P1-6: EXISTS-guard по
+    // payments.status='refunded' — стаб проверяет payments Map.
     if (q.startsWith('INSERT INTO wallet_ledger (user_id, charge_id, kind, grant_type,') && q.includes('SELECT')) {
-      const [rev_charge_id, created_at, orig_charge_id] = params;
-      if (ledger.has(rev_charge_id)) return { success: true, meta: { changes: 0 } };
-      const grant = ledger.get(orig_charge_id);
+      const [operation_id, created_at, orig_charge_id] = params;
+      const grants = [...ledger.values()].filter(
+        (r) => r.charge_id === orig_charge_id && r.kind === 'grant'
+      );
       const alreadyReversed = [...ledger.values()].some(
         (r) => r.kind === 'reversal' && r.reverses_charge_id === orig_charge_id
       );
       const payment = payments.get(orig_charge_id);
-      if (!grant || grant.kind !== 'grant' || alreadyReversed) return { success: true, meta: { changes: 0 } };
+      if (grants.length === 0 || alreadyReversed) return { success: true, meta: { changes: 0 } };
       if (!payment || payment.status !== 'refunded') return { success: true, meta: { changes: 0 } };
-      const row = {
-        id: ledger.size + 1, user_id: grant.user_id, charge_id: rev_charge_id, kind: 'reversal',
-        grant_type: grant.grant_type, amount: -grant.amount, skin_id: grant.skin_id,
-        reverses_charge_id: orig_charge_id, amount_text: `reversal-of:${orig_charge_id}`, created_at,
-      };
-      ledger.set(rev_charge_id, row);
-      applyTrigger(row);
-      return { success: true, meta: { changes: 1 } };
+      let inserted = 0;
+      for (const grant of grants) {
+        const revChargeId = `rev:${operation_id}:${grant.grant_type}:${grant.skin_id ?? ''}`;
+        const key = ledgerKey(revChargeId, grant.grant_type, grant.skin_id ?? '');
+        if (ledger.has(key)) continue;
+        const row = {
+          id: ledger.size + 1, user_id: grant.user_id, charge_id: revChargeId, kind: 'reversal',
+          grant_type: grant.grant_type, amount: -grant.amount, skin_id: grant.skin_id ?? '',
+          reverses_charge_id: orig_charge_id, amount_text: `reversal-of:${orig_charge_id}`, created_at,
+        };
+        ledger.set(key, row);
+        applyTrigger(row);
+        inserted++;
+      }
+      return { success: true, meta: { changes: inserted } };
     }
     // SQL_INSERT_SUBSCRIPTION_EVENT (v17): аудит BotSubscriptionUpdated.
     if (q.startsWith('INSERT INTO subscription_events')) {
@@ -219,10 +241,10 @@ export function makeD1() {
 
   function execSelect(sql, params) {
     const q = norm(sql);
-    if (q === 'SELECT user_id, product_id, status, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days FROM orders WHERE nonce=?') {
+    if (q === 'SELECT user_id, product_id, status, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, grant_bundle_json FROM orders WHERE nonce=?') {
       const row = orders.get(params[0]);
       return row
-        ? [{ user_id: row.user_id, product_id: row.product_id, status: row.status, amount_stars: row.amount_stars, sku_version: row.sku_version, grant_rna: row.grant_rna ?? null, grant_booster_days: row.grant_booster_days ?? null, grant_skin_id: row.grant_skin_id ?? null, grant_season_pass_days: row.grant_season_pass_days ?? null }]
+        ? [{ user_id: row.user_id, product_id: row.product_id, status: row.status, amount_stars: row.amount_stars, sku_version: row.sku_version, grant_rna: row.grant_rna ?? null, grant_booster_days: row.grant_booster_days ?? null, grant_skin_id: row.grant_skin_id ?? null, grant_season_pass_days: row.grant_season_pass_days ?? null, grant_bundle_json: row.grant_bundle_json ?? null }]
         : [];
     }
     // handleStaleOrders: заказы pending старше cutoff.
@@ -370,11 +392,12 @@ export function makeD1() {
 /** Засеять заказ новым SQL (как его пишет /api/invoice v16/v17). */
 export async function seedOrder(db, nonce, userId, productId, amountStars, opts = {}) {
   const { skuVersion = 2, status = 'pending', createdAt = Date.now(),
-    grantRna = null, grantBoosterDays = null, grantSkinId = null, grantSeasonPassDays = null } =
+    grantRna = null, grantBoosterDays = null, grantSkinId = null, grantSeasonPassDays = null,
+    grantBundleJson = null } =
     typeof opts === 'object' && opts !== null ? opts : {};
   await db
-    .prepare("INSERT INTO orders (nonce, user_id, product_id, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, status, created_at) VALUES (?,?,?,?,?,?,?,?,?, 'pending',?)")
-    .bind(nonce, userId, productId, amountStars, skuVersion, grantRna, grantBoosterDays, grantSkinId, grantSeasonPassDays, createdAt)
+    .prepare("INSERT INTO orders (nonce, user_id, product_id, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, grant_bundle_json, status, created_at) VALUES (?,?,?,?,?,?,?,?,?,?, 'pending',?)")
+    .bind(nonce, userId, productId, amountStars, skuVersion, grantRna, grantBoosterDays, grantSkinId, grantSeasonPassDays, grantBundleJson, createdAt)
     .run();
   if (status !== 'pending') {
     const row = db.orders.get(nonce);

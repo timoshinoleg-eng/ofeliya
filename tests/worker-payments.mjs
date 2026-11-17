@@ -187,10 +187,10 @@ try {
             }
             if (sql.startsWith('INSERT INTO orders')) {
               // v16 (B2+P1-2): заказ иммутабелен — amount_stars, sku_version и снапшот гранта пишутся сразу.
-              // v17 (монетизация v3): + grant_season_pass_days (4-е поле снапшота).
-              const [nonce, userId, productId, amountStars, skuVersion, grantRna, grantBoosterDays, grantSkinId, grantSeasonPassDays, createdAt] = params;
+              // v17 (монетизация v3): + grant_season_pass_days (4-е поле снапшота) + grant_bundle_json.
+              const [nonce, userId, productId, amountStars, skuVersion, grantRna, grantBoosterDays, grantSkinId, grantSeasonPassDays, grantBundleJson, createdAt] = params;
               if (orders.has(nonce)) throw new Error('UNIQUE constraint failed: orders.nonce');
-              orders.set(nonce, { user_id: userId, product_id: productId, amount_stars: amountStars, sku_version: skuVersion, grant_rna: grantRna, grant_booster_days: grantBoosterDays, grant_skin_id: grantSkinId, grant_season_pass_days: grantSeasonPassDays, status: 'pending', created_at: createdAt });
+              orders.set(nonce, { user_id: userId, product_id: productId, amount_stars: amountStars, sku_version: skuVersion, grant_rna: grantRna, grant_booster_days: grantBoosterDays, grant_skin_id: grantSkinId, grant_season_pass_days: grantSeasonPassDays, grant_bundle_json: grantBundleJson, status: 'pending', created_at: createdAt });
               return { meta: { changes: 1 } };
             }
             throw new Error(`worker-payments D1 stub: unknown SQL: ${sql}`);

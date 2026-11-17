@@ -62,9 +62,19 @@
 -- Что меняется (v16 → v17):
 --   - orders: + grant_season_pass_days INTEGER (снапшот дней пропуска,
 --     4-е поле гранта; backfill 0 для старых заказов);
+--   - orders: + grant_bundle_json TEXT (снапшот компонентов бандла,
+--     NULL у одиночных; backfill не нужен);
 --   - wallets: + season_pass_until_ms INTEGER NOT NULL DEFAULT 0
 --     (абсолютный срок пропуска, как booster_until_ms);
 --   - subscription_events: новая таблица (аудит BotSubscriptionUpdated);
+--   - wallet_ledger: UNIQUE(charge_id) → UNIQUE(charge_id, grant_type,
+--     skin_id) — ПЕРЕСОЗДАНИЕ таблицы копированием (SQLite не умеет
+--     DROP CONSTRAINT; DROP TABLE сносит и триггер — он пересоздаётся
+--     шагом 4). Старые NULL skin_id нормализуются в '' при копировании
+--     (инвариант нового UNIQUE: skin_id никогда не NULL в журнале);
+--   - wallet_skins: UNIQUE с charge_id СНЯТ — пересоздание таблицы
+--     (бандл из трёх скинов — три строки с одним charge_id;
+--     уникальность держит PK (user_id, skin_id, charge_id));
 --   - триггер trg_wallet_ledger_apply пересоздаётся с ветками season_pass
 --     (grant: max(текущий, created_at) + amount; reversal: max(created_at,
 --     текущий + amount) — политика «время вспять не отматываем»).
@@ -80,6 +90,7 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 
 -- 1. Снапшот гранта: 4-е поле (ALTER без IF NOT EXISTS — см. шапку).
 ALTER TABLE orders ADD COLUMN grant_season_pass_days INTEGER;
+ALTER TABLE orders ADD COLUMN grant_bundle_json TEXT;
 ALTER TABLE wallets ADD COLUMN season_pass_until_ms INTEGER NOT NULL DEFAULT 0;
 
 -- Backfill старых заказов: пропуска у них не было → 0. Идемпотентно
@@ -99,7 +110,44 @@ CREATE TABLE IF NOT EXISTS subscription_events (
 );
 CREATE INDEX IF NOT EXISTS idx_subscription_events_nonce ON subscription_events(nonce);
 
--- 3. Триггер — ПЕРЕСОЗДАТЬ с ветками season_pass (полный текст — как в
+-- 3. wallet_ledger: UNIQUE(charge_id) → UNIQUE(charge_id, grant_type,
+-- skin_id) — пересоздание таблицы копированием (см. шапку). DROP TABLE
+-- сносит триггер — он пересоздаётся шагом 4. Старые NULL skin_id → ''.
+CREATE TABLE wallet_ledger_new (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id           INTEGER NOT NULL,
+  charge_id         TEXT NOT NULL,
+  kind              TEXT NOT NULL,
+  grant_type        TEXT NOT NULL,
+  amount            INTEGER NOT NULL DEFAULT 0,
+  skin_id           TEXT,
+  reverses_charge_id TEXT,
+  amount_text       TEXT NOT NULL DEFAULT '',
+  created_at        INTEGER NOT NULL,
+  UNIQUE (charge_id, grant_type, skin_id)
+);
+INSERT INTO wallet_ledger_new (id, user_id, charge_id, kind, grant_type, amount, skin_id, reverses_charge_id, amount_text, created_at)
+  SELECT id, user_id, charge_id, kind, grant_type, amount, COALESCE(skin_id, ''), reverses_charge_id, amount_text, created_at FROM wallet_ledger;
+DROP TABLE wallet_ledger;
+ALTER TABLE wallet_ledger_new RENAME TO wallet_ledger;
+CREATE INDEX IF NOT EXISTS idx_wallet_ledger_user_seq ON wallet_ledger(user_id, id);
+
+-- 3b. wallet_skins: снять UNIQUE с charge_id (бандл из трёх скинов —
+-- три строки с одним charge_id; уникальность держит PK).
+CREATE TABLE wallet_skins_new (
+  user_id    INTEGER NOT NULL,
+  skin_id    TEXT NOT NULL,
+  charge_id  TEXT NOT NULL,
+  status     TEXT NOT NULL DEFAULT 'active',
+  granted_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, skin_id, charge_id)
+);
+INSERT INTO wallet_skins_new (user_id, skin_id, charge_id, status, granted_at)
+  SELECT user_id, skin_id, charge_id, status, granted_at FROM wallet_skins;
+DROP TABLE wallet_skins;
+ALTER TABLE wallet_skins_new RENAME TO wallet_skins;
+
+-- 4. Триггер — ПЕРЕСОЗДАТЬ с ветками season_pass (полный текст — как в
 -- worker/schema.sql; DROP нужен, т.к. CREATE TRIGGER IF NOT EXISTS не
 -- обновляет существующий триггер).
 DROP TRIGGER IF EXISTS trg_wallet_ledger_apply;
@@ -156,6 +204,6 @@ BEGIN
      AND NEW.kind = 'reversal' AND NEW.grant_type = 'skin';
 END;
 
--- 4. Отметка о применении (идемпотентно).
+-- 5. Отметка о применении (идемпотентно).
 INSERT OR IGNORE INTO schema_migrations (version, applied_at)
 VALUES ('v17', strftime('%s','now')*1000);

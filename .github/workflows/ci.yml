@@ -155,6 +155,9 @@ jobs:
       - name: Worker season pass contract
         run: npm run test:worker-season-pass
 
+      - name: Worker bundles contract
+        run: npm run test:worker-bundles
+
       - name: Season quests contract
         run: npm run test:season-quests
 

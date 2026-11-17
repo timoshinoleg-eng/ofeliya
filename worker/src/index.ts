@@ -1,5 +1,5 @@
 import { SERVER_GRANTS, GRANTS_VERSION, grantForProduct, grantAmountText } from './grants';
-import type { ServerGrant } from './grants';
+import type { BundleComponent, ResolvedGrant, ServerGrant } from './grants';
 import {
   SQL_UPDATE_ORDER_PAID,
   SQL_INSERT_PAYMENT,
@@ -482,12 +482,16 @@ async function handleInvoice(request: Request, env: Env): Promise<Response> {
   // как Telegram создаст инвойс (битый трекинг исключён).
   // B2 (патч №16): заказ иммутабелен — amount_stars, sku_version и снапшот
   // гранта (P1-2) пишутся один раз здесь; вебхук сверяет платёж именно с заказом.
+  // Монетизация v3: бандл — снапшот компонентов как JSON (grant_bundle_json);
+  // у одиночных товаров — NULL.
+  const bundleJson =
+    product.bundle && product.bundle.length > 0 ? JSON.stringify(product.bundle) : null;
   try {
     await env.PAYMENTS_DB.prepare(SQL_INSERT_ORDER)
       .bind(
         nonce, v.userId, productId, product.stars, GRANTS_VERSION,
         product.rna, product.boosterDays, product.skinId, product.seasonPassDays,
-        Date.now()
+        bundleJson, Date.now()
       )
       .run();
   } catch {
@@ -573,6 +577,11 @@ interface DbOrderRow {
   grant_skin_id: string | null;
   /** Монетизация v3: снапшот дней пропуска (NULL у заказов до миграции-17). */
   grant_season_pass_days: number | null;
+  /**
+   * Монетизация v3: снапшот бандла — JSON-массив BundleComponent
+   * (NULL у одиночных товаров и у заказов до миграции-17).
+   */
+  grant_bundle_json: string | null;
 }
 
 interface DbPaymentRow {
@@ -585,7 +594,7 @@ interface DbPaymentRow {
 
 async function getOrder(db: D1Database, nonce: string): Promise<DbOrderRow | null> {
   const row = await db
-    .prepare('SELECT user_id, product_id, status, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days FROM orders WHERE nonce=?')
+    .prepare('SELECT user_id, product_id, status, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, grant_bundle_json FROM orders WHERE nonce=?')
     .bind(nonce)
     .first<DbOrderRow>();
   if (!row || typeof row.user_id !== 'number' || typeof row.product_id !== 'string') return null;
@@ -835,6 +844,44 @@ function grantFromOrderSnapshot(
 }
 
 /**
+ * Гранты из снапшота заказа — СПИСОК (монетизация v3, бандлы).
+ * Бандл: grant_bundle_json — JSON-массив BundleComponent; каждый
+ * компонент валидируется строго (вид + положительное значение /
+ * непустой skinId), битый компонент или битый JSON — ВЕСЬ снапшот
+ * null (fail-closed: лучше не выдать, чем выдать часть бандла).
+ * Одиночный товар: список из одного элемента (grantFromOrderSnapshot).
+ * Пустой массив в JSON — тоже null (бандл без компонентов — битые данные).
+ */
+function grantsFromOrderSnapshot(order: DbOrderRow): ResolvedGrant[] | null {
+  const bundleJson = order.grant_bundle_json;
+  if (typeof bundleJson === 'string' && bundleJson.length > 0) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(bundleJson);
+    } catch {
+      return null;
+    }
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+    const out: ResolvedGrant[] = [];
+    for (const c of parsed as Array<Partial<BundleComponent>>) {
+      if (!c || typeof c !== 'object') return null;
+      if (c.kind === 'rna' && typeof c.rna === 'number' && c.rna > 0) {
+        out.push({ kind: 'rna', grant: { title: '', description: '', stars: 0, rna: Math.floor(c.rna), boosterDays: 0, skinId: null, seasonPassDays: 0 } });
+      } else if (c.kind === 'booster' && typeof c.boosterDays === 'number' && c.boosterDays > 0) {
+        out.push({ kind: 'booster', grant: { title: '', description: '', stars: 0, rna: 0, boosterDays: Math.floor(c.boosterDays), skinId: null, seasonPassDays: 0 } });
+      } else if (c.kind === 'skin' && typeof c.skinId === 'string' && c.skinId.length > 0) {
+        out.push({ kind: 'skin', grant: { title: '', description: '', stars: 0, rna: 0, boosterDays: 0, skinId: c.skinId, seasonPassDays: 0 } });
+      } else {
+        return null;
+      }
+    }
+    return out;
+  }
+  const single = grantFromOrderSnapshot(order);
+  return single ? [single] : null;
+}
+
+/**
  * Продление подписки (монетизация v3): successful_payment с тем же nonce,
  * что и первая оплата, новым charge_id и is_recurring=true /
  * is_first_recurring=false. Вызывается из recordSuccessfulPayment, когда
@@ -1036,10 +1083,12 @@ async function recordSuccessfulPayment(
   // то и выдаётся, даже если каталог сменил грант без смены цены.
   // Legacy-заказы (снимка нет, NULL): fallback на текущий каталог + громкий
   // лог — такие заказы либо уже оплачены, либо протухли.
-  const resolved = grantFromOrderSnapshot(order);
+  // Монетизация v3: гранты — СПИСКОМ (бандл: N компонентов, N строк
+  // журнала одним батчем). Одиночный товар — список из одного элемента.
+  const resolvedList = grantsFromOrderSnapshot(order);
   const now = Date.now();
   const skuVersion = typeof order.sku_version === 'number' ? order.sku_version : GRANTS_VERSION;
-  if (!resolved) {
+  if (!resolvedList) {
     // E-a: товар оплачен, но его нет в каталоге (каталог сменился между
     // созданием инвойса и оплатой). НЕ silent-skip: пишем как 'paid' +
     // громкий лог; fulfilled НЕ ставим — ручное разрешение позже.
@@ -1061,17 +1110,18 @@ async function recordSuccessfulPayment(
     });
     return;
   }
-  const { kind, grant } = resolved;
-  // Цена из ТЕКУЩЕГО каталога — для диагностики дрейфа. grant из снапшота
+  const isBundle = resolvedList.length > 1;
+  // Цена из ТЕКУЩЕГО каталога — для диагностики дрейфа. Грант из снапшота
   // заказа несёт stars: 0 (цена — в order.amount_stars, см.
   // grantFromOrderSnapshot), поэтому сравнение order.amount_stars против
   // grant.stars ложно срабатывало на КАЖДОМ платеже со снапшотом — т.е.
   // на всех реальных заказах с v16 (нашёл тест сезонного пропуска:
   // catalogStars: 0 в каждом stars_payment_sku_drift). Монетизация v3:
-  // дрейф считается против текущего каталога; товар вне каталога — null
-  // (тогда работает только проверка версии).
-  const catalogGrant = grantForProduct(order.product_id);
-  const catalogStars = catalogGrant ? catalogGrant.grant.stars : null;
+  // дрейф считается против текущего каталога (SERVER_GRANTS — источник
+  // цены; grantForProduct для бандлов возвращает null, цена там всё равно
+  // есть); товар вне каталога — null (тогда работает только проверка
+  // версии).
+  const catalogStars = SERVER_GRANTS[order.product_id]?.stars ?? null;
   // B2: платёж сверяется с НЕИЗМЕНЯЕМЫМ заказом (amount_stars зафиксирован
   // в /api/invoice), а не только с текущим каталогом. NULL у строк,
   // созданных до миграции-16 без backfill, — тоже fail-closed: такие заказы
@@ -1105,7 +1155,8 @@ async function recordSuccessfulPayment(
   }
   // amount для журнала (знаковый INTEGER, см. schema.sql):
   // rna +N; booster +мс; season_pass +мс; skin 0. Триггер применит к wallets/wallet_skins.
-  const ledgerAmount =
+  // Монетизация v3: бандл — по строке на компонент (один charge_id).
+  const ledgerAmountFor = (kind: string, grant: ServerGrant): number =>
     kind === 'rna'
       ? Math.max(0, Math.floor(grant.rna))
       : kind === 'booster'
@@ -1113,16 +1164,18 @@ async function recordSuccessfulPayment(
         : kind === 'season_pass'
           ? Math.max(0, Math.floor(grant.seasonPassDays)) * 86_400_000
           : 0;
-  const skinId = kind === 'skin' ? grant.skinId : null;
-  // ОДИН батч — одна транзакция: либо платёж+грант+кошелёк, либо ничего.
+  // ОДИН батч — одна транзакция: либо платёж+грант(ы)+кошелёк, либо ничего.
   // Ошибка → throw → 503 → Telegram переотправит (идемпотентно).
   const results = await db.batch([
     db.prepare(SQL_UPDATE_ORDER_PAID).bind(nonce),
     db.prepare(SQL_INSERT_PAYMENT).bind(
       chargeId, fromId, order.product_id, amount, sp.currency, 'paid', nonce, skuVersion, now, null
     ),
-    db.prepare(SQL_INSERT_LEDGER_GRANT).bind(
-      fromId, chargeId, 'grant', kind, ledgerAmount, skinId, null, grantAmountText(kind, grant), now
+    ...resolvedList.map(({ kind, grant }) =>
+      db.prepare(SQL_INSERT_LEDGER_GRANT).bind(
+        fromId, chargeId, 'grant', kind, ledgerAmountFor(kind, grant),
+        kind === 'skin' ? grant.skinId : null, null, grantAmountText(kind, grant), now
+      )
     ),
   ]);
   if (results[1]?.meta.changes === 0) {
@@ -1135,7 +1188,8 @@ async function recordSuccessfulPayment(
     ...base,
     userId: fromId,
     productId: order.product_id,
-    grantKind: kind,
+    grantKind: isBundle ? 'bundle' : resolvedList[0].kind,
+    ...(isBundle ? { grantCount: resolvedList.length } : {}),
   });
 }
 
@@ -1475,7 +1529,9 @@ async function handleAdminRefund(request: Request, env: Env): Promise<Response> 
       return json({ ok: false, error: 'refund-in-progress' }, 409);
     }
 
-    const revChargeId = `rev:${operationId}`;
+    // Монетизация v3: reversal SQL сам строит charge_id построчно
+    // ('rev:' || operationId || ':' || grant_type || ':' || skin_id) —
+    // передаём голый operationId, а не готовый 'rev:<op>'.
 
     if (!execute) {
       // «ПОМЕТИТЬ»: деньги уже возвращены ВНЕ системы (BotFather/поддержка).
@@ -1500,7 +1556,7 @@ async function handleAdminRefund(request: Request, env: Env): Promise<Response> 
           operationId, chargeId, payment.user_id, 'mark', 'completed', reason, null, now, now
         ),
         db.prepare(SQL_UPDATE_PAYMENT_REFUNDED).bind(chargeId),
-        db.prepare(SQL_INSERT_LEDGER_REVERSAL).bind(revChargeId, now, chargeId, chargeId, chargeId),
+        db.prepare(SQL_INSERT_LEDGER_REVERSAL).bind(operationId, now, chargeId, chargeId, chargeId),
       ]);
       if (results[1]?.meta.changes === 0) {
         // Статус сменился между SELECT и батчем (конкурентный refund) —
@@ -1573,7 +1629,7 @@ async function handleAdminRefund(request: Request, env: Env): Promise<Response> 
     await db.batch([
       db.prepare(SQL_COMPLETE_REFUND_OP).bind(now, now, operationId),
       db.prepare(SQL_UPDATE_PAYMENT_REFUNDED_FROM_ANY).bind(chargeId),
-      db.prepare(SQL_INSERT_LEDGER_REVERSAL).bind(revChargeId, now, chargeId, chargeId, chargeId),
+      db.prepare(SQL_INSERT_LEDGER_REVERSAL).bind(operationId, now, chargeId, chargeId, chargeId),
     ]);
     logEvent('stars_payment_refunded_execute', {
       telegramChargeId: chargeId,
