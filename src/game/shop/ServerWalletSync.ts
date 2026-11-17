@@ -457,8 +457,21 @@ export async function syncServerWallet(opts: SyncServerWalletOptions): Promise<S
         pages += 1;
       }
     }
+    // CR-R3-9: курсор перечитывается из персистентного хранилища
+    // НЕПОСРЕДСТВЕННО перед синхронным применением ответа. seqMap выше
+    // прочитан ДО сетевых ожиданий: два инстанса провайдера (например,
+    // рестарт сцены при resize создаёт новый, пока синк старого ещё
+    // в полёте) захватывали один курсор — устаревший ответ мог повторно
+    // применить РНК, восстановить отозванный пропуск и откатить курсор
+    // (Math.max сравнивал с захваченным, а не с персистентным).
+    // Применение ниже — синхронный блок без await (run-to-completion),
+    // поэтому перечитанный курсор не устареет до записи. Тернарник
+    // assumedServer/sinceSeq больше не нужен: свежий персистентный
+    // курсор для (serverId, user) покрывает все три случая (тот же
+    // бэкенд, смена бэкенда, зонд с sinceSeq).
+    const freshSeqMap = readSeqMap();
     const cursor: number | null =
-      assumedServer === resp.serverId ? sinceSeq : (seqMap[resp.serverId]?.[userKey]?.last_seq ?? null);
+      freshSeqMap[resp.serverId]?.[userKey]?.last_seq ?? null;
 
     const applied: WalletSyncApplied = {
       rna: 0,
@@ -653,10 +666,13 @@ export async function syncServerWallet(opts: SyncServerWalletOptions): Promise<S
     // ничего нет (даже если событий 0). Назад курсор НЕ двигается:
     // устаревший ответ (tip_seq < курсора) иначе заставил бы следующий
     // синк переприменить уже применённые события (двойное начисление РНК).
-    const users = seqMap[resp.serverId] ?? {};
+    // CR-R3-9: пишем СВЕЖУЮ карту (freshSeqMap), а не захваченную до
+    // сети: иначе запись затёрла бы курсоры других пользователей/
+    // бэкендов, продвинутые конкурентным синком.
+    const users = freshSeqMap[resp.serverId] ?? {};
     users[userKey] = { last_seq: Math.max(cursor ?? 0, resp.tipSeq) };
-    seqMap[resp.serverId] = users;
-    writeSeqMap(seqMap);
+    freshSeqMap[resp.serverId] = users;
+    writeSeqMap(freshSeqMap);
 
     return { ok: true, applied, tip_seq: resp.tipSeq };
   } catch {
