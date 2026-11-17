@@ -345,6 +345,9 @@ jobs:
       - name: Real-touch result actions smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/result-actions-smoke.cjs
 
+      - name: Storefront layout geometry smoke (P1-4)
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:storefront-layout
+
       - name: Natural startup and mutation progression
         run: npm run test:natural-progression
 
