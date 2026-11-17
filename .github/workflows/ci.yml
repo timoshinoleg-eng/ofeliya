@@ -137,6 +137,9 @@ jobs:
       - name: Analytics read path contract
         run: npm run test:analytics-readpath
 
+      - name: Client experience app_open dedup contract
+        run: npm run test:client-experience-app-open
+
       - name: Client feature flags contract
         run: npm run test:feature-flags
 
