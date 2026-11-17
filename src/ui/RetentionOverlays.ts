@@ -272,18 +272,30 @@ export function showDailyModal(
   }
 }
 
-/** Компактный тост (зеркалит паттерн GameScene.showAchievementToast). */
-export function showMetaToast(scene: Phaser.Scene, title: string, sub: string): void {
+/**
+ * Компактный тост (зеркалит паттерн GameScene.showAchievementToast).
+ * CR4: опциональный depth (default 62 — поведение остальных вызывающих
+ * не меняется). Вызывающий из-под оверлея с большим depth обязан
+ * передать depth выше оверлея, иначе тост не виден: так, QuestBoard —
+ * depth 70, и тост о награде за миссию создаётся на 71.
+ */
+export function showMetaToast(
+  scene: Phaser.Scene,
+  title: string,
+  sub: string,
+  headerText: string = 'ДОСТИЖЕНИЕ',
+  depth: number = 62
+): void {
   if (!scene || !scene.scene.isActive()) return;
   const W = scene.scale.width;
   const H = scene.scale.height;
-  const c = scene.add.container(W / 2, Math.max(120, H * 0.2)).setScrollFactor(0).setDepth(62).setAlpha(0);
+  const c = scene.add.container(W / 2, Math.max(120, H * 0.2)).setScrollFactor(0).setDepth(depth).setAlpha(0);
   const panelW = Math.min(W - 36, 340);
   const panel = scene.add
     .rectangle(0, 0, panelW, 52, 0x101522, 0.94)
     .setStrokeStyle(1.5, 0xffd56a, 0.82);
   const header = scene.add
-    .text(-panelW / 2 + 14, -16, 'ДОСТИЖЕНИЕ', {
+    .text(-panelW / 2 + 14, -16, headerText, {
       fontFamily: FONT,
       fontSize: '9px',
       fontStyle: 'bold',

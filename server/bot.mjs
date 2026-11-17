@@ -112,7 +112,7 @@ export async function pollOnce() {
         const cmd = cmdRaw.replace(/@.+$/, ''); // /start@mybot → /start
         if (cmd === '/start') {
           await handleStart(msg, parseStartParam(msg.text));
-        } else if (cmd === '/help') {
+        } else if (cmd === '/help' || cmd === '/paysupport') {
           if (msg.chat?.id != null) {
             const { method, ...params } = buildTelegramWebhookMethod({ message: msg }, { gameUrl: GAME_URL });
             await api(method, params).catch(() => {});

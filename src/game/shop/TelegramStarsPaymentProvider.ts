@@ -352,7 +352,23 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
             body: JSON.stringify({ productId, initData, nonce }),
             signal: ctrl.signal,
           });
-          if (!res.ok) return fail('invoice-create-failed');
+          if (!res.ok) {
+            // P3-N7: 409 subscription-active/pending — различимые причины
+            // (сцена показывает «Пропуск уже активен» / «Ожидается оплата
+            // пропуска» вместо generic-ошибки). Тело читаем best-effort:
+            // при битом JSON — прежний invoice-create-failed.
+            if (res.status === 409) {
+              const errData: unknown = await res.json().catch(() => null);
+              const code =
+                !!errData && typeof errData === 'object'
+                  ? String((errData as { error?: unknown }).error ?? '')
+                  : '';
+              if (code === 'subscription-active' || code === 'subscription-pending') {
+                return fail(code);
+              }
+            }
+            return fail('invoice-create-failed');
+          }
           const data: unknown = await res.json();
           invoiceUrl =
             !!data && typeof data === 'object'
@@ -415,6 +431,20 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
           };
         }
         return { state: 'paid', productId, provider: 'telegram-stars', chargeId, nonce };
+      }
+      // P2-N2 (b): терминальный статус сервера — не pending, а failed:
+      // гранта не будет, сцена показывает «платёж отклонён» и не ставит
+      // запись в pending-журнал (иначе баннер висит вечно).
+      if (
+        verification.verified === false &&
+        (verification.reason === 'verify-denied' || verification.reason === 'verify-duplicate')
+      ) {
+        return {
+          state: 'failed',
+          productId,
+          provider: 'telegram-stars',
+          reason: verification.reason,
+        };
       }
       return {
         state: 'pending',
@@ -540,6 +570,7 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
    */
   async restore(): Promise<RestoreResult> {
     const pendingFulfilled: string[] = [];
+    const pendingDenied: string[] = [];
     // Патч №16 (A3): кандидаты на /api/ack. Ack — ТОЛЬКО после подтверждённой
     // материализации (успешный синк кошелька); иначе — в pending-sync очередь.
     const ackCandidates: Array<{ chargeId: string; productId: string }> = [];
@@ -548,6 +579,12 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
         try {
           const done = await this.processPendingRecord(rec);
           if (done) {
+            // P2-N2 (b): отклонённая запись — не fulfilled: гранта нет,
+            // ack не нужен, сцена показывает «платёж отклонён».
+            if (done.denied) {
+              pendingDenied.push(done.productId);
+              continue;
+            }
             pendingFulfilled.push(done.productId);
             // chargeId '' — товар исчез из каталога: допроверять нечего.
             if (done.chargeId) ackCandidates.push({ chargeId: done.chargeId, productId: done.productId });
@@ -665,6 +702,7 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
     return {
       productIds: this.readEntitlements().map((e) => e.productId),
       pendingFulfilled,
+      pendingDenied,
     };
   }
 
@@ -675,10 +713,13 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
    * Патч №13: chargeId — только настоящий от сервера (синтетики нет),
    * productId — только серверный (mismatch → не выдавать, лог);
    * запись снимается ТОЛЬКО при ok от fulfillPurchase.
+   * P2-N2 (b): терминальный статус сервера (verify-denied /
+   * verify-duplicate) — запись снимается БЕЗ выдачи и возвращается
+   * {productId, denied:true}; restore() докладывает это сцене.
    */
   private async processPendingRecord(
     rec: PendingRecord
-  ): Promise<{ productId: string; chargeId: string } | null> {
+  ): Promise<{ productId: string; chargeId: string; denied: boolean } | null> {
     const nonce = rec.nonce;
     if (this.pendingInFlight.has(nonce)) return null;
     this.pendingInFlight.add(nonce);
@@ -688,6 +729,17 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
       const v = await verifyPurchase({ apiBaseUrl: this.apiBaseUrl, initData, nonce });
       const fresh = loadPendingPurchases().find((p) => p.nonce === nonce);
       if (!fresh) return null; // запись сняли (параллельный вызов)
+      // P2-N2 (b): платёж отклонён сервером — гранта не будет, возврат
+      // оформляется сервером. Запись снимаем сразу (иначе баннер
+      // «Ожидание подтверждения» висит вечно), ретраев не ставим.
+      if (
+        v.verified === false &&
+        (v.reason === 'verify-denied' || v.reason === 'verify-duplicate')
+      ) {
+        removePendingPurchase(nonce);
+        // chargeId '' — ack не нужен (гранта не было).
+        return { productId: fresh.productId, chargeId: '', denied: true };
+      }
       if (v.verified === true) {
         const chargeId = v.chargeId;
         if (!chargeId) {
@@ -707,7 +759,7 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
             // Каталог сменился, а платёж настоящий — не крутить вечно.
             console.warn('[telegram-stars] pending product vanished from catalog:', fresh.productId);
             removePendingPurchase(nonce);
-            return { productId: fresh.productId, chargeId: '' };
+            return { productId: fresh.productId, chargeId: '', denied: false };
           }
           // Выдача — только через ledger (идемпотентность по chargeId).
           // P1-a: запись снимаем ТОЛЬКО при успешной выдаче.
@@ -723,7 +775,7 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
           // финальный синк кошелька, ack только при r.ok. Fire-and-forget
           // синка здесь больше нет (был P0 A3: результат игнорировался).
           removePendingPurchase(nonce);
-          return { productId: fresh.productId, chargeId };
+          return { productId: fresh.productId, chargeId, denied: false };
         }
       }
       // Не подтверждено / не выдано: бэкофф-ретраи в сессии, затем стоп.

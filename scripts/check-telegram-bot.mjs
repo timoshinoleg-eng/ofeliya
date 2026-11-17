@@ -41,6 +41,35 @@ for (const type of ['private', 'group', 'supergroup']) {
 }
 const invalid = buildTelegramWebhookMethod({ message: { chat: { id: 23, type: 'private' }, text: '/start bad parameter' } }, opts);
 assert.equal(invalid.reply_markup.inline_keyboard[0][0].web_app.url, opts.gameUrl);
+// Telegram Stars policy: /paysupport must provide an actionable owned
+// mailbox, never a game CTA, and fail visibly when no contact is configured.
+const supportUpdate = { message: { chat: { id: 23, type: 'private' },
+  from: { id: 23 }, text: '/paysupport' } };
+const support = buildTelegramWebhookMethod(supportUpdate,
+  { ...opts, paymentSupportEmail: 'billing@example.test' });
+assert.equal(support.method, 'sendMessage');
+assert.ok(support.text.includes('billing@example.test'));
+assert.equal(support.reply_markup, undefined, 'payment support must not upsell');
+const unconfiguredSupport = buildTelegramWebhookMethod(supportUpdate,
+  { ...opts, paymentSupportEmail: '' });
+assert.match(unconfiguredSupport.text, /не настроена/);
+assert.equal(unconfiguredSupport.reply_markup, undefined);
+// CR1: пустая OFELIYA_SUPPORT_EMAIL не должна блокировать fallback на
+// VITE_SUPPORT_EMAIL (?? не ловит пустую строку). Явно переданный ''
+// выше — по-прежнему unconfigured (семантика не меняется).
+process.env.OFELIYA_SUPPORT_EMAIL = '';
+process.env.VITE_SUPPORT_EMAIL = 'fallback@example.test';
+const fallbackSupport = buildTelegramWebhookMethod(supportUpdate, opts);
+assert.ok(fallbackSupport.text.includes('fallback@example.test'), 'empty OFELIYA_SUPPORT_EMAIL falls back to VITE_SUPPORT_EMAIL');
+process.env.VITE_SUPPORT_EMAIL = '';
+const bothEmptySupport = buildTelegramWebhookMethod(supportUpdate, opts);
+assert.match(bothEmptySupport.text, /не настроена/, 'both emails empty → unconfigured');
+delete process.env.OFELIYA_SUPPORT_EMAIL;
+delete process.env.VITE_SUPPORT_EMAIL;
+const helpMethod = buildTelegramWebhookMethod(
+  { message: { ...supportUpdate.message, text: '/help' } }, opts);
+assert.ok(helpMethod.text.includes('/paysupport'));
+
 console.log('telegram bot command contract: ok');
 
 for (const text of ['/start', '/start ref_m_12345']) {

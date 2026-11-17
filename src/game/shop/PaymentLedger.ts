@@ -308,7 +308,18 @@ export interface VerifyOptions {
  */
 export type VerifyResult =
   | { verified: true; chargeId: string; productId: string }
-  | { verified: false; reason: 'verify-unreachable' | 'verify-unconfirmed' | 'verify-bad-config' };
+  | {
+      verified: false;
+      reason:
+        | 'verify-unreachable'
+        | 'verify-unconfirmed'
+        | 'verify-bad-config'
+        // P2-N2 (b): терминальные статусы сервера — ретрай не поможет:
+        // 'verify-denied' — заказ отклонён (denied); 'verify-duplicate' —
+        // платёж-дубликат (duplicate_payments, гранта не будет).
+        | 'verify-denied'
+        | 'verify-duplicate';
+    };
 
 /** Протокол патча №12: 3 попытки × 2с паузы, таймаут попытки 8с. */
 export const VERIFY_ATTEMPTS = 3;
@@ -322,7 +333,11 @@ export const VERIFY_TIMEOUT_MS = 8000;
  * - verified!==true после ретраев (гонка с вебхуком) → 'verify-unconfirmed';
  * - сеть упала сразу → 'verify-unreachable' (быстрый путь в pending-UI,
  *   допроверка — в restore()).
- * Вызывающий код НЕ выдаёт товар при verified:false — только 'pending'.
+ * - P2-N2 (b): серверный reason 'denied'/'duplicate' — ТЕРМИНАЛЬНЫЙ
+ *   статус, возвращается сразу без ретраев ('verify-denied' /
+ *   'verify-duplicate'): гранта не будет, возврат идёт через сервер.
+ * Вызывающий код НЕ выдаёт товар при verified:false — только 'pending'
+ * (или 'failed' при терминальных причинах).
  * Никогда не бросает.
  */
 export async function verifyPurchase(opts: VerifyOptions): Promise<VerifyResult> {
@@ -350,13 +365,26 @@ export async function verifyPurchase(opts: VerifyOptions): Promise<VerifyResult>
           const data: unknown = await res.json().catch(() => null);
           const v =
             !!data && typeof data === 'object'
-              ? (data as { verified?: unknown; chargeId?: unknown; productId?: unknown })
+              ? (data as {
+                  verified?: unknown;
+                  chargeId?: unknown;
+                  productId?: unknown;
+                  reason?: unknown;
+                })
               : null;
           if (v?.verified === true) {
             const chargeId = typeof v.chargeId === 'string' ? v.chargeId.trim() : '';
             // Патч №13 (P0-2): productId — только серверный (из заказа по nonce).
             const productId = typeof v.productId === 'string' ? v.productId.trim() : '';
             return { verified: true, chargeId, productId };
+          }
+          // P2-N2 (b): терминальный статус сервера — ретрай не поможет,
+          // возвращаем сразу (иначе клиент крутит вечный pending).
+          if (v?.reason === 'denied') {
+            return { verified: false, reason: 'verify-denied' };
+          }
+          if (v?.reason === 'duplicate') {
+            return { verified: false, reason: 'verify-duplicate' };
           }
           // verified !== true — возможно, вебхук ещё не долетел; ретрай.
         }

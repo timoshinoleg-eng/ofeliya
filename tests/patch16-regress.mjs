@@ -171,15 +171,22 @@ function makeD1() {
     }
     if (kind === 'grant' && grant_type === 'rna') w.purchased_rna += amount;
     else if (kind === 'grant' && grant_type === 'booster') w.booster_until_ms = Math.max(w.booster_until_ms, created_at) + amount;
+    else if (kind === 'grant' && grant_type === 'season_pass') w.season_pass_until_ms = Math.max(w.season_pass_until_ms ?? 0, created_at) + amount;
     else if (kind === 'grant' && grant_type === 'skin' && skin_id) {
-      if (!walletSkins.has(charge_id)) {
-        walletSkins.set(charge_id, { user_id, skin_id, charge_id, status: 'active', granted_at: created_at });
+      // Монетизация v3: ключ wallet_skins — (user, skin, charge): бандл
+      // пишет три скина с одним charge_id (UNIQUE с charge_id снят).
+      const sk = `${user_id}|${skin_id}|${charge_id}`;
+      if (!walletSkins.has(sk)) {
+        walletSkins.set(sk, { user_id, skin_id, charge_id, status: 'active', granted_at: created_at });
       }
     } else if (kind === 'reversal' && grant_type === 'rna') w.purchased_rna = Math.max(0, w.purchased_rna + amount);
     else if (kind === 'reversal' && grant_type === 'booster') w.booster_until_ms = Math.max(created_at, w.booster_until_ms + amount);
+    else if (kind === 'reversal' && grant_type === 'season_pass') w.season_pass_until_ms = Math.max(created_at, (w.season_pass_until_ms ?? 0) + amount);
     else if (kind === 'reversal' && grant_type === 'skin' && reverses_charge_id) {
-      const s = walletSkins.get(reverses_charge_id);
-      if (s && s.status === 'active') s.status = 'reversed';
+      // SQL UPDATE гасит ВСЕ активные строки этого charge_id (бандл).
+      for (const s of walletSkins.values()) {
+        if (s.charge_id === reverses_charge_id && s.status === 'active') s.status = 'reversed';
+      }
     }
     w.updated_at = created_at;
   }
@@ -206,28 +213,44 @@ function makeD1() {
     }
     if (q.startsWith('INSERT INTO wallet_ledger (user_id, charge_id, kind, grant_type,') && q.includes('VALUES')) {
       const [user_id, charge_id, kind, grant_type, amount, skin_id, reverses_charge_id, amount_text, created_at] = params;
-      if (ledger.has(charge_id)) return { success: true, meta: { changes: 0 } };
-      const row = { id: ledger.size + 1, user_id, charge_id, kind, grant_type, amount, skin_id, reverses_charge_id, amount_text, created_at };
-      ledger.set(charge_id, row);
+      const normSkinId = skin_id ?? '';
+      const key = `${charge_id}\0${grant_type}\0${normSkinId}`;
+      if (ledger.has(key)) return { success: true, meta: { changes: 0 } };
+      const row = { id: ledger.size + 1, user_id, charge_id, kind, grant_type, amount, skin_id: normSkinId, reverses_charge_id, amount_text, created_at };
+      ledger.set(key, row);
       applyTrigger(row);
       return { success: true, meta: { changes: 1 } };
     }
     if (q.startsWith('INSERT INTO wallet_ledger (user_id, charge_id, kind, grant_type,') && q.includes('SELECT')) {
-      // SQL_INSERT_LEDGER_REVERSAL: params (rev_charge_id, created_at, orig_charge_id, orig_charge_id)
-      const [rev_charge_id, created_at, orig_charge_id] = params;
-      if (ledger.has(rev_charge_id)) return { success: true, meta: { changes: 0 } };
-      const grant = ledger.get(orig_charge_id);
+      // SQL_INSERT_LEDGER_REVERSAL: params (operation_id, created_at, orig, orig, orig).
+      // Монетизация v3: N grant-строк (бандл) → N reversal-строк.
+      const [operation_id, created_at, orig_charge_id] = params;
+      const grants = [...ledger.values()].filter(
+        (r) => r.charge_id === orig_charge_id && r.kind === 'grant'
+      );
       const alreadyReversed = [...ledger.values()].some(
         (r) => r.kind === 'reversal' && r.reverses_charge_id === orig_charge_id
       );
-      if (!grant || grant.kind !== 'grant' || alreadyReversed) return { success: true, meta: { changes: 0 } };
-      const row = {
-        id: ledger.size + 1, user_id: grant.user_id, charge_id: rev_charge_id, kind: 'reversal',
-        grant_type: grant.grant_type, amount: -grant.amount, skin_id: grant.skin_id,
-        reverses_charge_id: orig_charge_id, amount_text: `reversal-of:${orig_charge_id}`, created_at,
-      };
-      ledger.set(rev_charge_id, row);
-      applyTrigger(row);
+      if (grants.length === 0 || alreadyReversed) return { success: true, meta: { changes: 0 } };
+      let inserted = 0;
+      for (const grant of grants) {
+        const revChargeId = `rev:${operation_id}:${grant.grant_type}:${grant.skin_id ?? ''}`;
+        const key = `${revChargeId}\0${grant.grant_type}\0${grant.skin_id ?? ''}`;
+        if (ledger.has(key)) continue;
+        const row = {
+          id: ledger.size + 1, user_id: grant.user_id, charge_id: revChargeId, kind: 'reversal',
+          grant_type: grant.grant_type, amount: -grant.amount, skin_id: grant.skin_id ?? '',
+          reverses_charge_id: orig_charge_id, amount_text: `reversal-of:${orig_charge_id}`, created_at,
+        };
+        ledger.set(key, row);
+        applyTrigger(row);
+        inserted++;
+      }
+      return { success: true, meta: { changes: inserted } };
+    }
+    if (q.startsWith('INSERT INTO duplicate_payments')) {
+      // P1-1/P1-2: запись дубликата — best-effort; регресс-стаб не хранит
+      // duplicate_payments (ни один сценарий их не читает), успех фиктивен.
       return { success: true, meta: { changes: 1 } };
     }
     if (q.startsWith('INSERT INTO refund_ops')) {
@@ -249,17 +272,36 @@ function makeD1() {
 
   function execSelect(sql, params) {
     const q = norm(sql);
-    if (q === 'SELECT user_id, product_id, status, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id FROM orders WHERE nonce=?') {
+    if (q === 'SELECT user_id, product_id, status, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, grant_bundle_json FROM orders WHERE nonce=?') {
       const row = orders.get(params[0]);
-      return row ? [{ user_id: row.user_id, product_id: row.product_id, status: row.status, amount_stars: row.amount_stars, sku_version: row.sku_version, grant_rna: row.grant_rna ?? null, grant_booster_days: row.grant_booster_days ?? null, grant_skin_id: row.grant_skin_id ?? null }] : [];
+      return row ? [{ user_id: row.user_id, product_id: row.product_id, status: row.status, amount_stars: row.amount_stars, sku_version: row.sku_version, grant_rna: row.grant_rna ?? null, grant_booster_days: row.grant_booster_days ?? null, grant_skin_id: row.grant_skin_id ?? null, grant_season_pass_days: row.grant_season_pass_days ?? null, grant_bundle_json: row.grant_bundle_json ?? null }] : [];
     }
     if (q === 'SELECT charge_id FROM payments WHERE nonce=?') {
       for (const row of payments.values()) if (row.nonce === params[0]) return [{ charge_id: row.charge_id }];
       return [];
     }
-    if (q === 'SELECT charge_id, user_id, product_id, status FROM payments WHERE charge_id=?') {
+    if (q === 'SELECT charge_id, user_id, product_id, status FROM payments WHERE charge_id=?' ||
+        q === 'SELECT charge_id, user_id, product_id, status, nonce FROM payments WHERE charge_id=?') {
       const row = payments.get(params[0]);
-      return row ? [{ charge_id: row.charge_id, user_id: row.user_id, product_id: row.product_id, status: row.status }] : [];
+      return row ? [{ charge_id: row.charge_id, user_id: row.user_id, product_id: row.product_id, status: row.status, nonce: row.nonce ?? null }] : [];
+    }
+    if (q === 'SELECT charge_id, nonce, user_id, product_id, amount, currency, reason, status, created_at FROM duplicate_payments WHERE charge_id=?') {
+      // Регресс-стаб не хранит duplicate_payments — дубликатов нет.
+      return [];
+    }
+    if (q === 'SELECT purchased_rna, booster_until_ms, season_pass_until_ms FROM wallets WHERE user_id=?') {
+      // P1-3 read-back: реальная строка кошелька (эмуляция триггера выше).
+      const w = wallets.get(params[0]);
+      return w ? [{ purchased_rna: w.purchased_rna ?? 0, booster_until_ms: w.booster_until_ms ?? 0, season_pass_until_ms: w.season_pass_until_ms ?? 0 }] : [];
+    }
+    if (q === "SELECT skin_id FROM wallet_skins WHERE user_id=? AND status='active' ORDER BY granted_at ASC") {
+      // P1-3 read-back (скины): регресс скинов не покупает, но SELECT
+      // должен существовать, чтобы read-back не падал в error-лог.
+      const rows = [...walletSkins.values()]
+        .filter((s) => s.user_id === params[0] && s.status === 'active')
+        .sort((a, b) => a.granted_at - b.granted_at)
+        .map((s) => ({ skin_id: s.skin_id }));
+      return rows;
     }
     if (q === 'SELECT operation_id, charge_id, action, status FROM refund_ops WHERE operation_id=?') {
       const row = refundOps.get(params[0]);
@@ -390,7 +432,7 @@ async function testA1(handler) {
     assert(db.batchCalls() === 1, `батчей на платёж: ${db.batchCalls()}, ожидался 1`);
     assert(db.batchSizes[0] === 3, `statement'ов в батче: ${db.batchSizes[0]}, ожидалось 3`);
     assert(db.payments.get('a1-charge-01')?.status === 'paid', 'платёж paid');
-    assert(db.ledger.get('a1-charge-01')?.kind === 'grant', 'грант в журнале');
+    assert([...db.ledger.values()].some((r) => r.charge_id === 'a1-charge-01' && r.kind === 'grant'), 'грант в журнале');
     assert(db.wallets.get(USER)?.purchased_rna === 500, 'кошелёк +500 (триггер)');
     // Негативный путь: падение 2-го statement → весь батч откачен.
     seedOrder(db, 'a1-nonce-02', USER, 'currency.rna-pack-s');
@@ -399,7 +441,7 @@ async function testA1(handler) {
     db.hooks.failBatchAtStatement = -1;
     assert(r2.status === 503, `ожидался 503 (ретрай Telegram), получен ${r2.status}`);
     assert(!db.payments.has('a1-charge-02'), 'платёж НЕ записан при сбое батча');
-    assert(!db.ledger.has('a1-charge-02'), 'грант НЕ записан при сбое батча');
+    assert(![...db.ledger.values()].some((r) => r.charge_id === 'a1-charge-02'), 'грант НЕ записан при сбое батча');
     assert(db.orders.get('a1-nonce-02')?.status === 'pending', 'заказ остался pending');
     assert(db.wallets.get(USER)?.purchased_rna === 500, 'кошелёк не тронут сбоем (только грант №1)');
     ok(id, '1 батч / 3 statement; сбой → 503 и ноль записей');

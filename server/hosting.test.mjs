@@ -35,7 +35,11 @@ async function check(mode) {
     OFELIYA_BOT_USERNAME: broken ? '' : 'id100000000000_test_bot', OFELIYA_BOT_MODE: 'dedicated',
     OFELIYA_BOT_WEBHOOK_DOMAIN: 'https://example.test',
     OFELIYA_BOT_WEBHOOK_PATH: '/ofeliya/bot/webhook',
-    OFELIYA_BOT_WEBHOOK_SECRET: '0123456789abcdef0123456789abcdef' };
+    OFELIYA_BOT_WEBHOOK_SECRET: '0123456789abcdef0123456789abcdef',
+    // The runtime CSP must allow only explicitly configured HTTPS endpoints.
+    VITE_UMAMI_ENABLED: '1',
+    VITE_UMAMI_SRC: 'https://cloud.umami.is/script.js',
+    VITE_PAYMENTS_API_URL: 'https://ofeliya-payments.example.workers.dev' };
   // Never inherit real remote state or messenger secrets into the fixture.
   for (const key of ['OFELIYA_STATE_URL', 'OFELIYA_STATE_TOKEN', 'TG_BOT_TOKEN', 'TG_WEBHOOK_SECRET',
     'MAX_BOT_TOKEN', 'OFELIYA_MAX_BOT_TOKEN', 'VK_SECURE_KEY']) delete env[key];
@@ -59,6 +63,14 @@ async function check(mode) {
     assert.ok(csp, 'Render gateway must emit an effective CSP');
     assert.ok(csp.includes(`'sha256-${createHash('sha256').update(inlineScript).digest('base64')}'`));
     assert.ok(!csp.split(';').find(part => part.trim().startsWith('script-src')).includes('unsafe-inline'));
+    const scriptPolicy = csp.split(';').find(part => part.trim().startsWith('script-src'));
+    const connectPolicy = csp.split(';').find(part => part.trim().startsWith('connect-src'));
+    assert.ok(scriptPolicy.includes('https://cloud.umami.is'), 'Umami script allowed when enabled');
+    assert.ok(connectPolicy.includes('https://cloud.umami.is'), 'Umami events can be sent');
+    assert.ok(connectPolicy.includes('https://ofeliya-payments.example.workers.dev'),
+      'Telegram Stars Worker API is reachable from the game');
+    assert.ok(!scriptPolicy.includes('ofeliya-payments.example.workers.dev'),
+      'payment endpoint must not be a script source');
     assert.match(csp, /frame-ancestors.*https:\/\/web\.telegram\.org/);
     assert.equal(page.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
     assert.match(page.headers.get('permissions-policy'), /camera=\(\)/);

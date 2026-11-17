@@ -11,6 +11,8 @@ export interface OptionalWebEventProperties {
   questCount?: number;
   collectionCount?: number;
   reducedMotion?: boolean;
+  /** Public catalog SKU only; never attach Telegram IDs, initData or purchase tokens. */
+  productId?: string;
 }
 
 export interface OptionalWebAnalyticsOptions {
@@ -42,7 +44,7 @@ const EVENT_NAMES = new Set<OptionalWebEvent>([
   'daily_claimed', 'achievement_unlocked',
   'lab_upgrade_bought', 'prestige_done',
   'skin_granted', 'skin_equipped',
-  'store_viewed', 'purchase_started', 'purchase_completed', 'purchase_failed', 'purchase_pending', 'purchase_grant_failed', 'purchase_sync_pending', 'purchase_sync_recovered', 'purchase_sync_retry_failed',
+  'store_viewed', 'product_view', 'purchase_started', 'purchase_completed', 'purchase_denied', 'purchase_failed', 'purchase_pending', 'purchase_grant_failed', 'purchase_sync_pending', 'purchase_sync_recovered', 'purchase_sync_retry_failed',
 ]);
 const ENUM_VALUES: Record<string, ReadonlySet<string>> = {
   screen: new Set(['menu', 'game', 'result', 'codex', 'collection']),
@@ -52,7 +54,7 @@ const ENUM_VALUES: Record<string, ReadonlySet<string>> = {
   durationBucket: new Set(['under_1m', '1_to_3m', '3_to_6m', 'over_6m']),
 };
 const PROPERTY_NAMES = new Set([
-  'screen', 'mode', 'stage', 'result', 'durationBucket', 'questCount', 'collectionCount', 'reducedMotion',
+  'screen', 'mode', 'stage', 'result', 'durationBucket', 'questCount', 'collectionCount', 'reducedMotion', 'productId',
 ]);
 
 function validConfiguration(options: OptionalWebAnalyticsOptions): { src: string; websiteId: string } | null {
@@ -74,6 +76,11 @@ function safeProperties(input: Record<string, unknown> | undefined): Record<stri
     if (!PROPERTY_NAMES.has(key)) continue;
     if (key in ENUM_VALUES) {
       if (typeof value === 'string' && ENUM_VALUES[key].has(value)) safe[key] = value;
+      continue;
+    }
+    if (key === 'productId') {
+      // The SKU comes from our public catalog, not from Telegram/user input.
+      if (typeof value === 'string' && /^(?:skin|booster|currency|season-pass|bundle)\.[a-z0-9][a-z0-9._-]{0,63}$/.test(value)) safe[key] = value;
       continue;
     }
     if (key === 'questCount' || key === 'collectionCount') {

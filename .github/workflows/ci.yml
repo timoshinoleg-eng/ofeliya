@@ -137,6 +137,9 @@ jobs:
       - name: Analytics read path contract
         run: npm run test:analytics-readpath
 
+      - name: Client experience app_open dedup contract
+        run: npm run test:client-experience-app-open
+
       - name: Client feature flags contract
         run: npm run test:feature-flags
 
@@ -151,6 +154,27 @@ jobs:
 
       - name: Worker entitlements contract
         run: npm run test:worker-entitlements
+
+      - name: Worker season pass contract
+        run: npm run test:worker-season-pass
+
+      - name: Worker bundles contract
+        run: npm run test:worker-bundles
+
+      - name: Worker P1 remediation contract
+        run: npm run test:worker-p1
+
+      - name: Worker round 2 contract
+        run: npm run test:worker-round2
+
+      - name: D1 schema gate contract
+        run: npm run test:check-schema
+
+      - name: Invite and collab contract
+        run: npm run test:invite-collab
+
+      - name: Season quests contract
+        run: npm run test:season-quests
 
       - name: Payments trust contract
         run: npm run test:payments-trust
@@ -329,6 +353,12 @@ jobs:
 
       - name: Real-touch result actions smoke
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" node scripts/result-actions-smoke.cjs
+
+      - name: Storefront layout geometry smoke (P1-4)
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:storefront-layout
+
+      - name: QuestBoard reward toast depth smoke (CR4)
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:questboard-toast-depth
 
       - name: Natural startup and mutation progression
         run: npm run test:natural-progression

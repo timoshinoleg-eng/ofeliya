@@ -5,6 +5,7 @@ import Phaser from 'phaser';
 import { artScale } from '../game/ArtMetrics';
 import { parseChallengePayload } from '../game/Challenge';
 import { parseDuelStartPayload, type DuelChallengeSnapshot } from '../game/Duel';
+import { getCollab, parseCollabStartPayload } from '../game/shop/collabs';
 import { COLORS, FONT, UI_FONT, UI_TEXT, fmtTime } from '../game/config';
 import { CODEX_COPY, MENU_COPY, META_COPY, masteryModeLine, platformLabel } from '../game/UiCopy';
 import { fmtInt, joinSegments, toTitleCase } from '../game/UiFormat';
@@ -87,6 +88,20 @@ export class MenuScene extends Phaser.Scene {
   }
 
   create(): void {
+    // Монетизация v3: коллаб-диплинк (startapp=collab_<id>) открывает
+    // витрину сразу, минуя меню. Неизвестный id — обычное меню.
+    // Редирект — один раз за сессию (registry-флаг): start_param живёт
+    // всю сессию WebApp, без флага возврат в меню из забега снова
+    // уводил бы в витрину. При ручном открытии витрины баннер коллаба
+    // всё равно показывается (collabId передаётся в chip-обработчике).
+    const incomingCollabId = parseCollabStartPayload(PlatformBridge.getStartParam());
+    const incomingCollab =
+      incomingCollabId !== null ? getCollab(incomingCollabId) ?? null : null;
+    if (incomingCollab && !this.registry.get('collabRedirectDone')) {
+      this.registry.set('collabRedirectDone', true);
+      this.scene.start('Storefront', { collabId: incomingCollab.id });
+      return;
+    }
     if (clientFlags().collection.enabled) clientCollection().visit();
     StartupTrace.mark('menu.create.start');
     StartupTrace.mark('menu.cinematicTextures.start');
@@ -1113,7 +1128,9 @@ export class MenuScene extends Phaser.Scene {
         shopBg.setAlpha(1);
         Sfx.play('click');
         PlatformBridge.haptic('light');
-        this.scene.start('Storefront');
+        // Монетизация v3: витрина показывает баннер коллаба, если вход
+        // был по коллаб-диплинку (даже после первого авто-редиректа).
+        this.scene.start('Storefront', incomingCollab ? { collabId: incomingCollab.id } : undefined);
       });
     }
 

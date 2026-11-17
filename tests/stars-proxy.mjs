@@ -66,6 +66,11 @@ assert(
   isStarsUpdate({ message: { successful_payment: { currency: 'XTR' } } }),
   'successful_payment is stars'
 );
+assert(isStarsUpdate({ subscription: { user: { id: 123 }, invoice_payload: 'test',
+  state: 'canceled' } }), 'subscription cancellation is routed to Stars Worker');
+assert(isStarsUpdate({ subscription: { user: { id: 123 }, invoice_payload: 'test',
+  state: 'failed' } }), 'subscription renewal failure is routed to Stars Worker');
+assert(!isStarsUpdate({ subscription: null }), 'empty subscription is not Stars');
 assert(!isStarsUpdate({ message: { text: '/start' } }), '/start is not stars');
 assert(!isStarsUpdate(null), 'null is not stars');
 
@@ -130,6 +135,19 @@ assert(!isStarsUpdate(null), 'null is not stars');
     eq(seen[0].url, '/api/webhook', 'P0-1: request path is /api/webhook');
     eq(seen[0].secret, SECRET, 'worker secret header forwarded');
     eq(JSON.parse(seen[0].body).pre_checkout_query.id, 'q-int-1', 'update body forwarded');
+
+    // Subscription update must reach the same worker route intact.
+    seen.length = 0;
+    const subscription = { subscription: { user: { id: 123 },
+      invoice_payload: 'test_nonce', state: 'canceled' } };
+    await forwardStarsUpdate(subscription, {
+      workerUrl: `http://127.0.0.1:${port}`,
+      workerSecret: SECRET,
+      allowInsecure: true,
+      timeoutMs: 5000,
+    });
+    eq(seen.length, 1, 'subscription update forwarded exactly once');
+    eq(JSON.parse(seen[0].body).subscription.state, 'canceled', 'subscription state intact');
 
     // И с trailing slash в конфиге — путь всё равно ровно /api/webhook.
     seen.length = 0;

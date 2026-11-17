@@ -1,4 +1,14 @@
--- OFELIYA payments reference backend — Cloudflare D1 schema (патч №16, v16).
+-- OFELIYA payments reference backend — Cloudflare D1 schema (монетизация v3, v17).
+--
+-- Новое в v17 (относительно v16): сезонный пропуск (подписка Telegram Stars):
+--   - orders.grant_season_pass_days — снапшот дней пропуска (4-е поле гранта);
+--   - wallets.season_pass_until_ms — абсолютный срок пропуска (как бустер);
+--   - wallet_ledger.grant_type += 'season_pass' (amount в мс, как бустер);
+--   - subscription_events — аудит BotSubscriptionUpdated (state
+--     canceled|active|failed; доступ НЕ гейтится этой таблицей — только
+--     датой season_pass_until_ms).
+-- Апгрейд существующей базы v16 → v17: worker/migration-17.sql.
+-- Свежий деплой — просто этот файл (D1 в проде ЕЩЁ НЕТ, деплой за Mark).
 --
 -- Ключевое изменение v16: выдача гранта — ОДИН атомарный db.batch() из трёх
 -- statement'ов (orders→'paid', payments INSERT, wallet_ledger INSERT) + SQL-
@@ -53,6 +63,14 @@
 --   'pending' — инвойс создан, оплата ещё не пришла;
 --   'paid'    — платёж по заказу записан (атомарный батч в successful_payment);
 --   'expired' — вручную/скриптом: окно оплаты истекло без платежа.
+--   'denied'  — P1-2: оплата подписки отклонена (у пользователя уже был
+--               активный пропуск); терминальный, грантов по нему не будет.
+--   'invoice_failed' — CR-R3-2: createInvoiceLink упал, инвойс не создан;
+--               терминальный, гейт freshPendingSub его не видит (иначе
+--               несуществующий инвойс блокировал бы покупку на 24ч).
+--               pre_checkout требует status='pending', поэтому даже
+--               «потерянный» инвойс Telegram по такому заказу не оплатить.
+-- CHECK на status нет: новые значения не требуют миграции.
 -- Строгий pre_checkout (патч №15, P0-2): ok:true ТОЛЬКО при status='pending'
 -- И совпадении from.id с order.user_id. Повторная оплата того же nonce
 -- невозможна: после первой оплаты заказ уже 'paid'.
@@ -62,12 +80,17 @@
 --     РНК (ЦЕЛЫЕ; INTEGER: сложение — атомарным UPDATE в триггере, без
 --     read-modify-write гонки; гранты всегда целые);
 --     booster_until_ms — абсолютный срок бустера (max(текущий, now) + дни);
+--     season_pass_until_ms — абсолютный срок сезонного пропуска (v17,
+--     та же семантика, что у бустера; доступ к paid-треку миссий гейтится
+--     этой датой, а не таблицей subscription_events);
 --     skins_json — DEPRECATED с патча №16: колонка оставлена для
 --     совместимости, триггер её НЕ ведёт; владение скинами — wallet_skins.
 --   wallet_ledger: append-only журнал; id — монотонный seq (AUTOINCREMENT);
 --     charge_id UNIQUE — идемпотентность выдачи при ретраях Telegram;
---     kind: 'grant' | 'reversal'; grant_type: 'rna' | 'booster' | 'skin';
---     amount — ЗНАКОВЫЙ INTEGER (rna +N/-N; booster +мс/-мс; skin 0);
+--     kind: 'grant' | 'reversal'; grant_type: 'rna' | 'booster' | 'skin' |
+--     'season_pass' (v17);
+--     amount — ЗНАКОВЫЙ INTEGER (rna +N/-N; booster +мс/-мс;
+--     season_pass +мс/-мс; skin 0);
 --     reverses_charge_id — для reversal: какой грант откатываем.
 --   wallet_skins: владение скинами; владение = EXISTS строка status='active'.
 --     Reversal гасит ТОЛЬКО строку своего charge_id: если тот же скин был
@@ -89,7 +112,14 @@
 -- значение на устройстве НЕ отзывается (см. «Модель угроз» в index.ts).
 -- Политика booster-reversal: время вспять не отматываем — ниже момента
 -- возврата (created_at reversal-строки) не уходим (см. триггер ниже и
--- README_DEPLOY).
+-- README_DEPLOY). Та же политика — у season_pass-reversal (v17).
+--
+-- Подписки (v17): продление приходит successful_payment с ТЕМ ЖЕ nonce,
+-- что и первая оплата, но новым charge_id (is_recurring=true,
+-- is_first_recurring=false). Воркер пишет платёж продления с ПРОИЗВОДНЫМ
+-- nonce `${nonce}:r:${chargeId}` (UNIQUE(payments.nonce) не даёт вставить
+-- второй платёж с тем же nonce). BotSubscriptionUpdated (update.subscription)
+-- пишется в subscription_events — аудит, не гейт доступа.
 --
 -- server_id: воркер отдаёт env.PAYMENTS_SERVER_ID (дефолт 'ofeliya-d1-v1') в
 -- POST /api/wallet. Mark должен держать его СТАБИЛЬНЫМ на бэкенд: смена
@@ -103,7 +133,7 @@
 --       AND created_at < (strftime('%s','now')*1000 - 86400000);
 --   -- 2. удалить протухшие старше 30 дней (история платежей не трогается):
 --   DELETE FROM orders
---     WHERE status='expired'
+--     WHERE status IN ('expired', 'invoice_failed')
 --       AND created_at < (strftime('%s','now')*1000 - 2592000000);
 
 CREATE TABLE IF NOT EXISTS orders (
@@ -120,6 +150,11 @@ CREATE TABLE IF NOT EXISTS orders (
   grant_rna           INTEGER,
   grant_booster_days  INTEGER,
   grant_skin_id       TEXT,
+  -- Монетизация v3: снапшот дней сезонного пропуска (4-е поле гранта).
+  grant_season_pass_days INTEGER,
+  -- Монетизация v3 (бандлы): снапшот компонентов мульти-гранта —
+  -- JSON-массив BundleComponent (NULL у одиночных товаров).
+  grant_bundle_json TEXT,
   status     TEXT    NOT NULL DEFAULT 'pending',
   created_at INTEGER NOT NULL
 );
@@ -153,36 +188,64 @@ CREATE TABLE IF NOT EXISTS wallets (
   user_id          INTEGER PRIMARY KEY,
   purchased_rna    INTEGER NOT NULL DEFAULT 0,
   booster_until_ms INTEGER NOT NULL DEFAULT 0,
+  -- Монетизация v3: абсолютный срок сезонного пропуска (epoch ms).
+  season_pass_until_ms INTEGER NOT NULL DEFAULT 0,
   skins_json       TEXT NOT NULL DEFAULT '[]',
   updated_at       INTEGER NOT NULL
 );
 
 -- Append-only журнал грантов и возвратов. id — монотонный seq (клиент
--- синкается по нему: /api/wallet → since_seq/tip_seq). charge_id UNIQUE —
--- идемпотентность выдачи при ретраях Telegram: дубликатная доставка даёт
+-- синкается по нему: /api/wallet → since_seq/tip_seq). UNIQUE —
+-- (charge_id, grant_type, skin_id): один платёж выдаёт N строк (бандл —
+-- по строке на компонент), а дубликатная доставка компонента даёт
 -- ON CONFLICT DO NOTHING → вставки нет → триггер не срабатывает → ноль
--- доп. начисления.
+-- доп. начисления. skin_id нормализуется в '' при вставке (см.
+-- SQL_INSERT_LEDGER_GRANT): NULL в UNIQUE не конфликтовал бы.
 CREATE TABLE IF NOT EXISTS wallet_ledger (
   id                INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id           INTEGER NOT NULL,
-  charge_id         TEXT NOT NULL UNIQUE,
+  charge_id         TEXT NOT NULL,
   kind              TEXT NOT NULL,   -- 'grant' | 'reversal'
-  grant_type        TEXT NOT NULL,   -- 'rna' | 'booster' | 'skin'
-  amount            INTEGER NOT NULL DEFAULT 0,  -- знаковый: rna ±N; booster ±мс; skin 0
-  skin_id           TEXT,            -- для grant_type='skin'
+  grant_type        TEXT NOT NULL,   -- 'rna' | 'booster' | 'skin' | 'season_pass' (v17)
+  amount            INTEGER NOT NULL DEFAULT 0,  -- знаковый: rna ±N; booster ±мс; season_pass ±мс; skin 0
+  skin_id           TEXT,            -- для grant_type='skin' ('' у остальных — нормализация, см. выше)
   reverses_charge_id TEXT,           -- для kind='reversal': какой грант откатываем
   amount_text       TEXT NOT NULL DEFAULT '',    -- аудит-совместимость (v15)
-  created_at        INTEGER NOT NULL
+  created_at        INTEGER NOT NULL,
+  UNIQUE (charge_id, grant_type, skin_id)
 );
 CREATE INDEX IF NOT EXISTS idx_wallet_ledger_user_seq ON wallet_ledger(user_id, id);
+
+-- Аудит BotSubscriptionUpdated (монетизация v3, Bot API 10.2).
+-- Апдейт несёт только {user.id, invoice_payload (= nonce заказа), state};
+-- charge_id резолвится воркером из payments по nonce (NULL, если платёж
+-- ещё не записан). Доступ НЕ гейтится этой таблицей — только датой
+-- wallets.season_pass_until_ms. Дубликат апдейта (ретрай Telegram) даст
+-- вторую строку — для аудита это допустимо.
+CREATE TABLE IF NOT EXISTS subscription_events (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id    INTEGER NOT NULL,
+  nonce      TEXT NOT NULL,
+  charge_id  TEXT,
+  state      TEXT NOT NULL,   -- 'canceled' | 'active' | 'failed'
+  -- P2-3: источник записи — 'telegram' (BotSubscriptionUpdated) или
+  -- 'admin' (POST /api/admin/subscription / refund cancelSubscription).
+  source     TEXT NOT NULL DEFAULT 'telegram',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_subscription_events_nonce ON subscription_events(nonce);
 
 -- Владение скинами (патч №16). Владение = EXISTS строка status='active'.
 -- PK включает charge_id: один скин может быть выдан дважды (два платежа) —
 -- reversal гасит только строку своего charge_id.
+-- Монетизация v3: UNIQUE на charge_id СНЯТ — бандл из трёх скинов пишет
+-- три строки с ОДНИМ charge_id (skin-trio); уникальность держит PK
+-- (user_id, skin_id, charge_id). Reversal по charge_id гасит все строки
+-- этого платежа (полный возврат бандла), что и нужно.
 CREATE TABLE IF NOT EXISTS wallet_skins (
   user_id    INTEGER NOT NULL,
   skin_id    TEXT NOT NULL,
-  charge_id  TEXT NOT NULL UNIQUE,
+  charge_id  TEXT NOT NULL,
   status     TEXT NOT NULL DEFAULT 'active',  -- 'active' | 'reversed'
   granted_at INTEGER NOT NULL,
   PRIMARY KEY (user_id, skin_id, charge_id)
@@ -206,10 +269,11 @@ CREATE TABLE IF NOT EXISTS refund_ops (
 CREATE INDEX IF NOT EXISTS idx_refund_ops_charge ON refund_ops(charge_id);
 
 -- P1-5 (независимый review): дубликатные платежи — второй successful_payment
--- на тот же nonce (гонка двух pre_checkout). Деньги списаны Telegram, но
--- заказ уже оплачен: записываем платёж БЕЗ гранта (видим + возвращаем
--- вручную через /api/admin/refund), громкий лог. UNIQUE(nonce) в payments
--- не даёт вставить сюда — поэтому отдельная таблица.
+-- на тот же nonce (гонка двух pre_checkout) или отклонённая вторая подписка
+-- (P1-2, reason='subscription_active'). Деньги списаны Telegram, но заказ
+-- уже оплачен / пропуск уже активен: записываем платёж БЕЗ гранта (видим +
+-- возвращаем через /api/admin/refund, P1-1), громкий лог. UNIQUE(nonce) в
+-- payments не даёт вставить сюда — поэтому отдельная таблица.
 CREATE TABLE IF NOT EXISTS duplicate_payments (
   charge_id  TEXT PRIMARY KEY,
   nonce      TEXT NOT NULL,
@@ -217,19 +281,23 @@ CREATE TABLE IF NOT EXISTS duplicate_payments (
   product_id TEXT NOT NULL,
   amount     INTEGER NOT NULL,
   currency   TEXT NOT NULL,
-  reason     TEXT NOT NULL,  -- 'nonce_reuse'
+  reason     TEXT NOT NULL,  -- 'nonce_reuse' | 'subscription_active' (P1-2) | 'renewal_amount_mismatch' (CR7); CHECK нет — новые значения без миграции
+  -- P1-1: state machine возврата дубликата (зеркало payments):
+  -- 'pending' → 'refund_requested' → 'refunded'. Только через
+  -- POST /api/admin/refund; гранта у дубликата нет — reversal не нужен.
+  status     TEXT NOT NULL DEFAULT 'pending',
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_duplicate_payments_nonce ON duplicate_payments(nonce);
 
--- Учёт применённых миграций (записывает migration-16.sql; свежий деплой
--- по этому файлу — тоже v16).
+-- Учёт применённых миграций (записывает migration-17.sql; свежий деплой
+-- по этому файлу — тоже v17: отметка ставится внизу файла, P3-N2).
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version    TEXT PRIMARY KEY,
   applied_at INTEGER NOT NULL
 );
 
--- Триггер выдачи/возврата (патч №16, A1). Срабатывает на КАЖДУЮ вставку в
+-- Триггер выдачи/возврата (патч №16, A1; v17: + season_pass). Срабатывает на КАЖДУЮ вставку в
 -- wallet_ledger — внутри того же батча/транзакции, что и сама вставка
 -- (атомарно: либо платёж+грант+кошелёк, либо ничего).
 --
@@ -241,6 +309,8 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 --  - rna grant:      purchased_rna += amount (плоско, без бонусов);
 --  - booster grant:  booster_until_ms = max(текущий, момент выдачи) + amount
 --                    (время не сгорает; amount в мс);
+--  - season_pass grant: season_pass_until_ms = max(текущий, момент выдачи)
+--                    + amount (v17; та же семантика, что у бустера);
 --  - skin grant:     аддитивное множество в wallet_skins (OR IGNORE);
 --  - rna reversal:   purchased_rna = max(0, purchased_rna + amount),
 --                    amount отрицательный → ниже нуля не уходим;
@@ -248,13 +318,17 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 --                    booster_until_ms + amount) — ПОЛИТИКА: время вспять не
 --                    отматываем, ниже момента возврата не уходим
 --                    (задокументировано в README_DEPLOY);
+--  - season_pass reversal: season_pass_until_ms = max(момент возврата,
+--                    season_pass_until_ms + amount) (v17; та же политика:
+--                    возврат первого периода на 5-й день → пропуск кончается
+--                    сейчас; возврат одного из продлений отнимает 30 дней);
 --  - skin reversal:  гасим ТОЛЬКО строку charge_id=reverses_charge_id
 --                    (владение сохраняется при других активных выдачах).
 CREATE TRIGGER IF NOT EXISTS trg_wallet_ledger_apply
 AFTER INSERT ON wallet_ledger
 BEGIN
-  INSERT OR IGNORE INTO wallets(user_id, purchased_rna, booster_until_ms, skins_json, updated_at)
-  VALUES (NEW.user_id, 0, 0, '[]', NEW.created_at);
+  INSERT OR IGNORE INTO wallets(user_id, purchased_rna, booster_until_ms, season_pass_until_ms, skins_json, updated_at)
+  VALUES (NEW.user_id, 0, 0, 0, '[]', NEW.created_at);
 
   UPDATE wallets
      SET purchased_rna = purchased_rna + NEW.amount,
@@ -267,6 +341,12 @@ BEGIN
          updated_at = NEW.created_at
    WHERE user_id = NEW.user_id
      AND NEW.kind = 'grant' AND NEW.grant_type = 'booster';
+
+  UPDATE wallets
+     SET season_pass_until_ms = max(season_pass_until_ms, NEW.created_at) + NEW.amount,
+         updated_at = NEW.created_at
+   WHERE user_id = NEW.user_id
+     AND NEW.kind = 'grant' AND NEW.grant_type = 'season_pass';
 
   INSERT OR IGNORE INTO wallet_skins(user_id, skin_id, charge_id, status, granted_at)
   SELECT NEW.user_id, NEW.skin_id, NEW.charge_id, 'active', NEW.created_at
@@ -284,9 +364,71 @@ BEGIN
    WHERE user_id = NEW.user_id
      AND NEW.kind = 'reversal' AND NEW.grant_type = 'booster';
 
+  UPDATE wallets
+     SET season_pass_until_ms = max(NEW.created_at, season_pass_until_ms + NEW.amount),
+         updated_at = NEW.created_at
+   WHERE user_id = NEW.user_id
+     AND NEW.kind = 'reversal' AND NEW.grant_type = 'season_pass';
+
   UPDATE wallet_skins
      SET status = 'reversed'
    WHERE charge_id = NEW.reverses_charge_id
      AND status = 'active'
      AND NEW.kind = 'reversal' AND NEW.grant_type = 'skin';
 END;
+
+-- Guard конкурентной двойной подписки (P2-N1, раунд 2). JS-проверка
+-- активного пропуска в recordSuccessfulPayment и грант-батч — отдельные
+-- вызовы D1: два параллельных платежа второй подписки оба читают pass=0
+-- и оба выдают грант (аудит воспроизвёл интерливингом: payments=2,
+-- pass=+60д). Этот BEFORE INSERT триггер — атомарный слой внутри батча:
+-- RAISE(ABORT) роняет statement, а db.batch() откатывает весь батч
+-- (платёж тоже не записывается); вебхук отвечает 503, ретрай Telegram
+-- уходит в denied-путь (JS-проверка к тому моменту видит активный
+-- пропуск → duplicate_payments + заказ 'denied').
+--
+-- Различение продления от первой оплаты — по payments.nonce: продление
+-- пишется с ПРОИЗВОДНЫМ nonce `${nonce}:r:${chargeId}` (содержит ':'),
+-- обычный nonce ':' не содержит (NONCE_RE в worker/src/index.ts).
+-- INSERT payments идёт в батче РАНЬШЕ INSERT ledger (и в
+-- recordSuccessfulPayment, и в recordSubscriptionRenewal), поэтому
+-- payments-строка уже видна триггеру внутри той же транзакции.
+-- Прямые вставки в журнал без payments-строки (только тесты/тулинг)
+-- трактуются как первая оплата (fail-closed).
+--
+-- Два обхода, без которых guard ломает легитимные пути:
+--  - дубликатная доставка (тот же charge_id/grant_type/skin_id):
+--    BEFORE-триггер срабатывает и для конфликтующей строки, поэтому
+--    уже существующий ключ пропускается — иначе ретрай ушёл бы в вечный
+--    503 вместо ON CONFLICT DO NOTHING;
+--  - «активен» — относительно NEW.created_at (момент записи гранта),
+--    а не wall-clock: триггер не знает Date.now() воркера, а created_at
+--    — это и есть момент платежа.
+-- Reversal и другие grant_type guard не трогает (условие — только
+-- kind='grant' AND grant_type='season_pass').
+CREATE TRIGGER IF NOT EXISTS trg_wallet_ledger_season_pass_guard
+BEFORE INSERT ON wallet_ledger
+BEGIN
+  SELECT RAISE(ABORT, 'season pass already active for user')
+   WHERE NEW.kind = 'grant' AND NEW.grant_type = 'season_pass'
+     AND NOT EXISTS (
+       SELECT 1 FROM wallet_ledger
+        WHERE charge_id = NEW.charge_id AND grant_type = NEW.grant_type
+          AND skin_id = COALESCE(NEW.skin_id, '')
+     )
+     AND EXISTS (
+       SELECT 1 FROM wallets
+        WHERE user_id = NEW.user_id AND season_pass_until_ms > NEW.created_at
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM payments
+        WHERE charge_id = NEW.charge_id AND instr(nonce, ':') > 0
+     );
+END;
+
+-- P3-N2: свежий деплой по этому файлу — тоже v17 (см. комментарий у
+-- schema_migrations выше). Отметка нужна гейту check-schema: без неё
+-- функционально-v17 база неотличима от частично мигрированной, а
+-- повторный прогон migration-17.sql упал бы на ALTER TABLE ADD COLUMN.
+INSERT OR IGNORE INTO schema_migrations (version, applied_at)
+VALUES ('v17', strftime('%s','now')*1000);

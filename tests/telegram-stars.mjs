@@ -212,7 +212,8 @@ try {
     payments: new Map(),
     nonceToCharge: new Map(),
     verifyNonces: [],
-    verifyMode: 'ok', // 'ok' | 'ok-no-charge' | 'mismatch' | 'not-found' | 'throw'
+    verifyMode: 'ok', // 'ok' | 'ok-no-charge' | 'mismatch' | 'not-found' | 'throw' | 'denied' | 'duplicate'
+    invoiceMode: 'ok', // 'ok' | 'conflict-active' | 'conflict-pending' (P3-N7)
     entitlementsMode: 'ok', // 'ok' | 'unavailable'
     ackCalls: [],
     ackBehavior: 'ok', // 'ok' | 'fail'
@@ -238,6 +239,7 @@ try {
     server.nonceToCharge.clear();
     server.verifyNonces.length = 0;
     server.verifyMode = 'ok';
+    server.invoiceMode = 'ok';
     server.entitlementsMode = 'ok';
     server.ackCalls.length = 0;
     server.ackBehavior = 'ok';
@@ -250,6 +252,13 @@ try {
   globalThis.fetch = async (url, init) => {
     const body = init?.body ? JSON.parse(init.body) : {};
     if (url.endsWith('/api/invoice')) {
+      // P3-N7: 409 subscription-active/pending от воркера (P1-2).
+      if (server.invoiceMode === 'conflict-active') {
+        return { ok: false, status: 409, json: async () => ({ error: 'subscription-active' }) };
+      }
+      if (server.invoiceMode === 'conflict-pending') {
+        return { ok: false, status: 409, json: async () => ({ error: 'subscription-pending' }) };
+      }
       assert(typeof body.nonce === 'string' && body.nonce.length >= 8, 'invoice sends nonce');
       assert(
         typeof body.productId === 'string' && SHOP_CATALOG.some((p) => p.id === body.productId),
@@ -265,6 +274,13 @@ try {
       if (server.verifyMode === 'throw') throw new Error('network down');
       if (server.verifyMode === 'ok-no-charge') {
         return { ok: true, json: async () => ({ verified: true }) };
+      }
+      // P2-N2 (b): терминальные статусы сервера — без ретраев на клиенте.
+      if (server.verifyMode === 'denied') {
+        return { ok: true, json: async () => ({ verified: false, reason: 'denied' }) };
+      }
+      if (server.verifyMode === 'duplicate') {
+        return { ok: true, json: async () => ({ verified: false, reason: 'duplicate' }) };
       }
       const chargeId = server.nonceToCharge.get(body.nonce);
       if (server.verifyMode === 'not-found' || !chargeId) {
@@ -482,6 +498,57 @@ try {
   eq(r.state, 'pending', 'productId mismatch is pending, not paid');
   eq(r.reason, 'verify-product-mismatch', 'pending reason is verify-product-mismatch');
   eq(loadMeta().rna, 0, 'no grant on productId mismatch');
+
+  // (6c) P2-N2 (b): сервер вернул denied/duplicate → purchase 'failed'
+  // (не вечный pending), без ретраев; pending-запись снимается,
+  // restore докладывает denied (сцена показывает «платёж отклонён»).
+  resetPayments();
+  resetServer();
+  server.verifyMode = 'denied';
+  withWindow(paidWindow());
+  const tDenied = Date.now();
+  r = await p1.purchase(packS.id);
+  assert(Date.now() - tDenied < 3000, `denied verify is terminal, no retries (took ${Date.now() - tDenied}ms)`);
+  eq(r.state, 'failed', 'denied purchase is failed, not pending');
+  eq(r.reason, 'verify-denied', 'denied reason');
+  eq(loadMeta().rna, 0, 'denied purchase grants nothing');
+  resetPayments();
+  resetServer();
+  server.verifyMode = 'duplicate';
+  withWindow(paidWindow());
+  r = await p1.purchase(packS.id);
+  eq(r.state, 'failed', 'duplicate purchase is failed, not pending');
+  eq(r.reason, 'verify-duplicate', 'duplicate reason');
+  eq(loadMeta().rna, 0, 'duplicate purchase grants nothing');
+  // Pending-запись с denied-верификацией: restore снимает её и докладывает.
+  resetPayments();
+  resetServer();
+  server.verifyMode = 'denied';
+  addPendingPurchase({ nonce: 'denied-nonce-1', productId: packS.id, stars: 35, createdAt: Date.now() });
+  eq(loadPendingPurchases().length, 1, 'pending record present before restore');
+  const restoredDenied = await p1.restore();
+  eq(loadPendingPurchases().length, 0, 'denied pending record removed by restore');
+  assert((restoredDenied.pendingDenied ?? []).includes(packS.id), 'restore reports pendingDenied');
+  eq(loadMeta().rna, 0, 'denied restore grants nothing');
+  const restoredDenied2 = await p1.restore();
+  eq((restoredDenied2.pendingDenied ?? []).length, 0, 'denied reported once');
+
+  // (6d) P3-N7: 409 subscription-active/pending — различимая причина,
+  // а не generic invoice-create-failed (сцена показывает понятный текст).
+  resetPayments();
+  resetServer();
+  server.invoiceMode = 'conflict-active';
+  withWindow(paidWindow());
+  r = await p1.purchase(packS.id);
+  eq(r.state, 'failed', '409 subscription-active is failed');
+  eq(r.reason, 'subscription-active', '409 active reason surfaced');
+  resetPayments();
+  resetServer();
+  server.invoiceMode = 'conflict-pending';
+  withWindow(paidWindow());
+  r = await p1.purchase(packS.id);
+  eq(r.state, 'failed', '409 subscription-pending is failed');
+  eq(r.reason, 'subscription-pending', '409 pending reason surfaced');
 
   // (7) booster: серверный грант → синк берёт max(local, server).
   // Патч №15: fulfillPurchase начислений не делает; срок вычисляет сервер.

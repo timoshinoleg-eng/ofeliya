@@ -99,6 +99,37 @@ try {
   eq(formatPrice({ amount: 1.99, currency: 'USD' }), '$1.99', 'USD formats with $');
   eq(formatPrice({ amount: 10, currency: 'EUR' }), '10 EUR', 'unknown currency falls back');
 
+  // --- P2-8: discount tags are computed in the purchase currency (Stars),
+  // not in showcase RUB. rna-pack-m: 100★ vs 3× small pack (3×35★=105★)
+  // → 5% cheaper (RUB math would say 13%: 129₽ vs 3×49₽=147₽ — wrong,
+  // players pay Stars). skin-trio: 300★ vs 100+100+250=450★ → 33%.
+  const byId = new Map(SHOP_CATALOG.map((p) => [p.id, p]));
+  const packM = byId.get('currency.rna-pack-m');
+  const packS = byId.get('currency.rna-pack-s');
+  const packMSaving = Math.round((1 - packM.stars / (3 * packS.stars)) * 100);
+  eq(packM.tag, `-${packMSaving}%`, 'rna-pack-m tag matches Stars saving');
+  assert(
+    packM.description.includes(`на ${packMSaving}%`),
+    'rna-pack-m description matches Stars saving'
+  );
+  const trio = byId.get('bundle.skin-trio');
+  const trioAlt = trio.bundle.reduce(
+    (sum, c) => sum + (c.kind === 'skin' ? byId.get(c.skinId).stars : 0),
+    0
+  );
+  const trioSaving = Math.round((1 - trio.stars / trioAlt) * 100);
+  eq(trio.tag, `-${trioSaving}%`, 'skin-trio tag matches Stars saving');
+  // Every '-%' tag in the catalog must have a Stars-basis check above —
+  // a future discount tag cannot slip in with RUB math unnoticed.
+  for (const p of SHOP_CATALOG) {
+    if (typeof p.tag === 'string' && /^-\d+%$/.test(p.tag)) {
+      assert(
+        ['currency.rna-pack-m', 'bundle.skin-trio'].includes(p.id),
+        `discount tag on ${p.id} has no Stars-basis check`
+      );
+    }
+  }
+
   console.log('shop-catalog: ok');
 } finally {
   rmSync(temp, { recursive: true, force: true });

@@ -4,6 +4,7 @@ import { clientCollection, clientFlags } from '../systems/ClientExperience';
 import { impactZoom } from '../ui/ClientJuice';
 import Phaser from 'phaser';
 import { QuestRuntime } from '../quests/questRuntime';
+import { recordSeasonRun } from '../game/shop/seasonQuests';
 import { artScale } from '../game/ArtMetrics';
 import {
   COLORS,
@@ -2709,6 +2710,21 @@ export class GameScene extends Phaser.Scene {
     this.quests.tick(run.timeMs, stage.noDamageMs, true);
     this.detachHostLifecycle?.();this.detachHostLifecycle=null;
     this.quests.end(SaveSystem.get().runs);
+    // Монетизация v3: сезонные миссии — итоги забега в месячный прогресс.
+    // Чекпоинт квестов — единственный источник rna/mutations за забег
+    // (runState их не хранит); счётчики забега берутся из run.
+    // recordSeasonRun никогда не бросает (санитизация внутри).
+    try {
+      const cp = this.quests.checkpoint();
+      recordSeasonRun({
+        kills: run.kills,
+        rnaCollected: cp?.rna ?? 0,
+        bossesDefeated: run.bossesDefeated,
+        mutations: cp?.mutations ?? 0,
+      });
+    } catch {
+      // Сезонный прогресс — retention, а не платёж: не роняем конец забега.
+    }
     if (clientFlags().collection.enabled) {
       const cp=this.quests.checkpoint();
       if(cp) clientCollection().observeRun({id:cp.id,kills:run.kills,timeMs:run.timeMs,

@@ -5,6 +5,9 @@
  * как единого источника: id/title/seed/palette/stars — оттуда, дублирования
  * нет. Редкость — галерейная аннотация (в каталоге витрины её нет).
  * Дефолтный скин 'strain-zero' — каноничный арт 'virus-player' (без DiceBear).
+ * Исключение — бандл-эксклюзивы (BUNDLE_ONLY_SKINS): скины, которые не
+ * продаются отдельным товаром и выдаются только компонентом бандла
+ * (монетизация v3); их def — здесь, потому что в SHOP_CATALOG их нет.
  *
  * Модуль Phaser-free: чистые функции, тестируются в Node.
  * Рендер SVG — в SkinArt.ts (там же зависимость @dicebear/*).
@@ -39,6 +42,8 @@ export const PALETTE_COLORS: Record<
   magenta: { shape1: 'ff4fb5', shape2: 'b3128f', shape3: 'ffc2e2', background: '14060f' },
   teal: { shape1: '2fd6c0', shape2: '0f8f80', shape3: 'b8fff4', background: '041410' },
   gold: { shape1: 'ffd56a', shape2: 'c98f1b', shape3: 'fff3c4', background: '141006' },
+  // Монетизация v3: палитра эксклюзивного скина стартового набора.
+  prime: { shape1: 'b18cff', shape2: '6a3df0', shape3: 'e6d9ff', background: '0d0618' },
 };
 
 /** Чистая функция: цвета палитры (неизвестная → 'bio'). */
@@ -57,6 +62,24 @@ const SHOP_SKIN_META: Record<string, { rarity: SkinRarity }> = {
   'skin.abyssal-teal': { rarity: 'rare' },
   'skin.gilded-prime': { rarity: 'legendary' },
 };
+
+/**
+ * Скины, которые НЕ продаются отдельным товаром (монетизация v3):
+ * выдаются только как компонент бандла. productId — id бандла, который
+ * их грантит; stars — null (отдельной цены нет). Галерея показывает их
+ * наравне с шоп-скинами; владение — через SkinOwnership как обычно.
+ */
+const BUNDLE_ONLY_SKINS: readonly SkinDef[] = [
+  {
+    id: 'skin.starter-prime',
+    title: 'Штамм «Прайм»',
+    seed: 'starter-prime',
+    palette: 'prime',
+    rarity: 'legendary',
+    productId: 'bundle.starter-pack',
+    stars: null,
+  },
+];
 
 export const SKIN_CATALOG: readonly SkinDef[] = [
   {
@@ -79,6 +102,8 @@ export const SKIN_CATALOG: readonly SkinDef[] = [
     productId: p.id,
     stars: p.stars ?? null,
   })),
+  // Бандл-эксклюзивы (см. BUNDLE_ONLY_SKINS выше).
+  ...BUNDLE_ONLY_SKINS,
 ];
 
 const BY_ID = new Map(SKIN_CATALOG.map((s) => [s.id, s]));

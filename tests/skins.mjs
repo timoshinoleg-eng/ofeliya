@@ -60,14 +60,26 @@ try {
 
   // --- каталог ---
   const skins = catalog.listSkins();
-  eq(skins.length, 4, 'catalog size');
+  eq(skins.length, 5, 'catalog size (4 + bundle-exclusive starter-prime)');
   eq(skins[0].id, 'strain-zero', 'default skin first');
   eq(skins[0].productId, null, 'default skin is free');
   for (const s of skins.slice(1)) {
-    assert(s.productId === s.id, `shop skin ${s.id} references its product`);
+    // Шоп-скины ссылаются на свой товар; бандл-эксклюзивы — на бандл.
+    assert(
+      s.productId === s.id || s.productId === 'bundle.starter-pack',
+      `skin ${s.id} references its product`
+    );
     assert(typeof s.seed === 'string' && s.seed.length > 0, `skin ${s.id} has seed`);
     assert(typeof s.palette === 'string' && s.palette.length > 0, `skin ${s.id} has palette`);
   }
+  // Бандл-эксклюзив (монетизация v3): только в стартовом наборе.
+  const prime = catalog.getSkinDef('skin.starter-prime');
+  assert(prime, 'starter-prime in catalog');
+  eq(prime.productId, 'bundle.starter-pack', 'starter-prime comes from the starter pack');
+  eq(prime.stars, null, 'starter-prime has no standalone price');
+  eq(prime.rarity, 'legendary', 'starter-prime is legendary');
+  eq(prime.palette, 'prime', 'starter-prime palette');
+  eq(catalog.getSkinPriceStars('skin.starter-prime'), null, 'starter-prime price is null');
   // Цены — из каталога (до партии 3 — inline-дефы, значения как в витрине стека): 100/100/250 stars.
   eq(catalog.getSkinPriceStars('skin.virulent-magenta'), 100, 'magenta price');
   eq(catalog.getSkinPriceStars('skin.abyssal-teal'), 100, 'teal price');

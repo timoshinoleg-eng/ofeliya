@@ -11,7 +11,7 @@
 
 export type ProviderId = 'mock' | 'max-bridge' | 'telegram-stars';
 
-export type ProductKind = 'skin' | 'booster' | 'currency';
+export type ProductKind = 'skin' | 'booster' | 'currency' | 'season_pass' | 'bundle';
 
 /** Нейтральный формат цены: major units + ISO 4217 код. */
 export interface ProductPrice {
@@ -29,6 +29,16 @@ export interface ProductArt {
   palette: string;
 }
 
+/**
+ * Компонент бандла (монетизация v3). Зеркало worker/src/grants.ts
+ * BundleComponent: дискриминированный union — у компонента ровно один
+ * активный вид. Сезонный пропуск в бандл не входит (подписка).
+ */
+export type BundleComponent =
+  | { kind: 'rna'; rna: number }
+  | { kind: 'booster'; boosterDays: number }
+  | { kind: 'skin'; skinId: string };
+
 export interface Product {
   /** Уникальный id, напр. 'skin.virulent-magenta'. */
   id: string;
@@ -37,8 +47,16 @@ export interface Product {
   description: string;
   price: ProductPrice;
   art: ProductArt;
-  /** Бейдж на карточке: 'HIT' | 'NEW' | '-13%' … */
+  /** Бейдж на карточке: 'HIT' | 'NEW' | '-5%' … (скидки — в Stars, см. products.ts) */
   tag?: string;
+  /**
+   * Компоненты бандла (монетизация v3): только для kind='bundle'.
+   * Зеркало worker/src/grants.ts BundleComponent — клиентский маппинг
+   * grantPurchase обязан совпадать с серверным (иначе mock-выдача
+   * разойдётся с серверной). Серверная выдача — из своего каталога,
+   * клиентскому списку не доверяет.
+   */
+  bundle?: BundleComponent[];
   /**
    * Цена в звёздах Telegram (XTR) — ЦЕЛОЕ число (1 star ≈ $0.013).
    * TelegramStarsPaymentProvider берёт цену отсюда; если stars нет —
@@ -98,6 +116,10 @@ export interface RestoreResult {
   productIds: string[];
   /** Патч №12: productId, выданные из pending-журнала в этом вызове. */
   pendingFulfilled?: string[];
+  /** P2-N2 (b): productId, чья pending-запись снята как отклонённая
+   * (сервер вернул verify-denied/verify-duplicate — гранта не будет,
+   * возврат оформляется сервером). Сцена показывает «платёж отклонён». */
+  pendingDenied?: string[];
 }
 
 /**

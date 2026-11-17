@@ -187,12 +187,26 @@ try {
             }
             if (sql.startsWith('INSERT INTO orders')) {
               // v16 (B2+P1-2): заказ иммутабелен — amount_stars, sku_version и снапшот гранта пишутся сразу.
-              const [nonce, userId, productId, amountStars, skuVersion, grantRna, grantBoosterDays, grantSkinId, createdAt] = params;
+              // v17 (монетизация v3): + grant_season_pass_days (4-е поле снапшота) + grant_bundle_json.
+              const [nonce, userId, productId, amountStars, skuVersion, grantRna, grantBoosterDays, grantSkinId, grantSeasonPassDays, grantBundleJson, createdAt] = params;
               if (orders.has(nonce)) throw new Error('UNIQUE constraint failed: orders.nonce');
-              orders.set(nonce, { user_id: userId, product_id: productId, amount_stars: amountStars, sku_version: skuVersion, grant_rna: grantRna, grant_booster_days: grantBoosterDays, grant_skin_id: grantSkinId, status: 'pending', created_at: createdAt });
+              orders.set(nonce, { user_id: userId, product_id: productId, amount_stars: amountStars, sku_version: skuVersion, grant_rna: grantRna, grant_booster_days: grantBoosterDays, grant_skin_id: grantSkinId, grant_season_pass_days: grantSeasonPassDays, grant_bundle_json: grantBundleJson, status: 'pending', created_at: createdAt });
               return { meta: { changes: 1 } };
             }
             throw new Error(`worker-payments D1 stub: unknown SQL: ${sql}`);
+          },
+          // P2-5: идемпотентный ретрай инвойса читает существующий заказ.
+          async first() {
+            if (sql.startsWith('SELECT user_id, product_id, status, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, grant_bundle_json FROM orders WHERE nonce=?')) {
+              const row = orders.get(params[0]);
+              return row
+                ? { user_id: row.user_id, product_id: row.product_id, status: row.status, amount_stars: row.amount_stars, sku_version: row.sku_version, grant_rna: row.grant_rna ?? null, grant_booster_days: row.grant_booster_days ?? null, grant_skin_id: row.grant_skin_id ?? null, grant_season_pass_days: row.grant_season_pass_days ?? null, grant_bundle_json: row.grant_bundle_json ?? null }
+                : null;
+            }
+            return null;
+          },
+          async all() {
+            return { results: [] };
           },
         };
       },
@@ -235,9 +249,11 @@ try {
     assert(order.product_id === 'currency.rna-pack-s', 'order stores productId');
     assert(order.status === 'pending', 'order status pending');
     // v16 (B2): заказ иммутабелен — цена и версия каталога зафиксированы.
+    // v17 (монетизация v3): GRANTS_VERSION 3 (добавлен сезонный пропуск).
     assert(order.amount_stars === 35, 'order amount_stars');
-    assert(order.sku_version === 2, 'order sku_version');
+    assert(order.sku_version === 4, 'order sku_version');
     assert(order.grant_rna === 500, 'order grant snapshot rna');
+    assert(order.grant_season_pass_days === 0, 'order grant snapshot season pass (0 for non-pass)');
     inv = await invoicePost(invEnv, {
       initData: goodInit,
       productId: 'currency.rna-pack-s',
@@ -278,14 +294,27 @@ try {
     assert(inv.json.error === 'order-store-failed', 'order-store 502 error code');
     assert(botCalls.length === callsBeforeFail, 'no Bot API call on order-store failure');
     assert(!orders.has('nonce-inv-5'), 'failed order not tracked');
-    // Дубликат nonce (UNIQUE) → 502, инвойс не создаётся.
+    // P2-5: повтор с тем же nonce (тот же user+product, заказ pending) —
+    // идемпотентное перевыпускание инвойса (200), а не вечный 502.
+    const callsBeforeRetry = botCalls.length;
     inv = await invoicePost(invEnv, {
       initData: goodInit,
       productId: 'currency.rna-pack-s',
       nonce: 'nonce-inv-1',
     });
-    assert(inv.status === 502, 'duplicate nonce → 502');
-    assert(botCalls.length === callsBeforeFail, 'no Bot API call on duplicate nonce');
+    assert(inv.status === 200, 'duplicate nonce (same user+product, pending) → 200 idempotent retry');
+    assert(inv.json.invoiceUrl === 'https://t.me/$inv-test', 'retry returns invoice URL');
+    assert(botCalls.length === callsBeforeRetry + 1, 'createInvoiceLink re-issued on retry');
+    assert(orders.size === 1, 'still one order after retry');
+    // Чужой пользователь с тем же nonce — 502 (не раскрываем чужой заказ).
+    const alienFields = { ...fields, user: JSON.stringify({ id: 777002, first_name: 'Alien' }) };
+    inv = await invoicePost(invEnv, {
+      initData: buildInitData(alienFields),
+      productId: 'currency.rna-pack-s',
+      nonce: 'nonce-inv-1',
+    });
+    assert(inv.status === 502, 'duplicate nonce by another user → 502');
+    assert(inv.json.error === 'order-store-failed', 'alien retry error code');
   } finally {
     globalThis.fetch = realFetch;
   }

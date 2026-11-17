@@ -8,7 +8,8 @@
  * Scope: Phase 2 keys (events.doubleRna, difficulty.earlyGame,
  * storefront.variant) + Phase 3 key (retention.quests, порт Фазы 3)
  * + Phase 4 key (economy.lab, порт Фазы 4)
- * + Phase 5 key (skins.gallery, порт Фазы 5).
+ * + Phase 5 key (skins.gallery, порт Фазы 5)
+ * + monetization key (monetization.starter-pack, монетизация v3).
  * Later phases add their own keys here.
  */
 import { execFileSync } from 'node:child_process';
@@ -67,7 +68,7 @@ try {
   // --- defaults ---
   deepEq(
     FLAG_DEFAULTS,
-    { 'events.doubleRna': false, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden', 'retention.quests': true, 'economy.lab': true, 'skins.gallery': true },
+    { 'events.doubleRna': false, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden', 'retention.quests': true, 'economy.lab': true, 'skins.gallery': true, 'monetization.starter-pack': true },
     'FLAG_DEFAULTS'
   );
 
@@ -75,28 +76,33 @@ try {
   deepEq(resolveFlags(), FLAG_DEFAULTS, 'resolveFlags() with no args = defaults');
   deepEq(
     resolveFlags({ 'events.doubleRna': true }),
-    { 'events.doubleRna': true, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden', 'retention.quests': true, 'economy.lab': true, 'skins.gallery': true },
+    { 'events.doubleRna': true, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden', 'retention.quests': true, 'economy.lab': true, 'skins.gallery': true, 'monetization.starter-pack': true },
     'resolveFlags partial override'
   );
   deepEq(
     resolveFlags({ 'difficulty.earlyGame': 1.25, 'storefront.variant': 'featured' }),
-    { 'events.doubleRna': false, 'difficulty.earlyGame': 1.25, 'storefront.variant': 'featured', 'retention.quests': true, 'economy.lab': true, 'skins.gallery': true },
+    { 'events.doubleRna': false, 'difficulty.earlyGame': 1.25, 'storefront.variant': 'featured', 'retention.quests': true, 'economy.lab': true, 'skins.gallery': true, 'monetization.starter-pack': true },
     'resolveFlags multiple overrides'
   );
   deepEq(
     resolveFlags({ 'retention.quests': false }),
-    { 'events.doubleRna': false, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden', 'retention.quests': false, 'economy.lab': true, 'skins.gallery': true },
+    { 'events.doubleRna': false, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden', 'retention.quests': false, 'economy.lab': true, 'skins.gallery': true, 'monetization.starter-pack': true },
     'resolveFlags retention override'
   );
   deepEq(
     resolveFlags({ 'economy.lab': false }),
-    { 'events.doubleRna': false, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden', 'retention.quests': true, 'economy.lab': false, 'skins.gallery': true },
+    { 'events.doubleRna': false, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden', 'retention.quests': true, 'economy.lab': false, 'skins.gallery': true, 'monetization.starter-pack': true },
     'resolveFlags lab override'
   );
   deepEq(
     resolveFlags({ 'skins.gallery': false }),
-    { 'events.doubleRna': false, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden', 'retention.quests': true, 'economy.lab': true, 'skins.gallery': false },
+    { 'events.doubleRna': false, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden', 'retention.quests': true, 'economy.lab': true, 'skins.gallery': false, 'monetization.starter-pack': true },
     'resolveFlags gallery override'
+  );
+  deepEq(
+    resolveFlags({ 'monetization.starter-pack': false }),
+    { 'events.doubleRna': false, 'difficulty.earlyGame': 1, 'storefront.variant': 'hidden', 'retention.quests': true, 'economy.lab': true, 'skins.gallery': true, 'monetization.starter-pack': false },
+    'resolveFlags starter-pack override'
   );
   deepEq(
     resolveFlags({ 'unknown.flag': true }),
@@ -150,6 +156,11 @@ try {
     readUrlFlagOverrides('?flag.skins.gallery=false'),
     { 'skins.gallery': false },
     'URL gallery bool false'
+  );
+  deepEq(
+    readUrlFlagOverrides('?flag.monetization.starter-pack=false'),
+    { 'monetization.starter-pack': false },
+    'URL starter-pack bool false'
   );
   deepEq(
     readUrlFlagOverrides('?flag.skins.gallery=yes'),
@@ -213,6 +224,7 @@ try {
         'retention.quests': FeatureFlags.get('retention.quests'),
         'economy.lab': FeatureFlags.get('economy.lab'),
         'skins.gallery': FeatureFlags.get('skins.gallery'),
+        'monetization.starter-pack': FeatureFlags.get('monetization.starter-pack'),
       },
       FLAG_DEFAULTS,
       'init() with no overrides = defaults'

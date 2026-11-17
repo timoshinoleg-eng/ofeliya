@@ -4,6 +4,16 @@ function safeText(value, max = 96) {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
 }
 
+// CR1: первое НЕПУСТОЕ значение. `??` пустую строку не ловит: при
+// OFELIYA_SUPPORT_EMAIL='' fallback на VITE_SUPPORT_EMAIL не срабатывал,
+// и /paysupport отвечал «не настроена» при заданном втором адресе.
+function firstNonBlank(...values) {
+  for (const v of values) {
+    if (typeof v === 'string' && v.trim() !== '') return v;
+  }
+  return '';
+}
+
 function safeHttpsUrl(value) {
   if (typeof value !== 'string' || !value.trim()) return '';
   try {
@@ -31,6 +41,9 @@ export function parseTelegramStartParam(text) {
 
 export function buildTelegramWebhookMethod(update, {
   gameUrl = '', miniAppUrl = process.env.OFELIYA_TELEGRAM_GAME_URL ?? '',
+  // Publish a real, operator-owned support mailbox before enabling Stars.
+  // CR1: первое НЕПУСТОЕ значение env (пустая строка не блокирует fallback).
+  paymentSupportEmail = firstNonBlank(process.env.OFELIYA_SUPPORT_EMAIL, process.env.VITE_SUPPORT_EMAIL),
 } = {}) {
   const message = update?.message;
   const chatId = message?.chat?.id;
@@ -49,7 +62,14 @@ export function buildTelegramWebhookMethod(update, {
       ? `Привет, ${firstName}! Друг позвал тебя в OFELIYA. Открой игру и начни первый забег.`
       : `Привет, ${firstName}! Это OFELIYA: STRAIN ZERO. Открой игру и удержи ядро.`;
   } else if (command === '/help') {
-    reply = 'OFELIYA: STRAIN ZERO\n\n/start — открыть игру\n/help — помощь';
+    reply = 'OFELIYA: STRAIN ZERO\n\n/start — открыть игру\n/help — помощь\n/paysupport — вопросы и возвраты по Telegram Stars';
+  } else if (command === '/paysupport') {
+    const mailbox = safeText(paymentSupportEmail, 254);
+    // Don't show a forged/unconfigured contact or claim a refund is complete.
+    const validMailbox = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mailbox);
+    reply = validMailbox
+      ? `Поддержка платежей OFELIYA (Telegram Stars).\n\nНапишите на ${mailbox}. Укажите название товара, дату покупки и проблему. Идентификатор транзакции можно найти в истории Stars Telegram. Пароли, код входа и токен бота присылать не нужно. Возврат рассматривается отдельно; это сообщение не означает, что он выполнен.`
+      : 'Поддержка платежей OFELIYA ещё не настроена. Покупки Stars нельзя включать до публикации действующего контакта поддержки.';
   } else {
     reply = 'OFELIYA: STRAIN ZERO — открой игру кнопкой ниже.';
   }
@@ -71,7 +91,7 @@ export function buildTelegramWebhookMethod(update, {
     text: reply,
     disable_web_page_preview: true,
   };
-  if (launchUrl || directUrl) {
+  if ((launchUrl || directUrl) && command !== '/paysupport') {
     const useWebApp = message.chat.type === 'private' && !param && launchUrl && !isDirectLaunch;
     method.reply_markup = {
       inline_keyboard: [[useWebApp

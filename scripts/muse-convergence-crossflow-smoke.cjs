@@ -499,6 +499,16 @@ const mark = (name, value, kind = 'real') => {
       return Promise.all([ensureTelegramBridge(8), ensureTelegramBridge(25)]);
     });
     assert.deepEqual(expired, [false, false], 'both concurrent bridge calls must time out');
+    // The script element is appended synchronously by the loader, but the
+    // browser may dispatch the request after the 25 ms window on a slow
+    // machine (SwiftShader frames run ~100 ms; the hosted runner is slower
+    // still). Wait boundedly for the request to be observed — the
+    // shared-request contract (exactly one) is unchanged, only the
+    // observation is decoupled from the callers' deadlines.
+    const sdkWaitStarted = Date.now();
+    while (sdkRequests === 0 && Date.now() - sdkWaitStarted < 2000) {
+      await page.waitForTimeout(25);
+    }
     assert.equal(sdkRequests, 1, 'concurrent callers must share one SDK script request');
 
     releaseSdk();

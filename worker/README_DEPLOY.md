@@ -19,14 +19,27 @@ cp wrangler.toml.example wrangler.toml   # поправь name при желан
 
 # Секреты (в репозиторий НЕ коммитить):
 npx wrangler secret put TELEGRAM_BOT_TOKEN   # токен из шага 1
-npx wrangler secret put WEBHOOK_SECRET       # придумай строку, напр. openssl rand -hex 32
+npx wrangler secret put WEBHOOK_SECRET       # секрет прокси Render→воркер (НЕ TG_WEBHOOK_SECRET)
+npx wrangler secret put ADMIN_TOKEN          # отдельный админ-секрет для возвратов/подписок
 
 # D1 — журнал платежей (ОБЯЗАТЕЛЬНО, патч №13):
 # без биндинга PAYMENTS_DB воркер отвечает 503 на /api/invoice
 # и ok:false на pre_checkout_query (fail-closed всей цепочки).
 npx wrangler d1 create ofeliya-payments   # запомнить выданный database_id
-npx wrangler d1 execute ofeliya-payments --file=worker/schema.sql --remote
+npx wrangler d1 execute ofeliya-payments --file=schema.sql --remote
 # database_id → в wrangler.toml, [[d1_databases]] (см. wrangler.toml.example)
+
+# ГЕЙТ СХЕМЫ (P1-3) — СТОП, если проверка красная. Без триггера
+# trg_wallet_ledger_apply гранты ТИХО теряются: платёж запишется paid,
+# а кошелёк останется пустым. Воркер НЕ деплоить до зелёного гейта.
+# Локальная проверка файлов схемы (изолированно, D1 не трогает):
+# (мы уже внутри worker/ — npm-скрипт check-schema живёт только
+# в корневом package.json, здесь прямой вызов скрипта)
+node scripts/check-schema.mjs
+# Проверка УЖЕ созданной D1 — только чтение (SELECT/PRAGMA):
+node scripts/check-schema.mjs --print-commands
+# → выполнить выданные wrangler d1 execute --command и сверить
+# с ожидаемым (триггер на месте, тело содержит ветки season_pass).
 
 npx wrangler deploy
 # → получишь https://ofeliya-payments.<твой-аккаунт>.workers.dev
@@ -34,17 +47,38 @@ npx wrangler deploy
 
 Проверка: `curl https://<worker>/api/health` → `{"ok":true,...}`.
 
-## 3. Webhook бота
+## 3. Webhook бота (продакшн: Render → Worker)
+
+**Не переключать Telegram напрямую на Worker:** у Bot API один webhook.
+Прямой Worker URL отключит игровой webhook и команды `/start`/`/help`.
+Сначала настрой прокси в Render (`ofeliya-game`):
+
+```bash
+OFELIYA_STARS_WORKER_URL=https://<worker>.workers.dev
+OFELIYA_STARS_WORKER_SECRET=<тот же WEBHOOK_SECRET, что в Worker>
+```
+
+Затем укажи существующий игровой webhook, сохранив **отдельный**
+`TG_WEBHOOK_SECRET` Render:
 
 ```bash
 curl "https://api.telegram.org/bot<TOKEN>/setWebhook" \
-  -d "url=https://<worker>/api/webhook" \
-  -d "secret_token=<WEBHOOK_SECRET>"
+  -d "url=https://ofeliya-game.onrender.com/api/telegram/webhook" \
+  -d "secret_token=<TG_WEBHOOK_SECRET>" \
+  -d 'allowed_updates=["message","pre_checkout_query","subscription"]'
 ```
 
-Воркер сверяет заголовок `X-Telegram-Bot-Api-Secret-Token` с `WEBHOOK_SECRET`.
-Без `WEBHOOK_SECRET` в env воркер отвечает **401 fail-closed** (патч №12):
-молчаливого отключения проверки больше нет — секрет обязателен.
+**Важно:** Telegram сохраняет старое `allowed_updates`, если параметр
+не передан. После добавления `subscription` необходимо явно разрешить
+этот тип апдейтов (Bot API 10.2), иначе даже исправленный Render-прокси
+не увидит события отмены/сбоя. Пример включает только типы, которые
+обрабатывает текущий webhook; перед изменением проверь `getWebhookInfo`,
+если бот используется также другими обработчиками.
+
+Воркер проверяет заголовок `X-Telegram-Bot-Api-Secret-Token` с
+`WEBHOOK_SECRET`, а игровой сервер независимо проверяет
+`TG_WEBHOOK_SECRET`. Оба обязательны, но **не должны совпадать**.
+Подробно о прокси и таймауте pre_checkout — §9.
 
 ## 4. Клиент игры
 
@@ -55,6 +89,55 @@ VITE_PAYMENTS_API_URL=https://<worker>
 
 Витрина: `?flag.storefront.variant=telegram` (флаг Фазы 2, без пересборки).
 Провайдер сам проверит: Telegram WebApp + initData + бэкенд — иначе «скоро».
+
+### 4.2 Обязательная поддержка платежей Telegram Stars
+
+Официальные требования Telegram к цифровым товарам включают
+`/paysupport` и своевременную обработку платёжных обращений.
+В `server/telegram-webhook.mjs` и запасном polling-пути реализована
+команда `/paysupport`. **Перед включением настоящих платежей** в Render
+(`ofeliya-game`) установить `OFELIYA_SUPPORT_EMAIL` — действующий
+почтовый ящик для обращений, который владелец разрешил публиковать.
+Контакт появится в ответе на команду; без него команда явно сообщает, что
+поддержка не настроена (это **release blocker**, не рабочая поддержка).
+
+Проверить в Telegram: отправить боту `/paysupport`, убедиться, что
+приходит **действующий** адрес, затем отправить реальное тестовое
+обращение и убедиться, что владелец может его обработать. `/help`
+должен показывать `/paysupport`. Ответ команды **не является**
+подтверждением возврата; для возврата использовать процедуру в §10.
+
+### 4.1 Umami Cloud Hobby (без self-hosted PostgreSQL)
+
+Создай сайт в https://cloud.umami.is/ : Name `OFELIYA`,
+Domain `ofeliya-game.onrender.com`. На странице сайта открой
+**Edit → Tracking code**. Значения `src` и `data-website-id` копируй
+**из своего кабинета** (включая регион US/EU; не угадывай URL).
+
+В **Render → ofeliya-game → Environment** добавь:
+
+```dotenv
+VITE_UMAMI_ENABLED=1
+VITE_UMAMI_SRC=<полный HTTPS src из Tracking code>
+VITE_UMAMI_WEBSITE_ID=<data-website-id из Tracking code>
+VITE_PAYMENTS_API_URL=https://<worker>.workers.dev
+PAYMENTS_SERVER_ID=ofeliya-d1-v1
+```
+
+`VITE_UMAMI_ENABLED=1`, **не `true`**: `src/main.ts` использует
+строгое сравнение с `'1'`. Не включай `VITE_PAYMENTS_API_URL` до
+успешного smoke D1 и готового webhook; отсутствие этой переменной
+оставляет магазин без активного Stars-провайдера. Для веб-аналитики
+не нужны bot token, ключи API Umami или персональные Telegram-данные.
+
+После изменения Vite env требуется новая **сборка** Render (переменные
+подставляются при build). В Telegram Mini App проверь в дашборде Umami:
+`app_open → run_start → death/win → store_viewed → product_view →
+purchase_started → purchase_completed/purchase_failed`. Событий
+`run_end` и `shop_open` в коде **нет**; они называются
+`death | win` и `store_viewed`. События `product_view` и платежей
+несут только проверенный публичный `productId`. Счётчик Hobby считает
+события и их сохранённые свойства в лимит — следи за Usage.
 
 ## 5. Сквозной тест
 
@@ -152,7 +235,9 @@ Telegram webhook (`POST /api/telegram/webhook`, секрет проверяет�
 отдельно, обрабатывает private start). Воркер оплат — независимый
 сервис со своим секретом (`WEBHOOK_SECRET`) и своим URL
 (`https://<worker>/api/webhook`); общий обработчик им не нужен.
-При `setWebhook` для платёжного бота указывай именно URL воркера.
+Для существующего игрового бота `setWebhook` должен указывать URL **Render**,
+который пересылает Stars-апдейты воркеру. Прямой URL воркера допустим
+только для отдельного бота без игровых команд.
 
 ### Статус: прокси реализован (патч №14)
 
@@ -199,6 +284,16 @@ OFELIYA_STARS_WORKER_SECRET=<тот же WEBHOOK_SECRET, что у воркер�
 сохраняются, платёжный журнал — в D1 воркера (атомарные батчи, протокол v3),
 риск для score-контракта минимален. Прямой webhook на воркер — только если
 игровые команды бота не нужны вообще.
+
+**Риск на Render Free:** бесплатный Web Service уходит в sleep после
+15 минут без входящего трафика и может запускаться около минуты
+(официальная документация Render). При холодном старте цепочка
+Telegram → Render → Worker не может уложиться в 10-секундный лимит
+`pre_checkout_query`. Перед включением реальных оплат проверь реальный
+pre_checkout **после периода простоя**. Если не проходит — нужен
+always-on хост для webhook или Worker-first маршрутизация (с прокси
+неплатёжных апдейтов обратно в Render); простое повторение покупки
+не устраняет архитектурный риск.
 
 `pre_checkout_query` требует ответа ≤ 10 с **от отправки Telegram** — это
 бюджет всей цепочки: Telegram → Render → прокси (таймаут 8 с) → воркер →
@@ -271,6 +366,49 @@ curl -X POST https://<worker>/api/admin/refund \
 - Журнал админа = таблица `refund_ops` (operation_id, charge_id, reason,
   статусы, timestamps). Секреты в логи не пишутся (аудит — патч №16, D).
 
+### Возврат дубликата (P1-1)
+
+Дубликатные платежи (`duplicate_payments`: гонка двух pre_checkout —
+`reason='nonce_reuse'`, или отклонённая вторая подписка —
+`reason='subscription_active'`, см. §11) возвращаются ТЕМ ЖЕ эндпоинтом
+и тем же state machine (`refund_ops` + бронь, идемпотентный повтор,
+возобновление execute). Отличия:
+
+- ответ помечен `{duplicate:true}`;
+- reversal-строки в журнале НЕТ — у дубликата не было гранта;
+- исходная законная покупка НЕ трогается (её грант и статус целы);
+- состояние дубликата: `pending` → `refund_requested` → `refunded`
+  (колонка `duplicate_payments.status`).
+
+`reconcile.mjs` находит зависшие дубликаты автоматически
+(`duplicate_without_refund`, §11).
+
+### Возврат пропуска: ОБЯЗАТЕЛЬНЫЙ двухшаговый процесс (P2-2)
+
+`refundStarPayment` НЕ отменяет подписку Telegram: деньги вернутся,
+а продления продолжат списываться каждый месяц. Поэтому возврат
+сезонного пропуска — всегда ДВА шага:
+
+1. **Возврат денег** — `POST /api/admin/refund` как обычно. Ответ для
+   subscription-товара содержит флаг:
+   `{subscriptionStillActive:true, hint:"refundStarPayment does not
+   cancel the Telegram subscription — ..."}` — напоминание о шаге 2.
+2. **Отмена подписки** — один из двух вариантов:
+   - отдельным вызовом: `POST /api/admin/subscription`
+     `{"chargeId":"<telegram_charge_id>","isCanceled":true}`
+     (отмена продления; текущий период действует до конца);
+   - или сразу в refund: добавить `"cancelSubscription":true` —
+     воркер вызовет `editUserStarSubscription` в том же флоу.
+     Успех → `{subscriptionCanceled:true, subscriptionStillActive:false}`;
+     провал отмены → возврат всё равно `ok:true`, но с флагом
+     `{subscriptionCancelFailed:true}` — повторить шаг 2 отдельно.
+
+Админские действия с подписками пишутся в `subscription_events` с
+`source='admin'` (P2-3) — видно, кто и когда отменил подписку.
+Отклонённая вторая подписка (P1-2) живёт только в `duplicate_payments` —
+её тоже можно отменить через `/api/admin/subscription` по её charge_id
+(и вернуть деньги через refund дубликата, см. выше).
+
 ### Политика booster-reversal (зафиксирована)
 
 Возврат НЕ отматывает время бустера вспять: триггер ставит
@@ -297,12 +435,17 @@ Read-only сверка трёх источников (D1-дампы + Telegram).
 расхождениях.
 
 ```bash
-# 1. Дампы из D1 (пример; orders/ledger/refund_ops — аналогичными SELECT):
+# 1. Дампы из D1 (пример; orders/ledger/refund_ops/duplicate_payments — аналогичными SELECT):
 wrangler d1 execute ofeliya-payments --remote \
   --command "SELECT charge_id,user_id,product_id,amount,currency,status,nonce,sku_version,created_at FROM payments" \
   --json > /tmp/payments.json
-# payments.json — объект {payments:[...], orders:[...], refund_ops:[...]}
-# (допускается голый массив = payments)
+wrangler d1 execute ofeliya-payments --remote \
+  --command "SELECT charge_id,nonce,user_id,product_id,amount,currency,reason,status,created_at FROM duplicate_payments" \
+  --json > /tmp/duplicates.json
+# payments.json — объект {payments:[...], orders:[...], refund_ops:[...], duplicate_payments:[...]}
+# (допускается голый массив = payments; duplicate_payments можно дописать
+# в тот же файл под своим ключом — без него дубликаты не сверяются,
+# а их Telegram-транзакции ложно помечаются telegram_without_d1)
 
 # 2. Запуск (без токена — только D1-внутренние проверки):
 node worker/scripts/reconcile.mjs --dump /tmp/payments.json --ledger /tmp/ledger.json
@@ -315,10 +458,14 @@ node worker/scripts/reconcile.mjs --dump /tmp/payments.json --ledger /tmp/ledger
 
 Проверки: `paid_without_grant` (потерянный грант), `refunded_without_reversal`,
 `duplicate_nonce`/`duplicate_charge_id`, `stuck_refund_op` (`'requested'`
-старше порога), `stale_pending_order`, `grant_without_payment`,
-`reversal_without_grant`, `telegram_without_d1` (платёж Telegram без D1 —
-главный кейс), `d1_without_telegram` (warning: история Telegram может быть
-неполной). Тест со стабом Telegram HTTP:
+старше порога), `stale_pending_order`, `duplicate_without_refund`
+(дубликат `'pending'` старше порога без завершённого возврата — P1-1),
+`grant_without_payment`, `reversal_without_grant`,
+`overlapping_season_pass_grants` (первый платёж пропуска при активном —
+P2-N1, guard должен был не дать), `telegram_without_d1`
+(платёж Telegram без D1 — главный кейс; дубликаты из `duplicate_payments`
+считаются «в D1», а не потерянными), `d1_without_telegram` (warning:
+история Telegram может быть неполной). Тест со стабом Telegram HTTP:
 `node --test worker/scripts/reconcile.test.mjs`.
 
 Разбор по сценариям:
@@ -341,6 +488,23 @@ node worker/scripts/reconcile.mjs --dump /tmp/payments.json --ledger /tmp/ledger
    с `execute:true` (§10).
 6. **Операция refund зависла в `'requested'`** — повторить execute с тем же
    `operationId` (§10); `reconcile.mjs` находит такие автоматически.
+7. **Дубликат (P1-1/P1-2)** — деньги списаны, гранта нет: `reason='nonce_reuse'`
+   (гонка двух pre_checkout) или `'subscription_active'` (вторая подписка
+   при активном пропуске — заказ переведён в `'denied'`, продления этой
+   подписки тоже отклоняются). Действие: вернуть через
+   `/api/admin/refund` с `execute:true` (§10, возврат дубликата); для
+   второй подписки — ОБЯЗАТЕЛЬНО отменить её продления
+   (`POST /api/admin/subscription {chargeId, isCanceled:true}` или
+   `cancelSubscription:true` в refund), иначе списания продолжатся
+   ежемесячно. `reconcile.mjs` находит зависшие дубликаты
+   (`duplicate_without_refund`).
+8. **`stars_grant_readback_mismatch` в логах (P1-3)** — грант-батч
+   прошёл, а кошелёк не изменился: триггер `trg_wallet_ledger_apply`
+   потерян или сломан. СТОП: не принимать платежи, прогнать гейт схемы
+   (§2, `npm run check-schema` + `--print-commands` против реальной D1),
+   восстановить триггер из `worker/schema.sql` (весь `CREATE TRIGGER` —
+   одним `--command`), затем пересчитать пострадавшие кошельки из
+   `wallet_ledger` вручную (гранты в журнале целы — батч их записал).
 
 ## 12. Миграция существующей D1 (если база уже создана)
 
@@ -383,6 +547,115 @@ skin-грантов (refunded исключены); новые таблицы `re
 (бэкфилла нет — нельзя отличить уже выданное локально). Их гранты уже
 материализованы старыми клиентами локально; новые клиенты увидят
 `purchased_rna=0` — это корректно, задвоения не будет.
+
+### Миграция v16 → v17 (монетизация v3) + гейт схемы (P1-3, P2-4)
+
+Порядок — строго такой (обратное окно «новый воркер, старая схема»
+НЕДОПУСТИМО: INSERT заказа упадёт на несуществующей колонке):
+
+```bash
+# 0. Снапшот ОБЯЗАТЕЛЕН:
+wrangler d1 export ofeliya-payments --remote --output=backup-v16.sql
+# 1. Pre-check: миграция ещё не применена (0 строк):
+wrangler d1 execute ofeliya-payments --remote --command \
+  "SELECT version FROM schema_migrations WHERE version='v17'"
+# 2. Локальный гейт файлов схемы (изолированно, D1 не трогает):
+npm run check-schema
+# 3. Миграция:
+wrangler d1 execute ofeliya-payments --remote --file=worker/migration-17.sql
+# 4. ГЕЙТ РЕАЛЬНОЙ D1 — только чтение, СТОП при красном:
+node worker/scripts/check-schema.mjs --print-commands
+# → выполнить выданные команды и сверить: триггер на месте, тело
+#    содержит ветки season_pass, guard-триггер
+#    trg_wallet_ledger_season_pass_guard на месте (P2-N1 — без него
+#    конкурентная двойная подписка снова возможна), UNIQUE журнала —
+#    (charge_id, grant_type, skin_id), колонки v17 на месте.
+# 5. Деплой воркера v17 — ТОЛЬКО после зелёного гейта.
+```
+
+**Частичная миграция (P2-4)** — если файл упал посередине (обрыв
+соединения, ошибка wrangler): НЕ запускать файл повторно вслепую
+(четыре `ALTER TABLE ADD COLUMN` упадут с `duplicate column name` —
+это нормально, но не показатель прогресса). Точная процедура — в шапке
+`worker/migration-17.sql`; коротко:
+
+1. Диагностика (только чтение): `SELECT version FROM schema_migrations`
+   (`v17` есть = файл дошёл до конца); `PRAGMA table_info(orders)` /
+   `table_info(wallets)` / `table_info(duplicate_payments)` (какие
+   колонки уже добавлены); `SELECT name FROM sqlite_master WHERE
+   type='table' AND name='subscription_events'`; `PRAGMA
+   index_list('wallet_ledger')` (новый UNIQUE?); `SELECT sql FROM
+   sqlite_master WHERE type='trigger'` (триггер с season_pass?).
+2. Если `wallet_ledger_new` или `wallet_skins_new` существует в
+   `sqlite_master` — миграция упала ВНУТРИ пересоздания таблиц:
+   **восстановить базу из снапшота шага 0 и прогнать файл заново**.
+   Вручную не достраивать: триггер в этот момент уже снесён, копия
+   журнала может быть частичной.
+3. В остальных случаях — доработать недостающие шаги вручную по таблице
+   шагов в шапке миграции (шаги 0/2/5 идемпотентны — безопасно
+   повторить; шаг 1 — пропустить уже добавленные колонки; шаг 4 —
+   пересоздать триггер целиком, шаг 4b — guard-триггер P2-N1),
+   затем прогнать гейт шага 4.
+4. При ЛЮБЫХ сомнениях — восстановить из снапшота и начать заново:
+   файл рассчитан на один прогон на чистой v16.
+
+Откат ТОЛЬКО воркера на v16 при схеме v17 НЕ БЕЗОПАСЕН (CR5): v17
+wallet_ledger не имеет charge-only UNIQUE, а v16-код пишет гранты
+через `INSERT ... ON CONFLICT(charge_id) DO NOTHING` — такой INSERT
+против v17-схемы падает, и каждая оплата на откаченном воркере уйдёт
+в 503/потерю гранта (доказано на реальном SQLite в
+check-schema.test.mjs, тест CR5). Единственный безопасный откат —
+восстановить базу из снапшота шага 0 и вернуть деплой v16. НО
+восстановление снапшота в одиночку безопасно ТОЛЬКО если после
+снапшота не было принято ни одного платежа: восстановление стирает
+все платежи, принятые после снапшота (записи `payments`, строки
+`wallet_ledger`, скины, события подписок), а Telegram их НЕ
+переотправит — вебхук уже acked 200. Поэтому (CR-R3-5):
+
+- Платёжный трафик ДОЛЖЕН стоять на паузе с момента создания
+  снапшота и до завершения отката (либо до подтверждения, что v17
+  работает и откат не нужен). Пауза вебхука: временно очистить
+  `OFELIYA_STARS_WORKER_URL` в Render — stars-proxy отвечает 503
+  (`server/index.mjs`), и Telegram ретраит апдейты после
+  восстановления прокси, ничего не теряется. Кодового kill-switch
+  для новых инвойсов нет (клиент ходит в воркер напрямую), поэтому
+  паузу делать в окно минимальной активности и ОБЯЗАТЕЛЬНО
+  проверять пост-снапшотную активность перед восстановлением
+  (шаг 2 ниже) — пауза вебхука сама по себе новые покупки
+  не блокирует.
+- Если паузы не было или её покрытие не гарантировано — ПЕРЕД
+  восстановлением сохранить и сверить пост-снапшотные платежи
+  (время снапшота зафиксировать в мс: `date +%s%3N` перед
+  экспортом; `created_at` в D1 — INTEGER мс):
+  1. Полный экспорт живой базы: `wrangler d1 export
+     ofeliya-payments --remote --output=backup-pre-rollback.sql`
+     — в нём все платежи после снапшота.
+  2. Перечислить их: `SELECT charge_id,user_id,product_id,amount,
+     status,created_at FROM payments WHERE created_at > <мс
+     снапшота>` (аналогично — `wallet_ledger`,
+     `subscription_events`, `refund_ops` за тот же период).
+     Ноль строк = пост-снапшотных платежей нет, восстанавливать
+     можно сразу.
+  3. Сверка с Telegram: `node worker/scripts/reconcile.mjs
+     --dump ... --ledger ... --bot-token "$TELEGRAM_BOT_TOKEN"`
+     (§11) — найти `telegram_without_d1` и `paid_without_grant`.
+- ПОСЛЕ восстановления каждый пост-снапшотный платёж либо
+  вернуть покупателю (`charge_id` — из сохранённого экспорта,
+  `/api/admin/refund`, §10), либо переприменить грант вручную:
+  повторный INSERT сохранённых строк `wallet_ledger` в порядке
+  `id` (триггер `trg_wallet_ledger_apply` сам пересчитает
+  кошельки и `wallet_skins`) + соответствующие строки
+  `payments`/`orders` (только колонки v16). Пропуск
+  (`grant_type='season_pass'`) переприменить в v16 НЕЛЬЗЯ: в v16
+  нет ни колонки `season_pass_until_ms`, ни ветки триггера —
+  такие платежи только возвращать. После — повторная сверка
+  `reconcile.mjs`: расхождений быть не должно.
+- Только после сохранения/сверки — восстанавливать снапшот и
+  возвращать деплой v16.
+
+Окно «миграция → деплой v17» (старый воркер уже несовместим с новой
+схемой) закрывается немедленным деплоем v17 после миграции либо
+паузой платёжного трафика — см. шапку migration-17.sql.
 
 ## 13. Протокол v5 (патч №16) — что изменилось
 

@@ -18,6 +18,9 @@
  *  (e) 100 redelivery одного charge_id → ровно 1 грант;
  *  (f) interleaving грант+рефанд → инварианты консистентности
  *      (reversal ⇒ грант был и итог 0; иначе итог 500).
+ *  (g) P2-N1: два конкурентных первых платежа пропуска → ровно один грант,
+ *      второй — ошибка guard-триггера (RAISE(ABORT)), батч откачен
+ *      целиком (payments=1, pass=now+30д ровно один раз).
  *
  * Запуск: node --experimental-strip-types tests/patch16-concurrency.mjs
  * (флаг нужен для импорта worker/src/*.ts). Живой Cloudflare/Telegram/
@@ -61,6 +64,7 @@ function grantTask(name, { userId = USER, productId, chargeId, nonce, now = Date
   const ledgerAmount =
     kind === 'rna' ? Math.max(0, Math.floor(grant.rna))
     : kind === 'booster' ? Math.max(0, Math.floor(grant.boosterDays)) * 86_400_000
+    : kind === 'season_pass' ? Math.max(0, Math.floor(grant.seasonPassDays)) * 86_400_000
     : 0;
   return {
     type: 'grant', name, userId, productId, chargeId, nonce,
@@ -74,7 +78,7 @@ function grantTask(name, { userId = USER, productId, chargeId, nonce, now = Date
 function refundMarkTask(name, { userId = USER, chargeId, operationId, now = Date.now() }) {
   return {
     type: 'refund-mark', name, userId, chargeId, operationId,
-    revChargeId: `rev:${operationId}`, reason: 'p16-concurrency', now,
+    reason: 'p16-concurrency', now,
   };
 }
 
@@ -96,7 +100,7 @@ const ledgerRowsFor = (db, charge) =>
 const paymentStatus = (db, charge) =>
   db.prepare('SELECT status FROM payments WHERE charge_id=?').get(charge)?.status ?? null;
 
-async function runScenario(label, { seed, tasks, check }) {
+async function runScenario(label, { seed, tasks, check, checkErrors }) {
   const dir = mkdtempSync(join(tmpdir(), 'p16-conc-'));
   const dbPath = join(dir, 'conc.db');
   let db = null;
@@ -121,7 +125,10 @@ async function runScenario(label, { seed, tasks, check }) {
     for (const w of workers) await w.terminate();
     const taskResults = all.flatMap((m) => m.results);
     const errors = taskResults.filter((r) => !r.ok);
-    assert(errors.length === 0, `ошибки воркеров: ${JSON.stringify(errors.slice(0, 3))}`);
+    // checkErrors (P2-N1): сценарий с ОЖИДАЕМОЙ ошибкой (guard ABORT) —
+    // валидация ошибок на сценарии, а не «ноль ошибок».
+    if (checkErrors) checkErrors(errors, taskResults);
+    else assert(errors.length === 0, `ошибки воркеров: ${JSON.stringify(errors.slice(0, 3))}`);
 
     db = new DatabaseSync(dbPath);
     db.exec('PRAGMA journal_mode=WAL');
@@ -223,6 +230,38 @@ async function main() {
       }
     },
   });
+
+  // (g) P2-N1: два конкурентных первых платежа пропуска → ровно один грант.
+  // Без guard-триггера оба батча коммитились бы (аудит: payments=2,
+  // pass=now+60д). С guard: второй батч падает с RAISE(ABORT) и
+  // откатывается целиком (платёж тоже не записан) — ретрай Telegram
+  // уйдёт в denied-путь (JS-проверка видит активный пропуск).
+  {
+    const now = Date.now();
+    const MONTH = 30 * 86_400_000;
+    await runScenario('(g) 2× первый платёж пропуска → 1 грант, 1 guard-ABORT', {
+      seed: (db) => { seedOrder(db, 'cg-n1', 'season-pass.basic-30d'); seedOrder(db, 'cg-n2', 'season-pass.basic-30d'); },
+      tasks: [
+        grantTask('g1', { productId: 'season-pass.basic-30d', chargeId: 'cg-ch-1', nonce: 'cg-n1', now }),
+        grantTask('g2', { productId: 'season-pass.basic-30d', chargeId: 'cg-ch-2', nonce: 'cg-n2', now }),
+      ],
+      checkErrors: (errors, taskResults) => {
+        eq(errors.length, 1, 'ровно один батч упал');
+        assert(/already active/.test(errors[0].error), `ошибка — guard ABORT (получено: ${errors[0].error})`);
+        eq(taskResults.filter((r) => r.ok).length, 1, 'ровно один батч закоммитился');
+      },
+      check: (db) => {
+        const until = db.prepare('SELECT season_pass_until_ms FROM wallets WHERE user_id=?').get(USER)?.season_pass_until_ms ?? 0;
+        eq(until, now + MONTH, 'pass = now+30d ровно один раз');
+        const payments = db.prepare("SELECT COUNT(*) AS c FROM payments WHERE product_id='season-pass.basic-30d'").get().c;
+        eq(payments, 1, 'payments=1 (упавший батч откачен целиком)');
+        const grants = db.prepare("SELECT COUNT(*) AS c FROM wallet_ledger WHERE grant_type='season_pass' AND kind='grant'").get().c;
+        eq(grants, 1, 'один season_pass-грант в журнале');
+        const paidOrders = db.prepare("SELECT COUNT(*) AS c FROM orders WHERE status='paid'").get().c;
+        eq(paidOrders, 1, 'один заказ paid, второй остался pending (ретрай → denied-путь)');
+      },
+    });
+  }
 
   console.log('='.repeat(80));
   const nFail = results.filter((r) => r.status === 'FAIL').length;

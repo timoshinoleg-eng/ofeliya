@@ -33,6 +33,9 @@
 export function isStarsUpdate(update) {
   if (!update || typeof update !== 'object') return false;
   if (update.pre_checkout_query && typeof update.pre_checkout_query === 'object') return true;
+  // Bot API 10.2: update.subscription is neither a message nor pre-checkout.
+  // Without this branch, cancellation/failure updates silently disappear in Render.
+  if (update.subscription && typeof update.subscription === 'object') return true;
   const msg = update.message;
   return !!msg && typeof msg === 'object' && !!msg.successful_payment;
 }
