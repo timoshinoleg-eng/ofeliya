@@ -7,6 +7,9 @@
 --   - subscription_events — аудит BotSubscriptionUpdated (state
 --     canceled|active|failed; доступ НЕ гейтится этой таблицей — только
 --     датой season_pass_until_ms).
+--   - orders.invoice_url (CR-R4-2) — URL выданного инвойса (NULL —
+--     не выдавался); ретрай переиспользует его, пометка invoice_failed
+--     ставится только при NULL.
 -- Апгрейд существующей базы v16 → v17: worker/migration-17.sql.
 -- Свежий деплой — просто этот файл (D1 в проде ЕЩЁ НЕТ, деплой за Mark).
 --
@@ -70,6 +73,10 @@
 --               несуществующий инвойс блокировал бы покупку на 24ч).
 --               pre_checkout требует status='pending', поэтому даже
 --               «потерянный» инвойс Telegram по такому заказу не оплатить.
+--               CR-R4-2: пометка ставится ТОЛЬКО если инвойс не выдавался
+--               (invoice_url IS NULL) — иначе упавший ретрай убивал бы
+--               первый URL; конкурентный близнец с живым инвойсом
+--               оживляет такой заказ обратно в pending (см. orders).
 -- CHECK на status нет: новые значения не требуют миграции.
 -- Строгий pre_checkout (патч №15, P0-2): ok:true ТОЛЬКО при status='pending'
 -- И совпадении from.id с order.user_id. Повторная оплата того же nonce
@@ -155,6 +162,14 @@ CREATE TABLE IF NOT EXISTS orders (
   -- Монетизация v3 (бандлы): снапшот компонентов мульти-гранта —
   -- JSON-массив BundleComponent (NULL у одиночных товаров).
   grant_bundle_json TEXT,
+  -- CR-R4-2 (раунд 4): URL выданного инвойса (NULL — инвойс ещё не
+  -- выдавался). Ретрай с тем же nonce переиспользует его без повторного
+  -- createInvoiceLink; пометка invoice_failed — только при NULL
+  -- (иначе упавший ретрай убивал бы первый URL). Запись URL заодно
+  -- оживляет заказ из invoice_failed обратно в pending, если
+  -- конкурентный близнец успел его пометить (у держателя URL на руках
+  -- живой инвойс — пометка «инвойса нет» ложна).
+  invoice_url TEXT,
   status     TEXT    NOT NULL DEFAULT 'pending',
   created_at INTEGER NOT NULL
 );

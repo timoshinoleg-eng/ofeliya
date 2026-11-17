@@ -81,7 +81,7 @@
 --
 -- ИДЕМПОТЕНТНОСТЬ: все CREATE — IF NOT EXISTS; backfill-UPDATE — с
 -- WHERE IS NULL (повторный прогон меняет 0 строк); INSERT — OR IGNORE.
--- Исключение: четыре ALTER TABLE ADD COLUMN (у SQLite нет IF NOT EXISTS
+-- Исключение: пять ALTER TABLE ADD COLUMN (у SQLite нет IF NOT EXISTS
 -- для ADD COLUMN) — при повторном прогоне упадут с «duplicate column
 -- name». Это НОРМАЛЬНО и безопасно: сначала проверь SELECT version FROM
 -- schema_migrations — если там уже 'v17', миграцию НЕ запускать.
@@ -97,8 +97,8 @@
 --        ПОСЛЕ миграции (например, на выводе результата): прогнать
 --        гейт (п. 4 «КЛЮЧЕВЫХ ШАГОВ» выше) и идти дальше. 'v17' нет →
 --        идти по пунктам ниже.
---     b) PRAGMA table_info(orders); — есть ли grant_season_pass_days
---        и grant_bundle_json (шаг 1 файла применён?).
+--     b) PRAGMA table_info(orders); — есть ли grant_season_pass_days,
+--        grant_bundle_json и invoice_url (шаг 1 файла применён?).
 --     c) PRAGMA table_info(wallets); — есть ли season_pass_until_ms.
 --     d) PRAGMA table_info(duplicate_payments); — есть ли status.
 --     e) SELECT name FROM sqlite_master WHERE type='table'
@@ -119,7 +119,7 @@
 --     - Иначе — доработать недостающие шаги ВРУЧНУЮ, по таблице
 --       (нумерация — шаги файла, см. комментарии -- N. в теле):
 --         шаг 0 (schema_migrations) — идемпотентен, повторить как есть;
---         шаг 1 (4× ALTER) — пропустить УЖЕ добавленные колонки
+--         шаг 1 (5× ALTER) — пропустить УЖЕ добавленные колонки
 --           (п. b–d), выполнить только недостающие;
 --         шаг 2 (subscription_events + индекс) — идемпотентен
 --           (IF NOT EXISTS), повторить как есть;
@@ -149,6 +149,10 @@
 --     4-е поле гранта; backfill 0 для старых заказов);
 --   - orders: + grant_bundle_json TEXT (снапшот компонентов бандла,
 --     NULL у одиночных; backfill не нужен);
+--   - orders: + invoice_url TEXT (CR-R4-2: URL выданного инвойса,
+--     NULL — инвойс ещё не выдавался; ретрай переиспользует URL без
+--     повторного createInvoiceLink, пометка invoice_failed — только
+--     при NULL; backfill не нужен);
 --   - wallets: + season_pass_until_ms INTEGER NOT NULL DEFAULT 0
 --     (абсолютный срок пропуска, как booster_until_ms);
 --   - duplicate_payments: + status TEXT NOT NULL DEFAULT 'pending'
@@ -184,6 +188,9 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 -- 1. Снапшот гранта: 4-е поле (ALTER без IF NOT EXISTS — см. шапку).
 ALTER TABLE orders ADD COLUMN grant_season_pass_days INTEGER;
 ALTER TABLE orders ADD COLUMN grant_bundle_json TEXT;
+-- CR-R4-2: URL выданного инвойса (NULL — не выдавался). Ретрай
+-- переиспользует его; пометка invoice_failed — только при NULL.
+ALTER TABLE orders ADD COLUMN invoice_url TEXT;
 ALTER TABLE wallets ADD COLUMN season_pass_until_ms INTEGER NOT NULL DEFAULT 0;
 -- P1-1: state machine возврата дубликата ('pending' → 'refund_requested' →
 -- 'refunded'); существующие дубликаты получают 'pending' по DEFAULT.

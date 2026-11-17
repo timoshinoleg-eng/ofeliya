@@ -24,7 +24,8 @@
  * - P2-3 (попутно): админские правки подписки пишутся в
  *   subscription_events с source='admin'.
  * - P2-5: повтор /api/invoice с тем же nonce (тот же user+product,
- *   pending) → 200 с новым URL; чужой user / оплаченный заказ → 502.
+ *   pending) → 200 с тем же сохранённым URL (CR-R4-2: без повторного
+ *   createInvoiceLink); чужой user / оплаченный заказ → 502.
  * - P2-6: падение Bot API на pre-checkout → 503, не 500/throw.
  * - P1-3 (в): read-back после грант-батча: нормальный платёж — без
  *   mismatch-лога; отключённый триггер (стаб disableTrigger) — громкий
@@ -827,13 +828,15 @@ try {
     assert(firstJ.invoiceUrl, 'P2-5: first invoice has URL');
     const createCalls1 = botCalls.filter((c) => c.method === 'createInvoiceLink').length;
     eq(createCalls1, 1, 'P2-5: one createInvoiceLink');
-    // Ретрай с тем же nonce (ответ потерян) — 200 с новым URL, заказ один.
+    // Ретрай с тем же nonce (ответ потерян) — 200 с тем же сохранённым
+    // URL (CR-R4-2: без повторного createInvoiceLink), заказ один.
     const retry = await post(handler, '/api/invoice', { initData, productId: RNA_ID, nonce: 'nonce-p1-p25-1' }, env);
     eq(retry.status, 200, 'P2-5: retry same nonce → 200 (was eternal 502)');
     const retryJ = await retry.json();
     assert(retryJ.invoiceUrl, 'P2-5: retry returns invoice URL');
+    eq(retryJ.invoiceUrl, firstJ.invoiceUrl, 'P2-5: retry returns the SAME stored URL (CR-R4-2)');
     eq(retryJ.nonce, 'nonce-p1-p25-1', 'P2-5: retry echoes nonce');
-    eq(botCalls.filter((c) => c.method === 'createInvoiceLink').length, 2, 'P2-5: createInvoiceLink re-issued on retry');
+    eq(botCalls.filter((c) => c.method === 'createInvoiceLink').length, 1, 'P2-5: no second createInvoiceLink on retry (stored URL reused)');
     eq(db.orders.size, 1, 'P2-5: still one order');
     // Чужой пользователь с тем же nonce — 502 (не раскрываем чужой заказ).
     const alien = await post(handler, '/api/invoice', { initData: otherInitData, productId: RNA_ID, nonce: 'nonce-p1-p25-1' }, env);

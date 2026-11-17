@@ -105,10 +105,11 @@ export function makeD1() {
       throw new Error('d1-stub: injected statement failure');
     }
     // SQL_INSERT_ORDER (v16, B2): заказ иммутабелен. v17: + grant_season_pass_days + grant_bundle_json.
+    // CR-R4-2: invoice_url NULL до первой успешной выдачи инвойса.
     if (q.startsWith('INSERT INTO orders')) {
       const [nonce, user_id, product_id, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, grant_bundle_json, created_at] = params;
       if (orders.has(nonce)) throw new Error('UNIQUE constraint failed: orders.nonce');
-      orders.set(nonce, { nonce, user_id, product_id, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, grant_bundle_json, status: 'pending', created_at });
+      orders.set(nonce, { nonce, user_id, product_id, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, grant_bundle_json, invoice_url: null, status: 'pending', created_at });
       return { success: true, meta: { changes: 1 } };
     }
     if (q === "UPDATE orders SET status='paid' WHERE nonce=? AND status='pending'") {
@@ -252,14 +253,27 @@ export function makeD1() {
       return { success: true, meta: { changes: 0 } };
     }
     // CR-R3-2: заказ без созданного инвойса — терминальный 'invoice_failed'.
-    if (q === "UPDATE orders SET status='invoice_failed' WHERE nonce=? AND status='pending'") {
+    // CR-R4-2: пометка — только если инвойс ещё не выдавался
+    // (invoice_url IS NULL), иначе упавший ретрай убивал бы первый URL.
+    if (q === "UPDATE orders SET status='invoice_failed' WHERE nonce=? AND status='pending' AND invoice_url IS NULL") {
       const [nonce] = params;
       const row = orders.get(nonce);
-      if (row && row.status === 'pending') {
+      if (row && row.status === 'pending' && row.invoice_url == null) {
         row.status = 'invoice_failed';
         return { success: true, meta: { changes: 1 } };
       }
       return { success: true, meta: { changes: 0 } };
+    }
+    // CR-R4-2: фиксация выданного инвойса (SQL_UPDATE_ORDER_INVOICE_ISSUED).
+    // CASE оживляет заказ, который конкурентный близнец успел пометить
+    // invoice_failed между createInvoiceLink и этой записью.
+    if (q === "UPDATE orders SET invoice_url=?, status=CASE WHEN status='invoice_failed' THEN 'pending' ELSE status END WHERE nonce=?") {
+      const [invoice_url, nonce] = params;
+      const row = orders.get(nonce);
+      if (!row) return { success: true, meta: { changes: 0 } };
+      row.invoice_url = invoice_url;
+      if (row.status === 'invoice_failed') row.status = 'pending';
+      return { success: true, meta: { changes: 1 } };
     }
     if (q.startsWith('INSERT INTO refund_ops')) {
       const [operation_id, charge_id, user_id, action, status, reason, telegram_confirmed_at, created_at, updated_at] = params;
@@ -330,10 +344,10 @@ export function makeD1() {
 
   function execSelect(sql, params) {
     const q = norm(sql);
-    if (q === 'SELECT user_id, product_id, status, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, grant_bundle_json FROM orders WHERE nonce=?') {
+    if (q === 'SELECT user_id, product_id, status, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, grant_bundle_json, invoice_url FROM orders WHERE nonce=?') {
       const row = orders.get(params[0]);
       return row
-        ? [{ user_id: row.user_id, product_id: row.product_id, status: row.status, amount_stars: row.amount_stars, sku_version: row.sku_version, grant_rna: row.grant_rna ?? null, grant_booster_days: row.grant_booster_days ?? null, grant_skin_id: row.grant_skin_id ?? null, grant_season_pass_days: row.grant_season_pass_days ?? null, grant_bundle_json: row.grant_bundle_json ?? null }]
+        ? [{ user_id: row.user_id, product_id: row.product_id, status: row.status, amount_stars: row.amount_stars, sku_version: row.sku_version, grant_rna: row.grant_rna ?? null, grant_booster_days: row.grant_booster_days ?? null, grant_skin_id: row.grant_skin_id ?? null, grant_season_pass_days: row.grant_season_pass_days ?? null, grant_bundle_json: row.grant_bundle_json ?? null, invoice_url: row.invoice_url ?? null }]
         : [];
     }
     // handleStaleOrders: заказы pending старше cutoff.
@@ -533,14 +547,16 @@ export async function seedLedgerBulk(db, rows) {
 export async function seedOrder(db, nonce, userId, productId, amountStars, opts = {}) {
   const { skuVersion = 2, status = 'pending', createdAt = Date.now(),
     grantRna = null, grantBoosterDays = null, grantSkinId = null, grantSeasonPassDays = null,
-    grantBundleJson = null } =
+    grantBundleJson = null, invoiceUrl = null } =
     typeof opts === 'object' && opts !== null ? opts : {};
   await db
     .prepare("INSERT INTO orders (nonce, user_id, product_id, amount_stars, sku_version, grant_rna, grant_booster_days, grant_skin_id, grant_season_pass_days, grant_bundle_json, status, created_at) VALUES (?,?,?,?,?,?,?,?,?,?, 'pending',?)")
     .bind(nonce, userId, productId, amountStars, skuVersion, grantRna, grantBoosterDays, grantSkinId, grantSeasonPassDays, grantBundleJson, createdAt)
     .run();
+  const row = db.orders.get(nonce);
+  // CR-R4-2: посеять выданный инвойс (по умолчанию — не выдавался).
+  if (row && invoiceUrl != null) row.invoice_url = invoiceUrl;
   if (status !== 'pending') {
-    const row = db.orders.get(nonce);
     if (row) row.status = status;
   }
 }

@@ -15,7 +15,7 @@
  *    текст равен тексту из schema.sql (без него конкурентная двойная
  *    подписка снова возможна);
  *  - колонки v17: orders.grant_season_pass_days, orders.grant_bundle_json,
- *    wallets.season_pass_until_ms, duplicate_payments.status,
+ *    orders.invoice_url, wallets.season_pass_until_ms, duplicate_payments.status,
  *    subscription_events.source;
  *  - wallet_ledger: UNIQUE(charge_id, grant_type, skin_id) (через
  *    PRAGMA index_list — старый UNIQUE(charge_id) гейт не проходит);
@@ -101,7 +101,7 @@ const REQUIRED_TABLES = [
 ];
 
 const REQUIRED_COLUMNS = {
-  orders: ['grant_season_pass_days', 'grant_bundle_json'],
+  orders: ['grant_season_pass_days', 'grant_bundle_json', 'invoice_url'],
   wallets: ['season_pass_until_ms'],
   duplicate_payments: ['status'],
   subscription_events: ['source'],
@@ -417,8 +417,8 @@ function printCommands() {
   console.log('# on (charge_id) alone (CR-R3-3: obsolete UNIQUE means migration step 3b was');
   console.log('# skipped and multi-skin bundles lose skins); columns');
   console.log('# orders.grant_season_pass_days, orders.grant_bundle_json,');
-  console.log('# wallets.season_pass_until_ms, duplicate_payments.status,');
-  console.log('# subscription_events.source present.');
+  console.log('# orders.invoice_url, wallets.season_pass_until_ms,');
+  console.log('# duplicate_payments.status, subscription_events.source present.');
 }
 
 function printChecks(result) {
