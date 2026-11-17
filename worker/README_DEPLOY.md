@@ -70,6 +70,38 @@ VITE_PAYMENTS_API_URL=https://<worker>
 Витрина: `?flag.storefront.variant=telegram` (флаг Фазы 2, без пересборки).
 Провайдер сам проверит: Telegram WebApp + initData + бэкенд — иначе «скоро».
 
+### 4.1 Umami Cloud Hobby (без self-hosted PostgreSQL)
+
+Создай сайт в https://cloud.umami.is/ : Name `OFELIYA`,
+Domain `ofeliya-game.onrender.com`. На странице сайта открой
+**Edit → Tracking code**. Значения `src` и `data-website-id` копируй
+**из своего кабинета** (включая регион US/EU; не угадывай URL).
+
+В **Render → ofeliya-game → Environment** добавь:
+
+```dotenv
+VITE_UMAMI_ENABLED=1
+VITE_UMAMI_SRC=<полный HTTPS src из Tracking code>
+VITE_UMAMI_WEBSITE_ID=<data-website-id из Tracking code>
+VITE_PAYMENTS_API_URL=https://<worker>.workers.dev
+PAYMENTS_SERVER_ID=ofeliya-d1-v1
+```
+
+`VITE_UMAMI_ENABLED=1`, **не `true`**: `src/main.ts` использует
+строгое сравнение с `'1'`. Не включай `VITE_PAYMENTS_API_URL` до
+успешного smoke D1 и готового webhook; отсутствие этой переменной
+оставляет магазин без активного Stars-провайдера. Для веб-аналитики
+не нужны bot token, ключи API Umami или персональные Telegram-данные.
+
+После изменения Vite env требуется новая **сборка** Render (переменные
+подставляются при build). В Telegram Mini App проверь в дашборде Umami:
+`app_open → run_start → death/win → store_viewed → product_view →
+purchase_started → purchase_completed/purchase_failed`. Событий
+`run_end` и `shop_open` в коде **нет**; они называются
+`death | win` и `store_viewed`. События `product_view` и платежей
+несут только проверенный публичный `productId`. Счётчик Hobby считает
+события и их сохранённые свойства в лимит — следи за Usage.
+
 ## 5. Сквозной тест
 
 1. Открой Mini App внутри Telegram (не в браузере — там нет `window.Telegram`).
