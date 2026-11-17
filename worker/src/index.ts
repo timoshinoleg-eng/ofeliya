@@ -557,7 +557,26 @@ async function handleInvoice(request: Request, env: Env): Promise<Response> {
       )
       .run();
   } catch {
-    return json({ error: 'order-store-failed' }, 502);
+    // P2-5: идемпотентный ретрай — ответ на первую попытку мог потеряться
+    // (заказ вставлен, createInvoiceLink прошёл, клиент не получил URL).
+    // Тот же nonce + тот же user + тот же товар + заказ ещё pending →
+    // перевыпускаем ссылку (createInvoiceLink ниже с тем же nonce).
+    // Иначе (чужой заказ, другой товар, заказ оплачен) — честный 502:
+    // чужой заказ не раскрываем, оплаченный не перевыпускаем.
+    let existing: DbOrderRow | null = null;
+    try {
+      existing = await getOrder(env.PAYMENTS_DB, nonce);
+    } catch {
+      existing = null;
+    }
+    if (
+      !existing ||
+      existing.user_id !== v.userId ||
+      existing.product_id !== productId ||
+      existing.status !== 'pending'
+    ) {
+      return json({ error: 'order-store-failed' }, 502);
+    }
   }
   let invoiceUrl: string;
   try {
