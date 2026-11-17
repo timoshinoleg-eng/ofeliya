@@ -249,11 +249,12 @@ try {
   serverBooster = b0;
   await sync();
   eq(meta.loadMeta().boosterUntilMs, b0 + 3 * DAY_MS, 'N3: mission booster preserved after server refund');
-  // (iv) продление покупкой после возврата.
+  // (iv) продление покупкой после возврата. CR-R3-7: миссионные 3 дня
+  // СКЛАДЫВАЮТСЯ с новой покупкой (было: покупка заменяла награду).
   ledger.push(boosterGrant(3, 'cb2'));
   serverBooster = b0 + BOOSTER_7D;
   await sync();
-  eq(meta.loadMeta().boosterUntilMs, b0 + BOOSTER_7D, 'N3: repurchase extends booster');
+  eq(meta.loadMeta().boosterUntilMs, b0 + BOOSTER_7D + 3 * DAY_MS, 'N3: repurchase adds to preserved mission time');
   // (v) свежий синк с возвратом в истории — серверное значение, без ухода в прошлое.
   reset();
   ledger = [boosterGrant(1, 'cb1'), boosterReversal(2, 'rev:op1', 'cb1')];
@@ -273,6 +274,74 @@ try {
   serverBooster = b0 + BOOSTER_7D; // -7d + 7d
   await sync();
   eq(meta.loadMeta().boosterUntilMs, b0 + BOOSTER_7D + 3 * DAY_MS, 'N3: rebuy batch preserves mission time');
+
+  // --- 4c. CR-R3-6: возврат ИСТЁКШЕЙ покупки не съедает миссионную награду ---
+  // Покупка 1 день в b0, синк; миссия 3 дня в b0+2d (покупка уже истекла,
+  // local = b0+5d); возврат покупки (серверный пол — момент возврата b0+2d)
+  // не должен срезать непросроченную награду.
+  reset();
+  ledger = [boosterGrant(1, 'cb6', DAY_MS)];
+  serverBooster = b0 + DAY_MS;
+  await sync();
+  eq(meta.loadMeta().boosterUntilMs, b0 + DAY_MS, 'R3-6: 1d purchase applied');
+  meta.setSeasonPassUntilMs(b0 + 30 * DAY_MS);
+  const claimAt6 = b0 + 2 * DAY_MS;
+  season.recordSeasonRun({ kills: 0, rnaCollected: 0, bossesDefeated: 0, mutations: 50 }, claimAt6);
+  const mc6 = season.claimSeasonMission('season.mutations-50', claimAt6);
+  eq(mc6.ok, true, 'R3-6: mission claim ok');
+  eq(meta.loadMeta().boosterUntilMs, b0 + 5 * DAY_MS, 'R3-6: local = refund-time + 3d mission');
+  ledger.push(boosterReversal(2, 'rev:op6', 'cb6', DAY_MS));
+  serverBooster = claimAt6; // триггер: max(created_at, cur - 1d)
+  await sync();
+  eq(meta.loadMeta().boosterUntilMs, b0 + 5 * DAY_MS, 'R3-6: refund of expired purchase keeps mission reward');
+
+  // --- 4d. CR-R3-7: миссия + покупка СКЛАДЫВАЮТСЯ (3 + 7 = 10), повторный синк идемпотентен ---
+  reset();
+  meta.setSeasonPassUntilMs(b0 + 30 * DAY_MS);
+  season.recordSeasonRun({ kills: 0, rnaCollected: 0, bossesDefeated: 0, mutations: 50 }, b0);
+  const mc7 = season.claimSeasonMission('season.mutations-50', b0);
+  eq(mc7.ok, true, 'R3-7: mission claim ok');
+  eq(meta.loadMeta().boosterUntilMs, b0 + 3 * DAY_MS, 'R3-7: local = 3d mission');
+  ledger = [boosterGrant(1, 'cb7')];
+  serverBooster = b0 + BOOSTER_7D;
+  await sync();
+  eq(meta.loadMeta().boosterUntilMs, b0 + 10 * DAY_MS, 'R3-7: purchase adds to mission time (3+7=10)');
+  const r7b = await sync();
+  eq(r7b.ok, true, 'R3-7: repeat sync ok');
+  eq(meta.loadMeta().boosterUntilMs, b0 + 10 * DAY_MS, 'R3-7: repeat sync idempotent (no double-add)');
+
+  // --- 4e. CR-R3-8: устаревший ответ не воскрешает отозванный бустер ---
+  reset();
+  ledger = [boosterGrant(1, 'cb8')];
+  serverBooster = b0 + BOOSTER_7D;
+  await sync();
+  eq(meta.loadMeta().boosterUntilMs, b0 + BOOSTER_7D, 'R3-8: booster granted');
+  ledger.push(boosterReversal(2, 'rev:op8', 'cb8'));
+  serverBooster = b0;
+  await sync();
+  eq(meta.loadMeta().boosterUntilMs, b0, 'R3-8: booster revoked after refund');
+  // Сервер «откатился»: tip 1 < курсора 2, снапшот — старое высокое значение.
+  ledger = [boosterGrant(1, 'cb8')];
+  serverBooster = b0 + BOOSTER_7D;
+  const r8e = await sync();
+  eq(r8e.ok, true, 'R3-8: stale response still ok');
+  eq(meta.loadMeta().boosterUntilMs, b0, 'R3-8: stale response does not resurrect booster');
+
+  // --- 4f. CR-R3-6/7: истёкший банк не продлевает позднюю покупку ---
+  // Миссия забрана, затем бустер истёк (local в прошлом); покупка через
+  // долгое время не получает +3d от мёртвой награды. На старом коде
+  // зелёный (там банка нет) — гард правила живости нового банка.
+  reset();
+  meta.setSeasonPassUntilMs(b0 + 30 * DAY_MS);
+  season.recordSeasonRun({ kills: 0, rnaCollected: 0, bossesDefeated: 0, mutations: 50 }, b0);
+  season.claimSeasonMission('season.mutations-50', b0);
+  eq(meta.loadMeta().boosterUntilMs, b0 + 3 * DAY_MS, 'R3-6f: mission booster granted');
+  // Время прошло: local истёк (симуляция сдвигом local в прошлое).
+  meta.setBoosterUntilMs(b0 - 1000);
+  ledger = [boosterGrant(1, 'cb6f')];
+  serverBooster = b0 + BOOSTER_7D;
+  await sync();
+  eq(meta.loadMeta().boosterUntilMs, b0 + BOOSTER_7D, 'R3-6f: lapsed mission bank does not extend purchase');
 
   // --- 4b. Сезонный пропуск — max(local, server) (монетизация v3) ---
   reset();
