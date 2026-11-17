@@ -118,6 +118,33 @@ export const SQL_UPDATE_PAYMENT_REFUNDED_FROM_ANY =
   "UPDATE payments SET status='refunded' WHERE charge_id=? AND status IN ('paid','fulfilled','refund_requested')";
 
 /**
+ * Дубликатный платёж (P1-1/P1-2): второй successful_payment на тот же nonce
+ * (гонка двух pre_checkout) или отклонённая вторая подписка. ON CONFLICT
+ * DO NOTHING — повторная доставка того же charge_id не плодит строк.
+ * Колонки: (charge_id, nonce, user_id, product_id, amount, currency,
+ * reason, created_at); reason: 'nonce_reuse' | 'subscription_active'.
+ * status — state machine возврата дубликата (зеркало payments, P1-1):
+ * 'pending' → 'refund_requested' → 'refunded'; гранта у дубликата нет,
+ * поэтому reversal-строки не нужны — только статус + refund_ops.
+ */
+export const SQL_INSERT_DUPLICATE_PAYMENT =
+  'INSERT INTO duplicate_payments ' +
+  '(charge_id, nonce, user_id, product_id, amount, currency, reason, created_at) ' +
+  'VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(charge_id) DO NOTHING';
+
+/** Дубликат → 'refund_requested' (execute, шаг 1: бронь перед refundStarPayment). */
+export const SQL_UPDATE_DUPLICATE_REFUND_REQUESTED =
+  "UPDATE duplicate_payments SET status='refund_requested' WHERE charge_id=? AND status='pending'";
+
+/** Дубликат → 'refunded' (mark: только из 'pending'). */
+export const SQL_UPDATE_DUPLICATE_REFUNDED_FROM_PENDING =
+  "UPDATE duplicate_payments SET status='refunded' WHERE charge_id=? AND status='pending'";
+
+/** Дубликат → 'refunded' (execute, шаг 2: из любого пред-статуса refund-флоу). */
+export const SQL_UPDATE_DUPLICATE_REFUNDED_FROM_ANY =
+  "UPDATE duplicate_payments SET status='refunded' WHERE charge_id=? AND status IN ('pending','refund_requested')";
+
+/**
  * Reversal-строка в журнале: копирует grant-строку с отрицательным amount и
  * ссылкой reverses_charge_id. Если grant-строки нет (unknown-product) —
  * вставляется 0 строк: это ок, откатывать нечего. NOT EXISTS-guard: один

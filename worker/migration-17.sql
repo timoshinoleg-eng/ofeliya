@@ -54,7 +54,7 @@
 --
 -- ИДЕМПОТЕНТНОСТЬ: все CREATE — IF NOT EXISTS; backfill-UPDATE — с
 -- WHERE IS NULL (повторный прогон меняет 0 строк); INSERT — OR IGNORE.
--- Исключение: два ALTER TABLE ADD COLUMN (у SQLite нет IF NOT EXISTS
+-- Исключение: четыре ALTER TABLE ADD COLUMN (у SQLite нет IF NOT EXISTS
 -- для ADD COLUMN) — при повторном прогоне упадут с «duplicate column
 -- name». Это НОРМАЛЬНО и безопасно: сначала проверь SELECT version FROM
 -- schema_migrations — если там уже 'v17', миграцию НЕ запускать.
@@ -66,6 +66,9 @@
 --     NULL у одиночных; backfill не нужен);
 --   - wallets: + season_pass_until_ms INTEGER NOT NULL DEFAULT 0
 --     (абсолютный срок пропуска, как booster_until_ms);
+--   - duplicate_payments: + status TEXT NOT NULL DEFAULT 'pending'
+--     (P1-1: state machine возврата дубликата; существующие строки
+--     получают 'pending' — их возвраты ещё не выполнялись);
 --   - subscription_events: новая таблица (аудит BotSubscriptionUpdated);
 --   - wallet_ledger: UNIQUE(charge_id) → UNIQUE(charge_id, grant_type,
 --     skin_id) — ПЕРЕСОЗДАНИЕ таблицы копированием (SQLite не умеет
@@ -92,6 +95,9 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 ALTER TABLE orders ADD COLUMN grant_season_pass_days INTEGER;
 ALTER TABLE orders ADD COLUMN grant_bundle_json TEXT;
 ALTER TABLE wallets ADD COLUMN season_pass_until_ms INTEGER NOT NULL DEFAULT 0;
+-- P1-1: state machine возврата дубликата ('pending' → 'refund_requested' →
+-- 'refunded'); существующие дубликаты получают 'pending' по DEFAULT.
+ALTER TABLE duplicate_payments ADD COLUMN status TEXT NOT NULL DEFAULT 'pending';
 
 -- Backfill старых заказов: пропуска у них не было → 0. Идемпотентно
 -- (WHERE IS NULL). Без backfill строгая проверка полноты снапшота в

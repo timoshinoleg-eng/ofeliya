@@ -258,10 +258,11 @@ CREATE TABLE IF NOT EXISTS refund_ops (
 CREATE INDEX IF NOT EXISTS idx_refund_ops_charge ON refund_ops(charge_id);
 
 -- P1-5 (независимый review): дубликатные платежи — второй successful_payment
--- на тот же nonce (гонка двух pre_checkout). Деньги списаны Telegram, но
--- заказ уже оплачен: записываем платёж БЕЗ гранта (видим + возвращаем
--- вручную через /api/admin/refund), громкий лог. UNIQUE(nonce) в payments
--- не даёт вставить сюда — поэтому отдельная таблица.
+-- на тот же nonce (гонка двух pre_checkout) или отклонённая вторая подписка
+-- (P1-2, reason='subscription_active'). Деньги списаны Telegram, но заказ
+-- уже оплачен / пропуск уже активен: записываем платёж БЕЗ гранта (видим +
+-- возвращаем через /api/admin/refund, P1-1), громкий лог. UNIQUE(nonce) в
+-- payments не даёт вставить сюда — поэтому отдельная таблица.
 CREATE TABLE IF NOT EXISTS duplicate_payments (
   charge_id  TEXT PRIMARY KEY,
   nonce      TEXT NOT NULL,
@@ -269,7 +270,11 @@ CREATE TABLE IF NOT EXISTS duplicate_payments (
   product_id TEXT NOT NULL,
   amount     INTEGER NOT NULL,
   currency   TEXT NOT NULL,
-  reason     TEXT NOT NULL,  -- 'nonce_reuse'
+  reason     TEXT NOT NULL,  -- 'nonce_reuse' | 'subscription_active' (P1-2)
+  -- P1-1: state machine возврата дубликата (зеркало payments):
+  -- 'pending' → 'refund_requested' → 'refunded'. Только через
+  -- POST /api/admin/refund; гранта у дубликата нет — reversal не нужен.
+  status     TEXT NOT NULL DEFAULT 'pending',
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_duplicate_payments_nonce ON duplicate_payments(nonce);

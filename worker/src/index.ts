@@ -10,6 +10,10 @@ import {
   SQL_UPDATE_PAYMENT_REFUND_REQUESTED,
   SQL_COMPLETE_REFUND_OP,
   SQL_UPDATE_PAYMENT_REFUNDED_FROM_ANY,
+  SQL_INSERT_DUPLICATE_PAYMENT,
+  SQL_UPDATE_DUPLICATE_REFUND_REQUESTED,
+  SQL_UPDATE_DUPLICATE_REFUNDED_FROM_PENDING,
+  SQL_UPDATE_DUPLICATE_REFUNDED_FROM_ANY,
   SQL_INSERT_LEDGER_REVERSAL,
   SQL_INSERT_SUBSCRIPTION_EVENT,
 } from './sql';
@@ -1038,8 +1042,8 @@ async function recordSuccessfulPayment(
   // инфраструктуры.
   // P1-5 (независимый review): молча отбрасывать нельзя — Stars уже списаны
   // Telegram. Пишем в duplicate_payments БЕЗ гранта: платёж видим в D1,
-  // возвращаем вручную через /api/admin/refund (reversal будет 0 строк —
-  // гранта не было, это ок).
+  // возвращаем через /api/admin/refund (P1-1: дубликат имеет свой status
+  // state machine; reversal не нужен — гранта не было).
   const nonceRow = await db
     .prepare('SELECT charge_id FROM payments WHERE nonce=?')
     .bind(nonce)
@@ -1060,11 +1064,7 @@ async function recordSuccessfulPayment(
     try {
       const dupNow = Date.now();
       await db
-        .prepare(
-          'INSERT INTO duplicate_payments ' +
-            '(charge_id, nonce, user_id, product_id, amount, currency, reason, created_at) ' +
-            'VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(charge_id) DO NOTHING'
-        )
+        .prepare(SQL_INSERT_DUPLICATE_PAYMENT)
         .bind(chargeId, nonce, fromId, order.product_id, amount, sp.currency, 'nonce_reuse', dupNow)
         .run();
     } catch {
@@ -1462,6 +1462,11 @@ async function handleWallet(request: Request, env: Env): Promise<Response> {
  * Чужой operationId на другой chargeId → 400 {error:'operation-id-mismatch'}.
  * Журнал админа = refund_ops (reason обрезан до 200; секреты НЕ логируются —
  * см. аудит logEvent в патче №16, D).
+ * P1-1: charge из duplicate_payments (nonce_reuse / отклонённая подписка)
+ * возвращается тем же флоу: lookup сначала в payments, затем в
+ * duplicate_payments; бронь — статусом дубликата ('pending' →
+ * 'refund_requested' → 'refunded'); reversal НЕ пишется (гранта не было),
+ * исходная покупка не трогается. Ответ помечает {duplicate:true}.
  * Откат серверного кошелька — reversal-строкой в ledger: триггер
  * trg_wallet_ledger_apply применяет её атомарно в том же батче
  * (rna: max(0, −N); booster: время вспять не отматываем; skin: гасим только
@@ -1515,17 +1520,39 @@ async function handleAdminRefund(request: Request, env: Env): Promise<Response> 
       if (!execute) return json({ ok: false, error: 'operation-in-progress' }, 409);
     }
     const payment = await db
-      .prepare('SELECT charge_id, user_id, product_id, status FROM payments WHERE charge_id=?')
+      .prepare('SELECT charge_id, user_id, product_id, status, nonce FROM payments WHERE charge_id=?')
       .bind(chargeId)
-      .first<{ charge_id: string; user_id: number; product_id: string; status: string }>();
-    if (!payment) return json({ ok: false, error: 'not-found' });
-    if (payment.status === 'refunded') return json({ ok: true, already: true });
+      .first<{ charge_id: string; user_id: number; product_id: string; status: string; nonce: string | null }>();
+    // P1-1: charge может быть дубликатом (duplicate_payments): гранта нет,
+    // но деньги списаны Telegram — возврат идёт тем же state machine
+    // (refund_ops + бронь), только без reversal-строки в журнале.
+    const duplicate = !payment
+      ? await db
+          .prepare('SELECT charge_id, nonce, user_id, product_id, amount, currency, reason, status, created_at FROM duplicate_payments WHERE charge_id=?')
+          .bind(chargeId)
+          .first<{ charge_id: string; nonce: string; user_id: number; product_id: string; amount: number; currency: string; reason: string; status: string; created_at: number }>()
+      : null;
+    let target: { userId: number; productId: string; nonce: string | null; isDuplicate: boolean };
+    if (payment) {
+      target = { userId: payment.user_id, productId: payment.product_id, nonce: payment.nonce, isDuplicate: false };
+    } else if (duplicate) {
+      target = { userId: duplicate.user_id, productId: duplicate.product_id, nonce: duplicate.nonce, isDuplicate: true };
+    } else {
+      return json({ ok: false, error: 'not-found' });
+    }
+    if (payment?.status === 'refunded' || duplicate?.status === 'refunded') {
+      return json({ ok: true, already: true });
+    }
     // P1-6 (независимый review): mark во время чужого execute ('refund_requested')
     // НЕ ДОЛЖЕН применять reversal: батч mark коммитится (reversal в журнале),
     // а UPDATE payments даёт 0 строк → уже было {ok:true, already:true} при
     // неоткаченном... точнее, при ОТКАЧЕННОМ, но незавершённом возврате —
     // state machine нарушена. Требуем строго paid/fulfilled, иначе 409.
-    if (!execute && payment.status !== 'paid' && payment.status !== 'fulfilled') {
+    // Дубликат: mark только из 'pending' (аналог paid/fulfilled).
+    const markBlocked = payment
+      ? payment.status !== 'paid' && payment.status !== 'fulfilled'
+      : duplicate?.status !== 'pending';
+    if (!execute && markBlocked) {
       return json({ ok: false, error: 'refund-in-progress' }, 409);
     }
 
@@ -1551,13 +1578,22 @@ async function handleAdminRefund(request: Request, env: Env): Promise<Response> 
       }
       // ОДИН батч: журнал + статус + reversal (атомарно; reversal SELECT
       // даёт 0 строк, если grant-строки нет — откатывать нечего, это ок).
-      const results = await db.batch([
-        db.prepare(SQL_INSERT_REFUND_OP).bind(
-          operationId, chargeId, payment.user_id, 'mark', 'completed', reason, null, now, now
-        ),
-        db.prepare(SQL_UPDATE_PAYMENT_REFUNDED).bind(chargeId),
-        db.prepare(SQL_INSERT_LEDGER_REVERSAL).bind(operationId, now, chargeId, chargeId, chargeId),
-      ]);
+      // Дубликат: reversal нет вообще (гранта не было) — только журнал
+      // операции + статус дубликата; исходная покупка не трогается.
+      const results = target.isDuplicate
+        ? await db.batch([
+            db.prepare(SQL_INSERT_REFUND_OP).bind(
+              operationId, chargeId, target.userId, 'mark', 'completed', reason, null, now, now
+            ),
+            db.prepare(SQL_UPDATE_DUPLICATE_REFUNDED_FROM_PENDING).bind(chargeId),
+          ])
+        : await db.batch([
+            db.prepare(SQL_INSERT_REFUND_OP).bind(
+              operationId, chargeId, target.userId, 'mark', 'completed', reason, null, now, now
+            ),
+            db.prepare(SQL_UPDATE_PAYMENT_REFUNDED).bind(chargeId),
+            db.prepare(SQL_INSERT_LEDGER_REVERSAL).bind(operationId, now, chargeId, chargeId, chargeId),
+          ]);
       if (results[1]?.meta.changes === 0) {
         // Статус сменился между SELECT и батчем (конкурентный refund) —
         // идемпотентный ответ, состояние не портится.
@@ -1567,19 +1603,27 @@ async function handleAdminRefund(request: Request, env: Env): Promise<Response> 
         telegramChargeId: chargeId,
         operationId,
         reason,
+        ...(target.isDuplicate ? { duplicate: true } : {}),
       });
-      return json({ ok: true, executed: false, operationId });
+      return json({ ok: true, executed: false, operationId, ...(target.isDuplicate ? { duplicate: true } : {}) });
     }
 
     // «ВЫПОЛНИТЬ»: двухшаговый, с бронью перед внешним вызовом.
     const resumeRequested = !!existingOp && existingOp.status === 'requested';
     if (!resumeRequested) {
-      const b1 = await db.batch([
-        db.prepare(SQL_INSERT_REFUND_OP).bind(
-          operationId, chargeId, payment.user_id, 'execute', 'requested', reason, null, now, now
-        ),
-        db.prepare(SQL_UPDATE_PAYMENT_REFUND_REQUESTED).bind(chargeId),
-      ]);
+      const b1 = target.isDuplicate
+        ? await db.batch([
+            db.prepare(SQL_INSERT_REFUND_OP).bind(
+              operationId, chargeId, target.userId, 'execute', 'requested', reason, null, now, now
+            ),
+            db.prepare(SQL_UPDATE_DUPLICATE_REFUND_REQUESTED).bind(chargeId),
+          ])
+        : await db.batch([
+            db.prepare(SQL_INSERT_REFUND_OP).bind(
+              operationId, chargeId, target.userId, 'execute', 'requested', reason, null, now, now
+            ),
+            db.prepare(SQL_UPDATE_PAYMENT_REFUND_REQUESTED).bind(chargeId),
+          ]);
       if (b1[1]?.meta.changes === 0) {
         // Платёж не в ('paid','fulfilled'): его забрал конкурентный вызов
         // (mark/execute) между нашим SELECT и батчем. Наша операция ничего
@@ -1590,10 +1634,15 @@ async function handleAdminRefund(request: Request, env: Env): Promise<Response> 
           .bind(now, operationId)
           .run();
         // Перечитываем для точного ответа.
-        const cur = await db
-          .prepare('SELECT status FROM payments WHERE charge_id=?')
-          .bind(chargeId)
-          .first<{ status: string }>();
+        const cur = target.isDuplicate
+          ? await db
+              .prepare('SELECT status FROM duplicate_payments WHERE charge_id=?')
+              .bind(chargeId)
+              .first<{ status: string }>()
+          : await db
+              .prepare('SELECT status FROM payments WHERE charge_id=?')
+              .bind(chargeId)
+              .first<{ status: string }>();
         if (!cur || cur.status === 'refunded') return json({ ok: true, already: true });
         // 'refund_requested' чужим operationId — второй админ в том же
         // флоу: не мешаем, сообщаем честно.
@@ -1605,7 +1654,7 @@ async function handleAdminRefund(request: Request, env: Env): Promise<Response> 
     }
     try {
       await botApi(env.TELEGRAM_BOT_TOKEN, 'refundStarPayment', {
-        user_id: payment.user_id,
+        user_id: target.userId,
         telegram_payment_charge_id: chargeId,
       });
     } catch (e) {
@@ -1617,7 +1666,7 @@ async function handleAdminRefund(request: Request, env: Env): Promise<Response> 
         logEvent('stars_refund_failed', {
           telegramChargeId: chargeId,
           operationId,
-          userId: payment.user_id,
+          userId: target.userId,
           error: msg,
         });
         return json({ ok: false, error: 'refund-failed' }, 502);
@@ -1626,17 +1675,26 @@ async function handleAdminRefund(request: Request, env: Env): Promise<Response> 
       // трактуем как подтверждение и завершаем пометку.
     }
     // Батч2: завершение — атомарно (журнал + статус + reversal через триггер).
-    await db.batch([
-      db.prepare(SQL_COMPLETE_REFUND_OP).bind(now, now, operationId),
-      db.prepare(SQL_UPDATE_PAYMENT_REFUNDED_FROM_ANY).bind(chargeId),
-      db.prepare(SQL_INSERT_LEDGER_REVERSAL).bind(operationId, now, chargeId, chargeId, chargeId),
-    ]);
+    // Дубликат: без reversal (гранта не было).
+    await db.batch(
+      target.isDuplicate
+        ? [
+            db.prepare(SQL_COMPLETE_REFUND_OP).bind(now, now, operationId),
+            db.prepare(SQL_UPDATE_DUPLICATE_REFUNDED_FROM_ANY).bind(chargeId),
+          ]
+        : [
+            db.prepare(SQL_COMPLETE_REFUND_OP).bind(now, now, operationId),
+            db.prepare(SQL_UPDATE_PAYMENT_REFUNDED_FROM_ANY).bind(chargeId),
+            db.prepare(SQL_INSERT_LEDGER_REVERSAL).bind(operationId, now, chargeId, chargeId, chargeId),
+          ]
+    );
     logEvent('stars_payment_refunded_execute', {
       telegramChargeId: chargeId,
       operationId,
       reason,
+      ...(target.isDuplicate ? { duplicate: true } : {}),
     });
-    return json({ ok: true, executed: true, operationId });
+    return json({ ok: true, executed: true, operationId, ...(target.isDuplicate ? { duplicate: true } : {}) });
   } catch {
     return json({ error: 'db-write-failed' }, 502);
   }
