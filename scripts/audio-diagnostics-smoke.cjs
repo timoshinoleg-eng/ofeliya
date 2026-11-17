@@ -43,7 +43,11 @@ const EXIT_OK = 0;
 const EXIT_FAIL = 1;
 
 const CURRENT_TIME_WINDOW_MS = 1000;
-const CURRENT_TIME_MIN_ADVANCE_S = 0.5;
+// A healthy clock advances ~1s here; this VM measured 0.63s under load
+// (virtual audio device), so 0.3 separates "runs" from "frozen" (0.05)
+// with margin on both sides. The in-between band (0.05–0.3) with a
+// missing onended is reported as environment trouble, not AUDIO_FAIL.
+const CURRENT_TIME_MIN_ADVANCE_S = 0.3;
 const CURRENT_TIME_FROZEN_S = 0.05;
 const ONENDED_TIMEOUT_MS = 3000;
 

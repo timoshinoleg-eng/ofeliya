@@ -46,7 +46,11 @@
  * Each check runs on a fresh browser context (localStorage isolation).
  * Runs use the survival probe (1M HP, stage-transition-smoke pattern)
  * and the in-page auto-choice handler (see scripts/lib/harness-browser.cjs)
- * so long legs are not cut short by death or a stuck modal.
+ * so long legs are not cut short by death or a stuck modal. Pages load
+ * with ?qaHide=gems,atmo,ui (visibility ONLY — logic, physics and timers
+ * run identically; see withQaHide in scripts/lib/harness-browser.cjs):
+ * it keeps thousands of stepped renders affordable in software rendering
+ * without changing any compared time series.
  *
  * A JSON summary is written to artifacts/harness-acceptance/summary.json.
  * Exit 0 iff every check passes, 1 otherwise, 2 when the Test API is absent.
@@ -68,6 +72,7 @@ const {
   installAutoChoose,
   readAutoChooseErrors,
   readAutoChoices,
+  withQaHide,
 } = require('./lib/harness-browser.cjs');
 
 const EXIT_PASS = 0;
@@ -76,7 +81,10 @@ const EXIT_API_MISSING = 2;
 
 const FIXED_DT = 1000 / 60;
 const REL_TOL = 1e-9;
-const CHECK_TIMEOUT_MS = 10 * 60 * 1000;
+// 3600 stepped frames per leg in software rendering; on a loaded VM a leg
+// takes 10+ minutes. 20 min bounds a hung check without false-failing a
+// slow one.
+const CHECK_TIMEOUT_MS = 20 * 60 * 1000;
 const ARTIFACT_DIR = path.join(process.cwd(), 'artifacts', 'harness-acceptance');
 
 function usageError(message) {
@@ -147,6 +155,7 @@ async function check0Guard(browser, url, seed) {
     await waitForTestApi(page);
     await startSteppedCampaign(page, { seed: `${seed}-guard` });
     await installSurvivalProbe(page);
+    await installAutoChoose(page);
     const result = await page.evaluate(async () => {
       const api = window.__ofeliyaTest;
       const out = {};
@@ -749,7 +758,7 @@ async function check4Replay(browser, url, seed) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const seed = args.seed ?? 'harness-acceptance';
-  const url = args.url ?? process.env.OFELIYA_URL ?? 'http://127.0.0.1:5176/';
+  const url = withQaHide(args.url ?? process.env.OFELIYA_URL ?? 'http://127.0.0.1:5176/');
 
   console.log(`harness-acceptance: seed=${seed} url=${url}`);
 

@@ -18,6 +18,19 @@ const fs = require('fs');
 
 const VIEWPORT = { width: 390, height: 844 };
 
+/**
+ * Append ?qaHide=gems,atmo,ui to a game URL. Visibility ONLY (qaHide.ts):
+ * logic, physics and timers run identically, only pixels disappear — so
+ * long stepped legs stay affordable in software rendering without
+ * changing any compared time series. Used by the parity and acceptance
+ * scripts; the audio probe does not need it.
+ */
+function withQaHide(baseUrl) {
+  const url = new URL(baseUrl);
+  url.searchParams.set('qaHide', 'gems,atmo,ui');
+  return url.toString();
+}
+
 function resolveChromeExecutable() {
   if (process.platform === 'win32') return undefined;
   const found = ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(
@@ -163,6 +176,7 @@ async function readAutoChoices(page) {
 
 module.exports = {
   VIEWPORT,
+  withQaHide,
   resolveChromeExecutable,
   launchHarnessBrowser,
   newHarnessPage,

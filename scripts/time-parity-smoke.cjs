@@ -39,6 +39,15 @@
  * (1e-9 relative). Exit 0 on match, 1 on divergence (with a line-by-line
  * diff of the first divergences), 2 when the Test API is absent.
  *
+ * Known wall-clock leak, recorded for diagnosis (NOT part of the
+ * criterion): Juice hit-stop dips scene.time.timeScale and the physics
+ * world timeScale on tween.js WALL-clock timers (Juice.ts header: the
+ * group runs on performance.now(), not scene time). A dip's progress per
+ * stepped frame therefore depends on wall speed, which differs between
+ * legs. The recorder stores both timeScales per frame; on divergence the
+ * script reports the dip state around the first differing frame, so a
+ * Juice-driven divergence is diagnosable instead of mysterious.
+ *
  * Usage:
  *   node scripts/time-parity-smoke.cjs [--url <base>] [--seed <seed>]
  *     [--difficulty standard|strained] [--max-frames N]
@@ -52,6 +61,7 @@ const {
   waitForTestApi,
   startSteppedCampaign,
   installSurvivalProbe,
+  withQaHide,
 } = require('./lib/harness-browser.cjs');
 
 const EXIT_MATCH = 0;
@@ -60,7 +70,10 @@ const EXIT_API_MISSING = 2;
 
 const REL_TOL = 1e-9;
 const MAX_DIFF_LINES = 20;
-const LEG_TIMEOUT_MS = 10 * 60 * 1000;
+// ~18k stepped frames per leg in software rendering; on a loaded VM a leg
+// takes tens of minutes. 45 min bounds a hung leg without false-failing a
+// slow one.
+const LEG_TIMEOUT_MS = 45 * 60 * 1000;
 const BOSS_SPAWN_PHASE = 'BOSS_ACTIVE';
 
 function usageError(message) {
@@ -96,12 +109,6 @@ function parseArgs(argv) {
     i += 1;
   }
   return args;
-}
-
-function withQaHide(baseUrl) {
-  const url = new URL(baseUrl);
-  url.searchParams.set('qaHide', 'gems,atmo,ui');
-  return url.toString();
 }
 
 function relClose(a, b, tol = REL_TOL) {
@@ -152,6 +159,10 @@ async function installRecorder(page) {
           ]),
           hb: st.heartbeat.nextImpactAtMs,
           hbm: st.heartbeat.msToNextImpact,
+          // Diagnostic only (see header): Juice hit-stop dips these on
+          // wall-clock timers; NOT part of the pass/fail comparison.
+          ts: gs.time.timeScale,
+          ws: gs.physics.world.timeScale,
         });
         // Apply the choice on the exact frame the modal opens — identical
         // in both legs regardless of chunk size (see header).
@@ -356,11 +367,16 @@ async function main() {
 
     const tg1x = summarizeTelegraphs(a);
     const tg4x = summarizeTelegraphs(b);
+    const dipped = (series) => series.filter((f) => f.ts < 0.999 || f.ws < 0.999).length;
     const last = a[a.length - 1];
     console.log(
       `compared ${a.length} frames to boss spawn: runTimeMs=${last.r} stageTimeMs=${last.s} ` +
         `telegraph frames 1x=${tg1x.framesWith} (first ${tg1x.firstFrame}) ` +
         `4x=${tg4x.framesWith} (first ${tg4x.firstFrame})`
+    );
+    console.log(
+      `hit-stop dipped frames (timeScale < 1, wall-clock Juice — diagnostic only): ` +
+        `1x=${dipped(a)} 4x=${dipped(b)}`
     );
     console.log(
       `heartbeat on bloodstream: nextImpactAtMs=${last.hb} msToNextImpact=${last.hbm} ` +
@@ -374,6 +390,17 @@ async function main() {
     if (diffs.length > 0) {
       console.error(`time-parity-smoke: DIVERGED (${diffs.length} shown, cap ${MAX_DIFF_LINES})`);
       for (const line of diffs.slice(0, MAX_DIFF_LINES)) console.error(`  ${line}`);
+      // Dip context around the first divergence: if a Juice hit-stop dip
+      // was active there, the wall-clock leak above is the prime suspect.
+      const firstFrame = Number((diffs[0].match(/^frame (\d+):/) || [])[1]);
+      if (Number.isInteger(firstFrame)) {
+        console.error('dip context around first divergence (ts = clock timeScale, ws = world timeScale):');
+        for (let f = Math.max(0, firstFrame - 2); f <= Math.min(a.length - 1, firstFrame + 2); f++) {
+          console.error(
+            `  frame ${f}: 1x ts=${a[f].ts} ws=${a[f].ws} | 4x ts=${b[f].ts} ws=${b[f].ws}`
+          );
+        }
+      }
       process.exit(EXIT_DIVERGED);
     }
     console.log(
