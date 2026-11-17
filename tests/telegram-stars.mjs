@@ -213,6 +213,7 @@ try {
     nonceToCharge: new Map(),
     verifyNonces: [],
     verifyMode: 'ok', // 'ok' | 'ok-no-charge' | 'mismatch' | 'not-found' | 'throw' | 'denied' | 'duplicate'
+    invoiceMode: 'ok', // 'ok' | 'conflict-active' | 'conflict-pending' (P3-N7)
     entitlementsMode: 'ok', // 'ok' | 'unavailable'
     ackCalls: [],
     ackBehavior: 'ok', // 'ok' | 'fail'
@@ -238,6 +239,7 @@ try {
     server.nonceToCharge.clear();
     server.verifyNonces.length = 0;
     server.verifyMode = 'ok';
+    server.invoiceMode = 'ok';
     server.entitlementsMode = 'ok';
     server.ackCalls.length = 0;
     server.ackBehavior = 'ok';
@@ -250,6 +252,13 @@ try {
   globalThis.fetch = async (url, init) => {
     const body = init?.body ? JSON.parse(init.body) : {};
     if (url.endsWith('/api/invoice')) {
+      // P3-N7: 409 subscription-active/pending от воркера (P1-2).
+      if (server.invoiceMode === 'conflict-active') {
+        return { ok: false, status: 409, json: async () => ({ error: 'subscription-active' }) };
+      }
+      if (server.invoiceMode === 'conflict-pending') {
+        return { ok: false, status: 409, json: async () => ({ error: 'subscription-pending' }) };
+      }
       assert(typeof body.nonce === 'string' && body.nonce.length >= 8, 'invoice sends nonce');
       assert(
         typeof body.productId === 'string' && SHOP_CATALOG.some((p) => p.id === body.productId),
@@ -523,6 +532,23 @@ try {
   eq(loadMeta().rna, 0, 'denied restore grants nothing');
   const restoredDenied2 = await p1.restore();
   eq((restoredDenied2.pendingDenied ?? []).length, 0, 'denied reported once');
+
+  // (6d) P3-N7: 409 subscription-active/pending — различимая причина,
+  // а не generic invoice-create-failed (сцена показывает понятный текст).
+  resetPayments();
+  resetServer();
+  server.invoiceMode = 'conflict-active';
+  withWindow(paidWindow());
+  r = await p1.purchase(packS.id);
+  eq(r.state, 'failed', '409 subscription-active is failed');
+  eq(r.reason, 'subscription-active', '409 active reason surfaced');
+  resetPayments();
+  resetServer();
+  server.invoiceMode = 'conflict-pending';
+  withWindow(paidWindow());
+  r = await p1.purchase(packS.id);
+  eq(r.state, 'failed', '409 subscription-pending is failed');
+  eq(r.reason, 'subscription-pending', '409 pending reason surfaced');
 
   // (7) booster: серверный грант → синк берёт max(local, server).
   // Патч №15: fulfillPurchase начислений не делает; срок вычисляет сервер.

@@ -352,7 +352,23 @@ export class TelegramStarsPaymentProvider implements PaymentProvider {
             body: JSON.stringify({ productId, initData, nonce }),
             signal: ctrl.signal,
           });
-          if (!res.ok) return fail('invoice-create-failed');
+          if (!res.ok) {
+            // P3-N7: 409 subscription-active/pending — различимые причины
+            // (сцена показывает «Пропуск уже активен» / «Ожидается оплата
+            // пропуска» вместо generic-ошибки). Тело читаем best-effort:
+            // при битом JSON — прежний invoice-create-failed.
+            if (res.status === 409) {
+              const errData: unknown = await res.json().catch(() => null);
+              const code =
+                !!errData && typeof errData === 'object'
+                  ? String((errData as { error?: unknown }).error ?? '')
+                  : '';
+              if (code === 'subscription-active' || code === 'subscription-pending') {
+                return fail(code);
+              }
+            }
+            return fail('invoice-create-failed');
+          }
           const data: unknown = await res.json();
           invoiceUrl =
             !!data && typeof data === 'object'
