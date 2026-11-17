@@ -116,6 +116,7 @@
     "test:campaign:20": "OFELIYA_CAMPAIGN_RUNS=20 node scripts/autonomous-campaign.cjs",
     "test:campaign:replay": "node scripts/verify-campaign-replay.mjs",
     "test:campaign-report": "node scripts/lib/campaign-report.cjs --fixture",
+    "test:harness-absent": "node scripts/check-harness-absent.mjs",
     "analytics:funnel": "node scripts/analyze-product-funnel.mjs",
     "test:mobile-evidence": "node scripts/check-mobile-acceptance-evidence.mjs",
     "test:biological-impact-smoke": "node scripts/biological-impact-smoke.cjs",
