@@ -47,7 +47,7 @@ export interface Product {
   description: string;
   price: ProductPrice;
   art: ProductArt;
-  /** Бейдж на карточке: 'HIT' | 'NEW' | '-13%' … */
+  /** Бейдж на карточке: 'HIT' | 'NEW' | '-5%' … (скидки — в Stars, см. products.ts) */
   tag?: string;
   /**
    * Компоненты бандла (монетизация v3): только для kind='bundle'.
