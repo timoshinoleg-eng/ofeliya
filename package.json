@@ -115,6 +115,7 @@
     "test:campaign": "node scripts/autonomous-campaign.cjs",
     "test:campaign:20": "OFELIYA_CAMPAIGN_RUNS=20 node scripts/autonomous-campaign.cjs",
     "test:campaign:replay": "node scripts/verify-campaign-replay.mjs",
+    "test:time-parity": "node scripts/time-parity-smoke.cjs",
     "test:campaign-report": "node scripts/lib/campaign-report.cjs --fixture",
     "test:harness-absent": "node scripts/check-harness-absent.mjs",
     "analytics:funnel": "node scripts/analyze-product-funnel.mjs",
