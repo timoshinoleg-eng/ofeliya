@@ -228,26 +228,33 @@ function computeMove(snapshot, profile, opts) {
     }
   }
 
-  // --- pinpoint dodge (cycle 7): full-speed radial escape from the ONE ---
-  // enemy about to hit, and only then. Cycle 6's flee mode fired whenever
-  // ANY enemy was inside the full danger radius (150/190 px) — almost
-  // constantly after 60 s — so the bot only ran, never fought or farmed
-  // (2 choices at 100 s, 90 enemies, 81 kills on campaign-std1): the
-  // coordinator's "excessive fleeing", made worse. The dodge fires only
-  // when the nearest enemy is inside its time-to-contact threshold
-  // (~0.4 s from contact: runner 85 px, swarm 60 px, brute 50 px,
-  // anomaly 55 px). Otherwise the bot fights and farms with the force
-  // sum below — standing still or moving radially, which keeps bullets
-  // accurate (tryFire has no leading, Bullet has no tracking: only
-  // LATERAL motion causes misses, and there is no tangent anywhere in
-  // the no-boss branch). The dodge direction is radial away from the
-  // threatening enemy (not the repulsion sum — the threat is pinpoint).
+  // --- pinpoint dodge (cycle 7, direction fixed in cycle 8) --------------
+  // The dodge fires ONLY when the nearest enemy is inside its
+  // time-to-contact threshold (~0.4 s from contact: runner 85 px, swarm
+  // 60 px, brute 50 px, anomaly 55 px). Otherwise the bot fights and
+  // farms with the force sum below — standing still or moving radially,
+  // which keeps bullets accurate (tryFire has no leading, Bullet has no
+  // tracking: only LATERAL motion causes misses, and there is no tangent
+  // anywhere in the no-boss branch).
+  // Cycle 7 dodged radially away from the NEAREST enemy — and died at
+  // 146 s to CLUSTERED hits (57/58/59 s, 106/107/108 s, 138/139 s: 2-3
+  // hits within seconds): dodging the nearest runs the bot into the next
+  // converging enemy. Cycle 8 dodges in the REPULSION-SUM direction —
+  // away from the whole local crowd, not just the nearest threat. The
+  // sum is falloff^2-weighted, so a single close enemy still dominates
+  // it (the dodge stays pinpoint for lone threats) while converging
+  // threats bias the escape away from the cluster. If the sum cancels
+  // (symmetric surround), fall back to the nearest-enemy direction.
   // Boss fights keep their orbit (the anchor branch below): bosses are
   // big targets (radius 25 px) and slow (66 px/s), so the strafe does
   // not cause boss misses. The hard telegraph projection still applies.
   if (!seeking && !boss && dodgeThreat) {
-    const fx = px - dodgeThreat.enemy.x;
-    const fy = py - dodgeThreat.enemy.y;
+    let fx = mx;
+    let fy = my;
+    if (length(fx, fy) < 0.1) {
+      fx = px - dodgeThreat.enemy.x;
+      fy = py - dodgeThreat.enemy.y;
+    }
     const flee = unit(fx, fy);
     const projected = projectOutOfTelegraphs(snapshot, flee);
     return {
