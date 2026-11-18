@@ -64,22 +64,22 @@ try {
   const callback = { update_id: 104, callback_query: { id: 'callback', data: 'ok' } };
 
   // Auth, malformed input and strict body bounds are fail-closed.
-  let res = await worker.fetch(request(start, 'invalid'));
+  let res = await worker.fetch(request(start, 'invalid'), baseEnv);
   assert.equal(res.status, 403, 'invalid Telegram secret is rejected');
   assert.equal(calls.length, 0, 'invalid auth cannot forward');
-  res = await worker.fetch(request(start, WORKER_SECRET));
+  res = await worker.fetch(request(start, WORKER_SECRET), baseEnv);
   assert.equal(res.status, 403, 'legacy Worker proxy secret is not accepted by direct ingress');
   res = await worker.fetch(request(start), { ...baseEnv, TG_WEBHOOK_SECRET: '' });
   assert.equal(res.status, 503, 'unconfigured direct secret is fail-closed');
-  res = await worker.fetch(request('{bad-json'));
+  res = await worker.fetch(request('{bad-json'), baseEnv);
   assert.equal(res.status, 400, 'malformed JSON rejected');
-  res = await worker.fetch(request('null'));
+  res = await worker.fetch(request('null'), baseEnv);
   assert.equal(res.status, 400, 'nonobject body rejected');
-  res = await worker.fetch(request([], TG_SECRET));
+  res = await worker.fetch(request([], TG_SECRET), baseEnv);
   assert.equal(res.status, 400, 'array body rejected');
-  res = await worker.fetch(request(start, TG_SECRET, 'text/plain'));
+  res = await worker.fetch(request(start, TG_SECRET, 'text/plain'), baseEnv);
   assert.equal(res.status, 415, 'non-JSON content-type rejected');
-  res = await worker.fetch(request('x'.repeat(260 * 1024)));
+  res = await worker.fetch(request('x'.repeat(260 * 1024)), baseEnv);
   assert.equal(res.status, 413, 'actual byte limit enforced without trusting Content-Length');
   assert.equal(calls.length, 0, 'bad or unauthenticated updates never forwarded');
 
