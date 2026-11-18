@@ -102,6 +102,7 @@ import {
 } from '../systems/adaptiveAudioMath';
 import { AdaptiveAudioDirector } from '../systems/AdaptiveAudioDirector';
 import { SfxAdaptiveSink } from '../systems/SfxAdaptiveSink';
+import { CPlusAudioDirector, CPlusAdaptiveSink } from '../systems/CPlusAudioDirector';
 import { MUSIC_TRACK_COUNT, Sfx } from '../systems/Sfx';
 import { VfxSystem } from '../systems/VfxSystem';
 import { EnemyHealthOverlay } from '../systems/EnemyHealthOverlay';
@@ -267,6 +268,8 @@ export class GameScene extends Phaser.Scene {
   private dailyMutator: DailyMutator | null = null;
   private gameplayRng!: RunRng;
   private audio!: AdaptiveAudioDirector;
+  /** Optional C+ v4 bed set (opt-in QA mode). `null` in production sessions. */
+  private cplusAudio: CPlusAudioDirector | null = null;
   private audioAccMs = 0;
   private heartbeatPulse!: HeartbeatPulseDirector;
   private cardiacHazard = new CardiacLineHazardDirector();
@@ -430,8 +433,15 @@ export class GameScene extends Phaser.Scene {
     this.checkpointAccMs = 0;
     // Adaptive audio foundation: one deterministic bed per run plus danger-driven tension layers.
     // The director only observes gameplay; StageDirector keeps lifecycle authority.
-    this.audio = new AdaptiveAudioDirector(new SfxAdaptiveSink(), { bedCount: MUSIC_TRACK_COUNT });
+    // C+ v4 beds are opt-in (`?audio=cplus`). When they are off this stays null
+    // and the production licensed bed path is byte-for-byte unchanged.
+    this.cplusAudio = new CPlusAudioDirector();
+    const audioSink = this.cplusAudio.active ? new CPlusAdaptiveSink() : new SfxAdaptiveSink();
+    this.audio = new AdaptiveAudioDirector(audioSink, { bedCount: MUSIC_TRACK_COUNT });
     this.audioAccMs = 0;
+    if (this.cplusAudio.active) {
+      this.cplusAudio.start(this.stageDirector.currentStage.order);
+    }
     this.audio.start(
       this.runSeed,
       this.stageDirector.currentStage.order,
@@ -715,6 +725,7 @@ export class GameScene extends Phaser.Scene {
       // Audio is not a Phaser subsystem, so it is safe (and required) to release it here:
       // every restart path must not leak the bed, layer nodes or the visibility listener.
       this.audio?.stop();
+      this.cplusAudio?.stop();
       Sfx.stopMusic();
       this.registry.remove('run');
       this.registry.remove('runResult');
@@ -735,6 +746,7 @@ export class GameScene extends Phaser.Scene {
     this.saveCheckpointNow();
     this.cancelStageTransition();
     this.audio.stop();
+    this.cplusAudio?.stop();
     Sfx.stopMusic();
     if (this.scene.isActive('UI') || this.scene.isPaused('UI')) this.scene.stop('UI');
     this.scene.stop();
@@ -2628,6 +2640,7 @@ export class GameScene extends Phaser.Scene {
           this.heartbeatPulse.reset();
           this.wave.startStage(event.stage);
           this.audio.setStage(event.stage.order, event.stage.theme.heartbeatMs);
+          this.cplusAudio?.setStage(event.stage.order);
           if (event.stage.id === 'heart') {
             this.trackComprehensionOnce('heart', {
               runSeed: this.runSeed,
@@ -2647,6 +2660,7 @@ export class GameScene extends Phaser.Scene {
             break;
           }
           this.audio.onBossSpawn();
+          this.cplusAudio?.onBossSpawn(event.stage.id);
           break;
         case 'run-ended':
           this.finish(event.reason === 'campaign-complete', event.reason);
@@ -2675,6 +2689,9 @@ export class GameScene extends Phaser.Scene {
           break;
         case 'stage-transition-requested':
           this.audio.onStageTransition();
+          // The boss is gone: the C+ bed falls back to the act bed of the
+          // stage the run is entering.
+          this.cplusAudio?.onBossClear(event.to.order);
           this.beginStageTransition(event.from, event.to);
           break;
       }
@@ -2807,7 +2824,13 @@ export class GameScene extends Phaser.Scene {
       daily: this.dailyRun,
     });
     this.audio.onRunEnd(win);
-    Sfx.play(win ? 'victory' : 'gameover');
+    if (this.cplusAudio?.active) {
+      // The C+ package ships reworked result signals; the legacy licensed
+      // stingers stay silent so the outcome is read exactly once.
+      this.cplusAudio.onRunEnd(win);
+    } else {
+      Sfx.play(win ? 'victory' : 'gameover');
+    }
     PlatformBridge.notify(win ? 'success' : 'error');
     this.cameras.main.resetFX();
     this.scene.pause();

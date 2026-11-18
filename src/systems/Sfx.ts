@@ -20,6 +20,7 @@ import {
   MASTER_GAIN, MUSIC_GAIN, MUSIC_BED_TRIMS, SFX_ROLE_GAINS,
   scanNormalizationTrim, musicGainForDuck, perceptualVolumeGain, nextVolumeStep,
 } from './audioMixMath';
+import { CPLUS_BED_SOURCES, isCPlusStinger, type CPlusBedRole } from './cplusAudioMath';
 import { ZZFX_PRESETS } from './zzfxPresets';
 import { buildZzfxSamples, ZZFX_SAMPLE_RATE } from './ZzfxSynth';
 
@@ -116,6 +117,18 @@ class SfxImpl {
   private actualBedIndex: number | null = null;
   private musicTension = MUSIC_TENSION_NEUTRAL;
   private layerTones = new Set<() => void>();
+
+  // --- C+ v4 beds (opt-in test set) -------------------------------------
+  // The C+ beds live in their own slot of the same graph: bedTrim -> musicGain
+  // -> tension filter. They never replace a production bed unless the session
+  // explicitly asks for them, and they are always released by stopMusic().
+  private cplusRole: CPlusBedRole | null = null;
+  private cplusSrc: AudioBufferSourceNode | null = null;
+  private cplusGain: GainNode | null = null;
+  private cplusBuffers: Partial<Record<CPlusBedRole, AudioBuffer>> = {};
+  private cplusAbort: AbortController | null = null;
+  private cplusRequestId = 0;
+  private cplusActive = false;
 
   // One persistent oscillator is cheaper than spawning heartbeat nodes every beat. Gain remains
   // virtually silent between pulses; setRunIntensity only schedules a short envelope.
@@ -278,6 +291,9 @@ class SfxImpl {
 
   /** Deterministic run bed. Same run seed → same bed; never a random per-lifecycle pick. */
   startBed(index: number): void {
+    // A production bed and a C+ bed are mutually exclusive: the licensed CC0
+    // bed must never sound together with the C+ test set.
+    this.stopCPlusBed();
     this.setBedIndex(index);
     this.setMusicTension(MUSIC_TENSION_NEUTRAL);
     this.resetMusicDuck();
@@ -645,6 +661,13 @@ class SfxImpl {
   startMusic(): void {
     this.musicWanted = true;
     if (this.muted) return;
+    if (this.cplusActive) {
+      // The C+ bed owns the music slot: re-create its source instead of
+      // loading a licensed production bed.
+      this.ensureBioAmbience();
+      this.resumeCPlusBed();
+      return;
+    }
     this.ensureBioAmbience();
     if (this.musicSrc) return;
     if (this.musicBuf) { this.spawnMusic(); return; }
@@ -735,6 +758,203 @@ class SfxImpl {
     this.musicSrc = null;
   }
 
+  /**
+   * C+ v4 bed (opt-in). The bed is cross-faded over `fadeMs` so an act or
+   * boss switch never clicks. The production bed is released first: in a C+
+   * session the licensed CC0 bed and the C+ bed must never sound together.
+   */
+  startCPlusBed(role: CPlusBedRole, fadeMs = 700): void {
+    if (this.muted) return;
+    this.cplusActive = true;
+    this.musicWanted = true;
+    const cached = this.cplusBuffers[role];
+    if (cached) {
+      this.swapCPlusBed(cached, role, fadeMs);
+      return;
+    }
+    const ctx = this.ensure();
+    if (!ctx) return;
+    this.stopCurrentMusicSource();
+    this.musicBuf = null;
+    this.actualBedIndex = null;
+    this.cancelMusicLoad();
+    const requestId = ++this.cplusRequestId;
+    this.cancelCPlusLoad();
+    const controller = new AbortController();
+    this.cplusAbort = controller;
+    void this.loadCPlusBed(ctx, role, requestId, controller, fadeMs).finally(() => {
+      if (this.cplusAbort === controller) this.cplusAbort = null;
+    });
+  }
+
+  /** One-shot C+ stinger (run end). Plays through the layer bus, so the
+   *  run-end music duck does not swallow the outcome signal. */
+  playCPlusStinger(role: CPlusBedRole): void {
+    if (this.muted) return;
+    const out = this.layerBus ?? this.musicGain;
+    if (!out) return;
+    const cached = this.cplusBuffers[role];
+    if (cached) {
+      this.playCPlusBuffer(cached, out);
+      return;
+    }
+    const ctx = this.ensure();
+    if (!ctx) return;
+    const requestId = ++this.cplusRequestId;
+    this.cancelCPlusLoad();
+    const controller = new AbortController();
+    this.cplusAbort = controller;
+    void this.loadCPlusStinger(ctx, role, requestId, controller);
+  }
+
+  private async loadCPlusBed(
+    ctx: AudioContext,
+    role: CPlusBedRole,
+    requestId: number,
+    controller: AbortController,
+    fadeMs: number
+  ): Promise<void> {
+    for (const file of CPLUS_BED_SOURCES[role]) {
+      if (controller.signal.aborted || requestId !== this.cplusRequestId) return;
+      const buffer = await this.fetchCPlus(ctx, file, requestId, controller);
+      if (!buffer) return;
+      if (requestId !== this.cplusRequestId) return;
+      this.cplusBuffers[role] = buffer;
+      this.swapCPlusBed(buffer, role, fadeMs);
+      return;
+    }
+    console.warn('[OFELIYA audio] unable to load a C+ bed', { role });
+  }
+
+  private async loadCPlusStinger(
+    ctx: AudioContext,
+    role: CPlusBedRole,
+    requestId: number,
+    controller: AbortController
+  ): Promise<void> {
+    for (const file of CPLUS_BED_SOURCES[role]) {
+      if (controller.signal.aborted || requestId !== this.cplusRequestId) return;
+      const buffer = await this.fetchCPlus(ctx, file, requestId, controller);
+      if (!buffer) return;
+      if (requestId !== this.cplusRequestId) return;
+      this.cplusBuffers[role] = buffer;
+      const out = this.layerBus ?? this.musicGain;
+      if (!out) return;
+      this.playCPlusBuffer(buffer, out);
+      return;
+    }
+    console.warn('[OFELIYA audio] unable to load a C+ stinger', { role });
+  }
+
+  /** Fetch + decode one C+ candidate; returns null when the request was superseded. */
+  private async fetchCPlus(
+    ctx: AudioContext,
+    file: string,
+    requestId: number,
+    controller: AbortController
+  ): Promise<AudioBuffer | null> {
+    try {
+      const response = await fetch(audioAssetUrl(file), { signal: controller.signal });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const buffer = await ctx.decodeAudioData(await response.arrayBuffer());
+      if (controller.signal.aborted || requestId !== this.cplusRequestId) return null;
+      return buffer;
+    } catch {
+      if (controller.signal.aborted || requestId !== this.cplusRequestId) return null;
+      return null;
+    }
+  }
+
+  /** Cross-fade the C+ bed into the music bus. */
+  private swapCPlusBed(buffer: AudioBuffer, role: CPlusBedRole, fadeMs: number): void {
+    const ctx = this.ctx;
+    const trim = this.bedTrim;
+    if (!ctx || !trim) return;
+    const now = ctx.currentTime;
+    const fade = Math.max(0.01, fadeMs / 1000);
+
+    const oldSrc = this.cplusSrc;
+    const oldGain = this.cplusGain;
+    if (oldSrc && oldGain) {
+      oldGain.gain.cancelScheduledValues(now);
+      oldGain.gain.setValueAtTime(oldGain.gain.value, now);
+      oldGain.gain.linearRampToValueAtTime(0, now + fade);
+      try { oldSrc.stop(now + fade + 0.02); } catch { /* already stopped */ }
+    }
+
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = !isCPlusStinger(role);
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    gain.gain.linearRampToValueAtTime(1, now + fade);
+    src.connect(gain);
+    gain.connect(trim);
+    src.onended = () => {
+      try { src.disconnect(); gain.disconnect(); } catch { /* no-op */ }
+    };
+    src.start();
+
+    this.cplusSrc = src;
+    this.cplusGain = gain;
+    this.cplusRole = role;
+    this.cplusActive = true;
+  }
+
+  /** Play a decoded C+ buffer as a one-shot through the layer bus. */
+  private playCPlusBuffer(buffer: AudioBuffer, out: GainNode): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    const gain = ctx.createGain();
+    gain.gain.value = 1;
+    src.connect(gain);
+    gain.connect(out);
+    src.onended = () => {
+      try { src.disconnect(); gain.disconnect(); } catch { /* no-op */ }
+    };
+    src.start();
+  }
+
+  /** Re-create the C+ bed source after a context suspend/resume. */
+  private resumeCPlusBed(): void {
+    const role = this.cplusRole;
+    if (!role) return;
+    const cached = this.cplusBuffers[role];
+    if (cached) {
+      this.swapCPlusBed(cached, role, 0);
+      return;
+    }
+    this.startCPlusBed(role, 0);
+  }
+
+  /** Release the C+ bed. Used by the fast-restart path. */
+  stopCPlusBed(): void {
+    this.cancelCPlusLoad();
+    this.cplusActive = false;
+    this.cplusRole = null;
+    const src = this.cplusSrc;
+    const gain = this.cplusGain;
+    this.cplusSrc = null;
+    this.cplusGain = null;
+    if (src) {
+      try { src.onended = null; src.stop(); } catch { /* already stopped */ }
+      try { src.disconnect(); } catch { /* no-op */ }
+    }
+    if (gain) {
+      try { gain.disconnect(); } catch { /* no-op */ }
+    }
+  }
+
+  private cancelCPlusLoad(): void {
+    this.cplusRequestId += 1;
+    if (this.cplusAbort) {
+      try { this.cplusAbort.abort(); } catch { /* no-op */ }
+      this.cplusAbort = null;
+    }
+  }
+
   stopMusic(): void {
     this.musicWanted = false;
     this.disarmMusicUnlockRetry();
@@ -747,6 +967,7 @@ class SfxImpl {
     for (const stop of this.layerTones) stop();
     this.setBioCadence(0);
     this.stopCurrentMusicSource();
+    this.stopCPlusBed();
     this.resetMusicDuck();
   }
 

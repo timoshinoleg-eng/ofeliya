@@ -35,3 +35,7 @@ skills
 .env
 .env.*
 !.env.example
+
+# python-кеш генератора аудио (tools/audio/cplus)
+__pycache__/
+*.pyc

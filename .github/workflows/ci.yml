@@ -104,6 +104,9 @@ jobs:
       - name: Adaptive audio deterministic smoke
         run: npm run test:audio
 
+      - name: C+ v4 audio contracts and asset gate
+        run: npm run test:cplus-audio && npm run test:audio-cplus
+
       - name: Telegram share contract smoke
         run: npm run test:telegram-share
 
