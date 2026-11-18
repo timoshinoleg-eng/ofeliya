@@ -66,7 +66,9 @@ async function check(mode) {
     const scriptPolicy = csp.split(';').find(part => part.trim().startsWith('script-src'));
     const connectPolicy = csp.split(';').find(part => part.trim().startsWith('connect-src'));
     assert.ok(scriptPolicy.includes('https://cloud.umami.is'), 'Umami script allowed when enabled');
-    assert.ok(connectPolicy.includes('https://cloud.umami.is'), 'Umami events can be sent');
+    assert.ok(connectPolicy.includes('https://cloud.umami.is'), 'Umami script origin allowed');
+    assert.ok(connectPolicy.includes('https://gateway.umami.is'), 'Umami Cloud collector must be allowed');
+    assert.ok(!scriptPolicy.includes('https://gateway.umami.is'), 'collector must not be a script source');
     assert.ok(connectPolicy.includes('https://ofeliya-payments.example.workers.dev'),
       'Telegram Stars Worker API is reachable from the game');
     assert.ok(!scriptPolicy.includes('ofeliya-payments.example.workers.dev'),

@@ -21,7 +21,11 @@ export function browserSecurityHeaders(html, {
   const umamiOrigin = umamiEnabled ? httpsOrigin(umamiSrc) : '';
   const paymentsOrigin = httpsOrigin(paymentsApiUrl);
   const scriptOrigins = [umamiOrigin].filter(Boolean).join(' ');
-  const connectOrigins = [umamiOrigin, paymentsOrigin].filter(Boolean).join(' ');
+  // Umami Cloud serves script.js from cloud.umami.is but POSTs events to
+  // gateway.umami.is. Keep this exact collector origin scoped to Cloud only.
+  const umamiCollectorOrigin = umamiOrigin === 'https://cloud.umami.is'
+    ? 'https://gateway.umami.is' : '';
+  const connectOrigins = [umamiOrigin, umamiCollectorOrigin, paymentsOrigin].filter(Boolean).join(' ');
   const hashes = [];
   for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
     if (/\bsrc\s*=/i.test(match[1]) || !match[2].trim()) continue;
