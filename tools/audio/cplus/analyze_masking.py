@@ -41,6 +41,37 @@ CRITICAL_SFX = [
 BEDS = ["bloodstream", "heart", "immune_prime", "cardiac_titan"]
 
 
+PRODUCTION_BEDS = [
+    ("loop0.ogg", "prod_loop0", "act1"),
+    ("loop1.ogg", "prod_loop1", "act1"),
+    ("loop2.ogg", "prod_loop2", "act2"),
+    ("loop3.mp3", "prod_loop3", "act1"),
+    ("loop4.mp3", "prod_loop4", "act2"),
+    ("loop5.mp3", "prod_loop5", "act2"),
+    ("loop6.mp3", "prod_loop6", "act1"),
+]
+
+#: Which production beds belong to which act, mirroring `MUSIC_BED_POOLS` in
+#: `src/systems/adaptiveAudioMath.ts` (bloodstream = [0,1,3,6], heart = [2,4,5]).
+PRODUCTION_ACT = {
+    "prod_loop0": "act1",
+    "prod_loop1": "act1",
+    "prod_loop3": "act1",
+    "prod_loop6": "act1",
+    "prod_loop2": "act2",
+    "prod_loop4": "act2",
+    "prod_loop5": "act2",
+}
+
+#: Which act each C+ bed belongs to.
+CPLUS_ACT = {
+    "bloodstream": "act1",
+    "immune_prime": "act1",
+    "heart": "act2",
+    "cardiac_titan": "act2",
+}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--package", required=True)
@@ -61,12 +92,7 @@ def main() -> None:
 
     # production baseline: the licensed beds the game ships today
     prod_dir = repo / "public" / "audio" / "music"
-    for name, label in (
-        ("loop0.ogg", "prod_loop0"),
-        ("loop2.ogg", "prod_loop2"),
-        ("loop3.mp3", "prod_loop3"),
-        ("loop4.mp3", "prod_loop4"),
-    ):
+    for name, label, _act in PRODUCTION_BEDS:
         path = prod_dir / name
         if path.exists():
             data, sr = metrics.read(path)
@@ -84,6 +110,10 @@ def main() -> None:
             report["bed"] = bed
             report["sfx"] = sfx_name
             report["baseline"] = bed.startswith("prod_")
+            report["actMatched"] = (
+                not report["baseline"]
+                and PRODUCTION_ACT.get(bed) == CPLUS_ACT.get(bed)
+            )
             rows.append(report)
 
     out = {
@@ -113,28 +143,70 @@ def main() -> None:
             f"{'clear' if r['sfxClear'] else 'masked'}"
         )
 
-    # regression check against the production baseline
-    print("\n[masking] C+ v4 vs production baseline (same SFX, same band)")
+    # Regression check against the production baseline.
+    #
+    # The headline number uses the *act-matched* production beds: the C+ act I
+    # bed is compared with the production act I beds (and the act II bed with
+    # the production act II beds), because that is the like-for-like
+    # comparison — the same musical slot in the same act. The full range over
+    # *every* production bed is reported next to it, so the least favourable
+    # baseline is visible as well.
+    print("\n[masking] C+ v4 vs production baseline")
     regressions = []
     for sfx_name, sfx_role in CRITICAL_SFX:
         baseline = [r for r in rows if r["sfx"] == sfx_name and r["baseline"]]
         if not baseline:
             continue
-        base_best = max(r["musicVsSfxInBandDb"] for r in baseline)
         for r in rows:
             if r["sfx"] != sfx_name or r["baseline"]:
                 continue
-            delta = r["musicVsSfxInBandDb"] - base_best
+            matched = [b for b in baseline if PRODUCTION_ACT.get(b["bed"]) == CPLUS_ACT.get(r["bed"])]
+            pool = matched if matched else baseline
+            pool_best = max(b["musicVsSfxInBandDb"] for b in pool)
+            pool_worst = min(b["musicVsSfxInBandDb"] for b in pool)
+            all_best = max(b["musicVsSfxInBandDb"] for b in baseline)
+            delta = r["musicVsSfxInBandDb"] - pool_best
+            delta_all = r["musicVsSfxInBandDb"] - all_best
             flag = "WORSE" if delta > 3.0 else ("better" if delta < -1.0 else "same")
             regressions.append({
-                "sfx": sfx_name, "bed": r["bed"], "deltaDb": round(delta, 2), "verdict": flag,
+                "sfx": sfx_name,
+                "bed": r["bed"],
+                "baselinePool": sorted(b["bed"] for b in pool),
+                "actMatched": bool(matched),
+                "deltaDb": round(delta, 2),
+                "deltaVsWorstBaselineDb": round(delta_all, 2),
+                "verdict": flag,
             })
             print(
-                f"  {sfx_name:<16}{r['bed']:<16}Δ vs prod = {delta:+6.1f} dB  ({flag})"
+                f"  {sfx_name:<16}{r['bed']:<16}act-matched Δ={delta:+6.1f} dB   "
+                f"vs best baseline Δ={delta_all:+6.1f} dB  ({flag})"
             )
     worse = [r for r in regressions if r["verdict"] == "WORSE"]
-    print(f"\n[masking] {len(worse)} of {len(regressions)} comparisons are worse than production by >3 dB")
+    same = [r for r in regressions if r["verdict"] == "same"]
+    matched_rows = [r for r in regressions if r["actMatched"]]
+    matched_worse = [r for r in matched_rows if r["verdict"] == "WORSE"]
+    print(
+        f"\n[masking] act-matched comparisons: {len(matched_rows)}, "
+        f"worse than production by >3 dB: {len(matched_worse)}; "
+        f"over all baselines: {len(regressions)} comparisons, worse: {len(worse)}, same: {len(same)}"
+    )
     out["regressions"] = regressions
+    out["actMatchedSummary"] = {
+        "comparisons": len(matched_rows),
+        "worseThanProduction": len(matched_worse),
+        "deltaRangeDb": [
+            round(min((r["deltaDb"] for r in matched_rows), default=0.0), 2),
+            round(max((r["deltaDb"] for r in matched_rows), default=0.0), 2),
+        ],
+    }
+    out["allBaselineSummary"] = {
+        "comparisons": len(regressions),
+        "worseThanProduction": len(worse),
+        "deltaRangeDb": [
+            round(min((r["deltaDb"] for r in regressions), default=0.0), 2),
+            round(max((r["deltaDb"] for r in regressions), default=0.0), 2),
+        ],
+    }
     path.write_text(json.dumps(out, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 

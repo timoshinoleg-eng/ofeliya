@@ -231,28 +231,45 @@ def main() -> None:
     masking_path = package / "analysis" / "sfx-masking.json"
     if masking_path.exists():
         masking = json.loads(masking_path.read_text(encoding="utf-8"))
-        rows_m = masking["rows"]
+        regressions = masking.get("regressions", [])
+        matched = [r for r in regressions if r.get("actMatched")]
         lines.append(
-            "| SFX | C+ v4 Δ к production (дБ, отрицательное = лучше) | худший случай |\n"
-            "|---|---|---|\n"
+            "Сравнение «по акту»: C+ bed сравнивается с production-bed **того же акта** "
+            "(пулы из `MUSIC_BED_POOLS`: акт I — loop0/1/3/6, акт II — loop2/4/5), потому что "
+            "это один и тот же музыкальный слот в одном акте. Рядом указан диапазон по "
+            "**всем** production-bed сразу, включая самый невыгодный baseline — чтобы "
+            "выбор эталона не мог улучшить результат.\n\n"
         )
-        for sfx in sorted({r["sfx"] for r in rows_m}):
-            cplus = [r for r in rows_m if r["sfx"] == sfx and not r["baseline"]]
-            base = [r for r in rows_m if r["sfx"] == sfx and r["baseline"]]
-            if not cplus or not base:
-                continue
-            base_best = max(r["musicVsSfxInBandDb"] for r in base)
-            deltas = [r["musicVsSfxInBandDb"] - base_best for r in cplus]
+        lines.append(
+            "| SFX | Δ к act-matched production (дБ) | Δ к худшему baseline | хуже production на >3 дБ |\n"
+            "|---|---|---|---|\n"
+        )
+        for sfx in sorted({r["sfx"] for r in matched}):
+            sel = [r for r in matched if r["sfx"] == sfx]
+            deltas = [r["deltaDb"] for r in sel]
+            deltas_all = [r["deltaVsWorstBaselineDb"] for r in sel]
+            worse = sum(1 for r in sel if r["verdict"] == "WORSE")
             lines.append(
                 f"| {sfx} | {fmt(min(deltas), 1)} … {fmt(max(deltas), 1)} | "
-                f"{fmt(max(deltas), 1)} |"
+                f"{fmt(min(deltas_all), 1)} … {fmt(max(deltas_all), 1)} | "
+                f"{worse} из {len(sel)} |"
             )
+        summary_matched = masking.get("actMatchedSummary", {})
+        summary_all = masking.get("allBaselineSummary", {})
         lines.append(
-            "\nПолоса берётся из собственного спектра SFX, а не из фиксированного "
-            "«кармана» 1.5–3.5 кГц. Музыка измеряется на её реальном игровом уровне "
-            "(шина музыки 0.65), SFX — на пике в своей полосе с учётом роли из "
-            "`audioMixMath.ts`. Все 32 сравнения с production-эталоном показывают, "
-            "что C+ v4 маскирует игровые сигналы **меньше**, чем текущая музыка.\n"
+            f"\nИтог по act-matched сравнениям: {summary_matched.get('comparisons', 0)}, "
+            f"хуже production на >3 дБ — **{summary_matched.get('worseThanProduction', 0)}**; "
+            f"диапазон Δ {summary_matched.get('deltaRangeDb', ['—', '—'])[0]}…"
+            f"{summary_matched.get('deltaRangeDb', ['—', '—'])[1]} дБ. "
+            f"По всем baseline сразу: {summary_all.get('comparisons', 0)} сравнений, "
+            f"хуже — {summary_all.get('worseThanProduction', 0)}.\n"
+        )
+        lines.append(
+            "Полоса берётся из собственного спектра SFX, а не из фиксированного «кармана» "
+            "1.5–3.5 кГц. Музыка измеряется на её реальном игровом уровне (шина музыки "
+            "0.65), SFX — на пике в своей полосе с учётом роли из `audioMixMath.ts`. "
+            "Отрицательный Δ означает, что C+ v4 маскирует игровой сигнал **меньше**, "
+            "чем production-bed в том же слоте.\n"
         )
 
     lines.append("\n## 8. Эмуляция небольшого динамика\n")

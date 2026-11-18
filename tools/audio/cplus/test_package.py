@@ -26,7 +26,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "generator"))
 
+import numpy as np
+
 from ofeliya_cplus import metrics  # noqa: E402
+from ofeliya_cplus.dsp import SR  # noqa: E402
 
 TARGET_LUFS = -14.0
 LUFS_TOLERANCE = 0.5
@@ -122,6 +125,31 @@ def main() -> None:
                 check(metrics.sha256_of(src) == m["sha256"], f"manifest {rel}: sha256 matches the package file")
                 check(abs((m["lufs"] or 0) - TARGET_LUFS) <= LUFS_TOLERANCE + 0.25, f"manifest {rel}: LUFS {m['lufs']} in contract")
                 check(m["truePeakDbTp"] <= MAX_TRUE_PEAK_DBTP, f"manifest {rel}: true peak in contract")
+
+    report()
+
+
+    # 7. the seam detector itself must be able to fail --------------------
+    # A metric that always returns "seamless" would make every loop check
+    # above meaningless, so the gate proves the detector on a signal whose
+    # ends do not join.
+    n = int(2.0 * SR)
+    t = np.arange(n) / SR
+    broken = 0.95 * np.sin(2.0 * np.pi * 219.7 * t)  # 878.8 cycles: does not close
+    broken_stereo = np.stack([broken, broken], axis=1)
+    broken_report = metrics.seam_report(broken_stereo, SR, cycles=10)
+    check(
+        broken_report["seamless"] is False,
+        "the seam detector reports a non-closing waveform as NOT seamless",
+    )
+    check(
+        broken_report["wrapVsLocalRatio"] > 3.0,
+        "the seam detector exposes the click as a local outlier",
+    )
+    check(
+        broken_report["cyclesMeasuredSeams"] == 9,
+        "the seam detector measured every internal seam of a ten-cycle repeat",
+    )
 
     report()
 

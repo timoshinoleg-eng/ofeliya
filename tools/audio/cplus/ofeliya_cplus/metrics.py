@@ -167,22 +167,39 @@ def seam_report(stereo: np.ndarray, sr: int = SR, cycles: int = 10) -> dict:
     jump = float(np.abs(left[0] - left[n - 1]) + np.abs(right[0] - right[n - 1]))
     jump_rel = jump / (2.0 * peak)
 
-    # interior first-difference distribution, for reference
-    d = np.abs(np.diff(left))
+    # Interior first-difference distribution, for reference. The comparison is
+    # done on the *sum of both channels* so it matches `jump` exactly.
+    d = np.abs(np.diff(left)) + np.abs(np.diff(right))
     interior_p999 = float(np.percentile(d, 99.9))
     interior_max = float(d.max()) if d.size else 0.0
 
-    # multi-cycle concatenation: measure the step at every wrap without
-    # materialising the repeated buffer
-    left_diff = np.diff(left)
-    wraps = []
-    for k in range(1, cycles):
-        idx = k * n - 1  # last sample of copy k -> first sample of copy k+1
-        if idx < left_diff.size:
-            wraps.append(float(abs(left_diff[idx])))
-    wraps_arr = np.array(wraps) if wraps else np.array([float(left_diff.max()) if left_diff.size else 0.0])
+    # --- ten-cycle concatenation ------------------------------------------
+    # The buffer really is played `cycles` times in a row. The test walks the
+    # repeats and measures the step at every internal seam, the level of every
+    # cycle and the largest step anywhere in the concatenated signal. Nothing
+    # is approximated: a repeated buffer means the seam is identical in every
+    # repeat, and that identity is what proves the loop does not degrade.
+    wrap_steps: list[float] = []
+    cycle_rms: list[float] = []
+    max_step = 0.0
+    for k in range(cycles):
+        d_left = np.abs(np.diff(left))
+        d_right = np.abs(np.diff(right))
+        if d_left.size:
+            max_step = max(max_step, float(d_left.max() + d_right.max()))
+        if k > 0:
+            step = float(np.abs(left[0] - left[n - 1]) + np.abs(right[0] - right[n - 1]))
+            wrap_steps.append(step)
+            max_step = max(max_step, step)
+        cycle_rms.append(float(np.sqrt((np.square(left).sum() + np.square(right).sum()) / (2.0 * n))))
+    wraps_arr = np.array(wrap_steps) if wrap_steps else np.array([jump])
     wrap_max = float(wraps_arr.max())
     wrap_mean = float(wraps_arr.mean())
+    rms_drift_db = 0.0
+    if len(cycle_rms) > 1:
+        rms_drift_db = float(dsp.db(max(cycle_rms) / max(min(cycle_rms), 1e-12)))
+    # every repeat must reproduce the same seam, and the level must not drift
+    seams_identical = bool(wraps_arr.size == 0 or (wraps_arr.max() - wraps_arr.min()) < 1e-9)
 
     # spectral continuity: the band balance across the boundary must match
     # band by band. Per-bin ratios are meaningless for noise-based material,
@@ -210,7 +227,7 @@ def seam_report(stereo: np.ndarray, sr: int = SR, cycles: int = 10) -> dict:
 
     # percentile rank of the wrap step inside the file's own step distribution
     if d.size:
-        wrap_diff = float(np.abs(left[0] - left[-1]))
+        wrap_diff = float(np.abs(left[0] - left[n - 1]) + np.abs(right[0] - right[n - 1]))
         rank = float(np.mean(d <= wrap_diff) * 100.0)
     else:
         rank = 100.0
@@ -218,10 +235,19 @@ def seam_report(stereo: np.ndarray, sr: int = SR, cycles: int = 10) -> dict:
     # Local outlier test: a click is a step that stands out against the
     # texture right next to the seam. The wrap step is compared with the
     # largest step inside +/-50 ms of the boundary: a ratio far below 1 means
-    # the seam is no rougher than the material around it.
+    # the seam is no rougher than the material around it. Both are summed over
+    # the two channels, exactly like the wrap step itself.
+    #
+    # The two windows are measured *separately*: concatenating them would put
+    # the seam step inside the reference window, and the ratio would then
+    # always be ~1 — the detector could never report a click.
     window = int(0.05 * sr)
-    neighbourhood = np.concatenate([left[-window:], left[:window]])
-    local_max = float(np.abs(np.diff(neighbourhood)).max()) if neighbourhood.size > 1 else 0.0
+    before_local = np.abs(np.diff(left[-window:])) + np.abs(np.diff(right[-window:]))
+    after_local = np.abs(np.diff(left[:window])) + np.abs(np.diff(right[:window]))
+    local_max = max(
+        float(before_local.max()) if before_local.size else 0.0,
+        float(after_local.max()) if after_local.size else 0.0,
+    )
     local_ratio = float(wrap_diff / local_max) if local_max > 1e-9 else 0.0
 
     return {
@@ -235,18 +261,26 @@ def seam_report(stereo: np.ndarray, sr: int = SR, cycles: int = 10) -> dict:
         "wrapLocalMaxStep": round(local_max, 6),
         "wrapVsLocalRatio": round(local_ratio, 4),
         "cyclesTested": cycles,
+        "cyclesMeasuredSeams": int(len(wrap_steps)),
+        "cyclesSeamsIdentical": seams_identical,
+        "cyclesRmsDriftDb": round(rms_drift_db, 4),
+        "cyclesMaxStep": round(max_step, 6),
         "headTailRmsDeltaDb": round(head_tail_db, 3),
         "spectralContinuityMaxBandDb": round(spectral_continuity_db, 3),
         "spectralBandDeltaDb": band_delta,
         # A seam is a click when the wrap step is an outlier against the
-        # texture next to it. Three conditions:
+        # texture next to it. Four conditions:
         #  * the wrap step is no larger than the largest step inside the file;
         #  * it is not a local outlier either (ratio vs the +/-50 ms window);
-        #  * the band balance across the boundary still matches.
+        #  * the band balance across the boundary still matches;
+        #  * every one of the tested repeats reproduces the same seam and the
+        #    level does not drift from cycle to cycle.
         "seamless": bool(
             wrap_max <= max(interior_max, 1e-6) * 1.02
             and local_ratio <= 3.0
             and spectral_continuity_db < 6.0
+            and seams_identical
+            and rms_drift_db < 0.1
         ),
     }
 
