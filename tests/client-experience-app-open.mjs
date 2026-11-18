@@ -127,9 +127,11 @@ try {
       ...options,
     });
     const appOpens = () => calls.filter(([p]) => p.name === 'app_open');
+    const pageviews = () => calls.filter(([p]) => p.name === undefined);
     return {
       calls,
       appOpens,
+      pageviews,
       fireReady: async () => {
         eq(document.scripts.length, 1, 'umami script appended');
         document.scripts[0].onload();
@@ -143,6 +145,9 @@ try {
     const s = scenario();
     await s.fireReady();
     await sleep(60);
+    eq(s.pageviews().length, 1, 'browser: exactly one manual pageview');
+    eq(s.pageviews()[0][0].url, '/ofeliya', 'pageview uses fixed URL without Telegram initData');
+    eq(Object.keys(s.pageviews()[0][0]).sort().join(','), 'title,url,website', 'pageview only sends safe fields');
     eq(s.appOpens().length, 1, 'browser: exactly one fallback app_open');
     eq(s.appOpens()[0][0].data.screen, 'menu', 'fallback carries screen=menu');
   }
