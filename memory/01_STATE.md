@@ -1,3 +1,13 @@
+# C+ v4 audio — ревизия QA-инструмента (2026-11-18, ветка feat/ofeliya-audio-cplus-v4, PR #302, коммит ce6b4c0)
+
+Факты. В seam-отчёте (`ofeliya_cplus/metrics.py`) цикл десяти повторов не исполнялся: индексы точек склейки вычислялись от diff исходного файла, где `size == n-1`, поэтому индекс `n-1` отбрасывался, а последующие выходили за границу; подставлялся максимум внутренних шагов, и условие `wrap_max <= interior_max * 1.02` было тождественно истинным. Дополнительно окно соседей склеивалось через стык, из-за чего отношение «шаг ÷ локальный максимум» не могло превысить единицу. Исправлено: обход всех `cycles - 1` внутренних точек с проверкой тождественности шага и дрейфа уровня, окно соседей считается двумя отдельными частями. Добавлен самопроверяющий модуль `tools/audio/cplus/test_seam_detector.py` (14/14) и три такие же проверки в гейт пакета (162/162).
+
+Пересчёт исправленным детектором: bloodstream/heart/immune_prime/cardiac_titan — `seamless: true` во всех четырёх; отношение шага к локальному максимуму 0.16–0.63; `cyclesMeasuredSeams` = 9; `cyclesRmsDriftDb` = 0.0; разброс по полосам ≤3.4 дБ. Прочие измерения (LUFS −14.00, TP −4.89…−7.94, моно 4.18–5.00 дБ, эхо на 16 с 0.335–0.404, воздух 7.1–18.0 %) не изменились.
+
+Маскировка SFX: baseline исправлен на act-matched (production-bed того же акта по пулам `MUSIC_BED_POOLS`), в отчёте добавлен диапазон по всем baseline сразу. Итог: 0 из 32 act-matched сравнений хуже production на >3 дБ, диапазон Δ −15.5…−5.2 дБ.
+
+CI: run 44382547462 (head 6039aaa) — success; run 44376149055 (19ca819), 44375364076 (a4b0032), 44374292785 (3931cb4), 44372766872 (1f4dc77) — success.
+
 # C+ v4 audio — C+ Mobile / Adaptive (2026-11-18, ветка feat/ofeliya-audio-cplus-v4, база main a894547, PR #302, коммиты 9b16ec2 → ad68eff → 1f4dc77 → 3931cb4 → a4b0032 → 19ca819)
 
 Факты. Генератор: `tools/audio/cplus/ofeliya_cplus/` (dsp, theory, compositions, master, metrics) + CLI `build.py` (`--qa-only`, `--manifest-only`), `build_stand.py`, `analyze_masking.py`, `write_report.py`, `sync_package.py`, `serve_stand.py`, `test_package.py`. Сид фиксирован, сборка детерминирована. Тональный центр F minor (F2 = 87.31 Гц), 72 BPM, такт = 147 000 отсчётов. Шесть композиций: bloodstream 80.00 с / heart 80.00 с / immune_prime 80.00 с / cardiac_titan 100.00 с / victory 4.00 с / defeat 4.50 с.
