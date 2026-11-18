@@ -154,6 +154,11 @@ export class UIScene extends Phaser.Scene {
   private fanfare!: Phaser.GameObjects.Particles.ParticleEmitter;
   private comboText!: Phaser.GameObjects.Text;
   private lastCombo = 0;
+  private lastTimerLabel: string | null = null;
+  private lastLevelLabel: string | null = null;
+  private lastKills: number | null = null;
+  private lastHpLabel: string | null = null;
+  private lastBossName: string | null = null;
   private hudBarState: { width: number; xp: number; xpNext: number; hp: number; maxHp: number; bossHp: number; bossMax: number } | null = null;
 
   private modal: Phaser.GameObjects.Container | null = null;
@@ -183,6 +188,7 @@ export class UIScene extends Phaser.Scene {
 
   create(): void {
     this.hudBarState = null;
+    this.invalidateHudTextCache();
     this.gs = this.scene.get('Game') as GameScene;
     // Juice для модалок/наград (tween.js). UI-сцена без governor — интенсивность 1.
     this.juice = new Juice(this);
@@ -429,21 +435,32 @@ export class UIScene extends Phaser.Scene {
         }
       }
 
-      this.timerText.setText(fmtTime(run.timeMs));
-      const causalLabel = `РНК ${run.xp}/${run.xpNext} → МУТАЦИЯ`;
-      this.levelText.setText(causalLabel);
-      const availableLabelWidth =
-        this.timerText.x - this.timerText.width / 2 - this.levelText.x - 8;
-      if (this.levelText.width > availableLabelWidth) {
-        this.levelText.setText(`РНК ${run.xp}/${run.xpNext}`);
+      const timerLabel = fmtTime(run.timeMs);
+      if (timerLabel !== this.lastTimerLabel) {
+        this.lastTimerLabel = timerLabel;
+        this.timerText.setText(timerLabel);
       }
-      if (this.levelText.width > availableLabelWidth) {
-        this.levelText.setText(
-          `РНК ${compactHudNumber(run.xp)}/${compactHudNumber(run.xpNext)}`
-        );
+      if (geometryDirty || xpDirty || this.lastLevelLabel === null) {
+        const causalLabel = `РНК ${run.xp}/${run.xpNext} → МУТАЦИЯ`;
+        this.levelText.setText(causalLabel);
+        const availableLabelWidth =
+          this.timerText.x - this.timerText.width / 2 - this.levelText.x - 8;
+        let levelLabel = causalLabel;
+        if (this.levelText.width > availableLabelWidth) {
+          levelLabel = `РНК ${run.xp}/${run.xpNext}`;
+          this.levelText.setText(levelLabel);
+        }
+        if (this.levelText.width > availableLabelWidth) {
+          levelLabel = `РНК ${compactHudNumber(run.xp)}/${compactHudNumber(run.xpNext)}`;
+          this.levelText.setText(levelLabel);
+        }
+        this.lastLevelLabel = levelLabel;
       }
       this.layoutRnaPickupFeedback();
-      this.killsText.setText(`УНИЧТОЖЕНО ${run.kills}`);
+      if (run.kills !== this.lastKills) {
+        this.lastKills = run.kills;
+        this.killsText.setText(`УНИЧТОЖЕНО ${run.kills}`);
+      }
 
       const showCombo = run.combo >= COMBO.showFrom;
       this.comboText.setVisible(!this.qaHudHidden && showCombo);
@@ -476,7 +493,11 @@ export class UIScene extends Phaser.Scene {
           this.drawBarHighlight(this.hpFill, bx, HUD.row.hpY, Math.max(bw * hf, 10));
         }
       }
-      this.hpText.setText(`${Math.ceil(Math.max(0, run.hp))} / ${run.maxHp}`);
+      const hpLabel = `${Math.ceil(Math.max(0, run.hp))} / ${run.maxHp}`;
+      if (hpLabel !== this.lastHpLabel) {
+        this.lastHpLabel = hpLabel;
+        this.hpText.setText(hpLabel);
+      }
 
       this.hpWarn.clear();
       if (run.hp > 0 && hf <= JUICE.lowHpFraction) {
@@ -495,7 +516,10 @@ export class UIScene extends Phaser.Scene {
         this.bossPhaseTransitionAt = -1;
       }
       if (boss) {
-        this.bossLabel.setText(run.bossName);
+        if (run.bossName !== this.lastBossName) {
+          this.lastBossName = run.bossName;
+          this.bossLabel.setText(run.bossName);
+        }
         if (geometryDirty || !previous || previous.bossMax <= 0) {
           this.bossBack.clear();
           this.bossBack.fillStyle(HUD.barBack, 0.9);
@@ -1237,6 +1261,7 @@ export class UIScene extends Phaser.Scene {
   /** Single writer for the HUD strip geometry (X + Y) and the HUD type floors. */
   private layout(): void {
     this.hudBarState = null;
+    this.invalidateHudTextCache();
     const W = this.scale.width;
     this.hudBackdrop
       .setPosition(W / 2, HUD.plate.top + HUD.plate.height / 2)
@@ -1262,6 +1287,14 @@ export class UIScene extends Phaser.Scene {
     this.contextHintText
       ?.setFontSize(W < 370 ? 11 : 12)
       .setWordWrapWidth(Math.min(W - 52, 332));
+  }
+
+  private invalidateHudTextCache(): void {
+    this.lastTimerLabel = null;
+    this.lastLevelLabel = null;
+    this.lastKills = null;
+    this.lastHpLabel = null;
+    this.lastBossName = null;
   }
 
   private onUiResize(): void {
