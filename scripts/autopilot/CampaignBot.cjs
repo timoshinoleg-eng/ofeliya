@@ -184,17 +184,24 @@ class CampaignBot {
     // --- AoE fighting distance ----------------------------------------------
     // The campaign-std1 run died at 157 s sim with orbit x3 / infect /
     // lysis owned but unused: kiting at dangerRadius 150 keeps enemies
-    // OUTSIDE the orbit ring (82 px) and barely inside nova (140 px), so
-    // the AoE build never deals damage while the swarm (147 enemies) closes
-    // in. With orbit/nova stacks owned, shrink the effective danger radius
-    // to 70% (standard 150 -> 105, strained 190 -> 133): repulsion stays
-    // strong below ~60 px (contact is ~20-30 px), but enemies enter the
-    // ring and the blades kill them there (a swarmer dies in ~0.2 s inside
-    // an orbit x3 ring, before crossing the remaining ~70 px). Boss
-    // repulsion is unaffected (it floors at 200 px in MovementPolicy).
-    const aoeStacks = (this.stacks.orbit || 0) + (this.stacks.nova || 0);
-    const profile = aoeStacks > 0
-      ? { ...this.profile, dangerRadius: Math.round(this.profile.dangerRadius * 0.7) }
+    // OUTSIDE the orbit ring (82 px), so the AoE build never deals damage
+    // while the swarm grows. Cycle 2 shrank the radius to 70% with ANY
+    // orbit/nova stack — and died EARLIER (132 s): at orbit x1-2 the ring
+    // (32-64 DPS) does not kill a runner (30 HP, 152 px/s) before it
+    // crosses 105 px to contact (~0.5 s), so the bot ate contact hits with
+    // only ~20 enemies around. The shrink must scale with the ring's
+    // killing power: orbit x0-1 -> no shrink (the x1 ring is a bonus, not
+    // a style); orbit x2 -> 0.85 (standard 128, strained 162); orbit x3+
+    // -> 0.70 (standard 105, strained 133). At x2 (64 DPS) a runner dies
+    // in 0.47 s vs ~0.7 s to close from 128 px; at x3 (97 DPS) it dies in
+    // 0.3 s vs ~0.5 s from 105 px. Nova stacks do not shrink: nova bursts
+    // at 140 px, already inside the base radius. Boss repulsion is
+    // unaffected (it floors at 200 px in MovementPolicy).
+    const orbitStacks = this.stacks.orbit || 0;
+    const aoeFactor = orbitStacks >= 3 ? 0.7 : orbitStacks >= 2 ? 0.85 : 1;
+    const aoeStacks = orbitStacks + (this.stacks.nova || 0);
+    const profile = aoeFactor < 1
+      ? { ...this.profile, dangerRadius: Math.round(this.profile.dangerRadius * aoeFactor) }
       : this.profile;
 
     // --- movement ------------------------------------------------------------
