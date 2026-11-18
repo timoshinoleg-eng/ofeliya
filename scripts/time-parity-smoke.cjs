@@ -385,16 +385,20 @@ async function main() {
     const b = leg4x.series.slice(0, spawn4x + 1);
     if (a.length !== b.length) {
       diffs.push(`truncated series length differs: 1x=${a.length} 4x=${b.length}`);
-    } else {
-      diffs.push(...compareSeries(a, b));
     }
+    // Always compare the overlapping prefix (compareSeries uses the min
+    // length): a length mismatch must not hide the first per-frame
+    // divergence — that frame is the diagnosis.
+    diffs.push(...compareSeries(a, b));
 
     const tg1x = summarizeTelegraphs(a);
     const tg4x = summarizeTelegraphs(b);
     const dipped = (series) => series.filter((f) => f.ts < 0.999 || f.ws < 0.999).length;
     const last = a[a.length - 1];
+    const compared = Math.min(a.length, b.length);
     console.log(
-      `compared ${a.length} frames to boss spawn: runTimeMs=${last.r} stageTimeMs=${last.s} ` +
+      `compared ${compared} frames to boss spawn (truncated lengths 1x=${a.length} 4x=${b.length}): ` +
+        `runTimeMs=${last.r} stageTimeMs=${last.s} ` +
         `telegraph frames 1x=${tg1x.framesWith} (first ${tg1x.firstFrame}) ` +
         `4x=${tg4x.framesWith} (first ${tg4x.firstFrame})`
     );
@@ -414,12 +418,15 @@ async function main() {
     if (diffs.length > 0) {
       console.error(`time-parity-smoke: DIVERGED (${diffs.length} shown, cap ${MAX_DIFF_LINES})`);
       for (const line of diffs.slice(0, MAX_DIFF_LINES)) console.error(`  ${line}`);
-      // Dip context around the first divergence: if a Juice hit-stop dip
-      // was active there, the wall-clock leak above is the prime suspect.
-      const firstFrame = Number((diffs[0].match(/^frame (\d+):/) || [])[1]);
+      // Dip context around the first per-frame divergence: if a Juice
+      // hit-stop dip was active there, the wall-clock leak above is the
+      // prime suspect. (diffs[0] may be a length/spawn line with no frame
+      // number — search for the first framed diff.)
+      const framed = diffs.find((d) => /^frame \d+:/.test(d));
+      const firstFrame = framed ? Number(framed.match(/^frame (\d+):/)[1]) : NaN;
       if (Number.isInteger(firstFrame)) {
         console.error('dip context around first divergence (ts = clock timeScale, ws = world timeScale):');
-        for (let f = Math.max(0, firstFrame - 2); f <= Math.min(a.length - 1, firstFrame + 2); f++) {
+        for (let f = Math.max(0, firstFrame - 2); f <= Math.min(compared - 1, firstFrame + 2); f++) {
           console.error(
             `  frame ${f}: 1x ts=${a[f].ts} ws=${a[f].ws} | 4x ts=${b[f].ts} ws=${b[f].ws}`
           );
