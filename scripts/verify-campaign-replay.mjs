@@ -91,7 +91,11 @@ const TAIL_FRAMES = 60;
 // never reaches the hash comparison. The wait is LOGGED (choiceWaits)
 // so a shifted application stays visible in the verdict; it does not
 // hide divergence — the stateHash comparison still decides MATCH/DIVERGED.
-const MAX_CHOICE_WAIT_FRAMES = 120;
+// 600 frames (10 s) is a DIAGNOSTIC bound: on real campaign logs the
+// shift can exceed 120 frames (choice 3 of the std-001 bot run needed
+// more), and the point of the window is to let the replay complete so
+// the hash comparison can quantify the divergence.
+const MAX_CHOICE_WAIT_FRAMES = 600;
 const DIFFICULTIES = ['standard', 'strained'];
 
 function usageError(message) {
@@ -341,6 +345,9 @@ async function runOnce(browser, { seed, difficulty, inputs, choices, transitions
         }
         if (waited > 0) {
           choiceWaits.push({ id: choice.id, recordedTick: at, appliedTick: tick, waited });
+          console.log(
+            `choice ${choice.id}: modal opened ${waited}f after recorded tick ${at} (applied @${tick})`
+          );
         }
         if (!result.applied) {
           throw new Error(
