@@ -343,7 +343,7 @@ async function runOnce(browser, { seed, difficulty, inputs, choices, transitions
           }
           result = await tryApplyChoice(choice.id);
         }
-        if (waited > 0) {
+        if (waited > 0 && result.applied) {
           choiceWaits.push({ id: choice.id, recordedTick: at, appliedTick: tick, waited });
           console.log(
             `choice ${choice.id}: modal opened ${waited}f after recorded tick ${at} (applied @${tick})`
