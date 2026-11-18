@@ -155,7 +155,7 @@ export class UIScene extends Phaser.Scene {
   private comboText!: Phaser.GameObjects.Text;
   private lastCombo = 0;
   private lastTimerLabel: string | null = null;
-  private lastLevelLabel: string | null = null;
+  private lastLevelAvailableWidth: number | null = null;
   private lastKills: number | null = null;
   private lastHpLabel: string | null = null;
   private lastBossName: string | null = null;
@@ -436,15 +436,27 @@ export class UIScene extends Phaser.Scene {
       }
 
       const timerLabel = fmtTime(run.timeMs);
-      if (timerLabel !== this.lastTimerLabel) {
+      // The level label's available width depends on timerText.width, which
+      // changes when the timer string changes (proportional font: "09:59" is
+      // narrower than "10:00"). Restart the reflow when the timer string or the
+      // measured available width changes, so a timer tick cannot leave an
+      // overflowing label unreflowed until the next XP change.
+      const timerLabelChanged = timerLabel !== this.lastTimerLabel;
+      if (timerLabelChanged) {
         this.lastTimerLabel = timerLabel;
         this.timerText.setText(timerLabel);
       }
-      if (geometryDirty || xpDirty || this.lastLevelLabel === null) {
+      const availableLabelWidth =
+        this.timerText.x - this.timerText.width / 2 - this.levelText.x - 8;
+      if (
+        geometryDirty ||
+        xpDirty ||
+        timerLabelChanged ||
+        this.lastLevelAvailableWidth !== availableLabelWidth
+      ) {
+        this.lastLevelAvailableWidth = availableLabelWidth;
         const causalLabel = `РНК ${run.xp}/${run.xpNext} → МУТАЦИЯ`;
         this.levelText.setText(causalLabel);
-        const availableLabelWidth =
-          this.timerText.x - this.timerText.width / 2 - this.levelText.x - 8;
         let levelLabel = causalLabel;
         if (this.levelText.width > availableLabelWidth) {
           levelLabel = `РНК ${run.xp}/${run.xpNext}`;
@@ -454,7 +466,6 @@ export class UIScene extends Phaser.Scene {
           levelLabel = `РНК ${compactHudNumber(run.xp)}/${compactHudNumber(run.xpNext)}`;
           this.levelText.setText(levelLabel);
         }
-        this.lastLevelLabel = levelLabel;
       }
       this.layoutRnaPickupFeedback();
       if (run.kills !== this.lastKills) {
@@ -1291,7 +1302,7 @@ export class UIScene extends Phaser.Scene {
 
   private invalidateHudTextCache(): void {
     this.lastTimerLabel = null;
-    this.lastLevelLabel = null;
+    this.lastLevelAvailableWidth = null;
     this.lastKills = null;
     this.lastHpLabel = null;
     this.lastBossName = null;
