@@ -30,15 +30,17 @@ $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secret)
 try { $initData = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr) }
 finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr) }
 if ([string]::IsNullOrWhiteSpace($initData)) { throw 'Empty Telegram initData' }
+$nonce = [Guid]::NewGuid().ToString('N') # retain privately for D1 reconciliation
 $payload = @{
   initData = $initData
   productId = 'currency.rna-pack-s'
-  nonce = [Guid]::NewGuid().ToString('N')
+  nonce = $nonce
 } | ConvertTo-Json -Compress
 $initData = $null
 $response = Invoke-RestMethod -Method POST -ContentType 'application/json' -Uri 'https://ofeliya-payments.chatbot24-cloud.workers.dev/api/invoice' -Body $payload -TimeoutSec 15
 $payload = $null
 if (-not $response.invoiceUrl) { throw 'Invoice not issued' }
+if ($response.nonce -ne $nonce) { throw 'Invoice nonce mismatch; abort without opening' }
 $invoice = [Uri]$response.invoiceUrl
 if ($invoice.Scheme -ne 'https' -or $invoice.Host -ne 't.me') { throw 'Untrusted invoice URL; abort' }
 Write-Host 'Invoice created; Telegram will request explicit payment confirmation.'
@@ -49,7 +51,7 @@ This command sends the request from the operator machine, not through the browse
 
 ## Required reconciliation
 
-After one owner-approved real purchase, perform authenticated read-only D1 checks:
+After one owner-approved real purchase, perform authenticated read-only D1 checks. The local PowerShell variable `$nonce` remains available in that operator session to match the D1 `orders.nonce` and `payments.nonce`; do not paste it into public chat or GitHub:
 - Order is paid with the intended user, product, price, and nonce.
 - Exactly one payment exists with the actual nonempty Telegram charge ID.
 - One RNA ledger grant exists, increasing purchased_rna by exactly 500.
