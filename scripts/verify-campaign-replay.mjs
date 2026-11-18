@@ -45,9 +45,12 @@
  * Replay advances in chunks between logged event ticks (inputs are
  * piecewise-constant, so chunking is equivalent to per-frame stepping),
  * applies each logged input / choice / transition ack at its tick, then
- * reads getRunLog() + getRngState(). A choice that cannot be applied —
- * no modal open at the logged tick, or the id is not among
- * pendingChoices — is a divergence and fails the run.
+ * reads getRunLog() + getRngState(). A choice whose id is not among
+ * pendingChoices when the modal opens is a divergence and fails the run.
+ * If the modal has not opened yet at the logged tick, the replay waits
+ * up to MAX_CHOICE_WAIT_FRAMES for it (level-up timing shifts by a few
+ * frames between runs — wall-clock Juice dip, design §2.2) and logs the
+ * shift; only a modal that never opens within the window fails the run.
  *
  * The two runs use fresh browser contexts (localStorage isolation, §4.3).
  * Bit-identity is guaranteed only inside one Chromium in CI (§2.4).
@@ -79,6 +82,16 @@ const EXIT_API_MISSING = 2;
 
 const API_VERSION = 1;
 const TAIL_FRAMES = 60;
+// Bounded wait for the mutation modal when a recorded choice tick arrives
+// before the modal opens in the replay. Level-up timing shifts by a few
+// frames between runs because the Juice hit-stop dip runs on wall-clock
+// (tween.js/performance.now, design §2.2) and stretches scene time
+// differently per run (parity DIVERGED, first divergence frame 107).
+// Without the wait the replay crashes at the first shifted choice and
+// never reaches the hash comparison. The wait is LOGGED (choiceWaits)
+// so a shifted application stays visible in the verdict; it does not
+// hide divergence — the stateHash comparison still decides MATCH/DIVERGED.
+const MAX_CHOICE_WAIT_FRAMES = 120;
 const DIFFICULTIES = ['standard', 'strained'];
 
 function usageError(message) {
@@ -266,6 +279,36 @@ async function runOnce(browser, { seed, difficulty, inputs, choices, transitions
       ...new Set([...inputByTick.keys(), ...choicesByTick.keys(), ...transitionTicks]),
     ].sort((a, b) => a - b);
 
+    const applyInput = (entry) =>
+      page.evaluate((e) => {
+        const payload = { moveX: e.move[0], moveY: e.move[1] };
+        if (e.aim) {
+          payload.aimX = e.aim[0];
+          payload.aimY = e.aim[1];
+        }
+        window.__ofeliyaTest.setInput(payload);
+      }, entry);
+    const tryApplyChoice = (id) =>
+      page.evaluate((choiceId) => {
+        const api = window.__ofeliyaTest;
+        const state = api.readState();
+        if (!state.awaitingChoice) {
+          return { applied: false, reason: 'no mutation modal open', pending: state.pendingChoices };
+        }
+        if (!state.pendingChoices.includes(choiceId)) {
+          return { applied: false, reason: 'id not among pendingChoices', pending: state.pendingChoices };
+        }
+        api.chooseUpgrade(choiceId);
+        return { applied: true };
+      }, id);
+    const ackedTransitions = new Set();
+    const ackTransition = async (tickValue) => {
+      if (ackedTransitions.has(tickValue)) return;
+      ackedTransitions.add(tickValue);
+      await page.evaluate(() => window.__ofeliyaTest.acknowledgeTransition());
+    };
+
+    const choiceWaits = [];
     let tick = 0;
     for (const at of eventTicks) {
       if (at > tick) {
@@ -274,37 +317,40 @@ async function runOnce(browser, { seed, difficulty, inputs, choices, transitions
       }
       const input = inputByTick.get(at);
       if (input) {
-        await page.evaluate((entry) => {
-          const payload = { moveX: entry.move[0], moveY: entry.move[1] };
-          if (entry.aim) {
-            payload.aimX = entry.aim[0];
-            payload.aimY = entry.aim[1];
-          }
-          window.__ofeliyaTest.setInput(payload);
-        }, input);
+        await applyInput(input);
       }
       for (const choice of choicesByTick.get(at) ?? []) {
-        const result = await page.evaluate((id) => {
-          const api = window.__ofeliyaTest;
-          const state = api.readState();
-          if (!state.awaitingChoice) {
-            return { applied: false, reason: 'no mutation modal open', pending: state.pendingChoices };
+        let result = await tryApplyChoice(choice.id);
+        let waited = 0;
+        while (
+          !result.applied &&
+          result.reason === 'no mutation modal open' &&
+          waited < MAX_CHOICE_WAIT_FRAMES
+        ) {
+          await page.evaluate(() => window.__ofeliyaTest.advance(1));
+          tick += 1;
+          waited += 1;
+          const pendingInput = inputByTick.get(tick);
+          if (pendingInput) {
+            await applyInput(pendingInput);
           }
-          if (!state.pendingChoices.includes(id)) {
-            return { applied: false, reason: 'id not among pendingChoices', pending: state.pendingChoices };
+          if (transitionTicks.has(tick)) {
+            await ackTransition(tick);
           }
-          api.chooseUpgrade(id);
-          return { applied: true };
-        }, choice.id);
+          result = await tryApplyChoice(choice.id);
+        }
+        if (waited > 0) {
+          choiceWaits.push({ id: choice.id, recordedTick: at, appliedTick: tick, waited });
+        }
         if (!result.applied) {
           throw new Error(
             `choice ${choice.id} at tick ${at} could not be applied (${result.reason}; ` +
-              `pending: ${JSON.stringify(result.pending)}) — the replay diverged from the recorded run`
+              `pending: ${JSON.stringify(result.pending)}; waited ${waited} frames) — the replay diverged from the recorded run`
           );
         }
       }
       if (transitionTicks.has(at)) {
-        await page.evaluate(() => window.__ofeliyaTest.acknowledgeTransition());
+        await ackTransition(at);
       }
     }
     await page.evaluate((frames) => window.__ofeliyaTest.advance(frames), TAIL_FRAMES);
@@ -312,7 +358,7 @@ async function runOnce(browser, { seed, difficulty, inputs, choices, transitions
     const log = await page.evaluate(() => window.__ofeliyaTest.getRunLog());
     const rngState = await page.evaluate(() => window.__ofeliyaTest.getRngState());
     const state = await page.evaluate(() => window.__ofeliyaTest.readState());
-    return { log, rngState, state, errors };
+    return { log, rngState, state, errors, choiceWaits };
   } finally {
     await ctx.close();
   }
@@ -381,6 +427,12 @@ async function main() {
     for (const [label, run] of [['first', first], ['second', second]]) {
       for (const error of run.errors) {
         console.warn(`warning: pageerror during ${label} run: ${error}`);
+      }
+      for (const wait of run.choiceWaits) {
+        console.log(
+          `choice wait during ${label} run: ${wait.id} ` +
+            `recorded@${wait.recordedTick} applied@${wait.appliedTick} (+${wait.waited}f)`
+        );
       }
     }
 
