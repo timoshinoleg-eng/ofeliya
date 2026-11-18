@@ -34,6 +34,12 @@
  * - The page loads with ?qaHide=gems,atmo,ui (visibility ONLY — logic,
  *   physics and timers still run; see qaHide.ts). It keeps ~18k stepped
  *   renders cheap; the compared series are logic time, not pixels.
+ * - The page loads with ?renderer=canvas (the game's own override):
+ *   under VM memory pressure the SwiftShader GPU process can die, the
+ *   page loses its WebGL context, and installWebGLRecovery() answers
+ *   with window.location.reload() — which destroyed a run at ~12k
+ *   frames of the 1x leg on 2026-11-18. Canvas has no WebGL context
+ *   to lose; the compared series are renderer-independent.
  *
  * Criterion: all series identical within float-rounding tolerance
  * (1e-9 relative). Exit 0 on match, 1 on divergence (with a line-by-line
@@ -62,6 +68,7 @@ const {
   startSteppedCampaign,
   installSurvivalProbe,
   withQaHide,
+  withRenderer,
 } = require('./lib/harness-browser.cjs');
 
 const EXIT_MATCH = 0;
@@ -324,7 +331,11 @@ async function main() {
   const maxFrames = args['max-frames'] === undefined ? 19000 : Number(args['max-frames']);
   if (!Number.isInteger(maxFrames) || maxFrames <= 0) usageError('--max-frames must be a positive integer');
   const baseUrl = args.url ?? process.env.OFELIYA_URL ?? 'http://127.0.0.1:5176/';
-  const url = withQaHide(baseUrl);
+  // Canvas renderer: see withRenderer() — a WebGL context loss under VM
+  // memory pressure makes the game reload the page (installWebGLRecovery),
+  // which destroyed the 1x leg at ~12k frames on 2026-11-18. Time series
+  // are renderer-independent, so this changes no compared value.
+  const url = withRenderer(withQaHide(baseUrl), 'canvas');
 
   console.log(
     `time-parity-smoke: seed=${seed} difficulty=${difficulty} url=${url} maxFrames=${maxFrames}`

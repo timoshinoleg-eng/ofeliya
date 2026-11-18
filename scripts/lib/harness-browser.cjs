@@ -31,6 +31,25 @@ function withQaHide(baseUrl) {
   return url.toString();
 }
 
+/**
+ * Force a renderer via the game's own ?renderer= override (main.ts:
+ * explicitRenderer() reads the query param; 'canvas' -> Phaser.CANVAS).
+ * Long stepped runs use Canvas: under VM memory pressure the SwiftShader
+ * GPU process can die, the page loses its WebGL context, and the game's
+ * installWebGLRecovery() answers with window.location.reload() — which
+ * destroys the execution context mid-run (observed 2026-11-18: parity run
+ * killed at ~12k frames of the 1x leg, vite also OOM-killed). Canvas has
+ * no WebGL context to lose, so the reload trigger disappears. The time
+ * series the harness compares (loop.delta, runTimeMs, telegraph/boss
+ * moments) are logic, not rendering — the renderer choice cannot change
+ * them.
+ */
+function withRenderer(baseUrl, renderer) {
+  const url = new URL(baseUrl);
+  url.searchParams.set('renderer', renderer);
+  return url.toString();
+}
+
 function resolveChromeExecutable() {
   if (process.platform === 'win32') return undefined;
   const found = ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(
@@ -177,6 +196,7 @@ async function readAutoChoices(page) {
 module.exports = {
   VIEWPORT,
   withQaHide,
+  withRenderer,
   resolveChromeExecutable,
   launchHarnessBrowser,
   newHarnessPage,
