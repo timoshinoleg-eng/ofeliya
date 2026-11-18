@@ -96,9 +96,9 @@ class CampaignBot {
     this.lastStageId = null;
     this.lastPhase = null;
     // Own upgrade stacks (from chooseUpgrade calls — the bot's own build,
-    // not readState, which does not expose stacks). Diagnostic only since
-    // cycle 4 (the AoE distance shrink it drove was reverted: the ring's
-    // 340 ms/enemy cooldown makes it a chip grinder, not a wall).
+    // not readState, which does not expose stacks). Cycle 5: drives the
+    // regen sustain rule in UpgradePolicy (cap 2 stacks); the AoE
+    // distance shrink they drove in cycles 2-3 stays reverted.
     this.stacks = {};
     this.wasDwelling = false;
   }
@@ -255,8 +255,8 @@ class CampaignBot {
 
   /**
    * Pick a mutation from the pending offers (UpgradePolicy table).
-   * Records the pick in this.stacks (the bot's own build — diagnostic
-   * only since cycle 4).
+   * Records the pick in this.stacks (the bot's own build). The stacks are
+   * passed to the policy (cycle 5: the regen sustain rule caps at 2).
    * @param {object} snapshot HarnessState (must have pendingChoices).
    * @returns {string} chosen upgrade id.
    */
@@ -269,6 +269,7 @@ class CampaignBot {
       phase: snapshot.phase,
       bossKind: snapshot.boss ? snapshot.boss.kind : null,
       hpRatio: player.maxHp > 0 ? player.hp / player.maxHp : 1,
+      stacks: this.stacks,
     });
     this.stacks[id] = (this.stacks[id] || 0) + 1;
     return id;

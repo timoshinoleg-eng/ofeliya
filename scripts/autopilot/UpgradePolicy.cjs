@@ -68,6 +68,22 @@ const TABLES = {
 // Below this HP ratio an offered 'heal' beats everything except a legendary
 // or an evolution (those are one-time offers — never skip them).
 const HEAL_THRESHOLD = 0.3;
+// Cycle 5 (survivability): the bot bleeds ~0.5-1 HP/s from ~30 s onward in
+// every run (std-001: 100 -> 19 HP by 150 s; std-002: 100 -> 1 by 135 s)
+// with zero sustain — regen was offered and passed every time. Regen is
+// +0.6 HP/s per stack (UpgradeSystem.ts), so one stack nearly cancels the
+// bleed and two (+1.2/s) out-heal it; over a 300 s run one early stack is
+// worth ~+180 HP. 'hp' is +25 max HP and +25 HP immediately. The rules:
+//   - hurt (hpRatio < 0.6) + 'hp' offered -> take it (immediate +25);
+//   - regen stacks < 2 + 'regen' offered -> take it (compounds over time).
+// Both sit below legendary/evolution/emergency-heal and above the damage
+// tables. The tables themselves stay damage-first (the cycle-1 lesson
+// stands: hp-first EARLY picks stall XP); the sustain rules are gated
+// exceptions, not a table reorder. The bot's stacks come from the caller
+// (CampaignBot tracks its own picks); without stacks info the regen rule
+// treats the count as 0 and the game itself caps regen at 3 stacks.
+const HP_HURT_THRESHOLD = 0.6;
+const REGEN_STACK_CAP = 2;
 
 function bucketFor(context) {
   if (context.bossKind === 'cardiac-titan') return 'titan';
@@ -87,7 +103,8 @@ function firstAvailable(priorityList, pendingChoices) {
 /**
  * @param {string[]} pendingChoices ids from readState().pendingChoices.
  * @param {object} context { difficultyId, stageId, stageTimeMs, phase,
- *   bossKind|null, hpRatio }
+ *   bossKind|null, hpRatio, stacks? } — stacks is the bot's own pick counts
+ *   ({ regen: n, ... }); absent = unknown (regen rule assumes 0).
  * @returns {string} chosen id (always one of pendingChoices).
  */
 function chooseUpgrade(pendingChoices, context) {
@@ -108,6 +125,15 @@ function chooseUpgrade(pendingChoices, context) {
   const hpRatio = Number.isFinite(context.hpRatio) ? context.hpRatio : 1;
   if (hpRatio <= HEAL_THRESHOLD && pendingChoices.includes('heal')) return 'heal';
 
+  // 3b. Sustain (cycle 5): hurt + 'hp' offered -> +25 HP now.
+  if (hpRatio < HP_HURT_THRESHOLD && pendingChoices.includes('hp')) return 'hp';
+
+  // 3c. Sustain (cycle 5): regen below cap -> +0.6 HP/s for the rest of
+  // the run. Value scales with remaining run time, so take it whenever
+  // offered while under the cap.
+  const regenStacks = (context.stacks && context.stacks.regen) || 0;
+  if (regenStacks < REGEN_STACK_CAP && pendingChoices.includes('regen')) return 'regen';
+
   // 4. Deterministic table by difficulty + bucket.
   const table = (TABLES[context.difficultyId] || TABLES.standard)[bucketFor(context)];
   const pick = firstAvailable(table, pendingChoices);
@@ -123,6 +149,8 @@ module.exports = {
   EVOLUTION_PRIORITY,
   TABLES,
   HEAL_THRESHOLD,
+  HP_HURT_THRESHOLD,
+  REGEN_STACK_CAP,
   bucketFor,
   chooseUpgrade,
 };

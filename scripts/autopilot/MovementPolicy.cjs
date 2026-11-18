@@ -305,14 +305,20 @@ function computeMove(snapshot, profile, opts) {
         const strength = 0.6 + Math.min(0.4, (near.dist - ENGAGE_FAR) / 400);
         mx += toward.x * strength;
         my += toward.y * strength;
-      } else if (near.dist >= nearRadius && near.dist < nearRadius * 1.4) {
-        // Strafe only in the annulus OUTSIDE the (per-kind) danger radius.
-        // Cycle 4: inside the radius the tangent must NOT dilute the flee —
-        // a bot circling tangentially at 180 px/s lets a runner close at
-        // its full 152 px/s (tangential motion does not change the
-        // distance), while pure radial repulsion outruns it. Inside the
-        // radius the repulsion sum alone steers the bot (it points away
-        // from the whole local crowd, not just the nearest enemy).
+      } else if (near.dist < nearRadius * 1.4
+        && (near.dist >= nearRadius || near.enemy.kind !== 'runner')) {
+        // Strafe in the annulus OUTSIDE the (per-kind) danger radius, and
+        // — cycle 5 — also INSIDE the radius when the nearest enemy is
+        // SLOW (swarm 92 / brute 56 / anomaly 74 px/s). Cycle 4 suppressed
+        // the tangent inside the radius for ALL kinds, and the bot bled
+        // out to swarmers: pure repulsion is near-zero at 100-150 px
+        // (falloff^2), so the bot stood almost still while swarmers walked
+        // up (std-001/std-002: nearly every hit is 8-10 dmg = swarmer).
+        // The strafe moves the bot at 0.7 x 180 = 126 px/s tangentially —
+        // faster than any slow enemy, so they can never catch a strafing
+        // bot — but slower than a runner (152 px/s), which cuts the corner
+        // and closes at full speed. So only runners get the pure radial
+        // flee inside their radius; slow enemies get the strafe back.
         const dx = px - near.enemy.x;
         const dy = py - near.enemy.y;
         const d = near.dist || 1;
