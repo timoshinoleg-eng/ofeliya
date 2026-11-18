@@ -39,7 +39,7 @@ New independent `POST /api/telegram/ingress` route (keep legacy `POST /api/webho
 5. Deploy Worker code **with new ingress route dormant**; prove legacy route untouched and reject tests against new ingress fail closed. Set Worker `TG_WEBHOOK_SECRET` **identically to Render's existing `TG_WEBHOOK_SECRET`** using the secret UI. Before any switch, perform an authenticated nonpayment ingress smoke against the dormant endpoint and verify the command is accepted by Render and its reply is forwarded. Never send synthetic payment-success objects to the production Worker. No webhook switch yet.
 6. Snapshot actual Telegram webhook configuration; controlled `setWebhook(new URL,secret_token,allowed_updates,drop_pending_updates=false)` only at explicit final release gate; smoke all commands & referrals first, then precheckout under idle, legitimate Stars grant and refund in controlled amounts.
 7. Rollback plan: restore old Render URL, secret and allowed_updates with `drop_pending_updates=false`; preserve D1 journal, reconcile payments, retry pending. Do not downgrade D1 or clear pending updates.
-8. Leave `VITE_PAYMENTS_API_URL` disabled until all mandatory payment gates pass. First purchase should be manual user-approved, then verify `payments`, `wallet_ledger`, `wallets`, subsequent purchase and refund/renewal.
+8. Leave `VITE_PAYMENTS_API_URL` disabled during **operator backend payment smoke**. Generate a real signed invoice using the human-reviewed local PowerShell procedure in `docs/stars-operator-payment-smoke.md`, which accepts fresh Telegram Mini App `initData` via hidden prompt and directly calls Worker `/api/invoice` without enabling the storefront or relaxing CSP. First purchase must be explicitly human-approved; then reconcile `payments`, `wallet_ledger`, `wallets`, refund and subscription controls. Only after the backend gate passes: controlled client UI verification, then gradual public storefront enablement.
 
 ## Explicit non-goals
 
@@ -63,6 +63,6 @@ Do not change Phaser game RNG, audio, Umami, render hosting tier, server authori
 
 - [ ] `/start`, `/help`, `/paysupport`, referral registration and command replies work on the **actual bot**
 - [ ] Actual precheckout after long Render idle is answered by Telegram within 10s end-to-end with safety margin
-- [ ] Controlled legitimate low-value Stars payment, D1 payment+wallet grant, duplicate webhook replay, refund and subscription lifecycle reconciled
+- [ ] Controlled legitimate low-value Stars payment through `docs/stars-operator-payment-smoke.md` (no public storefront), D1 payment+wallet grant, duplicate webhook replay, refund and subscription lifecycle reconciled
 - [ ] Only after all payment checks: `VITE_PAYMENTS_API_URL` enabled on Render and purchase UI allowed
 - [ ] Any failure triggers `setWebhook` rollback to the captured Render URL and old allowed_updates, with `drop_pending_updates=false` and D1 transaction reconciliation
