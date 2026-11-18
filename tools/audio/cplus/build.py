@@ -189,6 +189,68 @@ def write_repo_manifest(out: Path, manifest_path: Path) -> None:
     print(f"[build] wrote {manifest_path} ({len(assets)} assets)")
 
 
+def qa_one(track_id: str, out: Path) -> dict:
+    """Re-measure an already rendered package without re-rendering it.
+
+    Used when only a measurement rule changed: the audio files stay byte for
+    byte the same, but the QA reports and the manifest are refreshed.
+    """
+    info = compositions.TRACK_INFO[track_id]
+    wav_path = out / "wav" / f"{track_id}.wav"
+    if not wav_path.exists():
+        raise SystemExit(f"{wav_path} is missing — run a full build first")
+    mastered_data, sr = metrics.read(wav_path)
+    m = metrics.measure_file(wav_path)
+    report = {
+        "id": track_id,
+        "title": info["title"],
+        "role": info["role"],
+        "loop": info["loop"],
+        "act": info["act"],
+        "bars": info["bars"],
+        "bpm": compositions.BPM,
+        "mastering": {
+            "highpassHz": master.HPF_HZ,
+            "punchHz": master.PUNCH_HZ,
+            "punchGainDb": master.PUNCH_GAIN_DB,
+            "airHz": master.AIR_HZ,
+            "airGainDb": master.AIR_GAIN_DB,
+            "targetLufs": master.TARGET_LUFS,
+            "limiterCeilingDbTp": master.LIMITER_CEILING_DBTP,
+        },
+        "files": {},
+        "measured": m,
+        "qa": {
+            "seam": metrics.seam_report(mastered_data, sr),
+            "mono": metrics.mono_report(mastered_data, sr),
+            "fatigue": metrics.fatigue_report(mastered_data, sr),
+            "speakerEmulation": metrics.emulate_small_speaker(mastered_data, sr),
+        },
+    }
+    for kind, rel in (("wav", f"wav/{track_id}.wav"), ("ogg", f"ogg/{track_id}.ogg"), ("mp3", f"mp3/{track_id}.mp3")):
+        path = out / rel
+        if path.exists():
+            fm = metrics.measure_file(path)
+            fm["sha256"] = metrics.sha256_of(path)
+            report["files"][kind] = fm
+    if info["loop"]:
+        report["qa"]["loopChecks"] = {
+            "durationSec": m["durationSec"],
+            "inTargetBand": 60.0 <= m["durationSec"] <= 90.0,
+            "seamless": report["qa"]["seam"]["seamless"],
+            "monoSafe": report["qa"]["mono"]["monoSafe"],
+        }
+    (out / "analysis" / f"{track_id}.json").write_text(
+        json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    seam = report["qa"]["seam"]
+    print(
+        f"         {m['durationSec']:7.2f}s  {m['lufs']:7.2f} LUFS  TP {m['truePeakDbTp']:6.2f}  "
+        f"seam {seam['sampleJumpRel']:.5f}  seamless={seam['seamless']}"
+    )
+    return report
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True, help="output directory for the package")
@@ -200,6 +262,11 @@ def main() -> None:
         action="store_true",
         help="skip rendering; only refresh the game manifest from an existing package",
     )
+    ap.add_argument(
+        "--qa-only",
+        action="store_true",
+        help="skip rendering; re-measure the existing package and refresh the analysis reports",
+    )
     args = ap.parse_args()
 
     out = Path(args.out).resolve()
@@ -210,6 +277,16 @@ def main() -> None:
         if not args.manifest_out:
             raise SystemExit("--manifest-only needs --manifest-out")
         write_repo_manifest(out, Path(args.manifest_out).resolve())
+        return
+
+    if args.qa_only:
+        ids = list(compositions.COMPOSERS.keys())
+        if args.only:
+            ids = [args.only]
+        for track_id in ids:
+            qa_one(track_id, out)
+        if args.manifest_out:
+            write_repo_manifest(out, Path(args.manifest_out).resolve())
         return
 
     ids = list(compositions.COMPOSERS.keys())

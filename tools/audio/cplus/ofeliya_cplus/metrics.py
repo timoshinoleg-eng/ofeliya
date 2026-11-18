@@ -422,11 +422,32 @@ def fatigue_report(stereo: np.ndarray, sr: int = SR, window_s: float = 4.0) -> d
     comparison is made across a 16 s lag, which is what `loop16sEcho`
     measures: a genuinely composed 80 s bed scores far below 1.0 there,
     a looped 16 s bed scores above 0.98.
+
+    The detector only makes sense for material that is actually looped: a
+    four-second one-shot stinger has no "far" window to compare against, so
+    the report is marked as not applicable instead of reporting a meaningless
+    number.
     """
+    duration = stereo.shape[0] / float(sr)
+    applicable = duration >= 8.0 * window_s
+    if not applicable:
+        return {
+            "applicable": False,
+            "reason": f"one-shot material ({duration:.1f}s): the loop-repetition detector does not apply",
+            "loop16sEcho": None,
+            "farSimilarityMean": None,
+            "nearSimilarityMean": None,
+            "farSimilarPairsPct": None,
+            "distinctWindows": 0,
+            "windowSec": window_s,
+            "repetitionRisk": "n/a",
+        }
     mono = mono_of(stereo)
     win = int(window_s * sr)
     if mono.size < 4 * win:
-        return {"loop16sEcho": 1.0, "farSimilarityMean": 1.0, "farSimilarPairsPct": 100.0, "repetitionRisk": "high"}
+        return {"applicable": False, "loop16sEcho": None, "farSimilarityMean": None,
+                "nearSimilarityMean": None, "farSimilarPairsPct": None,
+                "distinctWindows": 0, "windowSec": window_s, "repetitionRisk": "n/a"}
     hop = win // 2
     feats = []
     for start in range(0, mono.size - win, hop):
@@ -454,6 +475,7 @@ def fatigue_report(stereo: np.ndarray, sr: int = SR, window_s: float = 4.0) -> d
     near_mean = float(np.mean(near_vals)) if near_vals else far_mean
     far_pct = float(np.mean(far_arr > 0.98) * 100.0)
     return {
+        "applicable": True,
         "loop16sEcho": round(echo, 4),
         "farSimilarityMean": round(far_mean, 4),
         "nearSimilarityMean": round(near_mean, 4),

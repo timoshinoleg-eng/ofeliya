@@ -194,9 +194,16 @@ def main() -> None:
     )
 
     lines.append("\n## 6. Утомляемость: детектор короткого цикла\n")
+    lines.append(
+        "Детектор применим только к зацикливаемым beds: для коротких one-shot "
+        "сигналов он не имеет смысла и помечен как «не применимо».\n\n"
+    )
     lines.append("| Трек | эхо на 16 с | сходство далёких окон | доля почти идентичных пар | риск |\n|---|---|---|---|---|\n")
     for r in rows:
         f = r["v4fatigue"]
+        if not f.get("applicable", True):
+            lines.append(f"| {r['title']} | — | — | — | не применимо (one-shot) |")
+            continue
         lines.append(
             f"| {r['title']} | {fmt(f['loop16sEcho'], 3)} | {fmt(f['farSimilarityMean'], 3)} | "
             f"{fmt(f['farSimilarPairsPct'], 2)} % | {f['repetitionRisk']} |"
