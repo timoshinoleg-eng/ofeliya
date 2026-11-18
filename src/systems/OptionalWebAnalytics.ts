@@ -30,6 +30,8 @@ export interface OptionalWebAnalyticsOptions {
 export interface OptionalWebAnalyticsClient {
   /** Resolves true after the script loads, false when disabled or unavailable. */
   ready: Promise<boolean>;
+  /** Tracks one manual pageview with a fixed route, never Telegram launch credentials. */
+  trackPageview(): boolean;
   /** Sends one allowlisted event when Umami is already available. */
   track(event: OptionalWebEvent | string, properties?: Record<string, unknown>): boolean;
 }
@@ -149,6 +151,19 @@ export function createOptionalWebAnalytics(options: OptionalWebAnalyticsOptions 
 
   return {
     ready,
+    trackPageview() {
+      if (!config) return false;
+      const track = windowRef?.umami?.track;
+      if (typeof track !== 'function') return false;
+      try {
+        // Automatic pageviews are intentionally disabled to avoid leaking Telegram
+        // query/hash credentials. A fixed route provides safe visitor statistics.
+        track.call(windowRef?.umami, { website: config.websiteId, url: '/ofeliya', title: 'OFELIYA' });
+        return true;
+      } catch {
+        return false;
+      }
+    },
     track(event, properties = {}) {
       if (!config || !EVENT_NAMES.has(event as OptionalWebEvent)) return false;
       const track = windowRef?.umami?.track;
