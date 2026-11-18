@@ -118,6 +118,9 @@ document.scripts[0].onload();
 assert.equal(await first.ready, true);
 assert.equal(await second.ready, true);
 assert.equal(document.scripts.length, 1, 'loaded script must be deduplicated');
+assert.equal(first.trackPageview(), true, 'manual fixed-path pageview is supported');
+assert.deepEqual(calls, [[{ website:config.websiteId, url:'/ofeliya', title:'OFELIYA' }]], 'pageview must not expose launch credentials');
+calls.length = 0;
 assert.equal(first.track('win', {
   mode: 'daily', result: 'win', durationBucket: 'under_1m', questCount: 3,
   telegramUserId: '12345', initData: 'sensitive', url: 'https://secret.invalid/?x=1',
