@@ -129,6 +129,11 @@ class SfxImpl {
   private cplusAbort: AbortController | null = null;
   private cplusRequestId = 0;
   private cplusActive = false;
+  /** Live run-end stinger, so a fast restart can cut it. */
+  private cplusStingerSrc: AudioBufferSourceNode | null = null;
+  private cplusStingerGain: GainNode | null = null;
+  /** Run-end stinger requested while muted; played when the sound comes back. */
+  private cplusPendingStinger: CPlusBedRole | null = null;
 
   // One persistent oscillator is cheaper than spawning heartbeat nodes every beat. Gain remains
   // virtually silent between pulses; setRunIntensity only schedules a short envelope.
@@ -175,9 +180,19 @@ class SfxImpl {
       this.resetMusicDuck();
       this.disarmMusicUnlockRetry();
       if (!this.musicSrc) this.cancelMusicLoad();
-    } else if (this.musicWanted) {
-      this.startMusic();
-      this.ensureBioAmbience();
+    } else {
+      if (this.musicWanted) {
+        this.startMusic();
+        this.ensureBioAmbience();
+      }
+      // A run-end signal requested while muted is delivered now, so the
+      // outcome is not lost. This must not depend on `musicWanted`: the bed
+      // may already be stopped while the result screen is still up.
+      const pending = this.cplusPendingStinger;
+      if (pending) {
+        this.cplusPendingStinger = null;
+        this.startCPlusStingerAudible(pending);
+      }
     }
   }
 
@@ -762,17 +777,29 @@ class SfxImpl {
    * C+ v4 bed (opt-in). The bed is cross-faded over `fadeMs` so an act or
    * boss switch never clicks. The production bed is released first: in a C+
    * session the licensed CC0 bed and the C+ bed must never sound together.
+   *
+   * The requested role is recorded *before* the mute check. Unmuting has to
+   * resume the bed the run is actually on, not the one that happened to be
+   * requested when the game was silent.
    */
   startCPlusBed(role: CPlusBedRole, fadeMs = 700): void {
-    if (this.muted) return;
+    this.cplusRole = role;
     this.cplusActive = true;
     this.musicWanted = true;
+    // A new bed replaces the previous run's outcome signal.
+    this.stopCPlusStinger();
     // The licensed bed and the C+ bed are mutually exclusive: the production
     // source is released before the C+ bed is started, cached or not.
     this.stopCurrentMusicSource();
     this.musicBuf = null;
     this.actualBedIndex = null;
     this.cancelMusicLoad();
+    if (this.muted) return;
+    this.startCPlusBedAudible(role, fadeMs);
+  }
+
+  /** Audible part of `startCPlusBed`: cached buffer, or a fresh load. */
+  private startCPlusBedAudible(role: CPlusBedRole, fadeMs: number): void {
     const cached = this.cplusBuffers[role];
     if (cached) {
       this.swapCPlusBed(cached, role, fadeMs);
@@ -780,8 +807,11 @@ class SfxImpl {
     }
     const ctx = this.ensure();
     if (!ctx) return;
-    const requestId = ++this.cplusRequestId;
+    // Cancel the previous load FIRST: `cancelCPlusLoad` bumps the generation
+    // counter, so assigning the new id before the cancel would immediately
+    // mark the new request as stale and nothing would ever be fetched.
     this.cancelCPlusLoad();
+    const requestId = ++this.cplusRequestId;
     const controller = new AbortController();
     this.cplusAbort = controller;
     void this.loadCPlusBed(ctx, role, requestId, controller, fadeMs).finally(() => {
@@ -789,10 +819,22 @@ class SfxImpl {
     });
   }
 
-  /** One-shot C+ stinger (run end). Plays through the layer bus, so the
-   *  run-end music duck does not swallow the outcome signal. */
+  /**
+   * One-shot C+ stinger (run end). Plays through the layer bus, so the
+   * run-end music duck does not swallow the outcome signal.
+   *
+   * While muted the stinger is remembered, not played: the outcome signal has
+   * to reach the player when the sound comes back, and it must never survive
+   * into the next run.
+   */
   playCPlusStinger(role: CPlusBedRole): void {
+    this.cplusPendingStinger = role;
     if (this.muted) return;
+    this.cplusPendingStinger = null;
+    this.startCPlusStingerAudible(role);
+  }
+
+  private startCPlusStingerAudible(role: CPlusBedRole): void {
     const ctx = this.ensure();
     const out = this.layerBus ?? this.musicGain;
     if (!ctx || !out) return;
@@ -801,8 +843,9 @@ class SfxImpl {
       this.playCPlusBuffer(cached, out);
       return;
     }
-    const requestId = ++this.cplusRequestId;
+    // Cancel first, then assign the generation: see `startCPlusBedAudible`.
     this.cancelCPlusLoad();
+    const requestId = ++this.cplusRequestId;
     const controller = new AbortController();
     this.cplusAbort = controller;
     void this.loadCPlusStinger(ctx, role, requestId, controller);
@@ -816,12 +859,14 @@ class SfxImpl {
     fadeMs: number
   ): Promise<void> {
     for (const file of CPLUS_BED_SOURCES[role]) {
-      if (controller.signal.aborted || requestId !== this.cplusRequestId) return;
-      const buffer = await this.fetchCPlus(ctx, file, requestId, controller);
-      if (!buffer) return;
-      if (requestId !== this.cplusRequestId) return;
-      this.cplusBuffers[role] = buffer;
-      this.swapCPlusBed(buffer, role, fadeMs);
+      if (this.cplusStale(requestId, controller)) return;
+      const result = await this.fetchCPlus(ctx, file, requestId, controller);
+      if (result.kind === 'stale') return;
+      // A fetch or decode failure is not a cancellation: try the next
+      // candidate so the MP3 fallback still works on iOS.
+      if (result.kind === 'failed') continue;
+      this.cplusBuffers[role] = result.buffer;
+      this.swapCPlusBed(result.buffer, role, fadeMs);
       return;
     }
     console.warn('[OFELIYA audio] unable to load a C+ bed', { role });
@@ -834,35 +879,48 @@ class SfxImpl {
     controller: AbortController
   ): Promise<void> {
     for (const file of CPLUS_BED_SOURCES[role]) {
-      if (controller.signal.aborted || requestId !== this.cplusRequestId) return;
-      const buffer = await this.fetchCPlus(ctx, file, requestId, controller);
-      if (!buffer) return;
-      if (requestId !== this.cplusRequestId) return;
-      this.cplusBuffers[role] = buffer;
+      if (this.cplusStale(requestId, controller)) return;
+      const result = await this.fetchCPlus(ctx, file, requestId, controller);
+      if (result.kind === 'stale') return;
+      if (result.kind === 'failed') continue;
+      this.cplusBuffers[role] = result.buffer;
       const out = this.layerBus ?? this.musicGain;
       if (!out) return;
-      this.playCPlusBuffer(buffer, out);
+      this.playCPlusBuffer(result.buffer, out);
       return;
     }
     console.warn('[OFELIYA audio] unable to load a C+ stinger', { role });
   }
 
-  /** Fetch + decode one C+ candidate; returns null when the request was superseded. */
+  /** True when this request was aborted or superseded by a newer one. */
+  private cplusStale(requestId: number, controller: AbortController): boolean {
+    return controller.signal.aborted || requestId !== this.cplusRequestId;
+  }
+
+  /**
+   * Fetch + decode one C+ candidate.
+   *
+   * The result distinguishes a *failure* (the file is missing or the WebView
+   * cannot decode it — the caller should try the next candidate) from a
+   * *stale* request (aborted or superseded — the caller must stop).
+   */
   private async fetchCPlus(
     ctx: AudioContext,
     file: string,
     requestId: number,
     controller: AbortController
-  ): Promise<AudioBuffer | null> {
+  ): Promise<
+    { kind: 'ok'; buffer: AudioBuffer } | { kind: 'failed' } | { kind: 'stale' }
+  > {
     try {
       const response = await fetch(audioAssetUrl(file), { signal: controller.signal });
       if (!response.ok) throw new Error('HTTP ' + response.status);
       const buffer = await ctx.decodeAudioData(await response.arrayBuffer());
-      if (controller.signal.aborted || requestId !== this.cplusRequestId) return null;
-      return buffer;
+      if (this.cplusStale(requestId, controller)) return { kind: 'stale' };
+      return { kind: 'ok', buffer };
     } catch {
-      if (controller.signal.aborted || requestId !== this.cplusRequestId) return null;
-      return null;
+      if (this.cplusStale(requestId, controller)) return { kind: 'stale' };
+      return { kind: 'failed' };
     }
   }
 
@@ -902,7 +960,12 @@ class SfxImpl {
     this.cplusActive = true;
   }
 
-  /** Play a decoded C+ buffer as a one-shot through the layer bus. */
+  /**
+   * Play a decoded C+ buffer as a one-shot through the layer bus.
+   *
+   * The source is registered so it can be stopped: a run-end signal must not
+   * survive a fast restart into the next run's music.
+   */
   private playCPlusBuffer(buffer: AudioBuffer, out: GainNode): void {
     const ctx = this.ctx;
     if (!ctx) return;
@@ -914,8 +977,30 @@ class SfxImpl {
     gain.connect(out);
     src.onended = () => {
       try { src.disconnect(); gain.disconnect(); } catch { /* no-op */ }
+      if (this.cplusStingerSrc === src) {
+        this.cplusStingerSrc = null;
+        this.cplusStingerGain = null;
+      }
     };
     src.start();
+    this.cplusStingerSrc = src;
+    this.cplusStingerGain = gain;
+  }
+
+  /** Stop a live C+ stinger and drop a pending one. */
+  private stopCPlusStinger(): void {
+    this.cplusPendingStinger = null;
+    const src = this.cplusStingerSrc;
+    const gain = this.cplusStingerGain;
+    this.cplusStingerSrc = null;
+    this.cplusStingerGain = null;
+    if (src) {
+      try { src.onended = null; src.stop(); } catch { /* already stopped */ }
+      try { src.disconnect(); } catch { /* no-op */ }
+    }
+    if (gain) {
+      try { gain.disconnect(); } catch { /* no-op */ }
+    }
   }
 
   /** Re-create the C+ bed source after a context suspend/resume. */
@@ -935,6 +1020,7 @@ class SfxImpl {
     this.cancelCPlusLoad();
     this.cplusActive = false;
     this.cplusRole = null;
+    this.stopCPlusStinger();
     const src = this.cplusSrc;
     const gain = this.cplusGain;
     this.cplusSrc = null;

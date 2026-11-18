@@ -195,6 +195,43 @@ await test('the director reports its state for the debug overlay', () => {
   assert.equal(d.debugState.state, 'ended');
 });
 
+await test('the opt-in flag survives denied or missing storage', () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  const restore = () => {
+    if (original) Object.defineProperty(globalThis, 'localStorage', original);
+    else delete globalThis.localStorage;
+  };
+
+  try {
+    // 1. storage is absent entirely
+    delete globalThis.localStorage;
+    assert.equal(math.cPlusEnabled('?audio=cplus', math.readStoredCPlusFlag()), true);
+    assert.equal(math.cPlusEnabled('', math.readStoredCPlusFlag()), false);
+
+    // 2. the getter throws SecurityError — a policy denial
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      get() { throw new Error('SecurityError: storage is denied'); },
+    });
+    assert.doesNotThrow(() => math.readStoredCPlusFlag(), 'reading denied storage must not throw');
+    assert.equal(math.readStoredCPlusFlag(), null, 'denied storage reads as "no preference"');
+    assert.equal(math.cPlusEnabled('?audio=cplus'), true, 'the URL flag still works without storage');
+    assert.equal(math.cPlusEnabled(''), false, 'a normal URL stays on the production path');
+    assert.equal(math.cPlusEnabled(undefined), false, 'a missing search string is not the C+ path');
+
+    // 3. storage works
+    const store = new Map([[math.CPLUS_STORAGE_KEY, '1']]);
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      get() { return { getItem: (k) => (store.has(k) ? store.get(k) : null) }; },
+    });
+    assert.equal(math.readStoredCPlusFlag(), '1', 'a stored preference is read');
+    assert.equal(math.cPlusEnabled(''), true, 'the stored preference enables the C+ beds');
+  } finally {
+    restore();
+  }
+});
+
 if (failures) {
   console.error(`${failures} of ${total} C+ audio check(s) failed`);
   process.exit(1);

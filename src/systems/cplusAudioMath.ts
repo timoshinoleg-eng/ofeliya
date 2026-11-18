@@ -198,6 +198,39 @@ export function cPlusStateAfter(
 /** Query-parameter flag that turns the C+ beds on for a QA session. */
 export const CPLUS_QUERY_FLAG = 'audio=cplus';
 
+/** localStorage key holding the persisted opt-in. */
+export const CPLUS_STORAGE_KEY = 'ofeliya.audio.cplus';
+
+/**
+ * Read the stored opt-in flag.
+ *
+ * Storage access can be denied by policy: in that case merely *touching*
+ * `localStorage` throws a `SecurityError` — and a `typeof localStorage` guard
+ * does not catch it, because `typeof` still resolves the property. The whole
+ * access therefore lives inside a try/catch, and a denial is treated as
+ * "no stored preference" instead of aborting the caller.
+ *
+ * `GameScene.create()` constructs the director on every session, so an
+ * exception here would break a normal production URL that has no C+ flag at
+ * all.
+ */
+export function readStoredCPlusFlag(): string | null {
+  try {
+    return localStorage.getItem(CPLUS_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Read the current query string without throwing in exotic hosts. */
+function readSearch(): string | undefined {
+  try {
+    return typeof location !== 'undefined' ? location.search : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Whether the C+ beds are enabled for this session.
  *
@@ -206,11 +239,16 @@ export const CPLUS_QUERY_FLAG = 'audio=cplus';
  * override in local storage.
  */
 export function cPlusEnabled(
-  search: string | undefined = typeof location !== 'undefined' ? location.search : undefined,
-  stored: string | null = typeof localStorage !== 'undefined' ? localStorage.getItem('ofeliya.audio.cplus') : null
+  search: string | undefined = readSearch(),
+  stored: string | null | undefined = readStoredCPlusFlag()
 ): boolean {
   if (stored === '1') return true;
   if (!search) return false;
-  const params = new URLSearchParams(search);
+  let params: URLSearchParams;
+  try {
+    params = new URLSearchParams(search);
+  } catch {
+    return false;
+  }
   return params.get('audio') === 'cplus' || params.get('cplus') === '1';
 }

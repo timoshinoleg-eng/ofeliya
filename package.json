@@ -45,6 +45,7 @@
     "test:audio": "node scripts/check-adaptive-audio.mjs",
     "test:audio-assets": "node scripts/check-audio-assets.mjs",
     "test:cplus-audio": "node tests/cplus-audio.mjs",
+    "test:cplus-webaudio": "node tests/cplus-webaudio.mjs",
     "test:audio-cplus": "node scripts/check-audio-cplus.mjs",
     "test:result-actions": "node scripts/result-actions-smoke.cjs",
     "test:video": "node scripts/video-interstitial-smoke.cjs",
