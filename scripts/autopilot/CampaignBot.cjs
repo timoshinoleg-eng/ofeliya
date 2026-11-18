@@ -96,9 +96,9 @@ class CampaignBot {
     this.lastStageId = null;
     this.lastPhase = null;
     // Own upgrade stacks (from chooseUpgrade calls — the bot's own build,
-    // not readState, which does not expose stacks). Drives the AoE fighting
-    // distance: with orbit/nova owned, the bot must let enemies INSIDE the
-    // AoE ring instead of kiting outside it.
+    // not readState, which does not expose stacks). Diagnostic only since
+    // cycle 4 (the AoE distance shrink it drove was reverted: the ring's
+    // 340 ms/enemy cooldown makes it a chip grinder, not a wall).
     this.stacks = {};
     this.wasDwelling = false;
   }
@@ -181,28 +181,21 @@ class CampaignBot {
       };
     }
 
-    // --- AoE fighting distance ----------------------------------------------
-    // The campaign-std1 run died at 157 s sim with orbit x3 / infect /
-    // lysis owned but unused: kiting at dangerRadius 150 keeps enemies
-    // OUTSIDE the orbit ring (82 px), so the AoE build never deals damage
-    // while the swarm grows. Cycle 2 shrank the radius to 70% with ANY
-    // orbit/nova stack — and died EARLIER (132 s): at orbit x1-2 the ring
-    // (32-64 DPS) does not kill a runner (30 HP, 152 px/s) before it
-    // crosses 105 px to contact (~0.5 s), so the bot ate contact hits with
-    // only ~20 enemies around. The shrink must scale with the ring's
-    // killing power: orbit x0-1 -> no shrink (the x1 ring is a bonus, not
-    // a style); orbit x2 -> 0.85 (standard 128, strained 162); orbit x3+
-    // -> 0.70 (standard 105, strained 133). At x2 (64 DPS) a runner dies
-    // in 0.47 s vs ~0.7 s to close from 128 px; at x3 (97 DPS) it dies in
-    // 0.3 s vs ~0.5 s from 105 px. Nova stacks do not shrink: nova bursts
-    // at 140 px, already inside the base radius. Boss repulsion is
-    // unaffected (it floors at 200 px in MovementPolicy).
-    const orbitStacks = this.stacks.orbit || 0;
-    const aoeFactor = orbitStacks >= 3 ? 0.7 : orbitStacks >= 2 ? 0.85 : 1;
-    const aoeStacks = orbitStacks + (this.stacks.nova || 0);
-    const profile = aoeFactor < 1
-      ? { ...this.profile, dangerRadius: Math.round(this.profile.dangerRadius * aoeFactor) }
-      : this.profile;
+    // --- AoE fighting distance: REVERTED in cycle 4 ------------------------
+    // Cycles 2-3 shrank dangerRadius with orbit stacks (0.7 / stack-scaled)
+    // to let enemies inside the orbit ring — and both died EARLIER than
+    // cycle 1 (132 s vs 157 s sim, same seed/build). The premise was wrong
+    // twice over: runner HP is 12, not 30 (config.ts), and the ring's
+    // 340 ms/enemy hit cooldown caps its real DPS vs a fast crosser — a
+    // runner spends ~0.37 s inside the 82 px ring and takes at most 2
+    // blade hits (22 dmg vs 22 scaled HP: borderline), a swarmer survives
+    // the crossing outright (37 HP at 2 min). The ring is a chip grinder,
+    // not a wall; fighting closer only buys contact hits. The profile
+    // dangerRadius (§3.2, verbatim) is used as-is; the real fixes for the
+    // ~100 s bleed are in MovementPolicy (runner radius, tangent
+    // suppression, brute floor). aoeStacks is kept as a debug diagnostic.
+    const aoeStacks = (this.stacks.orbit || 0) + (this.stacks.nova || 0);
+    const profile = this.profile;
 
     // --- movement ------------------------------------------------------------
     const hpRatio = player.maxHp > 0 ? player.hp / player.maxHp : 1;
@@ -262,8 +255,8 @@ class CampaignBot {
 
   /**
    * Pick a mutation from the pending offers (UpgradePolicy table).
-   * Records the pick in this.stacks (the bot's own build — drives the AoE
-   * fighting distance in decide()).
+   * Records the pick in this.stacks (the bot's own build — diagnostic
+   * only since cycle 4).
    * @param {object} snapshot HarnessState (must have pendingChoices).
    * @returns {string} chosen upgrade id.
    */

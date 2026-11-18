@@ -51,6 +51,22 @@ const DWELL_SAFE_TELEGRAPH = 40;
 // Cells this close are quick to reach and infect: worth it even under
 // pressure or while hurt (the risk/HP gates are waived for them).
 const CLOSE_CELL_RADIUS = 160;
+// Cycle 4: runners (152 px/s) unlock at 90 s (StageDefinitions pickKind)
+// and the ~100 s bleed in all three tuning cycles is theirs — the orbit
+// ring's 340 ms/enemy hit cooldown lets them cross it. A runner needs
+// more reaction distance than the profile radius: +40 px (standard 190,
+// strained 230) so the bot starts fleeing — and bullets start killing
+// (a 22-HP scaled runner dies in ~0.4 s of focused fire) — before the
+// runner is 1 s from contact. The profile dangerRadius itself stays
+// verbatim (§3.2); this is a per-kind radius in the repulsion loop only.
+const RUNNER_RADIUS_BONUS = 40;
+// Cycle 4: brute kindWeight is 0.25 (lowest, per spec — brutes are slow),
+// but a brute hit is 16-20 dmg, the largest single hit, and at weight
+// 0.25 the repulsion (0.27 at 50 px) loses to RNA (0.55) or host-cell
+// (0.6-1.15) attraction — the bot can walk into a brute while farming.
+// Floor the REPULSION strength at 0.5 for brutes (kindWeight itself is
+// untouched: riskAt and the threat map keep the spec weights).
+const BRUTE_REPULSION_FLOOR = 0.5;
 
 function unit(x, y) {
   const d = length(x, y);
@@ -130,9 +146,16 @@ function computeMove(snapshot, profile, opts) {
     const dx = px - enemy.x;
     const dy = py - enemy.y;
     const d = length(dx, dy);
-    if (d >= dangerRadius || d < 1e-6) continue;
-    const falloff = 1 - d / dangerRadius;
-    const strength = kindWeight(enemy.kind, enemy.isElite) * falloff * falloff * 2.4 * repulsionWeight;
+    // Per-kind radius: runners get +40 (cycle 4 — they are the ~100 s
+    // bleed; see RUNNER_RADIUS_BONUS). Brutes get a repulsion floor
+    // (cycle 4 — their 16-20 dmg hit must not lose to gem/cell pull).
+    const radius = enemy.kind === 'runner' ? dangerRadius + RUNNER_RADIUS_BONUS : dangerRadius;
+    if (d >= radius || d < 1e-6) continue;
+    const falloff = 1 - d / radius;
+    const weight = enemy.kind === 'brute'
+      ? Math.max(kindWeight(enemy.kind, enemy.isElite), BRUTE_REPULSION_FLOOR)
+      : kindWeight(enemy.kind, enemy.isElite);
+    const strength = weight * falloff * falloff * 2.4 * repulsionWeight;
     mx += (dx / d) * strength;
     my += (dy / d) * strength;
   }
@@ -271,6 +294,10 @@ function computeMove(snapshot, profile, opts) {
     // while enemies converge. If nothing is near, drift toward the nearest
     // gem/cell (already handled above) or hold a slow patrol circle.
     if (near && near.enemy) {
+      // Per-kind danger radius of the nearest enemy (runners +40, cycle 4).
+      const nearRadius = near.enemy.kind === 'runner'
+        ? dangerRadius + RUNNER_RADIUS_BONUS
+        : dangerRadius;
       if (near.dist > ENGAGE_FAR) {
         // Too far to shoot (weapon range 380): close in so auto-fire stays
         // engaged. Without this the bot outruns its own DPS and kills stall.
@@ -278,7 +305,14 @@ function computeMove(snapshot, profile, opts) {
         const strength = 0.6 + Math.min(0.4, (near.dist - ENGAGE_FAR) / 400);
         mx += toward.x * strength;
         my += toward.y * strength;
-      } else if (near.dist < dangerRadius * 1.4) {
+      } else if (near.dist >= nearRadius && near.dist < nearRadius * 1.4) {
+        // Strafe only in the annulus OUTSIDE the (per-kind) danger radius.
+        // Cycle 4: inside the radius the tangent must NOT dilute the flee —
+        // a bot circling tangentially at 180 px/s lets a runner close at
+        // its full 152 px/s (tangential motion does not change the
+        // distance), while pure radial repulsion outruns it. Inside the
+        // radius the repulsion sum alone steers the bot (it points away
+        // from the whole local crowd, not just the nearest enemy).
         const dx = px - near.enemy.x;
         const dy = py - near.enemy.y;
         const d = near.dist || 1;
@@ -330,6 +364,8 @@ module.exports = {
   DWELL_SAFE_ENEMY,
   DWELL_SAFE_TELEGRAPH,
   CLOSE_CELL_RADIUS,
+  RUNNER_RADIUS_BONUS,
+  BRUTE_REPULSION_FLOOR,
   computeMove,
   projectOutOfTelegraphs,
   unit,
