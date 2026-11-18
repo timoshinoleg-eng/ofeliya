@@ -116,6 +116,7 @@ Dynamic pairs (Kimi): driver `scripts/hud-text-guards-capture.cjs`, same combat 
 - Kimi round: `npx tsc --noEmit` — PASS (re-run on `c2133ba`).
 - Kimi round: 36 dynamic screenshot frames (9 states × 2 builds × 2 viewports) with matching pair metadata; boss and reflow pairs visually compared — PASS.
 - Kimi round: committed probe (`scripts/hud-text-upload-probe.cjs`), visible base-vs-guarded reduction ≈79% on dedicated series (threshold −70%: PASS on the dedicated series; single kill-dense pairs scatter down to −48…−61% due to damage-number uploads, see variability note).
+- Hosted CI green on code head `0ce7c79` (build, production-contract, browser-smoke; run 44397496507). The docs-only follow-up `d145034` (three memory .md lines) failed browser-smoke in the step "Combined Muse convergence cross-flow" — the 25-ms SDK-request race documented as a known flake in project memory (same failure mode previously proven flaky by a same-code green rerun). Same code was green ~30 min earlier; the delta is docs-only, so this is a flake, not a branch defect. Retriggered with empty commit `37dcd39`.
 
 ## Files changed
 
