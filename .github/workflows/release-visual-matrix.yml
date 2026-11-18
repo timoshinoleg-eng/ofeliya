@@ -133,14 +133,18 @@ jobs:
           cat /tmp/ofeliya-preview.log
           exit 1
 
+      # Canvas renderer for the campaign legs (same pace reason as ci.yml:
+      # ~283 ms/frame SwiftShader WebGL vs ~9 ms/frame Canvas — two full
+      # campaigns cannot fit the 60-minute timeout on WebGL). WebGL visuals
+      # are covered by the visual-matrix jobs in this same workflow.
       - name: Campaign release gate (Standard)
         env:
-          OFELIYA_BASE_URL: http://127.0.0.1:4173/
+          OFELIYA_BASE_URL: http://127.0.0.1:4173/?renderer=canvas
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:campaign -- --seed release-standard --difficulty standard
 
       - name: Campaign release gate (Strained)
         env:
-          OFELIYA_BASE_URL: http://127.0.0.1:4173/
+          OFELIYA_BASE_URL: http://127.0.0.1:4173/?renderer=canvas
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:campaign -- --seed release-strained --difficulty strained
 
       - name: Build campaign HTML report

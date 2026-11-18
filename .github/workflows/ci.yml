@@ -555,8 +555,13 @@ jobs:
       - name: Production bundle shape
         run: npm run test:bundle-shape
 
+      # Canvas renderer: measured pace on a CPU-only runner is ~283 ms/frame
+      # on SwiftShader WebGL vs ~9 ms/frame on Canvas (coordinator, 2026-11-18)
+      # — a full ~40k-frame campaign is ~3 h vs ~6 min. The PR gate is a
+      # logic/score/invariants gate; WebGL rendering is covered by the
+      # visual-matrix jobs, not by this campaign.
       - name: Autonomous campaign PR smoke (Standard)
-        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:campaign -- --seed pr-smoke --difficulty standard
+        run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:campaign -- --seed pr-smoke --difficulty standard --url "http://127.0.0.1:5173/?renderer=canvas"
 
       # The runner writes per-run dirs under artifacts/autonomous-campaign/
       # (§6.2); the report generator turns them into artifacts/campaign/.
