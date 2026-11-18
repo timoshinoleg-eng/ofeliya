@@ -53,6 +53,9 @@ export function configureClientExperience(options: {
     if (generation !== analyticsGeneration || !analytics) return;
     if (!ready) { earlyEvents = []; return; }
     webReady = true;
+    // Umami auto-tracking is disabled for launch-credential privacy; send one
+    // fixed-path pageview so Visits/Visitors are counted alongside custom events.
+    analytics.trackPageview();
     const buffered = earlyEvents;
     earlyEvents = [];
     for (const { event, props } of buffered) analytics.track(event, props);
