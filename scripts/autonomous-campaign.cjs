@@ -363,8 +363,14 @@ function browserDriver() {
   const { chromium } = require('playwright-core');
   const executablePath = ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium']
     .find(fs.existsSync);
-  if (!executablePath) throw new Error('Chrome not found');
-  return { chromium, executablePath };
+  if (executablePath) return { chromium, executablePath };
+  // No system Chrome: fall back to Playwright's bundled Chromium (launch
+  // without executablePath resolves it from the Playwright cache). The
+  // /usr/bin/google-chrome symlink proved unreliable in this environment
+  // (it vanished twice on 2026-11-18, incl. across a runtime restart), so
+  // the runner must not hard-fail without it.
+  warn('no system Chrome found; falling back to Playwright bundled Chromium');
+  return { chromium, executablePath: undefined };
 }
 
 // ---------------------------------------------------------------------------
