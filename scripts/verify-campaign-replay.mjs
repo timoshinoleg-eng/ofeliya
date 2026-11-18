@@ -74,7 +74,9 @@ const chrome =
   process.platform === 'win32'
     ? undefined
     : ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(existsSync);
-if (process.platform !== 'win32' && !chrome) throw new Error('Chrome not found');
+// No hard throw when the system-Chrome symlink is absent (it vanished twice
+// on 2026-11-18 after VM recreations): executablePath: undefined lets
+// playwright-core fall back to its bundled Chromium, same as the runner.
 
 const EXIT_MATCH = 0;
 const EXIT_DIVERGED = 1;
@@ -266,6 +268,14 @@ async function runOnce(browser, { seed, difficulty, inputs, choices, transitions
     if (version !== API_VERSION) {
       throw new Error(`unsupported __ofeliyaTest version: ${version} (expected ${API_VERSION})`);
     }
+
+    // Pause before startCampaign so no live RAF frame runs between the run
+    // start and the first advance() — without it the start is
+    // nondeterministic (1-2 live frames) and the tick coordinate shifts vs
+    // the recorded log (systematic divergence at tick 1380, proven by
+    // track C's race probe 5/5: without pause 33.33/16.67 ms, with pause
+    // exactly 16.67 ms).
+    await page.evaluate(() => window.__ofeliyaTest.pause());
 
     await page.evaluate(
       ({ seed: s, difficulty: d }) => window.__ofeliyaTest.startCampaign({ seed: s, difficulty: d }),
