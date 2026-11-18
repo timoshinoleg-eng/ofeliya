@@ -1,0 +1,11 @@
+{
+  "timeMs": 61400,
+  "kills": 13,
+  "hp": null,
+  "boss": {
+    "name": "ИММУННЫЙ ПРАЙМ"
+  },
+  "timer": "01:01",
+  "level": "РНК 0/1000000",
+  "levelFits": true
+}

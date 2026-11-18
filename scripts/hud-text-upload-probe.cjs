@@ -11,7 +11,10 @@
 //     [--frames 240] [--skip 20] [--trace-settext] [--no-kills] [--out result.json]
 //
 // The run starts via scripts/lib/combat-fixture.cjs (mechanic-only fixture:
-// xpNext=1_000_000, no mutation modal). --hud hidden applies
+// xpNext=1_000_000, no mutation modal). The sampling window is in GAME time
+// (--window-start 5000 --window 15000 by default) so paired builds are
+// compared at the same run phase; the first --skip ticks of the window are
+// discarded. --hud hidden applies
 // UIScene.setQaHudHidden(true) right after the run starts. --trace-settext
 // additionally counts Phaser Text.setText calls by resulting string during the
 // sampled window (logical writes; a new Text object also uploads on first
@@ -38,7 +41,11 @@ const url = arg('url', process.env.OFELIYA_URL || 'http://127.0.0.1:4173/');
 const label = arg('label', 'probe');
 const hud = arg('hud', 'visible');
 const [vw, vh] = String(arg('viewport', '390x844')).split('x').map(Number);
-const FRAMES = Number(arg('frames', '240'));
+// Sampling window in GAME time (run.timeMs), so paired builds are compared at
+// the same run phase (wave density drives upload activity). ~240 rAF ticks
+// cover the window in practice; the first 20 ticks are still discarded.
+const WINDOW_START_MS = Number(arg('window-start', '5000'));
+const WINDOW_MS = Number(arg('window', '15000'));
 const SKIP = Number(arg('skip', '20'));
 const out = arg('out', null);
 const traceSetText = flag('trace-settext');
@@ -57,7 +64,7 @@ const percentile = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.floor(
   await ctx.route('https://st.max.ru/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/javascript', body: '' })
   );
-  await ctx.addInitScript(() => {
+  await ctx.addInitScript(({ vpW, vpH }) => {
     localStorage.setItem('ofeliya_save_v1', JSON.stringify({ muted: true, runs: 1 }));
     window.__shared = null;
     window.WebApp = {
@@ -65,7 +72,7 @@ const percentile = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.floor(
       version: '26.20.0',
       initData: 'signed-ci-payload',
       initDataUnsafe: { user: { id: 42, first_name: 'QA', last_name: 'Carrier' } },
-      getViewportSize: async () => ({ width: '360', height: '760' }),
+      getViewportSize: async () => ({ width: String(vpW), height: String(vpH) }),
       shareMaxContent: async (params) => { window.__shared = params; },
       BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} },
       HapticFeedback: { impactOccurred() {}, notificationOccurred() {} },
@@ -95,7 +102,7 @@ const percentile = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.floor(
       requestAnimationFrame(sample);
     };
     requestAnimationFrame(sample);
-  });
+  }, { vpW: vw, vpH: vh });
 
   const page = await ctx.newPage();
   const errors = [];
@@ -151,11 +158,24 @@ const percentile = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.floor(
     });
   }
 
-  // Reset the sampler and collect the requested window of frames.
+  // Reset the sampler when the run reaches the window start (game time), then
+  // read it when the run reaches the window end. This pairs builds at the same
+  // run phase instead of the same rAF count.
+  await page.waitForFunction(
+    (start) => {
+      const run = window.__game.scene.getScene('Game').runState?.run;
+      return run && run.timeMs >= start;
+    },
+    WINDOW_START_MS,
+    { timeout: 180000 }
+  );
   await page.evaluate(() => { window.__texFrames = []; });
   await page.waitForFunction(
-    (n) => window.__texFrames.length >= n,
-    FRAMES + SKIP,
+    (end) => {
+      const run = window.__game.scene.getScene('Game').runState?.run;
+      return run && run.timeMs >= end;
+    },
+    WINDOW_START_MS + WINDOW_MS,
     { timeout: 180000 }
   );
 
@@ -166,7 +186,11 @@ const percentile = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.floor(
     const ext = gl.getExtension('WEBGL_debug_renderer_info');
     return ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : 'unknown';
   });
-  const frames = await page.evaluate((n) => window.__texFrames.slice(0, n), FRAMES + SKIP);
+  const frames = await page.evaluate(() => window.__texFrames);
+  const runState = await page.evaluate(() => {
+    const run = window.__game.scene.getScene('Game').runState?.run;
+    return run ? { timeMs: Math.round(run.timeMs), kills: run.kills } : null;
+  });
   const sample = frames.slice(SKIP);
   const sorted = [...sample].sort((a, b) => a - b);
   const total = sample.reduce((a, b) => a + b, 0);
@@ -179,22 +203,24 @@ const percentile = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.floor(
     url,
     viewport: [vw, vh],
     hud,
-    frames: sample.length,
+    window: [WINDOW_START_MS, WINDOW_START_MS + WINDOW_MS],
+    ticks: sample.length,
     skip: SKIP,
     renderer,
-    mean: Number((total / sample.length).toFixed(3)),
+    meanPerTick: Number((total / sample.length).toFixed(3)),
     p50: percentile(sorted, 50),
     p95: percentile(sorted, 95),
     total,
-    perFrame: sample,
+    runState,
+    perTick: sample,
     ...(noKills ? { control: 'no-kills' } : {}),
     ...(setTextTrace ? { setTextTrace } : {}),
     pageErrors: errors,
   };
   await browser.close();
 
-  const line = `${label}: mean=${result.mean} p50=${result.p50} p95=${result.p95} total=${result.total} ` +
-    `frames=${result.frames} renderer=${renderer} errors=${errors.length}`;
+  const line = `${label}: mean=${result.meanPerTick}/tick p50=${result.p50} p95=${result.p95} total=${result.total} ` +
+    `ticks=${result.ticks} run=${JSON.stringify(runState)} renderer=${renderer} errors=${errors.length}`;
   console.log(line);
   if (errors.length) console.error('page errors:', errors.join(' | '));
   if (out) {
