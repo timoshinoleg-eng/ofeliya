@@ -71,9 +71,13 @@ const EXIT_API_MISSING = 2;
 const REL_TOL = 1e-9;
 const MAX_DIFF_LINES = 20;
 // ~18k stepped frames per leg in software rendering; on a loaded VM a leg
-// takes tens of minutes. 45 min bounds a hung leg without false-failing a
-// slow one.
-const LEG_TIMEOUT_MS = 45 * 60 * 1000;
+// takes tens of minutes. 90 min bounds a hung leg without false-failing a
+// slow one (at 300ms/frame a leg needs 90 min; the timeout's job is to
+// catch hangs, not to pressure slow-but-working legs).
+const LEG_TIMEOUT_MS = 90 * 60 * 1000;
+// Progress line every N stepped frames — a 30-90 min leg with zero output
+// looks hung in CI logs.
+const PROGRESS_EVERY_FRAMES = 3000;
 const BOSS_SPAWN_PHASE = 'BOSS_ACTIVE';
 
 function usageError(message) {
@@ -186,6 +190,7 @@ async function runLeg(browser, { url, seed, difficulty, chunkFrames, maxFrames, 
     await installRecorder(page);
 
     let frames = 0;
+    let nextProgressAt = PROGRESS_EVERY_FRAMES;
     for (;;) {
       const state = await page.evaluate(() => window.__ofeliyaTest.readState());
       if (state.phase === BOSS_SPAWN_PHASE) break;
@@ -201,6 +206,14 @@ async function runLeg(browser, { url, seed, difficulty, chunkFrames, maxFrames, 
       const chunk = Math.min(chunkFrames, maxFrames - frames);
       await page.evaluate((n) => window.__ofeliyaTest.advance(n), chunk);
       frames += chunk;
+      if (frames >= nextProgressAt) {
+        const elapsedS = ((Date.now() - startedAt) / 1000).toFixed(0);
+        console.log(
+          `${label} leg: ${frames} frames, runTimeMs=${state.runTimeMs} ` +
+            `phase=${state.phase} (${elapsedS}s wall)`
+        );
+        nextProgressAt += PROGRESS_EVERY_FRAMES;
+      }
     }
 
     const series = await page.evaluate(() => window.__timeSeries);
