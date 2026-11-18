@@ -140,10 +140,18 @@ function computeMove(snapshot, profile, opts) {
 
   let mx = 0;
   let my = 0;
-  // Cycle 6: flee mode needs to know whether ANY enemy is inside its
-  // per-kind danger radius (threatened) — the repulsion sum alone cannot
-  // tell (it can cancel to ~0 in a symmetric surround).
-  let threatened = false;
+  // Cycle 7: pinpoint dodge needs to know whether ANY enemy is an IMMINENT
+  // threat (inside its dodge threshold — ~0.4 s from contact). Cycle 6's
+  // flee mode used the full danger radius (150/190 px) as the trigger and
+  // fired almost constantly after 60 s: the bot only ran, never fought or
+  // farmed (2 choices at 100 s, 90 enemies, 81 kills on campaign-std1).
+  // The dodge threshold is per-kind, from time-to-contact: a runner at
+  // 85 px and a swarmer at 60 px are both ~0.4 s from contact (contact
+  // is ~25 px; speeds from config.ts: swarm 92 / runner 152 / brute 56 /
+  // anomaly 74). Only the nearest enemy can trigger the dodge (it is the
+  // one about to hit); the flag records the nearest imminent threat.
+  let dodgeThreat = null; // { enemy, dist } — nearest enemy inside its threshold.
+  const DODGE_RADIUS = { runner: 85, swarm: 60, brute: 50, anomaly: 55, boss: 55 };
 
   // --- enemy repulsion (priority 2: crowd pressure) -----------------------
   for (const enemy of snapshot.enemies) {
@@ -154,8 +162,11 @@ function computeMove(snapshot, profile, opts) {
     // bleed; see RUNNER_RADIUS_BONUS). Brutes get a repulsion floor
     // (cycle 4 — their 16-20 dmg hit must not lose to gem/cell pull).
     const radius = enemy.kind === 'runner' ? dangerRadius + RUNNER_RADIUS_BONUS : dangerRadius;
+    const dodgeAt = DODGE_RADIUS[enemy.kind] ?? 60;
+    if (d < dodgeAt && (!dodgeThreat || d < dodgeThreat.dist)) {
+      dodgeThreat = { enemy, dist: d };
+    }
     if (d >= radius || d < 1e-6) continue;
-    threatened = true;
     const falloff = 1 - d / radius;
     const weight = enemy.kind === 'brute'
       ? Math.max(kindWeight(enemy.kind, enemy.isElite), BRUTE_REPULSION_FLOOR)
@@ -200,12 +211,11 @@ function computeMove(snapshot, profile, opts) {
   // of a cell with no enemy or telegraph about to hit it, it stands still
   // until infection completes. The CampaignBot stuck detector (5 s) is the
   // safety valve if cells cluster and dwells chain. No dwell during a boss
-  // fight (lysis is negligible vs boss HP) or while hurt — and (cycle 6)
-  // no dwell while threatened: standing still with an enemy inside the
-  // danger radius is how the bot takes the hit the dwell was supposed to
-  // avoid (the 80 px check alone lets an enemy at 81-150 px close in
-  // during the 1.25 s dwell).
-  if (!seeking && !boss && !threatened && hpRatio >= profile.safeHpRatio) {
+  // fight (lysis is negligible vs boss HP) or while hurt — and (cycle 7)
+  // no dwell while an enemy is an imminent threat (inside its dodge
+  // threshold): standing still with a hit ~0.4 s away is how the bot
+  // takes the hit the dwell was supposed to avoid.
+  if (!seeking && !boss && !dodgeThreat && hpRatio >= profile.safeHpRatio) {
     const cell = nearestInfectableCell(snapshot, px, py);
     if (cell && cell.dist < DWELL_RADIUS && cell.cell.infection < 1) {
       const telegraphClose = snapshot.telegraphs.some(
@@ -218,37 +228,26 @@ function computeMove(snapshot, profile, opts) {
     }
   }
 
-  // --- flee mode (cycle 6): full-speed radial escape when threatened -----
-  // Cycles 4-5 proved the two failure modes of the force-sum kite:
-  //   - cycle 4 (no tangent): pure repulsion is near-zero at 100-150 px
-  //     (falloff^2), so the bot stood almost still and swarmers walked up
-  //     (the ~100 s bleed; nearly every hit is 8-10 dmg = swarmer);
-  //   - cycle 5 (tangent restored): the strafe moves the bot at 126 px/s
-  //     tangentially, and bullets MISS laterally-moving targets — tryFire
-  //     aims at the target's CURRENT position (no leading) and Bullet
-  //     flies straight (no tracking), so a 0.42 s flight to a 200 px
-  //     target lets it displace ~39 px laterally vs an ~11 px hit radius.
-  //     Same seed/build (std-001): cycle 4 = 1.47 kills/s, cycle 5 =
-  //     0.5 kills/s — the strafe costs ~3x bullet DPS.
-  // The fix is one move that answers both: when ANY enemy is inside its
-  // per-kind danger radius, flee at FULL SPEED (magnitude 1) in the
-  // repulsion-sum direction — radial, never tangential. The player (180
-  // px/s) outruns every enemy (swarm 92 / runner 152 / brute 56), so a
-  // full-speed radial flee is never caught; and the chasers approach
-  // head-on, so bullets hit. Attractions (RNA/cells) and the engagement
-  // approach are ignored while threatened — farming while threatened is
-  // how the bot walks into hits. If the repulsion cancels (symmetric
-  // surround), flee directly away from the nearest enemy instead. Boss
-  // fights keep their orbit (the anchor branch below): bosses are big
-  // targets (radius 25 px) and slow (66 px/s), so the strafe does not
-  // cause boss misses. The hard telegraph projection still applies.
-  if (!seeking && !boss && threatened) {
-    let fx = mx;
-    let fy = my;
-    if (length(fx, fy) < 0.1 && near && near.enemy) {
-      fx = px - near.enemy.x;
-      fy = py - near.enemy.y;
-    }
+  // --- pinpoint dodge (cycle 7): full-speed radial escape from the ONE ---
+  // enemy about to hit, and only then. Cycle 6's flee mode fired whenever
+  // ANY enemy was inside the full danger radius (150/190 px) — almost
+  // constantly after 60 s — so the bot only ran, never fought or farmed
+  // (2 choices at 100 s, 90 enemies, 81 kills on campaign-std1): the
+  // coordinator's "excessive fleeing", made worse. The dodge fires only
+  // when the nearest enemy is inside its time-to-contact threshold
+  // (~0.4 s from contact: runner 85 px, swarm 60 px, brute 50 px,
+  // anomaly 55 px). Otherwise the bot fights and farms with the force
+  // sum below — standing still or moving radially, which keeps bullets
+  // accurate (tryFire has no leading, Bullet has no tracking: only
+  // LATERAL motion causes misses, and there is no tangent anywhere in
+  // the no-boss branch). The dodge direction is radial away from the
+  // threatening enemy (not the repulsion sum — the threat is pinpoint).
+  // Boss fights keep their orbit (the anchor branch below): bosses are
+  // big targets (radius 25 px) and slow (66 px/s), so the strafe does
+  // not cause boss misses. The hard telegraph projection still applies.
+  if (!seeking && !boss && dodgeThreat) {
+    const fx = px - dodgeThreat.enemy.x;
+    const fy = py - dodgeThreat.enemy.y;
     const flee = unit(fx, fy);
     const projected = projectOutOfTelegraphs(snapshot, flee);
     return {
@@ -345,10 +344,11 @@ function computeMove(snapshot, profile, opts) {
     // tryFire aims with no leading and Bullet flies straight, so lateral
     // motion lets the target displace ~39 px during a 0.42 s flight vs an
     // ~11 px hit radius (std-001: 1.47 kills/s without the strafe in
-    // cycle 4 vs 0.5/s with it in cycle 5, same seed/build). The
-    // threatened case is handled by flee mode above (full-speed radial
-    // escape); unthreatened, the bot farms or approaches, and the
-    // normalize fallback below keeps it drifting if the forces balance.
+    // cycle 4 vs 0.5/s with it in cycle 5, same seed/build). Imminent
+    // threats are handled by the pinpoint dodge above (full-speed radial
+    // escape when an enemy is ~0.4 s from contact); unthreatened, the
+    // bot farms or approaches, and the normalize fallback below keeps it
+    // drifting if the forces balance.
     if (near && near.enemy) {
       if (near.dist > ENGAGE_FAR) {
         // Too far to shoot (weapon range 380): close in so auto-fire stays
