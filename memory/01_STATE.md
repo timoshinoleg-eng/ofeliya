@@ -1,4 +1,4 @@
-# C+ v4 audio — C+ Mobile / Adaptive (2026-11-18, ветка feat/ofeliya-audio-cplus-v4, база main a894547, PR #302, коммиты 9b16ec2 + ad68eff)
+# C+ v4 audio — C+ Mobile / Adaptive (2026-11-18, ветка feat/ofeliya-audio-cplus-v4, база main a894547, PR #302, коммиты 9b16ec2 → ad68eff → 1f4dc77 → 3931cb4 → a4b0032 → 19ca819)
 
 Факты. Генератор: `tools/audio/cplus/ofeliya_cplus/` (dsp, theory, compositions, master, metrics) + CLI `build.py` (`--qa-only`, `--manifest-only`), `build_stand.py`, `analyze_masking.py`, `write_report.py`, `sync_package.py`, `serve_stand.py`, `test_package.py`. Сид фиксирован, сборка детерминирована. Тональный центр F minor (F2 = 87.31 Гц), 72 BPM, такт = 147 000 отсчётов. Шесть композиций: bloodstream 80.00 с / heart 80.00 с / immune_prime 80.00 с / cardiac_titan 100.00 с / victory 4.00 с / defeat 4.50 с.
 
