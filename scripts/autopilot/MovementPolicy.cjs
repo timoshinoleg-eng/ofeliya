@@ -140,6 +140,10 @@ function computeMove(snapshot, profile, opts) {
 
   let mx = 0;
   let my = 0;
+  // Cycle 6: flee mode needs to know whether ANY enemy is inside its
+  // per-kind danger radius (threatened) — the repulsion sum alone cannot
+  // tell (it can cancel to ~0 in a symmetric surround).
+  let threatened = false;
 
   // --- enemy repulsion (priority 2: crowd pressure) -----------------------
   for (const enemy of snapshot.enemies) {
@@ -151,6 +155,7 @@ function computeMove(snapshot, profile, opts) {
     // (cycle 4 — their 16-20 dmg hit must not lose to gem/cell pull).
     const radius = enemy.kind === 'runner' ? dangerRadius + RUNNER_RADIUS_BONUS : dangerRadius;
     if (d >= radius || d < 1e-6) continue;
+    threatened = true;
     const falloff = 1 - d / radius;
     const weight = enemy.kind === 'brute'
       ? Math.max(kindWeight(enemy.kind, enemy.isElite), BRUTE_REPULSION_FLOOR)
@@ -195,8 +200,12 @@ function computeMove(snapshot, profile, opts) {
   // of a cell with no enemy or telegraph about to hit it, it stands still
   // until infection completes. The CampaignBot stuck detector (5 s) is the
   // safety valve if cells cluster and dwells chain. No dwell during a boss
-  // fight (lysis is negligible vs boss HP) or while hurt.
-  if (!seeking && !boss && hpRatio >= profile.safeHpRatio) {
+  // fight (lysis is negligible vs boss HP) or while hurt — and (cycle 6)
+  // no dwell while threatened: standing still with an enemy inside the
+  // danger radius is how the bot takes the hit the dwell was supposed to
+  // avoid (the 80 px check alone lets an enemy at 81-150 px close in
+  // during the 1.25 s dwell).
+  if (!seeking && !boss && !threatened && hpRatio >= profile.safeHpRatio) {
     const cell = nearestInfectableCell(snapshot, px, py);
     if (cell && cell.dist < DWELL_RADIUS && cell.cell.infection < 1) {
       const telegraphClose = snapshot.telegraphs.some(
@@ -207,6 +216,46 @@ function computeMove(snapshot, profile, opts) {
         return { x: clamp(still.x, -1, 1), y: clamp(still.y, -1, 1), dwelled: true };
       }
     }
+  }
+
+  // --- flee mode (cycle 6): full-speed radial escape when threatened -----
+  // Cycles 4-5 proved the two failure modes of the force-sum kite:
+  //   - cycle 4 (no tangent): pure repulsion is near-zero at 100-150 px
+  //     (falloff^2), so the bot stood almost still and swarmers walked up
+  //     (the ~100 s bleed; nearly every hit is 8-10 dmg = swarmer);
+  //   - cycle 5 (tangent restored): the strafe moves the bot at 126 px/s
+  //     tangentially, and bullets MISS laterally-moving targets — tryFire
+  //     aims at the target's CURRENT position (no leading) and Bullet
+  //     flies straight (no tracking), so a 0.42 s flight to a 200 px
+  //     target lets it displace ~39 px laterally vs an ~11 px hit radius.
+  //     Same seed/build (std-001): cycle 4 = 1.47 kills/s, cycle 5 =
+  //     0.5 kills/s — the strafe costs ~3x bullet DPS.
+  // The fix is one move that answers both: when ANY enemy is inside its
+  // per-kind danger radius, flee at FULL SPEED (magnitude 1) in the
+  // repulsion-sum direction — radial, never tangential. The player (180
+  // px/s) outruns every enemy (swarm 92 / runner 152 / brute 56), so a
+  // full-speed radial flee is never caught; and the chasers approach
+  // head-on, so bullets hit. Attractions (RNA/cells) and the engagement
+  // approach are ignored while threatened — farming while threatened is
+  // how the bot walks into hits. If the repulsion cancels (symmetric
+  // surround), flee directly away from the nearest enemy instead. Boss
+  // fights keep their orbit (the anchor branch below): bosses are big
+  // targets (radius 25 px) and slow (66 px/s), so the strafe does not
+  // cause boss misses. The hard telegraph projection still applies.
+  if (!seeking && !boss && threatened) {
+    let fx = mx;
+    let fy = my;
+    if (length(fx, fy) < 0.1 && near && near.enemy) {
+      fx = px - near.enemy.x;
+      fy = py - near.enemy.y;
+    }
+    const flee = unit(fx, fy);
+    const projected = projectOutOfTelegraphs(snapshot, flee);
+    return {
+      x: clamp(projected.x, -1, 1),
+      y: clamp(projected.y, -1, 1),
+      dwelled: false,
+    };
   }
 
   // --- host-cell attraction (priority 3) ----------------------------------
@@ -290,14 +339,17 @@ function computeMove(snapshot, profile, opts) {
     mx += tangent.x * tangentWeight;
     my += tangent.y * tangentWeight;
   } else if (!seeking) {
-    // No boss: strafe around the nearest threat so the bot never sits still
-    // while enemies converge. If nothing is near, drift toward the nearest
-    // gem/cell (already handled above) or hold a slow patrol circle.
+    // No boss: close in when the nearest enemy is out of effective range;
+    // otherwise the repulsion + attractions steer the bot. There is NO
+    // orbit tangent here (cycle 6): the strafe makes bullets miss —
+    // tryFire aims with no leading and Bullet flies straight, so lateral
+    // motion lets the target displace ~39 px during a 0.42 s flight vs an
+    // ~11 px hit radius (std-001: 1.47 kills/s without the strafe in
+    // cycle 4 vs 0.5/s with it in cycle 5, same seed/build). The
+    // threatened case is handled by flee mode above (full-speed radial
+    // escape); unthreatened, the bot farms or approaches, and the
+    // normalize fallback below keeps it drifting if the forces balance.
     if (near && near.enemy) {
-      // Per-kind danger radius of the nearest enemy (runners +40, cycle 4).
-      const nearRadius = near.enemy.kind === 'runner'
-        ? dangerRadius + RUNNER_RADIUS_BONUS
-        : dangerRadius;
       if (near.dist > ENGAGE_FAR) {
         // Too far to shoot (weapon range 380): close in so auto-fire stays
         // engaged. Without this the bot outruns its own DPS and kills stall.
@@ -305,27 +357,6 @@ function computeMove(snapshot, profile, opts) {
         const strength = 0.6 + Math.min(0.4, (near.dist - ENGAGE_FAR) / 400);
         mx += toward.x * strength;
         my += toward.y * strength;
-      } else if (near.dist < nearRadius * 1.4
-        && (near.dist >= nearRadius || near.enemy.kind !== 'runner')) {
-        // Strafe in the annulus OUTSIDE the (per-kind) danger radius, and
-        // — cycle 5 — also INSIDE the radius when the nearest enemy is
-        // SLOW (swarm 92 / brute 56 / anomaly 74 px/s). Cycle 4 suppressed
-        // the tangent inside the radius for ALL kinds, and the bot bled
-        // out to swarmers: pure repulsion is near-zero at 100-150 px
-        // (falloff^2), so the bot stood almost still while swarmers walked
-        // up (std-001/std-002: nearly every hit is 8-10 dmg = swarmer).
-        // The strafe moves the bot at 0.7 x 180 = 126 px/s tangentially —
-        // faster than any slow enemy, so they can never catch a strafing
-        // bot — but slower than a runner (152 px/s), which cuts the corner
-        // and closes at full speed. So only runners get the pure radial
-        // flee inside their radius; slow enemies get the strafe back.
-        const dx = px - near.enemy.x;
-        const dy = py - near.enemy.y;
-        const d = near.dist || 1;
-        const radial = { x: dx / d, y: dy / d };
-        const dir = opts.orbitDir >= 0 ? 1 : -1;
-        mx += -radial.y * dir * 0.7;
-        my += radial.x * dir * 0.7;
       }
     }
   }
