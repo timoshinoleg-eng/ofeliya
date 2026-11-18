@@ -1222,6 +1222,7 @@ async function runCampaign(browser, options, runIndex, seriesState) {
     choicesMade: 0,
     transitionsAcked: 0,
     botStuckCount: 0,
+    dwellCount: 0,
     heartSyncSuccesses: 0,
     heartSyncMisses: 0,
     nanCount: 0,
@@ -1692,6 +1693,9 @@ async function runCampaign(browser, options, runIndex, seriesState) {
         if (botEvent === 'BOT_STUCK') {
           st.botStuckCount += 1;
           timeline.push('BOT_STUCK', ctxFor(state, { stuckCount: st.botStuckCount }));
+        } else if (botEvent === 'BOT_DWELL') {
+          st.dwellCount += 1;
+          timeline.push('BOT_DWELL', ctxFor(state, { dwellCount: st.dwellCount }));
         } else if (botEvent === 'HEART_SYNC_SUCCESS') {
           st.heartSyncSuccesses += 1;
           timeline.push('HEART_SYNC_SUCCESS', ctxFor(state, {}));
@@ -1910,6 +1914,32 @@ async function runCampaign(browser, options, runIndex, seriesState) {
       }
     }
 
+    // --- post-run: release the input (the player lifts the thumb) -----------
+    // The harness owns the input channel: after the run ends it must leave
+    // registry 'joy'/'aimJoy' released, exactly as the real joystick does
+    // on pointerup (Joystick.ts removes 'joy'). The Game scene stays alive
+    // behind the result screen, so without this the last input vector stays
+    // stuck (campaign-std1: joy={-0.73, 0.68} after defeat) and the
+    // noStuckInput invariant fails. Both bot and replay runs release here,
+    // at the same end tick, so the input hash stays comparable.
+    try {
+      await page.evaluate(() => window.__ofeliyaTest.clearInput());
+    } catch {
+      // The page may already be gone (crash path) — the invariant below
+      // reports what it can from the last poll.
+    }
+    // Re-poll so the noStuckInput check below sees the released input
+    // (st.finalDiag still holds the pre-release poll).
+    try {
+      const released = await pollState(page, st.lastEventCount);
+      st.lastEventCount = released.eventCount;
+      st.finalState = released.state;
+      st.finalDiag = released.diag;
+      st.finalPools = released.pools;
+    } catch {
+      // Keep the last poll's values.
+    }
+
     // --- post-run: no-stuck-input invariant (checked at RUN_END, before the
     // result screen opens its own modal) -----------------------------------------
     if (st.runEnded && st.finalDiag && !st.finalDiag.error) {
@@ -2017,14 +2047,22 @@ async function runCampaign(browser, options, runIndex, seriesState) {
     // Listener baseline (§4.3): pools after vs the RUN_START baseline.
     // Only meaningful after teardown (RUN_END): mid-run timers/tweens are
     // live combat state, not leaks, so --until runs skip the check.
+    // The gate covers listeners and timers only. Tweens are reported as a
+    // diagnostic, not gated: the result screen legitimately runs its own
+    // animations (count-ups, pulses) in the UI scene, so the post-RUN_END
+    // tween count measures the result screen, not a leak — campaign-std1
+    // showed tweens +8 with listeners/timers at -1/-1. A true tween-leak
+    // check needs a return-to-menu step + re-baseline, which the harness
+    // does not perform (gap, noted in the handoff). Design §4.3 names
+    // heap/listeners/localStorage/audio; tweens were a runner addition.
     if (st.runEnded && st.poolsBaseline && finalPools) {
       const listenerDelta = finalPools.listeners - st.poolsBaseline.listeners;
       const timerDelta = finalPools.timers - st.poolsBaseline.timers;
       const tweenDelta = finalPools.tweens - st.poolsBaseline.tweens;
-      const passed = listenerDelta <= LISTENER_DELTA_TOLERANCE && timerDelta <= 2 && tweenDelta <= 2;
+      const passed = listenerDelta <= LISTENER_DELTA_TOLERANCE && timerDelta <= 2;
       invariants.check('listenerBaseline', passed, {
-        expected: 'no listener / timer / tween growth after teardown vs baseline',
-        actual: `listeners ${st.poolsBaseline.listeners} -> ${finalPools.listeners} (delta ${listenerDelta}), timers delta ${timerDelta}, tweens delta ${tweenDelta}`,
+        expected: 'no listener / timer growth after teardown vs baseline (tweens reported, not gated — result-screen animations)',
+        actual: `listeners ${st.poolsBaseline.listeners} -> ${finalPools.listeners} (delta ${listenerDelta}), timers delta ${timerDelta}, tweens delta ${tweenDelta} (diagnostic)`,
         failAt: passed ? undefined : markInvariantFail('listenerBaseline', st.finalState, `listener delta ${listenerDelta}`),
       });
       st.listenerDelta = listenerDelta;
@@ -2275,6 +2313,7 @@ async function runCampaign(browser, options, runIndex, seriesState) {
         saveValid,
         pageErrors: run.pageErrors.length,
         botStuckCount: st.botStuckCount,
+        dwellCount: st.dwellCount,
         heartSyncSuccesses: st.heartSyncSuccesses,
         heartSyncMisses: st.heartSyncMisses,
         choicesMade: st.choicesMade,

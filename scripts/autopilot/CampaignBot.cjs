@@ -95,6 +95,12 @@ class CampaignBot {
     this.stuckCount = 0;
     this.lastStageId = null;
     this.lastPhase = null;
+    // Own upgrade stacks (from chooseUpgrade calls — the bot's own build,
+    // not readState, which does not expose stacks). Drives the AoE fighting
+    // distance: with orbit/nova owned, the bot must let enemies INSIDE the
+    // AoE ring instead of kiting outside it.
+    this.stacks = {};
+    this.wasDwelling = false;
   }
 
   resetForStage(stageId) {
@@ -111,8 +117,9 @@ class CampaignBot {
    * @param {number} tick Run-relative frame count (frames advanced since
    *   startCampaign returned — the same coordinate the input log uses).
    * @returns {{ move: {x,y}, aim: {x,y}, events: string[], debug: object }}
-   *   events: 'BOT_STUCK' when the stuck detector fires,
-   *   'HEART_SYNC_SUCCESS' / 'HEART_SYNC_MISSED' from the Titan FSM.
+   *   events: 'BOT_STUCK' when the stuck detector fires, 'BOT_DWELL' once
+   *   per host-cell dwell start, 'HEART_SYNC_SUCCESS' / 'HEART_SYNC_MISSED'
+   *   from the Titan FSM.
    */
   decide(snapshot, tick) {
     const events = [];
@@ -174,19 +181,35 @@ class CampaignBot {
       };
     }
 
+    // --- AoE fighting distance ----------------------------------------------
+    // The campaign-std1 run died at 157 s sim with orbit x3 / infect /
+    // lysis owned but unused: kiting at dangerRadius 150 keeps enemies
+    // OUTSIDE the orbit ring (82 px) and barely inside nova (140 px), so
+    // the AoE build never deals damage while the swarm (147 enemies) closes
+    // in. With orbit/nova stacks owned, shrink the effective danger radius
+    // to 70% (standard 150 -> 105, strained 190 -> 133): repulsion stays
+    // strong below ~60 px (contact is ~20-30 px), but enemies enter the
+    // ring and the blades kill them there (a swarmer dies in ~0.2 s inside
+    // an orbit x3 ring, before crossing the remaining ~70 px). Boss
+    // repulsion is unaffected (it floors at 200 px in MovementPolicy).
+    const aoeStacks = (this.stacks.orbit || 0) + (this.stacks.nova || 0);
+    const profile = aoeStacks > 0
+      ? { ...this.profile, dangerRadius: Math.round(this.profile.dangerRadius * 0.7) }
+      : this.profile;
+
     // --- movement ------------------------------------------------------------
     const hpRatio = player.maxHp > 0 ? player.hp / player.maxHp : 1;
-    const hurt = hpRatio < this.profile.safeHpRatio;
+    const hurt = hpRatio < profile.safeHpRatio;
     let move;
     if (tick <= this.escapeUntilTick) {
       // Escape vector, still projected out of telegraphs (priority 1 holds
       // even while escaping).
       move = projectOutOfTelegraphs(snapshot, this.escapeVector);
     } else {
-      move = computeMove(snapshot, this.profile, {
+      move = computeMove(snapshot, profile, {
         orbitDir: this.orbitDir,
         anchor: hints.anchor,
-        orbitRadius: hints.orbitRadius ?? this.profile.orbitRadius,
+        orbitRadius: hints.orbitRadius ?? profile.orbitRadius,
         seekTarget: hints.seekTarget || null,
         telegraphWeight: hints.telegraphWeight,
         // Hurt: push enemies away harder, farm less (MovementPolicy already
@@ -194,6 +217,11 @@ class CampaignBot {
         repulsionWeight: hurt ? 1.5 : 1,
       });
     }
+
+    // Dwell diagnostic: emit once per dwell start (edge-triggered, so a
+    // 1.3 s dwell logs one marker, not thirteen).
+    if (move.dwelled && !this.wasDwelling) events.push('BOT_DWELL');
+    this.wasDwelling = Boolean(move.dwelled);
 
     // --- aim -------------------------------------------------------------------
     // Boss active: aim at the boss (focus fire). Otherwise aim (0,0): the
@@ -218,18 +246,23 @@ class CampaignBot {
         stuckCount: this.stuckCount,
         syncSuccesses: this.titan.syncSuccesses,
         syncMisses: this.titan.syncMisses,
+        aoeStacks,
+        dangerRadius: profile.dangerRadius,
+        dwelled: Boolean(move.dwelled),
       },
     };
   }
 
   /**
    * Pick a mutation from the pending offers (UpgradePolicy table).
+   * Records the pick in this.stacks (the bot's own build — drives the AoE
+   * fighting distance in decide()).
    * @param {object} snapshot HarnessState (must have pendingChoices).
    * @returns {string} chosen upgrade id.
    */
   chooseUpgrade(snapshot) {
     const player = snapshot.player;
-    return chooseUpgrade(snapshot.pendingChoices, {
+    const id = chooseUpgrade(snapshot.pendingChoices, {
       difficultyId: snapshot.difficultyId,
       stageId: snapshot.stageId,
       stageTimeMs: snapshot.stageTimeMs,
@@ -237,6 +270,8 @@ class CampaignBot {
       bossKind: snapshot.boss ? snapshot.boss.kind : null,
       hpRatio: player.maxHp > 0 ? player.hp / player.maxHp : 1,
     });
+    this.stacks[id] = (this.stacks[id] || 0) + 1;
+    return id;
   }
 }
 

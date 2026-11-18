@@ -181,7 +181,7 @@ function computeMove(snapshot, profile, opts) {
       );
       if ((!near || near.dist > DWELL_SAFE_ENEMY) && !telegraphClose) {
         const still = projectOutOfTelegraphs(snapshot, { x: 0, y: 0 });
-        return { x: clamp(still.x, -1, 1), y: clamp(still.y, -1, 1) };
+        return { x: clamp(still.x, -1, 1), y: clamp(still.y, -1, 1), dwelled: true };
       }
     }
   }
@@ -316,6 +316,7 @@ function computeMove(snapshot, profile, opts) {
   return {
     x: clamp(move.x, -1, 1),
     y: clamp(move.y, -1, 1),
+    dwelled: false,
   };
 }
 
