@@ -228,6 +228,16 @@ try {
   assert.equal(db.wallets.get(42)?.purchased_rna, 500, 'no double grant on replay');
   assert.equal(calls.length, 1, 'paid updates do not contact Render or Bot API');
 
+  // Subscription events must also bypass sleeping Render and be audited in D1.
+  const subscription = { update_id: 303, subscription: {
+    user: { id: 42 }, invoice_payload: nonce, state: 'canceled',
+  } };
+  res = await worker.fetch(request(subscription), dbEnv);
+  assert.equal(res.status, 200, 'valid subscription update accepted by Worker');
+  assert.equal(db.subscriptionEvents.length, 1, 'subscription event audited');
+  assert.equal(db.subscriptionEvents[0].state, 'canceled');
+  assert.equal(calls.length, 1, 'subscription update does not contact Render');
+
   // D1 that never responds must fail closed before Telegram's ten-second limit.
   const neverResolvingD1 = {
     prepare() { return { bind() { return { first: async () => new Promise(() => {}) }; } }; },
