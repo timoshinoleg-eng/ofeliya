@@ -851,13 +851,49 @@ async function readDirectTelegramBody(
   return { ok: true, raw, update: update as Record<string, unknown> };
 }
 
-function isDirectStarsUpdate(update: Record<string, unknown>): boolean {
-  if (update.pre_checkout_query && typeof update.pre_checkout_query === 'object') return true;
-  if (update.subscription && typeof update.subscription === 'object') return true;
+const hasOwnUpdateField = (o: Record<string, unknown>, key: string): boolean =>
+  Object.prototype.hasOwnProperty.call(o, key);
+
+function isUpdateObject(x: unknown): x is Record<string, unknown> {
+  return !!x && typeof x === 'object' && !Array.isArray(x);
+}
+
+/**
+ * Validate only Telegram's known payment update shapes at the public ingress.
+ * Unknown Telegram update types remain eligible for forwarding to Render.
+ * Never call Bot API or write to D1 for malformed recognized payment updates.
+ */
+function classifyDirectTelegramUpdate(update: Record<string, unknown>): 'payment' | 'other' | 'invalid' {
+  if (hasOwnUpdateField(update, 'pre_checkout_query')) {
+    const q = update.pre_checkout_query;
+    if (!isUpdateObject(q) || typeof q.id !== 'string' || !q.id ||
+      !isUpdateObject(q.from) || !Number.isSafeInteger(q.from.id) ||
+      typeof q.invoice_payload !== 'string' || !q.invoice_payload ||
+      q.currency !== 'XTR' || !Number.isSafeInteger(q.total_amount) || (q.total_amount as number) < 1
+    ) return 'invalid';
+    return 'payment';
+  }
+  if (hasOwnUpdateField(update, 'subscription')) {
+    const subscription = update.subscription;
+    if (!isUpdateObject(subscription) || !isUpdateObject(subscription.user) ||
+      !Number.isSafeInteger(subscription.user.id) ||
+      typeof subscription.invoice_payload !== 'string' || !subscription.invoice_payload ||
+      !['active', 'canceled', 'failed'].includes(String(subscription.state))
+    ) return 'invalid';
+    return 'payment';
+  }
   const message = update.message;
-  return !!message && typeof message === 'object' &&
-    !!(message as Record<string, unknown>).successful_payment &&
-    typeof (message as Record<string, unknown>).successful_payment === 'object';
+  if (isUpdateObject(message) && hasOwnUpdateField(message, 'successful_payment')) {
+    const p = message.successful_payment;
+    if (!isUpdateObject(p) || !isUpdateObject(message.from) ||
+      !Number.isSafeInteger(message.from.id) ||
+      typeof p.telegram_payment_charge_id !== 'string' || !p.telegram_payment_charge_id ||
+      typeof p.invoice_payload !== 'string' || !p.invoice_payload ||
+      p.currency !== 'XTR' || !Number.isSafeInteger(p.total_amount) || (p.total_amount as number) < 1
+    ) return 'invalid';
+    return 'payment';
+  }
+  return 'other';
 }
 
 async function handleDirectTelegramIngress(request: Request, env: Env): Promise<Response> {
@@ -870,7 +906,9 @@ async function handleDirectTelegramIngress(request: Request, env: Env): Promise<
   const parsed = await readDirectTelegramBody(request);
   if (!parsed.ok) return json({ error: 'bad-telegram-update' }, parsed.status);
 
-  if (isDirectStarsUpdate(parsed.update)) {
+  const updateClass = classifyDirectTelegramUpdate(parsed.update);
+  if (updateClass === 'invalid') return json({ error: 'bad-payment-update' }, 400);
+  if (updateClass === 'payment') {
     // The legacy route remains available for rollback. Invoke the same
     // handler with the legacy auth header ONLY after direct ingress auth.
     // No network call to Render occurs on this payment-critical path.
@@ -896,6 +934,9 @@ async function handleDirectTelegramIngress(request: Request, env: Env): Promise<
         'x-telegram-bot-api-secret-token': env.TG_WEBHOOK_SECRET,
       },
       body: parsed.raw,
+      // Workers follow redirects for subrequests and can leak secret headers
+      // to a redirected origin. Treat any 3xx as a retryable upstream failure.
+      redirect: 'manual',
       signal: AbortSignal.timeout(NONPAYMENT_PROXY_TIMEOUT_MS),
     });
     const responseBody = await upstream.text();
@@ -908,6 +949,27 @@ async function handleDirectTelegramIngress(request: Request, env: Env): Promise<
     });
   } catch {
     return json({ error: 'telegram-render-unavailable' }, 503);
+  }
+}
+
+/**
+ * Use one absolute deadline across all pre-checkout D1 reads.
+ * D1 calls are read-only, so an in-flight read finishing after timeout
+ * cannot write, approve, or mutate the payment decision.
+ */
+async function withinDeadline<T>(promise: Promise<T>, deadline: number): Promise<T> {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) throw new Error('precheckout-d1-deadline');
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error('precheckout-d1-deadline')), remaining);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
@@ -947,11 +1009,14 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
   const q = update.pre_checkout_query;
   if (q) {
     const t0 = Date.now();
+    // Telegram gives the bot ten seconds TOTAL, including ingress and D1.
+    // Reserve >=3s for Bot API; fail closed if D1 is late.
+    const d1Deadline = t0 + 5_000;
     const nonce = q.invoice_payload ?? '';
     let ok = false;
     if (isValidNonce(nonce) && env.PAYMENTS_DB) {
       try {
-        const order = await getOrder(env.PAYMENTS_DB, nonce);
+        const order = await withinDeadline(getOrder(env.PAYMENTS_DB, nonce), d1Deadline);
         const fromId = q.from?.id;
         // P1-3 (независимый review): сверка с НЕИЗМЕНЯЕМЫМ ЗАКАЗОМ, а не с
         // текущим каталогом. Иначе снижение цены ломает легитимные инвойсы,
@@ -971,11 +1036,11 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
         // не попадают (у них нет pre_checkout_query — Telegram списывает
         // автоматически), поэтому продление активной подписки не ломается.
         if (ok && order && SERVER_GRANTS[order.product_id]?.subscription) {
-          const passWallet = await env.PAYMENTS_DB.prepare(
+          const passWallet = await withinDeadline(env.PAYMENTS_DB.prepare(
             'SELECT season_pass_until_ms FROM wallets WHERE user_id=?'
           )
             .bind(order.user_id)
-            .first<{ season_pass_until_ms: number }>();
+            .first<{ season_pass_until_ms: number }>(), d1Deadline);
           if (
             passWallet &&
             typeof passWallet.season_pass_until_ms === 'number' &&
@@ -1011,7 +1076,7 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
           ok,
           ...(ok ? {} : { error_message: 'Товар недоступен. Попробуйте позже.' }),
         },
-        { timeoutMs: 8000 }
+        { timeoutMs: Math.max(500, Math.min(3_000, 8_500 - (Date.now() - t0))) }
       );
     } catch (err) {
       logEvent('pre_checkout_answer_failed', {
