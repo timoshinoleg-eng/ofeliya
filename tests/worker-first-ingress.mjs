@@ -9,6 +9,8 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import assert from 'node:assert/strict';
+import { buildTelegramWebhookMethod } from '../server/telegram-webhook.mjs';
+import { makeD1, seedOrder } from './d1-v16-stub.mjs';
 
 const temp = mkdtempSync(join(tmpdir(), 'ofeliya-ingress-'));
 writeFileSync(join(temp, 'package.json'), JSON.stringify({ type: 'commonjs' }));
@@ -83,18 +85,38 @@ try {
   assert.equal(res.status, 413, 'actual byte limit enforced without trusting Content-Length');
   assert.equal(calls.length, 0, 'bad or unauthenticated updates never forwarded');
 
-  // Commands, callback, deep links: original exact JSON and secret preserved.
+  // Commands and deep links: mimic the real Render pure reply builder.
+  fakeFetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    const update = JSON.parse(init.body);
+    const method = buildTelegramWebhookMethod(update, {
+      gameUrl: 'https://ofeliya-game.onrender.com/ofeliya/',
+      paymentSupportEmail: 'ovt@ovtveol.ru',
+    });
+    return new Response(JSON.stringify(method ?? { ok: true }), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    });
+  };
   for (const update of [start, help, support, callback]) {
     res = await worker.fetch(request(update), baseEnv);
     assert.equal(res.status, 200, 'nonpayment command forwarded');
-    assert.deepEqual(await res.json(), { method: 'sendMessage', chat_id: 42, text: 'OK' });
+    const expected = buildTelegramWebhookMethod(update, {
+      gameUrl: 'https://ofeliya-game.onrender.com/ofeliya/',
+      paymentSupportEmail: 'ovt@ovtveol.ru',
+    }) ?? { ok: true };
+    assert.deepEqual(await res.json(), expected, 'preserve real command response');
     const call = calls.at(-1);
     assert.equal(call.url, 'https://ofeliya-game.onrender.com/api/telegram/webhook');
     assert.equal(call.init.headers['x-telegram-bot-api-secret-token'], TG_SECRET);
-    assert.deepEqual(JSON.parse(call.init.body), update);
+    assert.equal(call.init.body, JSON.stringify(update), 'original JSON preserved');
+    assert.equal(call.init.redirect, 'manual', 'do not follow redirects with Telegram secret');
     assert.equal(call.init.method, 'POST');
   }
   assert.equal(calls.length, 4, 'exactly four nonpayment forwards');
+  const rawStart = JSON.stringify(start, null, 2);
+  res = await worker.fetch(request(rawStart), baseEnv);
+  assert.equal(res.status, 200, 'referral with whitespace accepted');
+  assert.equal(calls.at(-1).init.body, rawStart, 'referral body not parsed and reserialized');
 
   fakeFetch = async () => { throw new Error('render asleep'); };
   res = await worker.fetch(request(start), baseEnv);
@@ -102,6 +124,27 @@ try {
   fakeFetch = async () => new Response('upstream failed', { status: 500 });
   res = await worker.fetch(request(help), baseEnv);
   assert.equal(res.status, 503, 'non-2xx Render response is never acknowledged');
+  fakeFetch = async (url, init) => {
+    assert.equal(init.redirect, 'manual', 'redirect handling must not leak secret');
+    return new Response(null, { status: 302, headers: { location: 'https://untrusted.example/' } });
+  };
+  res = await worker.fetch(request(help), baseEnv);
+  assert.equal(res.status, 503, 'redirect refused and not followed');
+
+  // Malformed recognized payment updates fail before any Bot API or Render call.
+  calls.length = 0;
+  for (const broken of [
+    { pre_checkout_query: [] },
+    { pre_checkout_query: { id: '', from: {}, invoice_payload: 'x', total_amount: 35, currency: 'XTR' } },
+    { subscription: [] },
+    { subscription: { user: {}, state: 'active', invoice_payload: 'nonce_sp_bad' } },
+    { message: { successful_payment: [], from: { id: 42 } } },
+    { message: { successful_payment: { telegram_payment_charge_id: '', invoice_payload: 'nonce_bad', currency: 'XTR', total_amount: 35 }, from: { id: 42 } } },
+  ]) {
+    res = await worker.fetch(request(broken), baseEnv);
+    assert.equal(res.status, 400, 'malformed recognized payment rejected without downstream');
+  }
+  assert.equal(calls.length, 0, 'malformed payment causes no network requests');
 
   // Payment precheckout reaches existing Bot API handler WITHOUT forwarding to Render,
   // and fails closed without D1. No real Telegram API calls are made.
@@ -137,6 +180,66 @@ try {
   res = await worker.fetch(request(paid), baseEnv);
   assert.equal(res.status, 503, 'paid update without D1 requests retry');
   assert.equal(calls.length, 0, 'no cross-host forward for successful_payment');
+
+  // Full payment path: valid precheckout → atomic paid grant → redelivery
+  // no double credit, and failed batch → retry succeeds exactly once.
+  const db = makeD1();
+  const nonce = 'nonce_ingress_0123456789';
+  await seedOrder(db, nonce, 42, 'currency.rna-pack-s', 35, {
+    skuVersion: 4, grantRna: 500, grantBoosterDays: 0, grantSkinId: null,
+    grantSeasonPassDays: 0, invoiceUrl: 'https://t.me/$dummy',
+  });
+  const dbEnv = { ...baseEnv, PAYMENTS_DB: db };
+  calls.length = 0;
+  fakeFetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (!String(url).includes('/answerPreCheckoutQuery')) throw new Error('unexpected Render request');
+    return new Response(JSON.stringify({ ok: true, result: true }), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    });
+  };
+  const realCheckout = { update_id: 301, pre_checkout_query: {
+    id: 'q-ingress-paid', from: { id: 42 }, currency: 'XTR',
+    total_amount: 35, invoice_payload: nonce,
+  } };
+  res = await worker.fetch(request(realCheckout), dbEnv);
+  assert.equal(res.status, 200, 'valid direct precheckout accepted');
+  assert.equal(calls.length, 1, 'precheckout contacts Telegram only, not Render');
+  assert.equal(JSON.parse(calls[0].init.body).ok, true, 'pending order accepted by Telegram');
+  const paidOnce = { update_id: 302, message: { from: { id: 42 }, successful_payment: {
+    currency: 'XTR', total_amount: 35, invoice_payload: nonce,
+    telegram_payment_charge_id: 'ch-ingress-1', provider_payment_charge_id: 'provider-fake',
+  } } };
+  db.hooks.failBatchAtStatement = 2;
+  res = await worker.fetch(request(paidOnce), dbEnv);
+  assert.equal(res.status, 503, 'atomic D1 batch failure must request Telegram retry');
+  assert.equal(db.payments.size, 0, 'failed batch no payment commit');
+  assert.equal(db.ledger.size, 0, 'failed batch no grant commit');
+  db.hooks.failBatchAtStatement = -1;
+  res = await worker.fetch(request(paidOnce), dbEnv);
+  assert.equal(res.status, 200, 'paid retry accepted');
+  assert.equal(db.payments.size, 1, 'one payment committed');
+  assert.equal(db.ledger.size, 1, 'one ledger grant committed');
+  assert.equal(db.wallets.get(42)?.purchased_rna, 500, 'exactly 500 RNA granted');
+  res = await worker.fetch(request(paidOnce), dbEnv);
+  assert.equal(res.status, 200, 'repeat update idempotent');
+  assert.equal(db.payments.size, 1);
+  assert.equal(db.ledger.size, 1);
+  assert.equal(db.wallets.get(42)?.purchased_rna, 500, 'no double grant on replay');
+  assert.equal(calls.length, 1, 'paid updates do not contact Render or Bot API');
+
+  // D1 that never responds must fail closed before Telegram's ten-second limit.
+  const neverResolvingD1 = {
+    prepare() { return { bind() { return { first: async () => new Promise(() => {}) }; } }; },
+  };
+  calls.length = 0;
+  const started = Date.now();
+  res = await worker.fetch(request(realCheckout), { ...baseEnv, PAYMENTS_DB: neverResolvingD1 });
+  const elapsedMs = Date.now() - started;
+  assert.equal(res.status, 200, 'D1 timeout still produces a Telegram rejection');
+  assert.equal(calls.length, 1, 'D1 timeout causes one Telegram answer');
+  assert.equal(JSON.parse(calls[0].init.body).ok, false, 'D1 timeout must fail closed');
+  assert(elapsedMs < 9_000, 'D1 timeout must reserve time for Bot API');
 
   // Legacy /api/webhook still uses legacy secret for rollback compatibility.
   res = await worker.fetch(new Request('https://test.example/api/webhook', {
