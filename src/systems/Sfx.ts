@@ -767,6 +767,12 @@ class SfxImpl {
     if (this.muted) return;
     this.cplusActive = true;
     this.musicWanted = true;
+    // The licensed bed and the C+ bed are mutually exclusive: the production
+    // source is released before the C+ bed is started, cached or not.
+    this.stopCurrentMusicSource();
+    this.musicBuf = null;
+    this.actualBedIndex = null;
+    this.cancelMusicLoad();
     const cached = this.cplusBuffers[role];
     if (cached) {
       this.swapCPlusBed(cached, role, fadeMs);
@@ -774,10 +780,6 @@ class SfxImpl {
     }
     const ctx = this.ensure();
     if (!ctx) return;
-    this.stopCurrentMusicSource();
-    this.musicBuf = null;
-    this.actualBedIndex = null;
-    this.cancelMusicLoad();
     const requestId = ++this.cplusRequestId;
     this.cancelCPlusLoad();
     const controller = new AbortController();
@@ -791,15 +793,14 @@ class SfxImpl {
    *  run-end music duck does not swallow the outcome signal. */
   playCPlusStinger(role: CPlusBedRole): void {
     if (this.muted) return;
+    const ctx = this.ensure();
     const out = this.layerBus ?? this.musicGain;
-    if (!out) return;
+    if (!ctx || !out) return;
     const cached = this.cplusBuffers[role];
     if (cached) {
       this.playCPlusBuffer(cached, out);
       return;
     }
-    const ctx = this.ensure();
-    if (!ctx) return;
     const requestId = ++this.cplusRequestId;
     this.cancelCPlusLoad();
     const controller = new AbortController();
