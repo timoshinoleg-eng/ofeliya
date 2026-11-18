@@ -248,7 +248,14 @@ def seam_report(stereo: np.ndarray, sr: int = SR, cycles: int = 10) -> dict:
         float(before_local.max()) if before_local.size else 0.0,
         float(after_local.max()) if after_local.size else 0.0,
     )
-    local_ratio = float(wrap_diff / local_max) if local_max > 1e-9 else 0.0
+    if local_max > 1e-9:
+        local_ratio = float(wrap_diff / local_max)
+    elif wrap_diff > 1e-9:
+        # A non-zero step next to no local texture at all is a discontinuity.
+        # Reporting a ratio of zero would let the check accept it.
+        local_ratio = 999.0
+    else:
+        local_ratio = 0.0
 
     return {
         "sampleJumpRel": round(jump_rel, 6),
@@ -291,6 +298,13 @@ def seam_report(stereo: np.ndarray, sr: int = SR, cycles: int = 10) -> dict:
 def mono_report(stereo: np.ndarray, sr: int = SR) -> dict:
     """L+R fold-down: loudness change, correlation and per-band retention.
 
+    The per-band retention compares the fold-down against the **original
+    stereo channels**, not against the mid signal: `mid` and `fold` are the
+    same signal, so comparing them would report 0 dB in every band and could
+    never detect a phase cancellation. The reference is the mean of the two
+    channels' energies, so identical channels report 0 dB and an anti-phase
+    pair reports the full loss.
+
     BS.1770 sums the *power* of both channels, so a fully coherent stereo
     pair measures exactly 3.01 dB louder than its 0.5*(L+R) fold-down. The
     reported `monoLufsDeltaDb` is therefore *positive and close to 3.01 dB*
@@ -311,16 +325,25 @@ def mono_report(stereo: np.ndarray, sr: int = SR) -> dict:
     lo_mid = dsp.lowpass(mid, 250.0, order=2)
 
     band_retention = {}
+    band_side_pct = {}
     for name, (lo, hi) in BANDS.items():
-        b_stereo = dsp.bandpass(mid, lo, hi, order=2)
+        b_left = dsp.bandpass(left, lo, hi, order=2)
+        b_right = dsp.bandpass(right, lo, hi, order=2)
         b_fold = dsp.bandpass(fold, lo, hi, order=2)
-        e_stereo = dsp.rms(b_stereo)
-        e_fold = dsp.rms(b_fold)
-        band_retention[name] = round(
-            float(10.0 * np.log10(max(e_fold, 1e-12) / max(e_stereo, 1e-12))), 3
-        )
+        original_energy = 0.5 * (float(np.mean(b_left ** 2)) + float(np.mean(b_right ** 2)))
+        fold_energy = float(np.mean(b_fold ** 2))
+        ratio = fold_energy / original_energy if original_energy > 1e-18 else 0.0
+        band_retention[name] = round(float(10.0 * np.log10(max(ratio, 1e-12))), 3)
+        b_side = dsp.bandpass(side, lo, hi, order=2)
+        side_band_energy = float(np.mean(b_side ** 2))
+        total = original_energy + side_band_energy
+        band_side_pct[name] = round(100.0 * side_band_energy / total, 3) if total > 1e-18 else 0.0
 
+    mid_energy = float(np.mean(mid ** 2))
+    side_energy_total = float(np.mean(side ** 2))
+    total_energy = mid_energy + side_energy_total
     correlation = float(np.corrcoef(left, right)[0, 1])
+
     return {
         "monoLufsDeltaDb": round(delta, 3),
         "monoLufsLossDb": round(-delta, 3),
@@ -330,11 +353,20 @@ def mono_report(stereo: np.ndarray, sr: int = SR) -> dict:
         "lowBandPhaseLossDb": round(
             float(20.0 * np.log10(max(dsp.rms(lo_side), 1e-12) / max(dsp.rms(lo_mid), 1e-12))), 2
         ),
+        "antiPhaseEnergyPct": round(
+            100.0 * side_energy_total / total_energy if total_energy > 1e-18 else 0.0, 3
+        ),
         "bandRetentionDb": band_retention,
+        "bandSideEnergyPct": band_side_pct,
         # A wide stereo image always loses some side energy in a mono fold.
         # 3.01 dB is inherent to BS.1770's channel-power sum; up to 2.5 dB on
-        # top of that is normal for a cinematic mix and still audible.
-        "monoSafe": bool(2.0 <= delta <= 5.5 and correlation > 0.15),
+        # top of that is normal for a cinematic mix and still audible. A band
+        # that loses more than 12 dB means a phase problem, not a wide image.
+        "monoSafe": bool(
+            2.0 <= delta <= 5.5
+            and correlation > 0.15
+            and all(value > -12.0 for value in band_retention.values())
+        ),
     }
 
 
@@ -361,6 +393,19 @@ SFX_ROLE_GAINS = {
 }
 
 
+def runtime_normalization_trim(stereo: np.ndarray) -> float:
+    """Mirror of `scanNormalizationTrim` in `src/systems/audioMixMath.ts`.
+
+    The runtime plays a decoded SFX at `SFX_ROLE_GAINS[name] * trim`, where
+    the trim is derived from the decoded buffer's own peak. Ignoring it makes
+    the absolute intelligibility numbers wrong by up to ~16 dB.
+    """
+    peak = float(np.abs(stereo).max()) if stereo.size else 0.0
+    if peak <= 0:
+        return 1.0
+    return min(12.0, 0.63 / peak)
+
+
 def sfx_masking(
     music: np.ndarray,
     sfx: np.ndarray,
@@ -368,6 +413,7 @@ def sfx_masking(
     name: str = "sfx",
     sfx_role: str | None = None,
     music_bus_gain: float = MUSIC_BUS_GAIN,
+    runtime_trim: float | None = None,
 ) -> dict:
     """How loud the music bed is inside the SFX's own dominant band.
 
@@ -376,15 +422,15 @@ def sfx_masking(
     1.5-3.5 kHz pocket, which the independent review in issue #299 showed
     does not hold for the boss signals.
 
-    The comparison uses the **real in-game levels**:
+    Two levels of information are reported:
 
-    * the music bed plays through the music bus (`MUSIC_GAIN` = 0.65), and its
-      sustained level in the band is what can mask a sound;
-    * the SFX plays through its role gain (`SFX_ROLE_GAINS`), and a transient
-      is heard by its **peak** in the band, not by its file RMS.
+    * **relative** — the music level in the SFX band against the SFX level in
+      the same band, both at their in-game levels. This is the number that
+      answers "does the bed cover the sound".
+    * **absolute** — the margin between the SFX and the music in that band.
+      A positive margin means the sound stays above the bed.
 
-    `musicVsSfxInBandDb` <= 0 means the sustained music level in the SFX band
-    stays below the SFX peak in that band — the sound reads through the bed.
+    `musicVsSfxInBandDb` <= 0 means the music is below the SFX in its band.
     """
     m_mono = mono_of(music)
     s_mono = mono_of(sfx)
@@ -400,8 +446,10 @@ def sfx_masking(
     sfx_peak_db = _band_peak_db(s_mono, sr, lo, hi)
 
     role_gain = SFX_ROLE_GAINS.get(sfx_role or "", 1.0)
+    trim = runtime_trim if runtime_trim is not None else runtime_normalization_trim(sfx)
+
     music_db = music_rms_db + dsp.db(music_bus_gain)
-    sfx_db = sfx_peak_db + dsp.db(role_gain)
+    sfx_db = sfx_peak_db + dsp.db(role_gain) + dsp.db(trim)
 
     return {
         "name": name,
@@ -409,13 +457,16 @@ def sfx_masking(
         "dominantBandHz": [lo, hi],
         "musicBusGain": music_bus_gain,
         "sfxRoleGain": role_gain,
+        "sfxRuntimeTrim": round(float(trim), 4),
         "musicBandRmsDb": round(music_rms_db, 2),
         "musicBandDb": round(music_db, 2),
         "sfxBandRmsDb": round(sfx_rms_db, 2),
         "sfxBandPeakDb": round(sfx_peak_db, 2),
         "sfxBandDb": round(sfx_db, 2),
         "musicVsSfxInBandDb": round(music_db - sfx_db, 2),
+        "sfxMarginDb": round(sfx_db - music_db, 2),
         "sfxClear": bool(music_db - sfx_db <= 0.0),
+        "sfxAboveMusic": bool(sfx_db - music_db > 0.0),
     }
 
 

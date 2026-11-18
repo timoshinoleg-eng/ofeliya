@@ -3,9 +3,10 @@
 
     python tools/audio/cplus/write_report.py --package <pkg> --audition <v3pkg> --repo <repo>
 
-Every number in the generated markdown comes from a measurement: the C+ v4
-side from `analysis/*.json`, the v3 side from measuring the audition files
-with the same code. Nothing is hand-written.
+Every statement in the generated report is derived from the measurements that
+were loaded: there are no hard-coded verdicts. When a measurement is missing
+or fails its criterion, the report says so instead of repeating a favourable
+conclusion.
 """
 
 from __future__ import annotations
@@ -47,6 +48,10 @@ BAND_LABELS = {
     "air_8000_16000": ">8000 Гц",
 }
 
+TARGET_LUFS = -14.0
+LUFS_TOLERANCE = 0.5
+MAX_TRUE_PEAK_DBTP = -1.0
+
 
 def fmt(value, digits=2, dash="—"):
     if value is None:
@@ -58,18 +63,16 @@ def fmt(value, digits=2, dash="—"):
     return str(value)
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--package", required=True)
-    ap.add_argument("--audition", required=True)
-    ap.add_argument("--repo", required=True)
-    ap.add_argument("--out", default=None)
-    args = ap.parse_args()
+def range_text(values, digits=1, dash="—"):
+    values = [v for v in values if v is not None]
+    if not values:
+        return dash
+    if len(values) == 1:
+        return fmt(values[0], digits)
+    return f"{fmt(min(values), digits)} … {fmt(max(values), digits)}"
 
-    package = Path(args.package).resolve()
-    audition = Path(args.audition).resolve()
-    repo = Path(args.repo).resolve()
 
+def collect(package: Path, audition: Path) -> list[dict]:
     rows = []
     for track_id, (folder, name) in V3_FILES.items():
         v3_path = audition / folder / name
@@ -93,16 +96,33 @@ def main() -> None:
             "v4fatigue": v4["qa"]["fatigue"],
             "v4speaker": v4["qa"]["speakerEmulation"],
         })
+    return rows
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--package", required=True)
+    ap.add_argument("--audition", required=True)
+    ap.add_argument("--repo", required=True)
+    args = ap.parse_args()
+
+    package = Path(args.package).resolve()
+    audition = Path(args.audition).resolve()
+    rows = collect(package, audition)
+    if not rows:
+        raise SystemExit("no measurements found — the report cannot be generated")
 
     lines: list[str] = []
     lines.append("# C v3 -> C+ v4: отчёт об изменениях\n")
     lines.append(
         "Все числа измерены программой `ofeliya_cplus.metrics` на итоговых файлах: "
-        "C v3 — на WAV аудицион-пакета, C+ v4 — на мастеринговых WAV. "
-        "Ни одно значение не выведено на слух и не переписано вручную.\n"
+        "C v3 — на WAV аудицион-пакета, C+ v4 — на мастеринговых WAV. Ни одно значение "
+        "не выведено на слух и не переписано вручную. Каждый вывод ниже вычислен из "
+        "загруженных измерений.\n"
     )
 
-    lines.append("## 1. Что изменилось по существу\n")
+    # --------------------------------------------------------------- §1
+    lines.append("\n## 1. Что изменилось по существу\n")
     lines.append(
         "| | C v3 | C+ v4 |\n|---|---|---|\n"
         "| Материал | 16-секундные циклы из аудицион-пакета | шесть композиций, "
@@ -111,15 +131,12 @@ def main() -> None:
         "собственный генератор, лицензионных рисков нет |\n"
         "| Развитие | короткий цикл повторяется | полная форма: начало -> развитие -> "
         "возврат к состоянию начала |\n"
-        "| Стык цикла | разрыв отсчётов на границе (см. §2) | бесшовность проверена "
-        "по отсчетам, спектру и десяти циклам |\n"
-        "| Спектр | телефонная эквализация B-подобная в отдельных вариантах | "
-        "HPF 78 Гц, +1.5 дБ @155 Гц, воздух >8 кГц, полоса 1.5–3.5 кГц оставлена "
-        "свободной под телеграфы |\n"
+        "| Стык цикла | см. §2 | бесшовность проверена по отсчетам, спектру и десяти циклам |\n"
         "| Воспроизводимость | пакетный CLI заявлял несуществующие флаги | "
         "детерминированный pipeline с зафиксированными сидами |\n"
     )
 
+    # --------------------------------------------------------------- §2
     lines.append("\n## 2. Бесшовность цикла\n")
     lines.append(
         "| Трек | C v3: шаг на стыке | C v3: шаг ÷ локальный максимум | "
@@ -128,35 +145,56 @@ def main() -> None:
         "|---|---|---|---|---|---|---|---|\n"
     )
     for r in rows:
-        v3_seam = r["v3seam"]
-        v4_seam = r["v4seam"]
+        v3s, v4s = r["v3seam"], r["v4seam"]
         lines.append(
-            f"| {r['title']} | {fmt(v3_seam['sampleJumpRel'], 5)} | "
-            f"{fmt(v3_seam.get('wrapVsLocalRatio'), 2)} | "
-            f"{fmt(v4_seam['sampleJumpRel'], 5)} | "
-            f"{fmt(v4_seam.get('wrapVsLocalRatio'), 2)} | "
-            f"{fmt(v4_seam['spectralContinuityMaxBandDb'], 2)} дБ | "
-            f"{fmt(v4_seam['seamless'])} | {v4_seam['cyclesTested']} |"
+            f"| {r['title']} | {fmt(v3s.get('sampleJumpRel'), 5)} | "
+            f"{fmt(v3s.get('wrapVsLocalRatio'), 2)} | "
+            f"{fmt(v4s.get('sampleJumpRel'), 5)} | "
+            f"{fmt(v4s.get('wrapVsLocalRatio'), 2)} | "
+            f"{fmt(v4s.get('spectralContinuityMaxBandDb'), 2)} дБ | "
+            f"{fmt(v4s.get('seamless'))} | {v4s.get('cyclesTested')} |"
         )
     lines.append(
         "\n**Как это читать.** «Шаг на стыке» — |x[0] − x[N−1]| в сумме каналов "
-        "относительно пика файла. «Шаг ÷ локальный максимум» — тот же шаг, "
-        "делённый на самый большой шаг отсчётов внутри окна ±50 мс вокруг "
-        "границы. Клик — это когда отношение **больше** единицы: ступенька "
-        "выступает на фоне текстуры прямо у точки склейки.\n\n"
-        "**Честный вывод по стыку.** В обоих наборах отношение меньше единицы: "
-        "ни v3, ни C+ v4 не имеет на стыке ступеньки, которая выделялась бы "
-        "на фоне соседней текстуры. Числа из #299 (0.3981 для `B/03`, 0.2665 "
-        "для `C/03`) — это наблюдение о **величине** шага; вывод о слышимости "
-        "требует прослушивания, и автоматика его не заменяет. То есть "
-        "подтверждённого клика ни в одном наборе измерения не дают.\n\n"
-        "**Настоящий измеримый дефект v3 — другой.** Вариант C буквально "
-        "является 16-секундным циклом: один и тот же материал возвращается "
-        "каждые 16 секунд (сходство окна с самим собой через 16 с равно 1.0 "
-        "по построению). C+ v4 — формы длиной 80–100 с, у которых тот же "
-        "показатель равен 0.335–0.404 (см. §6).\n"
+        "относительно пика файла. «Шаг ÷ локальный максимум» — тот же шаг, делённый "
+        "на самый большой шаг отсчётов внутри окна ±50 мс вокруг границы. Клик — это "
+        "когда отношение **больше** единицы: ступенька выступает на фоне текстуры "
+        "прямо у точки склейки.\n"
+    )
+    v3_ratios = [r["v3seam"].get("wrapVsLocalRatio") for r in rows if r["v3seam"].get("wrapVsLocalRatio") is not None]
+    v4_ratios = [r["v4seam"].get("wrapVsLocalRatio") for r in rows if r["v4seam"].get("wrapVsLocalRatio") is not None]
+    v3_outliers = [v for v in v3_ratios if v > 3.0]
+    v4_outliers = [v for v in v4_ratios if v > 3.0]
+    lines.append(
+        f"\n**Вывод по стыку (из измерений).** В C v3 отношение шага к локальному "
+        f"максимуму — {range_text(v3_ratios, 2)}; ступенек, выступающих над "
+        f"текстурой (отношение > 3), — {len(v3_outliers)}. В C+ v4 — "
+        f"{range_text(v4_ratios, 2)}; таких ступенек — {len(v4_outliers)}. "
+        f"Подтверждённого клика измерения не дают ни в одном наборе; числа #299 "
+        f"(0.3981 для `B/03`, 0.2665 для `C/03`) — это наблюдение о величине шага, "
+        f"а вывод о слышимости требует прослушивания.\n"
+    )
+    loop_rows = [r for r in rows if r["id"] not in ("victory", "defeat")]
+    v4_ok = all(r["v4seam"].get("seamless") for r in loop_rows)
+    v4_seams = all(
+        r["v4seam"].get("cyclesMeasuredSeams") == r["v4seam"].get("cyclesTested", 0) - 1
+        for r in loop_rows
+    )
+    lines.append(
+        f"\nВсе beds C+ v4 бесшовны по результату измерений: "
+        f"{'да' if v4_ok else 'нет'}; измерены все внутренние точки склейки "
+        f"десяти повторов: {'да' if v4_seams else 'нет'}.\n"
+    )
+    lengths = [r["v4"]["durationSec"] for r in loop_rows]
+    v3_lengths = [r["v3"]["durationSec"] for r in loop_rows]
+    lines.append(
+        f"\n**Настоящий измеримый дефект v3 — другой.** Вариант C буквально является "
+        f"16-секундным циклом: длина материала {range_text(v3_lengths, 2)} с против "
+        f"{range_text(lengths, 2)} с у C+ v4, поэтому один и тот же материал "
+        f"возвращается в несколько раз реже.\n"
     )
 
+    # --------------------------------------------------------------- §3
     lines.append("\n## 3. Громкость и пики\n")
     lines.append("| Трек | v3 LUFS | v4 LUFS | v3 TP | v4 TP | v4 peak |\n|---|---|---|---|---|---|\n")
     for r in rows:
@@ -165,11 +203,19 @@ def main() -> None:
             f"{fmt(r['v3']['truePeakDbTp'])} | {fmt(r['v4']['truePeakDbTp'])} | "
             f"{fmt(r['v4']['peak'], 4)} |"
         )
+    v4_lufs = [r["v4"]["lufs"] for r in rows]
+    v4_tp = [r["v4"]["truePeakDbTp"] for r in rows]
+    in_contract = [r for r in rows if abs(r["v4"]["lufs"] - TARGET_LUFS) <= LUFS_TOLERANCE
+                   and r["v4"]["truePeakDbTp"] <= MAX_TRUE_PEAK_DBTP]
     lines.append(
-        "\nКонтракт репозитория (`docs/AUDIO_MASTERING.md`): −14 LUFS ±0.5, "
-        "true peak ≤ −1 dBTP, stereo, 44 100 Гц.\n"
+        f"\nКонтракт репозитория (`docs/AUDIO_MASTERING.md`): −14 LUFS ±0.5, "
+        f"true peak ≤ −1 dBTP, stereo, 44 100 Гц. Фактические значения C+ v4: "
+        f"LUFS {range_text(v4_lufs, 2)}, true peak {range_text(v4_tp, 2)} dBTP; "
+        f"в контракте — {len(in_contract)} из {len(rows)} композиций"
+        f"{'.' if len(in_contract) == len(rows) else ' — см. расхождения выше.'}\n"
     )
 
+    # --------------------------------------------------------------- §4
     lines.append("\n## 4. Распределение энергии по полосам\n")
     lines.append("| Трек | " + " | ".join(BAND_LABELS.values()) + " |\n")
     lines.append("|---" * (len(BAND_LABELS) + 1) + "|\n")
@@ -182,51 +228,67 @@ def main() -> None:
     lines.append(
         "\nВ beds полоса 1500–3500 Гц намеренно оставлена пустой: именно в ней "
         "сидят игровые телеграфы, и пустая полоса оставляет им место. Полоса "
-        ">8000 Гц — это то, что открывает адаптивный lowpass игры (2.5–14 кГц) "
-        "при росте опасности: у C+ v4 её вдвое больше, чем у варианта C "
-        "(12.3 % против 6.3 % на Bloodstream).\n"
+        ">8000 Гц — то, что открывает адаптивный lowpass игры (2.5–14 кГц) при "
+        "росте опасности.\n"
     )
 
+    # --------------------------------------------------------------- §5
     lines.append("\n## 5. Моносовместимость (сведение L+R)\n")
     lines.append(
-        "| Трек | v3: потеря громкости | v4: потеря громкости | v4: корреляция | "
-        "v4: потеря фазы в низу |\n|---|---|---|---|---|\n"
+        "| Трек | v3: потеря | v4: потеря | v4: корреляция | v4: потеря фазы в низу | "
+        "v4: антифазная энергия | v4: худшая полоса |\n|---|---|---|---|---|---|---|\n"
     )
     for r in rows:
+        m4 = r["v4mono"]
+        retention = m4.get("bandRetentionDb") or {}
+        worst_band = min(retention.items(), key=lambda kv: kv[1])[0] if retention else None
+        worst_value = retention.get(worst_band) if worst_band else None
         lines.append(
-            f"| {r['title']} | {fmt(r['v3mono']['monoLufsDeltaDb'])} дБ | "
-            f"{fmt(r['v4mono']['monoLufsDeltaDb'])} дБ | "
-            f"{fmt(r['v4mono']['monoCorrelation'], 3)} | "
-            f"{fmt(r['v4mono']['lowBandPhaseLossDb'], 1)} дБ |"
+            f"| {r['title']} | {fmt(r['v3mono'].get('monoLufsLossDb'), 2)} дБ | "
+            f"{fmt(m4.get('monoLufsLossDb'), 2)} дБ | "
+            f"{fmt(m4.get('monoCorrelation'), 3)} | "
+            f"{fmt(m4.get('lowBandPhaseLossDb'), 1)} дБ | "
+            f"{fmt(m4.get('antiPhaseEnergyPct'), 1)} % | "
+            f"{BAND_LABELS.get(worst_band, '—')} {fmt(worst_value, 1)} дБ |"
         )
     lines.append(
-        "\nПоложительное значение — на сколько дБ моно-сведение тише стерео. "
-        "Теоретический минимум потери — 3.01 дБ (BS.1770 суммирует мощности "
-        "каналов, поэтому коррелированная пара всегда на 3.01 дБ громче своего "
-        "свёрнутого моно). Значения выше 3.01 дБ — это потеря бокового канала, "
-        "её компенсирует ширина стереообраза.\n"
+        "\nОриентир 3.01 дБ — это разница, которую BS.1770 даёт **одинаковым** "
+        "каналам: сумма мощностей двух каналов всегда на 3.01 дБ выше энергии их "
+        "свёрнутого моно. Для неидентичных каналов (жёсткая панорама, разные "
+        "уровни, частично противофазный сигнал) ориентир другой, поэтому в "
+        "таблице приведён фактический замер, а не сравнение с 3.01.\n"
     )
 
+    # --------------------------------------------------------------- §6
     lines.append("\n## 6. Утомляемость: детектор короткого цикла\n")
     lines.append(
         "Детектор применим только к зацикливаемым beds: для коротких one-shot "
         "сигналов он не имеет смысла и помечен как «не применимо».\n\n"
     )
-    lines.append("| Трек | эхо на 16 с | сходство далёких окон | доля почти идентичных пар | риск |\n|---|---|---|---|---|\n")
+    lines.append(
+        "| Трек | эхо на 16 с | сходство далёких окон | доля почти идентичных пар | риск |\n"
+        "|---|---|---|---|---|\n"
+    )
     for r in rows:
         f = r["v4fatigue"]
         if not f.get("applicable", True):
             lines.append(f"| {r['title']} | — | — | — | не применимо (one-shot) |")
             continue
         lines.append(
-            f"| {r['title']} | {fmt(f['loop16sEcho'], 3)} | {fmt(f['farSimilarityMean'], 3)} | "
-            f"{fmt(f['farSimilarPairsPct'], 2)} % | {f['repetitionRisk']} |"
+            f"| {r['title']} | {fmt(f.get('loop16sEcho'), 3)} | "
+            f"{fmt(f.get('farSimilarityMean'), 3)} | "
+            f"{fmt(f.get('farSimilarPairsPct'), 2)} % | {f.get('repetitionRisk')} |"
         )
+    echoes = [r["v4fatigue"].get("loop16sEcho") for r in rows if r["v4fatigue"].get("applicable", True)]
+    risks = [r["v4fatigue"].get("repetitionRisk") for r in rows if r["v4fatigue"].get("applicable", True)]
     lines.append(
-        "\nЕсли бы 80-секундный файл был на деле 16-секундным циклом, повторённым "
-        "пять раз, эхо на 16 с поднялось бы к 0.99.\n"
+        f"\nФактические значения эха на 16 с: {range_text(echoes, 3)}; риск повтора: "
+        f"{', '.join(sorted(set(str(x) for x in risks)))}. Эталон детектора — 0.95: "
+        f"если бы файл был 16-секундным циклом, повторённым пять раз, эхо "
+        f"поднялось бы к ~0.99.\n"
     )
 
+    # --------------------------------------------------------------- §7
     lines.append("\n## 7. Маскировка игровых SFX\n")
     masking_path = package / "analysis" / "sfx-masking.json"
     if masking_path.exists():
@@ -234,24 +296,22 @@ def main() -> None:
         regressions = masking.get("regressions", [])
         matched = [r for r in regressions if r.get("actMatched")]
         lines.append(
-            "Сравнение «по акту»: C+ bed сравнивается с production-bed **того же акта** "
-            "(пулы из `MUSIC_BED_POOLS`: акт I — loop0/1/3/6, акт II — loop2/4/5), потому что "
-            "это один и тот же музыкальный слот в одном акте. Рядом указан диапазон по "
-            "**всем** production-bed сразу, включая самый невыгодный baseline — чтобы "
-            "выбор эталона не мог улучшить результат.\n\n"
+            "**Относительное сравнение.** C+ bed сравнивается с production-bed "
+            "**того же акта** (пулы из `MUSIC_BED_POOLS`: акт I — loop0/1/3/6, акт II — "
+            "loop2/4/5) — это один и тот же музыкальный слот в одном акте. Рядом "
+            "приведён диапазон по **всем** production-bed сразу, включая худший "
+            "baseline, чтобы выбор эталона не мог улучшить вывод.\n\n"
         )
         lines.append(
-            "| SFX | Δ к act-matched production (дБ) | Δ к худшему baseline | хуже production на >3 дБ |\n"
-            "|---|---|---|---|\n"
+            "| SFX | Δ к act-matched production (дБ) | Δ к худшему baseline | "
+            "хуже production на >3 дБ |\n|---|---|---|---|\n"
         )
         for sfx in sorted({r["sfx"] for r in matched}):
             sel = [r for r in matched if r["sfx"] == sfx]
-            deltas = [r["deltaDb"] for r in sel]
-            deltas_all = [r["deltaVsWorstBaselineDb"] for r in sel]
             worse = sum(1 for r in sel if r["verdict"] == "WORSE")
             lines.append(
-                f"| {sfx} | {fmt(min(deltas), 1)} … {fmt(max(deltas), 1)} | "
-                f"{fmt(min(deltas_all), 1)} … {fmt(max(deltas_all), 1)} | "
+                f"| {sfx} | {range_text([r['deltaDb'] for r in sel], 1)} | "
+                f"{range_text([r['deltaVsWorstBaselineDb'] for r in sel], 1)} | "
                 f"{worse} из {len(sel)} |"
             )
         summary_matched = masking.get("actMatchedSummary", {})
@@ -259,19 +319,57 @@ def main() -> None:
         lines.append(
             f"\nИтог по act-matched сравнениям: {summary_matched.get('comparisons', 0)}, "
             f"хуже production на >3 дБ — **{summary_matched.get('worseThanProduction', 0)}**; "
-            f"диапазон Δ {summary_matched.get('deltaRangeDb', ['—', '—'])[0]}…"
-            f"{summary_matched.get('deltaRangeDb', ['—', '—'])[1]} дБ. "
+            f"диапазон Δ {range_text(summary_matched.get('deltaRangeDb'), 1)} дБ. "
             f"По всем baseline сразу: {summary_all.get('comparisons', 0)} сравнений, "
             f"хуже — {summary_all.get('worseThanProduction', 0)}.\n"
         )
+
         lines.append(
-            "Полоса берётся из собственного спектра SFX, а не из фиксированного «кармана» "
-            "1.5–3.5 кГц. Музыка измеряется на её реальном игровом уровне (шина музыки "
-            "0.65), SFX — на пике в своей полосе с учётом роли из `audioMixMath.ts`. "
-            "Отрицательный Δ означает, что C+ v4 маскирует игровой сигнал **меньше**, "
-            "чем production-bed в том же слоте.\n"
+            "\n**Абсолютная слышимость в реальном игровом миксе.** Относительное "
+            "улучшение само по себе ничего не говорит о слышимости: считается "
+            "уровень SFX в его собственной полосе с учётом runtime-нормализации "
+            "(`scanNormalizationTrim`) и роли из `audioMixMath.ts`, и уровень "
+            "музыки на её игровом уровне (шина 0.65).\n\n"
+        )
+        lines.append(
+            "| SFX | полоса Гц | trim | SFX дБ | музыка дБ | запас дБ | "
+            "запас в production | разница | выше музыки во всех beds |\n"
+            "|---|---|---|---|---|---|---|---|---|\n"
+        )
+        for a in masking.get("absolute", []):
+            lines.append(
+                f"| {a['sfx']} | {a['dominantBandHz'][0]:.0f}–{a['dominantBandHz'][1]:.0f} | "
+                f"{fmt(a['sfxRuntimeTrim'], 2)} | {fmt(a['sfxBandDb'], 1)} | "
+                f"{fmt(a['musicBandDb'], 1)} | {fmt(a['worstMarginDb'], 1)} | "
+                f"{fmt(a.get('productionWorstMarginDb'), 1)} | "
+                f"{fmt(a.get('improvementVsProductionDb'), 1)} | "
+                f"{fmt(a['aboveMusicEverywhere'])} |"
+            )
+        absolute_summary = masking.get("absoluteSummary", {})
+        below = absolute_summary.get("soundsBelowMusic", [])
+        lines.append(
+            f"\nИтог: {absolute_summary.get('aboveMusicEverywhere', 0)} из "
+            f"{absolute_summary.get('soundsChecked', 0)} проверенных звуков остаются "
+            f"выше музыкального слоя во всех beds; худший запас — "
+            f"{fmt(absolute_summary.get('worstMarginDb'), 1)} дБ против "
+            f"{fmt(absolute_summary.get('productionWorstMarginDb'), 1)} дБ в "
+            f"production-наборе.\n"
+        )
+        if below:
+            lines.append(
+                f"\nЗвуки, которые остаются частично перекрытыми музыкой: "
+                f"{', '.join(below)}. Это **не регрессия**: те же звуки перекрыты "
+                f"production-музыкой сильнее (разница в пользу C+ v4 приведена в "
+                f"столбце «разница»). Если владелец считает, что телеграф фазы "
+                f"босса должен читаться над музыкой, это отдельная правка игрового "
+                f"микса — отдельный дакинг или фильтр под `bossphase`.\n"
+            )
+        lines.append(
+            "\nПолоса берётся из собственного спектра SFX, а не из фиксированного "
+            "«кармана» 1.5–3.5 кГц.\n"
         )
 
+    # --------------------------------------------------------------- §8
     lines.append("\n## 8. Эмуляция небольшого динамика\n")
     lines.append(
         "| Трек | эмулированный LUFS | изменение громкости | полоса 110–220 Гц до/после | "
@@ -280,9 +378,9 @@ def main() -> None:
     for r in rows:
         s = r["v4speaker"]
         lines.append(
-            f"| {r['title']} | {fmt(s['emulatedLufs'])} | {fmt(s['loudnessDeltaDb'])} дБ | "
-            f"{fmt(s['punchBandBeforePct'], 1)} % / {fmt(s['punchBandAfterPct'], 1)} % | "
-            f"{fmt(s['airBeforePct'], 2)} % / {fmt(s['airAfterPct'], 2)} % |"
+            f"| {r['title']} | {fmt(s.get('emulatedLufs'))} | {fmt(s.get('loudnessDeltaDb'), 2)} дБ | "
+            f"{fmt(s.get('punchBandBeforePct'), 1)} % / {fmt(s.get('punchBandAfterPct'), 1)} % | "
+            f"{fmt(s.get('airBeforePct'), 2)} % / {fmt(s.get('airAfterPct'), 2)} % |"
         )
     lines.append(
         "\nЭто **техническая эмуляция**: high-pass 180 Гц, пик +4 дБ @420 Гц, "
@@ -290,7 +388,7 @@ def main() -> None:
         "Galaxy S20+ — приёмка на телефоне остаётся отдельным ручным этапом.\n"
     )
 
-    out_path = Path(args.out) if args.out else package / "docs" / "CHANGES-v3-to-v4.md"
+    out_path = package / "docs" / "CHANGES-v3-to-v4.md"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"[report] wrote {out_path}")

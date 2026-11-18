@@ -148,7 +148,7 @@ def master(
         lufs = integrated_lufs(limited, sr)
         tp = true_peak_db(limited, sr)
         if not np.isfinite(lufs):
-            raise ValueError("mastering: signal is silent")
+            raise MasteringContractError("mastering: the signal is silent")
         stereo = limited
         if abs(lufs - target_lufs) <= 0.05 and tp <= LIMITER_CEILING_DBTP:
             break
@@ -160,14 +160,19 @@ def master(
             ceiling_db = min(ceiling_db - 0.1, LIMITER_CEILING_DBTP - overshoot - 0.05)
         gain_db += (target_lufs - lufs)
     else:
-        # Final pass with the last ceiling: guarantees the sample peak (and
-        # therefore the true peak) respects the contract.
+        # The iteration did not settle: one final pass with the last ceiling,
+        # and then the contract check below decides whether the result is
+        # usable at all.
         stereo = dsp.lookahead_limiter(
             base * dsp.from_db(gain_db), ceiling_db=ceiling_db, lookahead_ms=4.0, sr=sr
         )
 
     final_lufs = integrated_lufs(stereo, sr)
     final_tp = true_peak_db(stereo, sr)
+
+    # The contract is checked here, not assumed: a master that does not meet
+    # it must never be handed back as a success.
+    assert_master_contract(stereo, final_lufs, final_tp, sr)
 
     return Mastered(
         left=stereo[:, 0].astype(np.float32),
@@ -176,6 +181,60 @@ def master(
         lufs=float(final_lufs),
         true_peak_db=float(final_tp),
     )
+
+
+class MasteringContractError(RuntimeError):
+    """Raised when a master does not satisfy the loudness / true-peak contract."""
+
+
+def assert_master_contract(
+    stereo: np.ndarray,
+    lufs: float,
+    true_peak: float,
+    sr: int = SR,
+    target_lufs: float = TARGET_LUFS,
+    lufs_tolerance: float = LUFS_TOLERANCE,
+    max_true_peak: float = MAX_TRUE_PEAK_DBTP,
+) -> None:
+    """Verify the mastering contract, raising on any violation.
+
+    Checks, in order: finite samples, finite loudness, loudness inside the
+    tolerance, true peak inside the ceiling and a stereo signal at the
+    expected sample rate.
+    """
+    if stereo.size == 0:
+        raise MasteringContractError("mastering: empty signal")
+    if not np.all(np.isfinite(stereo)):
+        raise MasteringContractError("mastering: the signal contains NaN or Inf samples")
+    if not np.isfinite(lufs):
+        raise MasteringContractError("mastering: the integrated loudness is not a finite number")
+    if not np.isfinite(true_peak):
+        raise MasteringContractError("mastering: the true peak is not a finite number")
+    if abs(lufs - target_lufs) > lufs_tolerance:
+        raise MasteringContractError(
+            f"mastering: loudness {lufs:.2f} LUFS is outside {target_lufs} +/- {lufs_tolerance} dB"
+        )
+    if true_peak > max_true_peak:
+        raise MasteringContractError(
+            f"mastering: true peak {true_peak:.2f} dBTP exceeds {max_true_peak} dBTP"
+        )
+    if stereo.shape[1] != 2:
+        raise MasteringContractError(f"mastering: expected a stereo signal, got {stereo.shape[1]} channels")
+
+
+def verify_master_file(path: Path, sr: int = SR) -> dict:
+    """Measure a written file and enforce the contract on the *decoded* audio.
+
+    The QA has to look at the file that ships, not at the intermediate values
+    the mastering chain reported.
+    """
+    data, file_sr = sf.read(str(path), always_2d=True)
+    if file_sr != sr:
+        raise MasteringContractError(f"{path.name}: expected {sr} Hz, got {file_sr} Hz")
+    lufs = integrated_lufs(data, file_sr)
+    tp = true_peak_db(data, file_sr)
+    assert_master_contract(data, lufs, tp, file_sr)
+    return {"lufs": round(float(lufs), 2), "truePeakDbTp": round(float(tp), 2)}
 
 
 def write_wav(path: Path, mastered: Mastered, sr: int = SR) -> Path:

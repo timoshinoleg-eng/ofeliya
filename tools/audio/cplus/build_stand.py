@@ -88,6 +88,18 @@ def copy(src: Path, dst: Path) -> None:
 def build(package: Path, audition: Path, repo: Path) -> Path:
     stand = package / "stand"
     assets = stand / "assets"
+
+    # The comparison UI is a committed template, so a clean build always
+    # produces a usable stand — without an untracked local artefact.
+    template = Path(__file__).resolve().parent / "stand" / "index.html"
+    if not template.exists():
+        raise SystemExit(
+            f"the stand template is missing: {template} — the package cannot be "
+            f"assembled without it"
+        )
+    stand.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(template, stand / "index.html")
+
     groups = []
     metric_rows = []
 

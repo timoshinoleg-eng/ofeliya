@@ -163,6 +163,9 @@ def write_repo_manifest(out: Path, manifest_path: Path) -> None:
     The manifest pins every shipped C+ file by sha256 and records the measured
     loudness / true-peak / format, so `scripts/check-audio-cplus.mjs` can
     verify the branch without a decoder dependency.
+    The audio contract is validated on the **decoded** files before anything is
+    written: a manifest that describes a non-compliant encode must never
+    replace a valid one.
     """
     assets: dict[str, dict] = {}
     for track_id in compositions.COMPOSERS:
@@ -171,12 +174,40 @@ def write_repo_manifest(out: Path, manifest_path: Path) -> None:
             if not path.exists():
                 continue
             m = metrics.measure_file(path)
+            if m["lufs"] is None or abs(m["lufs"] - master.TARGET_LUFS) > 1.0:
+                raise SystemExit(
+                    f"{path.name}: loudness {m['lufs']} LUFS is outside the mastering "
+                    f"contract — the manifest was not updated"
+                )
+            if m["truePeakDbTp"] > master.MAX_TRUE_PEAK_DBTP:
+                raise SystemExit(
+                    f"{path.name}: true peak {m['truePeakDbTp']} dBTP exceeds "
+                    f"{master.MAX_TRUE_PEAK_DBTP} — the manifest was not updated"
+                )
+            if m["channels"] != 2 or m["sampleRate"] != master.SR:
+                raise SystemExit(
+                    f"{path.name}: expected stereo {master.SR} Hz, got "
+                    f"{m['channels']} channels at {m['sampleRate']} Hz — "
+                    f"the manifest was not updated"
+                )
             m["sha256"] = metrics.sha256_of(path)
             m["kind"] = "music"
             m["role"] = compositions.TRACK_INFO[track_id]["role"]
             m["title"] = compositions.TRACK_INFO[track_id]["title"]
             m["loop"] = compositions.TRACK_INFO[track_id]["loop"]
             assets[f"{track_id}.{fmt}"] = m
+
+    expected = {
+        f"{track_id}.{fmt}"
+        for track_id in compositions.COMPOSERS
+        for fmt in ("ogg", "mp3")
+    }
+    missing = sorted(expected - set(assets))
+    if missing:
+        raise SystemExit(
+            f"the package is missing {', '.join(missing)} — the manifest was not updated"
+        )
+
     manifest = {
         "version": 1,
         "musicTargetLUFS": master.TARGET_LUFS,
@@ -268,6 +299,13 @@ def main() -> None:
         help="skip rendering; re-measure the existing package and refresh the analysis reports",
     )
     args = ap.parse_args()
+
+    if args.no_encode and args.manifest_out:
+        raise SystemExit(
+            "--no-encode cannot be combined with --manifest-out: the manifest would be "
+            "written from the previous encodes while the WAVs were just re-rendered. "
+            "Use --manifest-only to refresh a manifest from an unchanged package."
+        )
 
     out = Path(args.out).resolve()
     for sub in ("source", "wav", "ogg", "mp3", "analysis"):

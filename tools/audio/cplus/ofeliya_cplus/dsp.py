@@ -355,6 +355,44 @@ def lookahead_limiter(
     return x * gain
 
 
+def _decaying_peak(env: np.ndarray, a_rel: float, block: int = 1024) -> np.ndarray:
+    """Decaying-peak detector: instant attack, exponential release.
+
+    Vectorised block-wise: inside a block the running maximum of
+    `env[k] * a_rel**(i-k)` is the decayed peak, and the block entry value
+    carries the previous block's state. A block size of 1024 keeps
+    `a_rel**i` well away from underflow.
+    """
+    out = np.empty_like(env)
+    carry = 0.0
+    n = env.size
+    for start in range(0, n, block):
+        seg = env[start : start + block]
+        idx = np.arange(1, seg.size + 1)
+        decay = a_rel ** idx
+        run = np.maximum.accumulate(seg * decay)
+        out[start : start + seg.size] = np.maximum(run, carry * decay)
+        carry = float(out[start + seg.size - 1])
+    return out
+
+
+def _smooth_ballistics(target_db: np.ndarray, a_att: float, a_rel: float) -> np.ndarray:
+    """One-pole smoother with separate attack and release coefficients.
+
+    The reduction deepens quickly (attack) and recovers slowly (release).
+    Implemented over plain Python floats: a 3.5 M sample pass costs about
+    half a second, which is acceptable for a mastering pass.
+    """
+    values = target_db.tolist()
+    out = [0.0] * len(values)
+    y = 0.0
+    for i, t in enumerate(values):
+        coef = a_att if t < y else a_rel
+        y = coef * y + (1.0 - coef) * t
+        out[i] = y
+    return np.array(out, dtype=np.float64)
+
+
 def compress(
     x: np.ndarray,
     threshold_db: float = -18.0,
@@ -363,23 +401,38 @@ def compress(
     release_s: float = 0.25,
     sr: int = SR,
 ) -> np.ndarray:
-    """Feed-forward peak compressor with an envelope follower.
+    """Feed-forward peak compressor with a dB-domain gain reduction.
 
-    The follower is built from two one-pole filters (fast attack, slow
-    release) and the larger of the two outputs is used, which is the standard
-    vectorised approximation of a piecewise envelope follower.
+    The gain reduction is computed from the detector level **in dBFS**: the
+    difference between the envelope level and the threshold is a level
+    difference, not an amplitude difference. Subtracting linear amplitudes and
+    treating the result as decibels applies roughly a tenth of the intended
+    reduction (a settled -6 dBFS signal under a -18 dBFS threshold and a 2:1
+    ratio has to lose 6 dB, not 0.19 dB).
+
+    The detector is a decaying peak, so a continuous tone settles at its peak
+    level; the ballistics then apply the attack and release times to the gain
+    reduction itself. Gain stays at unity below the threshold.
     """
-    thresh = 10.0 ** (threshold_db / 20.0)
-    env = np.abs(x)
-    a_att = float(np.exp(-1.0 / max(1e-6, attack_s * sr)))
+    if ratio < 1.0:
+        raise ValueError("compress(): ratio must be >= 1")
+    single = x.ndim == 1
+    channels = [x] if single else [x[:, c] for c in range(x.shape[1])]
+
     a_rel = float(np.exp(-1.0 / max(1e-6, release_s * sr)))
-    zi = np.zeros(1)
-    fast, _ = signal.lfilter([1.0 - a_att], [1.0, -a_att], env, zi=zi)
-    slow, _ = signal.lfilter([1.0 - a_rel], [1.0, -a_rel], env, zi=zi)
-    env_out = np.maximum(fast, slow)
-    over = np.maximum(env_out - thresh, 0.0)
-    reduction_db = -over * (1.0 - 1.0 / ratio)
-    return x * (10.0 ** (reduction_db / 20.0))
+    a_att = float(np.exp(-1.0 / max(1e-6, attack_s * sr)))
+
+    processed = []
+    for channel in channels:
+        env = np.abs(channel)
+        detector = _decaying_peak(env, a_rel)
+        detector_db = 20.0 * np.log10(np.maximum(detector, 1e-9))
+        over_db = np.maximum(detector_db - threshold_db, 0.0)
+        target_db = -over_db * (1.0 - 1.0 / ratio)
+        reduction_db = _smooth_ballistics(target_db, a_att, a_rel)
+        processed.append(channel * (10.0 ** (reduction_db / 20.0)))
+
+    return processed[0] if single else np.stack(processed, axis=1)
 
 
 def dc_block(x: np.ndarray, cutoff: float = 18.0, sr: int = SR) -> np.ndarray:

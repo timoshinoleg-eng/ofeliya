@@ -3,18 +3,20 @@
 
     python tests/test_package.py --package <pkg> [--manifest <manifest.json>]
 
-Checks, in order:
+The gate decodes the **shipped** files — not the intermediate values the
+mastering chain reported — and checks:
 
   1. every expected file exists (no missing or corrupt assets);
-  2. the mastering contract holds: -14 LUFS +/- 0.5, true peak <= -1 dBTP,
-     stereo, 44 100 Hz, no clipped samples;
-  3. the loop beds are 60-90 s (100 s for the climax) and their measured
-     seam report says the loop is seamless;
+  2. the mastering contract holds on the decoded audio: -14 LUFS +/- 0.5,
+     true peak <= -1 dBTP, stereo, 44 100 Hz, no clipping;
+  3. the loop beds are 60-90 s (100 s for the climax) and their measured seam
+     report says the loop is seamless;
   4. the mono fold-down stays inside the compatible range;
-  5. the sha256 in the analysis reports matches the shipped files;
-  6. the repository manifest matches the shipped files byte for byte.
-
-Exit code 0 = every check passed.
+  5. the sha256 of every shipped file matches its recorded digest — a missing
+     digest is a failure, not a skip;
+  6. the manifest lists exactly the expected asset names — no extra, no
+     missing, no duplicated entry through an alternative path;
+  7. the seam detector itself is able to fail.
 """
 
 from __future__ import annotations
@@ -24,16 +26,22 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "generator"))
-
 import numpy as np
+import soundfile as sf
+
+_HERE = Path(__file__).resolve().parent
+for _candidate in (_HERE, _HERE.parent / "generator"):
+    if (_candidate / "ofeliya_cplus").is_dir():
+        sys.path.insert(0, str(_candidate))
+        break
 
 from ofeliya_cplus import metrics  # noqa: E402
 from ofeliya_cplus.dsp import SR  # noqa: E402
 
-TARGET_LUFS = -14.0
-LUFS_TOLERANCE = 0.5
-MAX_TRUE_PEAK_DBTP = -1.0
+TRACKS = ["bloodstream", "heart", "immune_prime", "cardiac_titan", "victory", "defeat"]
+
+#: Exactly the files the package must ship.
+EXPECTED_ASSETS = {f"{track}.{fmt}" for track in TRACKS for fmt in ("ogg", "mp3")}
 
 LOOPS = {
     "bloodstream": (60.0, 90.0),
@@ -42,7 +50,11 @@ LOOPS = {
     "cardiac_titan": (90.0, 110.0),
 }
 STINGERS = {"victory": (3.0, 5.5), "defeat": (3.0, 5.5)}
-ALL = list(LOOPS) + list(STINGERS)
+
+TARGET_LUFS = -14.0
+LUFS_TOLERANCE_WAV = 0.5
+LUFS_TOLERANCE_LOSSY = 0.75
+MAX_TRUE_PEAK_DBTP = -1.0
 
 failures: list[str] = []
 checks = 0
@@ -58,6 +70,17 @@ def check(condition: bool, message: str) -> None:
         print(f"FAIL {message}")
 
 
+def measure_encoded(path: Path) -> dict:
+    """Decode a shipped file and measure it like the game would."""
+    data, sr = sf.read(str(path), always_2d=True)
+    m = metrics.measure_array(data, sr)
+    m["sampleRate"] = sr
+    m["channels"] = int(data.shape[1])
+    m["sha256"] = metrics.sha256_of(path)
+    m["bytes"] = path.stat().st_size
+    return m
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--package", required=True)
@@ -66,78 +89,127 @@ def main() -> None:
 
     package = Path(args.package).resolve()
 
-    # 1. presence -----------------------------------------------------------
-    for track in ALL:
+    # 1. presence ------------------------------------------------------------
+    for track in TRACKS:
         for folder, ext in (("source", ".wav"), ("wav", ".wav"), ("ogg", ".ogg"), ("mp3", ".mp3")):
             path = package / folder / f"{track}{ext}"
-            check(path.exists() and path.stat().st_size > 0, f"{folder}/{track}{ext} exists and is not empty")
+            check(
+                path.exists() and path.stat().st_size > 0,
+                f"{folder}/{track}{ext} exists and is not empty",
+            )
         analysis = package / "analysis" / f"{track}.json"
         check(analysis.exists(), f"analysis/{track}.json exists")
-
     if failures:
         report()
         return
 
-    # 2-4. measured contract ------------------------------------------------
-    for track in ALL:
-        track_report = json.loads((package / "analysis" / f"{track}.json").read_text(encoding="utf-8"))
-        m = track_report["measured"]
-        qa = track_report["qa"]
-        label = f"{track}"
+    # 2-5. the shipped files and the analysis digests -----------------------
+    for track in TRACKS:
+        analysis = json.loads((package / "analysis" / f"{track}.json").read_text(encoding="utf-8"))
+        for kind, folder, ext in (
+            ("wav", "wav", ".wav"),
+            ("ogg", "ogg", ".ogg"),
+            ("mp3", "mp3", ".mp3"),
+        ):
+            path = package / folder / f"{track}{ext}"
+            recorded = analysis.get("files", {}).get(kind, {}).get("sha256")
+            check(
+                isinstance(recorded, str) and len(recorded) == 64,
+                f"{track}.{kind}: a recorded digest is present (a missing digest is a failure)",
+            )
+            if not isinstance(recorded, str) or len(recorded) != 64:
+                continue
+            check(
+                metrics.sha256_of(path) == recorded,
+                f"{track}.{kind}: sha256 matches the analysis report",
+            )
+            m = measure_encoded(path)
+            tolerance = LUFS_TOLERANCE_WAV if kind == "wav" else LUFS_TOLERANCE_LOSSY
+            check(m["sampleRate"] == SR, f"{track}.{kind}: sample rate {m['sampleRate']} Hz")
+            check(m["channels"] == 2, f"{track}.{kind}: stereo")
+            check(
+                m["lufs"] is not None and abs(m["lufs"] - TARGET_LUFS) <= tolerance,
+                f"{track}.{kind}: LUFS {m['lufs']} within {TARGET_LUFS} +/- {tolerance}",
+            )
+            check(
+                m["truePeakDbTp"] <= MAX_TRUE_PEAK_DBTP,
+                f"{track}.{kind}: true peak {m['truePeakDbTp']} dBTP <= {MAX_TRUE_PEAK_DBTP}",
+            )
+            check(m["clippedFraction"] == 0, f"{track}.{kind}: no clipped samples")
+            if kind == "wav":
+                bounds = LOOPS.get(track) or STINGERS.get(track)
+                if bounds:
+                    lo, hi = bounds
+                    check(
+                        lo <= m["durationSec"] <= hi,
+                        f"{track}.wav: duration {m['durationSec']}s within {lo}-{hi}s",
+                    )
 
-        check(abs(m["lufs"] - TARGET_LUFS) <= LUFS_TOLERANCE, f"{label}: LUFS {m['lufs']} within {TARGET_LUFS} +/- {LUFS_TOLERANCE}")
-        check(m["truePeakDbTp"] <= MAX_TRUE_PEAK_DBTP, f"{label}: true peak {m['truePeakDbTp']} dBTP <= {MAX_TRUE_PEAK_DBTP}")
-        check(m["channels"] == 2, f"{label}: stereo")
-        check(m["sampleRate"] == 44100, f"{label}: 44100 Hz")
-        check(m["clippedFraction"] == 0, f"{label}: no clipped samples")
-        check(m["peak"] <= 1.0, f"{label}: peak {m['peak']} within full scale")
-
+        qa = analysis["qa"]
         if track in LOOPS:
-            lo, hi = LOOPS[track]
-            check(lo <= m["durationSec"] <= hi, f"{label}: duration {m['durationSec']}s within {lo}-{hi}s")
-            check(qa["seam"]["seamless"], f"{label}: loop seam verified over {qa['seam']['cyclesTested']} cycles")
-            check(qa["seam"]["cyclesTested"] >= 10, f"{label}: at least ten cycles were tested")
-            check(qa["seam"]["spectralContinuityMaxBandDb"] < 6.0, f"{label}: spectral continuity across the seam")
-            check(qa["mono"]["monoSafe"], f"{label}: mono fold-down compatible ({qa['mono']['monoLufsDeltaDb']} dB)")
-            check(qa["fatigue"]["repetitionRisk"] == "low", f"{label}: no short-loop repetition detected")
-        else:
-            lo, hi = STINGERS[track]
-            check(lo <= m["durationSec"] <= hi, f"{label}: duration {m['durationSec']}s within {lo}-{hi}s")
+            seam = qa["seam"]
+            check(seam["seamless"] is True, f"{track}: the loop seam is verified")
+            check(seam["cyclesTested"] >= 10, f"{track}: at least ten cycles were tested")
+            check(
+                seam.get("cyclesMeasuredSeams") == seam["cyclesTested"] - 1,
+                f"{track}: every internal seam of the repeat was measured",
+            )
+            check(
+                seam["spectralContinuityMaxBandDb"] < 6.0,
+                f"{track}: the band balance across the seam holds",
+            )
+            check(qa["mono"]["monoSafe"] is True, f"{track}: the mono fold-down stays compatible")
+            check(
+                qa["fatigue"].get("repetitionRisk") == "low",
+                f"{track}: no short-loop repetition detected",
+            )
 
-        # 5. hashes ---------------------------------------------------------
-        for kind, rel in (("wav", f"wav/{track}.wav"), ("ogg", f"ogg/{track}.ogg"), ("mp3", f"mp3/{track}.mp3")):
-            path = package / rel
-            expected = track_report["files"].get(kind, {}).get("sha256")
-            if expected:
-                check(metrics.sha256_of(path) == expected, f"{label}: {kind} sha256 matches the analysis report")
-
-    # 6. repository manifest ------------------------------------------------
+    # 6. the manifest lists exactly the expected assets -----------------------
     if args.manifest:
-        manifest_path = Path(args.manifest).resolve()
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest = json.loads(Path(args.manifest).read_text(encoding="utf-8"))
         entries = manifest.get("assets", {})
-        check(len(entries) == len(ALL) * 2, f"manifest pins {len(ALL) * 2} files (ogg + mp3), found {len(entries)}")
-        for rel, m in entries.items():
-            name = Path(rel).name
-            src = package / ("ogg" if name.endswith(".ogg") else "mp3") / name
-            check(src.exists(), f"manifest asset {rel} exists in the package")
-            if src.exists():
-                check(metrics.sha256_of(src) == m["sha256"], f"manifest {rel}: sha256 matches the package file")
-                check(abs((m["lufs"] or 0) - TARGET_LUFS) <= LUFS_TOLERANCE + 0.25, f"manifest {rel}: LUFS {m['lufs']} in contract")
-                check(m["truePeakDbTp"] <= MAX_TRUE_PEAK_DBTP, f"manifest {rel}: true peak in contract")
+        names = {Path(key).name for key in entries}
+        check(
+            names == EXPECTED_ASSETS,
+            f"the manifest lists exactly the {len(EXPECTED_ASSETS)} expected assets "
+            f"(missing {sorted(EXPECTED_ASSETS - names)}, extra {sorted(names - EXPECTED_ASSETS)})",
+        )
+        check(
+            len(entries) == len(EXPECTED_ASSETS),
+            f"the manifest has no duplicated entries ({len(entries)} entries for {len(EXPECTED_ASSETS)} assets)",
+        )
+        for name in sorted(EXPECTED_ASSETS):
+            entry = next((v for k, v in entries.items() if Path(k).name == name), None)
+            if entry is None:
+                continue
+            path = package / ("ogg" if name.endswith(".ogg") else "mp3") / name
+            check(path.exists(), f"manifest asset {name} exists in the package")
+            if not path.exists():
+                continue
+            check(
+                metrics.sha256_of(path) == entry.get("sha256"),
+                f"manifest {name}: sha256 matches the package file",
+            )
+            check(
+                entry.get("kind") == "music",
+                f"manifest {name}: kind is recorded as music",
+            )
+            check(
+                isinstance(entry.get("lufs"), (int, float))
+                and abs(entry["lufs"] - TARGET_LUFS) <= LUFS_TOLERANCE_LOSSY,
+                f"manifest {name}: LUFS {entry.get('lufs')} in contract",
+            )
+            check(
+                isinstance(entry.get("truePeakDbTp"), (int, float))
+                and entry["truePeakDbTp"] <= MAX_TRUE_PEAK_DBTP,
+                f"manifest {name}: true peak {entry.get('truePeakDbTp')} in contract",
+            )
 
-    report()
-
-
-    # 7. the seam detector itself must be able to fail --------------------
-    # A metric that always returns "seamless" would make every loop check
-    # above meaningless, so the gate proves the detector on a signal whose
-    # ends do not join.
+    # 7. the seam detector must be able to fail ------------------------------
     n = int(2.0 * SR)
     t = np.arange(n) / SR
     broken = 0.95 * np.sin(2.0 * np.pi * 219.7 * t)  # 878.8 cycles: does not close
-    broken_stereo = np.stack([broken, broken], axis=1)
-    broken_report = metrics.seam_report(broken_stereo, SR, cycles=10)
+    broken_report = metrics.seam_report(np.stack([broken, broken], axis=1), SR, cycles=10)
     check(
         broken_report["seamless"] is False,
         "the seam detector reports a non-closing waveform as NOT seamless",
@@ -147,7 +219,7 @@ def main() -> None:
         "the seam detector exposes the click as a local outlier",
     )
     check(
-        broken_report["cyclesMeasuredSeams"] == 9,
+        broken_report.get("cyclesMeasuredSeams") == 9,
         "the seam detector measured every internal seam of a ten-cycle repeat",
     )
 

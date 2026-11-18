@@ -73,6 +73,11 @@ def main() -> None:
 
     # --- 3. the ten-cycle part actually executes --------------------------
     check(smooth_report["cyclesTested"] == cycles, "the cycle count is reported")
+    check(
+        "cyclesMeasuredSeams" in smooth_report
+        and smooth_report["cyclesMeasuredSeams"] == cycles - 1,
+        "every internal seam of the ten-cycle repeat was measured",
+    )
     check(smooth_report["cyclesSeamsIdentical"] is True, "every repeat reproduces the same seam")
     check(smooth_report["cyclesRmsDriftDb"] < 0.1, "the level does not drift between repeats")
     check(
@@ -84,7 +89,8 @@ def main() -> None:
         "the concatenated signal reports its own largest step",
     )
     check(
-        click_report_cycles(report) == cycles - 1,
+        "cyclesMeasuredSeams" in report
+        and report["cyclesMeasuredSeams"] == cycles - 1,
         "the clicky signal was measured at every internal seam of the concatenation",
     )
 
@@ -101,6 +107,24 @@ def main() -> None:
     spike_stereo = np.stack([spike, spike], axis=1)
     spike_report = metrics.seam_report(spike_stereo, SR, cycles=cycles)
     check(spike_report["seamless"] is False, "a spike at the last sample is caught as well")
+
+    # --- 6. a step next to no local texture at all -----------------------
+    # The right channel's head block does not join its tail, and the step
+    # sits just outside both reference windows, so the local reference holds
+    # no steps while the wrap step is real. The global bound passes (the
+    # interior holds a step of the same size), so only the local check can
+    # reject it — which is exactly what it has to do.
+    window = int(0.05 * SR)
+    left = np.full(n, 0.1)
+    right = np.full(n, -0.2)
+    right[:window] = 0.2
+    flat_stereo = np.stack([left, right], axis=1)
+    flat_report = metrics.seam_report(flat_stereo, SR, cycles=cycles)
+    check(flat_report["seamless"] is False, "a step beside a silent neighbourhood is caught")
+    check(
+        flat_report["wrapVsLocalRatio"] > 3.0,
+        "a step beside a silent neighbourhood reports an outlier ratio",
+    )
 
     print()
     if failures:
