@@ -215,6 +215,15 @@ def seam_report(stereo: np.ndarray, sr: int = SR, cycles: int = 10) -> dict:
     else:
         rank = 100.0
 
+    # Local outlier test: a click is a step that stands out against the
+    # texture right next to the seam. The wrap step is compared with the
+    # largest step inside +/-50 ms of the boundary: a ratio far below 1 means
+    # the seam is no rougher than the material around it.
+    window = int(0.05 * sr)
+    neighbourhood = np.concatenate([left[-window:], left[:window]])
+    local_max = float(np.abs(np.diff(neighbourhood)).max()) if neighbourhood.size > 1 else 0.0
+    local_ratio = float(wrap_diff / local_max) if local_max > 1e-9 else 0.0
+
     return {
         "sampleJumpRel": round(jump_rel, 6),
         "sampleJumpAbs": round(jump, 6),
@@ -223,16 +232,20 @@ def seam_report(stereo: np.ndarray, sr: int = SR, cycles: int = 10) -> dict:
         "wrapDiscontinuityMax": round(wrap_max, 6),
         "wrapDiscontinuityMean": round(wrap_mean, 6),
         "wrapDiffPercentile": round(rank, 3),
+        "wrapLocalMaxStep": round(local_max, 6),
+        "wrapVsLocalRatio": round(local_ratio, 4),
         "cyclesTested": cycles,
         "headTailRmsDeltaDb": round(head_tail_db, 3),
         "spectralContinuityMaxBandDb": round(spectral_continuity_db, 3),
         "spectralBandDeltaDb": band_delta,
         # A seam is a click when the wrap step is an outlier against the
-        # file's own sample-to-sample distribution. A peak-relative test
-        # alone would flag dense, noisy beds as broken even when the wrap
-        # step is smaller than steps that occur naturally inside the file.
+        # texture next to it. Three conditions:
+        #  * the wrap step is no larger than the largest step inside the file;
+        #  * it is not a local outlier either (ratio vs the +/-50 ms window);
+        #  * the band balance across the boundary still matches.
         "seamless": bool(
             wrap_max <= max(interior_max, 1e-6) * 1.02
+            and local_ratio <= 3.0
             and spectral_continuity_db < 6.0
         ),
     }
