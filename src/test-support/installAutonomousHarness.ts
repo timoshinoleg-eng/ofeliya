@@ -93,6 +93,12 @@
  *    never wedges the API. A zero-frame call is a no-op and never trips
  *    the guard. Regression probe: `scripts/harness-acceptance.cjs`
  *    check (0).
+ * 10. Stepping raises the `qaDeterministic` flag (src/game/qaDeterministic.ts):
+ *    the wall-clock Juice hit-stop dip is skipped while synthetic stepping
+ *    drives the game (review §6.1 — the dip otherwise breaks time-parity and
+ *    campaign replay determinism). The flag is cleared on `resume()`. The
+ *    scene-time GameScene.hitStop() freeze is untouched. Production never
+ *    installs this module, so production behaviour is unchanged.
  *
  * Known limitation: `resume()` realigns scene clocks to wall time. Absolute
  * scene-time deadlines scheduled during stepping (hit-stop, fire timers,
@@ -101,6 +107,7 @@
  */
 
 import type { CardiacLineHazardDirector, CardiacLineHazardSpec } from '../game/CardiacLineHazard';
+import { setQaDeterministic } from '../game/qaDeterministic';
 import type { DifficultyId } from '../game/DifficultyProfile';
 import type { Enemy } from '../game/Enemy';
 import type { Gem } from '../game/Gem';
@@ -667,6 +674,10 @@ export function installAutonomousHarness(game: Phaser.Game): void {
   function enterSteppedMode(): void {
     if (!stepping) {
       stepping = true;
+      // Wall-clock Juice hit-stop dip is skipped while stepping (it would
+      // diverge replay/time-parity legs — see qaDeterministic.ts). Cleared
+      // on resume() back to wall-clock.
+      setQaDeterministic(true);
       savedSmoothStep = game.loop.smoothStep;
       game.loop.smoothStep = false;
       // Deterministic synthetic clock (header note 3b): with no run live,
@@ -808,6 +819,7 @@ export function installAutonomousHarness(game: Phaser.Game): void {
     if (loop.running) return;
     if (stepping) {
       stepping = false;
+      setQaDeterministic(false);
       loop.smoothStep = savedSmoothStep;
     }
     // start() is a no-op when `started` is still true (loop slept, not

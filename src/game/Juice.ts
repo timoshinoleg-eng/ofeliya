@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { Easing, Group, Tween } from '@tweenjs/tween.js';
+import { isQaDeterministic } from './qaDeterministic';
 
 /**
  * Juice — единый движок game feel поверх tween.js (MIT, `@tweenjs/tween.js`).
@@ -136,6 +137,13 @@ export class Juice {
    */
   hitStop(ms: number): void {
     if (ms <= 0) return;
+    // QA/stepped: дип качается на wall-clock tween.js — в степпинг-прогоне
+    // его длительность в кадрах зависит от скорости прокачки фреймов и
+    // ломает time-parity/replay (ревью §6.1). Пропускаем дип, пока харнесс
+    // драйвит игру синтетическими шагами; жёсткий фриз GameScene.hitStop()
+    // (scene-time) остаётся и детерминирован сам по себе. Прод: флаг
+    // никогда не поднимается — поведение не меняется.
+    if (isQaDeterministic()) return;
     this.stopHitStop();
     const time = this.scene.time;
     const world = this.scene.physics?.world as { timeScale: number } | undefined;
