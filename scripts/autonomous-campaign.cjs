@@ -137,6 +137,7 @@ const DIFFICULTIES = ['standard', 'strained'];
 const REPLAY_TAIL_FRAMES = 60; // Same tail as verify-campaign-replay.mjs.
 const SCREENSHOT_INTERVAL_FRAMES = 120; // 2 s of simulation.
 const PERF_SAMPLE_FRAMES = 300; // 5 s of simulation.
+const FLUSH_INTERVAL_FRAMES = 1800; // 30 s of simulation: incremental artifact flush.
 const SNAPSHOT_SAMPLE_FRAMES = 60; // 1 s of simulation.
 const STATE_HASH_STALL_SAMPLES = 3; // Consecutive identical samples = stall.
 const STATE_HASH_SAMPLE_FRAMES = 300; // 5 s of simulation between samples.
@@ -1175,6 +1176,28 @@ async function runCampaign(browser, options, runIndex, seriesState) {
     : { version: 1, seed, difficulty, inputs: [], choices: [], transitions: [] };
   const snapshots = [];
 
+  // Incremental artifact flush (review §6.2 open lead): long runs used to
+  // lose ALL artifacts when the environment killed the runner (VM memory
+  // pressure, reboots). Flush the appendable artifacts every
+  // FLUSH_INTERVAL_FRAMES and once more on SIGTERM/SIGINT, so a killed run
+  // still leaves a diagnosable trail. Final run.json still wins at the end:
+  // the last writer overwrites flush.json/checkpoint files.
+  const flushPartialArtifacts = (reason) => {
+    try {
+      fs.writeFileSync(path.join(runDir, 'inputs.json'), `${JSON.stringify(inputLog, null, 2)}\n`);
+      fs.writeFileSync(path.join(runDir, 'timeline.ndjson'), timeline.toNdjson());
+      fs.writeFileSync(path.join(runDir, 'snapshots.json'), `${JSON.stringify(snapshots, null, 2)}\n`);
+      fs.writeFileSync(path.join(runDir, 'console.log'), `${run.consoleLines.join('\n')}\n`);
+      fs.writeFileSync(path.join(runDir, 'network.json'), `${JSON.stringify(run.network, null, 2)}\n`);
+      fs.writeFileSync(path.join(runDir, 'flush.json'), `${JSON.stringify({ reason, tick: st.tick, wallMs: Date.now() - wallStart }, null, 2)}\n`);
+    } catch (error) {
+      warn(`partial flush failed: ${error.message}`);
+    }
+  };
+  const onTerminateSignal = (signal) => {
+    st.terminateRequested = signal;
+  };
+
   // Run state carried across ticks.
   const st = {
     tick: 0,
@@ -1214,7 +1237,8 @@ async function runCampaign(browser, options, runIndex, seriesState) {
     pendingShot: null, // Armed renderer snapshot, collected after the next advance.
     lastScreenshotTick: -SCREENSHOT_INTERVAL_FRAMES,
     lastPerfTick: 0,
-    lastSnapshotTick: 0,
+    lastFlushTick: 0,
+    terminateRequested: null, // 'SIGTERM' | 'SIGINT' while the run is in flight.
     degradedNoted: false,
     chunkWallEmaMs: null,
     lastProgressLogTick: 0,
@@ -1240,6 +1264,8 @@ async function runCampaign(browser, options, runIndex, seriesState) {
     finalHashes: { inputHash: null, stateHash: null },
     audioState: null,
   };
+  process.on('SIGTERM', onTerminateSignal);
+  process.on('SIGINT', onTerminateSignal);
 
   const driver = isReplay
     ? new ReplayDriver(options.replayPlan)
@@ -1837,6 +1863,26 @@ async function runCampaign(browser, options, runIndex, seriesState) {
         };
         timeline.push('PERF', ctxFor(state, {}, perf));
       }
+
+      // --- incremental flush + termination handshake --------------------------------------
+      if (st.tick - st.lastFlushTick >= FLUSH_INTERVAL_FRAMES) {
+        st.lastFlushTick = st.tick;
+        flushPartialArtifacts('interval');
+      }
+      if (st.terminateRequested) {
+        flushPartialArtifacts(`signal:${st.terminateRequested}`);
+        log(`run ${runId}: TERMINATED by ${st.terminateRequested} at tick ${st.tick}; partial artifacts flushed to ${runDir}`);
+        return {
+          runId,
+          runDir,
+          failed: true,
+          terminated: st.terminateRequested === 'SIGINT' ? 130 : 143,
+          runJson: {
+            run: { id: runId, seed, difficulty, status: 'terminated', tick: st.tick },
+            result: { terminal: 'terminated' },
+          },
+        };
+      }
       if (st.tick - st.lastSnapshotTick >= SNAPSHOT_SAMPLE_FRAMES) {
         st.lastSnapshotTick = st.tick;
         snapshots.push({
@@ -2384,6 +2430,8 @@ async function runCampaign(browser, options, runIndex, seriesState) {
 
     return { runId, runDir, runJson, failed: runFailed };
   } finally {
+    process.removeListener('SIGTERM', onTerminateSignal);
+    process.removeListener('SIGINT', onTerminateSignal);
     const failedRun = Boolean(st.failure || st.watchdog || (st.runEnded && st.runResult && !st.runResult.win));
     // Trace: retain-on-failure (design §4.1).
     if (options.trace && ctx) {
@@ -2475,6 +2523,10 @@ async function main() {
       try {
         const result = await runCampaign(browser, options, i, seriesState);
         results.push(result);
+        if (result.terminated) {
+          log(`series interrupted by ${result.terminated === 130 ? 'SIGINT' : 'SIGTERM'} after run ${i + 1}; remaining runs skipped`);
+          break;
+        }
       } catch (error) {
         if (error.code === 'HARNESS_API_MISSING') throw error;
         // One run crashing (browser hiccup, server failure) must not lose
@@ -2515,6 +2567,8 @@ async function main() {
   };
   fs.writeFileSync(path.join(options.out, 'series.json'), `${JSON.stringify(series, null, 2)}\n`);
   log(`series: ${passed}/${results.length} passed (${failed} failed) — artifacts in ${options.out}`);
+  const terminated = results.find((r) => r.terminated);
+  if (terminated) process.exit(terminated.terminated);
   process.exit(failed > 0 ? EXIT_FAIL : EXIT_PASS);
 }
 
