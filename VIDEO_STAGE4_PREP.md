@@ -43,6 +43,20 @@ Destination: public/video/. All prepared files are 720x1280 vertical 9:16, H.264
 
 (The earlier 8.50 s boss-intro encodes listed here historically were superseded by the shorter v2 cuts above; 09 was never shipped.)
 
+### December 2026 re-cut (MiniMax H3 sources, current production files)
+
+The five slots below were re-rendered from the MiniMax-H3 delivery (`minimax-2026-11-18`, QC-approved takes; victory uses the R2 re-shoot because the R1 take has a >25 brightness flash). Slot file names are unchanged — content was replaced in place. Encode: H.264 Constrained Baseline level 3.1, yuv420p, 24 fps, no audio, faststart MP4; content at CRF 23; baked tail hold encoded as IDR frames (CRF 23, `-g 1`) so the frozen tail is pixel-identical frame-to-frame (verified via framemd5), which a plain P-frame tail cannot guarantee. `02_bloodstream_to_heart.mp4` untouched.
+
+| File | Source | Duration | Size | Tail hold | SHA-256 |
+| --- | --- | ---: | ---: | ---: | --- |
+| 01_start_intro_v3.mp4 | `03_start_A` | 3.17 s (76 fr) | 1.72 MB | 0.92 s (22 fr, identical) | e2d40545133d6b67cbcafe308e9611791c5485ec674555647c070e8f39af1005 |
+| 04_defeat_v3.mp4 | `08_defeat_A` | 3.17 s (76 fr) | 2.29 MB | 0.92 s (22 fr, identical) | 03f984b6aa7aaad993f3d0068c9a6e5ca2ca3c734346f242359f28b42fead6ea |
+| 07_immune_prime_intro_v2.mp4 | `02_prime_A` | 4.96 s (119 fr) | 1.85 MB | 0.46 s (11 fr, identical) | 395ea4e8c7651159f0c7497068dffa52764d579a076e97b6404da79a16d31d5b |
+| 08_cardiac_titan_intro_v2.mp4 | `01_titan_A` | 4.96 s (119 fr) | 1.95 MB | 0.46 s (11 fr, identical) | e607f77fad54e896a3536632276d05a031da0c98bf6b976ea1cd010d026e748b |
+| 06_victory_canonical.mp4 | `07_victory_A_r2` | 5.17 s (124 fr) | 2.25 MB | none (fits the 8.5 s cap) | d33c0c0c07fe62b85b2dd4ca7a6209ac742a274560b49fdecfd3d531f39eb32e |
+
+All durations land inside their scene caps (3200 / 5000 / 8500 ms); tail brightness measured 18–52 (blackTail threshold is 8). Previous Gemini-based SHA-256 values for these five names are superseded by the table above; `public/video/video-manifest.json` is the runtime source of truth.
+
 ## Asset handoff state
 
 A complete integration pack has now been assembled from the persisted original insert pack plus the final reviewed Stage 4 encodes: `OFELIYA_stage4_complete_integration_pack.zip`. It contains P1 assets `01`, `02`, `04`, `06`, P2 assets `07`, `08`, and reference-only candidates separately. The MP4 binaries are **not yet committed to this repository**. Do not enable a runtime video path until the corresponding MP4 exists under `public/video/` and its SHA-256 matches `public/video/video-manifest.json`.
