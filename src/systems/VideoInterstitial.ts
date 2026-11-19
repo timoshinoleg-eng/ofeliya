@@ -21,12 +21,12 @@ type PlayOptions = {
 };
 
 const VIDEO_ASSETS: Record<VideoInterstitialId, VideoAsset> = {
-  startIntro: { file: '01_start_intro_v3.mp4', durationMs: 2709 },
+  startIntro: { file: '01_start_intro_v3.mp4', durationMs: 3167 },
   bloodstreamToHeart: { file: '02_bloodstream_to_heart.mp4', durationMs: 7417 },
-  defeat: { file: '04_defeat_v3.mp4', durationMs: 2834 },
-  victory: { file: '06_victory_canonical.mp4', durationMs: 7584 },
-  immunePrimeIntro: { file: '07_immune_prime_intro_v2.mp4', durationMs: 3917 },
-  cardiacTitanIntro: { file: '08_cardiac_titan_intro_v2.mp4', durationMs: 3917 },
+  defeat: { file: '04_defeat_v3.mp4', durationMs: 3167 },
+  victory: { file: '06_victory_canonical.mp4', durationMs: 5167 },
+  immunePrimeIntro: { file: '07_immune_prime_intro_v2.mp4', durationMs: 4958 },
+  cardiacTitanIntro: { file: '08_cardiac_titan_intro_v2.mp4', durationMs: 4958 },
 };
 
 const DEFAULT_START_WATCHDOG_MS = 1800;
