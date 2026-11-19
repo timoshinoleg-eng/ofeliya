@@ -75,7 +75,7 @@ const HEAL_THRESHOLD = 0.3;
 // bleed and two (+1.2/s) out-heal it; over a 300 s run one early stack is
 // worth ~+180 HP. 'hp' is +25 max HP and +25 HP immediately. The rules:
 //   - hurt (hpRatio < 0.6) + 'hp' offered -> take it (immediate +25);
-//   - hurt (hpRatio < 0.9) + regen stacks < 2 + 'regen' offered -> take it
+//   - hurt (hpRatio < 0.95) + regen stacks < 2 + 'regen' offered -> take it
 //     (cycle 6 HP-gates the regen rule: ungated, cycle 5 spent damage
 //     picks on regen at full HP and starved DPS).
 // Both sit below legendary/evolution/emergency-heal and above the damage
@@ -90,13 +90,17 @@ const REGEN_STACK_CAP = 2;
 // regen at full HP — on campaign-std1 it spent its first two damage picks
 // on regen x2 while taking no damage at all (HP 100 to 110 s), delaying
 // orbit to level 5 and starving DPS (76 enemies at 100 s vs ~20 in
-// cycles 1-4). Regen pays only when the bot actually bleeds, so it is
-// offered only below 0.9 HP ratio (one 8-10 dmg hit drops the bot to
-// 0.90-0.92): a bot that takes no damage keeps its damage picks, a
-// bleeding bot takes up to 2 stacks (+1.2 HP/s out-heals the ~1 HP/s
-// bleed), and a bot healed back to full by one stack does not spend a
-// pick on the second.
-const REGEN_HURT_THRESHOLD = 0.9;
+// cycles 1-4). Regen pays only when the bot actually bleeds.
+// Cycle 9: threshold 0.9 -> 0.95. The 0.9 gate fired only after the second
+// chip hit (one 8-10 dmg hit leaves 0.90-0.92, two leave ~0.80); at a
+// ~1 HP/s bleed the bot then spent tens of seconds below 0.9 before the
+// next level-up. 0.95 fires on the FIRST hit, so the regen stack starts
+// canceling the bleed a pick earlier; the anti-starve rationale of cycle 6
+// (regen at untouched HP is a wasted damage pick) still holds — a bot
+// taking no damage never drops below 0.95 to begin with. Cap 2 stacks
+// unchanged: a bot healed to full by one stack still does not buy a
+// second.
+const REGEN_HURT_THRESHOLD = 0.95;
 
 function bucketFor(context) {
   if (context.bossKind === 'cardiac-titan') return 'titan';
@@ -141,9 +145,10 @@ function chooseUpgrade(pendingChoices, context) {
   // 3b. Sustain (cycle 5): hurt + 'hp' offered -> +25 HP now.
   if (hpRatio < HP_HURT_THRESHOLD && pendingChoices.includes('hp')) return 'hp';
 
-  // 3c. Sustain (cycle 5, HP-gated in cycle 6): regen below cap, but only
-  // while the bot is actually hurt (hpRatio < 0.9) — at full HP the pick
-  // is worthless and costs a damage pick (cycle 5 starved DPS this way).
+  // 3c. Sustain (cycle 5, HP-gated in cycle 6, threshold raised in cycle 9):
+  // regen below cap, but only while the bot is actually hurt
+  // (hpRatio < REGEN_HURT_THRESHOLD) — at full HP the pick is worthless and
+  // costs a damage pick (cycle 5 starved DPS this way).
   const regenStacks = (context.stacks && context.stacks.regen) || 0;
   if (regenStacks < REGEN_STACK_CAP && hpRatio < REGEN_HURT_THRESHOLD
     && pendingChoices.includes('regen')) return 'regen';
