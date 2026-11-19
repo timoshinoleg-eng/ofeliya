@@ -243,6 +243,14 @@ export function buildScoreSubmission(
   } as ScoreSubmission;
 }
 
+// Submission IDs currently awaiting their HTTP response. A startup/boundary
+// retry (retryPendingDailySubmission) must not re-send an entry the live
+// submit path already owns: a run that finishes while the app boot is still
+// settling would otherwise be posted twice (outbox entry is written before
+// the fetch resolves). In-memory only: a full page reload discards both the
+// set and the in-flight fetch, leaving the durable outbox entry to retry.
+const inFlightSubmissionIds = new Set<string>();
+
 function scoreEndpoint(): string {
   if (typeof window === 'undefined') return 'api/score';
   return new URL('api/score', window.location.href).toString();
@@ -422,9 +430,14 @@ export async function submitRunScore(
   const outbox = readScoreOutbox();
   outbox.push(entry);
   writeScoreOutbox(outbox);
-  const outcome = await postScoreSubmission(entry.submission);
-  if (outcome.status !== 'retry') removeScoreOutboxEntry(entry.submissionId);
-  return outcome.status === 'accepted' ? outcome.response : null;
+  inFlightSubmissionIds.add(entry.submissionId);
+  try {
+    const outcome = await postScoreSubmission(entry.submission);
+    if (outcome.status !== 'retry') removeScoreOutboxEntry(entry.submissionId);
+    return outcome.status === 'accepted' ? outcome.response : null;
+  } finally {
+    inFlightSubmissionIds.delete(entry.submissionId);
+  }
 }
 
 /**
@@ -486,6 +499,7 @@ export async function submitDailyRunScoreDetailed(
   entry.submission.initData = platform.initData;
   entry.submission.submissionId = entry.submissionId;
   writeDailyOutbox(entry);
+  inFlightSubmissionIds.add(entry.submissionId);
 
   const controller = new AbortController();
   const timer = globalThis.setTimeout(() => controller.abort(), SCORE_TIMEOUT_MS);
@@ -541,6 +555,7 @@ export async function submitDailyRunScoreDetailed(
     return { response: null, status: 'network' };
   } finally {
     globalThis.clearTimeout(timer);
+    inFlightSubmissionIds.delete(entry.submissionId);
   }
 }
 
@@ -549,6 +564,7 @@ export async function retryPendingDailySubmission(platform: PlatformAdapter): Pr
   const dailyEntry = readDailyOutbox();
   if (
     dailyEntry &&
+    !inFlightSubmissionIds.has(dailyEntry.submissionId) &&
     (platform.kind === 'max' || platform.kind === 'telegram') &&
     dailyEntry.submission.platform === platform.kind &&
     dailyEntry.ownerId != null && dailyEntry.ownerId === platformOwnerId(platform) &&
@@ -577,6 +593,8 @@ async function retryPendingScoreSubmissions(platform: PlatformAdapter): Promise<
   for (const entry of pending) {
     // Another submission/retry can settle an entry or evict it at the queue bound.
     if (!readScoreOutbox().some((item) => item.submissionId === entry.submissionId)) continue;
+    // The live submit path owns this entry until its HTTP response settles.
+    if (inFlightSubmissionIds.has(entry.submissionId)) continue;
     const submission = { ...entry.submission, submissionId: entry.submissionId };
     if (submission.platform !== 'browser') {
       if (submission.platform !== platform.kind || !platform.initData ||
