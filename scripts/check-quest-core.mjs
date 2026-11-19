@@ -16,7 +16,9 @@ import { join, resolve } from 'node:path';
  *
  * The vocabulary under test is the Muse reference: the twelve quest ids, the titles,
  * the descriptions, the counter names, the targets, the daily selection algorithm and
- * the storage key. The reward table of the Muse reference is deliberately not part of it.
+ * the storage key — kept verbatim as the first twelve catalog entries — plus the
+ * December 2026 extension pinned as data. The reward table of the Muse reference is
+ * deliberately not part of it.
  */
 
 const temp = mkdtempSync(join(tmpdir(), 'ofeliya-quest-core-'));
@@ -220,7 +222,7 @@ try {
     ['veteran', 'Ветеран штамма', 'Заверши 10 забегов (суммарно)', 'q_runs', 10],
   ];
 
-  assert.equal(QUEST_CATALOG.length, MUSE_CATALOG.length, 'the catalog has twelve quests');
+  assert.equal(QUEST_CATALOG.length, MUSE_CATALOG.length + 6, 'the catalog has the Muse twelve plus the December 2026 set');
   for (const [id, title, desc, metric, target] of MUSE_CATALOG) {
     const quest = QUEST_CATALOG.find((entry) => entry.id === id);
     assert.ok(quest, `the catalog holds ${id}`);
@@ -229,6 +231,42 @@ try {
     assert.equal(quest.metric, metric, `${id} keeps the Muse counter`);
     assert.equal(quest.target, target, `${id} keeps the Muse target`);
   }
+
+  // The December 2026 extension (design content C2, MiniMax delivery 2026-11-18, base
+  // `a8945475`): six goals that fill the gaps between the Muse steps (kills 50→300,
+  // rna 500→2000, time 180→300) and add the missing second steps (mut 3, elites 5,
+  // nodmg 60). Pinned as data, like the Muse twelve.
+  const DECEMBER_CATALOG = [
+    ['purge_150', 'Чистка', 'Уничтожь 150 врагов за один забег', 'q_kills', 150],
+    ['hoard_1200', 'Обжора', 'Собери 1200 РНК за один забег', 'q_rna', 1200],
+    ['endurance_240', 'Долгий забег', 'Переживи 4 минуты в одном забеге', 'q_time', 240],
+    ['chimera_5', 'Химера', 'Выбери 5 мутаций за один забег', 'q_mut', 5],
+    ['alpha_9', 'Альфа', 'Уничтожь 9 элитных клеток за один забег', 'q_elites', 9],
+    ['bulwark_105', 'Скала', 'Продержись 105 секунд подряд без урона', 'q_nodmg', 105],
+  ];
+
+  for (const [id, title, desc, metric, target] of DECEMBER_CATALOG) {
+    const quest = QUEST_CATALOG.find((entry) => entry.id === id);
+    assert.ok(quest, `the catalog holds ${id}`);
+    assert.equal(quest.title, title, `${id} keeps the title`);
+    assert.equal(quest.desc, desc, `${id} keeps the description`);
+    assert.equal(quest.metric, metric, `${id} keeps the counter`);
+    assert.equal(quest.target, target, `${id} keeps the target`);
+  }
+
+  // No duplicated ids and no duplicated goals anywhere in the catalog: a daily set
+  // must never offer the same goal twice, and the Muse steps stay distinguishable
+  // from the extension steps.
+  assert.equal(
+    new Set(QUEST_CATALOG.map((quest) => quest.id)).size,
+    QUEST_CATALOG.length,
+    'the quest ids are unique'
+  );
+  assert.equal(
+    new Set(QUEST_CATALOG.map((quest) => `${quest.metric}:${quest.target}`)).size,
+    QUEST_CATALOG.length,
+    'the quest goals are unique'
+  );
 
   // The Muse reward tag is deliberately not taken. The server owns the reward table.
   for (const quest of QUEST_CATALOG) {
@@ -252,30 +290,33 @@ try {
     'the no-damage target is in seconds'
   );
 
-  // --- 2. the daily selection is the Muse reference --------------------------------------
+  // --- 2. the daily selection is deterministic -----------------------------------------
 
   // The reference algorithm: an FNV-1a hash of `ofeliya-quests:<day>` seeds a
   // mulberry32, and a Fisher–Yates pass over the catalog order picks the first three.
-  // These are the values the Muse build produces, so both sides offer the same quests on
-  // the same day.
-  const MUSE_SELECTION = {
-    '2026-10-22': ['mutant_1', 'slayer_1', 'slayer_3'],
-    '2026-10-23': ['hunter', 'slayer_3', 'slayer_1'],
-    '2026-10-24': ['ghost', 'survivor_1', 'slayer_2'],
-    '2026-11-01': ['hoarder_2', 'slayer_2', 'mutant_1'],
-    '2026-12-31': ['slayer_1', 'slayer_2', 'survivor_1'],
+  // The selection is pinned as regression fixtures: every client of this build has to
+  // offer the same three quests on the same day. Growing the catalog (the December
+  // 2026 extension) reshuffles all future days at once — these values are the schedule
+  // of the eighteen-quest catalog. The Muse build served the original twelve; the
+  // parity with it held for that catalog and is kept in the MUSE_CATALOG pin above.
+  const PINNED_SELECTION = {
+    '2026-10-22': ['mutant_1', 'hoarder_1', 'bulwark_105'],
+    '2026-10-23': ['survivor_1', 'ghost', 'endurance_240'],
+    '2026-10-24': ['purge_150', 'marathon', 'survivor_1'],
+    '2026-11-01': ['ghost', 'slayer_2', 'hoarder_2'],
+    '2026-12-31': ['purge_150', 'hunter', 'slayer_1'],
   };
 
-  for (const [day, expected] of Object.entries(MUSE_SELECTION)) {
+  for (const [day, expected] of Object.entries(PINNED_SELECTION)) {
     assert.deepEqual(
       selectDailyQuests(day, QUEST_CATALOG),
       expected,
-      `${day} selects the quests of the Muse reference`
+      `${day} selects the pinned quests`
     );
   }
 
   assert.equal(DAILY_QUEST_COUNT, 3, 'three quests are offered per day');
-  for (const day of Object.keys(MUSE_SELECTION)) {
+  for (const day of Object.keys(PINNED_SELECTION)) {
     const selected = selectDailyQuests(day, QUEST_CATALOG);
     assert.equal(selected.length, 3, `${day} offers three quests`);
     assert.equal(new Set(selected).size, 3, `${day} offers three different quests`);
@@ -741,14 +782,14 @@ try {
     const { engine } = makeEngine({ clock, catalog: QUEST_CATALOG });
     assert.deepEqual(
       engine.snapshot().activeQuestIds,
-      MUSE_SELECTION[DAY],
-      'the engine offers the quests of the Muse reference'
+      PINNED_SELECTION[DAY],
+      'the engine offers the pinned quests of the day'
     );
     clock.set(NEXT_DAY + 3_600_000);
     engine.ingest(tick('t1', 1000, 0));
     assert.deepEqual(
       engine.snapshot().activeQuestIds,
-      MUSE_SELECTION['2026-10-23'],
+      PINNED_SELECTION['2026-10-23'],
       'the next day offers the next set'
     );
   }
@@ -898,14 +939,14 @@ try {
       'a quest outside the daily set has no receipt'
     );
     assert.equal(
-      engine.claimLocalReward('hoarder_1'),
+      engine.claimLocalReward('slayer_1'),
       null,
       'a second quest outside the daily set has no receipt'
     );
     assert.deepEqual(
       engine.snapshot().activeQuestIds,
-      MUSE_SELECTION[DAY],
-      'the daily set of the test is the Muse set'
+      PINNED_SELECTION[DAY],
+      'the daily set of the test is the pinned set'
     );
   }
 
@@ -1047,7 +1088,7 @@ try {
     );
     assert.deepEqual(
       engine.snapshot().activeQuestIds,
-      MUSE_SELECTION[DAY],
+      PINNED_SELECTION[DAY],
       'the daily set of today is served'
     );
     engine.flush();
@@ -1119,8 +1160,8 @@ try {
     assert.equal(snapshot.dayKey, DAY, 'the newest Muse day is the active day');
     assert.deepEqual(
       engine.activeQuests().map((quest) => quest.id),
-      MUSE_SELECTION[DAY],
-      'the daily set is the Muse set'
+      PINNED_SELECTION[DAY],
+      'the daily set is the pinned set'
     );
     engine.flush();
     const saved = JSON.parse(recordOf(engine));
@@ -1407,7 +1448,7 @@ try {
     );
     assert.deepEqual(
       engine.snapshot().activeQuestIds,
-      MUSE_SELECTION['2026-10-23'],
+      PINNED_SELECTION['2026-10-23'],
       'the snapshot offers the set of the new day'
     );
   }

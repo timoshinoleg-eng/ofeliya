@@ -14,7 +14,15 @@ import type { QuestDefinition, QuestId } from './questTypes';
  *
  * The algorithm is the Muse reference, unchanged: an FNV-1a hash of `ofeliya-quests:<day>`
  * seeds a mulberry32, and a Fisher–Yates pass picks the first three of the catalog. The
- * same day therefore selects the same three quests on the Muse build and on this one.
+ * same day therefore selects the same three quests on every client, every device and
+ * every restart of this build.
+ *
+ * The selection is a function of the day key AND the catalog: growing the catalog
+ * reshuffles the daily sets of all future days at once — for every client alike, so
+ * the set stays identical across the player base. Parity with the Muse build held for
+ * the original twelve-quest catalog; the December 2026 extension (six goals, C2 design
+ * content) changed the schedule for future days. The salt below stays untouched: it
+ * is the compatibility contract with the Muse build.
  */
 
 /** Number of quests offered per UTC day. */

@@ -22,6 +22,7 @@ try {
  assert.equal(r.snapshot().processedEvents,1,'resume emits only current tick, no start');
  r.rna(7); r.flush(); assert.equal(JSON.parse(raw).runMetrics.q_rna,14,'replayed checkpoint timeline can earn RNA again');
  now+=60000; r.tick(60000,60000); r.tick(60000,0,true); r.tick(120000,60000);
+ r.flush(); // до чтения raw: запись иначе могла быть отложена коалесцингом (persist опирается на завершение квеста дневного набора, а набор зависит от каталога)
  assert.equal(JSON.parse(raw).dayMetrics.q_nodmg,60,'fresh streak after midnight damage');
  r.end(1); const ended=raw; r.end(2); assert.equal(raw,ended,'terminal receipt is idempotent');
  r=new QuestRuntime(storage,{now:()=>now}); r.begin(1,cp,{kills:1,timeMs:59000,noDamageMs:59000});
@@ -68,7 +69,7 @@ try {
  assert.equal(r.snapshot().processedEvents,pendingEvents+1,'terminal force delivers exactly one tick');
  r.tick(60950,60000,true);r.tick(60950,61000,true);
  assert.equal(r.snapshot().processedEvents,pendingEvents+1,'repeated or inflated equal force cannot replay');
- const terminalCp=r.checkpoint();r.end(1);
+ const terminalCp=r.checkpoint();r.end(1);r.flush();
  assert.equal(JSON.parse(raw).dayMetrics.q_nodmg,60,'terminal force preserves 60 real seconds (not 59)');
  assert.equal(JSON.parse(raw).lastTickTimeMs,60950);
  const terminalRaw=raw, terminalEvents=r.snapshot().processedEvents;
@@ -88,7 +89,7 @@ try {
  r.begin(0,rolloverCp,{kills:0,timeMs:10000,noDamageMs:10000,savedAtEpochMs:savedEpoch});
  r.tick(10900,10900);r.tick(10900,10900,true);r.flush();
  assert.equal(JSON.parse(raw).dayMetrics.q_nodmg,0,'inherited streak is not earned today');
- r.tick(10900,0,true);r.tick(70000,59100);r.tick(70900,60000);r.tick(70900,60000,true);r.end(1);
+ r.tick(10900,0,true);r.tick(70000,59100);r.tick(70900,60000);r.tick(70900,60000,true);r.end(1);r.flush();
  assert.equal(JSON.parse(raw).dayKey,'2026-10-25');
  assert.equal(JSON.parse(raw).dayMetrics.q_nodmg,60,'same-time actual hit clears inherited baseline before terminal flush');
  const broken=new QuestRuntime({read:()=>{throw Error('denied')},write:()=>{throw Error('quota')}},{now:()=>now});broken.begin(0);broken.rna(1);broken.end(1);

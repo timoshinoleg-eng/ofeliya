@@ -31,8 +31,11 @@
  * даже без пропуска (стандартное поведение battle pass: купил позже —
  * забрал накопленное). Гейт — только на claim.
  *
- * Каталог v1 — фиксированный, одинаковый каждый сезон (6 миссий).
- * Сезонная ротация каталога — отдельный шаг (нужен дизайн-контент).
+ * Каталоги по сезонам: `SEASON_CATALOGS` маппит seasonId (`YYYY-MM`)
+ * на набор миссий, месяц без своего набора играет фолбэк v1
+ * (`SEASON_MISSIONS`, см. `seasonMissionsFor()`). Смена набора вместе
+ * со сменой сезона обнуляет прогресс и claimed — старые id не
+ * сматчатся `sanitize()` и корректно сгорят.
  *
  * Хранение: localStorage `ofeliya.season-quests.v1` + in-memory fallback
  * для Node (как MetaWallet). Формат: {version:1, seasonId, progress,
@@ -64,6 +67,7 @@ export interface SeasonMissionDef {
  * Каталог v1 (6 миссий). Цели — на месяц регулярной игры (~2–3 забега
  * в день дают ~60–90 забегов, ~3–6 тыс. убийств). Награды free-трека —
  * ~1400 РНК за сезон; paid — 1000 РНК + 3 дня бустера ×2.
+ * Фолбэк для месяцев без своего набора (см. `seasonMissionsFor`).
  */
 export const SEASON_MISSIONS: readonly SeasonMissionDef[] = [
   {
@@ -121,6 +125,94 @@ export const SEASON_MISSIONS: readonly SeasonMissionDef[] = [
     reward: { kind: 'booster', days: 3 },
   },
 ];
+
+/**
+ * Каталог сезона 2026-12 (декабрь 2026) — дизайн-контент C1 (MiniMax,
+ * сдача 2026-11-18, база `a8945475`). Заменяет фолбэк v1 в своём месяце.
+ *
+ * Цели выше v1: входная миссия (kills-400) — единственная быстрая,
+ * остальные ступени — середина/верх коридоров месячной игры (~2–3
+ * забега в день). Награды — НЕ статы (AGENTS.md): free-трек ~1400 РНК,
+ * paid — 1000 РНК + бустер 3 дня. Скин-награда намеренно не
+ * использована (состав брифа C1 требует ровно эту бюджетную сетку).
+ *
+ * Id не пересекаются с v1 (`season.runs-10`, `season.kills-500`,
+ * `season.rna-5000`, `season.bosses-3`, `season.kills-2000`,
+ * `season.mutations-50`): старые `claimed` из v1 не сматчатся
+ * `sanitize()` в декабре и корректно сгорят при смене сезона.
+ */
+export const SEASON_MISSIONS_DECEMBER: readonly SeasonMissionDef[] = [
+  {
+    id: 'season.runs-25',
+    title: 'Двадцать пять забегов',
+    desc: 'Завершите 25 забегов за сезон',
+    metric: 'runs',
+    target: 25,
+    track: 'free',
+    reward: { kind: 'rna', amount: 300 },
+  },
+  {
+    id: 'season.kills-400',
+    title: 'Первые четыреста',
+    desc: 'Уничтожьте 400 врагов за сезон',
+    metric: 'kills',
+    target: 400,
+    track: 'free',
+    reward: { kind: 'rna', amount: 250 },
+  },
+  {
+    id: 'season.rna-6000',
+    title: 'Сборщик РНК',
+    desc: 'Соберите 6000 РНК за сезон',
+    metric: 'rna',
+    target: 6000,
+    track: 'free',
+    reward: { kind: 'rna', amount: 400 },
+  },
+  {
+    id: 'season.bosses-4',
+    title: 'Охотник на боссов',
+    desc: 'Победите 4 боссов за сезон',
+    metric: 'bosses',
+    target: 4,
+    track: 'free',
+    reward: { kind: 'rna', amount: 450 },
+  },
+  {
+    id: 'season.kills-2400',
+    title: 'Две тысячи четыреста',
+    desc: 'Уничтожьте 2400 врагов за сезон',
+    metric: 'kills',
+    target: 2400,
+    track: 'paid',
+    reward: { kind: 'rna', amount: 1000 },
+  },
+  {
+    id: 'season.mutations-60',
+    title: 'Шестьдесят мутаций',
+    desc: 'Выберите 60 мутаций за сезон',
+    metric: 'mutations',
+    target: 60,
+    track: 'paid',
+    reward: { kind: 'booster', days: 3 },
+  },
+];
+
+/**
+ * Реестр сезонных каталогов: `seasonId` (`YYYY-MM`) → набор миссий.
+ * Месяц без своего набора играет фолбэк v1 (`SEASON_MISSIONS`).
+ */
+const SEASON_CATALOGS: Readonly<Record<string, readonly SeasonMissionDef[]>> = {
+  '2026-12': SEASON_MISSIONS_DECEMBER,
+};
+
+/**
+ * Каталог миссий сезона. Неизвестный сезон (месяц без своего набора)
+ * получает v1 — поведение до ротации, сохранённое как фолбэк.
+ */
+export function seasonMissionsFor(seasonId: string): readonly SeasonMissionDef[] {
+  return SEASON_CATALOGS[seasonId] ?? SEASON_MISSIONS;
+}
 
 export const SEASON_QUESTS_KEY = 'ofeliya.season-quests.v1';
 const DAY_MS = 86_400_000;
@@ -197,9 +289,10 @@ function sanitize(raw: unknown, seasonId: string): SeasonState {
     if (typeof p[k] === 'number') st.progress[k] = n(p[k]);
   }
   if (Array.isArray(r.claimed)) {
+    const catalog = seasonMissionsFor(seasonId);
     st.claimed = r.claimed.filter(
       (id): id is string =>
-        typeof id === 'string' && SEASON_MISSIONS.some((d) => d.id === id)
+        typeof id === 'string' && catalog.some((d) => d.id === id)
     );
   }
   return st;
@@ -288,7 +381,7 @@ export function recordSeasonRun(totals: SeasonTotals, nowMs: number = Date.now()
 export function seasonSnapshot(nowMs: number = Date.now()): SeasonMissionProgress[] {
   const st = loadSeasonState(nowMs);
   const passActive = isSeasonPassActive(nowMs);
-  return SEASON_MISSIONS.map((def) => {
+  return seasonMissionsFor(st.seasonId).map((def) => {
     const progress = st.progress[def.metric] ?? 0;
     const complete = progress >= def.target;
     const claimed = st.claimed.includes(def.id);
@@ -304,7 +397,7 @@ export function seasonSnapshot(nowMs: number = Date.now()): SeasonMissionProgres
  * ставится, игрок сможет повторить. Никогда не бросает.
  */
 export function claimSeasonMission(id: string, nowMs: number = Date.now()): ClaimResult {
-  const def = SEASON_MISSIONS.find((d) => d.id === id);
+  const def = seasonMissionsFor(seasonIdFor(nowMs)).find((d) => d.id === id);
   if (!def) return { ok: false, reason: 'unknown' };
   const st = loadSeasonState(nowMs);
   const progress = st.progress[def.metric] ?? 0;
