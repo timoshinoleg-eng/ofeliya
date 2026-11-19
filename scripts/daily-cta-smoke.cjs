@@ -156,19 +156,6 @@ async function waitForText(page, needle, timeout = 6000) {
         });
       });
       const { page, errors } = await boot(ctx);
-      // TEMP-DEBUG: capture call stacks of every POST /api/score to identify the
-      // duplicate sender that only reproduces in CI. Remove before merge.
-      await page.evaluate(() => {
-        window.__postStacks = [];
-        const orig = window.fetch;
-        window.fetch = (...args) => {
-          const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url ?? '');
-          if (url.includes('/api/score')) {
-            window.__postStacks.push(String(new Error('post /api/score').stack));
-          }
-          return orig.apply(window, args);
-        };
-      });
       await startGameWith(page, {
         dailyIntent: { runId: TICKET.runId },
         dailyTicket: TICKET,
@@ -203,15 +190,6 @@ async function waitForText(page, needle, timeout = 6000) {
       assert(!joined.includes('РЕЙТИНГ · МЕСТО'), 'daily result rendered the global ranking line: ' + joined);
 
       assert(captured, 'no /api/score request captured for the daily run');
-      if (scoreRequests !== 1) {
-        // TEMP-DEBUG: dump stacks so CI log shows who sent the duplicate.
-        try {
-          const stacks = await page.evaluate(() => window.__postStacks ?? []);
-          console.error('DAILY-CTA-DEBUG post stacks:\n' + stacks.join('\n---\n'));
-        } catch (e) {
-          console.error('DAILY-CTA-DEBUG failed to read stacks: ' + e);
-        }
-      }
       assert(scoreRequests === 1, 'expected exactly one /api/score request, got ' + scoreRequests);
       const p = captured.payload || {};
       assert(captured.platform === 'max', 'daily submission platform mismatch: ' + captured.platform);
