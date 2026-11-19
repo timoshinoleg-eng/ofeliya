@@ -45,7 +45,11 @@ Destination: public/video/. All prepared files are 720x1280 vertical 9:16, H.264
 
 ### December 2026 re-cut (MiniMax H3 sources, current production files)
 
-The five slots below were re-rendered from the MiniMax-H3 delivery (`minimax-2026-11-18`, QC-approved takes; victory uses the R2 re-shoot because the R1 take has a >25 brightness flash). Slot file names are unchanged — content was replaced in place. Encode: H.264 Constrained Baseline level 3.1, yuv420p, 24 fps, no audio, faststart MP4; content at CRF 23; baked tail hold encoded as IDR frames (CRF 23, `-g 1`) so the frozen tail is pixel-identical frame-to-frame (verified via framemd5), which a plain P-frame tail cannot guarantee. `02_bloodstream_to_heart.mp4` untouched.
+The five slots below were re-rendered from the MiniMax-H3 delivery (`minimax-2026-11-18`, QC-approved takes). Slot file names are unchanged — content was replaced in place. Encode: H.264 Constrained Baseline level 3.1, yuv420p, 24 fps, no audio, faststart MP4; content at CRF 23; baked tail hold encoded as IDR frames (CRF 23, `-g 1`) so the frozen tail is pixel-identical frame-to-frame (verified via framemd5), which a plain P-frame tail cannot guarantee. `02_bloodstream_to_heart.mp4` untouched.
+
+Resolution note (independent review 2026-11-20): the four hold-bearing slots keep the MiniMax source resolution 768×1344 (4:7) — the integration-plan step "scale to 540×960 / 720×1280" was skipped; the runtime renders the overlay with `object-fit: cover`, so any aspect is cropped to the viewport with no layout impact. Victory joined them at 768×1344 in the 2026-11-20 re-cut below.
+
+Victory correction (independent review 2026-11-20): the originally shipped `07_victory_A_r2` take carries the same global brightness spike as R1 — 31.8/255 at 0.5 s against the QC threshold of 25 (R1 measured 35.6; the R2 re-shoot lowered but did not clear the spike, and it was accepted without a re-measure). The slot was re-cut from the QC-approved second angle `09_victory_B` (flash 21.2/255 @ 1.25 s, calm frame from ~4.0 s, сдача verdict «годится в игру»), audio stripped, CRF 23:
 
 | File | Source | Duration | Size | Tail hold | SHA-256 |
 | --- | --- | ---: | ---: | ---: | --- |
@@ -53,7 +57,7 @@ The five slots below were re-rendered from the MiniMax-H3 delivery (`minimax-202
 | 04_defeat_v3.mp4 | `08_defeat_A` | 3.17 s (76 fr) | 2.29 MB | 0.92 s (22 fr, identical) | 03f984b6aa7aaad993f3d0068c9a6e5ca2ca3c734346f242359f28b42fead6ea |
 | 07_immune_prime_intro_v2.mp4 | `02_prime_A` | 4.96 s (119 fr) | 1.85 MB | 0.46 s (11 fr, identical) | 395ea4e8c7651159f0c7497068dffa52764d579a076e97b6404da79a16d31d5b |
 | 08_cardiac_titan_intro_v2.mp4 | `01_titan_A` | 4.96 s (119 fr) | 1.95 MB | 0.46 s (11 fr, identical) | e607f77fad54e896a3536632276d05a031da0c98bf6b976ea1cd010d026e748b |
-| 06_victory_canonical.mp4 | `07_victory_A_r2` | 5.17 s (124 fr) | 2.25 MB | none (fits the 8.5 s cap) | d33c0c0c07fe62b85b2dd4ca7a6209ac742a274560b49fdecfd3d531f39eb32e |
+| 06_victory_canonical.mp4 | `09_victory_B` (re-cut 2026-11-20, был `07_victory_A_r2`) | 5.17 s (124 fr) | 2.86 MB | none (fits the 8.5 s cap) | 324259107059609277e47ba192a3646ce324de668c90e69b7d01b9bc401cbb1b |
 
 All durations land inside their scene caps (3200 / 5000 / 8500 ms); tail brightness measured 18–52 (blackTail threshold is 8). Previous Gemini-based SHA-256 values for these five names are superseded by the table above; `public/video/video-manifest.json` is the runtime source of truth.
 
