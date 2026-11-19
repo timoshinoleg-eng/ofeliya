@@ -407,6 +407,18 @@ async function boot(signal: AbortSignal): Promise<void> {
     window.__renderSnapshot = () => renderSnapshot(game, host);
   }
 
+  // Test-only autonomous campaign harness API (design §1.2): installed in dev
+  // and in the QA bundle only (VITE_QA_TOOLS=1). Vite substitutes the env
+  // literals at build time, so in a production build this branch — and the
+  // whole src/test-support/ module — is dead-code eliminated;
+  // scripts/check-harness-absent.mjs gates that in CI.
+  if (import.meta.env.DEV || import.meta.env.VITE_QA_TOOLS === '1') {
+    const { installAutonomousHarness } = await import(
+      './test-support/installAutonomousHarness'
+    );
+    installAutonomousHarness(game);
+  }
+
   if (
     'serviceWorker' in navigator &&
     import.meta.env.PROD &&

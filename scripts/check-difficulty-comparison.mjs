@@ -179,7 +179,7 @@ try {
           ? stage.difficulty.bossDamageScale * difficulty.bossDamageMultiplier
           : dmgScale * difficulty.enemyDamageMultiplier;
         const eliteModifier = elite
-          ? pickEliteModifier(difficulty, () => rng.next('elite'))
+          ? pickEliteModifier(difficulty, rng)
           : null;
         const def = ENEMY_DEFS[kind];
         const maxHp = def.hp * hpScaleUsed * (elite ? ELITE.hpMul : 1);

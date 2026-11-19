@@ -1,5 +1,6 @@
 import type { RunState } from './RunState';
 import type { EvolutionId, UpgradeDef, UpgradeFamily } from './UpgradeSystem';
+import type { RunRng } from './RunRng';
 
 export type LegendaryId =
   | 'split-geometry'
@@ -155,11 +156,11 @@ function toChoice(def: LegendaryDefinition): UpgradeDef {
 
 function weightedPick(
   pool: readonly LegendaryDefinition[],
-  rng: () => number
+  rng: RunRng
 ): LegendaryDefinition {
   const total = pool.reduce((sum, def) => sum + Math.max(0, def.weight), 0);
   if (total <= 0) return pool[0];
-  let cursor = rng() * total;
+  let cursor = rng.next('progression') * total;
   for (const def of pool) {
     cursor -= Math.max(0, def.weight);
     if (cursor <= 0) return def;
@@ -170,7 +171,7 @@ function weightedPick(
 export function guaranteedLegendaryChoices(
   state: RunState,
   count = 2,
-  rng: () => number = Math.random
+  rng: RunRng
 ): UpgradeDef[] {
   const pool = [...eligibleLegendaries(state)];
   const picks: UpgradeDef[] = [];
@@ -188,7 +189,7 @@ export function guaranteedLegendaryChoices(
 
 export function rollLegendaryChoice(
   state: RunState,
-  rng: () => number = Math.random
+  rng: RunRng
 ): UpgradeDef | null {
   // Reserve the second run-wide Legendary slot for the IMMUNE PRIME trophy contract.
   // Random level-ups before the first boss may grant at most one Legendary.
@@ -203,7 +204,7 @@ export function rollLegendaryChoice(
   if (eligible.length === 0) return null;
 
   const guaranteed = state.run.legendaryPity >= LEGENDARY_PITY_OFFERS;
-  if (!guaranteed && rng() >= LEGENDARY_BASE_CHANCE) {
+  if (!guaranteed && rng.next('progression') >= LEGENDARY_BASE_CHANCE) {
     state.noteLegendaryOffer(false);
     return null;
   }
