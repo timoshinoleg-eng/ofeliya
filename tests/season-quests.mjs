@@ -13,6 +13,10 @@
  *   неизвестный id — unknown;
  * - бустер-награда: +3 дня от max(now, текущий срок);
  * - смена сезона: прогресс и claimed сгорают;
+ * - декабрьский каталог 2026-12 (C1): seasonMissionsFor маппит сезон,
+ *   неизвестный сезон → фолбэк v1; бюджет free 1400 / paid 1000 +
+ *   бустер 3 дня; аккумуляция/claim в декабре; claimed из v1 не
+ *   протекает через sanitize в декабрь;
  * - claimAll: забирает все доступные;
  * - битый JSON в хранилище — чистое состояние, без исключений.
  *
@@ -179,6 +183,84 @@ try {
   // --- смена сезона: прогресс и claimed сгорают ---
   s = season.seasonSnapshot(DEC);
   assert(s.every((p) => p.progress === 0 && !p.complete && !p.claimed), 'new season resets progress and claimed');
+
+  // --- декабрьский каталог 2026-12 (C1) ---
+  eq(season.seasonMissionsFor('2026-12').length, 6, 'december catalog has 6 missions');
+  assert(season.seasonMissionsFor('2026-12').some((m) => m.id === 'season.runs-25'), 'december has runs-25');
+  eq(season.seasonMissionsFor('2026-11'), season.SEASON_MISSIONS, 'unknown season falls back to v1');
+  eq(season.seasonMissionsFor('2027-01'), season.SEASON_MISSIONS, 'future season without a set falls back to v1');
+
+  // бюджет декабря: free 1400 РНК, paid 1000 РНК + бустер 3 дня
+  const dec = season.SEASON_MISSIONS_DECEMBER;
+  eq(dec.length, 6, 'SEASON_MISSIONS_DECEMBER has 6 missions');
+  eq(dec.filter((m) => m.track === 'free').length, 4, 'december: 4 free missions');
+  eq(dec.filter((m) => m.track === 'paid').length, 2, 'december: 2 paid missions');
+  const decFreeRna = dec
+    .filter((m) => m.track === 'free' && m.reward.kind === 'rna')
+    .reduce((sum, m) => sum + m.reward.amount, 0);
+  eq(decFreeRna, 1400, 'december free track = 1400 RNA');
+  const decPaid = dec.filter((m) => m.track === 'paid');
+  eq(
+    decPaid.reduce((sum, m) => sum + (m.reward.kind === 'rna' ? m.reward.amount : 0), 0),
+    1000,
+    'december paid RNA = 1000'
+  );
+  assert(
+    decPaid.some((m) => m.reward.kind === 'booster' && m.reward.days === 3),
+    'december paid has booster 3 days'
+  );
+
+  // свежий декабрьский снапшот — набор декабря, не v1
+  reset();
+  s = season.seasonSnapshot(DEC);
+  eq(s.length, 6, 'december snapshot has 6 missions');
+  assert(byId(s, 'season.runs-25'), 'december snapshot has runs-25');
+  assert(!byId(s, 'season.runs-10'), 'december snapshot has no v1 missions');
+
+  // аккумуляция и claim в декабре
+  season.recordSeasonRun({ kills: 400, rnaCollected: 6000, bossesDefeated: 4, mutations: 60 }, DEC);
+  season.recordSeasonRun({ kills: 2000, rnaCollected: 0, bossesDefeated: 0, mutations: 0 }, DEC);
+  s = season.seasonSnapshot(DEC);
+  assert(byId(s, 'season.kills-400').complete, 'december kills-400 complete');
+  assert(byId(s, 'season.kills-400').claimable, 'december free claimable');
+  assert(byId(s, 'season.kills-2400').complete, 'december paid progress accumulates without pass');
+  assert(!byId(s, 'season.kills-2400').claimable, 'december paid not claimable without pass');
+  eq(season.claimSeasonMission('season.kills-2400', DEC).reason, 'pass-required', 'december paid claim without pass');
+  const decFree = season.claimSeasonMission('season.kills-400', DEC);
+  eq(decFree.ok, true, 'december free claim ok');
+  eq(decFree.grantedRna, 250, 'december kills-400 grants 250');
+  eq(season.claimSeasonMission('season.kills-400', DEC).reason, 'already-claimed', 'december double claim');
+
+  // paid с пропуском + бустерная награда
+  meta.setSeasonPassUntilMs(DEC + 30 * DAY_MS);
+  const decPaidClaim = season.claimSeasonMission('season.kills-2400', DEC);
+  eq(decPaidClaim.ok, true, 'december paid claim with pass');
+  eq(decPaidClaim.grantedRna, 1000, 'december kills-2400 grants 1000');
+  const decBoost = season.claimSeasonMission('season.mutations-60', DEC);
+  eq(decBoost.ok, true, 'december booster claim ok');
+  eq(decBoost.grantedBoosterDays, 3, 'december booster 3 days');
+  meta.setBoosterUntilMs(0); // не удваивать следующие гранты РНК
+
+  // runs-25: 25 забегов → 300 РНК
+  reset();
+  for (let i = 0; i < 25; i += 1) {
+    season.recordSeasonRun({ kills: 0, rnaCollected: 0, bossesDefeated: 0, mutations: 0 }, DEC);
+  }
+  eq(byId(season.seasonSnapshot(DEC), 'season.runs-25').progress, 25, 'december runs-25 accumulates');
+  const decRuns = season.claimSeasonMission('season.runs-25', DEC);
+  eq(decRuns.ok, true, 'december runs-25 claim ok');
+  eq(decRuns.grantedRna, 300, 'december runs-25 grants 300');
+
+  // sanitize: claimed из v1 не протекает в декабрь
+  reset();
+  store.set(
+    season.SEASON_QUESTS_KEY,
+    JSON.stringify({ version: 1, seasonId: '2026-12', progress: { kills: 5000 }, claimed: ['season.kills-500'] })
+  );
+  s = season.seasonSnapshot(DEC);
+  eq(byId(s, 'season.kills-400').progress, 5000, 'december progress kept');
+  assert(!byId(s, 'season.kills-400').claimed, 'v1 claimed id does not leak into december');
+  eq(season.claimSeasonMission('season.kills-400', DEC).ok, true, 'december claim works after v1 id dropped');
 
   // --- битый JSON — чистое состояние ---
   store.set(season.SEASON_QUESTS_KEY, '{not json');

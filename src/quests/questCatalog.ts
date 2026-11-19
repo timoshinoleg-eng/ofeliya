@@ -7,7 +7,8 @@ import type {
 } from './questTypes';
 
 /**
- * The quest catalog: the twelve goals of the Muse reference.
+ * The quest catalog: the twelve goals of the Muse reference plus the
+ * December 2026 extension.
  *
  * The ids, the titles, the descriptions, the counters and the targets are the ones of
  * `src/game/quests/content/quests.ink` in the Muse patch stack, transcribed as plain
@@ -15,10 +16,20 @@ import type {
  * catalog is the same content without the inkjs dependency, the runtime and the
  * `reward_rna` tag.
  *
- * The reward is deliberately absent. In the Muse reference every quest carries a
- * `reward_rna` tag and the client pays it out on completion, which is a client-side
- * value grant and a second daily source. Here the reward table belongs to the server
- * (see `QuestRewardGateway`), so the catalog describes the goal and nothing else.
+ * The last six entries are the December 2026 set (design content C2, MiniMax delivery
+ * 2026-11-18, base `a8945475`). They fill the gaps between the Muse steps (kills
+ * 50→300, rna 500→2000, time 180→300) and add the second step where the Muse catalog
+ * had only one (mut 3, elites 5, nodmg 60). Their ids and targets do not duplicate any
+ * Muse entry; the metric modes and scopes of `QUEST_METRIC_MODES` /
+ * `QUEST_METRIC_SCOPES` cover them unchanged. Growing the catalog reshuffles the daily
+ * selection of every future UTC day for every client alike — the schedule is pinned in
+ * `check-quest-core.mjs`.
+ *
+ * The reward is deliberately absent — for the Muse twelve and for the extension alike.
+ * In the Muse reference every quest carries a `reward_rna` tag and the client pays it
+ * out on completion, which is a client-side value grant and a second daily source. Here
+ * the reward table belongs to the server (see `QuestRewardGateway`), so the catalog
+ * describes the goal and nothing else.
  */
 export const QUEST_CATALOG: readonly QuestDefinition[] = [
   {
@@ -116,6 +127,54 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
     metric: 'q_runs',
     target: 10,
     family: 'mastery',
+  },
+  {
+    id: 'purge_150',
+    title: 'Чистка',
+    desc: 'Уничтожь 150 врагов за один забег',
+    metric: 'q_kills',
+    target: 150,
+    family: 'combat',
+  },
+  {
+    id: 'hoard_1200',
+    title: 'Обжора',
+    desc: 'Собери 1200 РНК за один забег',
+    metric: 'q_rna',
+    target: 1200,
+    family: 'progress',
+  },
+  {
+    id: 'endurance_240',
+    title: 'Долгий забег',
+    desc: 'Переживи 4 минуты в одном забеге',
+    metric: 'q_time',
+    target: 240,
+    family: 'survival',
+  },
+  {
+    id: 'chimera_5',
+    title: 'Химера',
+    desc: 'Выбери 5 мутаций за один забег',
+    metric: 'q_mut',
+    target: 5,
+    family: 'progress',
+  },
+  {
+    id: 'alpha_9',
+    title: 'Альфа',
+    desc: 'Уничтожь 9 элитных клеток за один забег',
+    metric: 'q_elites',
+    target: 9,
+    family: 'combat',
+  },
+  {
+    id: 'bulwark_105',
+    title: 'Скала',
+    desc: 'Продержись 105 секунд подряд без урона',
+    metric: 'q_nodmg',
+    target: 105,
+    family: 'survival',
   },
 ];
 
