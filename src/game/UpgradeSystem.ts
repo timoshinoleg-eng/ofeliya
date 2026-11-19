@@ -1,5 +1,6 @@
 import type { RunState } from './RunState';
 import type { LegendaryId } from './LegendarySystem';
+import type { RunRng } from './RunRng';
 
 export type UpgradeFamily = 'weapon' | 'core' | 'defense' | 'utility';
 export type UpgradeRarity = 'common' | 'rare' | 'legendary';
@@ -239,11 +240,11 @@ const HEAL: UpgradeDef = {
   },
 };
 
-/** n случайных доступных улучшений (без повторов). */
-export function rollChoices(s: RunState, n = 3, rng: () => number = Math.random): UpgradeDef[] {
+/** n случайных доступных улучшений (без повторов). Shuffle draws from the `progression` stream. */
+export function rollChoices(s: RunState, n = 3, rng: RunRng): UpgradeDef[] {
   const pool = UPGRADES.filter((u) => s.stackOf(u.id) < u.max);
   for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
+    const j = Math.floor(rng.next('progression') * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
   const picks = pool.slice(0, n);

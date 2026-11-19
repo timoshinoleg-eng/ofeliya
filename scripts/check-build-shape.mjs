@@ -22,6 +22,21 @@ assert.ok(
 const html = readFileSync('dist/index.html', 'utf8');
 assert.match(html, /vendor-phaser-[^"'<>]+\.js/, 'index.html must reference the Phaser vendor chunk');
 
+// Production bundle must not contain the autonomous campaign harness Test API
+// (same strings as scripts/check-harness-absent.mjs — second layer, §1.4).
+const FORBIDDEN_HARNESS_STRINGS = [
+  '__ofeliyaTest',
+  'installAutonomousHarness',
+  'VITE_QA_TOOLS',
+  'test-support',
+];
+for (const name of files) {
+  const text = readFileSync(join(assetsDir, name), 'utf8');
+  for (const needle of FORBIDDEN_HARNESS_STRINGS) {
+    assert.ok(!text.includes(needle), `harness Test API leaked into ${name}: ${needle}`);
+  }
+}
+
 console.log(
   `bundle shape: ok (vendor=${vendorBytes} B, largest-app=${largestAppBytes} B, js-chunks=${files.length})`
 );

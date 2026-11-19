@@ -1,5 +1,6 @@
 import type { RunState } from './RunState';
 import { rollLegendaryChoice } from './LegendarySystem';
+import type { RunRng } from './RunRng';
 import {
   EVOLUTION_NAMES,
   rollChoices,
@@ -80,7 +81,7 @@ function toChoice(def: EvolutionDef): UpgradeDef {
 export function rollRunChoices(
   s: RunState,
   n = 3,
-  rng: () => number = Math.random
+  rng: RunRng
 ): UpgradeDef[] {
   const ready = readyEvolutions(s).slice(0, n).map(toChoice);
   if (ready.length >= n) return ready;

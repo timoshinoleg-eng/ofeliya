@@ -47,6 +47,7 @@ export function generateRunSeed(): string {
   } catch {
     // Restricted WebViews can deny crypto access; fall through to a one-time seed source.
   }
+  // check-no-math-random: allowed — one-time seed fallback, not a gameplay roll; an explicit seed makes this path unreachable.
   const fallback = `${Date.now()}:${performance.now()}:${Math.random()}`;
   return hash32(fallback).toString(16).padStart(8, '0');
 }

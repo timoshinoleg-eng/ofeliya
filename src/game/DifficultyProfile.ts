@@ -1,5 +1,6 @@
 import type { HeartbeatPulseProfile } from './HeartbeatPulseDirector';
 import { HEARTBEAT_PULSE_PROFILE } from './HeartbeatPulseDirector';
+import type { RunRng } from './RunRng';
 
 export type DifficultyId = 'easy' | 'standard' | 'strained';
 export type EliteModifierId = 'regenerator' | 'frenzied' | 'volatile';
@@ -208,12 +209,12 @@ export function writeDifficultySelection(id: DifficultyId): void {
 
 export function pickEliteModifier(
   profile: DifficultyProfile,
-  random: () => number = Math.random
+  rng: RunRng
 ): EliteModifierId | null {
   if (profile.eliteModifiers.length === 0) return null;
   const index = Math.min(
     profile.eliteModifiers.length - 1,
-    Math.floor(Math.max(0, Math.min(0.999999, random())) * profile.eliteModifiers.length)
+    Math.floor(Math.max(0, Math.min(0.999999, rng.next('elite'))) * profile.eliteModifiers.length)
   );
   return profile.eliteModifiers[index] ?? null;
 }
