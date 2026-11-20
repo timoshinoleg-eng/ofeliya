@@ -89,7 +89,8 @@ def main() -> None:
         check(result.returncode == 0, f"the stand builds into an empty directory (exit {result.returncode})")
         if result.returncode != 0:
             print(result.stdout + result.stderr)
-            return
+            # A broken stand builder must fail CI, not return success.
+            raise SystemExit(1)
 
         index = clean / "stand" / "index.html"
         check(index.exists(), "the clean build produced stand/index.html")
@@ -214,6 +215,21 @@ def main() -> None:
                 server.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 server.kill()
+
+    # The validation must also detect its own broken builder. Exercise the
+    # nested failure path with a deliberately empty package and absent repo.
+    # The nested test fails before this check, so it cannot recurse forever.
+    with tempfile.TemporaryDirectory() as td_bad:
+        bad = Path(td_bad) / "bad"
+        (bad / "ogg").mkdir(parents=True)
+        (bad / "analysis").mkdir()
+        broken = subprocess.run(
+            [sys.executable, str(_HERE / "test_stand.py"),
+             "--package", str(bad), "--audition", str(Path(td_bad) / "absent-audition"),
+             "--repo", str(Path(td_bad) / "absent-repo")],
+            capture_output=True, text=True,
+        )
+        check(broken.returncode != 0, "the stand QA exits nonzero when its builder fails")
 
     print()
     if failures:
