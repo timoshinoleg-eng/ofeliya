@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OFELIYA Audio v4 — C+ Mobile / Adaptive: стенд сравнения</title>
+<style>
+  :root {
+    --bg: #0b0d10; --panel: #14171c; --panel2: #1b1f26; --line: #2a2f38;
+    --text: #e7e9ee; --dim: #8b93a1; --accent: #7fd7c4; --warn: #e2a15c; --bad: #e2706a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.55 "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+  }
+  header { padding: 22px 26px 14px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0 0 6px; font-size: 21px; letter-spacing: .3px; }
+  h2 { margin: 26px 0 10px; font-size: 16px; color: var(--accent); }
+  .sub { color: var(--dim); font-size: 13px; max-width: 1000px; }
+  .wrap { padding: 0 26px 60px; max-width: 1180px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 12px 0; }
+  .group { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 10px 0; }
+  .group h3 { margin: 0 0 4px; font-size: 14px; }
+  .group .note { color: var(--dim); font-size: 12px; margin-bottom: 8px; }
+  .row { display: grid; grid-template-columns: 240px 1fr 190px; gap: 10px; align-items: center;
+         padding: 5px 0; border-top: 1px solid #23272f; }
+  .row:first-of-type { border-top: 0; }
+  .name { font-size: 13px; }
+  .name small { display: block; color: var(--dim); font-size: 11px; }
+  .btns { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  button {
+    background: #232833; color: var(--text); border: 1px solid #333a46; border-radius: 6px;
+    padding: 4px 10px; cursor: pointer; font: inherit; font-size: 12px;
+  }
+  button:hover { background: #2c3340; }
+  button.on { background: var(--accent); color: #06231e; border-color: var(--accent); font-weight: 600; }
+  button:disabled { opacity: .45; cursor: default; }
+  .meta { color: var(--dim); font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; }
+  .meta b { color: var(--text); font-weight: 600; }
+  .ok { color: var(--accent); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  input[type=range] { width: 130px; vertical-align: middle; }
+  label.gain { color: var(--dim); font-size: 11px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; color: var(--dim); font-size: 12px; margin-top: 8px; }
+  .legend span::before { content: "■ "; }
+  .mixbtns button { min-width: 92px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 4px 8px; border-bottom: 1px solid #23272f; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--dim); font-weight: 600; }
+  code { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>OFELIYA Audio v4 — C+ Mobile / Adaptive</h1>
+  <div class="sub">
+    Стенд для прослушивания и сравнения на одинаковой воспринимаемой громкости.
+    Все уровни приведены к общей цели по измеренной интегрированной громкости
+    (BS.1770): кнопка «Ровная громкость» выставляет усиление
+    <code>gain = targetLUFS − measuredLUFS</code> для каждого трека, поэтому
+    сравнение не зависит от абсолютного уровня файлов. Числа в колонке «LUFS»
+    измерены программой <code>tools/audio/cplus</code>, а не оценены на слух.
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="panel">
+    <div class="btns">
+      <button id="unlock">▶ Запустить аудио-контекст</button>
+      <button id="equalize">Ровная громкость (по измерениям)</button>
+      <button id="stopAll">Стоп</button>
+      <span class="meta" id="status">аудио-контекст не запущен</span>
+    </div>
+    <div class="legend">
+      <span style="color:#7fd7c4">музыка</span>
+      <span style="color:#e2a15c">SFX</span>
+      <span style="color:#e2706a">дакинг музыки при SFX</span>
+    </div>
+  </div>
+
+  <div id="groups"></div>
+
+  <h2>Демонстрация реального игрового микса (музыка + SFX + дакинг)</h2>
+  <div class="sub" style="margin-bottom:10px">
+    Микс повторяет схему <code>src/systems/Sfx.ts</code>: шина музыки
+    (musicGain 0.65) → адаптивный lowpass 2.5–14 кГц → пользовательская громкость,
+    шина SFX отдельно, дакинг музыки теми же глубинами и таймингами, что и в игре
+    (0.22 — удар сердца, 0.40 — предупреждение босса, 0.55 — появление босса,
+    0.60 — смена акта / конец забега).
+  </div>
+  <div class="panel">
+    <div class="btns mixbtns" id="mix"></div>
+    <div class="meta" id="mixState" style="text-align:left;margin-top:8px"></div>
+  </div>
+
+  <h2>Измеренные метрики</h2>
+  <div class="panel">
+    <div class="sub" style="margin-bottom:8px">
+      Значения считаются <code>ofeliya_cplus.metrics</code> по итоговым файлам.
+      «Стык» — измеренный разрыв отсчётов на границе цикла относительно
+      собственного максимума файла; «Циклы» — проверка десяти последовательных
+      повторов; «Моно» — потеря громкости при сведении L+R.
+    </div>
+    <table id="metrics"></table>
+  </div>
+
+  <h2>Что осталось за пределами автоматики</h2>
+  <div class="panel sub">
+    Эмуляция динамика смартфона в отчётах — техническая (полосовой фильтр и
+    кривая нелинейности), а не измерение на телефоне. Физическая проверка на
+    Galaxy S20+ остаётся отдельным приёмочным этапом. Субъективная оценка
+    утомляемости при длинном прохождении тоже не заменяется числами.
+  </div>
+</div>
+
+<script type="module">
+const TARGET_LUFS = -14.0;
+
+const state = {
+  ctx: null,
+  nodes: null,
+  buffers: new Map(),
+  current: null,
+  playGeneration: 0,
+  equalised: false,
+};
+
+async function initAudio() {
+  if (state.ctx) {
+    if (state.ctx.state === 'suspended') await state.ctx.resume();
+    return state.ctx;
+  }
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const master = ctx.createGain(); master.gain.value = 0.8;
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -8; comp.knee.value = 6; comp.ratio.value = 4;
+  comp.attack.value = 0.003; comp.release.value = 0.12;
+  master.connect(comp); comp.connect(ctx.destination);
+
+  const sfxGain = ctx.createGain(); sfxGain.gain.value = 1; sfxGain.connect(master);
+  const musicFilter = ctx.createBiquadFilter();
+  musicFilter.type = 'lowpass'; musicFilter.frequency.value = 2500; musicFilter.Q.value = 0.9;
+  const musicUser = ctx.createGain(); musicUser.gain.value = 1;
+  musicFilter.connect(musicUser); musicUser.connect(master);
+  const musicGain = ctx.createGain(); musicGain.gain.value = 0.65;
+  musicGain.connect(musicFilter);
+  const bedTrim = ctx.createGain(); bedTrim.gain.value = 1; bedTrim.connect(musicGain);
+  const layerBus = ctx.createGain(); layerBus.gain.value = 1; layerBus.connect(musicFilter);
+
+  state.ctx = ctx;
+  state.nodes = { master, comp, sfxGain, musicFilter, musicUser, musicGain, bedTrim, layerBus };
+  return ctx;
+}
+
+function musicGainForDuck(depth) { return Math.max(0.02, 0.65 * (1 - depth)); }
+
+function duck(depth, holdMs) {
+  const ctx = state.ctx; const g = state.nodes.musicGain.gain;
+  const now = ctx.currentTime;
+  g.cancelScheduledValues(now);
+  g.setTargetAtTime(musicGainForDuck(depth), now, 0.08);
+  g.setTargetAtTime(0.65, now + holdMs / 1000, 0.35);
+}
+
+function setTension(tension) {
+  const f = state.nodes.musicFilter.frequency;
+  const v = Math.max(0, Math.min(1, tension));
+  f.value = 2500 * Math.pow(14000 / 2500, v);
+}
+
+async function loadBuffer(url) {
+  if (state.buffers.has(url)) return state.buffers.get(url);
+  const ctx = await initAudio();
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + url);
+  const buf = await ctx.decodeAudioData(await res.arrayBuffer());
+  state.buffers.set(url, buf);
+  return buf;
+}
+
+function stopCurrent() {
+  // Invalidate every in-flight fetch/decode before stopping active playback.
+  state.playGeneration += 1;
+  const cur = state.current;
+  if (!cur) return;
+  try { cur.src.stop(); } catch {}
+  try { cur.src.disconnect(); cur.gain.disconnect(); } catch {}
+  state.current = null;
+  document.querySelectorAll('button[data-track]').forEach((b) => b.classList.remove('on'));
+}
+
+async function playTrack(track, button) {
+  const requestedGeneration = ++state.playGeneration;
+  await initAudio();
+  if (requestedGeneration !== state.playGeneration) return;
+  if (state.current && state.current.url === track.file) { stopCurrent(); return; }
+  stopCurrent();
+  const playingGeneration = state.playGeneration;
+  const buf = await loadBuffer(track.file);
+  if (playingGeneration !== state.playGeneration) return;
+  const ctx = state.ctx;
+  const src = ctx.createBufferSource();
+  src.buffer = buf; src.loop = track.loop !== false;
+  const gain = ctx.createGain();
+  // The gain is a decibel value, the gain node wants a linear amplitude.
+  // `currentGainDb()` is the same state the slider and the equalisation
+  // switch use, so playback, slider and switch can never disagree - and the
+  // track is audible from the first sample instead of starting at zero.
+  gain.gain.value = dbToAmplitude(currentGainDb(track));
+  src.connect(gain); gain.connect(state.nodes.bedTrim);
+  src.start();
+  state.current = { src, gain, url: track.file };
+  if (button) {
+    button.classList.add('on');
+    document.querySelectorAll('button[data-track]').forEach((b) => { if (b !== button) b.classList.remove('on'); });
+  }
+  updateMixState();
+}
+
+function scanNormalizationTrim(buf) {
+  let peak = 0;
+  for (let channel = 0; channel < buf.numberOfChannels; channel += 1) {
+    const samples = buf.getChannelData(channel);
+    for (let i = 0; i < samples.length; i += 1) {
+      if (!Number.isFinite(samples[i])) return 1;
+      peak = Math.max(peak, Math.abs(samples[i]));
+    }
+  }
+  return Number.isFinite(peak) && peak > 0 ? Math.min(12, 0.63 / peak) : 1;
+}
+
+function playSfx(buf, depth, holdMs, tension, roleGain) {
+  if (!state.ctx || !buf) return;
+  const src = state.ctx.createBufferSource();
+  src.buffer = buf;
+  const g = state.ctx.createGain();
+  g.gain.value = roleGain * scanNormalizationTrim(buf);
+  src.connect(g); g.connect(state.nodes.sfxGain);
+  src.start();
+  if (depth > 0) duck(depth, holdMs);
+  if (typeof tension === 'number') setTension(tension);
+}
+
+// ---------------------------------------------------------------------------
+// manifest + UI
+// ---------------------------------------------------------------------------
+const manifest = await fetch('data/manifest.json').then((r) => r.json());
+
+const groupsEl = document.getElementById('groups');
+const metricsEl = document.getElementById('metrics');
+
+function trackGain(track) {
+  if (!state.equalised) return 0;
+  if (typeof track.lufs !== 'number') return 0;
+  return TARGET_LUFS - track.lufs;
+}
+
+/** Decibel value -> linear amplitude for a WebAudio gain node. */
+function dbToAmplitude(db) { return Math.pow(10, db / 20); }
+
+/** The gain slider of a track row, if the track has one. */
+function sliderFor(track) {
+  if (!manifest || !manifest.groups) return null;
+  for (const group of manifest.groups) {
+    const idx = manifest.groups.indexOf(group);
+    for (const t of group.tracks) {
+      if (t.file !== track.file) continue;
+      const rows = groupsEl.querySelectorAll('.group')[idx]?.querySelectorAll('.row');
+      const row = rows && rows[[...group.tracks].indexOf(t)];
+      const slider = row && row.querySelector('input[type=range]');
+      if (slider) return slider;
+    }
+  }
+  return null;
+}
+
+/**
+ * The gain that playback has to start with: the slider wins (the listener may
+ * have moved it), otherwise the measured loudness correction.
+ */
+function currentGainDb(track) {
+  const slider = sliderFor(track);
+  if (slider) return Number(slider.value);
+  return trackGain(track);
+}
+
+function renderGroups() {
+  groupsEl.innerHTML = '';
+  for (const group of manifest.groups) {
+    const box = document.createElement('div');
+    box.className = 'group';
+    const h = document.createElement('h3'); h.textContent = group.title; box.appendChild(h);
+    if (group.note) { const n = document.createElement('div'); n.className = 'note'; n.textContent = group.note; box.appendChild(n); }
+    for (const track of group.tracks) {
+      const row = document.createElement('div'); row.className = 'row';
+      const name = document.createElement('div'); name.className = 'name';
+      name.innerHTML = `${track.label}<small>${track.file.split('/').pop()}</small>`;
+      const btns = document.createElement('div'); btns.className = 'btns';
+      const play = document.createElement('button');
+      play.dataset.track = track.file; play.textContent = '▶';
+      play.onclick = () => playTrack(track, play);
+      btns.appendChild(play);
+      const gainWrap = document.createElement('div');
+      const slider = document.createElement('input');
+      slider.type = 'range'; slider.min = '-12'; slider.max = '6'; slider.step = '0.1';
+      slider.value = String(trackGain(track).toFixed(1));
+      const lab = document.createElement('label'); lab.className = 'gain';
+      lab.textContent = ` ${slider.value} dB`;
+      slider.oninput = () => {
+        const v = Number(slider.value);
+        lab.textContent = ` ${v.toFixed(1)} dB`;
+        if (state.current && state.current.url === track.file) {
+          const now = state.ctx.currentTime;
+          state.current.gain.gain.setTargetAtTime(dbToAmplitude(v), now, 0.02);
+        }
+      };
+      gainWrap.appendChild(slider); gainWrap.appendChild(lab);
+      btns.appendChild(gainWrap);
+      const meta = document.createElement('div'); meta.className = 'meta';
+      meta.innerHTML = track.lufs !== undefined && track.lufs !== null
+        ? `LUFS <b>${track.lufs}</b> · TP <b>${track.truePeakDbTp}</b><br>${track.durationSec}s`
+        : `${track.durationSec || '—'}s`;
+      row.appendChild(name); row.appendChild(btns); row.appendChild(meta);
+      box.appendChild(row);
+    }
+    groupsEl.appendChild(box);
+  }
+}
+
+function renderMetrics() {
+  const rows = manifest.metrics || [];
+  metricsEl.innerHTML =
+    '<tr><th>Трек</th><th>Ист.</th><th>LUFS</th><th>TP dBTP</th><th>Стык</th><th>Циклы</th>' +
+    '<th>Моно</th><th>Воздух &gt;8к</th><th>1.5–3.5к</th></tr>' +
+    rows.map((r) => `<tr>
+      <td>${r.label}</td><td>${r.source}</td><td>${r.lufs ?? '—'}</td><td>${r.truePeakDbTp ?? '—'}</td>
+      <td class="${r.seamless === false ? 'bad' : 'ok'}">${r.seamJump ?? '—'}</td>
+      <td class="${r.cyclesOk === false ? 'bad' : 'ok'}">${r.cycles ?? '—'}</td>
+      <td class="${r.monoSafe === false ? 'bad' : 'ok'}">${r.monoDelta ?? '—'}</td>
+      <td>${r.airPct ?? '—'}</td><td>${r.sfxPocketPct ?? '—'}</td>
+    </tr>`).join('');
+}
+
+function renderMix() {
+  const mix = document.getElementById('mix');
+  mix.innerHTML = '';
+  const music = document.createElement('div'); music.className = 'btns';
+  for (const t of manifest.mixTracks) {
+    const b = document.createElement('button');
+    b.textContent = '♪ ' + t.label;
+    // Begin the cancellation generation at click-time, before any await.
+    b.onclick = () => playTrack(t, b);
+    music.appendChild(b);
+  }
+  mix.appendChild(music);
+  const sfxRow = document.createElement('div'); sfxRow.className = 'btns'; sfxRow.style.marginTop = '10px';
+  for (const s of manifest.sfxEvents) {
+    const b = document.createElement('button');
+    b.textContent = s.label;
+    b.onclick = async () => {
+      await initAudio();
+      const buf = await loadBuffer('assets/sfx/' + s.file);
+      playSfx(buf, s.duck, s.holdMs, s.tension, s.roleGain);
+      updateMixState(s);
+    };
+    sfxRow.appendChild(b);
+  }
+  mix.appendChild(sfxRow);
+}
+
+function updateMixState(event) {
+  const el = document.getElementById('mixState');
+  const parts = [];
+  parts.push(state.current ? `музыка: ${state.current.url.split('/').pop()}` : 'музыка: нет');
+  parts.push(`lowpass: ${Math.round(state.nodes?.musicFilter.frequency.value ?? 0)} Гц`);
+  if (event) parts.push(`событие: ${event.label} (дакинг ${event.duck}, удержание ${event.holdMs} мс)`);
+  el.textContent = parts.join(' · ');
+}
+
+renderGroups();
+renderMetrics();
+renderMix();
+
+document.getElementById('unlock').onclick = async () => {
+  await initAudio();
+  const el = document.getElementById('status');
+  el.textContent = `аудио-контекст: ${state.ctx.state}, ${state.ctx.sampleRate} Гц`;
+  el.className = 'meta ok';
+};
+
+document.getElementById('equalize').onclick = () => {
+  state.equalised = !state.equalised;
+  const btn = document.getElementById('equalize');
+  btn.classList.toggle('on', state.equalised);
+  btn.textContent = state.equalised ? 'Ровная громкость: вкл' : 'Ровная громкость (по измерениям)';
+  for (const group of manifest.groups) {
+    for (const track of group.tracks) {
+      const g = trackGain(track);
+      const idx = manifest.groups.indexOf(group);
+      // update the slider of this row
+      const rows = groupsEl.querySelectorAll('.group')[idx].querySelectorAll('.row');
+      const row = rows[[...group.tracks].indexOf(track)];
+      if (!row) continue;
+      const slider = row.querySelector('input[type=range]');
+      slider.value = String(g.toFixed(1));
+      row.querySelector('label.gain').textContent = ` ${g.toFixed(1)} dB`;
+      if (state.current && state.current.url === track.file) {
+        state.current.gain.gain.setTargetAtTime(dbToAmplitude(g), state.ctx.currentTime, 0.02);
+      }
+    }
+  }
+};
+
+document.getElementById('stopAll').onclick = () => { stopCurrent(); updateMixState(); };
+</script>
+</body>
+</html>
