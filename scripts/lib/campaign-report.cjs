@@ -1183,7 +1183,11 @@ function copyScreenshots(loaded, outDir) {
 function checkHtmlSelfContained(html) {
   const violations = [];
   const checks = [
-    [/https?:\/\//, 'external http(s) URL'],
+    // Loopback URLs appear in escaped diagnostic text (page errors from a
+    // failed dynamic import against the local dev server) and are not
+    // external dependencies of the report.
+    [/https?:\/\/(?!(?:127\.0\.0\.1|localhost|0\.0\.0\.0|\[::1\])(?::\d+)?(?:[\/\s"'<>)]|$))/, 'external http(s) URL'],
+
     [/<script[^>]+src=/i, 'external <script src>'],
     [/<link[^>]+href=/i, 'external <link href>'],
     [/<img[^>]+src=["']https?:/i, 'external <img src>'],

@@ -108,6 +108,10 @@ class CampaignBot {
     this.positions = [];
     this.escapeUntilTick = -1;
     this.orbitDir = -this.orbitDir;
+    // The game resets stage progression on stage change
+    // (RunState.resetStageProgression), including upgrade stacks; mirror
+    // that or the previous stage's regen cap leaks into this one.
+    this.stacks = {};
     this.lastStageId = stageId;
   }
 
