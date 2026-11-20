@@ -2040,6 +2040,49 @@ await ok('profile: сохранённый ответ переживает пер
   assert.equal(parsed.profile.createdAt, aliceMigratedProfile.createdAt);
 });
 
+await ok('friends index: platform-specific best vs legacy bare-UID cross-platform best', async () => {
+  const submit = async (platform, uid, token, startParam, timeMs, kills) => {
+    const res = await fetch(`${BASE}/api/score`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        platform,
+        initData: signInitData({ id: uid }, token, startParam ? { startParam } : {}),
+        payload: { win: true, timeMs, kills, level: 10, daily: false },
+      }),
+    });
+    assert.equal(res.status, 200);
+  };
+  // The qualified MAX friend must not pick a faster VK score with the same UID.
+  await submit('max', 333, MAX_TOKEN, null, 350_000, 150);
+  const vkScore = await fetch(`${BASE}/api/score`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform: 'vk', anonId: '333',
+      payload: { win: true, timeMs: 320_000, kills: 130, level: 7, daily: false },
+    }),
+  });
+  assert.equal(vkScore.status, 200);
+  const as111 = await j(await fetch(`${BASE}/api/friends`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platform: 'telegram', initData: signInitData({ id: 111 }, TG_TOKEN) }),
+  }));
+  const maxFriend = as111.friends.find((f) => f.relation === 'invited' && f.platform === 'max');
+  assert.ok(maxFriend);
+  assert.equal(maxFriend.timeMs, 350_000);
+
+  // Legacy bare-UID referrals intentionally select the best across platforms.
+  await submit('max', 444, MAX_TOKEN, '333', 420_000, 60);
+  const as444 = await j(await fetch(`${BASE}/api/friends`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platform: 'max', initData: signInitData({ id: 444 }, MAX_TOKEN) }),
+  }));
+  const legacyInviter = as444.friends.find((f) => f.relation === 'inviter');
+  assert.ok(legacyInviter);
+  assert.equal(legacyInviter.platform, 'vk');
+  assert.equal(legacyInviter.timeMs, 320_000);
+});
+
 await new Promise((resolve) => server.close(resolve));
 rmSync(DATA_DIR, { recursive: true, force: true });
 console.log(`\n${passed} проверок пройдено${process.exitCode ? ' (Есть провалы!)' : ''}`);

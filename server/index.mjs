@@ -2002,14 +2002,38 @@ const server = createServer(async (req, res) => {
         if (r.to === meKey) addFriend(from, 'inviter');
       }
 
+      if (friends.size === 0) {
+        return send(res, 200, { ok: true, platform: identity.platform, friends: [] });
+      }
+
+      // Index only identities in the friend graph; avoid scanning scores per friend.
+      // Keep both platform-qualified identities and legacy bare-UID lookups.
+      const wantedUids = new Set([...friends.values()].map((friend) => friend.uid));
+      const bestByPlatform = new Map();
+      const bestByUid = new Map();
+      for (const score of store.scores) {
+        // Map uses SameValueZero, while the original UID comparison used ===.
+        if (Number.isNaN(score.uid) || !wantedUids.has(score.uid)) continue;
+        let platformScores = bestByPlatform.get(score.platform);
+        if (!platformScores) {
+          platformScores = new Map();
+          bestByPlatform.set(score.platform, platformScores);
+        }
+        const platformBest = platformScores.get(score.uid);
+        if (!platformBest || compareScores(score, platformBest) < 0) {
+          platformScores.set(score.uid, score);
+        }
+        const uidBest = bestByUid.get(score.uid);
+        if (!uidBest || compareScores(score, uidBest) < 0) {
+          bestByUid.set(score.uid, score);
+        }
+      }
+
       const out = [];
       for (const friend of friends.values()) {
-        let best = null;
-        for (const score of store.scores) {
-          if (score.uid !== friend.uid) continue;
-          if (friend.platform && score.platform !== friend.platform) continue;
-          if (!best || compareScores(score, best) < 0) best = score;
-        }
+        const best = friend.platform
+          ? bestByPlatform.get(friend.platform)?.get(friend.uid)
+          : bestByUid.get(friend.uid);
         if (best) {
           out.push({
             relation: friend.relation,
