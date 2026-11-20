@@ -65,7 +65,7 @@ function makeLegendaryChoice(choice, suffix = '') {
         // Layout robustness fixture only: the guaranteed trophy path offers two choices.
         scenarios.push({ kind: 'synthetic-three-legendary', choices: [definitions[0], definitions[1], definitions[2]], reward: true });
       } else {
-        // Linux measured line counts [2,3,2,3,3,2]; choose only measured 2-line definitions.
+        // Include the last-life-saving Legendary in the shortest three-card stack.
         // Index 5 is the last-life-saving Legendary. Synthetic UI coverage, not a trophy contract.
         scenarios.push({ kind: 'short-portrait-three-legendary-guard', choices: [definitions[0], definitions[2], definitions[5]], reward: true, expectCompact: true });
       }
@@ -103,6 +103,8 @@ function makeLegendaryChoice(choice, suffix = '') {
           const intersects = (a, b) => a.left < b.right - 0.5 && a.right > b.left + 0.5 && a.top < b.bottom - 0.5 && a.bottom > b.top + 0.5;
           const texts = measured.map(({ object }) => object);
           const subtitle = texts.find((obj) => obj.text.includes('выбери мутацию для СЕРДЦА'));
+          const contains = (outer, inner) => inner.left >= outer.left && inner.right <= outer.right &&
+            inner.top >= outer.top && inner.bottom <= outer.bottom;
           const cards = root.list.filter((obj) => obj.type === 'Container' &&
             obj.list?.some((child) => child.type === 'Rectangle' && child.width > 100 && child.height > 100));
           const cardReports = cards.map((card) => {
@@ -112,20 +114,20 @@ function makeLegendaryChoice(choice, suffix = '') {
             const expectedChoice = expected.find((choice) => choice.name === effect?.text);
             const description = expectedChoice && cardText.find((obj) => obj.text === expectedChoice.desc);
             const footer = cardText.find((obj) => obj.text === 'ИЗМЕНИТЬ ПРАВИЛА ЗАБЕГА');
-            const plate = effect && card.list.find((obj) => obj.type === 'Rectangle' && obj.width > 100 && obj.height <= 44 && Math.abs(obj.y - effect.y) < 1);
             const effectBounds = effect ? bounds(effect) : null;
+            const textBounds = cardText.map((object) => ({ text: object.text, bounds: bounds(object) }));
+            const textIntersections = textBounds.flatMap((row, index) =>
+              textBounds.slice(index + 1).filter((other) => intersects(row.bounds, other.bounds))
+                .map((other) => [row.text, other.text]));
             return {
               background: bg ? bounds(bg) : null,
               cardHeight: bg?.height ?? null,
               effect: effect ? { text: effect.text, linesNeeded: effect.getWrappedText(effect.text).length, maxLines: effect.style.maxLines, bounds: effectBounds } : null,
-              plate: plate ? bounds(plate) : null,
               description: description ? bounds(description) : null,
               footer: footer ? bounds(footer) : null,
-              effectOverlaps: effectBounds ? [
-                !description ? 'missing description' : intersects(effectBounds, bounds(description)) ? 'description' : null,
-                !footer ? 'missing footer' : intersects(effectBounds, bounds(footer)) ? 'footer' : null,
-                !plate ? 'missing plate' : effectBounds.top < bounds(plate).top + 1 || effectBounds.bottom > bounds(plate).bottom - 1 ? 'outside plate' : null,
-              ].filter(Boolean) : ['missing effect'],
+              effectFirst: !!effectBounds && textBounds.every(({ bounds: row }) => row.top >= effectBounds.top),
+              textIntersections,
+              textOutsideCard: bg ? textBounds.filter((row) => !contains(bounds(bg), row.bounds)) : textBounds,
             };
           });
           const cardIntersections = [];
@@ -164,9 +166,9 @@ function makeLegendaryChoice(choice, suffix = '') {
     const expandedFits = proposedTop >= r.subtitleBounds?.bottom + 9 && proposedBottom <= r.height - 9;
     return !r.subtitleBounds || r.actualCards !== r.expectedCards || !r.allChoicesFound ||
       r.cardIntersections.length > 0 || r.overflow.length > 0 ||
-      r.cards.some((card) => !card.background || !card.effect || !card.plate || card.effectOverlaps.length ||
-        card.effect.linesNeeded > card.effect.maxLines ||
-        (card.effect.linesNeeded > 2 && card.cardHeight !== 136)) ||
+      r.cards.some((card) => !card.background || !card.effect || !card.description || !card.footer ||
+        !card.effectFirst || card.textIntersections.length || card.textOutsideCard.length ||
+        (card.effect.maxLines > 0 && card.effect.linesNeeded > card.effect.maxLines)) ||
       r.subtitleGap.some((gap) => gap == null || gap < 8.5) ||
       (r.height < 650 && r.actualHeight !== (expandedFits ? 136 : 124)) ||
       (r.expectedCompact && expandedFits);
