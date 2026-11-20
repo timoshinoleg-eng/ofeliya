@@ -99,6 +99,7 @@ class TitanPolicy {
   constructor() {
     this.state = TITAN_STATES.OBSERVE_HEARTBEAT;
     this.lastNextImpactAtMs = null;
+    this.lastProtectedUntilMs = null;
     this.impactPassedWhileInside = false;
     this.syncSuccesses = 0;
     this.syncMisses = 0;
@@ -107,6 +108,7 @@ class TitanPolicy {
   reset() {
     this.state = TITAN_STATES.OBSERVE_HEARTBEAT;
     this.lastNextImpactAtMs = null;
+    this.lastProtectedUntilMs = null;
     this.impactPassedWhileInside = false;
   }
 
@@ -135,8 +137,20 @@ class TitanPolicy {
     const insidePocket = pocket
       && dist(player.x, player.y, pocket.x, pocket.y) <= pocket.radius * POCKET_INSIDE_FRACTION;
 
+    // The game destroys the safe-pocket indicator at the impact, before the
+    // harness reads state, so insidePocket is null/stale at this poll. The
+    // protection window is the game's own record of "player was inside at
+    // impact": it is renewed (advanced) on a protected impact and zeroed on
+    // an unprotected one.
+    const protectedUntil = heartbeat.protectedUntilMs ?? null;
+    const nowMs = snapshot.runTimeMs ?? 0;
+    const impactProtected = protectedUntil !== null
+      && protectedUntil !== this.lastProtectedUntilMs
+      && protectedUntil > nowMs;
+    this.lastProtectedUntilMs = protectedUntil;
+
     if (impactPassed) {
-      if (this.state === TITAN_STATES.VERIFY_SYNCHRONIZATION && insidePocket) {
+      if (this.state === TITAN_STATES.VERIFY_SYNCHRONIZATION && (insidePocket || impactProtected)) {
         this.syncSuccesses += 1;
         event = 'HEART_SYNC_SUCCESS';
         this.state = TITAN_STATES.ATTACK_WINDOW;
@@ -149,7 +163,7 @@ class TitanPolicy {
         // The impact passed while we were on our way or outside: a miss.
         // (If we were already inside but in MOVE state, still count the
         // sync as a success — the pocket protected us either way.)
-        if (insidePocket) {
+        if (insidePocket || impactProtected) {
           this.syncSuccesses += 1;
           event = 'HEART_SYNC_SUCCESS';
         } else {
@@ -160,7 +174,7 @@ class TitanPolicy {
       } else if (this.state === TITAN_STATES.ATTACK_WINDOW || this.state === TITAN_STATES.RETURN_TO_KITING) {
         // Impact passed while kiting/attacking: if we happened to be inside
         // a pocket, that is a free sync; otherwise just keep going.
-        if (insidePocket) {
+        if (insidePocket || impactProtected) {
           this.syncSuccesses += 1;
           event = 'HEART_SYNC_SUCCESS';
         }
