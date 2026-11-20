@@ -823,7 +823,7 @@ function renderTimelineTable(loaded) {
       : gameMs !== null ? Math.round(gameMs / speed) : null;
     const wallLabel = wallMs === null ? '—' : `${formatMs(wallMs)}${isFiniteNumber(entry.wallTimeMs) ? '' : ' *'}`;
     return `<tr id="tl-row-${index}" class="${entry.event === 'INVARIANT_FAIL' ? 'row-fail' : ''}">
-      <td>${entry.tick ?? '—'}</td>
+      <td>${escapeHtml(entry.tick ?? '—')}</td>
       <td>${gameMs === null ? '—' : formatMs(gameMs)}</td>
       <td>${wallLabel}</td>
       <td>${escapeHtml(entry.stage || '—')}</td>
@@ -873,7 +873,7 @@ function renderSeriesTable(runs) {
       <td class="${outcomes.cls(outcomes.prime)}">${outcomes.cell(outcomes.prime)}</td>
       <td class="${outcomes.cls(outcomes.heart)}">${outcomes.cell(outcomes.heart)}</td>
       <td class="${outcomes.cls(outcomes.titan)}">${outcomes.cell(outcomes.titan)}</td>
-      <td><strong>${result}</strong><br><span class="muted">${escapeHtml(run.result.terminal || '')}</span></td>
+      <td><strong>${escapeHtml(result)}</strong><br><span class="muted">${escapeHtml(run.result.terminal || '')}</span></td>
     </tr>`;
   }).join('');
   return `<table>
@@ -914,7 +914,7 @@ function renderDiagnosis(loaded, diagnosis, screenshotRelPaths) {
     const offset = isFiniteNumber(failAt?.gameMs) && isFiniteNumber(entry.simulationTimeMs)
       ? `${entry.simulationTimeMs - failAt.gameMs >= 0 ? '+' : ''}${((entry.simulationTimeMs - failAt.gameMs) / 1000).toFixed(1)}s`
       : '—';
-    return `<tr class="${entry.event === 'INVARIANT_FAIL' ? 'row-fail' : ''}"><td>${offset}</td><td>${formatMs(entry.simulationTimeMs)}</td><td>${entry.tick ?? '—'}</td><td><strong>${escapeHtml(entry.event)}</strong></td><td>${escapeHtml(markerDetail(entry))}</td></tr>`;
+    return `<tr class="${entry.event === 'INVARIANT_FAIL' ? 'row-fail' : ''}"><td>${offset}</td><td>${formatMs(entry.simulationTimeMs)}</td><td>${escapeHtml(entry.tick ?? '—')}</td><td><strong>${escapeHtml(entry.event)}</strong></td><td>${escapeHtml(markerDetail(entry))}</td></tr>`;
   }).join('');
   const deathShot = screenshotRelPaths.find((shot) => shot.file === run.artifacts.screenshot);
   const deathImg = deathShot
@@ -922,7 +922,7 @@ function renderDiagnosis(loaded, diagnosis, screenshotRelPaths) {
     : '';
   return `<section class="diagnosis fail"><h2>Diagnosis in 1 minute</h2>
   <p><strong>First failed invariant:</strong> ${escapeHtml(firstFailed.label)} (<code>${escapeHtml(firstFailed.id)}</code>)</p>
-  <p><strong>First failure at:</strong> ${failAt && isFiniteNumber(failAt.gameMs) ? `${formatMs(failAt.gameMs)} game / ${isFiniteNumber(failAt.wallMs) ? `${formatMs(failAt.wallMs)} wall` : '—'} (tick ${failAt.tick ?? '—'})` : 'unknown — no INVARIANT_FAIL marker in the timeline'} — stage <code>${escapeHtml(run.result.stage)}</code>, phase <code>${escapeHtml(run.result.phase)}</code></p>
+  <p><strong>First failure at:</strong> ${failAt && isFiniteNumber(failAt.gameMs) ? `${formatMs(failAt.gameMs)} game / ${isFiniteNumber(failAt.wallMs) ? `${formatMs(failAt.wallMs)} wall` : '—'} (tick ${escapeHtml(failAt.tick ?? '—')})` : 'unknown — no INVARIANT_FAIL marker in the timeline'} — stage <code>${escapeHtml(run.result.stage)}</code>, phase <code>${escapeHtml(run.result.phase)}</code></p>
   <p><strong>Expected:</strong> ${escapeHtml(firstFailed.expected)}<br><strong>Actual:</strong> ${escapeHtml(firstFailed.actual || 'violated')}</p>
   ${run.failure ? `<p><strong>Failure:</strong> <code>${escapeHtml(run.failure.code || '')}</code> — ${escapeHtml(run.failure.message || '')}</p>` : ''}
   <p><strong>Job summary line:</strong></p>
@@ -1063,10 +1063,10 @@ footer { border-top: 1px solid #30363d; color: #8b949e; font-size: 0.85rem; }
 <span><strong>Difficulty:</strong> ${escapeHtml(run.run.difficulty)}</span>
 <span><strong>Commit:</strong> <code>${escapeHtml(run.commit.slice(0, 12))}</code></span>
 <span><strong>Browser:</strong> ${escapeHtml(run.browser)} / ${escapeHtml(run.renderer)}</span>
-<span><strong>Viewport:</strong> ${run.viewport[0]}×${run.viewport[1]}</span>
+<span><strong>Viewport:</strong> ${escapeHtml(run.viewport[0])}×${escapeHtml(run.viewport[1])}</span>
 <span><strong>Simulated:</strong> ${formatDuration(run.run.simulatedDurationMs)}</span>
 <span><strong>Wall:</strong> ${formatDuration(run.run.wallDurationMs)}</span>
-<span><strong>Speed:</strong> ${run.run.speed}×</span>
+<span><strong>Speed:</strong> ${escapeHtml(run.run.speed)}×</span>
 </div>
 <div class="meta"><span><strong>Win rate:</strong></span>${winRateHtml}</div>
 <div class="meta"><span><strong>State hash:</strong> <code>${escapeHtml(run.stateHash)}</code></span>
