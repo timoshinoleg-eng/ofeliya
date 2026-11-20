@@ -272,6 +272,11 @@ interface Env {
   TELEGRAM_BOT_TOKEN: string;
   /** ОБЯЗАТЕЛЕН для /api/webhook: отсутствует → 401 fail-closed (патч №12). */
   WEBHOOK_SECRET?: string;
+  /** Direct Telegram ingress secret: the existing Render TG_WEBHOOK_SECRET value.
+   * Distinct from WEBHOOK_SECRET used for legacy Render→Worker payment proxy.
+   * Not stored in source control; set via wrangler secret put TG_WEBHOOK_SECRET.
+   */
+  TG_WEBHOOK_SECRET?: string;
   /**
    * Патч №13: Cloudflare D1 для журнала платежей (схема — worker/schema.sql).
    * KV-биндинг PAYMENTS удалён полностью (чистая замена, не fallback).
@@ -785,6 +790,190 @@ async function getOrder(db: D1Database, nonce: string): Promise<DbOrderRow | nul
 }
 
 /**
+ * Worker-first Telegram ingress (Stage 0 / dormant until setWebhook cutover).
+ *
+ * Telegram has ONE webhook per bot. Payment updates take the existing
+ * fail-closed Worker+D1 path directly, with no cold Render dependency.
+ * Nonpayment updates are relayed to the existing Render handler so
+ * /start/referrals, /help, and /paysupport preserve all existing semantics.
+ *
+ * The direct Telegram secret is distinct from legacy WEBHOOK_SECRET. Its
+ * current value must match Render's TG_WEBHOOK_SECRET, set by an operator.
+ * No secret or Telegram update body is logged.
+ */
+const RENDER_TELEGRAM_WEBHOOK_URL = 'https://ofeliya-game.onrender.com/api/telegram/webhook';
+const NONPAYMENT_PROXY_TIMEOUT_MS = 25_000;
+
+async function readDirectTelegramBody(
+  request: Request
+): Promise<{ ok: true; raw: string; update: Record<string, unknown> } | { ok: false; status: number }> {
+  if (!/^application\/json(?:\s*;|\s*$)/i.test(request.headers.get('content-type') ?? '')) {
+    return { ok: false, status: 415 };
+  }
+  const length = Number(request.headers.get('content-length') ?? '0');
+  if (Number.isFinite(length) && length > MAX_BODY_BYTES) return { ok: false, status: 413 };
+  if (!request.body) return { ok: false, status: 400 };
+  const reader = request.body.getReader();
+  const parts: Uint8Array[] = [];
+  let byteLength = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteLength += value.byteLength;
+      if (byteLength > MAX_BODY_BYTES) {
+        await reader.cancel();
+        return { ok: false, status: 413 };
+      }
+      parts.push(value);
+    }
+  } catch {
+    return { ok: false, status: 400 };
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const part of parts) {
+    bytes.set(part, offset);
+    offset += part.byteLength;
+  }
+  let update: unknown;
+  const raw = new TextDecoder().decode(bytes);
+  try {
+    update = JSON.parse(raw);
+  } catch {
+    return { ok: false, status: 400 };
+  }
+  if (!update || typeof update !== 'object' || Array.isArray(update)) {
+    return { ok: false, status: 400 };
+  }
+  return { ok: true, raw, update: update as Record<string, unknown> };
+}
+
+const hasOwnUpdateField = (o: Record<string, unknown>, key: string): boolean =>
+  Object.prototype.hasOwnProperty.call(o, key);
+
+function isUpdateObject(x: unknown): x is Record<string, unknown> {
+  return !!x && typeof x === 'object' && !Array.isArray(x);
+}
+
+/**
+ * Validate only Telegram's known payment update shapes at the public ingress.
+ * Unknown Telegram update types remain eligible for forwarding to Render.
+ * Never call Bot API or write to D1 for malformed recognized payment updates.
+ */
+function classifyDirectTelegramUpdate(update: Record<string, unknown>): 'payment' | 'other' | 'invalid' {
+  if (hasOwnUpdateField(update, 'pre_checkout_query')) {
+    const q = update.pre_checkout_query;
+    if (!isUpdateObject(q) || typeof q.id !== 'string' || !q.id ||
+      !isUpdateObject(q.from) || !Number.isSafeInteger(q.from.id) ||
+      typeof q.invoice_payload !== 'string' || !q.invoice_payload ||
+      q.currency !== 'XTR' || !Number.isSafeInteger(q.total_amount) || (q.total_amount as number) < 1
+    ) return 'invalid';
+    return 'payment';
+  }
+  if (hasOwnUpdateField(update, 'subscription')) {
+    const subscription = update.subscription;
+    if (!isUpdateObject(subscription) || !isUpdateObject(subscription.user) ||
+      !Number.isSafeInteger(subscription.user.id) ||
+      typeof subscription.invoice_payload !== 'string' || !subscription.invoice_payload ||
+      !['active', 'canceled', 'failed'].includes(String(subscription.state))
+    ) return 'invalid';
+    return 'payment';
+  }
+  const message = update.message;
+  if (isUpdateObject(message) && hasOwnUpdateField(message, 'successful_payment')) {
+    const p = message.successful_payment;
+    if (!isUpdateObject(p) || !isUpdateObject(message.from) ||
+      !Number.isSafeInteger(message.from.id) ||
+      typeof p.telegram_payment_charge_id !== 'string' || !p.telegram_payment_charge_id ||
+      typeof p.invoice_payload !== 'string' || !p.invoice_payload ||
+      p.currency !== 'XTR' || !Number.isSafeInteger(p.total_amount) || (p.total_amount as number) < 1
+    ) return 'invalid';
+    return 'payment';
+  }
+  return 'other';
+}
+
+async function handleDirectTelegramIngress(request: Request, env: Env): Promise<Response> {
+  if (!env.TG_WEBHOOK_SECRET || env.TG_WEBHOOK_SECRET.length < 16) {
+    return json({ error: 'telegram-ingress-not-configured' }, 503);
+  }
+  if (request.headers.get('x-telegram-bot-api-secret-token') !== env.TG_WEBHOOK_SECRET) {
+    return new Response('forbidden', { status: 403 });
+  }
+  const parsed = await readDirectTelegramBody(request);
+  if (!parsed.ok) return json({ error: 'bad-telegram-update' }, parsed.status);
+
+  const updateClass = classifyDirectTelegramUpdate(parsed.update);
+  if (updateClass === 'invalid') return json({ error: 'bad-payment-update' }, 400);
+  if (updateClass === 'payment') {
+    // The legacy route remains available for rollback. Invoke the same
+    // handler with the legacy auth header ONLY after direct ingress auth.
+    // No network call to Render occurs on this payment-critical path.
+    if (!env.WEBHOOK_SECRET) return json({ error: 'payments-not-configured' }, 503);
+    const internallyAuthenticated = new Request('https://ofeliya-payments.internal/api/webhook', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-telegram-bot-api-secret-token': env.WEBHOOK_SECRET,
+      },
+      body: parsed.raw,
+    });
+    return handleWebhook(internallyAuthenticated, env);
+  }
+
+  // Preserve old command/referral processing and JSON webhook reply.
+  // Return an error rather than acknowledging an unprocessed update.
+  try {
+    const upstream = await fetch(RENDER_TELEGRAM_WEBHOOK_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-telegram-bot-api-secret-token': env.TG_WEBHOOK_SECRET,
+      },
+      body: parsed.raw,
+      // Workers follow redirects for subrequests and can leak secret headers
+      // to a redirected origin. Treat any 3xx as a retryable upstream failure.
+      redirect: 'manual',
+      signal: AbortSignal.timeout(NONPAYMENT_PROXY_TIMEOUT_MS),
+    });
+    const responseBody = await upstream.text();
+    if (upstream.status < 200 || upstream.status >= 300) {
+      return json({ error: 'telegram-render-upstream', status: upstream.status }, 503);
+    }
+    return new Response(responseBody, {
+      status: upstream.status,
+      headers: { 'content-type': upstream.headers.get('content-type') ?? 'application/json' },
+    });
+  } catch {
+    return json({ error: 'telegram-render-unavailable' }, 503);
+  }
+}
+
+/**
+ * Use one absolute deadline across all pre-checkout D1 reads.
+ * D1 calls are read-only, so an in-flight read finishing after timeout
+ * cannot write, approve, or mutate the payment decision.
+ */
+async function withinDeadline<T>(promise: Promise<T>, deadline: number): Promise<T> {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) throw new Error('precheckout-d1-deadline');
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error('precheckout-d1-deadline')), remaining);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
  * POST /api/webhook (Telegram → воркер).
  * Fail-closed (патч №12, P3): без WEBHOOK_SECRET в env → 401, молчаливого
  * отключения проверки больше нет.
@@ -820,11 +1009,14 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
   const q = update.pre_checkout_query;
   if (q) {
     const t0 = Date.now();
+    // Telegram gives the bot ten seconds TOTAL, including ingress and D1.
+    // Reserve >=3s for Bot API; fail closed if D1 is late.
+    const d1Deadline = t0 + 5_000;
     const nonce = q.invoice_payload ?? '';
     let ok = false;
     if (isValidNonce(nonce) && env.PAYMENTS_DB) {
       try {
-        const order = await getOrder(env.PAYMENTS_DB, nonce);
+        const order = await withinDeadline(getOrder(env.PAYMENTS_DB, nonce), d1Deadline);
         const fromId = q.from?.id;
         // P1-3 (независимый review): сверка с НЕИЗМЕНЯЕМЫМ ЗАКАЗОМ, а не с
         // текущим каталогом. Иначе снижение цены ломает легитимные инвойсы,
@@ -844,11 +1036,11 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
         // не попадают (у них нет pre_checkout_query — Telegram списывает
         // автоматически), поэтому продление активной подписки не ломается.
         if (ok && order && SERVER_GRANTS[order.product_id]?.subscription) {
-          const passWallet = await env.PAYMENTS_DB.prepare(
+          const passWallet = await withinDeadline(env.PAYMENTS_DB.prepare(
             'SELECT season_pass_until_ms FROM wallets WHERE user_id=?'
           )
             .bind(order.user_id)
-            .first<{ season_pass_until_ms: number }>();
+            .first<{ season_pass_until_ms: number }>(), d1Deadline);
           if (
             passWallet &&
             typeof passWallet.season_pass_until_ms === 'number' &&
@@ -884,7 +1076,7 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
           ok,
           ...(ok ? {} : { error_message: 'Товар недоступен. Попробуйте позже.' }),
         },
-        { timeoutMs: 8000 }
+        { timeoutMs: Math.max(500, Math.min(3_000, 8_500 - (Date.now() - t0))) }
       );
     } catch (err) {
       logEvent('pre_checkout_answer_failed', {
@@ -2453,6 +2645,9 @@ export default {
     }
     if (request.method === 'POST' && url.pathname === '/api/invoice') {
       return handleInvoice(request, env);
+    }
+    if (request.method === 'POST' && url.pathname === '/api/telegram/ingress') {
+      return handleDirectTelegramIngress(request, env);
     }
     if (request.method === 'POST' && url.pathname === '/api/webhook') {
       return handleWebhook(request, env);

@@ -47,11 +47,13 @@ npx wrangler deploy
 
 Проверка: `curl https://<worker>/api/health` → `{"ok":true,...}`.
 
-## 3. Webhook бота (продакшн: Render → Worker)
+## 3. Webhook бота — действующая схема и будущий Worker-first
 
-**Не переключать Telegram напрямую на Worker:** у Bot API один webhook.
-Прямой Worker URL отключит игровой webhook и команды `/start`/`/help`.
-Сначала настрой прокси в Render (`ofeliya-game`):
+**Действующий production остаётся Render → Worker.** У Telegram только один активный webhook на бота. Переключать его непосредственно на старый `/api/webhook` нельзя — там нет обработки `/start`, `/help`, `/paysupport` и рефералов.
+
+**Новая схема Worker-first готовится отдельно в Draft PR #300:** `POST /api/telegram/ingress` обрабатывает Stars без Render и пересылает обычные обновления в Render. Это **не инструкция выполнить setWebhook сейчас**. До прохождения pre-cutover gates и разрешённого переключения следовать `docs/telegram-stars-worker-first-rollout.md`; только там указан точный cutover, обязательный snapshot `getWebhookInfo` и rollback. Worker `TG_WEBHOOK_SECRET` должен совпадать с **существующим** Render `TG_WEBHOOK_SECRET` и отличаться от Worker `WEBHOOK_SECRET`.
+
+Для текущей схемы настрой прокси в Render (`ofeliya-game`):
 
 ```bash
 OFELIYA_STARS_WORKER_URL=https://<worker>.workers.dev
@@ -114,13 +116,14 @@ Domain `ofeliya-game.onrender.com`. На странице сайта откро�
 **Edit → Tracking code**. Значения `src` и `data-website-id` копируй
 **из своего кабинета** (включая регион US/EU; не угадывай URL).
 
-В **Render → ofeliya-game → Environment** добавь:
+В **Render → ofeliya-game → Environment** для Umami добавь. **Платежный клиентский URL НЕ включать до завершения Stage 0 и успешных настоящих платежных тестов**:
 
 ```dotenv
 VITE_UMAMI_ENABLED=1
 VITE_UMAMI_SRC=<полный HTTPS src из Tracking code>
 VITE_UMAMI_WEBSITE_ID=<data-website-id из Tracking code>
-VITE_PAYMENTS_API_URL=https://<worker>.workers.dev
+# Только после полного Stage 0 / отдельно от настройки Umami:
+# VITE_PAYMENTS_API_URL=https://<worker>.workers.dev
 PAYMENTS_SERVER_ID=ofeliya-d1-v1
 ```
 
