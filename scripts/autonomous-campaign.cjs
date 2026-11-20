@@ -121,6 +121,7 @@ const http = require('http');
 const net = require('net');
 
 const { CampaignBot, DECISION_FRAMES } = require('./autopilot/CampaignBot.cjs');
+const { shouldAdvancePostRun, parseRecordedPostRunAdvance } = require('./lib/replay-postrun-policy.cjs');
 
 const EXIT_PASS = 0;
 const EXIT_FAIL = 1;
@@ -613,7 +614,7 @@ function loadInputsFile(file, cliSeed, cliDifficulty) {
     // its hashes. Runs stopped via --until did not; replaying them must skip
     // it too, or the hashes land on a different tick than the recorded
     // checkpoint. Absent in older logs -> true (the recorded behavior).
-    postRunAdvance: parsed.postRunAdvance !== false,
+    postRunAdvance: parseRecordedPostRunAdvance(parsed.postRunAdvance),
   };
 }
 
@@ -2085,12 +2086,27 @@ async function runCampaign(browser, options, runIndex, seriesState) {
     // A replay of a run stopped via --until must not advance either: its
     // recorded hashes were captured at the loop-exit tick (postRunAdvance is
     // false in such inputs files).
-    if (st.runEnded && !st.untilReached && (!isReplay || options.replayPlan.postRunAdvance !== false)) {
+    const postRunAdvanceAllowed = shouldAdvancePostRun({
+      runEnded: st.runEnded,
+      untilReached: st.untilReached,
+      isReplay,
+      recordedPostRunAdvance: options.replayPlan?.postRunAdvance,
+    });
+    // A failed page.evaluate can have advanced frames before its response was
+    // lost. Mark that checkpoint as non-replayable rather than claiming skip.
+    let postRunAdvanceOutcome = 'skipped';
+    if (postRunAdvanceAllowed) {
+      postRunAdvanceOutcome = 'uncertain';
       try {
         await page.evaluate((frames) => window.__ofeliyaTest.advance(frames), POST_RUN_ADVANCE_FRAMES);
         st.tick += POST_RUN_ADVANCE_FRAMES;
+        postRunAdvanceOutcome = 'completed';
       } catch (error) {
         warn(`post-run advance failed: ${error.message}`);
+        st.failure = st.failure || {
+          code: 'POST_RUN_ADVANCE_UNCERTAIN',
+          message: 'post-run advance failed; saved checkpoint cannot be trusted',
+        };
       }
       await sleep(POST_RUN_WALL_WAIT_MS);
       const after = await pollState(page, st.lastEventCount);
@@ -2238,7 +2254,9 @@ async function runCampaign(browser, options, runIndex, seriesState) {
         scoreValidation = `rejected: ${response && response.error ? response.error : `http ${run.scoreSubmission.responseStatus}`}`;
       }
     }
-    if (st.runEnded && !st.untilReached) {
+    // A terminal --until replay was recorded before the result-screen
+    // submission window; do not enforce a score contract it never exercised.
+    if (postRunAdvanceAllowed) {
       const accepted = scoreValidation === 'accepted';
       invariants.check('scoreContract', accepted, {
         expected: 'score payload accepted by the local trusted validator',
@@ -2248,7 +2266,11 @@ async function runCampaign(browser, options, runIndex, seriesState) {
     } else {
       invariants.check('scoreContract', true, {
         expected: 'score payload accepted by the local trusted validator',
-        actual: st.untilReached ? 'not exercised (--until run)' : 'not exercised (run did not end)',
+        actual: st.untilReached
+          ? 'not exercised (--until run)'
+          : st.runEnded
+            ? 'not exercised (terminal --until replay, no post-run advance)'
+            : 'not exercised (run did not end)',
       });
     }
 
@@ -2489,7 +2511,11 @@ async function runCampaign(browser, options, runIndex, seriesState) {
       finalTick: st.finalHashTick !== null ? st.finalHashTick : st.tick,
       expectedStateHash: st.finalHashes.stateHash,
       expectedInputHash: st.finalHashes.inputHash,
-      postRunAdvance: Boolean(st.runEnded && !st.untilReached),
+      // null intentionally marks a failed/uncertain post-run advance. The
+      // loader refuses replay of that checkpoint rather than guessing.
+      postRunAdvance: postRunAdvanceOutcome === 'uncertain'
+        ? null
+        : postRunAdvanceOutcome === 'completed',
     };
     fs.writeFileSync(path.join(runDir, 'inputs.json'), `${JSON.stringify(inputsOut, null, 2)}\n`);
     fs.writeFileSync(path.join(runDir, 'timeline.ndjson'), timeline.toNdjson());
