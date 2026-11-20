@@ -318,6 +318,8 @@ export function installAutonomousHarness(game: Phaser.Game): void {
 
   // --- frame-observer state -------------------------------------------------
   let prevActive = false;
+  // Phaser reuses the Game scene object, but GameScene.create replaces RunState.
+  let prevRunState: GameScene['runState'] | null = null;
   let prevPhase = '';
   let prevStageId = '';
   let prevBossAlive = false;
@@ -391,14 +393,16 @@ export function installAutonomousHarness(game: Phaser.Game): void {
         pushEvent({ type: 'RUN_END', reason: 'abandoned', win: false });
       }
       prevActive = false;
+      prevRunState = null;
       return;
     }
     const gi = internalsOf(gs);
     const stage = gi.stageDirector.currentStage;
     const phase = gi.stageDirector.phase;
 
-    if (!prevActive) {
-      // Run boundary: fresh hashes/log for the new run.
+    if (!prevActive || prevRunState !== gs.runState) {
+      // Run boundary: fresh hashes/log even when Game is restarted without
+      // an intervening inactive POST_STEP.
       resetRunLog();
       runTick = 0;
       pushEvent({ type: 'RUN_START', seed: gs.runSeed, difficulty: gs.difficulty.id, stage: stage.id });
@@ -408,6 +412,7 @@ export function installAutonomousHarness(game: Phaser.Game): void {
       prevBossId = '';
       prevAwaitingChoice = gs.awaitingChoice;
       prevRunResultSeen = false;
+      prevRunState = gs.runState;
       prevActive = true;
     }
 
@@ -704,6 +709,10 @@ export function installAutonomousHarness(game: Phaser.Game): void {
         `startCampaign: unsupported difficulty '${difficulty}' (expected 'standard' | 'strained')`
       );
     }
+    // Capture before scene.start queues a new Game.create(). A live old
+    // RunState must never satisfy readiness for the requested new campaign.
+    const previousRunState = getGameScene()?.runState ?? null;
+
     // Mirror MenuScene.launchFreshRun: fresh run, no daily intent, no resume.
     clearDailyIntent(game.registry);
     RunCheckpoint.clear();
@@ -726,7 +735,7 @@ export function installAutonomousHarness(game: Phaser.Game): void {
     const deadline = Date.now() + START_TIMEOUT_MS;
     for (;;) {
       const gs = getGameScene();
-      if (gs && isGameLive() && gs.runState) return;
+      if (gs && isGameLive() && gs.runState && gs.runState !== previousRunState) return;
       if (Date.now() > deadline) {
         throw new Error('startCampaign: Game scene did not become active within 10s');
       }
