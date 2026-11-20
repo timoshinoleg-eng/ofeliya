@@ -343,10 +343,26 @@ function parseOptions(args) {
   };
 }
 
+// Mirrors RunRng.canonicalSeed (src/game/RunRng.ts): the game silently
+// canonicalizes overlong/invalid seeds, so the artifacts must record the
+// canonical form or loadInputsFile rejects them as out of contract.
+function canonicalSeed(raw) {
+  const value = String(raw).trim();
+  if (SEED_RE.test(value)) return value;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < value.length; i += 1) {
+    h ^= value.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  h >>>= 0;
+  if (h === 0) h = 0x6d2b79f5;
+  return h.toString(16).padStart(8, '0');
+}
+
 function seedForRun(options, runIndex) {
   const base = options.seed ?? `campaign-${options.difficulty}`;
-  if (options.runs === 1) return base;
-  return `${base}-${runIndex + 1}`;
+  if (options.runs === 1) return canonicalSeed(base);
+  return canonicalSeed(`${base}-${runIndex + 1}`);
 }
 
 function gitCommit() {
@@ -407,14 +423,25 @@ function httpGetJson(url, timeoutMs = 3000) {
   });
 }
 
-async function waitForHealth(port, timeoutMs = 15000) {
+async function waitForHealth(port, timeoutMs = 15000, childExited = null) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
+    // A 200 can come from a foreign server already owning the port; trust
+    // the port only while our own child is still alive.
+    if (childExited && childExited()) {
+      throw new Error('score server process exited before becoming healthy (port already in use?)');
+    }
+    let status = null;
     try {
-      const { status } = await httpGetJson(`http://127.0.0.1:${port}/health`, 2000);
-      if (status === 200) return;
+      status = (await httpGetJson(`http://127.0.0.1:${port}/health`, 2000)).status;
     } catch {
       // Server not up yet.
+    }
+    if (status === 200) {
+      if (childExited && childExited()) {
+        throw new Error('score server process exited before becoming healthy (port already in use?)');
+      }
+      return;
     }
     if (Date.now() > deadline) throw new Error(`score server on port ${port} did not become healthy`);
     await sleep(200);
@@ -442,14 +469,25 @@ async function startScoreServer({ port, dataDir, origin }) {
       TG_BOT_TOKEN: '',
       MAX_TOKEN: '',
       OFELIYA_TELEGRAM_OUTBOUND_ENABLED: '',
+      // The test server must never claim the production remote state store:
+      // server/index.mjs enables DurableState from these vars, and a fresh
+      // DATA_DIR does not isolate it (test scores could commit to the remote
+      // snapshot and claim its writer).
+      OFELIYA_STATE_URL: '',
+      OFELIYA_STATE_TOKEN: '',
+      TG_WEBHOOK_SECRET: '',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let stderr = '';
+  // Readiness race: if another server owns the port, our child fails to bind
+  // and exits while waitForHealth can still get a 200 from the foreign one.
+  let childExited = false;
+  child.once('exit', () => { childExited = true; });
   child.stderr.on('data', (chunk) => { stderr += chunk; });
   child.stdout.on('data', () => {});
   try {
-    await waitForHealth(port);
+    await waitForHealth(port, 15000, () => childExited);
   } catch (error) {
     try { child.kill('SIGKILL'); } catch { /* already gone */ }
     throw error;
@@ -571,6 +609,11 @@ function loadInputsFile(file, cliSeed, cliDifficulty) {
     // false DIVERGED: bot ended at 1800, replay ran to 1854 =
     // lastEventTick + tail, while all 30 per-second snapshots matched).
     finalTick: Number.isInteger(parsed.finalTick) && parsed.finalTick >= 0 ? parsed.finalTick : null,
+    // Whether the recorded run executed the post-run advance before capturing
+    // its hashes. Runs stopped via --until did not; replaying them must skip
+    // it too, or the hashes land on a different tick than the recorded
+    // checkpoint. Absent in older logs -> true (the recorded behavior).
+    postRunAdvance: parsed.postRunAdvance !== false,
   };
 }
 
@@ -579,7 +622,7 @@ function loadInputsFile(file, cliSeed, cliDifficulty) {
 // pattern — same viewport, flags, MAX route, localStorage seed)
 // ---------------------------------------------------------------------------
 
-async function makeRunContext(browser, options, run) {
+async function makeRunContext(browser, options, run, runDir) {
   const contextOptions = {
     viewport: { width: VIEWPORT.width, height: VIEWPORT.height },
     deviceScaleFactor: 1,
@@ -587,8 +630,12 @@ async function makeRunContext(browser, options, run) {
     isMobile: true,
   };
   if (options.video) {
-    contextOptions.video = {
-      mode: 'retain-on-failure',
+    // BrowserContext recording is configured via recordVideo; the previous
+    // `video: { mode: 'retain-on-failure' }` shape is not a context option,
+    // so page.video() stayed null and no video.webm was ever produced.
+    // Teardown keeps the recording only for failed runs.
+    contextOptions.recordVideo = {
+      dir: path.join(runDir, '.video-staging'),
       size: { width: VIEWPORT.width, height: VIEWPORT.height },
     };
   }
@@ -1042,7 +1089,10 @@ const UNTIL_ALIASES = {
   'first-boss': { event: 'BOSS_ACTIVE' },
   heart: { event: 'STAGE_CHANGED', to: 'heart' },
   victory: { event: 'CAMPAIGN_VICTORY' },
-  defeat: { event: 'RUN_END', terminal: 'defeat' },
+  // The RUN_END marker carries the game's reason ('dead', 'campaign-complete',
+  // ...) plus its own win flag; match defeats by win === false, not by the
+  // reason text.
+  defeat: { event: 'RUN_END', win: false },
 };
 
 function untilMatches(until, marker) {
@@ -1051,6 +1101,7 @@ function untilMatches(until, marker) {
   if (alias) {
     if (marker.event !== alias.event) return false;
     if (alias.to !== undefined && marker.to !== alias.to) return false;
+    if (alias.win !== undefined && marker.win !== alias.win) return false;
     if (alias.terminal !== undefined && marker.terminal !== alias.terminal) return false;
     return true;
   }
@@ -1262,6 +1313,11 @@ async function runCampaign(browser, options, runIndex, seriesState) {
     finalDiag: null,
     finalPools: null,
     finalHashes: { inputHash: null, stateHash: null },
+    // Tick at which finalHashes was captured. inputs.json writes this value
+    // as finalTick: st.tick at write time can be past the capture tick
+    // (screenshot flush / post-run steps), and cumulative hashes only compare
+    // at exactly the capture tick.
+    finalHashTick: null,
     audioState: null,
   };
   process.on('SIGTERM', onTerminateSignal);
@@ -1423,7 +1479,7 @@ async function runCampaign(browser, options, runIndex, seriesState) {
   let ctx = null;
   let page = null;
   try {
-    ({ ctx, page } = await makeRunContext(browser, options, run));
+    ({ ctx, page } = await makeRunContext(browser, options, run, runDir));
     await page.goto(buildPageUrl(options.url, options), { waitUntil: 'domcontentloaded' });
     try {
       await page.waitForFunction(
@@ -1468,11 +1524,29 @@ async function runCampaign(browser, options, runIndex, seriesState) {
     // --- main decision loop -------------------------------------------------
     const loopWallStart = Date.now();
     let lastPoll = null;
+    // Scan markers emitted so far this tick against --until. Runs twice per
+    // iteration: right after the run-log event scan (a terminal RUN_END /
+    // CAMPAIGN_VICTORY must match before the terminal break below), and
+    // after the decision bot events (BOT_STUCK / BOT_DWELL / HEART_SYNC_* are
+    // pushed later in the tick).
+    const scanUntilMarkers = () => {
+      if (!options.until || st.untilReached) return;
+      for (let i = timeline.entries.length - 1; i >= 0; i -= 1) {
+        const marker = timeline.entries[i];
+        if (marker.tick !== st.tick) break;
+        if (untilMatches(options.until, marker)) {
+          st.untilReached = true;
+          st.untilMarker = marker.event;
+          break;
+        }
+      }
+    };
     while (true) {
       const tickWallStart = Date.now();
       const poll = await pollState(page, st.lastEventCount);
       st.lastEventCount = poll.eventCount;
       st.finalHashes = { inputHash: poll.inputHash, stateHash: poll.stateHash };
+      st.finalHashTick = st.tick;
       st.finalState = poll.state;
       st.finalDiag = poll.diag;
       st.finalPools = poll.pools;
@@ -1493,11 +1567,15 @@ async function runCampaign(browser, options, runIndex, seriesState) {
           timeline.push('STAGE_START', ctxFor(state, { stage: state.stageId }));
         } else if (event.type === 'PHASE_CHANGED') {
           if (event.to === 'BOSS_ACTIVE') {
+            // Boss-defeat baseline: the game increments bossesDefeated at
+            // boss death, which precedes the STAGE_TRANSITION ceremony, so a
+            // baseline captured at transition already includes the kill and
+            // the delta invariant sees 0 on every legit clear.
+            if (diag && !diag.error) st.bossesDefeatedAtTransition = diag.bossesDefeated;
             timeline.push('BOSS_ACTIVE', ctxFor(state, { boss: state.boss?.kind }));
           } else if (event.to === 'STAGE_TRANSITION') {
             st.transitionFrom = state.stageId;
             st.transitionSinceTick = st.tick;
-            if (diag && !diag.error) st.bossesDefeatedAtTransition = diag.bossesDefeated;
             timeline.push('STAGE_END', ctxFor(state, { stage: state.stageId }));
           } else if (event.to === 'BOSS_DEFEATED') {
             timeline.push('BOSS_DEFEATED', ctxFor(state, { boss: state.boss?.kind }));
@@ -1553,6 +1631,10 @@ async function runCampaign(browser, options, runIndex, seriesState) {
           }
         }
       }
+      // Terminal markers (RUN_END / CAMPAIGN_VICTORY / BOSS_ACTIVE / ...) were
+      // pushed above: check --until BEFORE the terminal break below, else
+      // `--until victory` / `--until defeat` never match.
+      scanUntilMarkers();
 
       // --- state-diff markers -------------------------------------------------
       const telegraphNow = Boolean(state.boss && state.boss.telegraph === 'telegraph');
@@ -1699,19 +1781,10 @@ async function runCampaign(browser, options, runIndex, seriesState) {
       }
 
       // --- --until ---------------------------------------------------------------------
-      if (options.until) {
-        // Check all markers emitted this tick (walk back to the tick start).
-        for (let i = timeline.entries.length - 1; i >= 0; i -= 1) {
-          const marker = timeline.entries[i];
-          if (marker.tick !== st.tick) break;
-          if (untilMatches(options.until, marker)) {
-            st.untilReached = true;
-            st.untilMarker = marker.event;
-            break;
-          }
-        }
-        if (st.untilReached) break;
-      }
+      // Second scan of the tick: catches markers pushed after the event scan
+      // (state-diff markers, decision bot events).
+      scanUntilMarkers();
+      if (st.untilReached) break;
 
       // --- decide + apply ---------------------------------------------------------------
       const decision = driver.decideAt(state, st.tick);
@@ -2009,7 +2082,10 @@ async function runCampaign(browser, options, runIndex, seriesState) {
     }
 
     // --- post-run: let the result screen submit the score -------------------------
-    if (st.runEnded && !st.untilReached) {
+    // A replay of a run stopped via --until must not advance either: its
+    // recorded hashes were captured at the loop-exit tick (postRunAdvance is
+    // false in such inputs files).
+    if (st.runEnded && !st.untilReached && (!isReplay || options.replayPlan.postRunAdvance !== false)) {
       try {
         await page.evaluate((frames) => window.__ofeliyaTest.advance(frames), POST_RUN_ADVANCE_FRAMES);
         st.tick += POST_RUN_ADVANCE_FRAMES;
@@ -2020,6 +2096,7 @@ async function runCampaign(browser, options, runIndex, seriesState) {
       const after = await pollState(page, st.lastEventCount);
       st.lastEventCount = after.eventCount;
       st.finalHashes = { inputHash: after.inputHash, stateHash: after.stateHash };
+      st.finalHashTick = st.tick;
       st.finalState = after.state;
       st.finalDiag = after.diag;
       st.finalPools = after.pools;
@@ -2212,14 +2289,22 @@ async function runCampaign(browser, options, runIndex, seriesState) {
     // hashes from different ticks is a guaranteed false DIVERGED.
     let replayVerdict = null;
     if (isReplay && options.replayPlan.expectedStateHash && options.replayPlan.finalTick !== null) {
-      const match = st.finalHashes.stateHash === options.replayPlan.expectedStateHash
-        && st.finalHashes.inputHash === options.replayPlan.expectedInputHash;
-      replayVerdict = match ? 'MATCH' : 'DIVERGED';
-      if (!match && !st.failure) {
-        st.failure = {
-          code: 'REPLAY_DIVERGED',
-          message: `stateHash ${st.finalHashes.stateHash} vs expected ${options.replayPlan.expectedStateHash}`,
-        };
+      if (st.tick < options.replayPlan.finalTick && (st.untilReached || st.failure || st.watchdog)) {
+        // Stopped before the recorded hash checkpoint (--until / invariant /
+        // watchdog): the expected hashes describe a later tick, so comparing
+        // them here would be a guaranteed false DIVERGED. Report a prefix
+        // replay instead.
+        replayVerdict = 'PREFIX';
+      } else {
+        const match = st.finalHashes.stateHash === options.replayPlan.expectedStateHash
+          && st.finalHashes.inputHash === options.replayPlan.expectedInputHash;
+        replayVerdict = match ? 'MATCH' : 'DIVERGED';
+        if (!match && !st.failure) {
+          st.failure = {
+            code: 'REPLAY_DIVERGED',
+            message: `stateHash ${st.finalHashes.stateHash} vs expected ${options.replayPlan.expectedStateHash}`,
+          };
+        }
       }
     }
 
@@ -2287,6 +2372,11 @@ async function runCampaign(browser, options, runIndex, seriesState) {
         };
       }
     }
+    // Carry the verdict failure into st.failure so the teardown predicate
+    // (trace retention / failedRun) sees invariant-caused failures too —
+    // otherwise a winning or --until run that fails an invariant loses its
+    // trace even though run.json reports the failure.
+    if (failure && !st.failure) st.failure = failure;
 
     // --- write artifacts ------------------------------------------------------------
     const wallDurationMs = Date.now() - wallStart;
@@ -2393,9 +2483,13 @@ async function runCampaign(browser, options, runIndex, seriesState) {
     // finalTick anchors the hashes: the replay ends at exactly this tick.
     const inputsOut = {
       ...inputLog,
-      finalTick: st.tick,
+      // Anchor the hashes at their capture tick: st.tick at write time can
+      // be past it (screenshot flush), and replay compares cumulative hashes
+      // only at exactly this checkpoint.
+      finalTick: st.finalHashTick !== null ? st.finalHashTick : st.tick,
       expectedStateHash: st.finalHashes.stateHash,
       expectedInputHash: st.finalHashes.inputHash,
+      postRunAdvance: Boolean(st.runEnded && !st.untilReached),
     };
     fs.writeFileSync(path.join(runDir, 'inputs.json'), `${JSON.stringify(inputsOut, null, 2)}\n`);
     fs.writeFileSync(path.join(runDir, 'timeline.ndjson'), timeline.toNdjson());
@@ -2445,16 +2539,17 @@ async function runCampaign(browser, options, runIndex, seriesState) {
         warn(`tracing stop failed: ${error.message}`);
       }
     }
-    let videoPath = null;
+    // video.path() is only available after the context closes (Playwright
+    // finalizes the recording on close), so resolve it after closing.
+    let video = null;
     if (page) {
-      try {
-        const video = page.video();
-        videoPath = video ? await video.path().catch(() => null) : null;
-      } catch {
-        videoPath = null;
-      }
+      try { video = page.video(); } catch { video = null; }
     }
     if (ctx) await ctx.close().catch(() => {});
+    let videoPath = null;
+    if (video) {
+      try { videoPath = await video.path(); } catch { videoPath = null; }
+    }
     if (videoPath && fs.existsSync(videoPath)) {
       if (failedRun) {
         try {
@@ -2492,6 +2587,16 @@ async function main() {
     options.runs = 1;
     options.seed = options.replayPlan.seed;
     options.difficulty = options.replayPlan.difficulty;
+    // Never let a replay rewrite the source artifacts: with the default
+    // --out the replay runDir resolves to the source runDir (same seed and
+    // run index) and would overwrite the original inputs.json.
+    const sourceDir = path.dirname(path.resolve(options.replay));
+    const replayRunDir = path.join(path.resolve(options.out), `${options.replayPlan.seed}-1`);
+    if (replayRunDir === sourceDir) {
+      if (args.out) usageError(`--out ${args.out} would overwrite the replay source artifacts (${sourceDir})`);
+      options.out = path.resolve(sourceDir, '..', `${path.basename(sourceDir)}-replay`);
+      log(`replay output -> ${options.out} (source directory kept intact)`);
+    }
   }
   if (options.until && !UNTIL_ALIASES[options.until] && !/^[A-Z][A-Z0-9_]*$/.test(options.until)) {
     usageError(`--until must be a timeline marker (e.g. BOSS_ACTIVE) or an alias (first-boss, heart, victory, defeat), got ${options.until}`);
