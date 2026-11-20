@@ -123,6 +123,11 @@ def main() -> None:
                 "the stand includes actual game SFX role gains for all eight cues",
             )
             check(
+                {s["name"] for s in sfx_events if s["duck"] > 0} == {"boss"}
+                and next(s for s in sfx_events if s["name"] == "boss")["holdMs"] == 700,
+                "the stand only ducks music for the actual boss spawn event",
+            )
+            check(
                 all((clean / "stand" / "assets" / "sfx" / s["file"]).is_file() for s in sfx_events),
                 "every game-mix cue has an audio asset",
             )

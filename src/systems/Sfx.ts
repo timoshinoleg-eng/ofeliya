@@ -450,14 +450,26 @@ class SfxImpl {
       this.disarmMusicUnlockRetry();
       void this.resumeAudioContext().then((running) => {
         if (!this.musicWanted || this.muted || this.isSuspended()) return;
-        if (running) this.spawnMusic();
-        else this.armMusicUnlockRetry();
+        if (running) {
+          if (this.cplusActive) this.resumeCPlusBed();
+          else this.spawnMusic();
+        } else this.armMusicUnlockRetry();
       });
     };
     this.musicUnlockHandler = retry;
     window.addEventListener('pointerdown', retry, true);
     window.addEventListener('touchend', retry, true);
     window.addEventListener('keydown', retry, true);
+  }
+
+  /** C+ uses the same user-gesture retry as the established production path. */
+  private ensureCPlusContextUnlocked(): void {
+    if (!this.ctx || this.ctx.state === 'running' || this.muted || this.isSuspended()) return;
+    void this.resumeAudioContext().then((running) => {
+      if (!this.cplusActive || !this.musicWanted || this.muted || this.isSuspended()) return;
+      if (running) this.disarmMusicUnlockRetry();
+      else this.armMusicUnlockRetry();
+    });
   }
 
   private disarmMusicUnlockRetry(): void {
@@ -818,6 +830,7 @@ class SfxImpl {
   private startCPlusBedAudible(role: CPlusBedRole, fadeMs: number): void {
     const cached = this.cplusBuffers[role];
     if (cached) {
+      this.ensureCPlusContextUnlocked();
       // A cached bed supersedes whatever was still loading for another role.
       this.cancelCPlusLoad();
       this.swapCPlusBed(cached, role, fadeMs);
@@ -825,6 +838,7 @@ class SfxImpl {
     }
     const ctx = this.ensure();
     if (!ctx) return;
+    this.ensureCPlusContextUnlocked();
     // Cancel the previous load FIRST: `cancelCPlusLoad` bumps the generation
     // counter, so assigning the new id before the cancel would immediately
     // mark the new request as stale and nothing would ever be fetched.
@@ -1041,6 +1055,7 @@ class SfxImpl {
   private resumeCPlusBed(): void {
     const role = this.cplusRole;
     if (!role) return;
+    this.ensureCPlusContextUnlocked();
     // Resuming the current bed is not a new bed: an outcome signal that was
     // requested while muted has to survive the resume, otherwise the
     // Victory/Defeat cue is silently dropped.

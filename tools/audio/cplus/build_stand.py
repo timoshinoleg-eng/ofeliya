@@ -34,12 +34,12 @@ from ofeliya_cplus import metrics  # noqa: E402
 # SFX events with the duck depths and hold times the game actually uses
 # (src/systems/AdaptiveAudioDirector.ts).
 SFX_EVENTS = [
-    {"name": "bossphase", "file": "bossphase.mp3", "label": "bossphase (телеграф фазы)", "duck": 0.55, "holdMs": 700, "tension": 0.86},
+    {"name": "bossphase", "file": "bossphase.mp3", "label": "bossphase (телеграф фазы)", "duck": 0.0, "holdMs": 0, "tension": 0.86},
     {"name": "boss", "file": "boss.ogg", "label": "boss (появление)", "duck": 0.55, "holdMs": 700, "tension": 0.86},
-    {"name": "elite", "file": "elite.ogg", "label": "elite", "duck": 0.22, "holdMs": 240, "tension": 0.66},
-    {"name": "infect", "file": "infect.mp3", "label": "infect", "duck": 0.22, "holdMs": 240, "tension": 0.66},
-    {"name": "lysis", "file": "lysis.mp3", "label": "lysis", "duck": 0.22, "holdMs": 240, "tension": 0.66},
-    {"name": "hit", "file": "hit.ogg", "label": "hit", "duck": 0.22, "holdMs": 240, "tension": 0.66},
+    {"name": "elite", "file": "elite.ogg", "label": "elite", "duck": 0.0, "holdMs": 0, "tension": 0.66},
+    {"name": "infect", "file": "infect.mp3", "label": "infect", "duck": 0.0, "holdMs": 0, "tension": 0.66},
+    {"name": "lysis", "file": "lysis.mp3", "label": "lysis", "duck": 0.0, "holdMs": 0, "tension": 0.66},
+    {"name": "hit", "file": "hit.ogg", "label": "hit", "duck": 0.0, "holdMs": 0, "tension": 0.66},
     {"name": "pickup", "file": "pickup.ogg", "label": "pickup (без дакинга)", "duck": 0.0, "holdMs": 0, "tension": 0.38},
     {"name": "levelup", "file": "levelup.ogg", "label": "levelup (без дакинга)", "duck": 0.0, "holdMs": 0, "tension": 0.38},
 ]

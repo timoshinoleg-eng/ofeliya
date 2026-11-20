@@ -64,6 +64,8 @@ def fmt(value, digits=2, dash="—"):
 
 
 def range_text(values, digits=1, dash="—"):
+    if values is None:
+        return dash
     values = [v for v in values if v is not None]
     if not values:
         return dash
@@ -381,13 +383,38 @@ def build_report(rows: list[dict], package: Path) -> str:
             f"production-наборе.\n"
         )
         if below:
+            improvements = [
+                a.get("improvementVsProductionDb")
+                for a in masking.get("absolute", [])
+                if a.get("sfx") in below
+            ]
+            measured = (
+                summary_matched.get("comparisons", 0) > 0
+                and len(improvements) >= len(below)
+                and all(isinstance(v, (int, float)) for v in improvements)
+            )
+            worse_count = summary_matched.get("worseThanProduction", 0)
+            if not measured:
+                conclusion = (
+                    "Данных для вывода о регрессии относительно production **недостаточно**: "
+                    "нет всех необходимых baseline-измерений. Сравнение по слуху обязательно."
+                )
+            elif worse_count > 0 or any(v < 0 for v in improvements):
+                conclusion = (
+                    "**Возможна регрессия слышимости относительно production**: "
+                    f"act-matched сравнений хуже более чем на 3 дБ — {worse_count}; "
+                    "у части звуков абсолютный запас стал меньше. "
+                    "Нужна корректировка микса и повторное измерение перед выпуском."
+                )
+            else:
+                conclusion = (
+                    "В проведённых сравнениях уменьшения запаса относительно production "
+                    "не найдено, но это не доказывает достаточную слышимость в игре. "
+                    "Нужна проверка на физическом устройстве."
+                )
             lines.append(
                 f"\nЗвуки, которые остаются частично перекрытыми музыкой: "
-                f"{', '.join(below)}. Это **не регрессия**: те же звуки перекрыты "
-                f"production-музыкой сильнее (разница в пользу C+ v4 приведена в "
-                f"столбце «разница»). Если владелец считает, что телеграф фазы "
-                f"босса должен читаться над музыкой, это отдельная правка игрового "
-                f"микса — отдельный дакинг или фильтр под `bossphase`.\n"
+                f"{', '.join(below)}. {conclusion}\n"
             )
         lines.append(
             "\nПолоса берётся из собственного спектра SFX, а не из фиксированного "

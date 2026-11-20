@@ -60,7 +60,7 @@ function fixture(opts = {}) {
 
   class Context {
     constructor() {
-      this.state = 'running';
+      this.state = opts.startSuspended ? 'suspended' : 'running';
       this.currentTime = 10;
       this.nodes = [];
       this.destination = { kind: 'destination' };
@@ -97,7 +97,11 @@ function fixture(opts = {}) {
       return { numberOfChannels: channels, length, sampleRate: rate, getChannelData: () => new Float32Array(length) };
     }
     createOscillator() { return Object.assign(this.node('oscillator'), { frequency: param(440) }); }
-    resume() { this.state = 'running'; return Promise.resolve(); }
+    resume() {
+      if (opts.resumeReject && !opts.allowResume) return Promise.reject(new Error('gesture required'));
+      this.state = 'running';
+      return Promise.resolve();
+    }
     suspend() { this.state = 'suspended'; return Promise.resolve(); }
     decodeAudioData(ab) {
       const url = ab && ab.url ? ab.url : '';
@@ -145,6 +149,11 @@ function fixture(opts = {}) {
 
   return {
     Sfx, requests, sources, warnings, saved, pendingFetches,
+    gestureListenerCount: (type) => listeners.get(type)?.size ?? 0,
+    gesture(type = 'pointerdown') {
+      opts.allowResume = true;
+      for (const fn of [...(listeners.get(type) ?? [])]) fn();
+    },
     startedSources: () => sources.filter((s) => s.started),
     stoppedSources: () => sources.filter((s) => s.stopped),
     resolveFetch(index, url) {
@@ -405,6 +414,34 @@ await test('resuming visibility does not duplicate a running C+ source', async (
   f.Sfx.setSuspended(false);
   await flush();
   assert.equal(f.startedSources().length, 1, 'visibility restoration must not create a second bed');
+});
+
+await test('C+ resumes a blocked AudioContext on a real user gesture without restarting the bed', async () => {
+  const f = fixture({ startSuspended: true, resumeReject: true });
+  f.Sfx.startCPlusBed('heart');
+  await flush();
+  assert.equal(f.Sfx.debugAudioState.contextState, 'suspended');
+  assert.ok(f.gestureListenerCount('pointerdown') > 0, 'gesture retry must be armed');
+  assert.equal(f.startedSources().length, 1, 'bed queued in suspended context');
+  f.gesture();
+  await flush();
+  assert.equal(f.Sfx.debugAudioState.contextState, 'running', 'gesture should unlock audio');
+  assert.equal(f.gestureListenerCount('pointerdown'), 0, 'retry listeners must be released');
+  assert.equal(f.startedSources().length, 1, 'unlocked context must not restart the existing music');
+});
+
+await test('a cached C+ bed also arms gesture unlock when the context is blocked', async () => {
+  const f = fixture({ startSuspended: true, resumeReject: true });
+  f.Sfx.startCPlusBed('heart');
+  await flush();
+  f.Sfx.stopMusic();
+  assert.equal(f.gestureListenerCount('pointerdown'), 0);
+  f.Sfx.startCPlusBed('heart');
+  await flush();
+  assert.ok(f.gestureListenerCount('pointerdown') > 0, 'cached source must request a gesture');
+  f.gesture();
+  await flush();
+  assert.equal(f.Sfx.debugAudioState.contextState, 'running');
 });
 
 if (failures) {

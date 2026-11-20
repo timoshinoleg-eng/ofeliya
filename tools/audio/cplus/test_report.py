@@ -103,13 +103,13 @@ MASKING = {
 }
 
 
-def render(rows: list[dict], with_masking: bool = True) -> str:
+def render(rows: list[dict], with_masking: bool = True, masking: dict | None = None) -> str:
     with tempfile.TemporaryDirectory() as td:
         package = Path(td)
         if with_masking:
             (package / "analysis").mkdir(parents=True, exist_ok=True)
             (package / "analysis" / "sfx-masking.json").write_text(
-                json.dumps(MASKING), encoding="utf-8"
+                json.dumps(masking if masking is not None else MASKING), encoding="utf-8"
             )
         return build_report(rows, package)
 
@@ -154,6 +154,44 @@ def main() -> None:
           "both ends of the range are in the table")
     check("Δ к **самому маскирующему** production-bed" in text,
           "the report states the criterion of the regression counter")
+
+    # Masked SFX may be a genuine regression or an unknown, not always an
+    # improvement. The conclusion must follow actual measured comparisons.
+    cue = {
+        "sfx": "bossphase", "dominantBandHz": [1000, 2000],
+        "sfxRuntimeTrim": 0.62, "sfxBandDb": -18.0,
+        "musicBandDb": -10.0, "worstMarginDb": -8.0,
+        "productionWorstMarginDb": 0.0,
+        "improvementVsProductionDb": -8.0, "aboveMusicEverywhere": False,
+    }
+    absolute_summary = {
+        "aboveMusicEverywhere": 0, "soundsChecked": 1,
+        "worstMarginDb": -8.0, "productionWorstMarginDb": 0.0,
+        "soundsBelowMusic": ["bossphase"],
+    }
+    worse = {
+        **MASKING, "absolute": [cue], "absoluteSummary": absolute_summary,
+        "actMatchedSummary": {"comparisons": 1, "worseThanProduction": 1, "deltaRangeDb": [8, 8]},
+    }
+    text = render([make_row("bloodstream", 0.5)], masking=worse)
+    check("Возможна регрессия слышимости" in text and "Это **не регрессия**" not in text,
+          "a worsening by 8 dB never receives a reassuring masking conclusion")
+
+    unknown = {
+        **worse, "actMatchedSummary": {"comparisons": 0, "worseThanProduction": 0, "deltaRangeDb": None},
+        "absolute": [{**cue, "improvementVsProductionDb": None}],
+    }
+    text = render([make_row("bloodstream", 0.5)], masking=unknown)
+    check("Данных для вывода о регрессии" in text,
+          "missing production baselines never imply a measured improvement")
+
+    improved = {
+        **worse, "actMatchedSummary": {"comparisons": 1, "worseThanProduction": 0, "deltaRangeDb": [-2, -2]},
+        "absolute": [{**cue, "improvementVsProductionDb": 2.0}],
+    }
+    text = render([make_row("bloodstream", 0.5)], masking=improved)
+    check("уменьшения запаса относительно production не найдено" in text,
+          "a positive measured margin supports a qualified no-regression conclusion")
 
     print()
     if failures:
