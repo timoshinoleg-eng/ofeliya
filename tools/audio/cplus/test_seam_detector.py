@@ -126,6 +126,35 @@ def main() -> None:
         "a step beside a silent neighbourhood reports an outlier ratio",
     )
 
+    # --- 7. a break that only one channel shows ---------------------------
+    # The right channel is a slow ramp: its interior steps are tiny, but the
+    # boundary step is 0.2. The left channel is a 2 kHz tone whose interior
+    # steps are 0.228, so every *summed* check passes - the right channel's
+    # break hides behind the left channel's texture. Each channel has to be
+    # judged against its own steps.
+    left_tone = 0.8 * np.cos(2.0 * np.pi * 2000.0 * (np.arange(n) + 0.5) / SR)
+    right_ramp = 0.2 * np.arange(n) / (n - 1)
+    asym_stereo = np.stack([left_tone, right_ramp], axis=1)
+    asym_report = metrics.seam_report(asym_stereo, SR, cycles=cycles)
+    check(
+        asym_report["wrapDiscontinuityMax"] <= asym_report["interiorDiffMax"] * 1.02
+        and asym_report["wrapVsLocalRatio"] <= 3.0,
+        "the summed checks would have accepted the asymmetric break (control)",
+    )
+    check(
+        asym_report["seamless"] is False,
+        "a break that only one channel shows is reported as NOT seamless",
+    )
+    per_channel = {c["channel"]: c for c in asym_report["channelChecks"]}
+    check(
+        per_channel["right"]["seamless"] is False,
+        "the channel with the break is rejected on its own steps",
+    )
+    check(
+        "channelChecks" in asym_report and len(asym_report["channelChecks"]) == 2,
+        "the report contains a verdict per channel",
+    )
+
     print()
     if failures:
         print(f"{len(failures)} of {checks} seam-detector check(s) FAILED")

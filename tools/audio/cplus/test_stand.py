@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import socket
 import subprocess
 import sys
@@ -47,6 +48,18 @@ def free_port() -> int:
         return int(sock.getsockname()[1])
 
 
+def extract_js_function(source: str, name: str) -> str | None:
+    """Extract a one-line JS function declaration so it can be evaluated."""
+    marker = f"function {name}("
+    start = source.find(marker)
+    if start < 0:
+        return None
+    end = source.find("}", start)
+    if end < 0:
+        return None
+    return source[start : end + 1]
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--package", required=True)
@@ -63,6 +76,11 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as td:
         clean = Path(td) / "clean-package"
         clean.mkdir()
+        # The stand builder consumes a previously built C+ package.
+        # Copy ONLY those inputs into a clean destination, not a stale stand.
+        # Otherwise an empty folder produces a page without C+ music or QA.
+        shutil.copytree(package / "ogg", clean / "ogg")
+        shutil.copytree(package / "analysis", clean / "analysis")
         result = subprocess.run(
             [sys.executable, str(_HERE / "build_stand.py"),
              "--package", str(clean), "--audition", str(audition), "--repo", str(repo)],
@@ -79,12 +97,69 @@ def main() -> None:
               "the produced stand/index.html is not empty")
         manifest = clean / "stand" / "data" / "manifest.json"
         check(manifest.exists(), "the clean build produced stand/data/manifest.json")
+        manifest_data = {}
         if manifest.exists():
             data = json.loads(manifest.read_text(encoding="utf-8"))
+            manifest_data = data
             check(len(data.get("groups", [])) >= 4, "the stand manifest lists the comparison groups")
-            check(len(data.get("metrics", [])) >= 6, "the stand manifest lists the measured tracks")
+            cplus = [g for g in data["groups"] if g["title"].startswith("C+ v4")]
+            cplus_tracks = cplus[0].get("tracks", []) if len(cplus) == 1 else []
+            measured_cplus = [m for m in data.get("metrics", []) if m.get("source") == "C+ v4"]
+            check(len(cplus_tracks) == 6, "the stand includes all six new C+ tracks")
+            check(len(measured_cplus) == 6, "the stand manifest lists all six measured C+ tracks")
+            tracks = [t for g in data.get("groups", []) for t in g.get("tracks", [])]
+            check(
+                all((clean / "stand" / t["file"]).is_file() for t in tracks),
+                "every listed stand track has an audio file",
+            )
+            check(bool(tracks), "the stand manifest lists playable tracks")
+            check(
+                all("gainDb" not in t for t in tracks),
+                "no track relies on a raw gainDb value (the stand derives the gain from the measurement)",
+            )
         assets = clean / "stand" / "assets"
         check(assets.is_dir() and any(assets.rglob("*.ogg")), "the clean build produced the audio assets")
+
+        # The playback gain is a decibel value; the gain node wants a linear
+        # amplitude. Assigning the decibel value directly silences the track
+        # (a negative gain inverts the phase, a zero gain is silence).
+        template = _HERE / "stand" / "index.html"
+        source = template.read_text(encoding="utf-8")
+        check(
+            "gain.gain.value = track.gainDb" not in source,
+            "the stand does not assign a raw decibel value to the gain node",
+        )
+        check(
+            "gain.gain.value = dbToAmplitude(" in source,
+            "the stand converts the playback gain from decibels to an amplitude",
+        )
+        check(
+            "function dbToAmplitude(db)" in source,
+            "the stand defines the decibel-to-amplitude conversion",
+        )
+        helper = extract_js_function(source, "dbToAmplitude")
+        ok = False
+        detail = ""
+        if helper:
+            probe = subprocess.run(
+                ["node", "-e",
+                 f"const f = {helper};"
+                 "const out = [f(0), f(-6), f(6)];"
+                 "console.log(JSON.stringify(out));"],
+                capture_output=True, text=True,
+            )
+            try:
+                values = json.loads(probe.stdout.strip())
+            except (ValueError, TypeError):
+                values = None
+            if values:
+                ok = (
+                    abs(values[0] - 1.0) < 1e-9
+                    and abs(values[1] - 0.5011872336272722) < 1e-9
+                    and abs(values[2] - 1.9952623149688795) < 1e-9
+                )
+                detail = f"got {values}"
+        check(ok, f"the decibel-to-amplitude conversion is numerically correct ({detail})")
 
         # the server has to serve the stand over a real origin
         port = free_port()

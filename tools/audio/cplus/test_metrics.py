@@ -56,6 +56,10 @@ def test_mono_report() -> None:
         f"L = R loses exactly the 3.01 dB of the BS.1770 channel sum (got {report['monoLufsDeltaDb']:.2f} dB)",
     )
     check(report["antiPhaseEnergyPct"] < 0.1, "identical channels carry no anti-phase energy")
+    check(
+        all(v < 0.1 for v in report["bandSideEnergyPct"].values()),
+        f"identical channels carry no side energy (worst {max(report['bandSideEnergyPct'].values()):.2f} %)",
+    )
     check(report["monoSafe"] is True, "identical channels are mono safe")
 
     # L = -R: a complete cancellation must be visible per band
@@ -66,6 +70,10 @@ def test_mono_report() -> None:
         f"L = -R cancels every band (worst {max(report['bandRetentionDb'].values()):.1f} dB)",
     )
     check(report["antiPhaseEnergyPct"] > 99.0, "an anti-phase pair is reported as fully anti-phase")
+    check(
+        all(v > 99.0 for v in report["bandSideEnergyPct"].values()),
+        f"an anti-phase pair puts its whole energy into the side channel (worst {min(report['bandSideEnergyPct'].values()):.1f} %)",
+    )
     check(report["monoSafe"] is False, "an anti-phase pair is not mono safe")
 
     # a signal in the left channel only: the fold-down keeps the signal but

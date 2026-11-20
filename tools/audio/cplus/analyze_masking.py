@@ -73,6 +73,99 @@ CRITICAL_SFX = [
 ]
 
 
+def build_regressions(rows: list[dict]) -> list[dict]:
+    """Compare every C+ bed with the production beds.
+
+    Two baseline sets are kept for every comparison:
+
+    * the **act-matched** pool - the production beds of the same act, i.e. the
+      same musical slot in the same act (`MUSIC_BED_POOLS`);
+    * the **full** production set - every baseline at once.
+
+    For both sets the hardest baseline (the one that hides the improvement
+    most: the largest music level in the SFX band) and the easiest one are
+    kept, so neither end of the range can be dropped.
+
+    `musicVsSfxInBandDb` is *music minus SFX*: a larger value means the bed
+    masks the sound more, so a **negative** delta means C+ v4 is better than
+    that baseline.
+    """
+    regressions: list[dict] = []
+    for sfx_name in sorted({r["sfx"] for r in rows}):
+        baseline = [r for r in rows if r["sfx"] == sfx_name and r["baseline"]]
+        if not baseline:
+            continue
+        for r in rows:
+            if r["sfx"] != sfx_name or r["baseline"]:
+                continue
+            matched = [
+                b for b in baseline
+                if PRODUCTION_ACT.get(b["bed"]) == CPLUS_ACT.get(r["bed"])
+            ]
+            pool = matched if matched else baseline
+            # both ends of the range are kept: the worst baseline is the one
+            # that hides the improvement, and it must not be dropped
+            pool_best = max(b["musicVsSfxInBandDb"] for b in pool)
+            pool_worst = min(b["musicVsSfxInBandDb"] for b in pool)
+            all_best = max(b["musicVsSfxInBandDb"] for b in baseline)
+            all_worst = min(b["musicVsSfxInBandDb"] for b in baseline)
+            delta = r["musicVsSfxInBandDb"] - pool_best
+            flag = "WORSE" if delta > 3.0 else ("better" if delta < -1.0 else "same")
+            regressions.append({
+                "sfx": sfx_name,
+                "bed": r["bed"],
+                "baselinePool": sorted(b["bed"] for b in pool),
+                "allBaselines": sorted(b["bed"] for b in baseline),
+                "actMatched": bool(matched),
+                # act-matched pool: both ends
+                "deltaDb": round(delta, 2),
+                "deltaVsWorstActBaselineDb": round(r["musicVsSfxInBandDb"] - pool_worst, 2),
+                # full baseline set: both ends
+                "deltaVsBestBaselineDb": round(r["musicVsSfxInBandDb"] - all_best, 2),
+                "deltaVsWorstBaselineDb": round(r["musicVsSfxInBandDb"] - all_worst, 2),
+                "verdict": flag,
+            })
+    return regressions
+
+
+def summarize_regressions(regressions: list[dict]) -> dict:
+    """Summaries for the act-matched pool and for the full baseline set."""
+    matched_rows = [r for r in regressions if r["actMatched"]]
+    matched_worse = [r for r in matched_rows if r["verdict"] == "WORSE"]
+    # "worse than production" is judged against the **hardest** production bed
+    # (the largest music level in the SFX band). Counting the delta against
+    # the *easiest* baseline flagged beds that are better than every baseline
+    # but still louder than the quietest one.
+    all_worse = [r for r in regressions if r["deltaVsBestBaselineDb"] > 3.0]
+    return {
+        "actMatchedSummary": {
+            "comparisons": len(matched_rows),
+            "worseThanProduction": len(matched_worse),
+            "deltaRangeDb": [
+                round(min((r["deltaDb"] for r in matched_rows), default=0.0), 2),
+                round(max((r["deltaDb"] for r in matched_rows), default=0.0), 2),
+            ],
+            "deltaVsWorstBaselineRangeDb": [
+                round(min((r["deltaVsWorstBaselineDb"] for r in matched_rows), default=0.0), 2),
+                round(max((r["deltaVsWorstBaselineDb"] for r in matched_rows), default=0.0), 2),
+            ],
+        },
+        "allBaselineSummary": {
+            "comparisons": len(regressions),
+            "worseThanProduction": len(all_worse),
+            "deltaRangeDb": [
+                round(min((r["deltaVsBestBaselineDb"] for r in regressions), default=0.0), 2),
+                round(max((r["deltaVsBestBaselineDb"] for r in regressions), default=0.0), 2),
+            ],
+            "deltaVsWorstBaselineRangeDb": [
+                round(min((r["deltaVsWorstBaselineDb"] for r in regressions), default=0.0), 2),
+                round(max((r["deltaVsWorstBaselineDb"] for r in regressions), default=0.0), 2),
+            ],
+            "criterion": "delta vs the hardest production bed (deltaVsBestBaselineDb) > 3 dB",
+        },
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--package", required=True)
@@ -126,64 +219,12 @@ def main() -> None:
     }
 
     # ---------------------------------------------------------------- relative
-    regressions = []
-    for sfx_name, _role in CRITICAL_SFX:
-        baseline = [r for r in rows if r["sfx"] == sfx_name and r["baseline"]]
-        if not baseline:
-            continue
-        for r in rows:
-            if r["sfx"] != sfx_name or r["baseline"]:
-                continue
-            matched = [b for b in baseline if PRODUCTION_ACT.get(b["bed"]) == CPLUS_ACT.get(r["bed"])]
-            pool = matched if matched else baseline
-            # both ends of the range are kept: the worst baseline is the one
-            # that hides the improvement, and it must not be dropped
-            pool_best = max(b["musicVsSfxInBandDb"] for b in pool)
-            pool_worst = min(b["musicVsSfxInBandDb"] for b in pool)
-            all_best = max(b["musicVsSfxInBandDb"] for b in baseline)
-            all_worst = min(b["musicVsSfxInBandDb"] for b in baseline)
-            delta = r["musicVsSfxInBandDb"] - pool_best
-            flag = "WORSE" if delta > 3.0 else ("better" if delta < -1.0 else "same")
-            regressions.append({
-                "sfx": sfx_name,
-                "bed": r["bed"],
-                "baselinePool": sorted(b["bed"] for b in pool),
-                "actMatched": bool(matched),
-                "deltaDb": round(delta, 2),
-                "deltaVsWorstActBaselineDb": round(r["musicVsSfxInBandDb"] - pool_worst, 2),
-                "deltaVsBestBaselineDb": round(r["musicVsSfxInBandDb"] - all_best, 2),
-                "deltaVsWorstBaselineDb": round(r["musicVsSfxInBandDb"] - all_worst, 2),
-                "verdict": flag,
-            })
+    regressions = build_regressions(rows)
     out["regressions"] = regressions
-
+    out.update(summarize_regressions(regressions))
     matched_rows = [r for r in regressions if r["actMatched"]]
     matched_worse = [r for r in matched_rows if r["verdict"] == "WORSE"]
-    all_worse = [r for r in regressions if r["deltaVsWorstBaselineDb"] > 3.0]
-    out["actMatchedSummary"] = {
-        "comparisons": len(matched_rows),
-        "worseThanProduction": len(matched_worse),
-        "deltaRangeDb": [
-            round(min((r["deltaDb"] for r in matched_rows), default=0.0), 2),
-            round(max((r["deltaDb"] for r in matched_rows), default=0.0), 2),
-        ],
-        "deltaVsWorstBaselineRangeDb": [
-            round(min((r["deltaVsWorstBaselineDb"] for r in matched_rows), default=0.0), 2),
-            round(max((r["deltaVsWorstBaselineDb"] for r in matched_rows), default=0.0), 2),
-        ],
-    }
-    out["allBaselineSummary"] = {
-        "comparisons": len(regressions),
-        "worseThanProduction": len(all_worse),
-        "deltaRangeDb": [
-            round(min((r["deltaVsBestBaselineDb"] for r in regressions), default=0.0), 2),
-            round(max((r["deltaVsBestBaselineDb"] for r in regressions), default=0.0), 2),
-        ],
-        "deltaVsWorstBaselineRangeDb": [
-            round(min((r["deltaVsWorstBaselineDb"] for r in regressions), default=0.0), 2),
-            round(max((r["deltaVsWorstBaselineDb"] for r in regressions), default=0.0), 2),
-        ],
-    }
+    all_worse = [r for r in regressions if r["deltaVsBestBaselineDb"] > 3.0]
 
     # ---------------------------------------------------------------- absolute
     absolute = []

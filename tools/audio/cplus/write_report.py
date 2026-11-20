@@ -99,19 +99,12 @@ def collect(package: Path, audition: Path) -> list[dict]:
     return rows
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--package", required=True)
-    ap.add_argument("--audition", required=True)
-    ap.add_argument("--repo", required=True)
-    args = ap.parse_args()
+def build_report(rows: list[dict], package: Path) -> str:
+    """Render the report from the loaded measurements.
 
-    package = Path(args.package).resolve()
-    audition = Path(args.audition).resolve()
-    rows = collect(package, audition)
-    if not rows:
-        raise SystemExit("no measurements found — the report cannot be generated")
-
+    Every statement is derived from `rows`; a missing measurement is
+    reported as missing instead of being counted as a favourable result.
+    """
     lines: list[str] = []
     lines.append("# C v3 -> C+ v4: отчёт об изменениях\n")
     lines.append(
@@ -157,31 +150,51 @@ def main() -> None:
     lines.append(
         "\n**Как это читать.** «Шаг на стыке» — |x[0] − x[N−1]| в сумме каналов "
         "относительно пика файла. «Шаг ÷ локальный максимум» — тот же шаг, делённый "
-        "на самый большой шаг отсчётов внутри окна ±50 мс вокруг границы. Клик — это "
-        "когда отношение **больше** единицы: ступенька выступает на фоне текстуры "
-        "прямо у точки склейки.\n"
+        "на самый большой шаг отсчётов внутри окна ±50 мс вокруг границы. Отношение "
+        "больше единицы означает лишь, что ступенька грубее соседней текстуры; "
+        "**выступающей** ступенькой детектор считает отношение больше 3 — в три раза "
+        "грубее фона. Порог в тексте отчёта и в коде детектора один и тот же.\n"
     )
     v3_ratios = [r["v3seam"].get("wrapVsLocalRatio") for r in rows if r["v3seam"].get("wrapVsLocalRatio") is not None]
     v4_ratios = [r["v4seam"].get("wrapVsLocalRatio") for r in rows if r["v4seam"].get("wrapVsLocalRatio") is not None]
     v3_outliers = [v for v in v3_ratios if v > 3.0]
     v4_outliers = [v for v in v4_ratios if v > 3.0]
+    # a missing measurement must not be counted as "no click confirmed"
+    v3_missing = [r for r in rows if r["v3seam"].get("wrapVsLocalRatio") is None]
+    v4_missing = [r for r in rows if r["v4seam"].get("wrapVsLocalRatio") is None]
+    if v3_missing or v4_missing:
+        click_claim = (
+            "Подтверждённого клика в измеренной части нет; "
+        )
+        missing_note = (
+            f"\n**Не измерено:** без отношения остались {len(v3_missing)} из {len(rows)} "
+            f"треков в C v3 и {len(v4_missing)} из {len(rows)} в C+ v4 — вывод о клике "
+            f"относится только к измеренным трекам.\n"
+        )
+    else:
+        click_claim = "Подтверждённого клика измерения не дают ни в одном наборе; "
+        missing_note = ""
     lines.append(
         f"\n**Вывод по стыку (из измерений).** В C v3 отношение шага к локальному "
         f"максимуму — {range_text(v3_ratios, 2)}; ступенек, выступающих над "
         f"текстурой (отношение > 3), — {len(v3_outliers)}. В C+ v4 — "
         f"{range_text(v4_ratios, 2)}; таких ступенек — {len(v4_outliers)}. "
-        f"Подтверждённого клика измерения не дают ни в одном наборе; числа #299 "
+        f"{click_claim}числа #299 "
         f"(0.3981 для `B/03`, 0.2665 для `C/03`) — это наблюдение о величине шага, "
-        f"а вывод о слышимости требует прослушивания.\n"
+        f"а вывод о слышимости требует прослушивания.\n" + missing_note
     )
     loop_rows = [r for r in rows if r["id"] not in ("victory", "defeat")]
-    v4_ok = all(r["v4seam"].get("seamless") for r in loop_rows)
-    v4_seams = all(
+    measured_loops = [r for r in loop_rows if r["v4seam"].get("seamless") is not None]
+    # `all()` on an empty list is True, so the verdict must not be given
+    # without a single measured bed
+    v4_ok = bool(measured_loops) and all(r["v4seam"].get("seamless") for r in measured_loops)
+    v4_seams = bool(measured_loops) and all(
         r["v4seam"].get("cyclesMeasuredSeams") == r["v4seam"].get("cyclesTested", 0) - 1
-        for r in loop_rows
+        for r in measured_loops
     )
     lines.append(
-        f"\nВсе beds C+ v4 бесшовны по результату измерений: "
+        f"\nBeds C+ v4, проверенных на стык: {len(measured_loops)} из {len(loop_rows)}; "
+        f"все бесшовны по результату измерений: "
         f"{'да' if v4_ok else 'нет'}; измерены все внутренние точки склейки "
         f"десяти повторов: {'да' if v4_seams else 'нет'}.\n"
     )
@@ -303,17 +316,26 @@ def main() -> None:
             "baseline, чтобы выбор эталона не мог улучшить вывод.\n\n"
         )
         lines.append(
-            "| SFX | Δ к act-matched production (дБ) | Δ к худшему baseline | "
-            "хуже production на >3 дБ |\n|---|---|---|---|\n"
+            "| SFX | C+ bed | act-matched: Δ к лучшему baseline | act-matched: Δ к худшему "
+            "baseline | все baseline: Δ к лучшему | все baseline: Δ к худшему | вердикт |\n"
+            "|---|---|---|---|---|---|---|\n"
         )
-        for sfx in sorted({r["sfx"] for r in matched}):
-            sel = [r for r in matched if r["sfx"] == sfx]
-            worse = sum(1 for r in sel if r["verdict"] == "WORSE")
+        for r in sorted(matched, key=lambda r: (r["sfx"], r["bed"])):
             lines.append(
-                f"| {sfx} | {range_text([r['deltaDb'] for r in sel], 1)} | "
-                f"{range_text([r['deltaVsWorstBaselineDb'] for r in sel], 1)} | "
-                f"{worse} из {len(sel)} |"
+                f"| {r['sfx']} | {r['bed']} | "
+                f"{fmt(r.get('deltaDb'), 1)} дБ | "
+                f"{fmt(r.get('deltaVsWorstActBaselineDb'), 1)} дБ | "
+                f"{fmt(r.get('deltaVsBestBaselineDb'), 1)} дБ | "
+                f"{fmt(r.get('deltaVsWorstBaselineDb'), 1)} дБ | "
+                f"{r.get('verdict')} |"
             )
+        lines.append(
+            "\n**Как это читать.** Δ отрицательный — C+ v4 лучше этого baseline. "
+            "«Лучший baseline» — самый маскирующий (наибольший уровень музыки в полосе "
+            "SFX), «худший» — самый тихий. Для каждого C+ bed показаны обе границы и по "
+            "act-matched пулу, и по всему набору production-bed: сводный диапазон по "
+            "разным beds не смешивается с разбросом по baseline.\n"
+        )
         summary_matched = masking.get("actMatchedSummary", {})
         summary_all = masking.get("allBaselineSummary", {})
         lines.append(
@@ -321,7 +343,10 @@ def main() -> None:
             f"хуже production на >3 дБ — **{summary_matched.get('worseThanProduction', 0)}**; "
             f"диапазон Δ {range_text(summary_matched.get('deltaRangeDb'), 1)} дБ. "
             f"По всем baseline сразу: {summary_all.get('comparisons', 0)} сравнений, "
-            f"хуже — {summary_all.get('worseThanProduction', 0)}.\n"
+            f"хуже — {summary_all.get('worseThanProduction', 0)}. "
+            f"Критерий «хуже production» — Δ к **самому маскирующему** production-bed "
+            f"больше 3 дБ: bed, который лучше всех production-bed, регрессией не "
+            f"считается, даже если он громче самого тихого из них.\n"
         )
 
         lines.append(
@@ -388,9 +413,25 @@ def main() -> None:
         "Galaxy S20+ — приёмка на телефоне остаётся отдельным ручным этапом.\n"
     )
 
+    return "\n".join(lines) + "\n"
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--package", required=True)
+    ap.add_argument("--audition", required=True)
+    ap.add_argument("--repo", required=True)
+    args = ap.parse_args()
+
+    package = Path(args.package).resolve()
+    audition = Path(args.audition).resolve()
+    rows = collect(package, audition)
+    if not rows:
+        raise SystemExit("no measurements found — the report cannot be generated")
+
     out_path = package / "docs" / "CHANGES-v3-to-v4.md"
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    out_path.write_text(build_report(rows, package), encoding="utf-8")
     print(f"[report] wrote {out_path}")
 
 

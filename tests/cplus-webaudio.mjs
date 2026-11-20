@@ -123,12 +123,17 @@ function fixture(opts = {}) {
     removeEventListener(t, fn) { listeners.get(t)?.delete(fn); },
   };
 
+  const pendingFetches = [];
   const fetch = (url, options) => {
     requests.push({ url, options });
     if (opts.failFetch && opts.failFetch(url)) return Promise.resolve({ ok: false, status: 404, arrayBuffer: async () => ({ url }) });
     if (opts.holdFetch) {
       const d = deferred();
-      options?.signal?.addEventListener?.('abort', () => d.reject(new Error('aborted')));
+      pendingFetches.push(d);
+      // `ignoreAbort` models a WebView whose request keeps running after the
+      // abort signal: the request id, not the signal, has to reject the
+      // superseded load.
+      if (!opts.ignoreAbort) options?.signal?.addEventListener?.('abort', () => d.reject(new Error('aborted')));
       return d.promise;
     }
     return Promise.resolve({ ok: true, status: 200, arrayBuffer: async () => ({ url }) });
@@ -139,9 +144,14 @@ function fixture(opts = {}) {
   });
 
   return {
-    Sfx, requests, sources, warnings, saved,
+    Sfx, requests, sources, warnings, saved, pendingFetches,
     startedSources: () => sources.filter((s) => s.started),
     stoppedSources: () => sources.filter((s) => s.stopped),
+    resolveFetch(index, url) {
+      const d = pendingFetches[index];
+      assert.ok(d, `no pending fetch at index ${index}`);
+      d.resolve({ ok: true, status: 200, arrayBuffer: async () => ({ url }) });
+    },
   };
 }
 
@@ -291,6 +301,49 @@ await test('a new bed cancels the previous run stinger', async () => {
   f.Sfx.startCPlusBed('heart');
   await flush();
   assert.equal(f.stoppedSources().length, 1, 'the previous run signal must not overlap the new bed');
+});
+
+await test('a bed switch while muted invalidates the load of the previous bed', async () => {
+  const f = fixture({ holdFetch: true, ignoreAbort: true });
+  f.Sfx.startCPlusBed('bloodstream');
+  await flush();
+  assert.equal(f.requests.length, 1, 'the first bed must issue its own request');
+
+  f.Sfx.setMuted(true);
+  f.Sfx.startCPlusBed('immune-prime');
+  await flush();
+
+  // the superseded request resolves late, as it would in a slow WebView
+  f.resolveFetch(0, f.requests[0].url);
+  await flush();
+  assert.equal(f.startedSources().length, 0, 'the stale act bed must not start');
+
+  f.Sfx.setMuted(false);
+  await flush();
+  assert.ok(
+    f.requests[f.requests.length - 1].url.includes('immune_prime'),
+    `the boss bed must resume, got ${f.requests[f.requests.length - 1].url}`
+  );
+});
+
+await test('a pending outcome signal survives the resume of an uncached bed', async () => {
+  const f = fixture({ muted: true });
+  f.Sfx.startCPlusBed('bloodstream');
+  await flush();
+  f.Sfx.playCPlusStinger('victory');
+  await flush();
+  assert.equal(f.startedSources().length, 0, 'a muted stinger must not play');
+
+  f.Sfx.setMuted(false);
+  await flush();
+  assert.ok(
+    f.requests.some((r) => r.url.includes('bloodstream')),
+    'the act bed must resume'
+  );
+  assert.ok(
+    f.requests.some((r) => r.url.includes('victory')),
+    'the outcome signal must be delivered after the bed resume'
+  );
 });
 
 if (failures) {

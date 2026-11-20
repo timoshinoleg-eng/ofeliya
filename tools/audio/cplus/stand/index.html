@@ -196,7 +196,11 @@ async function playTrack(track, button) {
   const src = ctx.createBufferSource();
   src.buffer = buf; src.loop = track.loop !== false;
   const gain = ctx.createGain();
-  gain.gain.value = track.gainDb !== undefined ? track.gainDb : 0;
+  // The gain is a decibel value, the gain node wants a linear amplitude.
+  // `currentGainDb()` is the same state the slider and the equalisation
+  // switch use, so playback, slider and switch can never disagree - and the
+  // track is audible from the first sample instead of starting at zero.
+  gain.gain.value = dbToAmplitude(currentGainDb(track));
   src.connect(gain); gain.connect(state.nodes.bedTrim);
   src.start();
   state.current = { src, gain, url: track.file };
@@ -232,6 +236,35 @@ function trackGain(track) {
   return TARGET_LUFS - track.lufs;
 }
 
+/** Decibel value -> linear amplitude for a WebAudio gain node. */
+function dbToAmplitude(db) { return Math.pow(10, db / 20); }
+
+/** The gain slider of a track row, if the track has one. */
+function sliderFor(track) {
+  if (!manifest || !manifest.groups) return null;
+  for (const group of manifest.groups) {
+    const idx = manifest.groups.indexOf(group);
+    for (const t of group.tracks) {
+      if (t.file !== track.file) continue;
+      const rows = groupsEl.querySelectorAll('.group')[idx]?.querySelectorAll('.row');
+      const row = rows && rows[[...group.tracks].indexOf(t)];
+      const slider = row && row.querySelector('input[type=range]');
+      if (slider) return slider;
+    }
+  }
+  return null;
+}
+
+/**
+ * The gain that playback has to start with: the slider wins (the listener may
+ * have moved it), otherwise the measured loudness correction.
+ */
+function currentGainDb(track) {
+  const slider = sliderFor(track);
+  if (slider) return Number(slider.value);
+  return trackGain(track);
+}
+
 function renderGroups() {
   groupsEl.innerHTML = '';
   for (const group of manifest.groups) {
@@ -259,7 +292,7 @@ function renderGroups() {
         lab.textContent = ` ${v.toFixed(1)} dB`;
         if (state.current && state.current.url === track.file) {
           const now = state.ctx.currentTime;
-          state.current.gain.gain.setTargetAtTime(Math.pow(10, v / 20), now, 0.02);
+          state.current.gain.gain.setTargetAtTime(dbToAmplitude(v), now, 0.02);
         }
       };
       gainWrap.appendChild(slider); gainWrap.appendChild(lab);
@@ -352,7 +385,7 @@ document.getElementById('equalize').onclick = () => {
       slider.value = String(g.toFixed(1));
       row.querySelector('label.gain').textContent = ` ${g.toFixed(1)} dB`;
       if (state.current && state.current.url === track.file) {
-        state.current.gain.gain.setTargetAtTime(Math.pow(10, g / 20), state.ctx.currentTime, 0.02);
+        state.current.gain.gain.setTargetAtTime(dbToAmplitude(g), state.ctx.currentTime, 0.02);
       }
     }
   }

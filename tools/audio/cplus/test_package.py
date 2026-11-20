@@ -70,9 +70,14 @@ def check(condition: bool, message: str) -> None:
         print(f"FAIL {message}")
 
 
-def measure_encoded(path: Path) -> dict:
-    """Decode a shipped file and measure it like the game would."""
-    data, sr = sf.read(str(path), always_2d=True)
+def measure_encoded(path: Path, data: np.ndarray, sr: int) -> dict:
+    """Measure an already decoded shipped file like the game would.
+
+    The caller decodes the file itself so that the channel count can be
+    checked *before* the measurement: `measure_array` reads the second
+    channel, so a mono file would abort the gate with an exception instead of
+    a diagnostic FAIL.
+    """
     m = metrics.measure_array(data, sr)
     m["sampleRate"] = sr
     m["channels"] = int(data.shape[1])
@@ -85,12 +90,16 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--package", required=True)
     ap.add_argument("--manifest", default=None, help="repository manifest to cross-check")
+    # Used by negative QA to isolate a single deliberately corrupted track.
+    # Without this option, the gate always validates the entire package.
+    ap.add_argument("--only-track", choices=TRACKS, default=None)
     args = ap.parse_args()
 
     package = Path(args.package).resolve()
+    tracks = [args.only_track] if args.only_track else TRACKS
 
     # 1. presence ------------------------------------------------------------
-    for track in TRACKS:
+    for track in tracks:
         for folder, ext in (("source", ".wav"), ("wav", ".wav"), ("ogg", ".ogg"), ("mp3", ".mp3")):
             path = package / folder / f"{track}{ext}"
             check(
@@ -104,8 +113,9 @@ def main() -> None:
         return
 
     # 2-5. the shipped files and the analysis digests -----------------------
-    for track in TRACKS:
+    for track in tracks:
         analysis = json.loads((package / "analysis" / f"{track}.json").read_text(encoding="utf-8"))
+        decoded_wav_seam = None
         for kind, folder, ext in (
             ("wav", "wav", ".wav"),
             ("ogg", "ogg", ".ogg"),
@@ -123,10 +133,21 @@ def main() -> None:
                 metrics.sha256_of(path) == recorded,
                 f"{track}.{kind}: sha256 matches the analysis report",
             )
-            m = measure_encoded(path)
+            data, file_sr = sf.read(str(path), always_2d=True)
+            channels = int(data.shape[1])
+            check(file_sr == SR, f"{track}.{kind}: sample rate {file_sr} Hz")
+            check(channels == 2, f"{track}.{kind}: stereo")
+            if channels != 2:
+                # The measurement reads the second channel. The file already
+                # failed the format check, so it is skipped with a diagnostic
+                # instead of aborting the whole gate with an IndexError.
+                continue
+            m = measure_encoded(path, data, file_sr)
+            if kind == "wav" and track in LOOPS and file_sr == SR:
+                # Never trust a stale pre-computed QA verdict merely because
+                # the analysis sha256 was updated after a file changed.
+                decoded_wav_seam = metrics.seam_report(data, file_sr, cycles=10)
             tolerance = LUFS_TOLERANCE_WAV if kind == "wav" else LUFS_TOLERANCE_LOSSY
-            check(m["sampleRate"] == SR, f"{track}.{kind}: sample rate {m['sampleRate']} Hz")
-            check(m["channels"] == 2, f"{track}.{kind}: stereo")
             check(
                 m["lufs"] is not None and abs(m["lufs"] - TARGET_LUFS) <= tolerance,
                 f"{track}.{kind}: LUFS {m['lufs']} within {TARGET_LUFS} +/- {tolerance}",
@@ -136,18 +157,24 @@ def main() -> None:
                 f"{track}.{kind}: true peak {m['truePeakDbTp']} dBTP <= {MAX_TRUE_PEAK_DBTP}",
             )
             check(m["clippedFraction"] == 0, f"{track}.{kind}: no clipped samples")
-            if kind == "wav":
-                bounds = LOOPS.get(track) or STINGERS.get(track)
-                if bounds:
-                    lo, hi = bounds
-                    check(
-                        lo <= m["durationSec"] <= hi,
-                        f"{track}.wav: duration {m['durationSec']}s within {lo}-{hi}s",
-                    )
+            bounds = LOOPS.get(track) or STINGERS.get(track)
+            if bounds:
+                lo, hi = bounds
+                # the lossy encoders pad the stream slightly, so they get a
+                # small slack; the WAV has to match exactly
+                slack = 0.0 if kind == "wav" else 0.15
+                check(
+                    lo - slack <= m["durationSec"] <= hi + slack,
+                    f"{track}.{kind}: duration {m['durationSec']}s within {lo}-{hi}s",
+                )
 
         qa = analysis["qa"]
         if track in LOOPS:
             seam = qa["seam"]
+            check(
+                decoded_wav_seam is not None and decoded_wav_seam["seamless"] is True,
+                f"{track}: decoded WAV has a seamless loop (independent measurement)",
+            )
             check(seam["seamless"] is True, f"{track}: the loop seam is verified")
             check(seam["cyclesTested"] >= 10, f"{track}: at least ten cycles were tested")
             check(
@@ -168,7 +195,10 @@ def main() -> None:
     if args.manifest:
         manifest = json.loads(Path(args.manifest).read_text(encoding="utf-8"))
         entries = manifest.get("assets", {})
-        names = {Path(key).name for key in entries}
+        # The **raw** keys are compared: normalising them with `Path(key).name`
+        # would let an alternative path ("./heart.ogg") pass as the expected
+        # asset name.
+        names = set(entries)
         check(
             names == EXPECTED_ASSETS,
             f"the manifest lists exactly the {len(EXPECTED_ASSETS)} expected assets "
@@ -179,7 +209,7 @@ def main() -> None:
             f"the manifest has no duplicated entries ({len(entries)} entries for {len(EXPECTED_ASSETS)} assets)",
         )
         for name in sorted(EXPECTED_ASSETS):
-            entry = next((v for k, v in entries.items() if Path(k).name == name), None)
+            entry = entries.get(name)
             if entry is None:
                 continue
             path = package / ("ogg" if name.endswith(".ogg") else "mp3") / name

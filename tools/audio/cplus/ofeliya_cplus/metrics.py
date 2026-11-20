@@ -257,6 +257,41 @@ def seam_report(stereo: np.ndarray, sr: int = SR, cycles: int = 10) -> dict:
     else:
         local_ratio = 0.0
 
+    # --- per-channel continuity --------------------------------------------
+    # Summing the two channels lets a break in one of them hide behind the
+    # other channel's larger interior steps: a right-channel jump of 0.2 next
+    # to a left-channel interior step of 0.227 passes every summed check.
+    # Every channel is therefore judged against **its own** interior and local
+    # steps, and the seam only counts as seamless when all of them pass.
+    channel_checks: list[dict] = []
+    for name, channel in (("left", left), ("right", right)):
+        d_ch = np.abs(np.diff(channel))
+        interior_ch = float(d_ch.max()) if d_ch.size else 0.0
+        boundary_ch = float(np.abs(channel[0] - channel[n - 1]))
+        before_ch = np.abs(np.diff(channel[-window:])) if window < n else np.array([])
+        after_ch = np.abs(np.diff(channel[:window]))
+        local_ch = max(
+            float(before_ch.max()) if before_ch.size else 0.0,
+            float(after_ch.max()) if after_ch.size else 0.0,
+        )
+        if local_ch > 1e-9:
+            ratio_ch = float(boundary_ch / local_ch)
+        elif boundary_ch > 1e-9:
+            ratio_ch = 999.0
+        else:
+            ratio_ch = 0.0
+        channel_checks.append({
+            "channel": name,
+            "boundaryStep": round(boundary_ch, 8),
+            "interiorMaxStep": round(interior_ch, 8),
+            "localMaxStep": round(local_ch, 8),
+            "boundaryVsLocalRatio": round(ratio_ch, 4),
+            "seamless": bool(
+                boundary_ch <= max(interior_ch, 1e-6) * 1.02 and ratio_ch <= 3.0
+            ),
+        })
+    channels_seamless = bool(channel_checks) and all(c["seamless"] for c in channel_checks)
+
     return {
         "sampleJumpRel": round(jump_rel, 6),
         "sampleJumpAbs": round(jump, 6),
@@ -275,15 +310,18 @@ def seam_report(stereo: np.ndarray, sr: int = SR, cycles: int = 10) -> dict:
         "headTailRmsDeltaDb": round(head_tail_db, 3),
         "spectralContinuityMaxBandDb": round(spectral_continuity_db, 3),
         "spectralBandDeltaDb": band_delta,
+        "channelChecks": channel_checks,
         # A seam is a click when the wrap step is an outlier against the
-        # texture next to it. Four conditions:
+        # texture next to it. Five conditions:
+        #  * every channel stays within its own interior and local steps;
         #  * the wrap step is no larger than the largest step inside the file;
         #  * it is not a local outlier either (ratio vs the +/-50 ms window);
         #  * the band balance across the boundary still matches;
         #  * every one of the tested repeats reproduces the same seam and the
         #    level does not drift from cycle to cycle.
         "seamless": bool(
-            wrap_max <= max(interior_max, 1e-6) * 1.02
+            channels_seamless
+            and wrap_max <= max(interior_max, 1e-6) * 1.02
             and local_ratio <= 3.0
             and spectral_continuity_db < 6.0
             and seams_identical
@@ -305,12 +343,15 @@ def mono_report(stereo: np.ndarray, sr: int = SR) -> dict:
     channels' energies, so identical channels report 0 dB and an anti-phase
     pair reports the full loss.
 
-    BS.1770 sums the *power* of both channels, so a fully coherent stereo
-    pair measures exactly 3.01 dB louder than its 0.5*(L+R) fold-down. The
-    reported `monoLufsDeltaDb` is therefore *positive and close to 3.01 dB*
-    for an ideal fold-down; a larger value means the side channel carried
-    energy that a mono speaker cannot reproduce, and a value below 2 dB means
-    the pair is partly out of phase.
+    BS.1770 sums the *power* of both channels, so a stereo pair with
+    **identical** channels measures exactly 3.01 dB louder than its
+    0.5*(L+R) fold-down. Coherence alone is not enough for that figure: with
+    different channel levels the difference shrinks (L = 2R measures about
+    +0.46 dB), so 3.01 dB is the reference for equal channels only.
+    The reported `monoLufsDeltaDb` is *positive and close to 3.01 dB* for an
+    ideal fold-down; a larger value means the side channel carried energy
+    that a mono speaker cannot reproduce, and a value below 2 dB means the
+    pair is partly out of phase.
     """
     left, right = stereo[:, 0], stereo[:, 1]
     fold = 0.5 * (left + right)
@@ -336,13 +377,29 @@ def mono_report(stereo: np.ndarray, sr: int = SR) -> dict:
         band_retention[name] = round(float(10.0 * np.log10(max(ratio, 1e-12))), 3)
         b_side = dsp.bandpass(side, lo, hi, order=2)
         side_band_energy = float(np.mean(b_side ** 2))
-        total = original_energy + side_band_energy
-        band_side_pct[name] = round(100.0 * side_band_energy / total, 3) if total > 1e-18 else 0.0
+        # Share of the band's energy that exists only in the side channel.
+        # The denominator is the band's **original** energy: adding the
+        # side energy to it counted that energy twice and reported 50 % for
+        # a fully anti-phase pair, where in fact 100 % of the energy is
+        # in the side channel.
+        band_side_pct[name] = (
+            round(100.0 * side_band_energy / original_energy, 3)
+            if original_energy > 1e-18
+            else 0.0
+        )
 
     mid_energy = float(np.mean(mid ** 2))
     side_energy_total = float(np.mean(side ** 2))
     total_energy = mid_energy + side_energy_total
-    correlation = float(np.corrcoef(left, right)[0, 1])
+    # A silent channel has no phase information: `np.corrcoef` would
+    # return NaN for it and a NaN would leak into the report and into the
+    # mono-safe verdict. A panned pair is coherent, not anti-phase.
+    left_std = float(np.std(left))
+    right_std = float(np.std(right))
+    if left_std > 1e-12 and right_std > 1e-12:
+        correlation = float(np.corrcoef(left, right)[0, 1])
+    else:
+        correlation = 1.0
 
     return {
         "monoLufsDeltaDb": round(delta, 3),

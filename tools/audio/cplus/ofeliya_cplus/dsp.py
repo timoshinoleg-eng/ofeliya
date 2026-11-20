@@ -358,20 +358,30 @@ def lookahead_limiter(
 def _decaying_peak(env: np.ndarray, a_rel: float, block: int = 1024) -> np.ndarray:
     """Decaying-peak detector: instant attack, exponential release.
 
-    Vectorised block-wise: inside a block the running maximum of
-    `env[k] * a_rel**(i-k)` is the decayed peak, and the block entry value
-    carries the previous block's state. A block size of 1024 keeps
-    `a_rel**i` well away from underflow.
+    The recurrence is ``peak[i] = max(env[i], a_rel * peak[i-1])``: a new
+    sample lifts the detector immediately, and between samples the previous
+    peak decays with the release coefficient. The block-wise evaluation
+    computes the running maximum of the **de-decayed** signal
+    (``max(env[k] * a_rel**-k)``) and multiplies it back by the decay curve,
+    so
+
+    * the decay is applied to the output as well - an early peak keeps falling
+      instead of staying flat for the whole block,
+    * the result does not depend on the block alignment: the carried state of
+      the previous block enters the next one through the same decay,
+    * the detector continues to decay after the signal ends.
+
+    A block size of 1024 keeps ``a_rel ** -block`` well away from overflow.
     """
     out = np.empty_like(env)
     carry = 0.0
     n = env.size
     for start in range(0, n, block):
         seg = env[start : start + block]
-        idx = np.arange(1, seg.size + 1)
+        idx = np.arange(seg.size, dtype=np.float64)
         decay = a_rel ** idx
-        run = np.maximum.accumulate(seg * decay)
-        out[start : start + seg.size] = np.maximum(run, carry * decay)
+        run = np.maximum.accumulate(seg / decay) * decay
+        out[start : start + seg.size] = np.maximum(run, carry * a_rel * decay)
         carry = float(out[start + seg.size - 1])
     return out
 

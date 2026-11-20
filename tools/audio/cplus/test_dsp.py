@@ -47,6 +47,60 @@ def rms_db(x: np.ndarray) -> float:
 
 
 # --------------------------------------------------------------------------
+# detector
+# --------------------------------------------------------------------------
+def test_detector() -> None:
+    """The decaying peak must follow `peak[i] = max(env[i], a_rel*peak[i-1])`.
+
+    The first implementation of the detector kept the running maximum flat
+    inside a block, so an early peak never decayed and the result depended on
+    the 1024-sample block alignment.
+    """
+    env = np.array([1.0, 0.0, 0.0, 0.0])
+    out = dsp._decaying_peak(env, 0.5)
+    expected = np.array([1.0, 0.5, 0.25, 0.125])
+    check(
+        np.allclose(out, expected),
+        f"the detector decays after the peak (got {out.tolist()}, expected {expected.tolist()})",
+    )
+
+    # the decay must not depend on where the block boundary falls
+    rng = np.random.default_rng(20261118)
+    noise = rng.random(4096)
+    a_rel = 0.9995
+    ref = dsp._decaying_peak(noise, a_rel, block=4096)
+    for block in (7, 64, 1024):
+        other = dsp._decaying_peak(noise, a_rel, block=block)
+        check(
+            np.allclose(ref, other, atol=1e-12),
+            f"the detector result does not depend on the block size ({block})",
+        )
+
+    # an impulse has to decay across the block boundary (50 ms release)
+    release_s = 0.05
+    a = float(np.exp(-1.0 / (release_s * SR)))
+    impulse = np.zeros(2048)
+    impulse[0] = 1.0
+    det = dsp._decaying_peak(impulse, a)
+    expected_at_1023 = a ** 1023
+    check(
+        abs(det[1023] - expected_at_1023) < 1e-6,
+        f"an impulse decays across the block boundary (got {det[1023]:.6f}, expected {expected_at_1023:.6f})",
+    )
+    impulse2 = np.zeros(2048)
+    impulse2[1023] = 1.0
+    det2 = dsp._decaying_peak(impulse2, a)
+    check(
+        abs(det2[1023] - 1.0) < 1e-9,
+        f"an impulse raises the detector to its own level at any position (got {det2[1023]:.6f})",
+    )
+    check(
+        det2[1024] < det2[1023],
+        "the detector keeps decaying after the impulse",
+    )
+
+
+# --------------------------------------------------------------------------
 # compressor
 # --------------------------------------------------------------------------
 def test_compressor() -> None:
@@ -91,12 +145,36 @@ def test_compressor() -> None:
     late = rms_db(y_burst[start + int(0.3 * SR) : start + int(0.4 * SR)])
     check(early > late + 3.0, "the gain reduction ramps in over the attack time")
 
-    # release: after the burst the gain must return
-    y_release = dsp.compress(burst, threshold_db=-18.0, ratio=2.0, attack_s=0.005, release_s=0.2)
-    tail = rms_db(y_release[start + int(0.4 * SR) :])
+    # release: after the burst the gain must return. The burst has to be
+    # followed by silence - a signal that continues to the end of the array
+    # never lets the detector recover, so it proves nothing about the release.
+    # A quiet probe tone after the gap shows the gain that is actually applied
+    # there (measuring the RMS of the silence itself would prove nothing).
+    n = int(2.0 * SR)
+    burst_start = int(0.5 * SR)
+    burst_len = int(0.2 * SR)
+    probe_start = int(1.5 * SR)
+    probe_len = int(0.2 * SR)
+    probe = np.zeros(n)
+    probe[probe_start : probe_start + probe_len] = tone(probe_len, amp=0.05)
+    burst = np.zeros(n)
+    burst[burst_start : burst_start + burst_len] = tone(burst_len, amp=0.5)
+    signal = burst + probe
+
+    y_release = dsp.compress(signal, threshold_db=-18.0, ratio=2.0, attack_s=0.005, release_s=0.25)
+    during = rms_db(y_release[burst_start + int(0.05 * SR) : burst_start + int(0.15 * SR)]) - rms_db(
+        burst[burst_start + int(0.05 * SR) : burst_start + int(0.15 * SR)]
+    )
+    after = rms_db(y_release[probe_start : probe_start + probe_len]) - rms_db(
+        probe[probe_start : probe_start + probe_len]
+    )
     check(
-        tail > rms_db(y_release[start + int(0.05 * SR) : start + int(0.15 * SR)]) - 1.0,
-        "the gain recovers over the release time",
+        after > during + 4.0,
+        f"the gain recovers after the signal ends (during {during:.2f} dB, after {after:.2f} dB)",
+    )
+    check(
+        abs(after) < 1.0,
+        f"the recovered gain is unity again (after {after:.2f} dB)",
     )
 
     # stereo: the two channels are processed independently
@@ -169,6 +247,7 @@ def test_master_contract() -> None:
 
 
 def main() -> None:
+    test_detector()
     test_compressor()
     test_master_contract()
     print()

@@ -255,6 +255,14 @@ def encode(path: Path, fmt: str, bitrate: str = "128k", out_dir: Path | None = N
         args = ["-c:a", "libmp3lame", "-b:a", bitrate]
     else:
         raise ValueError(fmt)
-    cmd = [FFMPEG, "-y", "-v", "error", "-i", str(path), *args, str(out)]
+    cmd = [FFMPEG, "-y", "-v", "error", "-i", str(path), *args]
+    if fmt == "ogg":
+        # The Ogg muxer writes a **random** stream serial number, so two
+        # builds of the same audio produced different bytes (the decoded audio
+        # was identical). `-fflags +bitexact` pins the serial to zero and
+        # `-serial_offset` moves it to a fixed non-zero value, which makes the
+        # encode byte-for-byte reproducible.
+        cmd += ["-fflags", "+bitexact", "-serial_offset", "1"]
+    cmd += [str(out)]
     subprocess.run(cmd, check=True)
     return out

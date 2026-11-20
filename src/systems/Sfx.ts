@@ -181,6 +181,10 @@ class SfxImpl {
       this.disarmMusicUnlockRetry();
       if (!this.musicSrc) this.cancelMusicLoad();
     } else {
+      // The outcome signal has to be read *before* the bed is resumed:
+      // resuming an uncached bed starts a new bed, and a new bed drops a
+      // pending signal - the Victory/Defeat cue would be lost.
+      const pending = this.cplusPendingStinger;
       if (this.musicWanted) {
         this.startMusic();
         this.ensureBioAmbience();
@@ -188,7 +192,6 @@ class SfxImpl {
       // A run-end signal requested while muted is delivered now, so the
       // outcome is not lost. This must not depend on `musicWanted`: the bed
       // may already be stopped while the result screen is still up.
-      const pending = this.cplusPendingStinger;
       if (pending) {
         this.cplusPendingStinger = null;
         this.startCPlusStingerAudible(pending);
@@ -794,6 +797,10 @@ class SfxImpl {
     this.musicBuf = null;
     this.actualBedIndex = null;
     this.cancelMusicLoad();
+    // A pending C+ load for the previous role must not survive this switch -
+    // not even while muted: when it resolves it overwrites `cplusRole` with
+    // the old bed, and unmuting would then resume the wrong music.
+    this.cancelCPlusLoad();
     if (this.muted) return;
     this.startCPlusBedAudible(role, fadeMs);
   }
@@ -802,6 +809,8 @@ class SfxImpl {
   private startCPlusBedAudible(role: CPlusBedRole, fadeMs: number): void {
     const cached = this.cplusBuffers[role];
     if (cached) {
+      // A cached bed supersedes whatever was still loading for another role.
+      this.cancelCPlusLoad();
       this.swapCPlusBed(cached, role, fadeMs);
       return;
     }
@@ -1007,12 +1016,18 @@ class SfxImpl {
   private resumeCPlusBed(): void {
     const role = this.cplusRole;
     if (!role) return;
+    // Resuming the current bed is not a new bed: an outcome signal that was
+    // requested while muted has to survive the resume, otherwise the
+    // Victory/Defeat cue is silently dropped.
+    const pending = this.cplusPendingStinger;
     const cached = this.cplusBuffers[role];
     if (cached) {
+      this.cancelCPlusLoad();
       this.swapCPlusBed(cached, role, 0);
-      return;
+    } else {
+      this.startCPlusBed(role, 0);
     }
-    this.startCPlusBed(role, 0);
+    this.cplusPendingStinger = pending;
   }
 
   /** Release the C+ bed. Used by the fast-restart path. */

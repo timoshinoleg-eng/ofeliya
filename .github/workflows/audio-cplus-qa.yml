@@ -1,0 +1,60 @@
+name: OFELIYA C+ full audio QA
+
+on:
+  pull_request:
+    paths:
+      - "tools/audio/cplus/**"
+      - "public/audio/cplus-v4/**"
+      - ".github/workflows/audio-cplus-qa.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regenerate-and-audit:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install audio dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg libsndfile1
+          python -m pip install --quiet numpy scipy soundfile pyloudnorm
+
+      - name: Regenerate all masters, encodes and manifest from clean code
+        run: |
+          python tools/audio/cplus/build.py \
+            --out "$RUNNER_TEMP/ofeliya-cplus-qa" \
+            --manifest-out "$RUNNER_TEMP/ofeliya-cplus-manifest.json"
+
+      - name: Validate the actual decoded package
+        run: |
+          python tools/audio/cplus/test_package.py \
+            --package "$RUNNER_TEMP/ofeliya-cplus-qa" \
+            --manifest "$RUNNER_TEMP/ofeliya-cplus-manifest.json"
+
+      - name: Compare newly generated audio with shipped game audio
+        run: |
+          python tools/audio/cplus/test_shipped_audio.py \
+            --generated "$RUNNER_TEMP/ofeliya-cplus-qa" \
+            --repo "$GITHUB_WORKSPACE"
+
+      - name: Negative QA — deliberately corrupt isolated temporary copies
+        run: |
+          python tools/audio/cplus/test_negative_qa.py \
+            --package "$RUNNER_TEMP/ofeliya-cplus-qa" \
+            --manifest "$RUNNER_TEMP/ofeliya-cplus-manifest.json"
+
+      - name: Build and serve comparison stand without unlicensed v3 references
+        run: |
+          python tools/audio/cplus/test_stand.py \
+            --package "$RUNNER_TEMP/ofeliya-cplus-qa" \
+            --repo "$GITHUB_WORKSPACE" \
+            --audition "$RUNNER_TEMP/v3-unavailable"

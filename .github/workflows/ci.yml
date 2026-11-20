@@ -265,6 +265,37 @@ jobs:
       - name: Production bundle shape
         run: npm run test:bundle-shape
 
+  cplus-generator:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install the generator dependencies
+        run: python -m pip install --quiet numpy scipy soundfile pyloudnorm
+
+      # The generator self-tests are the ones that prove the QA tools can
+      # fail: the detector has to report a broken loop as broken, the
+      # compressor has to lose 6 dB and not 0.19 dB, the masking comparison
+      # has to tell "better than production" from "worse than production".
+      - name: C+ v4 generator self-tests
+        run: |
+          python tools/audio/cplus/test_dsp.py
+          python tools/audio/cplus/test_metrics.py
+          python tools/audio/cplus/test_seam_detector.py
+          python tools/audio/cplus/test_masking.py
+          python tools/audio/cplus/test_report.py
+
   browser-smoke:
     needs: build
     runs-on: ubuntu-22.04
