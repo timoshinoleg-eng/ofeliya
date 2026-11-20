@@ -122,6 +122,7 @@ const state = {
   nodes: null,
   buffers: new Map(),
   current: null,
+  playGeneration: 0,
   equalised: false,
 };
 
@@ -179,6 +180,8 @@ async function loadBuffer(url) {
 }
 
 function stopCurrent() {
+  // Invalidate every in-flight fetch/decode before stopping active playback.
+  state.playGeneration += 1;
   const cur = state.current;
   if (!cur) return;
   try { cur.src.stop(); } catch {}
@@ -188,10 +191,14 @@ function stopCurrent() {
 }
 
 async function playTrack(track, button) {
+  const requestedGeneration = ++state.playGeneration;
   await initAudio();
+  if (requestedGeneration !== state.playGeneration) return;
   if (state.current && state.current.url === track.file) { stopCurrent(); return; }
   stopCurrent();
+  const playingGeneration = state.playGeneration;
   const buf = await loadBuffer(track.file);
+  if (playingGeneration !== state.playGeneration) return;
   const ctx = state.ctx;
   const src = ctx.createBufferSource();
   src.buffer = buf; src.loop = track.loop !== false;
@@ -211,11 +218,24 @@ async function playTrack(track, button) {
   updateMixState();
 }
 
-function playSfx(buf, depth, holdMs, tension) {
+function scanNormalizationTrim(buf) {
+  let peak = 0;
+  for (let channel = 0; channel < buf.numberOfChannels; channel += 1) {
+    const samples = buf.getChannelData(channel);
+    for (let i = 0; i < samples.length; i += 1) {
+      if (!Number.isFinite(samples[i])) return 1;
+      peak = Math.max(peak, Math.abs(samples[i]));
+    }
+  }
+  return Number.isFinite(peak) && peak > 0 ? Math.min(12, 0.63 / peak) : 1;
+}
+
+function playSfx(buf, depth, holdMs, tension, roleGain) {
   if (!state.ctx || !buf) return;
   const src = state.ctx.createBufferSource();
   src.buffer = buf;
-  const g = state.ctx.createGain(); g.gain.value = 1;
+  const g = state.ctx.createGain();
+  g.gain.value = roleGain * scanNormalizationTrim(buf);
   src.connect(g); g.connect(state.nodes.sfxGain);
   src.start();
   if (depth > 0) duck(depth, holdMs);
@@ -329,7 +349,8 @@ function renderMix() {
   for (const t of manifest.mixTracks) {
     const b = document.createElement('button');
     b.textContent = '♪ ' + t.label;
-    b.onclick = async () => { await initAudio(); await playTrack(t, b); };
+    // Begin the cancellation generation at click-time, before any await.
+    b.onclick = () => playTrack(t, b);
     music.appendChild(b);
   }
   mix.appendChild(music);
@@ -340,7 +361,7 @@ function renderMix() {
     b.onclick = async () => {
       await initAudio();
       const buf = await loadBuffer('assets/sfx/' + s.file);
-      playSfx(buf, s.duck, s.holdMs, s.tension);
+      playSfx(buf, s.duck, s.holdMs, s.tension, s.roleGain);
       updateMixState(s);
     };
     sfxRow.appendChild(b);

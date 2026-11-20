@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -186,6 +187,14 @@ def build(package: Path, audition: Path, repo: Path) -> Path:
         b_entries,
     )
 
+    # Mirror the real SFX role gains from the source of truth instead of
+    # maintaining a second, potentially stale gain table in the HTML stand.
+    mix_source = (repo / 'src' / 'systems' / 'audioMixMath.ts').read_text(encoding='utf-8')
+    role_section = mix_source.split('export const SFX_ROLE_GAINS = {', 1)[1].split('} as const;', 1)[0]
+    role_gains = {name: float(value) for name, value in re.findall(r'\b(\w+)\s*:\s*([0-9.]+)\s*,', role_section)}
+    for event in SFX_EVENTS:
+        if event['name'] not in role_gains:
+            raise ValueError(f'Missing game mix gain for {event["name"]}')
     # SFX for the game-mix demo
     for event in SFX_EVENTS:
         src = repo / "public" / "audio" / "sfx" / event["file"]
@@ -256,7 +265,7 @@ def build(package: Path, audition: Path, repo: Path) -> Path:
         "groups": groups,
         "metrics": metric_rows,
         "mixTracks": mix_tracks,
-        "sfxEvents": SFX_EVENTS,
+        "sfxEvents": [dict(event, roleGain=role_gains[event['name']]) for event in SFX_EVENTS],
     }
     data_dir = stand / "data"
     data_dir.mkdir(parents=True, exist_ok=True)

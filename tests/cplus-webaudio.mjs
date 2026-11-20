@@ -346,6 +346,67 @@ await test('a pending outcome signal survives the resume of an uncached bed', as
   );
 });
 
+await test('cold bed and cold stinger resolve independently when both are pending', async () => {
+  const f = fixture({ holdFetch: true, ignoreAbort: true });
+  f.Sfx.startCPlusBed('bloodstream');
+  await flush();
+  f.Sfx.playCPlusStinger('victory');
+  await flush();
+  assert.equal(f.requests.length, 2, 'both independent requests must be dispatched');
+  f.resolveFetch(0, f.requests[0].url);
+  f.resolveFetch(1, f.requests[1].url);
+  await flush();
+  assert.equal(f.startedSources().length, 2, 'both the bed and the outcome signal must start');
+  f.Sfx.stopMusic();
+  assert.equal(f.stoppedSources().length, 2, 'teardown releases both active sources');
+});
+
+await test('unmuting a cold bed with an outcome starts both sources, not only requests', async () => {
+  const f = fixture({ muted: true });
+  f.Sfx.startCPlusBed('heart');
+  f.Sfx.playCPlusStinger('defeat');
+  f.Sfx.setMuted(false);
+  await flush();
+  assert.equal(f.startedSources().length, 2, 'the uncached bed and defeat signal both start');
+});
+
+await test('teardown stops and disconnects outgoing fading beds', async () => {
+  const f = fixture();
+  f.Sfx.startCPlusBed('bloodstream');
+  await flush();
+  f.Sfx.startCPlusBed('heart');
+  await flush();
+  assert.equal(f.startedSources().length, 2);
+  f.Sfx.stopMusic();
+  assert.equal(f.stoppedSources().length, 2, 'fade-out source must not outlive the run');
+  assert.ok(f.startedSources().every((s) => s.disconnected));
+});
+
+await test('switching from a live muted bed to a boss never resumes the previous role', async () => {
+  const f = fixture();
+  f.Sfx.startCPlusBed('bloodstream');
+  await flush();
+  f.Sfx.setMuted(true);
+  f.Sfx.startCPlusBed('immune-prime');
+  await flush();
+  f.Sfx.setMuted(false);
+  await flush();
+  assert.equal(f.startedSources().length, 2);
+  assert.ok(f.startedSources()[0].stopped, 'old act source must be stopped');
+  assert.ok(f.startedSources()[1].buffer.url.includes('immune_prime'),
+    'the boss bed must replace the former act after mute');
+});
+
+await test('resuming visibility does not duplicate a running C+ source', async () => {
+  const f = fixture();
+  f.Sfx.startCPlusBed('heart');
+  await flush();
+  f.Sfx.setSuspended(true);
+  f.Sfx.setSuspended(false);
+  await flush();
+  assert.equal(f.startedSources().length, 1, 'visibility restoration must not create a second bed');
+});
+
 if (failures) {
   console.error(`${failures} of ${total} C+ WebAudio check(s) failed`);
   process.exit(1);

@@ -113,6 +113,18 @@ def main() -> None:
                 "every listed stand track has an audio file",
             )
             check(bool(tracks), "the stand manifest lists playable tracks")
+            sfx_events = data.get("sfxEvents", [])
+            check(
+                len(sfx_events) == 8 and all(
+                    isinstance(s.get("roleGain"), (float, int)) and s["roleGain"] > 0
+                    for s in sfx_events
+                ),
+                "the stand includes actual game SFX role gains for all eight cues",
+            )
+            check(
+                all((clean / "stand" / "assets" / "sfx" / s["file"]).is_file() for s in sfx_events),
+                "every game-mix cue has an audio asset",
+            )
             check(
                 all("gainDb" not in t for t in tracks),
                 "no track relies on a raw gainDb value (the stand derives the gain from the measurement)",
@@ -136,6 +148,16 @@ def main() -> None:
         check(
             "function dbToAmplitude(db)" in source,
             "the stand defines the decibel-to-amplitude conversion",
+        )
+        check(
+            "const playingGeneration = state.playGeneration;" in source
+            and "if (playingGeneration !== state.playGeneration) return;" in source
+            and "state.playGeneration += 1;" in source,
+            "the stand cancels outdated async track starts and stop-all invalidates loads",
+        )
+        check(
+            "roleGain * scanNormalizationTrim(buf)" in source,
+            "the stand applies game SFX role gains and decoded-buffer normalization",
         )
         helper = extract_js_function(source, "dbToAmplitude")
         ok = False

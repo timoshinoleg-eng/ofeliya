@@ -126,8 +126,12 @@ class SfxImpl {
   private cplusSrc: AudioBufferSourceNode | null = null;
   private cplusGain: GainNode | null = null;
   private cplusBuffers: Partial<Record<CPlusBedRole, AudioBuffer>> = {};
-  private cplusAbort: AbortController | null = null;
-  private cplusRequestId = 0;
+  private cplusBedAbort: AbortController | null = null;
+  private cplusBedRequestId = 0;
+  private cplusStingerAbort: AbortController | null = null;
+  private cplusStingerRequestId = 0;
+  /** Outgoing beds remain owned until their fade completes or teardown stops them. */
+  private cplusFadingBeds = new Set<{ src: AudioBufferSourceNode; gain: GainNode }>();
   private cplusActive = false;
   /** Live run-end stinger, so a fast restart can cut it. */
   private cplusStingerSrc: AudioBufferSourceNode | null = null;
@@ -801,7 +805,12 @@ class SfxImpl {
     // not even while muted: when it resolves it overwrites `cplusRole` with
     // the old bed, and unmuting would then resume the wrong music.
     this.cancelCPlusLoad();
-    if (this.muted) return;
+    if (this.muted) {
+      // A boss/act switch while a previous bed was playing and then muted
+      // must not resurrect the old source on unmute.
+      this.stopCPlusBedSources();
+      return;
+    }
     this.startCPlusBedAudible(role, fadeMs);
   }
 
@@ -820,11 +829,11 @@ class SfxImpl {
     // counter, so assigning the new id before the cancel would immediately
     // mark the new request as stale and nothing would ever be fetched.
     this.cancelCPlusLoad();
-    const requestId = ++this.cplusRequestId;
+    const requestId = ++this.cplusBedRequestId;
     const controller = new AbortController();
-    this.cplusAbort = controller;
+    this.cplusBedAbort = controller;
     void this.loadCPlusBed(ctx, role, requestId, controller, fadeMs).finally(() => {
-      if (this.cplusAbort === controller) this.cplusAbort = null;
+      if (this.cplusBedAbort === controller) this.cplusBedAbort = null;
     });
   }
 
@@ -844,6 +853,7 @@ class SfxImpl {
   }
 
   private startCPlusStingerAudible(role: CPlusBedRole): void {
+    this.cancelCPlusStingerLoad();
     const ctx = this.ensure();
     const out = this.layerBus ?? this.musicGain;
     if (!ctx || !out) return;
@@ -852,12 +862,14 @@ class SfxImpl {
       this.playCPlusBuffer(cached, out);
       return;
     }
-    // Cancel first, then assign the generation: see `startCPlusBedAudible`.
-    this.cancelCPlusLoad();
-    const requestId = ++this.cplusRequestId;
+    // Stingers and beds load independently: a pending result signal must not
+    // abort the bed that is resuming after mute or visibility restoration.
+    const requestId = ++this.cplusStingerRequestId;
     const controller = new AbortController();
-    this.cplusAbort = controller;
-    void this.loadCPlusStinger(ctx, role, requestId, controller);
+    this.cplusStingerAbort = controller;
+    void this.loadCPlusStinger(ctx, role, requestId, controller).finally(() => {
+      if (this.cplusStingerAbort === controller) this.cplusStingerAbort = null;
+    });
   }
 
   private async loadCPlusBed(
@@ -868,8 +880,8 @@ class SfxImpl {
     fadeMs: number
   ): Promise<void> {
     for (const file of CPLUS_BED_SOURCES[role]) {
-      if (this.cplusStale(requestId, controller)) return;
-      const result = await this.fetchCPlus(ctx, file, requestId, controller);
+      if (this.cplusStale('bed', requestId, controller)) return;
+      const result = await this.fetchCPlus(ctx, file, requestId, controller, 'bed');
       if (result.kind === 'stale') return;
       // A fetch or decode failure is not a cancellation: try the next
       // candidate so the MP3 fallback still works on iOS.
@@ -888,8 +900,8 @@ class SfxImpl {
     controller: AbortController
   ): Promise<void> {
     for (const file of CPLUS_BED_SOURCES[role]) {
-      if (this.cplusStale(requestId, controller)) return;
-      const result = await this.fetchCPlus(ctx, file, requestId, controller);
+      if (this.cplusStale('stinger', requestId, controller)) return;
+      const result = await this.fetchCPlus(ctx, file, requestId, controller, 'stinger');
       if (result.kind === 'stale') return;
       if (result.kind === 'failed') continue;
       this.cplusBuffers[role] = result.buffer;
@@ -902,8 +914,9 @@ class SfxImpl {
   }
 
   /** True when this request was aborted or superseded by a newer one. */
-  private cplusStale(requestId: number, controller: AbortController): boolean {
-    return controller.signal.aborted || requestId !== this.cplusRequestId;
+  private cplusStale(kind: 'bed' | 'stinger', requestId: number, controller: AbortController): boolean {
+    const latest = kind === 'bed' ? this.cplusBedRequestId : this.cplusStingerRequestId;
+    return controller.signal.aborted || requestId !== latest;
   }
 
   /**
@@ -917,7 +930,8 @@ class SfxImpl {
     ctx: AudioContext,
     file: string,
     requestId: number,
-    controller: AbortController
+    controller: AbortController,
+    requestKind: 'bed' | 'stinger'
   ): Promise<
     { kind: 'ok'; buffer: AudioBuffer } | { kind: 'failed' } | { kind: 'stale' }
   > {
@@ -925,10 +939,10 @@ class SfxImpl {
       const response = await fetch(audioAssetUrl(file), { signal: controller.signal });
       if (!response.ok) throw new Error('HTTP ' + response.status);
       const buffer = await ctx.decodeAudioData(await response.arrayBuffer());
-      if (this.cplusStale(requestId, controller)) return { kind: 'stale' };
+      if (this.cplusStale(requestKind, requestId, controller)) return { kind: 'stale' };
       return { kind: 'ok', buffer };
     } catch {
-      if (this.cplusStale(requestId, controller)) return { kind: 'stale' };
+      if (this.cplusStale(requestKind, requestId, controller)) return { kind: 'stale' };
       return { kind: 'failed' };
     }
   }
@@ -944,6 +958,12 @@ class SfxImpl {
     const oldSrc = this.cplusSrc;
     const oldGain = this.cplusGain;
     if (oldSrc && oldGain) {
+      const outgoing = { src: oldSrc, gain: oldGain };
+      this.cplusFadingBeds.add(outgoing);
+      oldSrc.onended = () => {
+        this.cplusFadingBeds.delete(outgoing);
+        try { oldSrc.disconnect(); oldGain.disconnect(); } catch { /* no-op */ }
+      };
       oldGain.gain.cancelScheduledValues(now);
       oldGain.gain.setValueAtTime(oldGain.gain.value, now);
       oldGain.gain.linearRampToValueAtTime(0, now + fade);
@@ -959,6 +979,10 @@ class SfxImpl {
     src.connect(gain);
     gain.connect(trim);
     src.onended = () => {
+      if (this.cplusSrc === src) {
+        this.cplusSrc = null;
+        this.cplusGain = null;
+      }
       try { src.disconnect(); gain.disconnect(); } catch { /* no-op */ }
     };
     src.start();
@@ -998,6 +1022,7 @@ class SfxImpl {
 
   /** Stop a live C+ stinger and drop a pending one. */
   private stopCPlusStinger(): void {
+    this.cancelCPlusStingerLoad();
     this.cplusPendingStinger = null;
     const src = this.cplusStingerSrc;
     const gain = this.cplusStingerGain;
@@ -1019,15 +1044,16 @@ class SfxImpl {
     // Resuming the current bed is not a new bed: an outcome signal that was
     // requested while muted has to survive the resume, otherwise the
     // Victory/Defeat cue is silently dropped.
-    const pending = this.cplusPendingStinger;
+    // This is a resume, not a new run or act. Do not cancel a concurrently
+    // loading outcome stinger, or clear the saved run-end notification.
+    if (this.cplusSrc) return;
     const cached = this.cplusBuffers[role];
     if (cached) {
       this.cancelCPlusLoad();
       this.swapCPlusBed(cached, role, 0);
-    } else {
-      this.startCPlusBed(role, 0);
+    } else if (!this.cplusBedAbort) {
+      this.startCPlusBedAudible(role, 0);
     }
-    this.cplusPendingStinger = pending;
   }
 
   /** Release the C+ bed. Used by the fast-restart path. */
@@ -1036,6 +1062,11 @@ class SfxImpl {
     this.cplusActive = false;
     this.cplusRole = null;
     this.stopCPlusStinger();
+    this.stopCPlusBedSources();
+  }
+
+  /** Stop active and fading music sources without changing the requested role. */
+  private stopCPlusBedSources(): void {
     const src = this.cplusSrc;
     const gain = this.cplusGain;
     this.cplusSrc = null;
@@ -1047,13 +1078,26 @@ class SfxImpl {
     if (gain) {
       try { gain.disconnect(); } catch { /* no-op */ }
     }
+    for (const faded of this.cplusFadingBeds) {
+      try { faded.src.onended = null; faded.src.stop(); } catch { /* already stopped */ }
+      try { faded.src.disconnect(); faded.gain.disconnect(); } catch { /* no-op */ }
+    }
+    this.cplusFadingBeds.clear();
   }
 
   private cancelCPlusLoad(): void {
-    this.cplusRequestId += 1;
-    if (this.cplusAbort) {
-      try { this.cplusAbort.abort(); } catch { /* no-op */ }
-      this.cplusAbort = null;
+    this.cplusBedRequestId += 1;
+    if (this.cplusBedAbort) {
+      try { this.cplusBedAbort.abort(); } catch { /* no-op */ }
+      this.cplusBedAbort = null;
+    }
+  }
+
+  private cancelCPlusStingerLoad(): void {
+    this.cplusStingerRequestId += 1;
+    if (this.cplusStingerAbort) {
+      try { this.cplusStingerAbort.abort(); } catch { /* no-op */ }
+      this.cplusStingerAbort = null;
     }
   }
 
