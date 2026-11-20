@@ -1,3 +1,6 @@
+# Audio C+ v4 — статус интеграции 2026-11-20
+Ветка integration/audio-cplus-v4-20261120 создавалась от main 91242a8 и включает код PR #302 (аудио-коммит 911e811). Код GameScene.ts / Sfx.ts / package.json Git объединил без текстовых конфликтов; требуется интеграционное тестирование и ручное прослушивание. WebAudio 14/14, DSP 25/25, mono 19/19, seam 21/21, stand 18/18, negative QA 28/28, shipped PCM 12/12 PASS в аудиоветке. Производственный режим без флага остаётся на старых CC0 beds.
+
 # Слияние серии 2026-11-20
 
 Факт: main = 71c5025 (после merge #311). Влито подряд: #310 (ревью Codex, docs only), #312 (victory из 09_victory_B — вспышка 21.2/255, манифест обновлён), #311 (раннер флаш+SIGTERM, бот regen 0.95, qaDeterministic-флаг для Juice в stepped-режиме). CI всех трёх зелёный. Записи D1-followup и re-cut слиты в память без потерь (ребейз-поезд #311 → #312 → #311 разрешён слиянием memory-записей). Продовое поведение игры изменилось только в слоте victory (контент ролика). Открыто за Mark: LEGIT_DEATH, hard boss focus, CI-wiring, кредиты MiniMax, воркер v6 + secrets, S20+, reload WebView.
