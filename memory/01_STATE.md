@@ -1736,3 +1736,8 @@ Docs cleanup (Muse, 2026-10-29, шаг 4 плана релиза): README.md + A
 # QA render-split v2 — 2026-11-04
 
 Факт: на main 00f0468 добавлена доработка диагностики (ветка feat/qa-render-split-v2) по критике Mark: переключение групп В БОЮ кнопками GEMS/ATMO/UI в GameScene (только под qaTools-гейтом; ?qaHide= — начальное состояние), модалка мутаций вне ui-hide (UIScene.setQaHudHidden прячет только persistent HUD + флаг qaHudHidden, гардящий re-show combo/boss в update), fps убран из шапки оверлея (только мс), оверлей на y=103 ниже HUD-полосы + фон 0.7, строка other сокращена до (derived). Восстановления: gems — только active, vignette — vignetteNormalVisible, atmo — снапшот qaHiddenVisible на старте hide-эпизода. Продовая стоимость: null-check qaHide в кадр — negligible, not measured.
+
+## P0-1 boss timing 2026-11-21
+Диагностика в `docs/qa/P0_BOSS_TIMING_DIAGNOSTICS_2026-11-21.md`: порог spawn 300000 game ms, clamp 50 ms, паузы останавливают Game; причина конкретного мобильного симптома не установлена. Mobile QA не проводился. Баланс не изменялся. Pacing и qa-perf прошли; браузерные результаты и ограничения см. в отчёте.
+Parity PASS: 18429 кадров до spawn, stage/run 300016.6667 ms, hash d0245b913e76ffb32f819c128b55aa39c9b0dd188586cef8064d1965807f4f5b совпал; это stepped desktop, не физический телефон.
+P0-1 продолжение 2026-11-21: повторные test:pacing и test:qa-perf PASS; ADB не найден. Кампания повторно не запускалась из-за отсутствия доступного сервера и ранее наблюдавшейся нагрузки; прежние прерванные прогоны не PASS. См. матрицу и протокол в docs/qa/P0_BOSS_TIMING_DIAGNOSTICS_2026-11-21.md.
