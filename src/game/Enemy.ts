@@ -43,6 +43,20 @@ import {
 
 export type EnemyDamageSource = 'standard' | 'lysis';
 
+const BIO_FRAMES: readonly string[] = ['bio-0', 'bio-1', 'bio-2', 'bio-3', 'bio-4', 'bio-5'];
+const KNOCK_DECAY_BY_SCENE = new WeakMap<
+  Phaser.Scene,
+  { time: number; delta: number; value: number }
+>();
+
+function knockDecayAt(scene: Phaser.Scene, time: number, delta: number): number {
+  const cached = KNOCK_DECAY_BY_SCENE.get(scene);
+  if (cached && cached.time === time && cached.delta === delta) return cached.value;
+  const value = Math.pow(0.82, delta / (1000 / 60));
+  KNOCK_DECAY_BY_SCENE.set(scene, { time, delta, value });
+  return value;
+}
+
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
   kind: EnemyKind = 'swarm';
   hp = 1;
@@ -329,7 +343,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       const hitAtlas = biologicalHitAtlasKey('immune-antibody');
       const hitFrame = biologicalHitFrame(this.scene.time.now - this.biologicalHitAt, this.biologicalHitDirection, reduced);
       const texture = hitFrame && this.scene.textures.exists(hitAtlas) ? hitAtlas : atlas;
-      const pose = texture === hitAtlas ? hitFrame! : `bio-${frame}`;
+      const pose = texture === hitAtlas ? hitFrame! : BIO_FRAMES[frame] ?? `bio-${frame}`;
       if (this.texture.key !== texture || this.frame.name !== pose) this.setTexture(texture, pose);
       this.biologicalFrame = frame;
     }
@@ -474,7 +488,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       }
     }
     (this.body as Phaser.Physics.Arcade.Body).setVelocity(velocityX, velocityY);
-    const knockDecay = Math.pow(0.82, delta / (1000 / 60));
+    const knockDecay = knockDecayAt(this.scene, time, delta);
     this.knockX *= knockDecay;
     this.knockY *= knockDecay;
 

@@ -1,3 +1,7 @@
+# PERF-04 enemy preUpdate cache — 2026-11-22
+
+Решение: ограничить оптимизацию доказанно инвариантными вычислениями. BIO_FRAMES — модульные статические строки только для 0..5, оригинальный template остаётся fallback без texture-exists caching. knockDecay кэшируется WeakMap на scene с ключами strict time+delta: Math.pow не зависит от enemy/mutable scene state, а сохранённый number бит-в-бит тот же результат для последующих умножений; смена time/delta пересчитывает. Не делать cache в GameScene.update. Density/pressure не разделять между enemies (fixture специально меняет их между вызовами), дополнительный anomaly getter не сворачивать, cosmetic pose throttling не вводить. Приёмка — exact deterministic state parity + call counts; не заявлять allocation/FPS gain без настоящего профилирования.
+
 # PERF-02 enemy aura cache — 2026-11-22
 
 Решение: кэшировать только retained Graphics geometry по (mode,radius), не запекать time-dynamic transforms и не добавлять эффектов. Для prime активный pulse требует redraw каждый кадр; primeAuraPulseDrawn гарантирует финальный clear при нулевом envelope, чтобы кольцо не осталось и не копилось. Обе aura инвалидируются на activate/death/stage reset, включая прямую смену kind без deactivate. Cardiac aura и вся gameplay/timing/state-machine логика не меняются. Приёмка ограничена детерминированным Graphics.clear/сигнатурным сравнением и заданными тестами; FPS и физическое устройство не claimed.
