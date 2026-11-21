@@ -2654,6 +2654,16 @@ export class GameScene extends Phaser.Scene {
         case 'boss-warning': {
           this.audio.onBossWarning();
           this.atmosphere.pulse(event.stage.theme.dangerColor, 0.28);
+          if (event.stage.id === 'bloodstream') {
+            // First ИММУННЫЙ ПРАЙМ teach: dodge the telegraphed circle, then hit
+            // during recovery. Uses the context-hint channel, which the boss
+            // reveal suspends and flushes, so no new presentation layer.
+            this.getUiScene()?.showContextHint(
+              'ИММУННЫЙ ПРАЙМ · УЙДИ ИЗ КРУГА · БЕЙ ПОСЛЕ АТАКИ',
+              3200,
+              { key: 'boss-warning:immune-prime', queueIfVisible: true }
+            );
+          }
           const bossVideoId =
             event.stage.id === 'bloodstream'
               ? 'immunePrimeIntro'
