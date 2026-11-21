@@ -1039,9 +1039,12 @@ export class UIScene extends Phaser.Scene {
         if (this.activeBossReveals === 0) {
           this.setHudCinematicAlpha(1);
           if (this.contextHintKey !== null && !this.modalOpen && !this.uiBlocked && !this.overShown && !this.transitionOverlay) {
+            // Restore the unfinished boss instruction first. Otherwise the
+            // pending lysis hint overwrites it on reveal completion.
             this.contextHintContainer?.setVisible(true);
+          } else {
+            this.flushContextHint();
           }
-          this.flushContextHint();
           this.renderOnboarding();
         }
       },
@@ -1437,8 +1440,13 @@ export class UIScene extends Phaser.Scene {
     const c = this.onboardingContainer;
     if (!c || !this.onboardingTitle || !this.onboardingBody) return;
     this.onboardingTitle.setText(copy.title);
-    const controlMode =
-      (this.registry.get('controlMode') as ControlMode | undefined) ?? 'one-hand';
+    // Registry values are untrusted at runtime; a TypeScript cast does not
+    // validate persisted or externally supplied control profile strings.
+    const rawControlMode = this.registry.get('controlMode');
+    const controlMode: ControlMode =
+      rawControlMode === 'two-hand' || rawControlMode === 'dual-move'
+        ? rawControlMode
+        : 'one-hand';
     this.onboardingBody.setText(
       step.id === 'move' ? ONBOARDING_MOVE_BODY[controlMode] : copy.body
     );

@@ -86,6 +86,39 @@ for (const [w, h] of [[320, 568], [360, 640], [390, 740]]) for (const key of ['i
   }
 }
 
+// Runtime profile validation: unexpected persisted values cannot blank step 1.
+for (const [rawMode, expected] of [
+  ['one-hand', 'Move body'],
+  ['two-hand', 'Move body two-hand'],
+  ['dual-move', 'Move body dual-move'],
+  ['unknown-profile', 'Move body'],
+  [null, 'Move body'],
+  [undefined, 'Move body'],
+  [42, 'Move body'],
+]) {
+  const probe = fixture(320, 568);
+  probe.registry = { get: () => rawMode };
+  probe.renderOnboarding();
+  assert.equal(probe.onboardingBody.text, expected, 'controlMode fallback: ' + String(rawMode));
+}
+
+// First boss hint must survive reveal; the second hint waits for first expiry.
+const bossHints = fixture(320, 568);
+bossHints.contextHintContainer.setVisible(false);
+bossHints.showContextHint('DODGE FIRST', 3200, { key: 'boss:dodge', queueIfVisible: true });
+bossHints.showContextHint('LYSIS SECOND', 3400, { key: 'boss:lysis', queueIfVisible: true });
+assert.deepEqual(bossHints.renderedHints.map(h => h.message), ['DODGE FIRST']);
+assert.deepEqual(bossHints.pendingContextHints.map(h => h.key), ['boss:lysis']);
+bossHints.showBossReveal('Prime', 'immune-prime', 0x91cbd2);
+assert.equal(bossHints.contextHintContainer.visible, false);
+bossHints.tweensList.filter(t => t.onComplete)[0].onComplete();
+assert.equal(bossHints.contextHintContainer.visible, true);
+assert.deepEqual(bossHints.renderedHints.map(h => h.message), ['DODGE FIRST'], 'reveal must preserve the first hint');
+assert.deepEqual(bossHints.pendingContextHints.map(h => h.key), ['boss:lysis']);
+bossHints.contextHintContainer.setVisible(false);
+bossHints.contextHintKey = null;
+bossHints.flushContextHint();
+assert.deepEqual(bossHints.renderedHints.map(h => h.message), ['DODGE FIRST', 'LYSIS SECOND']);
 const ui = fixture();
 const onboardingBefore = JSON.stringify(ui.onboarding);
 const timerBefore = ui.contextHintTimer;
