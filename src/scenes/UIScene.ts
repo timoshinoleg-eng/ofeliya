@@ -74,7 +74,17 @@ const ONBOARDING_COPY: Record<OnboardingStepId, { title: string; body: string }>
   autoAttack: { title: 'Шаг 2 / 5 — Атака', body: 'Штамм атакует сам. Просто подплывай к иммунным клеткам.' },
   pickup: { title: 'Шаг 3 / 5 — РНК', body: 'Собирай РНК из уничтоженных иммунных клеток — она запускает мутацию.' },
   levelUp: { title: 'Шаг 4 / 5 — Мутация', body: 'Выбери мутацию, чтобы усилить штамм.' },
-  infect: { title: 'Шаг 5 / 5 — Заражение', body: 'В крупную клетку организма не стреляй — подплыви и стой внутри: она заразится и лопнет.' },
+  infect: { title: 'Шаг 5 / 5 — Заражение', body: 'Выстрелы её не ранят — подплыви и стой внутри: она заразится и лопнет.' },
+};
+
+// The three control profiles read different touch zones (floating drag anywhere,
+// left half vs right aim, two fixed lower pads), so the first tutorial step
+// names the zone the active profile actually responds to instead of implying
+// any point on screen works everywhere.
+const ONBOARDING_MOVE_BODY: Record<ControlMode, string> = {
+  'one-hand': 'Зажми экран и веди палец — штамм поплывёт за ним.',
+  'two-hand': 'Зажми левую половину экрана и веди палец — штамм поплывёт.',
+  'dual-move': 'Зажми нижний стик слева или справа и веди палец — штамм поплывёт.',
 };
 
 function compactHudNumber(value: number): string {
@@ -1427,7 +1437,11 @@ export class UIScene extends Phaser.Scene {
     const c = this.onboardingContainer;
     if (!c || !this.onboardingTitle || !this.onboardingBody) return;
     this.onboardingTitle.setText(copy.title);
-    this.onboardingBody.setText(copy.body);
+    const controlMode =
+      (this.registry.get('controlMode') as ControlMode | undefined) ?? 'one-hand';
+    this.onboardingBody.setText(
+      step.id === 'move' ? ONBOARDING_MOVE_BODY[controlMode] : copy.body
+    );
     c.setVisible(!hidden);
   }
 

@@ -2655,13 +2655,23 @@ export class GameScene extends Phaser.Scene {
           this.audio.onBossWarning();
           this.atmosphere.pulse(event.stage.theme.dangerColor, 0.28);
           if (event.stage.id === 'bloodstream') {
-            // First ИММУННЫЙ ПРАЙМ teach: dodge the telegraphed circle, then hit
-            // during recovery. Uses the context-hint channel, which the boss
-            // reveal suspends and flushes, so no new presentation layer.
+            // First ИММУННЫЙ ПРАЙМ teach, two short phases through the existing
+            // context-hint channel: (1) dodge the telegraphed circle and hit
+            // during recovery; (2) bursting an infected host cell near him
+            // while he attacks breaks the membrane (BossVulnerability lysis
+            // break). Normal attacks stay worth it (armored ×0.9, not 0) —
+            // the lysis hint only adds the tear, it never claims otherwise.
+            // The boss reveal suspends and flushes the channel, so no new
+            // presentation layer.
             this.getUiScene()?.showContextHint(
               'ИММУННЫЙ ПРАЙМ · УЙДИ ИЗ КРУГА · БЕЙ ПОСЛЕ АТАКИ',
               3200,
               { key: 'boss-warning:immune-prime', queueIfVisible: true }
+            );
+            this.getUiScene()?.showContextHint(
+              'ЛОПНИ ЗАРАЖЁННУЮ КЛЕТКУ РЯДОМ, КОГДА ОН АТАКУЕТ — МЕМБРАНА ПОРВЁТСЯ',
+              3400,
+              { key: 'boss-warning:immune-prime:lysis', queueIfVisible: true }
             );
           }
           const bossVideoId =

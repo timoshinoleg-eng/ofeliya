@@ -18,9 +18,11 @@ const metricCode = ts.transpileModule(readFileSync('src/game/ArtMetrics.ts', 'ut
 const metricModule = { exports: {} };
 new Function('module', 'exports', metricCode)(metricModule, metricModule.exports);
 const { CORE_ART, artScale } = metricModule.exports;
-const Probe = new Function('createSpecimenSurface', 'VISUAL', 'CORE_ART', 'artScale', 'FONT', 'UI_FONT', 'DEPTH', 'ONBOARDING_COPY', 'VideoInterstitial', 'COLORS', `${outputText}; return Probe;`)(
+const Probe = new Function('createSpecimenSurface', 'VISUAL', 'CORE_ART', 'artScale', 'FONT', 'UI_FONT', 'DEPTH', 'ONBOARDING_COPY', 'ONBOARDING_MOVE_BODY', 'VideoInterstitial', 'COLORS', `${outputText}; return Probe;`)(
   () => new Node(), { ink: 0x080f14 }, CORE_ART, artScale, 'font', 'body', 50,
-  { move: { title: 'Move', body: 'Move body' } }, { play: () => false }, { green: 1 },
+  { move: { title: 'Move', body: 'Move body' } },
+  { 'one-hand': 'Move body', 'two-hand': 'Move body two-hand', 'dual-move': 'Move body dual-move' },
+  { play: () => false }, { green: 1 },
 );
 class Node {
   constructor(key = '', width = 0, height = 0) { Object.assign(this, { key, width, height, scaleX: 1, scaleY: 1, visible: true, list: [] }); }
@@ -40,6 +42,7 @@ function fixture(w = 390, h = 740) {
   Object.assign(ui, {
     scale: { width: w, height: h }, activeBossReveals: 0,
     modalOpen: false, uiBlocked: false, overShown: false, transitionOverlay: null,
+    registry: { get: () => undefined },
     contextHintKey: null, pendingContextHints: [], contextHintContainer: new Node(), contextHintText: new Node(),
     onboarding: { active: true, currentStep: { id: 'move' }, progressMarker: 17 },
     onboardingContainer: new Node(), onboardingTitle: new Node(), onboardingBody: new Node(),
