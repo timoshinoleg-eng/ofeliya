@@ -392,11 +392,16 @@ export class WaveDirector {
   private spawn(kind: EnemyKind, elite: boolean): void {
     const cap = this.stage.waves.normalEnemyCap + this.difficulty.normalEnemyCapBonus;
     if (!elite && this.enemies.countActive(true) >= cap) return;
-    if (!elite && !this.canAddThreat(kind, false, this.scene.runState.stage.timeMs)) {
+    // A fallback decision has no spawn between its candidates. Reuse only that
+    // decision's scan; a spawn callback may deactivate or otherwise change any
+    // enemy, so the next attempt must always take a fresh reading.
+    let threat: number | undefined;
+    const currentThreat = () => (threat ??= this.activeThreat());
+    if (!elite && !this.canAddThreat(kind, false, this.scene.runState.stage.timeMs, currentThreat)) {
       const fallback: Exclude<EnemyKind, 'boss'>[] =
         kind === 'brute' ? ['runner', 'swarm'] : kind === 'runner' ? ['swarm'] : [];
       const next = fallback.find((candidate) =>
-        this.canAddThreat(candidate, false, this.scene.runState.stage.timeMs)
+        this.canAddThreat(candidate, false, this.scene.runState.stage.timeMs, currentThreat)
       );
       if (!next) return;
       kind = next;
@@ -405,7 +410,7 @@ export class WaveDirector {
     this.scene.spawnEnemy(kind, position.x, position.y, elite);
   }
 
-  private canAddThreat(kind: EnemyKind, elite: boolean, stageTimeMs: number): boolean {
+  private canAddThreat(kind: EnemyKind, elite: boolean, stageTimeMs: number, currentThreat?: () => number): boolean {
     if (this.difficulty.threatCapStart === null || this.difficulty.threatCapEnd === null) return true;
     if (elite || kind === 'boss') return true;
     const progress = Phaser.Math.Clamp(stageTimeMs / this.stage.durationMs, 0, 1);
@@ -414,7 +419,7 @@ export class WaveDirector {
       this.difficulty.threatCapEnd,
       progress
     );
-    return this.activeThreat() + this.threatCost(kind, elite) <= cap;
+    return (currentThreat ? currentThreat() : this.activeThreat()) + this.threatCost(kind, elite) <= cap;
   }
 
   private activeThreat(): number {
