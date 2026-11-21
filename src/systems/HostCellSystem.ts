@@ -22,6 +22,7 @@ interface HostCellSlot {
   ringNear: boolean;
   ringInside: boolean;
   ringVisualStage: number;
+  ringDrawInfected: number;
   ringInfectionRadius: number;
   ringLowTier: boolean;
 }
@@ -142,6 +143,7 @@ export class HostCellSystem {
         ringNear: false,
         ringInside: false,
         ringVisualStage: -1,
+        ringDrawInfected: NaN,
         ringInfectionRadius: NaN,
         ringLowTier: false,
       });
@@ -223,8 +225,8 @@ export class HostCellSystem {
       const ringNear = distance <= approachRadius;
       const visualStage = infected > 0.72 ? 2 : infected > 0.66 ? 1 : 0;
       // Full/balanced tiers retain their original per-frame rendering.
-      // Low tier redraws cosmetic vectors at 30Hz, or immediately on any
-      // interaction boundary, slot move, quality switch or ring geometry change.
+      // Low tier redraws idle decorative vectors at 30Hz. Any change to
+      // actionable infection progress forces an immediate per-frame redraw.
       const redrawRing =
         !lowQuality ||
         cell.ringLowTier !== lowQuality ||
@@ -235,6 +237,7 @@ export class HostCellSystem {
         cell.ringNear !== ringNear ||
         cell.ringInside !== inside ||
         cell.ringVisualStage !== visualStage ||
+        cell.ringDrawInfected !== infected ||
         cell.ringInfectionRadius !== tuning.infectionRadius;
       if (redrawRing) {
         cell.ring.clear();
@@ -311,6 +314,7 @@ export class HostCellSystem {
         cell.ringNear = ringNear;
         cell.ringInside = inside;
         cell.ringVisualStage = visualStage;
+        cell.ringDrawInfected = infected;
         cell.ringInfectionRadius = tuning.infectionRadius;
         cell.ringLowTier = lowQuality;
       }

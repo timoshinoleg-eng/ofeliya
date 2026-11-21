@@ -20,7 +20,7 @@
 | 6 active host cells, 90 frames, `full` | 546 | 546 | Exact frame-by-frame recorded ring commands and gameplay snapshots PASS |
 | 6 active host cells, 90 frames, `low` | 546 | 186 | Snapshot/event parity, cosmetic redraw reduction PASS |
 | Host-cell sequence incl. approach/enter/exit, 120 frames, `full` | 102 | 102 | Frame-by-frame commands, snapshots, events PASS |
-| Same sequence, `low` | 102 | 38 | Snapshots and interaction events PASS |
+| Same sequence, `low` | 102 | 100 | Infection progress now redraws without delay; snapshots/events PASS |
 
 Other assertions: lyse callback payload, interaction IDs, pooled slot reactivation, reset/restore snapshot, and immediate visual refresh across proximity, tier and restore transitions — PASS. Tests used deterministic fake Phaser graphics and therefore do **not** prove real WebGL pixels or frame pacing.
 

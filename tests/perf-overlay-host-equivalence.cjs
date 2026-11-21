@@ -162,8 +162,12 @@ for(const quality of ['full','low']){
  player.x=cell.image.x;player.y=cell.image.y;
  ctx.scene.time.now=7008;host.update(7008,8,7008);
  assert.equal(cell.ring.clearCount,before+1,'enter must redraw immediately at low tier');
+ const prevInfection=cell.infection;
+ ctx.scene.time.now=7012;host.update(7012,4,7012);
+ assert.ok(cell.infection>prevInfection,'infection must progress every frame');
+ assert.equal(cell.ring.clearCount,before+2,'changing infection arc must redraw immediately at low tier');
  level='full';ctx.scene.time.now=7016;host.update(7016,8,7016);
- assert.equal(cell.ring.clearCount,before+2,'quality escalation must redraw immediately');
+ assert.equal(cell.ring.clearCount,before+3,'quality escalation must redraw immediately');
  const snap=host.snapshot();
  host.resetStage();host.restore(snap);
  const afterRestore=cell.ring.clearCount;
