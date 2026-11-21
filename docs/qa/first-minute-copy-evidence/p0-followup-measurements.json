@@ -1,0 +1,161 @@
+{
+  "onboarding": {
+    "one-hand": {
+      "step": "move",
+      "mode": "one-hand",
+      "containerVisible": true,
+      "bodyText": "Зажми экран и веди палец — штамм поплывёт за ним.",
+      "bodyBounds": {
+        "x": 33.5,
+        "y": 151,
+        "width": 253,
+        "height": 26,
+        "bottom": 177
+      },
+      "titleBounds": {
+        "y": 132.5,
+        "height": 15,
+        "bottom": 147.5
+      },
+      "skipBounds": {
+        "y": 176,
+        "top": 176
+      },
+      "panelBounds": {
+        "y": 126,
+        "height": 64,
+        "bottom": 190
+      },
+      "bodyFitsTwoLines": true,
+      "noTitleOverlap": true,
+      "noSkipOverlap": true,
+      "bodyInsidePanel": true
+    },
+    "step5": {
+      "step": "infect",
+      "mode": "one-hand",
+      "containerVisible": true,
+      "bodyText": "Выстрелы её не ранят — подплыви и стой внутри: она заразится и лопнет.",
+      "bodyBounds": {
+        "x": 33,
+        "y": 151,
+        "width": 254,
+        "height": 26,
+        "bottom": 177
+      },
+      "titleBounds": {
+        "y": 132.5,
+        "height": 15,
+        "bottom": 147.5
+      },
+      "skipBounds": {
+        "y": 176,
+        "top": 176
+      },
+      "panelBounds": {
+        "y": 126,
+        "height": 64,
+        "bottom": 190
+      },
+      "bodyFitsTwoLines": true,
+      "noTitleOverlap": true,
+      "noSkipOverlap": true,
+      "bodyInsidePanel": true
+    },
+    "two-hand": {
+      "step": "move",
+      "mode": "two-hand",
+      "containerVisible": true,
+      "bodyText": "Зажми левую половину экрана и веди палец — штамм поплывёт.",
+      "bodyBounds": {
+        "x": 39,
+        "y": 151,
+        "width": 242,
+        "height": 26,
+        "bottom": 177
+      },
+      "titleBounds": {
+        "y": 132.5,
+        "height": 15,
+        "bottom": 147.5
+      },
+      "skipBounds": {
+        "y": 176,
+        "top": 176
+      },
+      "panelBounds": {
+        "y": 126,
+        "height": 64,
+        "bottom": 190
+      },
+      "bodyFitsTwoLines": true,
+      "noTitleOverlap": true,
+      "noSkipOverlap": true,
+      "bodyInsidePanel": true
+    },
+    "dual-move": {
+      "step": "move",
+      "mode": "dual-move",
+      "containerVisible": true,
+      "bodyText": "Зажми нижний стик слева или справа и веди палец — штамм поплывёт.",
+      "bodyBounds": {
+        "x": 29,
+        "y": 151,
+        "width": 262,
+        "height": 26,
+        "bottom": 177
+      },
+      "titleBounds": {
+        "y": 132.5,
+        "height": 15,
+        "bottom": 147.5
+      },
+      "skipBounds": {
+        "y": 176,
+        "top": 176
+      },
+      "panelBounds": {
+        "y": 126,
+        "height": 64,
+        "bottom": 190
+      },
+      "bodyFitsTwoLines": true,
+      "noTitleOverlap": true,
+      "noSkipOverlap": true,
+      "bodyInsidePanel": true
+    }
+  },
+  "bossHints": {
+    "phase1": {
+      "visible": true,
+      "text": "ИММУННЫЙ ПРАЙМ · УЙДИ ИЗ КРУГА · БЕЙ ПОСЛЕ АТАКИ",
+      "textBounds": {
+        "y": 103,
+        "height": 26,
+        "bottom": 129
+      },
+      "panelBounds": {
+        "y": 99,
+        "height": 34,
+        "bottom": 133
+      },
+      "fitsPanel": true
+    },
+    "phase2": {
+      "visible": true,
+      "text": "ЛОПНИ ЗАРАЖЁННУЮ КЛЕТКУ РЯДОМ, КОГДА ОН АТАКУЕТ — МЕМБРАНА ПОРВЁТСЯ",
+      "textBounds": {
+        "y": 103,
+        "height": 26,
+        "bottom": 129
+      },
+      "panelBounds": {
+        "y": 99,
+        "height": 34,
+        "bottom": 133
+      },
+      "fitsPanel": true
+    }
+  },
+  "errors": []
+}
