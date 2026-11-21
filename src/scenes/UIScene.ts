@@ -74,7 +74,7 @@ const ONBOARDING_COPY: Record<OnboardingStepId, { title: string; body: string }>
   autoAttack: { title: 'Шаг 2 / 5 — Атака', body: 'Штамм атакует сам. Просто подплывай к иммунным клеткам.' },
   pickup: { title: 'Шаг 3 / 5 — РНК', body: 'Собирай РНК из уничтоженных иммунных клеток — она запускает мутацию.' },
   levelUp: { title: 'Шаг 4 / 5 — Мутация', body: 'Выбери мутацию, чтобы усилить штамм.' },
-  infect: { title: 'Шаг 5 / 5 — Заражение', body: 'Выстрелы её не ранят — подплыви и стой внутри: она заразится и лопнет.' },
+  infect: { title: 'Шаг 5 / 5 — Заражение', body: 'Крупная клетка организма: войди и стой внутри — она заразится и лопнет.' },
 };
 
 // The three control profiles read different touch zones (floating drag anywhere,
