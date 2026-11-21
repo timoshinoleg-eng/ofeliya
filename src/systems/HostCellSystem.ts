@@ -15,6 +15,15 @@ interface HostCellSlot {
   interactionId: number;
   wasInside: boolean;
   approachNotified: boolean;
+  // Cosmetic cache only, not part of gameplay or checkpoints.
+  ringDrawAt: number;
+  ringDrawX: number;
+  ringDrawY: number;
+  ringNear: boolean;
+  ringInside: boolean;
+  ringVisualStage: number;
+  ringInfectionRadius: number;
+  ringLowTier: boolean;
 }
 
 export interface HostCellTuning {
@@ -127,6 +136,14 @@ export class HostCellSystem {
         interactionId: 0,
         wasInside: false,
         approachNotified: false,
+        ringDrawAt: Number.NEGATIVE_INFINITY,
+        ringDrawX: NaN,
+        ringDrawY: NaN,
+        ringNear: false,
+        ringInside: false,
+        ringVisualStage: -1,
+        ringInfectionRadius: NaN,
+        ringLowTier: false,
       });
     }
   }
@@ -145,6 +162,9 @@ export class HostCellSystem {
     }
 
     const tuning = this.tuningFn();
+    // Read the governor once per system tick, without affecting gameplay cadence.
+    const quality = this.scene.registry?.get('runtimeQuality') as { level?: string } | undefined;
+    const lowQuality = quality?.level === 'low';
     for (const cell of this.cells) {
       if (!cell.active) continue;
       const dx = this.player.x - cell.image.x;
@@ -200,73 +220,99 @@ export class HostCellSystem {
         .setVisible(infected > 0.015)
         .setAlpha(infected * (infected > 0.7 ? infectionPulse : 0.82));
 
-      cell.ring.clear();
+      const ringNear = distance <= approachRadius;
+      const visualStage = infected > 0.72 ? 2 : infected > 0.66 ? 1 : 0;
+      // Full/balanced tiers retain their original per-frame rendering.
+      // Low tier redraws cosmetic vectors at 30Hz, or immediately on any
+      // interaction boundary, slot move, quality switch or ring geometry change.
+      const redrawRing =
+        !lowQuality ||
+        cell.ringLowTier !== lowQuality ||
+        time < cell.ringDrawAt ||
+        time - cell.ringDrawAt >= (1000 / 30 - 0.5) ||
+        cell.ringDrawX !== cell.image.x ||
+        cell.ringDrawY !== cell.image.y ||
+        cell.ringNear !== ringNear ||
+        cell.ringInside !== inside ||
+        cell.ringVisualStage !== visualStage ||
+        cell.ringInfectionRadius !== tuning.infectionRadius;
+      if (redrawRing) {
+        cell.ring.clear();
 
-      // Host cells are the signature objective, so they keep a persistent membrane locator even
-      // before infection starts. This must survive a 200-enemy screen without becoming HUD-like.
-      const locatorRadius = 47 + Math.sin(time * 0.0035 + cell.phase) * 1.2;
-      cell.ring.lineStyle(1.8, COLORS.green, 0.34 + infected * 0.18);
-      cell.ring.strokeCircle(cell.image.x, cell.image.y, locatorRadius);
-      cell.ring.lineStyle(1, COLORS.white, 0.18 + infected * 0.12);
-      cell.ring.strokeCircle(cell.image.x, cell.image.y, locatorRadius - 3);
+        // Host cells are the signature objective, so they keep a persistent membrane locator even
+        // before infection starts. This must survive a 200-enemy screen without becoming HUD-like.
+        const locatorRadius = 47 + Math.sin(time * 0.0035 + cell.phase) * 1.2;
+        cell.ring.lineStyle(1.8, COLORS.green, 0.34 + infected * 0.18);
+        cell.ring.strokeCircle(cell.image.x, cell.image.y, locatorRadius);
+        cell.ring.lineStyle(1, COLORS.white, 0.18 + infected * 0.12);
+        cell.ring.strokeCircle(cell.image.x, cell.image.y, locatorRadius - 3);
 
-      for (let i = 0; i < 4; i++) {
-        const a = cell.phase * 0.2 + (i / 4) * Math.PI * 2;
-        const x0 = cell.image.x + Math.cos(a) * (locatorRadius + 1);
-        const y0 = cell.image.y + Math.sin(a) * (locatorRadius + 1);
-        const x1 = cell.image.x + Math.cos(a) * (locatorRadius + 7);
-        const y1 = cell.image.y + Math.sin(a) * (locatorRadius + 7);
-        cell.ring.lineStyle(2, COLORS.green, 0.42 + infected * 0.28);
+        for (let i = 0; i < 4; i++) {
+          const a = cell.phase * 0.2 + (i / 4) * Math.PI * 2;
+          const x0 = cell.image.x + Math.cos(a) * (locatorRadius + 1);
+          const y0 = cell.image.y + Math.sin(a) * (locatorRadius + 1);
+          const x1 = cell.image.x + Math.cos(a) * (locatorRadius + 7);
+          const y1 = cell.image.y + Math.sin(a) * (locatorRadius + 7);
+          cell.ring.lineStyle(2, COLORS.green, 0.42 + infected * 0.28);
+          cell.ring.beginPath();
+          cell.ring.moveTo(x0, y0);
+          cell.ring.lineTo(x1, y1);
+          cell.ring.strokePath();
+        }
+
+        const ringColor = infected > 0.66 ? COLORS.green : COLORS.magenta;
+        cell.ring.lineStyle(3.4, ringColor, 0.28 + infected * 0.72);
         cell.ring.beginPath();
-        cell.ring.moveTo(x0, y0);
-        cell.ring.lineTo(x1, y1);
+        cell.ring.arc(
+          cell.image.x,
+          cell.image.y,
+          42 + Math.sin(time * 0.005 + cell.phase) * infected * 2,
+          -Math.PI / 2,
+          -Math.PI / 2 + Math.PI * 2 * Math.max(0.025, infected),
+          false
+        );
         cell.ring.strokePath();
-      }
 
-      const ringColor = infected > 0.66 ? COLORS.green : COLORS.magenta;
-      cell.ring.lineStyle(3.4, ringColor, 0.28 + infected * 0.72);
-      cell.ring.beginPath();
-      cell.ring.arc(
-        cell.image.x,
-        cell.image.y,
-        42 + Math.sin(time * 0.005 + cell.phase) * infected * 2,
-        -Math.PI / 2,
-        -Math.PI / 2 + Math.PI * 2 * Math.max(0.025, infected),
-        false
-      );
-      cell.ring.strokePath();
-
-      if (distance <= approachRadius) {
-        // Faint short arcs expose the exact runtime gameplay boundary, separately from the
-        // persistent membrane locator and the infection progress arc.
-        cell.ring.lineStyle(1.25, COLORS.white, inside ? 0.36 : 0.2);
-        const segmentCount = 12;
-        const segmentArc = (Math.PI * 2) / segmentCount * 0.48;
-        for (let i = 0; i < segmentCount; i++) {
-          const start = (i / segmentCount) * Math.PI * 2 - Math.PI / 2;
-          cell.ring.beginPath();
-          cell.ring.arc(
-            cell.image.x,
-            cell.image.y,
-            tuning.infectionRadius,
-            start,
-            start + segmentArc,
-            false
-          );
-          cell.ring.strokePath();
+        if (distance <= approachRadius) {
+          // Faint short arcs expose the exact runtime gameplay boundary, separately from the
+          // persistent membrane locator and the infection progress arc.
+          cell.ring.lineStyle(1.25, COLORS.white, inside ? 0.36 : 0.2);
+          const segmentCount = 12;
+          const segmentArc = (Math.PI * 2) / segmentCount * 0.48;
+          for (let i = 0; i < segmentCount; i++) {
+            const start = (i / segmentCount) * Math.PI * 2 - Math.PI / 2;
+            cell.ring.beginPath();
+            cell.ring.arc(
+              cell.image.x,
+              cell.image.y,
+              tuning.infectionRadius,
+              start,
+              start + segmentArc,
+              false
+            );
+            cell.ring.strokePath();
+          }
         }
-      }
 
-      // Membrane warning arcs appear only near rupture, replacing a generic progress-circle feel.
-      if (infected > 0.72) {
-        const crack = (infected - 0.72) / 0.28;
-        for (let i = 0; i < 3; i++) {
-          const a = time * 0.0008 + cell.phase + (i / 3) * Math.PI * 2;
-          cell.ring.lineStyle(1.5, COLORS.green, 0.18 + crack * 0.55);
-          cell.ring.beginPath();
-          cell.ring.arc(cell.image.x, cell.image.y, 36 + i * 2.2, a, a + 0.42 + crack * 0.35, false);
-          cell.ring.strokePath();
+        // Membrane warning arcs appear only near rupture, replacing a generic progress-circle feel.
+        if (infected > 0.72) {
+          const crack = (infected - 0.72) / 0.28;
+          for (let i = 0; i < 3; i++) {
+            const a = time * 0.0008 + cell.phase + (i / 3) * Math.PI * 2;
+            cell.ring.lineStyle(1.5, COLORS.green, 0.18 + crack * 0.55);
+            cell.ring.beginPath();
+            cell.ring.arc(cell.image.x, cell.image.y, 36 + i * 2.2, a, a + 0.42 + crack * 0.35, false);
+            cell.ring.strokePath();
+          }
         }
+        cell.ringDrawAt = time;
+        cell.ringDrawX = cell.image.x;
+        cell.ringDrawY = cell.image.y;
+        cell.ringNear = ringNear;
+        cell.ringInside = inside;
+        cell.ringVisualStage = visualStage;
+        cell.ringInfectionRadius = tuning.infectionRadius;
+        cell.ringLowTier = lowQuality;
       }
 
       if (infected >= 1) this.lyse(cell);
@@ -321,6 +367,7 @@ export class HostCellSystem {
         .setAlpha(saved.infection * 0.82)
         .setRotation(0)
         .setScale(0.78 + saved.infection * 0.1);
+      cell.ringDrawAt = Number.NEGATIVE_INFINITY;
       cell.ring.setVisible(true).clear();
     }
   }
@@ -355,6 +402,7 @@ export class HostCellSystem {
       cell.approachNotified = false;
       cell.image.setVisible(false).setAlpha(0).clearTint().setRotation(0).setScale(artScale('host-cell-shadow', 0.78));
       cell.infectionOverlay.setVisible(false).setAlpha(0).setRotation(0).setScale(0.78);
+      cell.ringDrawAt = Number.NEGATIVE_INFINITY;
       cell.ring.setVisible(false).clear();
     }
   }
@@ -397,6 +445,7 @@ export class HostCellSystem {
       this.scene.tweens.killTweensOf(slot.infectionOverlay);
       slot.image.setVisible(false).setAlpha(0).clearTint();
       slot.infectionOverlay.setVisible(false).setAlpha(0);
+      slot.ringDrawAt = Number.NEGATIVE_INFINITY;
       slot.ring.setVisible(false).clear();
     }
 
@@ -428,6 +477,7 @@ export class HostCellSystem {
       .setAlpha(0)
       .setRotation(0)
       .setScale(0.68);
+    slot.ringDrawAt = Number.NEGATIVE_INFINITY;
     slot.ring.setVisible(true).clear();
     this.scene.tweens.add({
       targets: slot.image,
@@ -449,6 +499,7 @@ export class HostCellSystem {
     cell.interactionId = 0;
     cell.wasInside = false;
     cell.approachNotified = false;
+    cell.ringDrawAt = Number.NEGATIVE_INFINITY;
     cell.ring.setVisible(false).clear();
 
     // Preserve the texture's native magenta/green membrane colors. Applying a green tint here
