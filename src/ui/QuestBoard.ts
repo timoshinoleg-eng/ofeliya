@@ -16,6 +16,7 @@ import { VISUAL, VISUAL_TEXT } from './visualTokens';
 import { PlatformBridge } from '../platform';
 import { createMetaDock, createModalFrame, MODAL, type MetaDockTarget } from './modal';
 import { showMetaToast } from './RetentionOverlays';
+import { addUiIcon } from './uiIcons';
 
 /**
  * Daily tasks board.
@@ -91,14 +92,15 @@ export class QuestBoard {
         y: number,
         value: string,
         size: number,
-        color: string = VISUAL_TEXT.ivory
+        color: string = VISUAL_TEXT.ivory,
+        width = w - MODAL.padX * 2
       ): Phaser.GameObjects.Text => {
         const t = scene.add
           .text(x, y, value, {
             fontFamily: UI_FONT,
             fontSize: size,
             color,
-            wordWrap: { width: w - MODAL.padX * 2 },
+            wordWrap: { width },
             lineSpacing: 4,
           })
           .setResolution(2);
@@ -205,8 +207,21 @@ export class QuestBoard {
 
       seasonRows.forEach((p, i) => {
         const y = seasonTop + 26 + i * seasonRowH;
-        const title = p.def.track === 'paid' ? `${p.def.title} ★` : p.def.title;
-        text(left + MODAL.padX, y, title, compact ? 12 : 13);
+        const paid = p.def.track === 'paid';
+        const titleX = left + MODAL.padX + (paid ? 18 : 0);
+        text(
+          titleX,
+          y,
+          p.def.title,
+          compact ? 12 : 13,
+          VISUAL_TEXT.ivory,
+          w - MODAL.padX * 2 - (paid ? 18 : 0)
+        );
+        if (paid) {
+          this.root.add(
+            addUiIcon(scene, left + MODAL.padX + 7, y + 7, 'star', 'host').setDisplaySize(13, 13)
+          );
+        }
         text(left + MODAL.padX, y + 16, p.def.desc, compact ? 10 : 11, VISUAL_TEXT.muted);
         const rightX = left + w - MODAL.padX;
         if (p.claimed) {

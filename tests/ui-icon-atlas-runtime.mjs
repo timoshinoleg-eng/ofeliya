@@ -65,7 +65,7 @@ try {
     const result = {
       atlasPresent: game.textures.exists('ui-icons'),
       iconKey: icon.texture.key,
-      fallbacksInstalled: framesToCheck.filter((frame) => game.textures.exists(`up-icon-${frame}`)),
+      fallbacksInstalled: framesToCheck.filter((frame) => game.textures.exists(`up-icon-${frame}`) || ({heart:'up-hp',activity:'up-rate',shield:'up-heal'}[frame] && game.textures.exists(({heart:'up-hp',activity:'up-rate',shield:'up-heal'})[frame]))),
     };
     icon.destroy();
     return result;
@@ -96,6 +96,8 @@ try {
     const started = Date.now();
     await page.goto(server.resolvedUrls.local[0] + '?renderer=canvas', { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.__game?.scene.isActive('Menu'), null, { timeout: 6000 });
+    const menuElapsed = Date.now() - started;
+    await page.waitForFunction(() => window.__game?.textures.exists('ui-icons'), null, { timeout: 6000 });
     const state = await probe(page);
     assert.equal(errors.length, 0, errors.join('\n'));
     assert.equal(state.atlasPresent, true, 'atlas texture must exist in the available scenario');
@@ -107,7 +109,7 @@ try {
     assert.equal(state.upHealProcedural, true);
     const artXhrs = requested.filter((r) => r.type === 'xhr');
     assert.equal(artXhrs.length, 10, 'startup XHRs must retain the original single timeout window');
-    assert.ok(Date.now() - started < 6000, 'Menu startup must remain bounded with the atlas load added');
+    assert.ok(menuElapsed < 6000, 'Menu startup must remain bounded with the atlas load added');
     console.log(`ui-icon-atlas runtime available: atlas frame + preserved up-* + 10 art XHRs, ${Date.now() - started}ms PASS`);
     await context.close();
   }
@@ -126,7 +128,7 @@ try {
     const state = await fallbackProbe(page, manifestIcons);
     assert.equal(errors.length, 0, errors.join('\n'));
     assert.equal(state.atlasPresent, false, 'atlas must stay absent when its requests fail');
-    assert.equal(state.iconKey, 'up-icon-heart', `fallback texture expected, got ${state.iconKey}`);
+    assert.equal(state.iconKey, 'up-hp', `fallback texture expected, got ${state.iconKey}`);
     assert.deepEqual(state.fallbacksInstalled, manifestIcons, 'BootScene must install up-icon-* fallbacks for every frame');
     assert.ok(Date.now() - started < 6000, 'missing atlas must not delay Menu');
     console.log(`ui-icon-atlas runtime missing: up-icon-* fallbacks installed, ${Date.now() - started}ms PASS`);
@@ -147,7 +149,7 @@ try {
     const state = await fallbackProbe(page, manifestIcons);
     assert.equal(errors.length, 0, errors.join('\n'));
     assert.equal(state.atlasPresent, false, 'stalled atlas must time out and stay absent');
-    assert.equal(state.iconKey, 'up-icon-heart');
+    assert.equal(state.iconKey, 'up-hp');
     assert.deepEqual(state.fallbacksInstalled, manifestIcons);
     const elapsed = Date.now() - started;
     assert.ok(elapsed < 6000, 'stalled atlas must release boot inside the shared window');

@@ -754,7 +754,9 @@ try {
         const board = menu.children.list.find((o) => o.name === 'ofeliya-quests')
           ?? menu.children.list.find((o) => o.name === 'ofeliya-collection')
           ?? menu.children.list.find((o) => o.name === 'ofeliya-codex');
-        const texts = board ? board.list.filter((o) => o.type === 'Text').map((o) => o.text) : [];
+        const collectTexts = (node) => (node?.list ?? []).flatMap((child) =>
+          [...(child.type === 'Text' ? [child.text] : []), ...collectTexts(child)]);
+        const texts = board ? collectTexts(board) : [];
         const names = board ? board.list.map((o) => o.name).filter(Boolean) : [];
         const overlay = menu.children.list.find((o) => o.name === 'ofeliya-codex');
         const overlayTexts = overlay ? overlay.list.filter((o) => o.type === 'Text').map((o) => o.text) : [];
@@ -974,8 +976,10 @@ try {
         }
         return into;
       };
+      const collectTexts = (node) => (node?.list ?? []).flatMap((child) =>
+        [...(child.type === 'Text' ? [child.text] : []), ...collectTexts(child)]);
       return {
-        texts: board.list.filter((o) => o.type === 'Text').map((o) => o.text),
+        texts: collectTexts(board),
         names: collect(board, []),
         interactiveNames: collectInteractive(board, []),
       };

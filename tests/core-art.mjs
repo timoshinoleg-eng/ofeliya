@@ -29,7 +29,7 @@ const bake=f=>load('src/game/StrainZeroTextures.ts').ensureStrainZeroTextures(f.
 test('all ten art/fallback backings are bounded 4x including non-square T-cell; raw removed after refresh',()=>{for(const raw of [[],Object.keys(logical),['virus-player','immune-tcell']]){const f=fixture(raw);bake(f);for(const[k,[w,h]]of Object.entries(logical)){const t=f.textures.get(k);assert.deepEqual([t.width,t.height],[w*4,h*4]);assert.deepEqual(t.ops[0],['scale',4,4]);const op=t.ops.find(o=>o[0]==='drawImage');if(raw.includes(k))assert.deepEqual(op.slice(2),[0,0,w,h]);else assert.equal(op,undefined);assert.ok(t.refreshed);}assert.deepEqual(f.removed.sort(),raw.map(k=>'raw-art-'+k).sort());}});
 test('repeated bake plus partial canonical presence still completes all required keys without duplication',()=>{const f=fixture();f.textures.set('virus-player',{width:224,height:224});bake(f);const count=f.textures.size;for (const key of [...Object.keys(logical),'viral-particle','rna-fragment','erythrocyte','host-cell-infection','membrane-fragment','bio-spark','combat-particles','mutation-prism','mutation-halo','mutation-singularity','blood-plasma','heart-plasma','cardiac-fiber']) assert.ok(f.textures.has(key), 'required texture '+key);bake(f);assert.equal(f.textures.size,count);});
 test('projectile RNA atmosphere and combat atlas source geometry remains unchanged',()=>{const f=fixture();bake(f);for(const [k,w,h]of [['viral-particle',22,14],['rna-fragment',22,28],['combat-particles',200,40],['blood-plasma',256,256],['heart-plasma',256,256],['cardiac-fiber',256,256],['host-cell-infection',112,112]])assert.deepEqual([f.textures.get(k).width,f.textures.get(k).height],[w,h]);});
-test('boot preload uses ten distinct raw keys with per-image finite XHR timeout',()=>{const {BootScene}=load('src/scenes/BootScene.ts'),boot=new BootScene(),requests=[];boot.textures={exists:()=>false};boot.load={atlas:(key,png,json,pngCfg,jsonCfg)=>{assert.equal(key,'ui-icons');assert.equal(pngCfg.timeout,1800);assert.equal(jsonCfg.timeout,1800);},image:(...args)=>requests.push(args)};boot.preload();assert.equal(requests.length,10);for(const [k,path,config]of requests){assert.ok(k.startsWith('raw-art-'));assert.equal(path,'art/'+k.slice(8)+'.webp');assert.equal(config.timeout,1800);}assert.equal(new Set(requests.map(r=>r[0])).size,10);});
+test('boot preload uses ten distinct raw keys with per-image finite XHR timeout',()=>{const {BootScene}=load('src/scenes/BootScene.ts'),boot=new BootScene(),requests=[];boot.textures={exists:()=>false};boot.load={image:(...args)=>requests.push(args)};boot.preload();assert.equal(requests.length,10);for(const [k,path,config]of requests){assert.ok(k.startsWith('raw-art-'));assert.equal(path,'art/'+k.slice(8)+'.webp');assert.equal(config.timeout,1800);}assert.equal(new Set(requests.map(r=>r[0])).size,10);});
 test('boot preload skips only individually present canonical textures', () => {
  const { BootScene } = load('src/scenes/BootScene.ts'), boot = new BootScene(), requests = [];
  const present = new Set(['virus-player', 'immune-tcell']);
@@ -48,7 +48,7 @@ test('optional art consumes one timeout window without retry or Android batching
   // File captures loader retry policy at queue time, so assert before the first image call.
   boot.load = { maxRetries: 2, maxParallelDownloads: parallel, atlas:()=>{assert.equal(boot.load.maxRetries,0);}, image: (...args) => {
    assert.equal(boot.load.maxRetries, 0);
-   assert.equal(boot.load.maxParallelDownloads, Math.max(parallel, 12));
+   assert.equal(boot.load.maxParallelDownloads, Math.max(parallel, 10));
    requests.push(args);
   } };
   boot.preload(); assert.equal(requests.length, 10);
@@ -72,7 +72,7 @@ test('boot create bakes missing or partly loaded art before removing splash and 
     } };
    } };
    boot.scene = { start: key => { assert.equal(key, 'Menu'); events.push('menu'); } };
-   boot.game = { textures: f.scene.textures, events: { once(){}, off(){} } };
+   boot.game = { textures: f.scene.textures, events: { on(){}, once(){}, off(){} } };
    boot.create();
    assert.deepEqual(events, ['legacy', 'splash', 'menu']);
    assert.deepEqual(f.removed.sort(), raw.map(key => 'raw-art-' + key).sort());

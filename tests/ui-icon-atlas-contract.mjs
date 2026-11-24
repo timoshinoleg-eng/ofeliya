@@ -95,9 +95,12 @@ assert.equal(buildInfo.jsonSha256, createHash('sha256').update(readFileSync(join
 const bootSource = readFileSync(join(root, 'src/scenes/BootScene.ts'), 'utf8');
 assert.ok(bootSource.includes('this.load.maxRetries = 0;'), 'maxRetries=0 window removed');
 assert.ok(/this\.load\.image\(rawArtKey\(key\), `art\/\$\{key\}\.webp`, \{ responseType: 'blob', timeout: 1800 \}\)/.test(bootSource), 'CORE_ART load policy changed');
-assert.ok(bootSource.includes("this.load.atlas(UI_ICON_ATLAS_KEY, 'assets/ui-icons-atlas.png', 'assets/ui-icons-atlas.json'"), 'atlas preload missing');
-const atlasLine = bootSource.split('\n').find((line) => line.includes('this.load.atlas('));
-assert.ok(atlasLine.includes('timeout: 1800') && atlasLine.split('timeout: 1800').length - 1 >= 2, 'atlas must carry the 1800ms timeout for png+json');
+assert.ok(!bootSource.includes('this.load.atlas('), 'atlas must not block Boot');
+const deferred = readFileSync(join(root, 'src/game/DeferredMenuArt.ts'), 'utf8');
+assert.ok(deferred.includes("game.events.on('postrender', begin)"));
+assert.ok(deferred.includes("game.scene.isActive('Menu')"));
+assert.ok(deferred.includes('loader.maxRetries = 0'));
+assert.equal((deferred.match(/timeout: 1800/g) || []).length, 2);
 assert.ok(!bootSource.includes('installUiIconFallbacks(this);'), 'fallbacks must be lazy to keep the startup budget');
 assert.ok(bootSource.includes("g.generateTexture(`up-${id}`, 40, 40);"), 'makeIcons up-* convention changed');
 

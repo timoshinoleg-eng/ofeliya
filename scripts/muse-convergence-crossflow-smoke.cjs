@@ -754,7 +754,8 @@ const mark = (name, value, kind = 'real') => {
       const { SKIN_CATALOG, ClientCollection } = await import('/src/game/collection/ClientCollection.ts');
       const state = new ClientCollection().snapshot();
       const root = window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection');
-      const buttons = root.list.filter(o => o.name?.startsWith('ofeliya-skin-'));
+      const all = []; const visit = o => { all.push(o); (o.list ?? []).forEach(visit); }; visit(root);
+      const buttons = all.filter(o => o.name?.startsWith('ofeliya-skin-'));
       const next = root.list.find(o => o.name === 'ofeliya-collection-next');
       return {
         catalogSize: SKIN_CATALOG.length,
@@ -777,7 +778,8 @@ const mark = (name, value, kind = 'real') => {
       await tap('ofeliya-collection-next');
       const skinPage = await page.evaluate(() => {
         const root = window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection');
-        const buttons = root.list.filter(o => o.name?.startsWith('ofeliya-skin-'));
+        const all = []; const visit = o => { all.push(o); (o.list ?? []).forEach(visit); }; visit(root);
+        const buttons = all.filter(o => o.name?.startsWith('ofeliya-skin-'));
         const next = root.list.find(o => o.name === 'ofeliya-collection-next');
         return { names: buttons.map(b => b.name), nextEnabled: Boolean(next?.input?.enabled) };
       });

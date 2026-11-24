@@ -9,6 +9,10 @@ import { fmtInt } from '../game/UiFormat';
 import { VISUAL, VISUAL_TEXT } from './visualTokens';
 import { createMetaDock, createModalFrame, MODAL, type MetaDockTarget } from './modal';
 import { collectionPageCount, shouldShowPaginator } from './collectionPages';
+import { ScrollViewport } from './ScrollViewport';
+import type { MenuKeyboard, MenuKeyboardControl } from './MenuKeyboard';
+import { addUiIcon } from './uiIcons';
+import type { UiIconFrame } from './generated/iconFrames';
 
 type Page = 'milestones' | 'shells' | 'lab';
 
@@ -31,11 +35,13 @@ export class CollectionBoard {
   private page: Page = 'milestones';
   private offset = 0;
   private closed = false;
+  private viewport: ScrollViewport | null = null;
 
   constructor(
     private scene: Phaser.Scene,
     private dismissed: () => void,
-    private navigate: (target: MetaDockTarget) => void
+    private navigate: (target: MetaDockTarget) => void,
+    private keyboard?: MenuKeyboard
   ) {
     this.root = scene.add.container(0, 0).setDepth(72).setName('ofeliya-collection');
     this.collection.visit();
@@ -46,6 +52,8 @@ export class CollectionBoard {
   }
 
   private render(): void {
+    this.viewport?.destroy();
+    this.viewport = null;
     this.root.removeAll(true);
     const s = this.scene;
     const W = s.scale.width;
@@ -69,6 +77,10 @@ export class CollectionBoard {
       onClose: dismiss,
     });
 
+    let contentBody: Phaser.GameObjects.Container | null = null;
+    let textParent = this.root;
+    let controlParent = this.root;
+    const focusTargets: MenuKeyboardControl[] = [];
     const text = (
       x: number,
       y: number,
@@ -80,7 +92,7 @@ export class CollectionBoard {
       const t = s.add
         .text(x, y, value, { fontFamily: UI_FONT, fontSize: size, color, wordWrap: { width }, lineSpacing: 3 })
         .setResolution(2);
-      this.root.add(t);
+      textParent.add(t);
       return t;
     };
     const button = (
@@ -90,15 +102,30 @@ export class CollectionBoard {
       bw: number,
       label: string,
       action: () => void,
-      enabled = true
+      enabled = true,
+      iconFrame?: UiIconFrame
     ): Phaser.GameObjects.Rectangle => {
       const hit = s.add
         .rectangle(x, y, bw, 44, VISUAL.ink, 1)
         .setStrokeStyle(1, VISUAL.line)
         .setName(name);
-      if (enabled) hit.setInteractive({ useHandCursor: true }).on('pointerup', action);
-      this.root.add(hit);
-      text(x, y, label, 11, enabled ? VISUAL_TEXT.ivory : VISUAL_TEXT.muted, bw - 8).setOrigin(0.5);
+      if (enabled) hit.setInteractive({ useHandCursor: true }).on('pointerup', (pointer: Phaser.Input.Pointer) => {
+        if (!pointer?.wasCanceled) action();
+      });
+      controlParent.add(hit);
+      if (enabled && contentBody && controlParent === contentBody) {
+        focusTargets.push({ id: name, object: hit, label: () => label, activate: action });
+      }
+      if (iconFrame) {
+        controlParent.add(
+          addUiIcon(s, x, y, iconFrame)
+            .setDisplaySize(20, 20)
+            .setAlpha(enabled ? 1 : 0.45)
+            .setName(`${name}-icon`)
+        );
+      } else {
+        text(x, y, label, 11, enabled ? VISUAL_TEXT.ivory : VISUAL_TEXT.muted, bw - 8).setOrigin(0.5);
+      }
       return hit;
     };
 
@@ -137,6 +164,14 @@ export class CollectionBoard {
     const y0 = tabY + 34;
     const rowH = this.page === 'shells' ? 96 : compact ? 78 : 91;
     const pageSize = Math.max(1, Math.min(4, Math.floor((h - 250) / rowH)));
+    const total = this.page === 'shells' ? SKIN_CATALOG.length : state.achievements.length;
+    const pageCount = collectionPageCount(total, pageSize);
+    const hasPaginator = this.page !== 'lab' && shouldShowPaginator(total, pageSize);
+    contentBody = s.add.container(0, 0).setName('ofeliya-collection-body');
+    this.root.add(contentBody);
+    textParent = contentBody;
+    controlParent = contentBody;
+    let contentBottom = y0;
 
     if (this.page === 'milestones') {
       const rows = state.achievements.slice(this.offset, this.offset + pageSize);
@@ -146,12 +181,17 @@ export class CollectionBoard {
       const firstRowY = y0 + (killsGroup ? 20 : 0);
       rows.forEach((a, i) => {
         const y = firstRowY + i * rowH;
+        controlParent.add(
+          addUiIcon(s, left + MODAL.padX + 7, y + 7, a.unlocked ? 'trophy' : 'target', a.unlocked ? 'host' : 'default')
+            .setDisplaySize(14, 14)
+        );
         text(
-          left + MODAL.padX,
+          left + MODAL.padX + 18,
           y,
-          `${a.unlocked ? '◆' : '◇'} ${a.title}`,
+          a.title,
           13,
-          a.unlocked ? VISUAL_TEXT.host : VISUAL_TEXT.ivory
+          a.unlocked ? VISUAL_TEXT.host : VISUAL_TEXT.ivory,
+          w - MODAL.padX * 2 - 18
         );
         text(left + MODAL.padX, y + 22, a.description, 11, VISUAL_TEXT.muted);
         // Every milestone has a numeric target, so the bar is always a real
@@ -165,18 +205,19 @@ export class CollectionBoard {
         const fill = s.add
           .rectangle(left + MODAL.padX + (barW * ratio) / 2, barY, Math.max(2, barW * ratio), 4,
             a.unlocked ? VISUAL.host : VISUAL.player, a.unlocked ? 1 : 0.85);
-        this.root.add([back, fill]);
+        controlParent.add([back, fill]);
         const rest = Math.max(0, a.threshold - a.progress);
         text(
           left + MODAL.padX,
           y + 51,
           a.unlocked
-            ? `◆ ВЫПОЛНЕНО · ${fmtInt(a.progress)} / ${fmtInt(a.threshold)}`
+            ? `ВЫПОЛНЕНО · ${fmtInt(a.progress)} / ${fmtInt(a.threshold)}`
             : `${fmtInt(a.progress)} / ${fmtInt(a.threshold)} · ${META_COPY.remaining(rest)}`,
           11,
           a.unlocked ? VISUAL_TEXT.host : VISUAL_TEXT.muted
         );
       });
+      contentBottom = firstRowY + rows.length * rowH;
       if (killsGroup) {
         text(
           left + MODAL.padX,
@@ -197,7 +238,7 @@ export class CollectionBoard {
         const orb = s.add
           .circle(left + MODAL.padX + 16, y + 22, 15, cosmeticColor(skin.id), owned ? 0.95 : 0.25)
           .setStrokeStyle(2, VISUAL.line);
-        this.root.add(orb);
+        controlParent.add(orb);
         if (owned) orb.setInteractive().on('pointerdown', () => squashAndStretch(s, orb, { enabled: clientFlags().juice.enhanced }));
         // The sub label names the kind of the shell; the goal names the way to
         // open it.
@@ -228,7 +269,7 @@ export class CollectionBoard {
             .rectangle(left + w - MODAL.padX - 52, y + 52, 104, 30, VISUAL.host, 0.95)
             .setStrokeStyle(1, VISUAL.host, 1)
             .setName(`ofeliya-skin-${skin.id}`);
-          this.root.add(activePlate);
+          controlParent.add(activePlate);
           text(left + w - MODAL.padX - 52, y + 52, META_COPY.active, 11, '#080f14').setOrigin(0.5);
         } else if (!owned) {
           // A locked shell keeps a named, inert row handle: it is shown, but it
@@ -237,7 +278,7 @@ export class CollectionBoard {
           const lockedPlate = s.add
             .rectangle(left + w - MODAL.padX - 52, y + 52, 104, 30, VISUAL.ink, 0.001)
             .setName(`ofeliya-skin-${skin.id}`);
-          this.root.add(lockedPlate);
+          controlParent.add(lockedPlate);
           text(left + w - MODAL.padX - 52, y + 52, META_COPY.locked, 10, VISUAL_TEXT.muted, 104).setOrigin(0.5);
         } else if (!state.readOnly) {
           button(`ofeliya-skin-${skin.id}`, left + w - MODAL.padX - 52, y + 52, 104, 'ВЫБРАТЬ', () => {
@@ -245,6 +286,7 @@ export class CollectionBoard {
           });
         }
       });
+      contentBottom = shellTop + Math.min(pageSize, SKIN_CATALOG.length - this.offset) * rowH;
     } else {
       text(left + MODAL.padX, y0, 'ИССЛЕДОВАНИЯ · БЕЗ УСИЛЕНИЙ', 13, VISUAL_TEXT.host);
       const today = new Date();
@@ -275,27 +317,45 @@ export class CollectionBoard {
         11,
         VISUAL_TEXT.host
       );
+      contentBottom = top + h - 70;
     }
 
+    const dockBodyTop = frame.dockTop - MODAL.dockHeight / 2;
+    const viewportBottom = hasPaginator ? dockBodyTop - 60 : dockBodyTop - 8;
+    this.viewport = new ScrollViewport(s, {
+      parent: this.root,
+      content: contentBody,
+      bounds: {
+        x: left + 8,
+        y: y0 - 4,
+        width: w - 16,
+        height: Math.max(44, viewportBottom - y0 + 4),
+      },
+      contentHeight: contentBottom,
+      name: 'ofeliya-collection',
+      keyboard: this.keyboard,
+      escape: () => { this.destroy(); return true; },
+    });
+    this.viewport.setFocusTargets(focusTargets);
+    textParent = this.root;
+    controlParent = this.root;
+
     // ---- Pagination --------------------------------------------------------
-    // One page needs no paginator.
-    const total = this.page === 'shells' ? SKIN_CATALOG.length : state.achievements.length;
-    const pageCount = collectionPageCount(total, pageSize);
-    if (this.page !== 'lab' && shouldShowPaginator(total, pageSize)) {
+    if (hasPaginator) {
       // The paginator is placed from the dock, not from the panel edge: its hit
       // areas are 44px tall, so a fixed offset from the panel bottom pushed them
       // into the dock row and the two controls competed for the same taps.
       const dockTop = frame.dockTop - MODAL.dockHeight / 2;
       const y = dockTop - 8 - 22;
-      button('ofeliya-collection-prev', left + MODAL.padX + 27, y, 54, '‹', () => {
+      button('ofeliya-collection-prev', left + MODAL.padX + 27, y, 54, 'НАЗАД', () => {
         this.offset = Math.max(0, this.offset - pageSize);
         this.render();
-      }, this.offset > 0);
+      }, this.offset > 0, 'chevron-left');
       text(W / 2, y, `${1 + Math.floor(this.offset / pageSize)} / ${pageCount}`, 11).setOrigin(0.5);
-      button('ofeliya-collection-next', left + w - MODAL.padX - 27, y, 54, '›', () => {
+      button('ofeliya-collection-next', left + w - MODAL.padX - 27, y, 54, 'ВПЕРЁД', () => {
         this.offset += pageSize;
         this.render();
-      }, this.offset + pageSize < total);
+      }, this.offset + pageSize < total, 'chevron-right');
     }
 
     // ---- Internal dock -----------------------------------------------------
@@ -319,6 +379,8 @@ export class CollectionBoard {
     this.closed = true;
     this.scene.events.off(Phaser.Scenes.Events.SHUTDOWN, this.destroy, this);
     this.scene.tweens.killTweensOf(this.root);
+    this.viewport?.destroy();
+    this.viewport = null;
     this.root.destroy();
     PlatformBridge.setBackHandler(null);
     this.dismissed();

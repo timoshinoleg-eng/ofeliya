@@ -80,6 +80,7 @@ export class MenuScene extends Phaser.Scene {
   private socialHub: SocialHub | null = null;
   private labPanel: { close: () => void } | null = null;
   private skinGallery: { close: () => void } | null = null;
+  private keyboard: MenuKeyboard | null = null;
   private founderBadge: Phaser.GameObjects.Container | null = null;
   private profileLoadGeneration = 0;
 
@@ -147,6 +148,7 @@ export class MenuScene extends Phaser.Scene {
         return false;
       },
     });
+    this.keyboard = keyboard;
 
     const startParam = PlatformBridge.getStartParam();
     const incomingDuelId = parseDuelStartPayload(startParam);
@@ -1146,6 +1148,7 @@ export class MenuScene extends Phaser.Scene {
       this.labPanel = null;
       this.skinGallery?.close();
       this.skinGallery = null;
+      this.keyboard = null;
       this.profileLoadGeneration += 1;
       this.founderBadge?.destroy();
       this.founderBadge = null;
@@ -1206,7 +1209,8 @@ export class MenuScene extends Phaser.Scene {
       },
       () => {
         this.socialHub = null;
-      }
+      },
+      this.keyboard ?? undefined
     );
   }
 
@@ -1252,7 +1256,8 @@ export class MenuScene extends Phaser.Scene {
     this.collectionBoard = new CollectionBoard(
       this,
       () => { this.collectionBoard = null; },
-      (target) => this.openMetaSurface(target)
+      (target) => this.openMetaSurface(target),
+      this.keyboard ?? undefined
     );
   }
 
@@ -1275,7 +1280,7 @@ export class MenuScene extends Phaser.Scene {
   private showSkins(): void {
     if (this.skinGallery || this.codexOverlay || this.socialHub || this.questBoard || this.collectionBoard || this.labPanel) return;
     if (!FeatureFlags.get('skins.gallery')) return;
-    this.skinGallery = showSkinGallery(this, () => { this.skinGallery = null; });
+    this.skinGallery = showSkinGallery(this, () => { this.skinGallery = null; }, this.keyboard ?? undefined);
   }
 
   private showCodex(): void {

@@ -12,8 +12,11 @@ try {
   await page.route('**/*',route=>route.request().url().startsWith(base)?route.continue():route.abort());
   await page.goto(base+'?renderer=canvas',{waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>!!window.__game&& !document.querySelector('#splash'),{},{timeout:15000});
+  await page.waitForFunction(() => window.__game?.scene.isActive('Menu'), null, {timeout:15000});
+  await page.waitForFunction(async () => (await import('/src/game/DeferredMenuArt.ts')).deferredMenuArtMetrics.organicComplete, null, {timeout:15000});
   const result=await page.evaluate(async()=>{
     const {organicBakeMetrics}=await import('/src/game/OrganicNoise.ts');
+    const {deferredMenuArtMetrics}=await import('/src/game/DeferredMenuArt.ts');
     // Separate cache/budget for the pixel contract so the real boot budget is not reset.
     const {prepareOrganicNoise,applyOrganicNoise}=await import('/src/game/OrganicNoise.ts?qa=pixel-contract');
     const marks=window.__startupTrace?.marks||[];
@@ -28,7 +31,7 @@ try {
     const alphaSame=before.every((v,i)=>i%4!==3||v===after[i]);
     const changed=before.some((v,i)=>i%4!==3&&v!==after[i]);
     c.width=c.height=0;
-    return {organic:actual,bootTextureMs:start!=null&&end!=null?end-start:null,alphaSame,changed};
+    return {firstFrameMs:deferredMenuArtMetrics.firstFrameMs,organic:actual,bootTextureMs:start!=null&&end!=null?end-start:null,alphaSame,changed};
   });
   console.log('ORGANIC_BOOT_EVIDENCE '+JSON.stringify(result));
   assert.equal(result.organic.skipped,false,'organic bake must not be skipped on this test device');

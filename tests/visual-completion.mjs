@@ -79,11 +79,17 @@ try {
         const hub=window.__game.scene.getScene('Menu').socialHub;
         const texts=hub.body.list.filter(o=>o.type==='Text');
         const box=name=>{const o=hub.body.getByName(name),b=o?.getBounds();return b?{top:b.top,bottom:b.bottom,left:b.left,right:b.right}:null;};
-        return {panelBottom:hub.panelTop+hub.panelH,rows:texts.map(o=>({name:o.name,text:o.text,font:parseFloat(o.style.fontSize),...box(o.name)})),daily:box('ofeliya-social-daily-bg')||box('ofeliya-social-daily-disabled'),status:box('ofeliya-social-today-status')};
+        const panelBottom=hub.panelTop+hub.panelH;
+        const last=hub.body.getByName('ofeliya-social-friend-row-3');
+        hub.viewport.scrollTo(hub.viewport.scrollLimit);
+        const lastBottom=last?.getBounds().bottom??null;
+        const lastTop=last?.getBounds().top??null;
+        return {panelBottom,viewportTop:hub.panelTop+58,viewportBottom:panelBottom-12,scrollLimit:hub.viewport.scrollLimit,lastBottom,lastTop,rows:texts.map(o=>({name:o.name,text:o.text,font:parseFloat(o.style.fontSize),...box(o.name)})),daily:box('ofeliya-social-daily-bg')||box('ofeliya-social-daily-disabled'),status:box('ofeliya-social-today-status')};
       });
       assert.ok(social.rows.every(o=>o.font>=11),'social metadata floor11px');
       assert.ok(social.status.bottom<=social.daily.top-2,'daily status must stay above44px action');
-      assert.ok(social.rows.filter(o=>o.name).every(o=>o.left>=8&&o.right<=width-8&&o.bottom<social.panelBottom),'social copy must stay inside panel');
+      assert.ok(social.rows.filter(o=>o.name).every(o=>o.left>=8&&o.right<=width-8),'social copy must stay inside panel width');
+      if(state==='rich') assert.ok(social.lastTop>=social.viewportTop&&social.lastBottom<=social.viewportBottom,'final social row must be fully visible after bounded scrolling');
       console.log(`visual completion ${width}: SocialHub ${state} PASS`);
     }
     await page.evaluate(()=>window.__game.scene.getScene('Menu').socialHub.destroy());

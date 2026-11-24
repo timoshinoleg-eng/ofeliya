@@ -55,6 +55,9 @@ export function ensureUiIconFallback(
   frame: UiIconFrame,
   variant: UiIconVariant = 'default'
 ): string {
+  const mapped: Partial<Record<UiIconFrame, string>> = { heart: 'up-hp', activity: 'up-rate', shield: 'up-heal' };
+  const existing = mapped[frame];
+  if (existing && scene.textures.exists(existing)) return existing;
   const key = uiIconFallbackKey(frame, variant);
   if (scene.textures.exists(key)) return key;
   const texture = scene.textures.createCanvas(key, FALLBACK_SIZE, FALLBACK_SIZE);
@@ -65,6 +68,29 @@ export function ensureUiIconFallback(
   ctx.strokeStyle = color;
   ctx.globalAlpha = 0.9;
   ctx.lineWidth = 2;
+  const strokes: Partial<Record<UiIconFrame, number[][]>> = {
+    'close': [[12,12,28,28],[28,12,12,28]],
+    'arrow-left': [[29,20,10,20],[19,11,10,20,19,29]],
+    'arrow-right': [[11,20,30,20],[21,11,30,20,21,29]],
+    'chevron-left': [[25,11,15,20,25,29]],
+    'chevron-right': [[15,11,25,20,15,29]],
+    'chevron-up': [[11,25,20,15,29,25]],
+    'chevron-down': [[11,15,20,25,29,15]],
+    'check': [[10,20,17,27,30,13]],
+    'plus': [[20,10,20,30],[10,20,30,20]],
+    'minus': [[10,20,30,20]],
+  };
+  const segments = strokes[frame];
+  if (segments) {
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = 3;
+    for (const points of segments) {
+      ctx.beginPath(); ctx.moveTo(points[0], points[1]);
+      for (let i = 2; i < points.length; i += 2) ctx.lineTo(points[i], points[i + 1]);
+      ctx.stroke();
+    }
+    texture.refresh();
+    return key;
+  }
   ctx.beginPath();
   ctx.arc(20, 20, 12, 0, Math.PI * 2);
   ctx.stroke();

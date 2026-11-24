@@ -119,6 +119,7 @@ class PlatformFacade implements PlatformAdapter {
     return this.adapter.shareResult(text, link);
   }
   shareResultFile(file: File, text: string): Promise<FileShareOutcome> {
+    if (this.kind === 'max') return Promise.resolve('unsupported');
     return shareFile(typeof navigator === 'undefined' ? null : navigator, file, text);
   }
   haptic(style: HapticStyle = 'light'): void { this.adapter.haptic(style); }
