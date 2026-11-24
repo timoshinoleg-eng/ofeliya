@@ -105,6 +105,49 @@ try {
       }
       await page.waitForTimeout(300);
       assert.deepEqual(await page.evaluate(() => window.__boardCounts()), baseline);
+      // Check the actual fixed header control at both compact sizes, without
+      // changing the 80-cycle listener assertions above.
+      for (const [width, height] of [[390, 740], [320, 568]]) {
+        await page.setViewportSize({ width, height });
+        await page.waitForFunction(({ width, height }) => {
+          const g = window.__game;
+          return g?.scene.isActive('Menu') && g.scale.width === width && g.scale.height === height;
+        }, { width, height });
+        const open = async () => {
+          await page.evaluate(() => window.__game.scene.getScene('Menu').showSkins());
+          await page.waitForFunction(() => {
+            const m = window.__game.scene.getScene('Menu');
+            const walk = o => o.name === 'ofeliya-skin-gallery-grid' || (o.list || []).some(walk);
+            return m.children.list.some(walk);
+          });
+          await page.waitForFunction(() => {
+            const m = window.__game.scene.getScene('Menu');
+            const find = o => o.name === 'ofeliya-skin-gallery-close-hit' ? o : (o.list || []).map(find).find(Boolean);
+            const hit = m.children.list.map(find).find(Boolean);
+            return hit?.input?.enabled && hit.getBounds().width >= 43.99 && Math.abs(hit.parentContainer.scaleX - 1) < 0.0001;
+          });
+        };
+        await open();
+        const hit = await page.evaluate(() => {
+          const g = window.__game, m = g.scene.getScene('Menu');
+          const find = o => o.name === 'ofeliya-skin-gallery-close-hit' ? o : (o.list || []).map(find).find(Boolean);
+          const target = m.children.list.map(find).find(Boolean);
+          const b = target.getBounds(), c = g.canvas.getBoundingClientRect();
+          return { w: b.width, h: b.height, inputW: target.input.hitArea.width, inputH: target.input.hitArea.height,
+            x: c.x + (b.centerX + 17) * c.width / g.scale.width,
+            y: c.y + b.centerY * c.height / g.scale.height };
+        });
+        assert.ok(hit.w >= 43.99 && hit.h >= 43.99 && hit.inputW >= 44 && hit.inputH >= 44);
+        await page.mouse.click(hit.x, hit.y);
+        await page.waitForFunction(() => !window.__game.scene.getScene('Menu').skinGallery);
+        await open();
+        await page.locator('canvas').focus();
+        await page.keyboard.press('Tab');
+        await page.waitForFunction(() => document.querySelector('canvas')?.getAttribute('aria-label')?.startsWith('\u0417\u0430\u043a\u0440\u044b\u0442\u044c \u0448\u0442\u0430\u043c\u043c\u044b'));
+        await page.keyboard.press('Enter');
+        await page.waitForFunction(() => !window.__game.scene.getScene('Menu').skinGallery);
+        console.log('PASS ' + renderer + ' close touch target and keyboard ' + width + 'x' + height);
+      }
       assert.deepEqual(errors, []);
     } finally { await ctx.close(); }
   }

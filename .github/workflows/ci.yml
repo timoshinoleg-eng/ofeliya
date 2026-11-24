@@ -23,6 +23,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Visual Foundation deterministic contracts
+        run: |
+          node tests/ui-icon-atlas-contract.mjs
+          node tests/organic-noise.mjs
+          node tests/scroll-viewport.mjs
+          node tests/result-file-share.cjs
+          npm run test:skins
+
       - name: Challenge v1/v2 compatibility smoke
         run: npm run test:challenge
 
@@ -301,6 +309,15 @@ jobs:
 
       - name: Skin SVG loader and overlay lifecycle
         run: node tests/skin-loader-lifecycle.mjs
+
+      - name: Visual Foundation icon atlas runtime
+        run: node tests/ui-icon-atlas-runtime.mjs
+
+      - name: Visual Foundation organic noise browser
+        run: node tests/organic-noise-browser.mjs
+
+      - name: Visual Foundation result card PNG
+        run: node tests/run-share-card.mjs
 
       - name: Combined Muse convergence cross-flow (platform, collection, quests, cosmetics)
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:muse-convergence-crossflow

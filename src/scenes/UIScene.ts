@@ -2840,7 +2840,7 @@ export class UIScene extends Phaser.Scene {
     };
     c.once(Phaser.GameObjects.Events.DESTROY, cleanupPreparedShare);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, cleanupPreparedShare);
-    if (!duelCreatable || challengeTarget || legacyChallengeCreatable) {
+    if (PlatformBridge.kind === 'browser' && (!duelCreatable || challengeTarget || legacyChallengeCreatable)) {
       void preparedShare.prepare(import('../ui/runShareCard').then(({ renderRunShareCard }) => renderRunShareCard({
         run: res, platform: PlatformBridge.kind, name: PlatformBridge.getDisplayName(),
         mutations: res.legendaryIds.map(id => getLegendaryDefinition(id).title),
@@ -2851,7 +2851,7 @@ export class UIScene extends Phaser.Scene {
       fileShareBusy = true;
       try {
         const file = preparedShare.file;
-        if (file && PlatformBridge.shareResultFile) {
+        if (PlatformBridge.kind === 'browser' && file && PlatformBridge.shareResultFile) {
           const status = await PlatformBridge.shareResultFile(file, link ? text + '\n' + link : text);
           if (shareDisposed || status === 'cancelled') return null;
           if (status === 'shared') return true;

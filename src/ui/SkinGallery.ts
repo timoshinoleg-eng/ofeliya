@@ -18,7 +18,7 @@
  */
 import Phaser from 'phaser';
 import { FONT } from '../game/config';
-import { BORDER, PANEL, ROLE } from './tokens';
+import { BORDER, PANEL, ROLE, TOUCH } from './tokens';
 import { VISUAL_TEXT } from './visualTokens';
 import { PlatformBridge } from '../platform';
 import { Sfx } from '../systems/Sfx';
@@ -36,7 +36,7 @@ import { equipSkin, getEquippedSkinId, isSkinOwned } from '../game/skins/SkinOwn
 import { FeatureFlags } from '../game/FeatureFlags';
 import { isStorefrontVisible } from '../game/shop/Storefront';
 import { ScrollViewport } from './ScrollViewport';
-import type { MenuKeyboard, MenuKeyboardControl } from './MenuKeyboard';
+import type { MenuKeyboard, MenuKeyboardControl, MenuKeyboardScope } from './MenuKeyboard';
 import { addUiIcon } from './uiIcons';
 
 const RARITY_COLOR: Record<string, string> = {
@@ -61,16 +61,22 @@ function closeButton(
   y: number,
   depth: number,
   onClose: () => void
-): Phaser.GameObjects.Image {
-  const btn = addUiIcon(scene, x, y, 'close')
+): { icon: Phaser.GameObjects.Image; hit: Phaser.GameObjects.Rectangle; activate: () => void } {
+  const icon = addUiIcon(scene, x, y, 'close')
     .setDisplaySize(20, 20)
+    .setDepth(depth);
+  const hit = scene.add.rectangle(x, y, TOUCH.min, TOUCH.min, 0x000000, 0.001)
     .setDepth(depth)
+    .setName('ofeliya-skin-gallery-close-hit')
     .setInteractive({ useHandCursor: true });
-  btn.on('pointerup', () => {
+  const activate = () => {
     Sfx.play('click');
     onClose();
+  };
+  hit.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+    if (!pointer?.wasCanceled) activate();
   });
-  return btn;
+  return { icon, hit, activate };
 }
 
 /** Кнопка-карточка: прямоугольник + подпись, паттерн чипов меню. */
@@ -135,9 +141,12 @@ export function showSkinGallery(
 
   let closed = false;
   let viewport: ScrollViewport | null = null;
+  let loadingFocus: MenuKeyboardScope | null = null;
   const doClose = () => {
     if (closed) return;
     closed = true;
+    loadingFocus?.destroy();
+    loadingFocus = null;
     viewport?.destroy();
     viewport = null;
     if (content) scene.tweens.killTweensOf(content);
@@ -151,6 +160,8 @@ export function showSkinGallery(
   // (и не проигрывает заново анимацию открытия).
   let content: Phaser.GameObjects.Container | null = null;
   const renderContent = (animate: boolean) => {
+    loadingFocus?.destroy();
+    loadingFocus = null;
     viewport?.destroy();
     viewport = null;
     if (content) scene.tweens.killTweensOf(content);
@@ -169,11 +180,15 @@ export function showSkinGallery(
       .rectangle(cx, cy, panelW, panelH, ROLE.surface.panel, PANEL.card)
       .setStrokeStyle(BORDER.thin, ROLE.faction.reward, 0.6);
     cadd(panel);
-    cadd(
-      closeButton(scene, cx + panelW / 2 - 22, cy - panelH / 2 + 30, 1, () => {
-        doClose();
-      })
-    );
+    const close = closeButton(scene, cx + panelW / 2 - TOUCH.min / 2, cy - panelH / 2 + 30, 1, doClose);
+    cadd(close.icon);
+    cadd(close.hit);
+    // This fixed header target has no scroll id: focusing it must not move the grid.
+    const closeFocus: MenuKeyboardControl = {
+      object: close.hit, label: () => '\u0417\u0430\u043a\u0440\u044b\u0442\u044c \u0448\u0442\u0430\u043c\u043c\u044b', activate: close.activate,
+    };
+    loadingFocus = keyboard?.createScope({ escape: () => { doClose(); return true; } }) ?? null;
+    loadingFocus?.setControls([closeFocus]);
 
     const title = scene.add
       .text(cx, cy - panelH / 2 + 30, 'ШТАММЫ', {
@@ -219,7 +234,7 @@ export function showSkinGallery(
       const gridTop = cy - panelH / 2 + 84;
       const grid = scene.add.container(0, 0).setName('ofeliya-skin-gallery-grid');
       contentRoot.add(grid);
-      const focusTargets: MenuKeyboardControl[] = [];
+      const focusTargets: MenuKeyboardControl[] = [closeFocus];
       // Витрина портирована (партия 3): шоп-скины показывают цену и кнопку
       // «КУПИТЬ» только когда витрина видима по флагу storefront.variant;
       // при дефолтном 'hidden' — «СКОРО», как раньше.
@@ -340,6 +355,8 @@ export function showSkinGallery(
         }
       });
       const rows = Math.ceil(skins.length / cols);
+      loadingFocus?.destroy();
+      loadingFocus = null;
       viewport = new ScrollViewport(scene, {
         parent: contentRoot,
         content: grid,

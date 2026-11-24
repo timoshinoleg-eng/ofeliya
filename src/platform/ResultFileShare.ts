@@ -2,6 +2,12 @@
 export type FileShareOutcome = 'shared' | 'unsupported' | 'error' | 'cancelled';
 
 type ShareNavigator = Pick<Navigator, 'canShare' | 'share'>;
+
+/** Messenger-native sharing owns the user gesture; PNG files are browser-only. */
+export function shareFileForPlatform(kind: 'browser' | 'telegram' | 'max', host: ShareNavigator | null, file: File, text: string): Promise<FileShareOutcome> {
+  if (kind !== 'browser') return Promise.resolve('unsupported');
+  return shareFile(host, file, text);
+}
 const failure = (error: unknown): FileShareOutcome =>
   error instanceof Object && 'name' in error && error.name === 'AbortError' ? 'cancelled' : 'error';
 
