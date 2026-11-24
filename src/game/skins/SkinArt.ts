@@ -22,10 +22,19 @@ export function renderSkinSvg(def: SkinDef): string {
 }
 
 /** Data URL для загрузки в Phaser. */
+export function encodeSkinSvgDataUrl(svg: string): string {
+  // Phaser 3.90 decodes data URLs via atob() directly into responseText.
+  // Generated SVG uses ASCII markup; escape Unicode text/attributes so its
+  // XML meaning survives that byte-string decoder without mojibake.
+  const xml = svg.replace(/[^\x00-\x7F]/gu, ch => `&#${ch.codePointAt(0)};`);
+  const bytes = new TextEncoder().encode(xml);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return `data:image/svg+xml;base64,${btoa(binary)}`;
+}
+
 export function skinSvgDataUrl(def: SkinDef): string {
-  // Phaser 3.90 treats every data: URL as base64 and passes it to atob().
-  const svg = renderSkinSvg(def).replace(/[^\x00-\x7F]/gu, ch => `&#${ch.codePointAt(0)};`);
-  return `data:image/svg+xml;base64,${btoa(svg)}`;
+  return encodeSkinSvgDataUrl(renderSkinSvg(def));
 }
 
 /**
@@ -48,6 +57,7 @@ export function ensureSkinTexture(scene: Phaser.Scene, def: SkinDef): Promise<vo
       // мог резолвить чужой промис раньше времени.
       scene.load.off(`filecomplete-svg-${key}`, onComplete);
       scene.load.off('loaderror', onError);
+      scene.events.off('shutdown', done);
       resolve();
     };
     const onComplete = (): void => {
@@ -59,6 +69,7 @@ export function ensureSkinTexture(scene: Phaser.Scene, def: SkinDef): Promise<vo
     };
     scene.load.once(`filecomplete-svg-${key}`, onComplete);
     scene.load.on('loaderror', onError);
+    scene.events.once('shutdown', done);
     try {
       const factor = artSourceFactor(key);
       scene.load.svg(key, skinSvgDataUrl(def), { width: 56 * factor, height: 56 * factor });

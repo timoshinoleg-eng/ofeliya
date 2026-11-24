@@ -299,6 +299,9 @@ jobs:
       - name: Muse quest-to-Phaser scenes and touch lifecycle
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:quest-scenes
 
+      - name: Skin SVG loader and overlay lifecycle
+        run: node tests/skin-loader-lifecycle.mjs
+
       - name: Combined Muse convergence cross-flow (platform, collection, quests, cosmetics)
         run: NODE_PATH="$GITHUB_WORKSPACE/node_modules" npm run test:muse-convergence-crossflow
 
