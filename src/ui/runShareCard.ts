@@ -13,10 +13,12 @@ export interface RunShareCardInput {
   mutations?: readonly string[];
 }
 function handle(platform: PlatformKind): string {
+  // A public MAX result card must identify OFELIYA, not arbitrary host configuration.
+  if (platform === 'max') return '@id402806822924_5_bot';
   const env = import.meta.env;
-  const canonical = platform === 'max' ? '@id402806822924_5_bot' : SHARE_BOT_HANDLE;
-  const raw = String(platform === 'max' ? env.VITE_MAX_BOT_NAME ?? '' : env.VITE_TG_BOT_USERNAME || env.VITE_TELEGRAM_BOT_NAME || '').trim().replace(/^@/, '');
-  if (!/^[A-Za-z0-9_]{1,64}$/.test(raw) || raw === 'id402806822924_1_bot') return canonical;
+  const raw = String(env.VITE_TG_BOT_USERNAME || env.VITE_TELEGRAM_BOT_NAME || '').trim().replace(/^@/, '');
+  // Numeric MAX account handles are not Telegram project identities.
+  if (!/^[A-Za-z0-9_]{1,64}$/.test(raw) || /^id\d+_\d+_bot$/i.test(raw)) return SHARE_BOT_HANDLE;
   return '@' + raw;
 }
 function round(ctx: CanvasRenderingContext2D,x:number,y:number,w:number,h:number,r:number): void {

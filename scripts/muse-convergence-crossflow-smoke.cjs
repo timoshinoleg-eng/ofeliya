@@ -713,12 +713,22 @@ const mark = (name, value, kind = 'real') => {
     await page.waitForFunction(() => Boolean(window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection')));
 
     const achievements = await page.evaluate(async () => {
-      const { COLLECTION_CATALOG } = await import('/src/game/collection/ClientCollection.ts');
+      const { COLLECTION_CATALOG, ClientCollection } = await import('/src/game/collection/ClientCollection.ts');
       const root = window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection');
-      const texts = root.list.filter(o => o.type === 'Text').map(o => o.text);
+      const { fmtInt } = await import('/src/game/UiFormat.ts');
+      const { META_COPY } = await import('/src/game/UiCopy.ts');
+      const all = []; const visit = o => { all.push(o); (o.list ?? []).forEach(visit); }; visit(root);
+      const texts = all.filter(o => o.type === 'Text').map(o => o.text);
+      const body = all.find(o => o.name === 'ofeliya-collection-body');
+      if (!body) throw Error('collection milestone body missing');
+      const bodyNodes = []; const visitBody = o => { bodyNodes.push(o); (o.list ?? []).forEach(visitBody); }; visitBody(body);
+      const bodyTexts = bodyNodes.filter(o => o.type === 'Text').map(o => o.text);
+      const expectedProgress = new ClientCollection().snapshot().achievements.map(a => a.unlocked
+        ? '\u0412\u042b\u041f\u041e\u041b\u041d\u0415\u041d\u041e \u00b7 ' + fmtInt(a.progress) + ' / ' + fmtInt(a.threshold)
+        : fmtInt(a.progress) + ' / ' + fmtInt(a.threshold) + ' \u00b7 ' + META_COPY.remaining(Math.max(0, a.threshold - a.progress)));
       return {
         catalogSize: COLLECTION_CATALOG.length,
-        progressRows: texts.filter(t => /^\d[\d\s ]*\/\s[\d\s ]+$/.test(t)).length,
+        progressRows: bodyTexts.filter(t => expectedProgress.includes(t)).length,
         hasMoneyWords: texts.some(t => /руб|₽|цена|купить|оплат|скидк/i.test(t)),
       };
     });
@@ -807,8 +817,9 @@ const mark = (name, value, kind = 'real') => {
     await tap('ofeliya-collection-lab');
     const lab = await page.evaluate(() => {
       const root = window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection');
-      const texts = root.list.filter(o => o.type === 'Text').map(o => o.text);
-      const interactive = root.list.filter(o => o.input?.enabled).map(o => o.name || o.type);
+      const all = []; const visit = o => { all.push(o); (o.list ?? []).forEach(visit); }; visit(root);
+      const texts = all.filter(o => o.type === 'Text').map(o => o.text);
+      const interactive = all.filter(o => o.input?.enabled).map(o => o.name || o.type);
       return {
         informational: texts.some(t => t.includes('БЕЗ УСИЛЕНИЙ')),
         noPermanentPower: texts.some(t => t.includes('не меняются')),
