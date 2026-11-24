@@ -19,7 +19,7 @@ function load(path) {
   const code = ts.transpileModule(readFileSync(path, 'utf8'), { compilerOptions: {
     target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, esModuleInterop: true,
   } }).outputText;
-  const localRequire = name => name === 'phaser' ? phaser : load(resolve(dirname(path), `${name}.ts`));
+  const localRequire = name => name === 'phaser' ? phaser : load(resolve(dirname(path), name.endsWith('.js') ? name : `${name}.ts`));
   new Function('require', 'module', 'exports', code)(localRequire, module, module.exports);
   cache.set(path, module.exports); return module.exports;
 }
