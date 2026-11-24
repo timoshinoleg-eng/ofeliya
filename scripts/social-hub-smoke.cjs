@@ -462,7 +462,7 @@ async function runHttpRetry(browser) {
   await waitLoaded(page);
   contract = await inspectHub(page, size);
   if (contract.retry) throw new Error('retry control must clear after successful manual retry');
-  if (contract.seasonRows !== 3 || contract.friendRows !== 3) throw new Error('manual retry did not render data');
+  if (contract.seasonRows !== 4 || contract.friendRows !== 4) throw new Error('manual retry did not render data');
   if (requests.length !== 8) throw new Error('manual retry must issue exactly one second batch: ' + requests.length);
   if (errors.length) throw new Error('pageerror in HTTP retry ' + JSON.stringify(errors));
   await ctx.close();
