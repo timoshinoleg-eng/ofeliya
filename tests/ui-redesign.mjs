@@ -10,6 +10,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 
@@ -29,6 +30,7 @@ async function shot(page, name) {
 }
 const CHROME = [
   process.env.OFELIYA_CHROME_PATH,
+  'C:/Program Files/Google/Chrome/Application/chrome.exe',
   '/usr/bin/google-chrome',
   '/usr/bin/google-chrome-stable',
   '/usr/bin/chromium',
@@ -97,7 +99,7 @@ const layoutModule = await (async () => {
     outfile: bundle,
     logLevel: 'warning',
   });
-  return import(bundle);
+  return import(pathToFileURL(bundle).href);
 })();
 
 /**

@@ -134,9 +134,13 @@ export function showSkinGallery(
   };
 
   let closed = false;
+  let viewport: ScrollViewport | null = null;
   const doClose = () => {
     if (closed) return;
     closed = true;
+    viewport?.destroy();
+    viewport = null;
+    if (content) scene.tweens.killTweensOf(content);
     root.destroy();
     onClose();
   };
@@ -147,6 +151,9 @@ export function showSkinGallery(
   // (и не проигрывает заново анимацию открытия).
   let content: Phaser.GameObjects.Container | null = null;
   const renderContent = (animate: boolean) => {
+    viewport?.destroy();
+    viewport = null;
+    if (content) scene.tweens.killTweensOf(content);
     content?.destroy();
     content = scene.add.container(0, 0);
     root.add(content);
@@ -162,7 +169,7 @@ export function showSkinGallery(
       .rectangle(cx, cy, panelW, panelH, ROLE.surface.panel, PANEL.card)
       .setStrokeStyle(BORDER.thin, ROLE.faction.reward, 0.6);
     cadd(panel);
-    add(
+    cadd(
       closeButton(scene, cx + panelW / 2 - 22, cy - panelH / 2 + 30, 1, () => {
         doClose();
       })
@@ -333,7 +340,7 @@ export function showSkinGallery(
         }
       });
       const rows = Math.ceil(skins.length / cols);
-      const viewport = new ScrollViewport(scene, {
+      viewport = new ScrollViewport(scene, {
         parent: contentRoot,
         content: grid,
         bounds: {
