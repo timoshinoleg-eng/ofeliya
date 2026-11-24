@@ -6,7 +6,8 @@ const { execFileSync } = require('node:child_process');
 const ts = require('typescript');
 
 const root = path.join(__dirname, '..');
-const parent = '7c18a40cc10b47f97c3af515dec36d095f1d2b15';
+// Integrated PERF-02 commit; Enemy.ts blob is identical to original 7c18a40.
+const parent = '00f784b5072aa68491d29daaeb683c671f1bc3c5';
 const atlas = 'bio-cycle-immune-antibody';
 const hitAtlas = 'bio-hit-immune-antibody';
 
