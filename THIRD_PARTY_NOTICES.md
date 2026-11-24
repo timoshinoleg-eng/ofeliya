@@ -315,3 +315,58 @@ File: `scripts/biological-impact-smoke.cjs`.
   waits that assume the new `vfx.biologicalGhosts` pool, which does not exist
   on pre-B1 builds (guards added so the same script can capture baseline
   evidence against old builds in `IMPACT_TOLERANCE=baseline` mode).
+
+## FastNoiseLite 1.1.1
+
+- Source: https://www.npmjs.com/package/fastnoise-lite/v/1.1.1
+- License: MIT; copyright (c) 2023 Jordan Peck and contributors.
+- Local file: `src/vendor/FastNoiseLite.js`, including the full MIT license header.
+
+## Canvas-Txt 5.0.2
+- Source: https://www.npmjs.com/package/canvas-txt/v/5.0.2 (MIT, Geon George).
+- Vendored ESM, declarations and original license: src/vendor/canvas-txt/; offscreen result share cards only.
+
+
+## VF-02 UI icon atlas — healthicons (CC0) + Tabler Icons (MIT)
+
+Files:
+
+- `public/assets/ui-icons-atlas.png`, `public/assets/ui-icons-atlas.json` —
+  baked atlas (59 outline icons x 4 palette variants, 52px cells, 988x676).
+- `tools/icons-src/svg/healthicons/**` (25 outline SVGs) and
+  `tools/icons-src/svg/tabler/*.svg` (34 outline SVGs) — verbatim upstream
+  sources; `tools/icons-src/files.json` records per-file bytes, sha256 and the
+  exact upstream URL.
+- `tools/icons-src/licenses/healthicons-LICENSE.txt`,
+  `tools/icons-src/licenses/tabler-LICENSE.txt` — upstream license copies.
+- `src/ui/generated/iconFrames.ts` — generated frame registry (do not edit by
+  hand; regenerate with `node --experimental-strip-types scripts/build-icon-atlas.ts`).
+
+### healthicons
+
+- Upstream: `https://github.com/resolvetosavelives/healthicons`
+- Pinned revision: commit `fe100687bdbb0bb99220fc4ec752a515d19d1dbc` (main, 2026-11-19)
+- Source path template: `public/icons/svg/outline/<category>/<name>.svg`
+- License: **CC0 1.0 Universal (public domain dedication)** for the icon files
+  (quoted in the copied license file; the website code's MIT terms do not apply
+  to the icons). Attribution not required; recorded here per project release rule.
+
+### Tabler Icons
+
+- Upstream: `https://github.com/tabler/tabler-icons`
+- Pinned revision: release `v3.52.0`, commit `4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35`
+- Source path template: `icons/outline/<name>.svg`
+- License: **MIT**, Copyright (c) 2020-2026 Paweł Kuna (full text in the copied
+  license file).
+
+### Regeneration and verification
+
+- Fetch/verify sources: `node scripts/fetch-icon-sources.mjs` (fails loudly on
+  any non-200, non-SVG body or duplicate frame; re-hashes into `files.json`).
+- Bake atlas: `node --experimental-strip-types scripts/build-icon-atlas.ts`
+  (renders via the existing Playwright Chromium; no new npm dependency, no sharp).
+  `tools/icons-src/build-info.json` records the pixel hash (FNV-1a over the
+  composed RGBA), png/json sha256 and the manifest sha256; the `--check` flag
+  re-renders and fails on pixel-hash drift.
+
+FastNoiseLite vendored source: upstream trailing whitespace normalized for git diff --check; no code changes.

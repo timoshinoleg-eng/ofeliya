@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { applyOrganicNoise, prepareOrganicNoise } from './OrganicNoise';
 import { COLORS } from './config';
 import { CORE_ART, artSourceFactor, rawArtKey } from './ArtMetrics';
 import { trackMutationArtSource } from './MutationArtRecovery';
@@ -50,6 +51,7 @@ export function combatParticleFrame(color: number, kind: 'spark' | 'chip' = 'spa
  * Silhouette and phone-size readability take priority over microscopic realism.
  */
 export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
+  prepareOrganicNoise();
   const make = (
     key: string,
     width: number,
@@ -122,6 +124,7 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
       }
       ctx.restore();
     }
+    if (key === 'virus-player' || key === 'immune-antibody' || key === 'rna-fragment') applyOrganicNoise(ctx, width, height);
     texture.refresh();
     trackMutationArtSource(key, texture, factor > 1 && scene.textures.exists(rawKey));
     // The canonical bake now owns its pixels; release the larger raw GPU upload only afterwards.
@@ -808,6 +811,7 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
     const bg = ctx.createLinearGradient(0, 0, 0, 256);
     bg.addColorStop(0, '#1b080d'); bg.addColorStop(0.5, '#300e15'); bg.addColorStop(1, '#1b080d');
     ctx.fillStyle = bg; ctx.fillRect(0, 0, 256, 256);
+    applyOrganicNoise(ctx, 256, 256, true);
     // 0.5 slope shifts 128px per tile: exactly four 32px fibre lanes, seamless on X.
     for (let i = -5; i < 9; i++) {
       ctx.beginPath();
@@ -846,6 +850,13 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
     cardiacFiber.refresh();
   }
 
+  make('sz_ui_card_sheen', 128, 128, (ctx, w, h) => {
+    const gradient = ctx.createLinearGradient(0, 0, w, h);
+    gradient.addColorStop(0, 'rgba(255,255,255,0.18)');
+    gradient.addColorStop(0.5, 'rgba(255,255,255,0.02)');
+    gradient.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = gradient; ctx.fillRect(0, 0, w, h);
+  });
   // Keep a tiny colour-token side effect so TypeScript does not consider COLORS an accidental
   // dependency if this file is later simplified. It also documents the canonical viral accent.
   void rgba('#ff4fb5', ((COLORS.virus & 0xff) / 255) * 0 + 1);

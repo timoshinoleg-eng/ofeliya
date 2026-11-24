@@ -1,3 +1,5 @@
+import { PreparedShare } from '../platform/ResultFileShare';
+import { renderRunShareCard } from '../ui/runShareCard';
 import Phaser from 'phaser';
 import {
   createChallengePayload,
@@ -2823,6 +2825,39 @@ export class UIScene extends Phaser.Scene {
       challengeTarget || legacyChallengeCreatable
         ? `Побить результат ${fmtTime(res.timeMs)} · ${fmtInt(res.kills)} кл.`
         : undefined;
+    // Prepare only on the result screen. File sharing remains optional and must be invoked in a user gesture.
+    const preparedShare = new PreparedShare();
+    let shareDisposed = false;
+    let fileShareBusy = false;
+    const cleanupPreparedShare = (): void => {
+      if (shareDisposed) return;
+      shareDisposed = true;
+      preparedShare.dispose();
+      this.events.off(Phaser.Scenes.Events.SHUTDOWN, cleanupPreparedShare);
+    };
+    c.once(Phaser.GameObjects.Events.DESTROY, cleanupPreparedShare);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, cleanupPreparedShare);
+    if (!duelCreatable || challengeTarget || legacyChallengeCreatable) {
+      void preparedShare.prepare(renderRunShareCard({
+        run: res, platform: PlatformBridge.kind, name: PlatformBridge.getDisplayName(),
+        mutations: res.legendaryIds.map(id => getLegendaryDefinition(id).title),
+      })).catch(() => { /* PNG preparation must never block the existing text share action. */ });
+    }
+    const sharePreparedResult = async (text: string, link?: string): Promise<boolean | null> => {
+      if (shareDisposed || fileShareBusy) return null;
+      fileShareBusy = true;
+      try {
+        const file = preparedShare.file;
+        if (file && PlatformBridge.shareResultFile) {
+          const status = await PlatformBridge.shareResultFile(file, link ? text + '\n' + link : text);
+          if (shareDisposed || status === 'cancelled') return null;
+          if (status === 'shared') return true;
+        }
+        return shareDisposed ? null : await PlatformBridge.shareResult(text, link);
+      } finally {
+        fileShareBusy = false;
+      }
+    };
     this.button(c, shareButtonLabel, W / 2, y, false, () => {
       const mins = fmtTime(res.timeMs);
       // The share text leaves the game: it names the product, states the outcome
@@ -2853,7 +2888,8 @@ export class UIScene extends Phaser.Scene {
           firstRun: SaveSystem.get().runs <= 1,
           legendaryName: res.win ? legendaryName : null,
         });
-        void PlatformBridge.shareResult(legacyText, link ?? undefined).then((ok) => {
+        void sharePreparedResult(legacyText, link ?? undefined).then((ok) => {
+          if (ok === null || shareDisposed) return;
           if (!ok) {
             this.toast(c, 'Нативный шаринг недоступен в этом клиенте');
           } else {
@@ -2867,7 +2903,8 @@ export class UIScene extends Phaser.Scene {
       }
 
       if (!duelCreatable) {
-        void PlatformBridge.shareResult(shareText).then((ok) => {
+        void sharePreparedResult(shareText).then((ok) => {
+          if (ok === null || shareDisposed) return;
           if (!ok) this.toast(c, 'Нативный шаринг недоступен в этом клиенте');
           else void trackProductEvent('share', PlatformBridge, { kind: dailyIntent ? 'daily-result' : 'result', runSeed: res.runSeed, daily: Boolean(dailyIntent) });
         });

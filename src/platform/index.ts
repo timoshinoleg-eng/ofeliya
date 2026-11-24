@@ -9,6 +9,7 @@ import { BrowserPlatform } from './BrowserPlatform';
 import { MaxPlatform } from './MaxPlatform';
 import { TELEGRAM_BRIDGE_READY_EVENT } from './TelegramBridgeLoader';
 import { TelegramPlatform } from './TelegramPlatform';
+import { shareFile, type FileShareOutcome } from './ResultFileShare';
 
 /**
  * The MAX CDN script is loaded independently from the application bundle. A one-shot adapter
@@ -116,6 +117,9 @@ class PlatformFacade implements PlatformAdapter {
   }
   shareResult(text: string, link?: string): Promise<boolean> {
     return this.adapter.shareResult(text, link);
+  }
+  shareResultFile(file: File, text: string): Promise<FileShareOutcome> {
+    return shareFile(typeof navigator === 'undefined' ? null : navigator, file, text);
   }
   haptic(style: HapticStyle = 'light'): void { this.adapter.haptic(style); }
   notify(type: NotifyType): void { this.adapter.notify(type); }

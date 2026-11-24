@@ -6,6 +6,7 @@ import { ensureBiologicalAnimations } from '../game/BiologicalAnimation';
 import { ensureBiologicalImpacts } from '../game/BiologicalImpact';
 import { StartupTrace } from '../systems/StartupTrace';
 import { startMutationArtRecovery } from '../game/MutationArtRecovery';
+import { UI_ICON_ATLAS_KEY } from '../ui/generated/iconFrames';
 
 /** Load optional core art; procedural textures keep startup usable when a file fails. */
 export class BootScene extends Phaser.Scene {
@@ -18,11 +19,16 @@ export class BootScene extends Phaser.Scene {
     // per file and only six concurrent downloads on Android; either would delay fallback.
     const previousRetries = this.load.maxRetries;
     this.load.maxRetries = 0;
-    this.load.maxParallelDownloads = Math.max(this.load.maxParallelDownloads, Object.keys(CORE_ART).length);
+    this.load.maxParallelDownloads = Math.max(this.load.maxParallelDownloads, Object.keys(CORE_ART).length + 2);
     try {
       for (const key of Object.keys(CORE_ART)) {
         if (this.textures.exists(key)) continue;
         this.load.image(rawArtKey(key), `art/${key}.webp`, { responseType: 'blob', timeout: 1800 });
+      }
+      // Optional VF-02 UI icon atlas: same bounded window and retry policy. When it
+      // fails, create() installs instant procedural `up-icon-*` fallbacks instead.
+      if (!this.textures.exists(UI_ICON_ATLAS_KEY)) {
+        this.load.atlas(UI_ICON_ATLAS_KEY, 'assets/ui-icons-atlas.png', 'assets/ui-icons-atlas.json', { responseType: 'blob', timeout: 1800 }, { responseType: '', timeout: 1800 });
       }
     } finally {
       // Each queued File captures maxRetries immediately; unrelated future loads retain policy.
@@ -37,6 +43,8 @@ export class BootScene extends Phaser.Scene {
     ensureStrainZeroTextures(this);
     ensureBiologicalAnimations(this);
     ensureBiologicalImpacts(this);
+    // Atlas missing (offline/timeout): procedural fallbacks keep every UI icon slot renderable.
+
     StartupTrace.mark('boot.textures.end');
     document.getElementById('splash')?.remove();
     StartupTrace.mark('splash.removed');

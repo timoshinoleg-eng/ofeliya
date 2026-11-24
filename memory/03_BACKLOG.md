@@ -1630,3 +1630,6 @@ Root validation: actual Canvas/WebGL echo matrix 16/16 passed at320/390/768/1080
 # QA render-split v2 — 2026-11-04
 
 Протокол 4 забегов SUPERSEDED критикой Mark (ненадёжен: модалка прячется, забеги несравнимы). После мержа v2: НОВЫЙ протокол — ОДИН бой на S20+: базовые значения, затем переключения групп кнопками туда-обратно в том же бою, скриншот оверлея до/после каждого переключения + hide: label. Развилка: падение render при скрытии в том же бою → вклад группы; не падает ни на одной → базовая/stall-сторона; частичное падение → сумма вкладов. Фикс render до результатов сплита не выбирать.
+
+## 2026-11-24 — visual foundation local checkpoint
+Isolated feature branch only. Main and production unchanged. VF-01 microtexture, VF-02 generated atlas/loading/fallback helper, VF-04 PNG result sharing integrated. VF-03 scroll/modal consumers remain unintegrated in visual-ui. Not release-ready; final startup and browser matrices require evidence. Baseline client JS gzip 533333 B; checkpoint pre-commit build 556314 B (+22981 B). Canvas noise and composite measured 33.5 ms in one desktop browser run; not a mobile acceptance measurement.

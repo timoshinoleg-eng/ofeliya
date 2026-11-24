@@ -1744,3 +1744,6 @@ Docs cleanup (Muse, 2026-10-29, шаг 4 плана релиза): README.md + A
 # QA render-split v2 — 2026-11-04
 
 Факт: на main 00f0468 добавлена доработка диагностики (ветка feat/qa-render-split-v2) по критике Mark: переключение групп В БОЮ кнопками GEMS/ATMO/UI в GameScene (только под qaTools-гейтом; ?qaHide= — начальное состояние), модалка мутаций вне ui-hide (UIScene.setQaHudHidden прячет только persistent HUD + флаг qaHudHidden, гардящий re-show combo/boss в update), fps убран из шапки оверлея (только мс), оверлей на y=103 ниже HUD-полосы + фон 0.7, строка other сокращена до (derived). Восстановления: gems — только active, vignette — vignetteNormalVisible, atmo — снапшот qaHiddenVisible на старте hide-эпизода. Продовая стоимость: null-check qaHide в кадр — negligible, not measured.
+
+## 2026-11-24 — visual foundation local checkpoint
+Isolated feature branch only. Main and production unchanged. VF-01 microtexture, VF-02 generated atlas/loading/fallback helper, VF-04 PNG result sharing integrated. VF-03 scroll/modal consumers remain unintegrated in visual-ui. Not release-ready; final startup and browser matrices require evidence. Baseline client JS gzip 533333 B; checkpoint pre-commit build 556314 B (+22981 B). Canvas noise and composite measured 33.5 ms in one desktop browser run; not a mobile acceptance measurement.
