@@ -23,7 +23,9 @@ export function renderSkinSvg(def: SkinDef): string {
 
 /** Data URL для загрузки в Phaser. */
 export function skinSvgDataUrl(def: SkinDef): string {
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(renderSkinSvg(def))}`;
+  // Phaser 3.90 treats every data: URL as base64 and passes it to atob().
+  const svg = renderSkinSvg(def).replace(/[^\x00-\x7F]/gu, ch => `&#${ch.codePointAt(0)};`);
+  return `data:image/svg+xml;base64,${btoa(svg)}`;
 }
 
 /**
@@ -56,9 +58,13 @@ export function ensureSkinTexture(scene: Phaser.Scene, def: SkinDef): Promise<vo
       if (file?.key === key) done();
     };
     scene.load.once(`filecomplete-svg-${key}`, onComplete);
-    scene.load.once('loaderror', onError);
-    const factor = artSourceFactor(key);
-    scene.load.svg(key, skinSvgDataUrl(def), { width: 56 * factor, height: 56 * factor });
-    scene.load.start();
+    scene.load.on('loaderror', onError);
+    try {
+      const factor = artSourceFactor(key);
+      scene.load.svg(key, skinSvgDataUrl(def), { width: 56 * factor, height: 56 * factor });
+      scene.load.start();
+    } catch {
+      done();
+    }
   });
 }
