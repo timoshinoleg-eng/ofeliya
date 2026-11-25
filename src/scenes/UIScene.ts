@@ -176,6 +176,10 @@ export class UIScene extends Phaser.Scene {
   private modalOpen = false;
   private pendingBossReveal: PendingBossReveal | null = null;
   private activeBossReveals = 0;
+  // VideoInterstitial owns one overlay; replacement cancels without a callback.
+  private activeBossVideos = 0;
+  private bossVideoGeneration = 0;
+  private bossVideoPausedGame = false;
   private modalGeneration = 0;
   private overShown = false;
   private uiBlocked = false;
@@ -199,6 +203,9 @@ export class UIScene extends Phaser.Scene {
     this.modalOpen = false;
     this.pendingBossReveal = null;
     this.activeBossReveals = 0;
+    this.activeBossVideos = 0;
+    this.bossVideoGeneration += 1;
+    this.bossVideoPausedGame = false;
     this.modalGeneration = 0;
     this.overShown = false;
     this.uiBlocked = false;
@@ -401,6 +408,10 @@ export class UIScene extends Phaser.Scene {
       this.contextHintText = null;
       this.pauseOverlay = null;
       this.manualPaused = false;
+      this.activeBossReveals = 0;
+      this.activeBossVideos = 0;
+      this.bossVideoGeneration += 1;
+      this.bossVideoPausedGame = false;
       VideoInterstitial.cancelActive();
     });
     this.layout();
@@ -409,7 +420,7 @@ export class UIScene extends Phaser.Scene {
   update(): void {
     this.juice.update();
     this.gs?.notificationRegion.setBlocked(this.uiBlocked || this.modalOpen || this.overShown ||
-      this.activeBossReveals > 0 || this.contextHintKey !== null || this.pendingContextHints.length > 0 || document.visibilityState === 'hidden' || !this.scene.isActive('Game'));
+      this.isBossPresentationActive() || this.contextHintKey !== null || this.pendingContextHints.length > 0 || document.visibilityState === 'hidden' || !this.scene.isActive('Game'));
     const run = this.registry.get('run') as RunSnapshot | undefined;
     const W = this.scale.width;
     const H = this.scale.height;
@@ -606,7 +617,7 @@ export class UIScene extends Phaser.Scene {
       duration,
       onComplete: options.onComplete,
     };
-    if (this.modalOpen || this.uiBlocked || this.transitionOverlay || this.overShown || this.activeBossReveals > 0) {
+    if (this.modalOpen || this.uiBlocked || this.transitionOverlay || this.overShown || this.isBossPresentationActive()) {
       if (!this.pendingContextHints.some((pending) => pending.key === next.key)) {
         this.pendingContextHints.push(next);
       }
@@ -660,12 +671,12 @@ export class UIScene extends Phaser.Scene {
   private suspendContextHint(): void {
     const container = this.contextHintContainer;
     const label = this.contextHintText;
-    if (container?.visible && label?.text) {
+    if (container && label?.text && (container.visible || this.contextHintKey !== null)) {
       if (!this.pendingContextHints.some((pending) => pending.key === (this.contextHintKey ?? label.text))) {
         this.pendingContextHints.unshift({
           key: this.contextHintKey ?? label.text,
           message: label.text,
-          duration: 1200,
+          duration: this.contextHintKey !== null && this.contextHintTimer?.paused ? Math.max(1, this.contextHintTimer.getRemaining()) : 1200,
           onComplete: this.contextHintComplete ?? undefined,
         });
       }
@@ -681,10 +692,11 @@ export class UIScene extends Phaser.Scene {
   private flushContextHint(): void {
     if (
       this.pendingContextHints.length === 0 ||
+      this.contextHintKey !== null ||
       this.modalOpen ||
       this.uiBlocked ||
       this.transitionOverlay ||
-      this.activeBossReveals > 0 ||
+      this.isBossPresentationActive() ||
       this.overShown
     ) {
       return;
@@ -895,6 +907,41 @@ export class UIScene extends Phaser.Scene {
     return playing;
   }
 
+  private isBossPresentationActive(): boolean {
+    return this.activeBossReveals > 0 || this.activeBossVideos > 0;
+  }
+
+  private pauseBossContextHint(): void {
+    this.contextHintContainer?.setVisible(false);
+    if (this.contextHintKey === null) return;
+    if (this.contextHintTimer) this.contextHintTimer.paused = true;
+    if (this.contextHintContainer) {
+      for (const tween of this.tweens.getTweensOf(this.contextHintContainer)) tween.pause();
+    }
+  }
+
+  private finishBossPresentation(flushPending = true): void {
+    if (this.isBossPresentationActive()) return;
+    this.setHudCinematicAlpha(1);
+    if (this.contextHintKey !== null && !this.modalOpen && !this.uiBlocked && !this.overShown && !this.transitionOverlay) {
+      this.contextHintContainer?.setVisible(true);
+      if (this.contextHintContainer) {
+        for (const tween of this.tweens.getTweensOf(this.contextHintContainer)) tween.resume();
+      }
+      if (this.contextHintTimer) this.contextHintTimer.paused = false;
+    } else if (flushPending) {
+      this.flushContextHint();
+    }
+    this.renderOnboarding();
+  }
+
+  private resumeBossVideoGame(): void {
+    if (!this.bossVideoPausedGame) return;
+    this.bossVideoPausedGame = false;
+    if (!this.manualPaused && !this.modalOpen && !this.uiBlocked && !this.transitionOverlay &&
+        !this.overShown && this.scene.isPaused('Game')) this.scene.resume('Game');
+  }
+
   showBossReveal(
     name: string,
     textureKey: string,
@@ -916,7 +963,7 @@ export class UIScene extends Phaser.Scene {
     const dim = this.add
       .rectangle(W / 2, H / 2, W, H, 0x030208, 0.62)
       .setDepth(149);
-    this.contextHintContainer?.setVisible(false);
+    this.pauseBossContextHint();
     this.onboardingContainer?.setVisible(false);
     const c = this.add.container(0, 0).setDepth(150).setAlpha(0);
 
@@ -1036,53 +1083,61 @@ export class UIScene extends Phaser.Scene {
         c.destroy(true);
         dim.destroy();
         this.activeBossReveals = Math.max(0, this.activeBossReveals - 1);
-        if (this.activeBossReveals === 0) {
-          this.setHudCinematicAlpha(1);
-          if (this.contextHintKey !== null && !this.modalOpen && !this.uiBlocked && !this.overShown && !this.transitionOverlay) {
-            // Restore the unfinished boss instruction first. Otherwise the
-            // pending lysis hint overwrites it on reveal completion.
-            this.contextHintContainer?.setVisible(true);
-          } else {
-            this.flushContextHint();
-          }
-          this.renderOnboarding();
-        }
+        this.finishBossPresentation();
       },
     });
 
     if (!videoId) return false;
-    let videoPausedGame = false;
-    const resumeBossFight = () => {
-      if (!videoPausedGame) return;
-      videoPausedGame = false;
-      if (this.scene.isPaused('Game')) this.scene.resume('Game');
+    // A new boss video replaces the old one (cancelActive has no callbacks).
+    // Claim the gate before play so even a synchronous failure is safe.
+    const generation = ++this.bossVideoGeneration;
+    this.activeBossVideos = 1;
+    let settled = false;
+    const finishVideo = () => {
+      if (settled || generation !== this.bossVideoGeneration) return;
+      settled = true;
+      this.activeBossVideos = 0;
+      this.resumeBossVideoGame();
+      this.finishBossPresentation();
     };
-    return VideoInterstitial.play(videoId, {
+    const playing = VideoInterstitial.play(videoId, {
       onVisible: () => {
-        if (!this.scene.isActive('Game') || this.scene.isPaused('Game')) return;
-        videoPausedGame = true;
+        if (settled || generation !== this.bossVideoGeneration ||
+            !this.scene.isActive('Game') || this.scene.isPaused('Game')) return;
+        this.bossVideoPausedGame = true;
         this.resetControls();
         this.scene.pause('Game');
       },
-      onComplete: resumeBossFight,
-      onFail: resumeBossFight,
+      onComplete: finishVideo,
+      onFail: finishVideo,
       maxDurationMs: 5000,
       ariaLabel: 'Пропустить появление босса',
     });
+    if (!playing) finishVideo();
+    return playing;
   }
 
   hideStageTransition(flushPending = true): void {
     VideoInterstitial.cancelActive();
+    const cancelledBossVideo = this.activeBossVideos > 0;
+    this.activeBossVideos = 0;
+    this.bossVideoGeneration += 1;
     if (!this.transitionOverlay) {
       this.uiBlocked = false;
-      if (flushPending) this.flushContextHint();
+      if (cancelledBossVideo) {
+        this.resumeBossVideoGame();
+        this.finishBossPresentation(flushPending);
+      } else if (flushPending) this.flushContextHint();
       return;
     }
     this.tweens.killTweensOf(this.transitionOverlay);
     this.transitionOverlay.destroy(true);
     this.transitionOverlay = null;
     this.uiBlocked = false;
-    if (flushPending) this.flushContextHint();
+    if (cancelledBossVideo) {
+      this.resumeBossVideoGame();
+      this.finishBossPresentation(flushPending);
+    } else if (flushPending) this.flushContextHint();
   }
 
   dismissProgressionForStageBoundary(): void {
@@ -1390,7 +1445,7 @@ export class UIScene extends Phaser.Scene {
     const copy = ONBOARDING_COPY[step.id];
     const W = this.scale.width;
     const hidden =
-      Boolean(this.gs?.notificationRegion.occupied) || this.contextHintKey !== null || this.pendingContextHints.length > 0 || this.overShown || this.modalOpen || this.activeBossReveals > 0;
+      Boolean(this.gs?.notificationRegion.occupied) || this.contextHintKey !== null || this.pendingContextHints.length > 0 || this.overShown || this.modalOpen || this.isBossPresentationActive();
     if (!this.onboardingContainer) {
       const panelW = Math.min(W - 28, 380);
       const panel = this.add
@@ -1464,7 +1519,7 @@ export class UIScene extends Phaser.Scene {
 
   canResumeFromHost(): boolean {
     return !this.manualPaused && !this.modalOpen && !this.transitionOverlay &&
-      !this.overShown && !this.uiBlocked && this.activeBossReveals === 0;
+      !this.overShown && !this.uiBlocked && !this.isBossPresentationActive();
   }
 
   private showPauseMenu(): void {

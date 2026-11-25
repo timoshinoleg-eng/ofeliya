@@ -193,3 +193,25 @@ Score/Duel/Daily/Stars, стор, фичефлаги геймплея — не �
 Codex обнаружил, что прежний шаг 5 использовал местоимение «её» без явного объекта: перед ним показывались только иммунные клетки. В player-facing `ONBOARDING_COPY.infect.body` объект теперь назван прямо: «Крупная клетка организма»; действие «войди и стой внутри» сохранено. Атака продолжает работать автоматически, текст не предлагает отключать её.
 
 Проверки после исправления: `tests/boss-presentation.mjs`, `test:language`, `test:ui-copy`, `test:onboarding` — PASS. Браузерный screenshot `onboarding-step5-320x568.png` из раунда 2 отражает **предыдущую формулировку**; считать его исторической иллюстрацией геометрии, а не подтверждением буквального финального текста. После изменения необходима повторная мобильная визуальная проверка.
+
+
+## 9. Boss hint / video synchronization (Telegram Desktop E2E)
+
+The QA run on Telegram Desktop 7.4.4.0 (Windows, HP VEOL, real WebView2)
+revealed a presentation race in the integrated P0-2 + Visual Foundation build:
+the banner tween ended while the fullscreen immunePrimeIntro video was still
+playing. The active hint's scene timer continued behind the overlay, and the
+queued lysis instruction could start before the player could read it.
+
+The narrow UIScene fix treats the banner and video as one presentation gate.
+It preserves the active hint's timer and tweens until both have finished;
+queued hints cannot replace it early. Video completion, failure, unavailable
+media, replacement and cancellation are covered, with lifecycle resets and
+generation protection. A modal opened during a hidden hint requeues it ahead
+of the second phase with the remaining time, removing the old timer.
+The existing no-active-hint timer contract is preserved. No gameplay,
+checkpoint, damage multiplier, video asset, or visual foundation code changes.
+
+Regression: tests/boss-presentation.mjs exercises both completion orders,
+complete/fail, duplicate callbacks, modal suspension, replacement/cancel,
+and unavailable media. Real Telegram QA is a separate release gate.
