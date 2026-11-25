@@ -8,6 +8,10 @@ interface EnemyHealthSlot {
   spawnSerial: number;
   visibleUntil: number;
   isElite: boolean;
+  drawnWidth: number;
+  drawnRadius: number;
+  drawnFraction: number;
+  drawnColor: number;
 }
 
 /** Small fixed pool for recently damaged, non-boss enemies. */
@@ -21,6 +25,10 @@ export class EnemyHealthOverlay {
       spawnSerial: 0,
       visibleUntil: 0,
       isElite: false,
+      drawnWidth: -1,
+      drawnRadius: -1,
+      drawnFraction: -1,
+      drawnColor: -1,
     }));
   }
 
@@ -52,6 +60,8 @@ export class EnemyHealthOverlay {
       slot.enemy = enemy;
       slot.spawnSerial = enemy.spawnSerial;
       slot.isElite = enemy.isElite;
+      // Reassignments must not retain previous pooled enemies geometry.
+      slot.drawnRadius = -1;
     }
 
     slot.visibleUntil = time + (enemy.isElite ? 1400 : 1000);
@@ -96,11 +106,19 @@ export class EnemyHealthOverlay {
     if (!enemy) return;
     const width = Phaser.Math.Clamp(enemy.radius * 2.4, 24, 38);
     const height = 4;
-    const x = enemy.x - width / 2;
-    const y = enemy.y - enemy.radius - 8;
+    // Retain local geometry, moving the bar with transform-only position updates.
+    const x = -width / 2;
+    const y = -enemy.radius - 8;
     const fraction = Phaser.Math.Clamp(enemy.hp / Math.max(1, enemy.maxHp), 0, 1);
     const color = slot.isElite ? COLORS.gold : COLORS.green;
     const graphics = slot.graphics;
+    graphics.setPosition(enemy.x, enemy.y).setVisible(true);
+    if (
+      slot.drawnWidth === width &&
+      slot.drawnRadius === enemy.radius &&
+      slot.drawnFraction === fraction &&
+      slot.drawnColor === color
+    ) return;
     graphics.clear();
     graphics.fillStyle(0x081018, 0.88);
     graphics.fillRoundedRect(x, y, width, height, 1.5);
@@ -108,7 +126,10 @@ export class EnemyHealthOverlay {
     graphics.fillRoundedRect(x, y, width * fraction, height, 1.5);
     graphics.lineStyle(0.8, COLORS.white, 0.46);
     graphics.strokeRoundedRect(x, y, width, height, 1.5);
-    graphics.setVisible(true);
+    slot.drawnWidth = width;
+    slot.drawnRadius = enemy.radius;
+    slot.drawnFraction = fraction;
+    slot.drawnColor = color;
   }
 
   private release(slot: EnemyHealthSlot): void {
@@ -117,5 +138,9 @@ export class EnemyHealthOverlay {
     slot.spawnSerial = 0;
     slot.visibleUntil = 0;
     slot.isElite = false;
+    slot.drawnWidth = -1;
+    slot.drawnRadius = -1;
+    slot.drawnFraction = -1;
+    slot.drawnColor = -1;
   }
 }

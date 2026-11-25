@@ -43,6 +43,20 @@ import {
 
 export type EnemyDamageSource = 'standard' | 'lysis';
 
+const BIO_FRAMES: readonly string[] = ['bio-0', 'bio-1', 'bio-2', 'bio-3', 'bio-4', 'bio-5'];
+const KNOCK_DECAY_BY_SCENE = new WeakMap<
+  Phaser.Scene,
+  { time: number; delta: number; value: number }
+>();
+
+function knockDecayAt(scene: Phaser.Scene, time: number, delta: number): number {
+  const cached = KNOCK_DECAY_BY_SCENE.get(scene);
+  if (cached && cached.time === time && cached.delta === delta) return cached.value;
+  const value = Math.pow(0.82, delta / (1000 / 60));
+  KNOCK_DECAY_BY_SCENE.set(scene, { time, delta, value });
+  return value;
+}
+
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
   kind: EnemyKind = 'swarm';
   hp = 1;
@@ -86,6 +100,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private primeBrokenUntil = 0;
   private primePhaseLast: 'armored' | 'recovery' | 'broken' = 'armored';
   private primePhaseTransitionAt = -1;
+  private primeAuraCacheMode: 'armored' | 'recovery' | 'broken' | null = null;
+  private primeAuraCacheRadius = -1;
+  private primeAuraPulseDrawn = false;
   // Reusable echo descriptor: getDangerEcho fills this in place and returns it,
   // so the hot loop above density 110 does not allocate per enemy per frame.
   // The reference is only valid until this enemy's next getDangerEcho call —
@@ -116,6 +133,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private anomalyLockedDirY = 0;
   private anomalyTelegraph: Phaser.GameObjects.Graphics | null = null;
   private anomalyAura: Phaser.GameObjects.Graphics | null = null;
+  private anomalyAuraCacheMode: 'pursuit' | 'telegraph' | 'recovery' | null = null;
+  private anomalyAuraCacheRadius = -1;
   private biologicalFrame = -1;
   private biologicalHitAt = -Infinity;
   private biologicalHitDirection = 0;
@@ -168,6 +187,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // would fire a spurious transition ceremony on the first aura update.
     this.primePhaseLast = 'armored';
     this.primePhaseTransitionAt = -1;
+    this.invalidateAuraGeometry();
     this.eliteModifier = opts.elite ? (opts.eliteModifier ?? null) : null;
     this.eliteVisualSignature =
       this.eliteModifier === 'regenerator'
@@ -277,7 +297,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.drawCardiacAura(this.bossAura, Math.max(68, this.radius + 42), this.color);
         this.bossAura.setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.88);
       } else {
-        this.drawPrimeAura(this.bossAura, Math.max(62, this.radius + 36), 'armored');
+        const auraRadius = Math.max(62, this.radius + 36);
+        this.drawPrimeAura(this.bossAura, auraRadius, 'armored');
+        this.primeAuraCacheMode = 'armored';
+        this.primeAuraCacheRadius = auraRadius;
         this.bossAura.setBlendMode(Phaser.BlendModes.NORMAL).setAlpha(0.72);
       }
       this.bossAura.setVisible(true).setPosition(x, y);
@@ -287,7 +310,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     if (kind === 'anomaly') {
       if (!this.anomalyAura) this.anomalyAura = this.scene.add.graphics().setDepth(9);
-      this.drawAnomalyAura(this.anomalyAura, Math.max(46, this.radius + 30), 'pursuit');
+      const auraRadius = Math.max(46, this.radius + 30);
+      this.drawAnomalyAura(this.anomalyAura, auraRadius, 'pursuit');
+      this.anomalyAuraCacheMode = 'pursuit';
+      this.anomalyAuraCacheRadius = auraRadius;
       this.anomalyAura.setVisible(true).setPosition(x, y);
     } else {
       this.anomalyAura?.setVisible(false);
@@ -317,7 +343,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       const hitAtlas = biologicalHitAtlasKey('immune-antibody');
       const hitFrame = biologicalHitFrame(this.scene.time.now - this.biologicalHitAt, this.biologicalHitDirection, reduced);
       const texture = hitFrame && this.scene.textures.exists(hitAtlas) ? hitAtlas : atlas;
-      const pose = texture === hitAtlas ? hitFrame! : `bio-${frame}`;
+      const pose = texture === hitAtlas ? hitFrame! : BIO_FRAMES[frame] ?? `bio-${frame}`;
       if (this.texture.key !== texture || this.frame.name !== pose) this.setTexture(texture, pose);
       this.biologicalFrame = frame;
     }
@@ -462,7 +488,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       }
     }
     (this.body as Phaser.Physics.Arcade.Body).setVelocity(velocityX, velocityY);
-    const knockDecay = Math.pow(0.82, delta / (1000 / 60));
+    const knockDecay = knockDecayAt(this.scene, time, delta);
     this.knockX *= knockDecay;
     this.knockY *= knockDecay;
 
@@ -672,6 +698,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       .setAlpha(motion.alpha);
   }
 
+  private invalidateAuraGeometry(): void {
+    this.primeAuraCacheMode = null;
+    this.primeAuraCacheRadius = -1;
+    this.primeAuraPulseDrawn = false;
+    this.anomalyAuraCacheMode = null;
+    this.anomalyAuraCacheRadius = -1;
+  }
+
   private drawAnomalyAura(
     g: Phaser.GameObjects.Graphics,
     radius: number,
@@ -707,7 +741,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
           ? 'recovery'
           : 'pursuit';
     const radius = Math.max(46, this.radius + 30);
-    this.drawAnomalyAura(this.anomalyAura, radius, mode);
+    if (this.anomalyAuraCacheMode !== mode || this.anomalyAuraCacheRadius !== radius) {
+      this.drawAnomalyAura(this.anomalyAura, radius, mode);
+      this.anomalyAuraCacheMode = mode;
+      this.anomalyAuraCacheRadius = radius;
+    }
     const rate = this.anomalyPhase === 2 ? 0.0016 : 0.0009;
     this.anomalyAura
       .setVisible(true)
@@ -866,6 +904,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.eliteRing?.setVisible(false);
     this.eliteMarker?.setVisible(false);
     this.bossAura?.setVisible(false);
+    this.invalidateAuraGeometry();
     this.roleTelegraph?.setVisible(false).clear();
     this.bossTelegraph?.setVisible(false).clear();
     this.anomalyAura?.setVisible(false);
@@ -948,6 +987,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.eliteRing?.setVisible(false);
       this.eliteMarker?.setVisible(false);
       this.bossAura?.setVisible(false);
+      this.invalidateAuraGeometry();
       this.roleTelegraph?.setVisible(false).clear();
       this.bossTelegraph?.setVisible(false).clear();
       this.anomalyAura?.setVisible(false);
@@ -1145,19 +1185,25 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.primePhaseTransitionAt = time;
     }
     const radius = Math.max(62, this.radius + 36);
-    this.drawPrimeAura(this.bossAura, radius, mode);
+    const geometryChanged = this.primeAuraCacheMode !== mode || this.primeAuraCacheRadius !== radius;
+    const pulse = prefersReducedMotion() ? 0 : phaseTransitionPulse(time - this.primePhaseTransitionAt);
+    if (geometryChanged || pulse > 0 || this.primeAuraPulseDrawn) {
+      this.drawPrimeAura(this.bossAura, radius, mode);
+      // One synchronized ceremony for armored -> recovery/broken: a short
+      // expanding ring that decays with the same envelope the HUD bar pulses
+      // with. Pure stroked geometry, no allocations, no gameplay state.
+      if (pulse > 0) {
+        this.bossAura.lineStyle(2.5, COLORS.white, 0.55 * pulse);
+        this.bossAura.strokeCircle(0, 0, radius + (1 - pulse) * 26);
+      }
+      this.primeAuraCacheMode = mode;
+      this.primeAuraCacheRadius = radius;
+      this.primeAuraPulseDrawn = pulse > 0;
+    }
     if (prefersReducedMotion()) {
       const alpha = mode === 'broken' ? 0.82 : mode === 'recovery' ? 0.72 : 0.56;
       this.bossAura.setVisible(true).setPosition(this.x, this.y).setRotation(0).setScale(1).setAlpha(alpha);
       return;
-    }
-    // One synchronized ceremony for armored -> recovery/broken: a short
-    // expanding ring that decays with the same envelope the HUD bar pulses
-    // with. Pure stroked geometry, no allocations, no gameplay state.
-    const pulse = phaseTransitionPulse(time - this.primePhaseTransitionAt);
-    if (pulse > 0) {
-      this.bossAura.lineStyle(2.5, COLORS.white, 0.55 * pulse);
-      this.bossAura.strokeCircle(0, 0, radius + (1 - pulse) * 26);
     }
     const pulseBoost = pulse * 0.15;
     const broken = mode === 'broken';
