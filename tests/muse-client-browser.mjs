@@ -52,8 +52,9 @@ export async function checkMuseClient(browser,url) {
   await tap('ofeliya-collection-shells');
   const overlaps=await page.evaluate(()=>{
    const root=window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection');
-   const close=root.list.find(o=>o.name==='ofeliya-modal-close-hit').getBounds();
-   return root.list.filter(o=>o.name?.startsWith('ofeliya-skin-')).filter(o=>{
+   const all=[];const visit=o=>{all.push(o);(o.list??[]).forEach(visit);};visit(root);
+   const close=all.find(o=>o.name==='ofeliya-modal-close-hit').getBounds();
+   return all.filter(o=>o.name?.startsWith('ofeliya-skin-')).filter(o=>{
     const b=o.getBounds();return b.y<close.bottom&&b.bottom>close.y;
    }).map(o=>o.name);
   });
@@ -61,11 +62,12 @@ export async function checkMuseClient(browser,url) {
   await tap('ofeliya-collection-next');
   const shellState=await page.evaluate(()=>{
    const board=window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection');
-   const texts=board.list.filter(o=>o.type==='Text').map(o=>o.text);
+   const all=[];const visit=o=>{all.push(o);(o.list??[]).forEach(visit);};visit(board);
+   const texts=all.filter(o=>o.type==='Text').map(o=>o.text);
    return {
     lastSkin:texts.some(t=>t.includes('Золотой прайм')),
     locked:texts.some(t=>t.startsWith('ЗАКРЫТО')),
-    lockedSelect:board.list.some(o=>o.name==='ofeliya-skin-skin.gilded-prime'&&Boolean(o.input?.enabled)),
+    lockedSelect:all.some(o=>o.name==='ofeliya-skin-skin.gilded-prime'&&Boolean(o.input?.enabled)),
    };
   });
   assert.equal(shellState.lastSkin,true,'pagination keeps last skin reachable');
@@ -73,7 +75,9 @@ export async function checkMuseClient(browser,url) {
   assert.equal(shellState.lockedSelect,false,'a locked shell must not offer a select action');
   await tap('ofeliya-collection-lab');
   assert.equal(await page.evaluate(()=>{
-   const texts=window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection').list.filter(o=>o.type==='Text');
+   const root=window.__game.scene.getScene('Menu').children.getByName('ofeliya-collection');
+   const all=[];const visit=o=>{all.push(o);(o.list??[]).forEach(visit);};visit(root);
+   const texts=all.filter(o=>o.type==='Text');
    return texts.find(o=>o.text.startsWith('Исследование клеток')).getBounds().bottom<=texts.find(o=>o.text.startsWith('Открыто вех')).getBounds().y;
   }),true,'safe-area-reduced lab research and status text do not overlap');
   await tap('ofeliya-modal-close-hit');

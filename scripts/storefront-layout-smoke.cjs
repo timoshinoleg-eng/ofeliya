@@ -52,6 +52,7 @@ const VIEWPORTS = [
   { width: 320, height: 520 },
   { width: 320, height: 568 },
   { width: 360, height: 640 },
+  { width: 390, height: 740 },
   { width: 390, height: 844 },
   { width: 412, height: 915 },
 ];
@@ -259,7 +260,7 @@ async function extractGeometry(page) {
       if (obj?.type === 'Text' && obj.text === 'ВИТРИНА') {
         chrome.title = { bounds: b(obj), fontSize: parseInt(obj.style.fontSize, 10) };
       }
-      if (obj?.type === 'Text' && obj.text === '‹ НАЗАД') chrome.backLabel = b(obj);
+      if (obj?.type === 'Text' && obj.text === 'НАЗАД') chrome.backLabel = b(obj);
       if (obj?.type === 'Text' && /тестовый режим|Telegram Stars|рельс MAX/.test(obj.text || '')) {
         chrome.mode = { bounds: b(obj), text: obj.text };
       }
@@ -269,7 +270,7 @@ async function extractGeometry(page) {
       const bg = scene.root.list.find(
         (o) =>
           o?.type === 'Rectangle' &&
-          Math.abs(o.x - c.x) < 2 &&
+          c.x >= b(o).x && c.x <= b(o).x + b(o).w &&
           Math.abs(o.y - c.y) < 2 &&
           o.input?.enabled
       );

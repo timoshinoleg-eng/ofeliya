@@ -1,9 +1,26 @@
 import Phaser from 'phaser';
 
-type Control = {
+export type MenuKeyboardControl = {
+  id?: string;
   object: Phaser.GameObjects.Rectangle | Phaser.GameObjects.Text;
   label: () => string;
   activate: () => void;
+  onFocus?: () => void;
+  keyboardAvailable?: boolean;
+};
+
+export type MenuKeyboardScope = {
+  setControls: (controls: MenuKeyboardControl[]) => void;
+  focus: (id: string) => boolean;
+  destroy: () => void;
+};
+
+type Scope = {
+  controls: MenuKeyboardControl[];
+  index: number;
+  blocked: () => boolean;
+  escape: () => boolean;
+  active: boolean;
 };
 
 /** Scene-local keyboard focus; actions are shared with pointer handlers, never emitted. */
@@ -11,8 +28,8 @@ export class MenuKeyboard {
   // Phaser 3.90 can revisit the manager queue before POST_STEP, including events
   // ignored while a DOM overlay was open. Remember those across scene restarts too.
   private static readonly seenEvents = new WeakSet<KeyboardEvent>();
-  private controls: Control[] = [];
-  private index = -1;
+  private readonly base: Scope;
+  private readonly scopes: Scope[] = [];
   private ring: Phaser.GameObjects.Graphics;
   private canvas: HTMLCanvasElement;
   private previousAttributes: (string | null)[];
@@ -23,12 +40,14 @@ export class MenuKeyboard {
     private scene: Phaser.Scene,
     private options: { blocked: () => boolean; escape: () => boolean },
   ) {
+    this.base = { controls: [], index: -1, blocked: options.blocked, escape: options.escape, active: true };
+    this.scopes.push(this.base);
     this.ring = scene.add.graphics().setDepth(90).setName('ofeliya-menu-keyboard-focus');
     this.canvas = scene.game.canvas;
     this.previousAttributes = this.attributes.map(name => this.canvas.getAttribute(name));
     this.canvas.tabIndex = 0;
     this.canvas.setAttribute('aria-label', 'Меню OFELIYA. Tab — выбор, Enter или пробел — действие.');
-    this.canvas.setAttribute('aria-keyshortcuts', 'Tab Shift+Tab ArrowUp ArrowDown Enter Space');
+    this.canvas.setAttribute('aria-keyshortcuts', 'Tab Shift+Tab ArrowUp ArrowDown Enter Space Escape');
     // No global addCapture: native DOM dialogs must keep Tab/Space/Enter defaults.
     scene.input.keyboard?.on('keydown', this.onKey, this);
     scene.events.on(Phaser.Scenes.Events.POST_UPDATE, this.render, this);
@@ -37,8 +56,45 @@ export class MenuKeyboard {
     scene.events.once(Phaser.Scenes.Events.DESTROY, this.destroy, this);
   }
 
-  add(object: Control['object'], label: Control['label'], activate: Control['activate']): void {
-    this.controls.push({ object, label, activate });
+  add(object: MenuKeyboardControl['object'], label: MenuKeyboardControl['label'], activate: MenuKeyboardControl['activate']): void {
+    this.base.controls.push({ object, label, activate });
+  }
+
+  createScope(options: { blocked?: () => boolean; escape: () => boolean }): MenuKeyboardScope {
+    const scope: Scope = {
+      controls: [], index: -1, blocked: options.blocked ?? (() => false), escape: options.escape, active: true,
+    };
+    this.scopes.push(scope);
+    return {
+      setControls: (controls) => {
+        if (!scope.active || this.destroyed) return;
+        const focusedId = scope.controls[scope.index]?.id;
+        scope.controls = [...controls];
+        scope.index = focusedId === undefined ? -1 : controls.findIndex(control => control.id === focusedId);
+      },
+      focus: (id) => {
+        if (!scope.active || this.destroyed || this.currentScope() !== scope) return false;
+        const index = scope.controls.findIndex(control => control.id === id && this.available(control));
+        if (index < 0) return false;
+        scope.index = index;
+        this.canvas.focus({ preventScroll: true });
+        scope.controls[index].onFocus?.();
+        this.render();
+        return true;
+      },
+      destroy: () => {
+        if (!scope.active) return;
+        scope.active = false;
+        scope.controls = [];
+        const index = this.scopes.indexOf(scope);
+        if (index > 0) this.scopes.splice(index, 1);
+        if (!this.destroyed) this.render();
+      },
+    };
+  }
+
+  private currentScope(): Scope {
+    return this.scopes[this.scopes.length - 1] ?? this.base;
   }
 
   private domOwnsFocus(event?: KeyboardEvent): boolean {
@@ -52,8 +108,9 @@ export class MenuKeyboard {
     return foreign(event?.target) || foreign(document.activeElement) || overlayVisible;
   }
 
-  private available(control: Control): boolean {
-    return control.object.active && control.object.visible && Boolean(control.object.input?.enabled);
+  private available(control: MenuKeyboardControl): boolean {
+    return control.object.active && control.object.visible &&
+      (control.keyboardAvailable === true || Boolean(control.object.input?.enabled));
   }
 
   private onKey(event: KeyboardEvent): void {
@@ -61,15 +118,16 @@ export class MenuKeyboard {
     MenuKeyboard.seenEvents.add(event);
     if (!this.scene.sys.isActive() || this.scene.scene.isActive('Game') || this.domOwnsFocus(event) ||
         event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
+    const scope = this.currentScope();
     if (event.key === 'Escape') {
-      if (!event.repeat && this.options.escape()) {
+      if (!event.repeat && scope.escape()) {
         event.preventDefault();
         this.canvas.focus({ preventScroll: true });
         this.render();
       }
       return;
     }
-    if (this.options.blocked()) {
+    if (scope.blocked()) {
       // Phaser overlays have no native tab stops. Keep canvas focus for Escape,
       // without advancing/activating the menu behind them. DOM was excluded above.
       if (['Tab', 'ArrowUp', 'ArrowDown', 'Enter', ' '].includes(event.key)) event.preventDefault();
@@ -79,22 +137,23 @@ export class MenuKeyboard {
     const move = event.key === 'Tab' || event.key === 'ArrowUp' || event.key === 'ArrowDown';
     const activate = event.key === 'Enter' || event.key === ' ';
     if (!move && !activate) return;
-    if (activate && (this.index < 0 || !this.available(this.controls[this.index]))) return;
+    if (activate && (scope.index < 0 || !this.available(scope.controls[scope.index]))) return;
     event.preventDefault();
     if (event.repeat) return;
     this.canvas.focus({ preventScroll: true });
     if (move) {
       const direction = backward ? -1 : 1;
-      let next = this.index < 0 ? (backward ? 0 : -1) : this.index;
-      for (let i = 0; i < this.controls.length; i++) {
-        next = (next + direction + this.controls.length) % this.controls.length;
-        if (this.available(this.controls[next])) {
-          this.index = next;
+      let next = scope.index < 0 ? (backward ? 0 : -1) : scope.index;
+      for (let i = 0; i < scope.controls.length; i++) {
+        next = (next + direction + scope.controls.length) % scope.controls.length;
+        if (this.available(scope.controls[next])) {
+          scope.index = next;
+          scope.controls[next].onFocus?.();
           break;
         }
       }
     } else {
-      this.controls[this.index].activate();
+      scope.controls[scope.index].activate();
     }
     this.render();
   }
@@ -103,8 +162,9 @@ export class MenuKeyboard {
 
   private render(): void {
     this.ring.clear();
-    const control = this.controls[this.index];
-    if (!control || !this.available(control) || this.options.blocked() || this.domOwnsFocus() ||
+    const scope = this.currentScope();
+    const control = scope.controls[scope.index];
+    if (!control || !this.available(control) || scope.blocked() || this.domOwnsFocus() ||
         document.activeElement !== this.canvas) return;
     const bounds = control.object.getBounds();
     // The stroke stays outside the glyphs; its 2px reach fits the utility row's
@@ -129,7 +189,11 @@ export class MenuKeyboard {
       if (value === null) this.canvas.removeAttribute(name);
       else this.canvas.setAttribute(name, value);
     });
-    this.controls = [];
+    for (const scope of this.scopes) {
+      scope.active = false;
+      scope.controls = [];
+    }
+    this.scopes.length = 0;
     this.ring.destroy();
   }
 }

@@ -55,6 +55,10 @@ import {
 } from '../game/achievements/MetaAchievements';
 import { showMetaToast } from '../ui/RetentionOverlays';
 import { showSkinGrantToast } from '../ui/SkinGallery';
+import { ScrollViewport } from '../ui/ScrollViewport';
+import { MenuKeyboard, type MenuKeyboardControl } from '../ui/MenuKeyboard';
+import { addUiIcon } from '../ui/uiIcons';
+import type { UiIconFrame } from '../ui/generated/iconFrames';
 import type {
   PaymentProvider,
   Product,
@@ -132,7 +136,7 @@ function wireTapButton(btn: Phaser.GameObjects.Rectangle, onTap: () => void): vo
   btn.on('pointerdown', () => btn.setAlpha(0.6));
   btn.on('pointerup', (pointer: Phaser.Input.Pointer) => {
     btn.setAlpha(1);
-    if (isTap(pointer)) onTap();
+    if (!pointer.wasCanceled && isTap(pointer)) onTap();
   });
   btn.on('pointerout', () => btn.setAlpha(1));
 }
@@ -166,17 +170,12 @@ const CARD_GAP_HEADER_DESC = 8;
 const CARD_GAP_DESC_BTN = 10;
 const CARD_GAP_STATUS = 4;
 
-/**
- * Детерминированный хеш строки → 0..1. Для заглушки арта: один seed —
- * один узор точек, без ассетов.
- */
-export function seedHash(seed: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < seed.length; i++) {
-    h ^= seed.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return (h >>> 0) / 0xffffffff;
+function productIconFrame(kind: Product['kind']): UiIconFrame {
+  if (kind === 'skin') return 'virus';
+  if (kind === 'booster') return 'bolt';
+  if (kind === 'currency') return 'dna';
+  if (kind === 'season_pass') return 'ribbon';
+  return 'gift';
 }
 
 export class StorefrontScene extends Phaser.Scene {
@@ -235,17 +234,15 @@ export class StorefrontScene extends Phaser.Scene {
 
   private root: Phaser.GameObjects.Container | null = null;
   private listContainer: Phaser.GameObjects.Container | null = null;
-  private maskGraphics: Phaser.GameObjects.Graphics | null = null;
+  private viewport: ScrollViewport | null = null;
+  private keyboard: MenuKeyboard | null = null;
   /** P1-4: низ шапки от измеренной подписи режима (buildChrome). */
   private chromeBottom = 96;
-  /** P1-4: scroll-catcher списка (лежит ПОД списком, см. renderList). */
-  private scrollHit: Phaser.GameObjects.Rectangle | null = null;
-  /** P1-4: интерактивные кнопки списка — инпут гасится вне маски. */
+  private scrollHit: Phaser.GameObjects.Zone | null = null;
   private listButtons: Phaser.GameObjects.Rectangle[] = [];
+  private listFocusTargets: MenuKeyboardControl[] = [];
   private scrollOffset = 0;
   private scrollLimit = 0;
-  private scrollOwner = -1;
-  private scrollLastY = 0;
 
   constructor() {
     super({ key: 'Storefront' });
@@ -275,15 +272,17 @@ export class StorefrontScene extends Phaser.Scene {
     this.scrollOffset = 0;
     this.scrollLimit = 0;
     this.listContainer = null;
-    this.maskGraphics = null;
+    this.viewport = null;
     this.scrollHit = null;
     this.listButtons = [];
+    this.listFocusTargets = [];
     // Resize — до раннего возврата: иначе слушатель переживёт уход в меню.
     this.scale.on('resize', this.onResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.onResize, this);
       this.clearListMask();
       this.listContainer = null;
+      this.keyboard = null;
       this.root?.destroy(true);
       this.root = null;
     });
@@ -313,6 +312,14 @@ export class StorefrontScene extends Phaser.Scene {
       return;
     }
     this.provider = resolveProvider(this.variant, { apiBaseUrl, qaTools });
+    this.keyboard = new MenuKeyboard(this, {
+      blocked: () => this.state === 'success',
+      escape: () => {
+        if (this.state === 'success') return false;
+        this.scene.start('Menu');
+        return true;
+      },
+    });
 
     this.buildChrome();
     void trackProductEvent('store_viewed', PlatformBridge, {
@@ -349,7 +356,7 @@ export class StorefrontScene extends Phaser.Scene {
       .setStrokeStyle(BORDER.thin, ROLE.surface.stroke, 0.8)
       .setInteractive({ useHandCursor: true });
     const backLabel = this.add
-      .text(12 + backW / 2, 44, '‹ НАЗАД', {
+      .text(12 + backW / 2 + 8, 44, 'НАЗАД', {
         fontFamily: FONT,
         fontSize: '13px',
         fontStyle: 'bold',
@@ -357,8 +364,11 @@ export class StorefrontScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setResolution(2);
-    wireTapButton(backBg, () => this.scene.start('Menu'));
-    this.root.add([backBg, backLabel]);
+    const backIcon = addUiIcon(this, 26, 44, 'arrow-left').setDisplaySize(17, 17);
+    const goBack = (): void => { this.scene.start('Menu'); };
+    wireTapButton(backBg, goBack);
+    this.keyboard?.add(backBg, () => 'Назад', goBack);
+    this.root.add([backBg, backLabel, backIcon]);
 
     // Заголовок — по центру, но сдвигается вправо, если измеренная ширина
     // упирается в кнопку «назад» (на 320 иначе пересечение).
@@ -433,6 +443,7 @@ export class StorefrontScene extends Phaser.Scene {
     this.scrollHit?.destroy();
     this.scrollHit = null;
     this.listButtons = [];
+    this.listFocusTargets = [];
     this.scrollOffset = 0;
     this.scrollLimit = 0;
   }
@@ -576,52 +587,32 @@ export class StorefrontScene extends Phaser.Scene {
     const list = this.add.container(x, top).setName('ofeliya-storefront-list');
     this.listContainer = list;
     this.listButtons = [];
-
-    // P1-4: scroll-catcher — прямоугольник ПОД списком в root. Phaser input
-    // по умолчанию topOnly: тап получает только верхний интерактивный
-    // объект. Когда catcher лежал поверх списка, кнопки покупки не получали
-    // ни одного тапа (P0: витрина не могла ничего продать при скролле).
-    // Цена: drag-скролл, начатый на кнопке, не стартует (тап — приоритет).
-    const hit = this.add
-      .rectangle(x, top + height / 2, width, height, 0x000000, 0)
-      .setName('ofeliya-storefront-hit');
-    this.root.add(hit);
+    this.listFocusTargets = [];
     this.root.add(list);
-    this.scrollHit = hit;
 
-    // P1-4: высоты баннеров и карточек — измеренные, а не константы.
     const gap = SPACE.md;
     let cy = 0;
-    // Патч №12: баннер неподтверждённых покупок + ручная допроверка.
     if (this.state === 'ready') {
       const pending = loadPendingPurchases();
       if (pending.length > 0) {
         cy += this.buildPendingBanner(list, 0, cy, width, pending.length) + gap;
       }
     }
-    // Патч №16 (A3): баннер неподтверждённого синка кошелька —
-    // «Оплата подтверждена, товар ожидает синхронизации» + «Повторить».
-    // Отличается от баннера verify-pending: оплата УЖЕ подтверждена
-    // сервером, не хватает только материализации гранта.
     if (this.state === 'ready' || this.state === 'sync-pending') {
       const syncInfo = this.syncPending;
       const queued = getPendingSyncChargeIds();
       const manual = hasManualCheckEntries();
       if (syncInfo || queued.length > 0 || manual) {
-        cy +=
-          this.buildSyncBanner(list, 0, cy, width, {
-            title: syncInfo ? syncInfo.productTitle : undefined,
-            queued: queued.length,
-            manual,
-          }) + gap;
+        cy += this.buildSyncBanner(list, 0, cy, width, {
+          title: syncInfo ? syncInfo.productTitle : undefined,
+          queued: queued.length,
+          manual,
+        }) + gap;
       }
     }
-    // Монетизация v3: баннер коллаба (вход по диплинку collab_<id>).
     if (this.state === 'ready' && this.collab) {
       cy += this.buildCollabBanner(list, 0, cy, width, this.collab) + gap;
     }
-    // Монетизация v3: баннер приглашения (только Telegram: ссылка
-    // строится из Telegram user id; на MAX/браузере баннера нет).
     if (this.state === 'ready' && this.inviteLink) {
       cy += this.buildInviteBanner(list, 0, cy, width, this.inviteLink) + gap;
     }
@@ -629,55 +620,30 @@ export class StorefrontScene extends Phaser.Scene {
       cy += this.buildCard(list, product, 0, cy, width) + gap;
     }
     const totalH = Math.max(0, cy - gap);
-    this.scrollLimit = Math.max(0, totalH - height);
-
-    // Маска + drag-scroll по паттерну ResultReport (чистая отписка на destroy).
-    const clip = this.make.graphics({});
-    const a = { x: x - width / 2, y: top };
-    clip.fillStyle(0x000000, 1).fillRect(a.x, a.y, width, height);
-    const mask = clip.createGeometryMask();
-    list.setMask(mask);
-    this.maskGraphics = clip;
-
-    if (this.scrollLimit > 0) {
-      hit.setInteractive();
-      hit.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-        this.scrollOwner = pointer.id;
-        this.scrollLastY = pointer.y;
-      });
-    }
-    const move = (pointer: Phaser.Input.Pointer): void => {
-      if (pointer.id !== this.scrollOwner || !this.listContainer) return;
-      this.applyScroll(this.scrollOffset + (this.scrollLastY - pointer.y));
-      this.scrollLastY = pointer.y;
-    };
-    const release = (pointer: Phaser.Input.Pointer): void => {
-      if (pointer.id === this.scrollOwner) this.scrollOwner = -1;
-    };
-    // P1-4: wheel — на уровне сцены, а не catcher: кнопка выше catcher,
-    // и колесо над кнопкой иначе не скроллит (topOnly). Граница — контент.
-    const wheel = (pointer: Phaser.Input.Pointer, _over: unknown, _dx: number, dy: number): void => {
-      const r = this.contentRect();
-      if (pointer.y < r.top || pointer.y > r.top + r.height) return;
-      this.applyScroll(this.scrollOffset + dy * 0.5);
-    };
-    this.input.on('pointermove', move);
-    this.input.on('pointerup', release);
-    if (this.scrollLimit > 0) this.input.on('wheel', wheel);
-    list.once(Phaser.GameObjects.Events.DESTROY, () => {
-      this.input.off('pointermove', move);
-      this.input.off('pointerup', release);
-      this.input.off('wheel', wheel);
+    this.viewport = new ScrollViewport(this, {
+      parent: this.root,
+      content: list,
+      bounds: { x: x - width / 2, y: top, width, height },
+      contentHeight: totalH,
+      name: 'ofeliya-storefront',
+      keyboard: this.keyboard ?? undefined,
+      blocked: () => this.state === 'success',
+      escape: () => {
+        if (this.state === 'success') return false;
+        this.scene.start('Menu');
+        return true;
+      },
+      onChange: (offset, limit) => {
+        this.scrollOffset = offset;
+        this.scrollLimit = limit;
+      },
     });
-    this.applyScroll(0);
+    this.viewport.setFocusTargets(this.listFocusTargets);
+    this.scrollHit = this.viewport.hitZone;
   }
 
   private applyScroll(next: number): void {
-    if (!this.listContainer) return;
-    const { top } = this.contentRect();
-    this.scrollOffset = Phaser.Math.Clamp(next, 0, this.scrollLimit);
-    this.listContainer.y = top - this.scrollOffset;
-    this.updateListButtonInput();
+    this.viewport?.scrollTo(next);
   }
 
   /**
@@ -691,20 +657,12 @@ export class StorefrontScene extends Phaser.Scene {
    * кликабельна: игрок чуть докручивает скролл до полного показа.
    */
   private updateListButtonInput(): void {
-    const { top, height } = this.contentRect();
-    for (const btn of this.listButtons) {
-      if (!btn.input) continue;
-      const b = btn.getBounds();
-      btn.input.enabled = b.y >= top && b.y + b.height <= top + height;
-    }
+    this.viewport?.refresh();
   }
 
   private clearListMask(): void {
-    if (this.listContainer) {
-      this.listContainer.clearMask(true);
-    }
-    this.maskGraphics?.destroy();
-    this.maskGraphics = null;
+    this.viewport?.destroy();
+    this.viewport = null;
   }
 
   /**
@@ -777,20 +735,14 @@ export class StorefrontScene extends Phaser.Scene {
     const headerH = Math.max(CARD_MEDALLION_R * 2, title.height);
     title.setY(CARD_PAD_TOP + (headerH - title.height) / 2);
 
-    // Арт-заглушка: детерминированный узор по хешу seed (до DiceBear Фазы 5).
     const artColor = STUB_PALETTES[product.art.palette] ?? ROLE.faction.neutral;
     const medallion = this.add.container(
       -width / 2 + CARD_PAD_X + CARD_MEDALLION_R,
       CARD_PAD_TOP + headerH / 2
     );
     const disc = this.add.circle(0, 0, CARD_MEDALLION_R, artColor, 0.28).setStrokeStyle(2, artColor, 0.9);
-    medallion.add(disc);
-    const h = seedHash(product.art.seed);
-    for (let i = 0; i < 5; i++) {
-      const ang = h * Math.PI * 2 + (i * Math.PI * 2) / 5;
-      const r = 6 + ((h * 97 + i * 13) % 8);
-      medallion.add(this.add.circle(Math.cos(ang) * r, Math.sin(ang) * r, 3.5, artColor, 0.95));
-    }
+    const icon = addUiIcon(this, 0, 0, productIconFrame(product.kind), 'host').setDisplaySize(30, 30);
+    medallion.add([disc, icon]);
     children.push(medallion);
 
     // Описание — на всю ширину карточки.
@@ -902,7 +854,14 @@ export class StorefrontScene extends Phaser.Scene {
       .setResolution(2)
       .setName('card-buy-label');
     if (!btnDisabled) {
-      wireTapButton(btnBg, () => void this.buy(product));
+      const activate = (): void => { void this.buy(product); };
+      wireTapButton(btnBg, activate);
+      this.listFocusTargets.push({
+        id: product.id,
+        object: btnBg,
+        label: () => `${product.title}. ${this.priceLabel(product)}`,
+        activate,
+      });
     }
     children.push(btnBg, btnLabel);
     this.listButtons.push(btnBg);
@@ -1022,7 +981,14 @@ export class StorefrontScene extends Phaser.Scene {
         })
         .setOrigin(0.5)
         .setResolution(2);
-      wireTapButton(btnBg, () => opts.onButton?.(btnLabel));
+      const activate = (): void => opts.onButton?.(btnLabel);
+      wireTapButton(btnBg, activate);
+      this.listFocusTargets.push({
+        id: `banner-${this.listFocusTargets.length}`,
+        object: btnBg,
+        label: () => opts.buttonLabel ?? opts.label,
+        activate,
+      });
       children.push(btnBg, btnLabel);
       this.listButtons.push(btnBg);
       y = btnY + btnH / 2;
@@ -1502,10 +1468,7 @@ export class StorefrontScene extends Phaser.Scene {
     const emblem = this.add.container(W / 2, H / 2 - 40).setDepth(20);
     const artColor = STUB_PALETTES[product.art.palette] ?? ROLE.faction.reward;
     const ring = this.add.circle(0, 0, 54, artColor, 0.22).setStrokeStyle(3, artColor, 1);
-    const check = this.add
-      .text(0, 0, '✓', { fontFamily: FONT, fontSize: '44px', fontStyle: 'bold', color: '#7fffa1' })
-      .setOrigin(0.5)
-      .setResolution(2);
+    const check = addUiIcon(this, 0, 0, 'check', 'host').setDisplaySize(46, 46);
     const label = this.add
       .text(0, 78, product.title, {
         fontFamily: FONT,

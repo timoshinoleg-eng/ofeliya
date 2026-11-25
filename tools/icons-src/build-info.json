@@ -1,0 +1,20 @@
+{
+  "generatedBy": "scripts/build-icon-atlas.ts",
+  "icons": 59,
+  "frames": 236,
+  "variants": [
+    "default",
+    "host",
+    "immune",
+    "danger"
+  ],
+  "cell": 52,
+  "size": {
+    "w": 988,
+    "h": 676
+  },
+  "pixelHashFNV1a": "0392ee80",
+  "pngSha256": "81c9c425fb878f25c6677edb967b609ed3f163d08caf69753ee08adcc57f9060",
+  "jsonSha256": "3d5602972ea342ba8a068f083fc0e8595be40fe2c73f69cad996fc2b0a41102f",
+  "manifestSha256": "5f74989564313c43bdf53ef751ec1fc8a4f7b2dcd6cad2675029f90c027ac607"
+}

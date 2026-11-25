@@ -16,8 +16,9 @@ import { fmtInt } from '../game/UiFormat';
 import { VISUAL, VISUAL_TEXT } from './visualTokens';
 import { createModalFrame } from './modal';
 import { createSpecimenSurface } from './specimenSurface';
-
-const MAX_ROWS = 3;
+import { ScrollViewport } from './ScrollViewport';
+import type { MenuKeyboard, MenuKeyboardControl } from './MenuKeyboard';
+import { addUiIcon } from './uiIcons';
 
 function platformLabel(value: string): string {
   const normalized = value.trim().toLowerCase();
@@ -77,12 +78,15 @@ export class SocialHub {
   private refreshTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private lastDetail: SocialSnapshotDetailed | null = null;
   private dailyLaunchStatus: DailyTicketStatus | 'idle' | 'loading' = 'idle';
+  private viewport: ScrollViewport;
+  private focusTargets: MenuKeyboardControl[] = [];
 
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly platform: PlatformAdapter,
     private readonly onDailyLaunch: () => Promise<DailyTicketStatus>,
-    private readonly onDismiss: () => void
+    private readonly onDismiss: () => void,
+    keyboard?: MenuKeyboard
   ) {
     const W = scene.scale.width;
     const H = scene.scale.height;
@@ -120,6 +124,20 @@ export class SocialHub {
 
     this.body = scene.add.container(0, 0).setName('ofeliya-social-body');
     this.root.add(this.body);
+    this.viewport = new ScrollViewport(scene, {
+      parent: this.root,
+      content: this.body,
+      bounds: {
+        x: this.panelLeft + 10,
+        y: this.panelTop + 58,
+        width: this.panelW - 20,
+        height: this.panelH - 70,
+      },
+      contentHeight: this.panelTop + this.panelH - 12,
+      name: 'ofeliya-social',
+      keyboard,
+      escape: () => { this.destroy(); return true; },
+    });
 
     this.platform.setBackHandler(() => this.destroy());
     this.renderLoading();
@@ -132,6 +150,7 @@ export class SocialHub {
     this.loadGeneration += 1;
     if (this.refreshTimer !== null) globalThis.clearTimeout(this.refreshTimer);
     this.platform.setBackHandler(null);
+    this.viewport.destroy();
     this.root.destroy(true);
     this.onDismiss();
   }
@@ -163,9 +182,9 @@ export class SocialHub {
     return text;
   }
 
-  private sectionTitle(y: number, value: string, name: string): void {
+  private sectionTitle(y: number, value: string, name: string, height = 132): void {
     this.body.add(createSpecimenSurface(
-      this.scene, this.scene.scale.width / 2, y + 58, this.panelW - 20, 132,
+      this.scene, this.scene.scale.width / 2, y + height / 2 - 8, this.panelW - 20, height,
       { accent: VISUAL.host, fill: VISUAL.ink, alpha: 0.58, detail: 'quiet' },
     ));
     this.addText(
@@ -178,10 +197,22 @@ export class SocialHub {
       this.panelW - 34,
       name
     ).setFontStyle('700');
+    const frame = name.includes('today') ? 'calendar' : name.includes('season') ? 'trophy' : 'users';
+    this.body.add(
+      addUiIcon(this.scene, this.panelLeft + this.panelW - 30, y + 8, frame, 'host')
+        .setDisplaySize(18, 18)
+        .setName(`${name}-icon`)
+    );
+  }
+
+  private syncViewport(contentBottom: number): void {
+    this.viewport.refresh(contentBottom);
+    this.viewport.setFocusTargets(this.focusTargets);
   }
 
   private renderLoading(): void {
     this.body.removeAll(true);
+    this.focusTargets = [];
     const left = this.panelLeft + 17;
     const width = this.panelW - 34;
     const todayY = this.panelTop + 70;
@@ -196,6 +227,7 @@ export class SocialHub {
     const friendsY = seasonY + 136;
     this.sectionTitle(friendsY, 'ДРУЗЬЯ', 'ofeliya-social-friends-title');
     this.addText(left, friendsY + 22, 'ЗАГРУЗКА СВЯЗЕЙ…', 11, VISUAL_TEXT.muted, 'left', width);
+    this.syncViewport(friendsY + 124);
   }
 
   /**
@@ -333,8 +365,8 @@ export class SocialHub {
       .setStrokeStyle(state.enabled ? 1.5 : 1, state.stroke, state.enabled ? 0.84 : 0.72)
       .setName(state.enabled ? 'ofeliya-social-daily-bg' : 'ofeliya-social-daily-disabled');
     if (state.enabled) {
-      bg.setInteractive({ useHandCursor: true }).on('pointerup', () => {
-        void this.startDaily();
+      bg.setInteractive({ useHandCursor: true }).on('pointerup', (pointer: Phaser.Input.Pointer) => {
+        if (!pointer?.wasCanceled) void this.startDaily();
       });
     }
     const label = this.scene.add
@@ -359,6 +391,11 @@ export class SocialHub {
       .setAlpha(0.92)
       .setName('ofeliya-social-daily-mutator');
     this.body.add([bg, label, mutatorText]);
+    if (state.enabled) {
+      this.focusTargets.push({
+        id: 'daily', object: bg, label: () => state.label, activate: () => { void this.startDaily(); },
+      });
+    }
     const streak = dailyStreakSummary();
     // A zero streak is an empty state, not a counter that reads "СЕРИЯ 0".
     if (streak.current > 0 || streak.best > 0) {
@@ -399,6 +436,7 @@ export class SocialHub {
   private render(detail: SocialSnapshotDetailed): void {
     this.lastDetail = detail;
     this.body.removeAll(true);
+    this.focusTargets = [];
     const left = this.panelLeft + 17;
     const width = this.panelW - 34;
     const rowSize = 11;
@@ -438,18 +476,16 @@ export class SocialHub {
       detail.status.season === 'ok' && detail.snapshot.season
         ? META_COPY.seasonTitle(detail.snapshot.season.index, detail.snapshot.season.daysLeft)
         : 'СЕЗОН';
-    this.sectionTitle(seasonY, seasonTitle, 'ofeliya-social-season-title');
+    const seasonRows = detail.status.seasonTop === 'ok' ? detail.snapshot.seasonTop : [];
+    const seasonHeight = Math.max(132, 28 + seasonRows.length * 32);
+    this.sectionTitle(seasonY, seasonTitle, 'ofeliya-social-season-title', seasonHeight);
     const seasonError = errorCopy(detail.status.seasonTop) ?? errorCopy(detail.status.season);
     if (seasonError) {
       this.addText(left, seasonY + 22, seasonError, bodySize, VISUAL_TEXT.danger, 'left', width, 'ofeliya-social-season-status');
-    } else if (detail.status.seasonTop === 'ok' && detail.snapshot.seasonTop.length > 0) {
-      detail.snapshot.seasonTop.slice(0, MAX_ROWS).forEach((entry, index) => {
+    } else if (seasonRows.length > 0) {
+      seasonRows.forEach((entry, index) => {
         this.addText(left, seasonY + 20 + index * 32, seasonRow(entry), rowSize, VISUAL_TEXT.ivory, 'left', width, `ofeliya-social-season-row-${index}`);
       });
-      const hidden = detail.snapshot.seasonTop.length - MAX_ROWS;
-      if (hidden > 0) {
-        this.addText(left, seasonY + 116, `ЕЩЁ +${hidden}`, rowSize, VISUAL_TEXT.muted, 'left', width, 'ofeliya-social-season-more');
-      }
     } else {
       this.addText(
         left,
@@ -463,8 +499,10 @@ export class SocialHub {
       );
     }
 
-    const friendsY = seasonY + 136;
-    this.sectionTitle(friendsY, 'ДРУЗЬЯ', 'ofeliya-social-friends-title');
+    const friendsY = seasonY + seasonHeight + 4;
+    const friendRows = detail.status.friends === 'ok' ? detail.snapshot.friends : [];
+    const friendsHeight = Math.max(132, 28 + friendRows.length * 32);
+    this.sectionTitle(friendsY, 'ДРУЗЬЯ', 'ofeliya-social-friends-title', friendsHeight);
     const friendsError = errorCopy(detail.status.friends);
     if (friendsError) {
       this.addText(left, friendsY + 22, friendsError, bodySize, VISUAL_TEXT.danger, 'left', width, 'ofeliya-social-friends-status');
@@ -479,14 +517,10 @@ export class SocialHub {
         width,
         'ofeliya-social-friends-status'
       );
-    } else if (detail.status.friends === 'ok' && detail.snapshot.friends.length > 0) {
-      detail.snapshot.friends.slice(0, MAX_ROWS).forEach((entry, index) => {
+    } else if (friendRows.length > 0) {
+      friendRows.forEach((entry, index) => {
         this.addText(left, friendsY + 20 + index * 32, friendRow(entry), rowSize, VISUAL_TEXT.ivory, 'left', width, `ofeliya-social-friend-row-${index}`);
       });
-      const hidden = detail.snapshot.friends.length - MAX_ROWS;
-      if (hidden > 0) {
-        this.addText(left, friendsY + 116, `ЕЩЁ +${hidden}`, rowSize, VISUAL_TEXT.muted, 'left', width, 'ofeliya-social-friends-more');
-      }
     } else {
       this.addText(
         left,
@@ -502,7 +536,8 @@ export class SocialHub {
     }
 
     const hasRetry = Object.values(detail.status).some((status) => status === 'network' || status === 'http');
-    if (hasRetry) this.addRetryButton();
+    if (hasRetry) this.addRetryButton(friendsY + friendsHeight + 22);
+    this.syncViewport(friendsY + friendsHeight + (hasRetry ? 52 : 0));
   }
 
   /**
@@ -527,19 +562,20 @@ export class SocialHub {
       .setOrigin(0.5)
       .setResolution(2)
       .setName('ofeliya-social-invite-label');
-    bg.setInteractive({ useHandCursor: true });
-    bg.on('pointerup', () => {
+    const invite = (): void => {
       this.platform.haptic('light');
       void this.platform.shareResult(buildInviteText()).then((ok) => {
-        if (!ok) this.addText(W / 2, y + 30, 'Нативный шаринг недоступен в этом клиенте', 11, VISUAL_TEXT.muted);
+        if (!ok && !this.closed) this.addText(W / 2, y + 30, 'Нативный шаринг недоступен в этом клиенте', 11, VISUAL_TEXT.muted);
       });
-    });
+    };
+    bg.setInteractive({ useHandCursor: true });
+    bg.on('pointerup', (pointer: Phaser.Input.Pointer) => { if (!pointer?.wasCanceled) invite(); });
     this.body.add([bg, label]);
+    this.focusTargets.push({ id: 'invite', object: bg, label: () => META_COPY.inviteFriends, activate: invite });
   }
 
-  private addRetryButton(): void {
+  private addRetryButton(y: number): void {
     const W = this.scene.scale.width;
-    const y = this.panelTop + this.panelH - 31;
     const w = Math.min(this.panelW - 48, 230);
     const bg = this.scene.add
       .rectangle(W / 2, y, w, 44, VISUAL.panelRaised, 0.97)
@@ -556,11 +592,13 @@ export class SocialHub {
       .setOrigin(0.5)
       .setResolution(2)
       .setName('ofeliya-social-retry-label');
-    bg.on('pointerup', () => {
+    const retry = (): void => {
       this.platform.haptic('light');
       void this.reload();
-    });
+    };
+    bg.on('pointerup', (pointer: Phaser.Input.Pointer) => { if (!pointer?.wasCanceled) retry(); });
     this.body.add([bg, label]);
+    this.focusTargets.push({ id: 'retry', object: bg, label: () => META_COPY.retry, activate: retry });
   }
 
   private async reload(): Promise<void> {

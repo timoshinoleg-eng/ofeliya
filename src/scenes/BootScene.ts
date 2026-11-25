@@ -6,6 +6,7 @@ import { ensureBiologicalAnimations } from '../game/BiologicalAnimation';
 import { ensureBiologicalImpacts } from '../game/BiologicalImpact';
 import { StartupTrace } from '../systems/StartupTrace';
 import { startMutationArtRecovery } from '../game/MutationArtRecovery';
+import { startDeferredMenuArt } from '../game/DeferredMenuArt';
 
 /** Load optional core art; procedural textures keep startup usable when a file fails. */
 export class BootScene extends Phaser.Scene {
@@ -37,12 +38,15 @@ export class BootScene extends Phaser.Scene {
     ensureStrainZeroTextures(this);
     ensureBiologicalAnimations(this);
     ensureBiologicalImpacts(this);
+    // Atlas missing (offline/timeout): procedural fallbacks keep every UI icon slot renderable.
+
     StartupTrace.mark('boot.textures.end');
     document.getElementById('splash')?.remove();
     StartupTrace.mark('splash.removed');
     StartupTrace.mark('menu.start.request');
     this.scene.start('Menu');
     startMutationArtRecovery(this.game);
+    startDeferredMenuArt(this.game);
   }
 
   private makeTextures(): void {

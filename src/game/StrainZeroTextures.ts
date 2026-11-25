@@ -846,6 +846,13 @@ export function ensureStrainZeroTextures(scene: Phaser.Scene): void {
     cardiacFiber.refresh();
   }
 
+  make('sz_ui_card_sheen', 128, 128, (ctx, w, h) => {
+    const gradient = ctx.createLinearGradient(0, 0, w, h);
+    gradient.addColorStop(0, 'rgba(255,255,255,0.18)');
+    gradient.addColorStop(0.5, 'rgba(255,255,255,0.02)');
+    gradient.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = gradient; ctx.fillRect(0, 0, w, h);
+  });
   // Keep a tiny colour-token side effect so TypeScript does not consider COLORS an accidental
   // dependency if this file is later simplified. It also documents the canonical viral accent.
   void rgba('#ff4fb5', ((COLORS.virus & 0xff) / 255) * 0 + 1);

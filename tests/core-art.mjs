@@ -17,7 +17,7 @@ class Display {
 const display = () => new Proxy(Display.prototype,{get(t,k){return t[k]??function(){return this;};}});
 class Graphics extends Display{} Object.setPrototypeOf(Graphics.prototype,display());
 const phaser={ Scene:class {},Physics:{Arcade:{Sprite:Display}},BlendModes:{ADD:1,NORMAL:0},Math:{Clamp:(v,a,b)=>Math.max(a,Math.min(b,v)),FloatBetween:(a,b)=>(a+b)/2,Between:(a,b)=>Math.floor((a+b)/2)}};
-function load(path){path=resolve(path);if(cache.has(path))return cache.get(path);const m={exports:{}};cache.set(path,m.exports);const source=ts.transpileModule(readFileSync(path,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS,esModuleInterop:true}}).outputText;new Function('require','module','exports',source)(n=>n==='phaser'?phaser:n.endsWith('/StartupTrace')?{StartupTrace:{mark(){}}}:load(resolve(dirname(path), n+'.ts')),m,m.exports);cache.set(path,m.exports);return m.exports;}
+function load(path){path=resolve(path);if(cache.has(path))return cache.get(path);const m={exports:{}};cache.set(path,m.exports);const source=ts.transpileModule(readFileSync(path,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS,esModuleInterop:true}}).outputText;new Function('require','module','exports',source)(n=>n==='phaser'?phaser:n.endsWith('/StartupTrace')?{StartupTrace:{mark(){}}}:load(resolve(dirname(path), n.endsWith('.js') ? n : n+'.ts')),m,m.exports);cache.set(path,m.exports);return m.exports;}
 // Phaser raster/physics are I/O adapters; production TS and source method bodies execute unchanged.
 // Root's actual Phaser WebGL/Canvas baseline protects the engine's body rounding and centers.
 const logical={'virus-player':[56,56],'immune-antibody':[38,38],'immune-tcell':[44,40],'immune-macrophage':[62,62],'immune-prime':[94,94],'cardiac-titan':[108,108],'host-cell-shadow':[112,112],'mutation-prism':[64,64],'mutation-halo':[64,64],'mutation-singularity':[64,64]};
@@ -34,7 +34,7 @@ test('boot preload skips only individually present canonical textures', () => {
  const { BootScene } = load('src/scenes/BootScene.ts'), boot = new BootScene(), requests = [];
  const present = new Set(['virus-player', 'immune-tcell']);
  boot.textures = { exists: key => present.has(key) };
- boot.load = { image: (...args) => requests.push(args) };
+ boot.load = { atlas:()=>{}, image: (...args) => requests.push(args) };
  boot.preload();
  assert.deepEqual(requests.map(([key]) => key), Object.keys(logical).filter(key => !present.has(key)).map(key => 'raw-art-' + key));
  for (const key of Object.keys(logical)) present.add(key);
@@ -46,7 +46,7 @@ test('optional art consumes one timeout window without retry or Android batching
   const boot = new BootScene(), requests = [];
   boot.textures = { exists: () => false };
   // File captures loader retry policy at queue time, so assert before the first image call.
-  boot.load = { maxRetries: 2, maxParallelDownloads: parallel, image: (...args) => {
+  boot.load = { maxRetries: 2, maxParallelDownloads: parallel, atlas:()=>{assert.equal(boot.load.maxRetries,0);}, image: (...args) => {
    assert.equal(boot.load.maxRetries, 0);
    assert.equal(boot.load.maxParallelDownloads, Math.max(parallel, 10));
    requests.push(args);
@@ -72,7 +72,7 @@ test('boot create bakes missing or partly loaded art before removing splash and 
     } };
    } };
    boot.scene = { start: key => { assert.equal(key, 'Menu'); events.push('menu'); } };
-   boot.game = { textures: f.scene.textures, events: { once(){}, off(){} } };
+   boot.game = { textures: f.scene.textures, events: { on(){}, once(){}, off(){} } };
    boot.create();
    assert.deepEqual(events, ['legacy', 'splash', 'menu']);
    assert.deepEqual(f.removed.sort(), raw.map(key => 'raw-art-' + key).sort());

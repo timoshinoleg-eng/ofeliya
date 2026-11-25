@@ -1,3 +1,4 @@
+import { PreparedShare } from '../platform/ResultFileShare';
 import Phaser from 'phaser';
 import {
   createChallengePayload,
@@ -18,6 +19,8 @@ import { Juice } from '../game/Juice';
 import { VISUAL, VISUAL_TEXT } from '../ui/visualTokens';
 import { createSpecimenSurface, drawSpecimenSurface } from '../ui/specimenSurface';
 import { createResultReport } from '../ui/ResultReport';
+import { createMutationCardSheens, type MutationSheenCard } from '../ui/MutationCardSheen';
+import { createMutationCardIcon } from '../ui/MutationCardSurface';
 import { getEvolutionDef } from '../game/EvolutionSystem';
 import { IDENTITY } from '../game/identity';
 import { phaseTransitionPulse } from '../game/BossPhaseCeremony';
@@ -1699,6 +1702,7 @@ export class UIScene extends Phaser.Scene {
     // a cut-off footer is worse than a tight header gap in the impossible-fit corner).
     if (blockCenter + totalH / 2 > H - gap) blockCenter = H - gap - totalH / 2;
     let y = blockCenter - totalH / 2 + ch / 2;
+    const sheenCards: MutationSheenCard[] = [];
 
     cards.forEach((def: UpgradeDef, cardIndex: number) => {
       const card = this.add.container(W / 2, y);
@@ -1769,10 +1773,7 @@ export class UIScene extends Phaser.Scene {
       }
       if (hasIcon) {
         card.add(
-          this.add
-            .image(iconX, -2, iconKey)
-            .setScale(compact ? 0.9 : 1.02)
-            .setTint(evolution ? COLORS.gold : def.rarity === 'rare' ? 0xe9dcff : 0xffffff)
+          createMutationCardIcon(this, def, iconKey, iconX, -2, compact)
         );
       } else if (!legendary) {
         card.add(
@@ -1937,6 +1938,9 @@ export class UIScene extends Phaser.Scene {
       bg.on('pointerover', () => drawSpecimenSurface(membrane, cw, ch, { accent, fill: VISUAL.panelRaised }));
       bg.on('pointerout', () => drawSpecimenSurface(membrane, cw, ch, { accent }));
 
+      if (!evolution && (legendary || def.rarity === 'rare')) {
+        sheenCards.push({ card, width: cw, height: ch, accent });
+      }
       c.add(card);
       card.setScale(0.94).setAlpha(0);
       this.tweens.add({
@@ -1950,6 +1954,7 @@ export class UIScene extends Phaser.Scene {
 
       y += ch + gap;
     });
+    if (sheenCards.length > 0) createMutationCardSheens(this, c, sheenCards);
   }
 
   private showLegendaryCeremony(id: LegendaryId, moreChoices: boolean): void {
@@ -2823,6 +2828,39 @@ export class UIScene extends Phaser.Scene {
       challengeTarget || legacyChallengeCreatable
         ? `Побить результат ${fmtTime(res.timeMs)} · ${fmtInt(res.kills)} кл.`
         : undefined;
+    // Prepare only on the result screen. File sharing remains optional and must be invoked in a user gesture.
+    const preparedShare = new PreparedShare();
+    let shareDisposed = false;
+    let fileShareBusy = false;
+    const cleanupPreparedShare = (): void => {
+      if (shareDisposed) return;
+      shareDisposed = true;
+      preparedShare.dispose();
+      this.events.off(Phaser.Scenes.Events.SHUTDOWN, cleanupPreparedShare);
+    };
+    c.once(Phaser.GameObjects.Events.DESTROY, cleanupPreparedShare);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, cleanupPreparedShare);
+    if (PlatformBridge.kind === 'browser' && (!duelCreatable || challengeTarget || legacyChallengeCreatable)) {
+      void preparedShare.prepare(import('../ui/runShareCard').then(({ renderRunShareCard }) => renderRunShareCard({
+        run: res, platform: PlatformBridge.kind, name: PlatformBridge.getDisplayName(),
+        mutations: res.legendaryIds.map(id => getLegendaryDefinition(id).title),
+      }))).catch(() => { /* PNG preparation must never block the existing text share action. */ });
+    }
+    const sharePreparedResult = async (text: string, link?: string): Promise<boolean | null> => {
+      if (shareDisposed || fileShareBusy) return null;
+      fileShareBusy = true;
+      try {
+        const file = preparedShare.file;
+        if (PlatformBridge.kind === 'browser' && file && PlatformBridge.shareResultFile) {
+          const status = await PlatformBridge.shareResultFile(file, link ? text + '\n' + link : text);
+          if (shareDisposed || status === 'cancelled') return null;
+          if (status === 'shared') return true;
+        }
+        return shareDisposed ? null : await PlatformBridge.shareResult(text, link);
+      } finally {
+        fileShareBusy = false;
+      }
+    };
     this.button(c, shareButtonLabel, W / 2, y, false, () => {
       const mins = fmtTime(res.timeMs);
       // The share text leaves the game: it names the product, states the outcome
@@ -2853,7 +2891,8 @@ export class UIScene extends Phaser.Scene {
           firstRun: SaveSystem.get().runs <= 1,
           legendaryName: res.win ? legendaryName : null,
         });
-        void PlatformBridge.shareResult(legacyText, link ?? undefined).then((ok) => {
+        void sharePreparedResult(legacyText, link ?? undefined).then((ok) => {
+          if (ok === null || shareDisposed) return;
           if (!ok) {
             this.toast(c, 'Нативный шаринг недоступен в этом клиенте');
           } else {
@@ -2867,7 +2906,8 @@ export class UIScene extends Phaser.Scene {
       }
 
       if (!duelCreatable) {
-        void PlatformBridge.shareResult(shareText).then((ok) => {
+        void sharePreparedResult(shareText).then((ok) => {
+          if (ok === null || shareDisposed) return;
           if (!ok) this.toast(c, 'Нативный шаринг недоступен в этом клиенте');
           else void trackProductEvent('share', PlatformBridge, { kind: dailyIntent ? 'daily-result' : 'result', runSeed: res.runSeed, daily: Boolean(dailyIntent) });
         });

@@ -1,6 +1,7 @@
 export type PlatformKind = 'max' | 'telegram' | 'browser';
 export type HapticStyle = 'light' | 'medium' | 'heavy' | 'rigid' | 'soft';
 export type NotifyType = 'error' | 'success' | 'warning';
+import type { FileShareOutcome } from './ResultFileShare';
 
 export interface PlatformUser {
   id?: number | string;
@@ -49,6 +50,8 @@ export interface PlatformAdapter {
   subscribeViewportChange?(listener: () => void): () => void;
   setBackHandler(callback: (() => void) | null): void;
   shareResult(text: string, link?: string): Promise<boolean>;
+  /** Native Web Share file capability, separate from messenger text/link sharing. */
+  shareResultFile?(file: File, text: string): Promise<FileShareOutcome>;
   haptic(style?: HapticStyle): void;
   notify(type: NotifyType): void;
 }

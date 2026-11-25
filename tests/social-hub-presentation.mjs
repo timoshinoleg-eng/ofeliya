@@ -37,6 +37,7 @@ const hub = Object.assign(Object.create(SocialHub.prototype), {
   platform: { kind: 'max', initData: 'fixture' }, dailyLaunchStatus: 'idle',
   scene: { scale: { width: 320, height: 568 } }, panelW: 298, panelLeft: 11, panelTop: 12,
   body: { removeAll() {} }, sectionTitle() {}, addDailyButton() {},
+  viewport: { refresh() {}, setFocusTargets() {} },
   addRetryButton() { this.retry = true; }, addInviteButton() { this.invite = true; },
   rows: [], addText(x, y, value, size, color, align, width, name) { this.rows.push({ x,y,value,size,width,name }); },
 });
@@ -59,7 +60,7 @@ const detail = { status: { daily: 'empty', season: 'ok', seasonTop: 'ok', friend
   snapshot: { daily: null, season: { index: 99, daysLeft: 99 }, seasonTop: Array(4).fill(entry), friends: Array(4).fill(entry) } };
 hub.render(detail);
 const table = hub.rows.filter(row => /-(?:season|friend)-row-/.test(row.name ?? ''));
-assert.equal(table.length, 6, 'preserve three visible rows per channel');
+assert.equal(table.length, 8, 'all records remain available to the scroll viewport');
 const seasonRows = table.filter(row => /-season-row-/.test(row.name ?? ''));
 const friendRows = table.filter(row => /-friend-row-/.test(row.name ?? ''));
 // One line per player in the season table; the friend rows keep the relation
@@ -77,7 +78,8 @@ assert.ok(
   'readable two-line friend records'
 );
 assert.equal(table[1].y - table[0].y, 32, 'reserve both lines before next record');
-assert.ok(hub.rows.some(row => row.name === 'ofeliya-social-friends-more' && row.value === 'ЕЩЁ +1'));
+assert.ok(hub.rows.some(row => row.name === 'ofeliya-social-friend-row-3'), 'the fourth friend has a stable row anchor');
+assert.ok(!hub.rows.some(row => row.name === 'ofeliya-social-friends-more'), 'records are scrolled instead of truncated');
 hub.rows = []; hub.retry = false;
 hub.render({ ...detail, status: { daily: 'network', season: 'http', seasonTop: 'http', friends: 'network' } });
 assert.equal(hub.retry, true, 'failed channels retain retry action');
@@ -100,4 +102,4 @@ hub.render({ ...detail, status: { daily: 'ok', season: 'ok', seasonTop: 'ok', fr
   snapshot: { daily: null, season: null, seasonTop: [], friends: [] } });
 assert.equal(hub.invite, true, 'an empty friends list offers the invite action');
 assert.ok(hub.rows.some(row => row.value.includes('друзей, которые играют в OFELIYA')), 'the friends empty state explains itself');
-console.log('SocialHub: daily permission/loading/retry policy; 320px metadata sizes, bounded record count and explicit row separation passed');
+console.log('SocialHub: daily permission/loading/retry policy; 320px metadata sizes, scrollable records and explicit row separation passed');

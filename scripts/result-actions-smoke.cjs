@@ -1,7 +1,7 @@
 const fs = require('fs');
 const { chromium } = require('playwright-core');
 
-const chrome = ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(fs.existsSync);
+const chrome = [process.env.OFELIYA_CHROME_PATH, chromium.executablePath(), '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].filter(Boolean).find(fs.existsSync);
 if (!chrome) throw new Error('Chrome not found');
 
 const VIEWPORT = { width: 360, height: 640 };
@@ -58,7 +58,7 @@ async function bootResult(browser) {
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (error) => errors.push(String(error)));
-  await page.goto('http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
+  await page.goto(process.env.OFELIYA_BASE_URL || 'http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__game?.scene.isActive('Menu'));
 
   await page.evaluate(() => {

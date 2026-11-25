@@ -18,7 +18,7 @@
  */
 import Phaser from 'phaser';
 import { FONT } from '../game/config';
-import { BORDER, PANEL, ROLE } from './tokens';
+import { BORDER, PANEL, ROLE, TOUCH } from './tokens';
 import { VISUAL_TEXT } from './visualTokens';
 import { PlatformBridge } from '../platform';
 import { Sfx } from '../systems/Sfx';
@@ -35,6 +35,9 @@ import { ensureSkinTexture } from '../game/skins/SkinArt';
 import { equipSkin, getEquippedSkinId, isSkinOwned } from '../game/skins/SkinOwnership';
 import { FeatureFlags } from '../game/FeatureFlags';
 import { isStorefrontVisible } from '../game/shop/Storefront';
+import { ScrollViewport } from './ScrollViewport';
+import type { MenuKeyboard, MenuKeyboardControl, MenuKeyboardScope } from './MenuKeyboard';
+import { addUiIcon } from './uiIcons';
 
 const RARITY_COLOR: Record<string, string> = {
   common: '#9fb4c8',
@@ -58,18 +61,22 @@ function closeButton(
   y: number,
   depth: number,
   onClose: () => void
-): Phaser.GameObjects.Text {
-  const btn = scene.add
-    .text(x, y, '✕', { fontFamily: FONT, fontSize: '18px', color: VISUAL_TEXT.ivory })
-    .setOrigin(0.5)
-    .setResolution(2)
+): { icon: Phaser.GameObjects.Image; hit: Phaser.GameObjects.Rectangle; activate: () => void } {
+  const icon = addUiIcon(scene, x, y, 'close')
+    .setDisplaySize(20, 20)
+    .setDepth(depth);
+  const hit = scene.add.rectangle(x, y, TOUCH.min, TOUCH.min, 0x000000, 0.001)
     .setDepth(depth)
+    .setName('ofeliya-skin-gallery-close-hit')
     .setInteractive({ useHandCursor: true });
-  btn.on('pointerup', () => {
+  const activate = () => {
     Sfx.play('click');
     onClose();
+  };
+  hit.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+    if (!pointer?.wasCanceled) activate();
   });
-  return btn;
+  return { icon, hit, activate };
 }
 
 /** Кнопка-карточка: прямоугольник + подпись, паттерн чипов меню. */
@@ -101,8 +108,9 @@ function cardButton(
     .setResolution(2);
   c.add([bg, t]);
   bg.on('pointerdown', () => bg.setAlpha(0.6));
-  bg.on('pointerup', () => {
+  bg.on('pointerup', (pointer: Phaser.Input.Pointer) => {
     bg.setAlpha(1);
+    if (pointer?.wasCanceled) return;
     Sfx.play('click');
     PlatformBridge.haptic('light');
     onTap();
@@ -117,7 +125,8 @@ function cardButton(
  */
 export function showSkinGallery(
   scene: Phaser.Scene,
-  onClose: () => void
+  onClose: () => void,
+  keyboard?: MenuKeyboard
 ): { close: () => void } | null {
   if (!scene || !scene.scene.isActive()) return null;
   const W = scene.scale.width;
@@ -131,9 +140,16 @@ export function showSkinGallery(
   };
 
   let closed = false;
+  let viewport: ScrollViewport | null = null;
+  let loadingFocus: MenuKeyboardScope | null = null;
   const doClose = () => {
     if (closed) return;
     closed = true;
+    loadingFocus?.destroy();
+    loadingFocus = null;
+    viewport?.destroy();
+    viewport = null;
+    if (content) scene.tweens.killTweensOf(content);
     root.destroy();
     onClose();
   };
@@ -144,6 +160,11 @@ export function showSkinGallery(
   // (и не проигрывает заново анимацию открытия).
   let content: Phaser.GameObjects.Container | null = null;
   const renderContent = (animate: boolean) => {
+    loadingFocus?.destroy();
+    loadingFocus = null;
+    viewport?.destroy();
+    viewport = null;
+    if (content) scene.tweens.killTweensOf(content);
     content?.destroy();
     content = scene.add.container(0, 0);
     root.add(content);
@@ -159,11 +180,15 @@ export function showSkinGallery(
       .rectangle(cx, cy, panelW, panelH, ROLE.surface.panel, PANEL.card)
       .setStrokeStyle(BORDER.thin, ROLE.faction.reward, 0.6);
     cadd(panel);
-    add(
-      closeButton(scene, cx + panelW / 2 - 22, cy - panelH / 2 + 30, 1, () => {
-        doClose();
-      })
-    );
+    const close = closeButton(scene, cx + panelW / 2 - TOUCH.min / 2, cy - panelH / 2 + 30, 1, doClose);
+    cadd(close.icon);
+    cadd(close.hit);
+    // This fixed header target has no scroll id: focusing it must not move the grid.
+    const closeFocus: MenuKeyboardControl = {
+      object: close.hit, label: () => '\u0417\u0430\u043a\u0440\u044b\u0442\u044c \u0448\u0442\u0430\u043c\u043c\u044b', activate: close.activate,
+    };
+    loadingFocus = keyboard?.createScope({ escape: () => { doClose(); return true; } }) ?? null;
+    loadingFocus?.setControls([closeFocus]);
 
     const title = scene.add
       .text(cx, cy - panelH / 2 + 30, 'ШТАММЫ', {
@@ -197,6 +222,8 @@ export function showSkinGallery(
     cadd(loading);
 
     const build = () => {
+      const contentRoot = content;
+      if (!contentRoot) return;
       loading.destroy();
       const skins = listSkins();
       const equippedId = getEquippedSkinId();
@@ -205,6 +232,9 @@ export function showSkinGallery(
       const cardW = (panelW - pad * (cols + 1)) / cols;
       const cardH = 196;
       const gridTop = cy - panelH / 2 + 84;
+      const grid = scene.add.container(0, 0).setName('ofeliya-skin-gallery-grid');
+      contentRoot.add(grid);
+      const focusTargets: MenuKeyboardControl[] = [closeFocus];
       // Витрина портирована (партия 3): шоп-скины показывают цену и кнопку
       // «КУПИТЬ» только когда витрина видима по флагу storefront.variant;
       // при дефолтном 'hidden' — «СКОРО», как раньше.
@@ -217,8 +247,8 @@ export function showSkinGallery(
         const y = gridTop + cardH / 2 + row * (cardH + pad);
         const owned = isSkinOwned(def.id);
         const equipped = equippedId === def.id;
-        const card = scene.add.container(x, y);
-        cadd(card);
+        const card = scene.add.container(x, y).setName(`ofeliya-skin-gallery-${def.id}`);
+        grid.add(card);
 
         const bg = scene.add
           .rectangle(0, 0, cardW, cardH, ROLE.surface.panel, PANEL.button)
@@ -274,14 +304,17 @@ export function showSkinGallery(
             .setResolution(2);
           card.add(badge);
         } else if (owned) {
-          const btn = cardButton(scene, 0, 76, cardW - 24, 28, 'ВЫБРАТЬ', 0, 0x5fd6ff, () => {
-            // equipSkin сам трекает skin_equipped.
-            // Пост-ревью (патч №11): только перерисовка контента, без анимации.
-            if (equipSkin(def.id)) {
-              renderContent(false);
-            }
-          });
+          const select = (): void => {
+            if (equipSkin(def.id)) renderContent(false);
+          };
+          const btn = cardButton(scene, 0, 76, cardW - 24, 28, 'ВЫБРАТЬ', 0, 0x5fd6ff, select);
           card.add(btn);
+          focusTargets.push({
+            id: def.id,
+            object: btn.getAt(0) as Phaser.GameObjects.Rectangle,
+            label: () => `${def.title}. Выбрать`,
+            activate: select,
+          });
         } else {
           const stars = getSkinPriceStars(def.id);
           const price = scene.add
@@ -295,11 +328,18 @@ export function showSkinGallery(
             .setResolution(2);
           card.add(price);
           if (shopVisible) {
-            const btn = cardButton(scene, 0, 80, cardW - 24, 26, 'КУПИТЬ', 0, ROLE.faction.reward, () => {
+            const buy = (): void => {
               doClose();
               scene.scene.start('Storefront');
-            });
+            };
+            const btn = cardButton(scene, 0, 80, cardW - 24, 26, 'КУПИТЬ', 0, ROLE.faction.reward, buy);
             card.add(btn);
+            focusTargets.push({
+              id: def.id,
+              object: btn.getAt(0) as Phaser.GameObjects.Rectangle,
+              label: () => `${def.title}. Купить`,
+              activate: buy,
+            });
           } else {
             const soon = scene.add
               .text(0, 78, 'СКОРО', {
@@ -314,18 +354,37 @@ export function showSkinGallery(
           }
         }
       });
+      const rows = Math.ceil(skins.length / cols);
+      loadingFocus?.destroy();
+      loadingFocus = null;
+      viewport = new ScrollViewport(scene, {
+        parent: contentRoot,
+        content: grid,
+        bounds: {
+          x: cx - panelW / 2 + pad / 2,
+          y: gridTop,
+          width: panelW - pad,
+          height: Math.max(44, cy + panelH / 2 - gridTop - 12),
+        },
+        contentHeight: gridTop + rows * cardH + Math.max(0, rows - 1) * pad,
+        name: 'ofeliya-skin-gallery',
+        keyboard,
+        escape: () => { doClose(); return true; },
+      });
+      viewport.setFocusTargets(focusTargets);
     };
 
     // Запекаем превью (кэш текстур — повторный вход мгновенный), затем строим сетку.
     const defs = listSkins().filter((d) => d.id !== DEFAULT_SKIN_ID);
+    const owner = content;
     const bakeAndBuild = () => {
       Promise.all(defs.map((d) => ensureSkinTexture(scene, d)))
         .then(() => {
-          if (!scene.scene.isActive()) return;
+          if (closed || !scene.scene.isActive() || content !== owner) return;
           build();
         })
         .catch(() => {
-          if (!scene.scene.isActive()) return;
+          if (closed || !scene.scene.isActive() || content !== owner) return;
           build();
         });
     };

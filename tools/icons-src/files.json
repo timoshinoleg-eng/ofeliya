@@ -1,0 +1,488 @@
+{
+  "svg/healthicons/body/antibody.svg": {
+    "frame": "antibody",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/body/antibody.svg",
+    "bytes": 3606,
+    "sha256": "ba517637ea60b60a6240aa5a67996eb69a3f22f5aab3398ba7266e0e6ae38ea0"
+  },
+  "svg/healthicons/body/bacteria.svg": {
+    "frame": "bacteria",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/body/bacteria.svg",
+    "bytes": 2184,
+    "sha256": "103a533e19737fa7d257ccdafc72a56dd26ecc3a0887b48da1ce5c9bd19c4d50"
+  },
+  "svg/healthicons/body/blood-cells.svg": {
+    "frame": "blood-cells",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/body/blood-cells.svg",
+    "bytes": 4449,
+    "sha256": "1b07372d7d7a60bc75da8efc54e0dd8e06f662320bbe857dba6aee4687b57a8b"
+  },
+  "svg/healthicons/body/blood-drop.svg": {
+    "frame": "blood-drop",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/body/blood-drop.svg",
+    "bytes": 1567,
+    "sha256": "d1cd89bbf76838e0e45ccc9be4b46db848f820dea5641c78394dae8cb82e0b84"
+  },
+  "svg/healthicons/body/blood-vessel.svg": {
+    "frame": "blood-vessel",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/body/blood-vessel.svg",
+    "bytes": 2154,
+    "sha256": "0b8abd3426b136ad10cdf340ae8723df32a7823e357eaee5533b624142f7a081"
+  },
+  "svg/healthicons/body/cell-nuclei.svg": {
+    "frame": "cell-nuclei",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/body/cell-nuclei.svg",
+    "bytes": 2179,
+    "sha256": "e8965061b6d7c265319310cb85aa2e27cc8636332fd6da249c3de0c1c121527f"
+  },
+  "svg/healthicons/body/dna.svg": {
+    "frame": "dna",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/body/dna.svg",
+    "bytes": 1213,
+    "sha256": "c52e57adfb9e3cafc9c4be27240821855411bba043862820f1cdc7e3e3308bc9"
+  },
+  "svg/healthicons/body/enzyme.svg": {
+    "frame": "enzyme",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/body/enzyme.svg",
+    "bytes": 2862,
+    "sha256": "fffa0a6dc7db6ffca900c499ae0ec93f97f1b3c657d35772d4c6924108ca0be8"
+  },
+  "svg/healthicons/body/eye.svg": {
+    "frame": "eye",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/body/eye.svg",
+    "bytes": 2106,
+    "sha256": "c9325fef32fbb9acf602a7dfd129e47b32b5f6d5166b34396e4428be6b38b1ef"
+  },
+  "svg/healthicons/conditions/cancerous-cell_nuclei.svg": {
+    "frame": "cancer-cell",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/conditions/cancerous-cell_nuclei.svg",
+    "bytes": 3472,
+    "sha256": "c9decfb5ec5e7519a1666c024afedbc72ce133bf81cbdae8e9233f84410d84da"
+  },
+  "svg/healthicons/conditions/autoimmune-disease.svg": {
+    "frame": "autoimmune",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/conditions/autoimmune-disease.svg",
+    "bytes": 3952,
+    "sha256": "fd9f1748f045772d8e1010a102f7f661d8d1791e2f378ef40c09432ca40a6d10"
+  },
+  "svg/healthicons/symbols/alert-circle.svg": {
+    "frame": "alert-circle",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/symbols/alert-circle.svg",
+    "bytes": 716,
+    "sha256": "c8b8e067e52e66c8723002a66b94d868ee95458028e6dee43037e526fff90807"
+  },
+  "svg/healthicons/symbols/alert-triangle.svg": {
+    "frame": "alert-triangle",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/symbols/alert-triangle.svg",
+    "bytes": 897,
+    "sha256": "d5e3db1f80de01481bf9b44881135a78d0985b39a98dc6caffa7038a294817eb"
+  },
+  "svg/healthicons/symbols/award-ribbon.svg": {
+    "frame": "ribbon",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/symbols/award-ribbon.svg",
+    "bytes": 1362,
+    "sha256": "628266f34372701f6d38e9b93c67932213662924af12728c2a88d521413ec942"
+  },
+  "svg/healthicons/objects/bandage-adhesive.svg": {
+    "frame": "bandage",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/objects/bandage-adhesive.svg",
+    "bytes": 3474,
+    "sha256": "cbc3f3e4b4f8d70d1875321c78a856ce7aeb5e2e7aa7a49dfe1c123d48cc7f5d"
+  },
+  "svg/healthicons/objects/book.svg": {
+    "frame": "book",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/objects/book.svg",
+    "bytes": 504,
+    "sha256": "0ec69578995fdb70913a7b6d0b43d30ecfb351375154bb84d5dcd3e3bf765a1f"
+  },
+  "svg/healthicons/objects/calendar.svg": {
+    "frame": "calendar",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/objects/calendar.svg",
+    "bytes": 2204,
+    "sha256": "1fa85e9c301e83833468203d51b8f9bdfcc90d485d80de5e36fbc6b4aca96660"
+  },
+  "svg/healthicons/objects/coins.svg": {
+    "frame": "coins",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/objects/coins.svg",
+    "bytes": 1793,
+    "sha256": "4aaaaa080460d0a94de9a588ec0043651781b57652cf1eb760941da6921c7f75"
+  },
+  "svg/healthicons/objects/money-bag.svg": {
+    "frame": "money-bag",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/objects/money-bag.svg",
+    "bytes": 2299,
+    "sha256": "962612515f43927b0ced112eb716412cbdb8a953518aaad08ec53bd4bbdcfd16"
+  },
+  "svg/healthicons/objects/megaphone.svg": {
+    "frame": "megaphone",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/objects/megaphone.svg",
+    "bytes": 1761,
+    "sha256": "8acdcb4b3c915a26f1a5ea10b4d5d4764951df9c707e183a680a81162659930d"
+  },
+  "svg/healthicons/diagnostics/malaria-microscope.svg": {
+    "frame": "microscope",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/diagnostics/malaria-microscope.svg",
+    "bytes": 3087,
+    "sha256": "0404c8a2becb859ef190fe47a933fc110ed4afd3fbbe26f9ec8d58ebdb0ac0a2"
+  },
+  "svg/healthicons/medications/pill-1.svg": {
+    "frame": "pill",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/medications/pill-1.svg",
+    "bytes": 676,
+    "sha256": "cf940728fdb72f71b598b4cffb1e1b867da0bb784a3be1a1b4d51862df176d80"
+  },
+  "svg/healthicons/medications/medicines.svg": {
+    "frame": "medicines",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/medications/medicines.svg",
+    "bytes": 2137,
+    "sha256": "37253f8c44375b95077dc8d23a497f01edfd02a7f5eb27c21a8772cd4848841e"
+  },
+  "svg/healthicons/devices/blood-pressure.svg": {
+    "frame": "blood-pressure",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/devices/blood-pressure.svg",
+    "bytes": 2258,
+    "sha256": "835ba3881d566cf4a55c4fb6a595fa7f93a19aa949821ee3659229a920f05a48"
+  },
+  "svg/healthicons/people/doctor.svg": {
+    "frame": "doctor",
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/public/icons/svg/outline/people/doctor.svg",
+    "bytes": 2552,
+    "sha256": "6d37f0882a92b593a1c8a886a82bacb7678d9f7aafced9ca64ef07609d08b6b1"
+  },
+  "svg/tabler/arrow-left.svg": {
+    "frame": "arrow-left",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/arrow-left.svg",
+    "bytes": 433,
+    "sha256": "12af90f1bb49b7ae62792ecf38d2fa8b39daa4753e39ebc3520d07482a90704f"
+  },
+  "svg/tabler/arrow-right.svg": {
+    "frame": "arrow-right",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/arrow-right.svg",
+    "bytes": 428,
+    "sha256": "7e602a26d53e78ceb788f38cb89ec1d1091130c56d7829ca294b7ed0642277c6"
+  },
+  "svg/tabler/chevron-down.svg": {
+    "frame": "chevron-down",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/chevron-down.svg",
+    "bytes": 424,
+    "sha256": "5a2e5c2a155ce06264a3f7299073ed636142dfd0b324b747387d9cfbf9fb5e3e"
+  },
+  "svg/tabler/chevron-up.svg": {
+    "frame": "chevron-up",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/chevron-up.svg",
+    "bytes": 412,
+    "sha256": "b9a66bccd34ae897a255a38af9e66a1149adf6549f60108907ea3066e5d0e740"
+  },
+  "svg/tabler/chevron-left.svg": {
+    "frame": "chevron-left",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/chevron-left.svg",
+    "bytes": 408,
+    "sha256": "889174801ca4213379fe4e6a574546793a72ab22be35bc2f177e3d8d24576dbd"
+  },
+  "svg/tabler/chevron-right.svg": {
+    "frame": "chevron-right",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/chevron-right.svg",
+    "bytes": 401,
+    "sha256": "83733bb6e03e1d20fd2674d06a493642c8ea6eef76c44ebb2239b9ef17dedff7"
+  },
+  "svg/tabler/x.svg": {
+    "frame": "close",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/x.svg",
+    "bytes": 406,
+    "sha256": "9350785360414c39450c3505f17d1745e55a7534edace8548e30cf49e3727d43"
+  },
+  "svg/tabler/check.svg": {
+    "frame": "check",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/check.svg",
+    "bytes": 389,
+    "sha256": "e206067a7d570997b5b3a7d30ab287c0b15a492787649a8b96dff8fad2862fbe"
+  },
+  "svg/tabler/plus.svg": {
+    "frame": "plus",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/plus.svg",
+    "bytes": 404,
+    "sha256": "9cc497d4cc1eb38cf9daae18f41ffdc1a5e2a8431d70247b0854978f303f28d6"
+  },
+  "svg/tabler/minus.svg": {
+    "frame": "minus",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/minus.svg",
+    "bytes": 379,
+    "sha256": "a6556d9c556316b946c28af277be016b4d56ad8618dc2a731ce455100438c0ea"
+  },
+  "svg/tabler/player-play.svg": {
+    "frame": "play",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/player-play.svg",
+    "bytes": 398,
+    "sha256": "e2bff69284f1dc77224c47c03798017206a29d4ef665549db724b0a4534d8e5c"
+  },
+  "svg/tabler/player-pause.svg": {
+    "frame": "pause",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/player-pause.svg",
+    "bytes": 528,
+    "sha256": "d9be9ab25e52cdcae17def18d41edc0855fa44caa8492cde2b5b8cd085e8c5a6"
+  },
+  "svg/tabler/settings.svg": {
+    "frame": "settings",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/settings.svg",
+    "bytes": 942,
+    "sha256": "ef9cf42d822c00b4fad5bc5eeceddd4e1ec3774bb7ddd09891d0fba274bc3e95"
+  },
+  "svg/tabler/search.svg": {
+    "frame": "search",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/search.svg",
+    "bytes": 433,
+    "sha256": "3dd53b9606283dfa0adcb0b10a7d9a4432369d4bebcfacf67f80fbe358381c34"
+  },
+  "svg/tabler/filter.svg": {
+    "frame": "filter",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/filter.svg",
+    "bytes": 474,
+    "sha256": "69bbcca665588bd0b64c44c42ced4538b3e3c75a59e3fc46e58b1f10d99d15ec"
+  },
+  "svg/tabler/share-2.svg": {
+    "frame": "share",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/share-2.svg",
+    "bytes": 498,
+    "sha256": "119f78204353e6f652891ce7fdf56910be62157e291a3dbaffb39498bb986562"
+  },
+  "svg/tabler/copy.svg": {
+    "frame": "copy",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/copy.svg",
+    "bytes": 627,
+    "sha256": "3a455a299db4ec939fd0473d15c81c1d3f30f65dec81a7de816317c989b06073"
+  },
+  "svg/tabler/refresh.svg": {
+    "frame": "refresh",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/refresh.svg",
+    "bytes": 453,
+    "sha256": "9dd8ab8cac268489501cbb0a106d93cc3f367add493d20c47ec1e1d9804c760a"
+  },
+  "svg/tabler/star.svg": {
+    "frame": "star",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/star.svg",
+    "bytes": 481,
+    "sha256": "c0b4afc60d311585f7c79c2ffd68d58eb5c1e3a3cd6d626cdc7792c5d3bbb49b"
+  },
+  "svg/tabler/trophy.svg": {
+    "frame": "trophy",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/trophy.svg",
+    "bytes": 555,
+    "sha256": "1c1168d9b0656d1c19797a199e19bd5f2bda185f818b46d67ce6f66db0ece666"
+  },
+  "svg/tabler/target.svg": {
+    "frame": "target",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/target.svg",
+    "bytes": 489,
+    "sha256": "1874e1180c0fbe2a570c59986adfbed4e4eb9e839f7dd100bc871e08f5aabb1d"
+  },
+  "svg/tabler/bolt.svg": {
+    "frame": "bolt",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/bolt.svg",
+    "bytes": 395,
+    "sha256": "5321162cf117d3a83aec6c8f67a3bb0398068edb487b524d280b8fb47d6b98ce"
+  },
+  "svg/tabler/flame.svg": {
+    "frame": "flame",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/flame.svg",
+    "bytes": 608,
+    "sha256": "4afc9c5fdb4ed5fac3f3e6947200a3c210a0d97e7556edd2a39b70b5fafbd78c"
+  },
+  "svg/tabler/magnet.svg": {
+    "frame": "magnet",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/magnet.svg",
+    "bytes": 504,
+    "sha256": "6ff886aee9b391868d78db5b979354fcdfc27afbf82fe54f92e760ee7c3f2f7a"
+  },
+  "svg/tabler/shield.svg": {
+    "frame": "shield",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/shield.svg",
+    "bytes": 453,
+    "sha256": "254faf50fe337be66083b5292d7a1d548bb24289a26a3496e367ea341c7869da"
+  },
+  "svg/tabler/heart.svg": {
+    "frame": "heart",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/heart.svg",
+    "bytes": 442,
+    "sha256": "332be1c5c3a67df766c69da053a0eb29a11aa74a262f4422b82bceaaf098b1e8"
+  },
+  "svg/tabler/user.svg": {
+    "frame": "user",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/user.svg",
+    "bytes": 458,
+    "sha256": "63554429f551522ea578a9bf72d1d350bd0ffdb8ede3af92a05e92d71cab6b9c"
+  },
+  "svg/tabler/users.svg": {
+    "frame": "users",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/users.svg",
+    "bytes": 536,
+    "sha256": "a9892bcba1adad20184c0b50641b1a96a56fb9ef5135ff60462c664874021cc3"
+  },
+  "svg/tabler/info-circle.svg": {
+    "frame": "info-circle",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/info-circle.svg",
+    "bytes": 442,
+    "sha256": "48b7dddf34a6b87e93843a42b14781ce01794cf69274c458249ed8bfc01b6e4d"
+  },
+  "svg/tabler/clock.svg": {
+    "frame": "clock",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/clock.svg",
+    "bytes": 445,
+    "sha256": "971b0b2d3b5b17ae240cd3aac1a09710ab680d8c41900f1a37a0e430994d7fda"
+  },
+  "svg/tabler/home.svg": {
+    "frame": "home",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/home.svg",
+    "bytes": 511,
+    "sha256": "069600f461f3e967685765723a851af7b35f24b715e03d41a2928152cf75644c"
+  },
+  "svg/tabler/gift.svg": {
+    "frame": "gift",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/gift.svg",
+    "bytes": 648,
+    "sha256": "6fd66354c15d2b62508bcf3699362c2cb45ff273cc591ebd9768f1f5426e2f92"
+  },
+  "svg/tabler/virus.svg": {
+    "frame": "virus",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/virus.svg",
+    "bytes": 917,
+    "sha256": "9f3107611c71704ecf05f738dca00b9a53aa5dee0f44e5b560534d723baa991a"
+  },
+  "svg/tabler/activity.svg": {
+    "frame": "activity",
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/icons/outline/activity.svg",
+    "bytes": 401,
+    "sha256": "2279e7a64688d1e730e42a7b277792350fbfade1fd3b992ad3971737e88ccde8"
+  },
+  "licenses/healthicons-LICENSE.txt": {
+    "source": "healthicons",
+    "license": "CC0-1.0",
+    "upstream": "https://raw.githubusercontent.com/resolvetosavelives/healthicons/fe100687bdbb0bb99220fc4ec752a515d19d1dbc/LICENSE",
+    "bytes": 8850,
+    "sha256": "d36196c6c2b0a983415778adddf81bfe63c51f408e707a36fa2b029d65e92d06"
+  },
+  "licenses/tabler-LICENSE.txt": {
+    "source": "tabler",
+    "license": "MIT",
+    "upstream": "https://raw.githubusercontent.com/tabler/tabler-icons/4581ad20d8d13e24f6c3be75caaea1c4ad6c4b35/LICENSE",
+    "bytes": 1073,
+    "sha256": "b740a1d46122672da62833e97f7e7c8a13fa85cbc7445b584b297cc00dde93db"
+  }
+}

@@ -1,7 +1,16 @@
 const fs = require('fs');
 const { chromium } = require('playwright-core');
 
-const chrome = ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'].find(fs.existsSync);
+const chrome = [
+  process.env.CHROME_PATH,
+  process.env.OFELIYA_CHROME_PATH,
+  'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
+  process.env.LOCALAPPDATA ? `${process.env.LOCALAPPDATA}/Google/Chrome/Application/chrome.exe` : undefined,
+  '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/chromium',
+].find((candidate) => candidate && fs.existsSync(candidate));
 if (!chrome) throw new Error('Chrome not found');
 
 const BASE_URL = process.env.OFELIYA_BASE_URL || 'http://127.0.0.1:5173/';
@@ -273,15 +282,26 @@ async function inspectHub(page, size) {
     const todayStatus = byName('ofeliya-social-today-status');
     const todayStatusBounds = serializeBounds(todayStatus);
     const texts = all.filter((obj) => typeof obj?.text === 'string' && obj.visible !== false).map((obj) => obj.text);
+    const body = byName('ofeliya-social-body');
+    const inBody = (obj) => {
+      for (let current = obj; current; current = current.parentContainer) if (current === body) return true;
+      return false;
+    };
     const content = all.filter((obj) => obj !== root && obj !== byName('ofeliya-social-dim') && obj !== panel && obj.visible !== false && typeof obj?.getBounds === 'function');
     const overflow = content
-      .map((obj) => ({ name: obj.name || '', text: typeof obj.text === 'string' ? obj.text : '', bounds: obj.getBounds() }))
-      .filter(({ bounds }) =>
+      .map((obj) => ({ name: obj.name || '', text: typeof obj.text === 'string' ? obj.text : '', bounds: obj.getBounds(), clipped: inBody(obj) }))
+      .filter(({ bounds, clipped }) =>
         bounds.left < panelBounds.left - 1 ||
         bounds.right > panelBounds.right + 1 ||
-        bounds.top < panelBounds.top - 1 ||
-        bounds.bottom > panelBounds.bottom + 1
+        (!clipped && (bounds.top < panelBounds.top - 1 || bounds.bottom > panelBounds.bottom + 1))
       );
+    const viewport = window.__game.scene.getScene('Menu').socialHub.viewport;
+    const lastFriend = byName(`ofeliya-social-friend-row-${Math.max(0, contractFriendCount(all) - 1)}`);
+    function contractFriendCount(objects) {
+      return objects.filter((obj) => String(obj?.name || '').startsWith('ofeliya-social-friend-row-')).length;
+    }
+    viewport.scrollTo(viewport.scrollLimit);
+    const lastFriendAfterScroll = serializeBounds(lastFriend);
     const joined = texts.join('\n');
     const forbidden = [uid, initData, 'run-seed-ci', 'run-id-ci', 'user=', '/api/'].filter((needle) => joined.includes(needle));
     return {
@@ -298,6 +318,10 @@ async function inspectHub(page, size) {
       friendRows: all.filter((obj) => String(obj?.name || '').startsWith('ofeliya-social-friend-row-')).length,
       hasSeasonMore: Boolean(byName('ofeliya-social-season-more')),
       hasFriendsMore: Boolean(byName('ofeliya-social-friends-more')),
+      scrollLimit: viewport.scrollLimit,
+      masked: Boolean(body?.mask),
+      viewportBounds: { top: panelBounds.top + 58, bottom: panelBounds.bottom - 12 },
+      lastFriendAfterScroll,
       texts,
       overflow,
       forbidden,
@@ -322,8 +346,13 @@ function assertSuccessContract(contract, size) {
   if (contract.disabled) throw new Error('identity-ready Social Hub rendered disabled Daily CTA');
   if (contract.disabledInteractive) throw new Error('daily disabled surface must not be interactive');
   if (rectsOverlap(contract.todayStatus, contract.daily)) throw new Error('today status overlaps Daily CTA ' + JSON.stringify({ size, today: contract.todayStatus, daily: contract.daily }));
-  if (contract.seasonRows !== 3 || contract.friendRows !== 3 || !contract.hasSeasonMore || !contract.hasFriendsMore) {
-    throw new Error('social row cap contract failed ' + JSON.stringify(contract));
+  if (contract.seasonRows !== 4 || contract.friendRows !== 4 || contract.hasSeasonMore || contract.hasFriendsMore) {
+    throw new Error('social scrollable row contract failed ' + JSON.stringify(contract));
+  }
+  if (!contract.masked || !contract.lastFriendAfterScroll ||
+      contract.lastFriendAfterScroll.top < contract.viewportBounds.top - 1 ||
+      contract.lastFriendAfterScroll.bottom > contract.viewportBounds.bottom + 1) {
+    throw new Error('social final row is not reachable through the clipped viewport ' + JSON.stringify(contract));
   }
   if (contract.forbidden.length) throw new Error('PII/internal data leaked into canvas ' + JSON.stringify(contract.forbidden));
 }
@@ -433,7 +462,7 @@ async function runHttpRetry(browser) {
   await waitLoaded(page);
   contract = await inspectHub(page, size);
   if (contract.retry) throw new Error('retry control must clear after successful manual retry');
-  if (contract.seasonRows !== 3 || contract.friendRows !== 3) throw new Error('manual retry did not render data');
+  if (contract.seasonRows !== 4 || contract.friendRows !== 4) throw new Error('manual retry did not render data');
   if (requests.length !== 8) throw new Error('manual retry must issue exactly one second batch: ' + requests.length);
   if (errors.length) throw new Error('pageerror in HTTP retry ' + JSON.stringify(errors));
   await ctx.close();

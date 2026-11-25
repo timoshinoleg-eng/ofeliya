@@ -2,7 +2,16 @@
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { gzipSync } from 'node:zlib';
 
+function scanImports(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) scanImports(path);
+    else if (/\.[cm]?[jt]sx?$/.test(entry.name)) assert.ok(!/rexuiplugin|templates\/ui/i.test(readFileSync(path, 'utf8')), 'forbidden Rex UI import: '+path);
+  }
+}
+scanImports('src');
 const assetsDir = 'dist/assets';
 const files = readdirSync(assetsDir).filter((name) => name.endsWith('.js'));
 const vendor = files.filter((name) => /^vendor-phaser-.*\.js$/.test(name));
@@ -19,6 +28,9 @@ assert.ok(
   `application chunk still carries too much vendor payload: ${largestAppBytes} B`
 );
 
+const gzipBytes = files.reduce((total, name) => total + gzipSync(readFileSync(join(assetsDir, name))).length, 0);
+assert.ok(gzipBytes <= 564053, `aggregate JS gzip exceeds 564053 B: ${gzipBytes} B (baseline 533333 B)`);
+
 const html = readFileSync('dist/index.html', 'utf8');
 assert.match(html, /vendor-phaser-[^"'<>]+\.js/, 'index.html must reference the Phaser vendor chunk');
 
@@ -32,6 +44,7 @@ const FORBIDDEN_HARNESS_STRINGS = [
 ];
 for (const name of files) {
   const text = readFileSync(join(assetsDir, name), 'utf8');
+  assert.ok(!/rexuiplugin|templates\/ui/i.test(text), `forbidden UI dependency in ${name}`);
   for (const needle of FORBIDDEN_HARNESS_STRINGS) {
     assert.ok(!text.includes(needle), `harness Test API leaked into ${name}: ${needle}`);
   }
